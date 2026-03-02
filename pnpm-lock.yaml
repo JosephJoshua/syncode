@@ -38,6 +38,22 @@ importers:
 
   apps/web: {}
 
+  packages/contracts:
+    dependencies:
+      '@syncode/shared':
+        specifier: workspace:^
+        version: link:../shared
+    devDependencies:
+      '@syncode/tsconfig':
+        specifier: workspace:^
+        version: link:../tsconfig
+      '@types/node':
+        specifier: ^25.3.3
+        version: 25.3.3
+      typescript:
+        specifier: 5.9.2
+        version: 5.9.2
+
   packages/db:
     dependencies:
       drizzle-orm:

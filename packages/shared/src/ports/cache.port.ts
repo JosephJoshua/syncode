@@ -1,5 +1,4 @@
 export const CACHE_SERVICE = Symbol.for('CACHE_SERVICE');
-export const CACHE_SERVICE_KEY = 'CACHE_SERVICE';
 
 export type TtlResult =
   | { state: 'expiring'; ttlSeconds: number }

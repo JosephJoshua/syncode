@@ -1,5 +1,4 @@
 export const QUEUE_SERVICE = Symbol.for('QUEUE_SERVICE');
-export const QUEUE_SERVICE_KEY = 'QUEUE_SERVICE';
 
 export interface QueueJobOptions {
   priority?: number;

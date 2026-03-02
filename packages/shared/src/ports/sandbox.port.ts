@@ -6,7 +6,6 @@ import type {
 } from '../types/execution';
 
 export const SANDBOX_PROVIDER = Symbol.for('SANDBOX_PROVIDER');
-export const SANDBOX_PROVIDER_KEY = 'SANDBOX_PROVIDER';
 
 /**
  * Sandbox provider for isolated code execution.

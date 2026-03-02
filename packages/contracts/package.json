@@ -1,0 +1,21 @@
+{
+  "name": "@syncode/contracts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check ."
+  },
+  "dependencies": {
+    "@syncode/shared": "workspace:^"
+  },
+  "devDependencies": {
+    "@syncode/tsconfig": "workspace:^",
+    "@types/node": "^25.3.3",
+    "typescript": "5.9.2"
+  }
+}

@@ -1,5 +1,4 @@
 export const STORAGE_SERVICE = Symbol.for('STORAGE_SERVICE');
-export const STORAGE_SERVICE_KEY = 'STORAGE_SERVICE';
 
 export interface StorageUploadOptions {
   contentType?: string;

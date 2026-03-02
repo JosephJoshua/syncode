@@ -1,5 +1,4 @@
 export const MEDIA_SERVICE = Symbol.for('MEDIA_SERVICE');
-export const MEDIA_SERVICE_KEY = 'MEDIA_SERVICE';
 
 export interface MediaTokenOptions {
   roomName: string;

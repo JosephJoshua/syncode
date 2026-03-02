@@ -1,6 +1,4 @@
 export type {
-  CodeResultPayload,
-  CodeRunPayload,
   CursorUpdatePayload,
   ErrorPayload,
   ParticipantJoinPayload,

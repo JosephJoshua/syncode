@@ -1,4 +1,3 @@
-import type { ExecutionResult } from './execution';
 import type { RoomParticipant, RoomStatus } from './room';
 
 export const RoomEvent = {
@@ -25,11 +24,6 @@ export const RoomEvent = {
   SYNC_RESPONSE: 'sync:response',
   CURSOR_UPDATE: 'cursor:update',
 
-  // Execution
-  CODE_RUN: 'code:run',
-  CODE_RESULT: 'code:result',
-  CODE_RUNNING: 'code:running',
-
   // Chat
   CHAT_MESSAGE: 'chat:message',
 } as const;
@@ -40,12 +34,6 @@ export type RoomEvent = (typeof RoomEvent)[keyof typeof RoomEvent];
 export interface RoomJoinPayload {
   roomCode: string;
   role?: string;
-}
-
-export interface CodeRunPayload {
-  code: string;
-  language: string;
-  stdin?: string;
 }
 
 export interface CursorUpdatePayload {
@@ -75,11 +63,7 @@ export interface RoomStatusChangePayload {
   changedBy: string;
 }
 
-export interface CodeResultPayload {
-  result: ExecutionResult;
-}
-
-// Bidirection payloads
+// Bidirectional payloads
 export interface SyncUpdatePayload {
   update: Uint8Array;
 }
