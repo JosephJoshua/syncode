@@ -1,5 +1,31 @@
 {
   "name": "@syncode/db",
   "version": "0.0.0",
-  "private": true
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "generate": "drizzle-kit generate",
+    "migrate": "tsx src/migrate.ts",
+    "push": "drizzle-kit push",
+    "seed": "tsx src/seed.ts",
+    "studio": "drizzle-kit studio",
+    "lint": "biome check ."
+  },
+  "dependencies": {
+    "drizzle-orm": "^0.45.1",
+    "drizzle-zod": "^0.8.3",
+    "postgres": "^3.4.8",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@syncode/tsconfig": "workspace:^",
+    "@types/node": "^25.3.3",
+    "drizzle-kit": "^0.31.9",
+    "tsx": "^4.21.0",
+    "typescript": "5.9.2"
+  }
 }
