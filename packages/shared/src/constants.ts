@@ -32,3 +32,10 @@ export const SUPPORTED_LANGUAGES = [
   'go',
   'rust',
 ] as const;
+
+export const EXECUTION_CONFIG = {
+  RESULT_TTL_SECONDS: 10 * 60,
+  STATUS_POLL_INTERVAL_MS: 100,
+  MAX_POLL_DURATION_MS: 3 * 60 * 1_000,
+  REDIS_KEY_PREFIX: 'execution',
+} as const;

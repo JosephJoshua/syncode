@@ -13,14 +13,25 @@ export interface ExecutionRequest {
   memoryMb?: number;
 }
 
+export const ExecutionStatus = {
+  PENDING: 'pending', // Submitted, not yet running
+  RUNNING: 'running', // Sandbox executing code
+  COMPLETED: 'completed', // Finished successfully
+  FAILED: 'failed', // Execution error (sandbox-level, not code error)
+  CANCELLED: 'cancelled', // User/system cancelled
+} as const;
+
+export type ExecutionStatus = (typeof ExecutionStatus)[keyof typeof ExecutionStatus];
+
 export interface ExecutionResult {
   requestId: string;
+  status: ExecutionStatus; // Always 'completed' or 'failed' when result exists
   stdout: string;
   stderr: string;
   exitCode: number;
   durationMs: number;
   timedOut: boolean;
-  error?: string;
+  error?: string; // Sandbox-level errors or cancellation reason
   cpuTimeMs?: number;
   memoryUsageMb?: number;
   outputTruncated?: boolean;
