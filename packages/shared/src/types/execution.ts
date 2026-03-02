@@ -21,4 +21,7 @@ export interface ExecutionResult {
   durationMs: number;
   timedOut: boolean;
   error?: string;
+  cpuTimeMs?: number;
+  memoryUsageMb?: number;
+  outputTruncated?: boolean;
 }

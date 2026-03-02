@@ -37,7 +37,11 @@ export interface IStorageService {
   exists(key: string): Promise<boolean>;
   getMetadata(key: string): Promise<StorageObjectMetadata | null>;
   list(options?: StorageListOptions): Promise<StorageListResult>;
-  getUploadUrl(key: string, expiresInSeconds: number): Promise<string>;
+  copy(sourceKey: string, destinationKey: string): Promise<void>;
+  getUploadUrl(
+    key: string,
+    options: { expiresInSeconds: number; contentType?: string },
+  ): Promise<string>;
   getDownloadUrl(key: string, expiresInSeconds: number): Promise<string>;
   shutdown(): Promise<void>;
 }
