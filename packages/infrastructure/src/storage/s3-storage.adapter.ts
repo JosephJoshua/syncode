@@ -111,18 +111,18 @@ export class S3StorageAdapter implements IStorageService, OnModuleDestroy {
           },
         });
 
-        const response = await this.client.send(command);
+        const result = await this.client.send(command);
 
-        if (response.Deleted) {
-          for (const obj of response.Deleted) {
+        if (result.Deleted) {
+          for (const obj of result.Deleted) {
             if (obj.Key) {
               deleted.push(obj.Key);
             }
           }
         }
 
-        if (response.Errors) {
-          for (const error of response.Errors) {
+        if (result.Errors) {
+          for (const error of result.Errors) {
             if (error.Key) {
               failed.push({
                 key: error.Key,
@@ -211,14 +211,9 @@ export class S3StorageAdapter implements IStorageService, OnModuleDestroy {
   }
 
   async copy(sourceKey: string, destinationKey: string): Promise<void> {
-    const sourceExists = await this.exists(sourceKey);
-    if (!sourceExists) {
-      throw new Error(`Source key does not exist: ${sourceKey}`);
-    }
-
     const command = new CopyObjectCommand({
       Bucket: this.bucket,
-      CopySource: `${this.bucket}/${encodeURIComponent(sourceKey)}`,
+      CopySource: `${this.bucket}/${sourceKey}`,
       Key: destinationKey,
     });
 
