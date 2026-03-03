@@ -1,3 +1,8 @@
+export {
+  CircuitBreakerOpenError,
+  CircuitBreakerTimeoutError,
+  CircuitState,
+} from './circuit-breaker';
 export type {
   CursorUpdatePayload,
   ErrorPayload,

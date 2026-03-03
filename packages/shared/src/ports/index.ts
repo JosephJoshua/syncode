@@ -1,3 +1,9 @@
+export type { CircuitBreakerConfig, CircuitBreakerStats } from '../types/circuit-breaker';
+export {
+  CircuitBreakerOpenError,
+  CircuitBreakerTimeoutError,
+  CircuitState,
+} from '../types/circuit-breaker';
 export type { ICacheService, TtlResult } from './cache.port';
 export { CACHE_SERVICE } from './cache.port';
 export type {
