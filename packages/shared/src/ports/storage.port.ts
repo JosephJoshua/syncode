@@ -32,7 +32,10 @@ export interface IStorageService {
   ): Promise<void>;
   download(key: string): Promise<Buffer>;
   delete(key: string): Promise<void>;
-  deleteMany(keys: string[]): Promise<void>;
+  deleteMany(keys: string[]): Promise<{
+    deleted: string[];
+    failed: Array<{ key: string; error: string }>;
+  }>;
   exists(key: string): Promise<boolean>;
   getMetadata(key: string): Promise<StorageObjectMetadata | null>;
   list(options?: StorageListOptions): Promise<StorageListResult>;
