@@ -15,8 +15,5 @@ export interface ICacheService {
   incrBy(key: string, amount?: number, ttlSeconds?: number): Promise<number>;
   setIfNotExists<T = unknown>(key: string, value: T, ttlSeconds?: number): Promise<boolean>;
   expire(key: string, ttlSeconds: number): Promise<boolean>;
-  publish(channel: string, message: string): Promise<void>;
-  subscribe(channel: string, handler: (message: string) => void): Promise<void>;
-  unsubscribe(channel: string): Promise<void>;
   shutdown(): Promise<void>;
 }

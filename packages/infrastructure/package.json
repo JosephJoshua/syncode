@@ -1,0 +1,30 @@
+{
+  "name": "@syncode/infrastructure",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check ."
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1000.0",
+    "@aws-sdk/s3-request-presigner": "^3.1000.0",
+    "@nestjs/common": "^11.1.14",
+    "@syncode/shared": "workspace:^",
+    "bullmq": "^5.70.1",
+    "ioredis": "^5.10.0",
+    "livekit-server-sdk": "^2.15.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@syncode/tsconfig": "workspace:^",
+    "@types/node": "^25.3.3",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2",
+    "typescript": "5.9.2"
+  }
+}
