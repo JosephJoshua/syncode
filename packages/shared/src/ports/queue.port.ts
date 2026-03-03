@@ -37,6 +37,24 @@ export interface QueueEventHandler<T = unknown> {
 
 export interface QueueProcessOptions {
   concurrency?: number;
+
+  /**
+   * How long (in ms) a worker can work on a job before it's considered stalled.
+   * Default: 30000 (30 seconds)
+   */
+  lockDuration?: number;
+
+  /**
+   * How often (in ms) to check for stalled jobs.
+   * Default: 5000 (5 seconds)
+   */
+  stalledInterval?: number;
+
+  /**
+   * Maximum time (in ms) to wait for worker shutdown before force-closing.
+   * Default: 30000 (30 seconds)
+   */
+  shutdownTimeoutMs?: number;
 }
 
 export interface QueueStats {
