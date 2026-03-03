@@ -1,0 +1,11 @@
+{
+  "extends": "//",
+  "linter": {
+    "rules": {
+      "style": {
+        "useImportType": "off",
+        "noNonNullAssertion": "off"
+      }
+    }
+  }
+}
