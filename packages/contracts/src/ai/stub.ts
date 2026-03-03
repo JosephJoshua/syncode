@@ -35,10 +35,17 @@ const HINT_RESPONSES = {
 
 export class StubAiClient implements IAiClient {
   private readonly jobs = new Map<string, StubJob>();
+  private readonly timers: ReturnType<typeof setTimeout>[] = [];
   private readonly delayMs: number;
 
   constructor(options: StubAiClientOptions = {}) {
     this.delayMs = options.delayMs ?? 800;
+  }
+
+  /** Clear all pending timers. Call from OnModuleDestroy or test teardown. */
+  shutdown(): void {
+    for (const t of this.timers) clearTimeout(t);
+    this.timers.length = 0;
   }
 
   async submitHintRequest(request: GenerateHintRequest): Promise<SubmitResult<'ai:hint'>> {
@@ -85,9 +92,21 @@ export class StubAiClient implements IAiClient {
     return job.interviewResult ?? null;
   }
 
-  async getJobStatus(jobId: JobId): Promise<JobStatus> {
+  async getHintJobStatus(jobId: JobId<'ai:hint'>): Promise<JobStatus> {
     const job = this.jobs.get(jobId);
-    if (!job) return 'failed';
+    if (!job || job.type !== 'hint') return 'failed';
+    return job.status;
+  }
+
+  async getReviewJobStatus(jobId: JobId<'ai:review'>): Promise<JobStatus> {
+    const job = this.jobs.get(jobId);
+    if (!job || job.type !== 'review') return 'failed';
+    return job.status;
+  }
+
+  async getInterviewJobStatus(jobId: JobId<'ai:interview'>): Promise<JobStatus> {
+    const job = this.jobs.get(jobId);
+    if (!job || job.type !== 'interview') return 'failed';
     return job.status;
   }
 
@@ -96,79 +115,92 @@ export class StubAiClient implements IAiClient {
   }
 
   private scheduleHintCompletion(jobId: string, request: GenerateHintRequest): void {
-    setTimeout(() => {
-      const job = this.jobs.get(jobId);
-      if (job) job.status = 'running';
-    }, this.delayMs / 4);
+    this.timers.push(
+      setTimeout(() => {
+        const job = this.jobs.get(jobId);
+        if (job) job.status = 'running';
+      }, this.delayMs / 4),
+    );
 
-    setTimeout(() => {
-      const job = this.jobs.get(jobId);
-      if (!job) return;
+    this.timers.push(
+      setTimeout(() => {
+        const job = this.jobs.get(jobId);
+        if (!job) return;
 
-      job.status = 'completed';
-      job.hintResult = {
-        hint: HINT_RESPONSES[request.hintLevel] ?? HINT_RESPONSES.gentle,
-        suggestedApproach: 'Consider breaking the problem into smaller subproblems.',
-      };
-    }, this.delayMs);
+        job.status = 'completed';
+        job.hintResult = {
+          hint: HINT_RESPONSES[request.hintLevel] ?? HINT_RESPONSES.gentle,
+          suggestedApproach: 'Consider breaking the problem into smaller subproblems.',
+        };
+      }, this.delayMs),
+    );
   }
 
   private scheduleReviewCompletion(jobId: string): void {
-    setTimeout(() => {
-      const job = this.jobs.get(jobId);
-      if (job) job.status = 'running';
-    }, this.delayMs / 4);
+    this.timers.push(
+      setTimeout(() => {
+        const job = this.jobs.get(jobId);
+        if (job) job.status = 'running';
+      }, this.delayMs / 4),
+    );
 
-    setTimeout(() => {
-      const job = this.jobs.get(jobId);
-      if (!job) return;
+    this.timers.push(
+      setTimeout(() => {
+        const job = this.jobs.get(jobId);
+        if (!job) return;
 
-      job.status = 'completed';
-      job.reviewResult = {
-        overallScore: 7,
-        categories: [
-          {
-            name: 'Correctness',
-            score: 8,
-            feedback: 'Solution handles main cases correctly.',
-          },
-          {
-            name: 'Efficiency',
-            score: 7,
-            feedback: 'Time complexity is acceptable. Consider edge cases.',
-          },
-          {
-            name: 'Code Quality',
-            score: 6,
-            feedback: 'Variable naming could be more descriptive.',
-          },
-        ],
-        summary: 'Solid solution with room for improvement in code clarity and edge case handling.',
-      };
-    }, this.delayMs);
+        job.status = 'completed';
+        job.reviewResult = {
+          overallScore: 7,
+          categories: [
+            {
+              name: 'Correctness',
+              score: 8,
+              feedback: 'Solution handles main cases correctly.',
+            },
+            {
+              name: 'Efficiency',
+              score: 7,
+              feedback: 'Time complexity is acceptable. Consider edge cases.',
+            },
+            {
+              name: 'Code Quality',
+              score: 6,
+              feedback: 'Variable naming could be more descriptive.',
+            },
+          ],
+          summary:
+            'Solid solution with room for improvement in code clarity and edge case handling.',
+        };
+      }, this.delayMs),
+    );
   }
 
   private scheduleInterviewCompletion(jobId: string): void {
-    setTimeout(() => {
-      const job = this.jobs.get(jobId);
-      if (job) job.status = 'running';
-    }, this.delayMs / 4);
+    this.timers.push(
+      setTimeout(() => {
+        const job = this.jobs.get(jobId);
+        if (job) job.status = 'running';
+      }, this.delayMs / 4),
+    );
 
-    setTimeout(() => {
-      const job = this.jobs.get(jobId);
-      if (!job) return;
+    this.timers.push(
+      setTimeout(() => {
+        const job = this.jobs.get(jobId);
+        if (!job) return;
 
-      job.status = 'completed';
-      job.interviewResult = {
-        message: "That's a good approach. Let me ask you about the time complexity.",
-        followUpQuestion: 'What is the time and space complexity of your solution?',
-        codeAnnotations: [
-          {
-            line: 1,
-            comment: 'Consider adding input validation here.',
-          },
-        ],
-      };
-    }, this.delayMs);
+        job.status = 'completed';
+        job.interviewResult = {
+          message: "That's a good approach. Let me ask you about the time complexity.",
+          followUpQuestion: 'What is the time and space complexity of your solution?',
+          codeAnnotations: [
+            {
+              line: 1,
+              comment: 'Consider adding input validation here.',
+            },
+          ],
+        };
+      }, this.delayMs),
+    );
   }
 }

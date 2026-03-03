@@ -1,7 +1,5 @@
 import type { SupportedLanguage } from '@syncode/shared';
 
-// ── Request (control-plane → queue → executor) ──────────────────────
-
 export interface RunCodeRequest {
   language: SupportedLanguage;
   code: string;
@@ -9,8 +7,6 @@ export interface RunCodeRequest {
   timeoutMs?: number;
   memoryMb?: number;
 }
-
-// ── Result (executor → queue → control-plane) ───────────────────────
 
 export interface RunCodeResult {
   status: 'completed' | 'failed';

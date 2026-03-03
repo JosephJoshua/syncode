@@ -15,7 +15,9 @@ export interface IAiClient {
   getReviewResult(jobId: JobId<'ai:review'>): Promise<ReviewCodeResult | null>;
   submitInterviewResponse(request: InterviewResponseRequest): Promise<SubmitResult<'ai:interview'>>;
   getInterviewResult(jobId: JobId<'ai:interview'>): Promise<InterviewResponseResult | null>;
-  getJobStatus(jobId: JobId): Promise<JobStatus>;
+  getHintJobStatus(jobId: JobId<'ai:hint'>): Promise<JobStatus>;
+  getReviewJobStatus(jobId: JobId<'ai:review'>): Promise<JobStatus>;
+  getInterviewJobStatus(jobId: JobId<'ai:interview'>): Promise<JobStatus>;
   healthCheck(): Promise<boolean>;
 }
 
