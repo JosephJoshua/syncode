@@ -1,11 +1,17 @@
-export { COLLAB_INTERNAL_ROUTES, CONTROL_PLANE_INTERNAL_ROUTES } from './routes';
-export type {
-  CreateDocumentRequest,
-  CreateDocumentResponse,
-  DestroyDocumentRequest,
-  DestroyDocumentResponse,
-  KickUserRequest,
-  KickUserResponse,
-  SnapshotReadyPayload,
-  UserDisconnectedPayload,
-} from './types';
+export { COLLAB_CLIENT, type ICollabClient } from './client';
+export {
+  CONTROL_INTERNAL,
+  type SnapshotReadyPayload,
+  snapshotReadyPayloadSchema,
+  type UserDisconnectedPayload,
+  userDisconnectedPayloadSchema,
+} from './events';
+export {
+  COLLAB_INTERNAL,
+  type CreateDocumentRequest,
+  type CreateDocumentResponse,
+  type DestroyDocumentResponse,
+  type KickUserRequest,
+  type KickUserResponse,
+} from './internal';
+export { StubCollabClient } from './stub';

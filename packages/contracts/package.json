@@ -11,7 +11,8 @@
     "lint": "biome check ."
   },
   "dependencies": {
-    "@syncode/shared": "workspace:^"
+    "@syncode/shared": "workspace:^",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@syncode/tsconfig": "workspace:^",
