@@ -4,6 +4,7 @@ const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   PORT: z.coerce.number().positive().default(3001),
   CONTROL_PLANE_URL: z.url().default('http://localhost:3000'),
+  // TODO: Replace with COLLAB_TOKEN_SECRET
   JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters'),
   OTEL_EXPORTER_OTLP_ENDPOINT: z.url().optional(),
 });
