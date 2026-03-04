@@ -74,7 +74,6 @@ jobs:
           name: coverage
           path: |
             apps/control-plane/coverage/lcov.info
-            apps/web/coverage/lcov.info
             packages/infrastructure/coverage/lcov.info
           retention-days: 1
 

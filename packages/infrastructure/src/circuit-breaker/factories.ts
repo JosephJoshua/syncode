@@ -50,7 +50,6 @@ export function createProtectedBullMqAdapter<T extends object>(
 
 /**
  * Creates a collab HTTP client with circuit breaker protection.
- * Note: healthCheck() is NOT proxied — it always makes a real HTTP call.
  */
 export function createProtectedCollabClient<T extends object>(
   adapter: T,
