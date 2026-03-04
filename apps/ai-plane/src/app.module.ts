@@ -15,13 +15,44 @@ import { InfrastructureModule } from './infrastructure/infrastructure.module';
     LoggerModule.forRoot({
       pinoHttp: {
         level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
-        transport:
-          process.env.NODE_ENV === 'production'
-            ? undefined
-            : {
-                target: 'pino-pretty',
-                options: { colorize: true, translateTime: 'SYS:standard', ignore: 'pid,hostname' },
-              },
+        transport: {
+          targets: [
+            process.env.NODE_ENV === 'production'
+              ? { target: 'pino/file', options: { destination: 1 } }
+              : {
+                  target: 'pino-pretty',
+                  options: {
+                    colorize: true,
+                    translateTime: 'SYS:standard',
+                    ignore: 'pid,hostname',
+                  },
+                },
+            ...(process.env.OTEL_EXPORTER_OTLP_ENDPOINT
+              ? [
+                  {
+                    target: 'pino-opentelemetry-transport',
+                    options: {
+                      logRecordProcessorOptions: [
+                        {
+                          recordProcessorType: 'batch',
+                          exporterOptions: {
+                            protocol: 'http',
+                            httpExporterOptions: {
+                              url: `${process.env.OTEL_EXPORTER_OTLP_ENDPOINT}/v1/logs`,
+                            },
+                          },
+                        },
+                      ],
+                      resourceAttributes: {
+                        'service.name': 'ai-plane',
+                        'service.version': process.env.npm_package_version || '0.0.0',
+                      },
+                    },
+                  },
+                ]
+              : []),
+          ],
+        },
       },
     }),
     InfrastructureModule,
