@@ -9,7 +9,7 @@ import {
   type RunCodeRequest,
 } from '@syncode/contracts';
 import { type IMediaService, MEDIA_SERVICE } from '@syncode/shared/ports';
-import type { CreateRoomResult, DestroyRoomResult, TestCase } from './types';
+import type { CreateRoomResult, DestroyRoomResult, TestCase } from './rooms.types';
 
 /**
  * Core business logic for room lifecycle and code execution.
