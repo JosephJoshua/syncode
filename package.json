@@ -1,0 +1,44 @@
+{
+  "name": "syncode",
+  "private": true,
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "test:cov": "turbo run test:cov",
+    "test:e2e": "turbo run test:e2e",
+    "lint": "turbo run lint",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "check": "biome check .",
+    "generate": "turbo run generate",
+    "migrate": "turbo run migrate",
+    "studio": "turbo run studio",
+    "db:generate": "pnpm --filter @syncode/db generate",
+    "db:migrate": "pnpm --filter @syncode/db migrate",
+    "db:studio": "pnpm --filter @syncode/db studio",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f",
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.4",
+    "@commitlint/cli": "^20.4.2",
+    "@commitlint/config-conventional": "^20.4.2",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.3.1",
+    "turbo": "^2.8.12",
+    "typescript": "5.9.2"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx,json,css,md}": [
+      "biome check --write --no-errors-on-unmatched"
+    ]
+  },
+  "packageManager": "pnpm@9.0.0",
+  "engines": {
+    "node": ">=18"
+  }
+}

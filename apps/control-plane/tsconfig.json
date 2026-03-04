@@ -1,0 +1,22 @@
+{
+  "extends": "@syncode/tsconfig/node.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src",
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"]
+    },
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "verbatimModuleSyntax": false,
+    "noEmit": true,
+    "strict": true,
+    "noImplicitOverride": false,
+    "skipLibCheck": true
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist", "**/*.spec.ts", "**/*.test.ts"]
+}
