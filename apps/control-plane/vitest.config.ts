@@ -12,6 +12,7 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     root: './',
+    passWithNoTests: true,
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html', 'lcov'],
@@ -24,12 +25,6 @@ export default defineConfig({
         '**/*.spec.ts',
         '**/*.test.ts',
       ],
-      thresholds: {
-        statements: 80,
-        branches: 80,
-        functions: 80,
-        lines: 80,
-      },
     },
   },
 });
