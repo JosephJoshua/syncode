@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "noEmit": false,
+    "outDir": "dist",
+    "rootDir": "src",
+    "verbatimModuleSyntax": false
+  },
+  "exclude": ["src/migrate.ts", "src/seed.ts"]
+}
