@@ -24,6 +24,8 @@ COPY --from=pruner /app/out/full/ .
 RUN pnpm turbo build --filter=@syncode/control-plane
 
 RUN pnpm deploy --filter=@syncode/control-plane --prod /app/deploy
+COPY infra/docker/migrate.mjs /app/deploy/migrate.mjs
+COPY packages/db/drizzle /app/deploy/drizzle
 
 # Stage 3: Production runner
 FROM node:25-alpine AS runner

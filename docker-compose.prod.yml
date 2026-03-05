@@ -1,7 +1,7 @@
 services:
   nginx:
     image: nginx:1.28-alpine
-    container_name: syncode-nginx
+
     restart: unless-stopped
     ports:
       - "${NGINX_PORT:-4443}:80"
@@ -19,21 +19,25 @@ services:
       - proxy
 
   web:
+    image: ${REGISTRY_PREFIX:-ghcr.io/josephjoshua}/syncode-web:${IMAGE_TAG:-latest}
     build:
       context: .
       dockerfile: infra/docker/Dockerfile.web
-    container_name: syncode-web
     restart: unless-stopped
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
     networks:
       - frontend
 
   control-plane:
+    image: ${REGISTRY_PREFIX:-ghcr.io/josephjoshua}/syncode-control-plane:${IMAGE_TAG:-latest}
     build:
       context: .
       dockerfile: infra/docker/Dockerfile.control-plane
-    container_name: syncode-control-plane
     restart: unless-stopped
     env_file: .env
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
     depends_on:
       postgres:
         condition: service_healthy
@@ -44,12 +48,14 @@ services:
       - backend
 
   collab-plane:
+    image: ${REGISTRY_PREFIX:-ghcr.io/josephjoshua}/syncode-collab-plane:${IMAGE_TAG:-latest}
     build:
       context: .
       dockerfile: infra/docker/Dockerfile.collab-plane
-    container_name: syncode-collab-plane
     restart: unless-stopped
     env_file: .env
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
     depends_on:
       redis:
         condition: service_healthy
@@ -58,12 +64,14 @@ services:
       - backend
 
   execution-plane:
+    image: ${REGISTRY_PREFIX:-ghcr.io/josephjoshua}/syncode-execution-plane:${IMAGE_TAG:-latest}
     build:
       context: .
       dockerfile: infra/docker/Dockerfile.execution-plane
-    container_name: syncode-execution-plane
     restart: unless-stopped
     env_file: .env
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
     depends_on:
       redis:
         condition: service_healthy
@@ -71,21 +79,35 @@ services:
       - backend
 
   ai-plane:
+    image: ${REGISTRY_PREFIX:-ghcr.io/josephjoshua}/syncode-ai-plane:${IMAGE_TAG:-latest}
     build:
       context: .
       dockerfile: infra/docker/Dockerfile.ai-plane
-    container_name: syncode-ai-plane
     restart: unless-stopped
     env_file: .env
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
     depends_on:
       redis:
         condition: service_healthy
     networks:
       - backend
 
+  watchtower:
+    image: nickfedor/watchtower:1.14.3
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${DOCKER_CONFIG:-/root/.docker/config.json}:/config.json:ro
+    environment:
+      WATCHTOWER_POLL_INTERVAL: "300"
+      WATCHTOWER_CLEANUP: "true"
+      WATCHTOWER_LABEL_ENABLE: "true"
+
   postgres:
     image: postgres:17-alpine
-    container_name: syncode-postgres-prod
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
@@ -103,7 +125,6 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: syncode-redis-prod
     restart: unless-stopped
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
@@ -125,7 +146,6 @@ services:
 
   livekit:
     image: livekit/livekit-server:v1.9.11
-    container_name: syncode-livekit
     restart: unless-stopped
     environment:
       LIVEKIT_KEYS: "${LIVEKIT_API_KEY:?LIVEKIT_API_KEY is required}: ${LIVEKIT_API_SECRET:?LIVEKIT_API_SECRET is required}"
@@ -135,7 +155,6 @@ services:
 
   seaweedfs:
     image: chrislusf/seaweedfs:4.13
-    container_name: syncode-seaweedfs
     restart: unless-stopped
     command: server -s3
     volumes:
