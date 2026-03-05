@@ -1,8 +1,11 @@
-import { drizzle } from 'drizzle-orm/postgres-js';
-import { migrate } from 'drizzle-orm/postgres-js/migrator';
-import postgres from 'postgres';
+import { runMigrations } from '@syncode/db';
 
-const connection = postgres(process.env.DATABASE_URL, { max: 1 });
-await migrate(drizzle(connection), { migrationsFolder: './drizzle' });
-await connection.end();
+const databaseUrl = process.env.DATABASE_URL;
+
+if (!databaseUrl) {
+  console.error('DATABASE_URL environment variable is required');
+  process.exit(1);
+}
+
+await runMigrations(databaseUrl, './drizzle');
 console.log('Migrations complete');
