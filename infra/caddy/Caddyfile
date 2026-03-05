@@ -1,0 +1,96 @@
+# Terminates TLS on the VPS and forwards to the origin server.
+# Origin nginx handles path routing, security headers, and WebSocket upgrades.
+#
+# Environment variables (set in .env):
+#   DOMAIN              - e.g. syncode.anggita.org
+#   ACME_EMAIL          - Let's Encrypt registration email
+#   ORIGIN_HOST         - Origin server public IP
+#   ORIGIN_PORT_PROD    - Origin port for production (e.g. 4443)
+#   ORIGIN_PORT_STAGING - Origin port for staging (e.g. 4444)
+
+{
+	email {$ACME_EMAIL}
+
+	servers {
+		protocols h1 h2 h3
+	}
+
+	log default {
+		format json
+		output file /data/logs/access.log {
+			roll_size 50MiB
+			roll_keep 10
+			roll_keep_for 720h
+		}
+	}
+}
+
+# Extra proxy headers
+(proxy_headers) {
+	header_up X-Real-IP {remote_host}
+}
+
+# WebSocket reverse proxy
+(ws_proxy) {
+	import proxy_headers
+	stream_timeout 3700s # Exceeds origin nginx's 3600s
+	stream_close_delay 5s
+}
+
+# Standard reverse proxy
+(standard_proxy) {
+	import proxy_headers
+}
+
+{$DOMAIN} {
+	# Strip Caddy's Server header because origin nginx sets its own headers
+	header -Server
+
+	handle /health {
+		respond "OK" 200
+	}
+
+	handle /ws/* {
+		reverse_proxy {$ORIGIN_HOST}:{$ORIGIN_PORT_PROD} {
+			import ws_proxy
+		}
+	}
+
+	handle /livekit/* {
+		reverse_proxy {$ORIGIN_HOST}:{$ORIGIN_PORT_PROD} {
+			import ws_proxy
+		}
+	}
+
+	handle {
+		reverse_proxy {$ORIGIN_HOST}:{$ORIGIN_PORT_PROD} {
+			import standard_proxy
+		}
+	}
+}
+
+staging.{$DOMAIN} {
+	header -Server
+
+	handle /health {
+		respond "OK" 200
+	}
+
+	handle /ws/* {
+		reverse_proxy {$ORIGIN_HOST}:{$ORIGIN_PORT_STAGING} {
+			import ws_proxy
+		}
+	}
+
+	handle /livekit/* {
+		reverse_proxy {$ORIGIN_HOST}:{$ORIGIN_PORT_STAGING} {
+			import ws_proxy
+		}
+	}
+
+	handle {
+		reverse_proxy {$ORIGIN_HOST}:{$ORIGIN_PORT_STAGING} {
+			import standard_proxy
+		}
+	}
+}

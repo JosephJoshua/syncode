@@ -18,9 +18,10 @@
     "db:generate": "pnpm --filter @syncode/db generate",
     "db:migrate": "pnpm --filter @syncode/db migrate",
     "db:studio": "pnpm --filter @syncode/db studio",
-    "docker:up": "docker compose up -d",
-    "docker:down": "docker compose down",
-    "docker:logs": "docker compose logs -f",
+    "infra:up": "docker compose -f docker-compose.yml up -d",
+    "infra:down": "docker compose down",
+    "infra:full": "docker compose up -d",
+    "infra:logs": "docker compose logs -f",
     "prepare": "husky"
   },
   "devDependencies": {

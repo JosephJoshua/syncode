@@ -1,0 +1,15 @@
+name: Branch Protection
+
+on:
+  push:
+    branches: [main, develop]
+
+jobs:
+  reject-direct-push:
+    if: github.event.head_commit.committer.username != 'web-flow'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Reject direct push
+        run: |
+          echo "::error::Direct pushes to ${{ github.ref_name }} are not allowed. Use a pull request."
+          exit 1

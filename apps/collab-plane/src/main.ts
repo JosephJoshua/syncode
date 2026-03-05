@@ -31,4 +31,4 @@ async function bootstrap() {
   logger.log(`Collab plane listening on port ${port}`);
 }
 
-await bootstrap();
+bootstrap();

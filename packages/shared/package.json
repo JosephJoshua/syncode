@@ -3,11 +3,27 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "main": "./dist/index.js",
+  "types": "./src/index.ts",
+  "typesVersions": {
+    "*": {
+      "ports": [
+        "./src/ports/index.ts"
+      ]
+    }
+  },
   "exports": {
-    ".": "./src/index.ts",
-    "./ports": "./src/ports/index.ts"
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./dist/index.js"
+    },
+    "./ports": {
+      "types": "./src/ports/index.ts",
+      "default": "./dist/ports/index.js"
+    }
   },
   "scripts": {
+    "build": "tsc -p tsconfig.build.json && echo '{\"type\":\"commonjs\"}' > dist/package.json",
     "typecheck": "tsc --noEmit",
     "lint": "biome check ."
   },
