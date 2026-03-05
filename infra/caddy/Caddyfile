@@ -26,6 +26,11 @@
 	}
 }
 
+# Internal health endpoint (no TLS, not exposed to host)
+:8080 {
+	respond /health 200
+}
+
 # Extra proxy headers
 (proxy_headers) {
 	header_up X-Real-IP {remote_host}
