@@ -25,8 +25,8 @@ services:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--web.enable-remote-write-receiver"
 
-  # NOTE: Loki 3.6+ uses a scratch-based image with no shell.
-  # You cannot exec into this container or use CMD-SHELL healthchecks.
+  # NOTE: Loki 3.6+ uses a distroless image with no shell.
+  # Use the built-in `loki -health` command for healthchecks (available since 3.6.5).
   loki:
     image: grafana/loki:3.6.7
     container_name: syncode-loki
@@ -34,9 +34,15 @@ services:
     ports:
       - "3100:3100"
     volumes:
-      - ./infra/loki/config.yaml:/etc/loki/local-config.yaml:ro
+      - ./infra/loki/config.yaml:/etc/loki/config.yaml:ro
       - loki_data:/loki
-    command: -config.file=/etc/loki/local-config.yaml
+    command: -config.file=/etc/loki/config.yaml
+    healthcheck:
+      test: ["CMD", "/usr/bin/loki", "-health"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 5
 
   tempo:
     image: grafana/tempo:2.10.1
