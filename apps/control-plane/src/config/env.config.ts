@@ -1,6 +1,13 @@
 import { z } from 'zod';
 
 /**
+ * Parses an env var string into a boolean.
+ */
+const booleanEnv = z
+  .union([z.boolean(), z.string()])
+  .transform((val) => val === true || val === 'true' || val === '1');
+
+/**
  * Environment variable validation schema
  */
 const envSchema = z
@@ -22,7 +29,7 @@ const envSchema = z
     S3_SECRET_KEY: z.string().min(1),
     S3_BUCKET: z.string().min(1),
     S3_REGION: z.string().default('us-east-1'),
-    S3_FORCE_PATH_STYLE: z.coerce.boolean().default(true),
+    S3_FORCE_PATH_STYLE: booleanEnv.default(true),
 
     LIVEKIT_API_KEY: z.string().min(1),
     LIVEKIT_API_SECRET: z.string().min(1),
@@ -30,9 +37,9 @@ const envSchema = z
 
     COLLAB_PLANE_URL: z.url().default('http://localhost:3001'),
 
-    USE_EXECUTION_STUB: z.coerce.boolean().default(false),
-    USE_AI_STUB: z.coerce.boolean().default(false),
-    USE_COLLAB_STUB: z.coerce.boolean().default(false),
+    USE_EXECUTION_STUB: booleanEnv.default(false),
+    USE_AI_STUB: booleanEnv.default(false),
+    USE_COLLAB_STUB: booleanEnv.default(false),
 
     OTEL_EXPORTER_OTLP_ENDPOINT: z.url().optional(),
 

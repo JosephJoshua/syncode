@@ -5,6 +5,15 @@ import { CollaborationModule } from './collaboration/collaboration.module';
 import { validateEnv } from './config/env.config';
 import { InternalModule } from './internal/internal.module';
 
+const isProd = process.env.NODE_ENV === 'production';
+let hasPinoPretty = false;
+if (!isProd) {
+  try {
+    require.resolve('pino-pretty');
+    hasPinoPretty = true;
+  } catch {}
+}
+
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -15,19 +24,19 @@ import { InternalModule } from './internal/internal.module';
 
     LoggerModule.forRoot({
       pinoHttp: {
-        level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
+        level: isProd ? 'info' : 'debug',
         transport: {
           targets: [
-            process.env.NODE_ENV === 'production'
-              ? { target: 'pino/file', options: { destination: 1 } }
-              : {
+            hasPinoPretty
+              ? {
                   target: 'pino-pretty',
                   options: {
                     colorize: true,
                     translateTime: 'SYS:standard',
                     ignore: 'pid,hostname',
                   },
-                },
+                }
+              : { target: 'pino/file', options: { destination: 1 } },
             ...(process.env.OTEL_EXPORTER_OTLP_ENDPOINT
               ? [
                   {
