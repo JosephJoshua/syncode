@@ -239,8 +239,6 @@ services:
     restart: unless-stopped
     command:
       - -config.file=/etc/loki/config.yaml
-      - -compactor.retention-enabled=true
-      - -limits.retention-period=168h
     volumes:
       - ./infra/loki/config.yaml:/etc/loki/config.yaml:ro
       - loki_data:/loki
@@ -258,7 +256,6 @@ services:
     restart: unless-stopped
     command:
       - -config.file=/etc/tempo/config.yaml
-      - -compactor.compaction.block-retention=168h
     volumes:
       - ./infra/tempo/config.yaml:/etc/tempo/config.yaml:ro
       - tempo_data:/var/tempo
