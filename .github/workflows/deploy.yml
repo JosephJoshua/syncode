@@ -1,0 +1,65 @@
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main, develop]
+
+concurrency:
+  group: deploy-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: false
+
+jobs:
+  build-and-push:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Set image tag
+        id: meta
+        run: |
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          echo "prefix=ghcr.io/${OWNER}" >> "$GITHUB_OUTPUT"
+          BRANCH="${{ github.event.workflow_run.head_branch }}"
+          if [ "${BRANCH}" = "main" ]; then
+            echo "tag=latest" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=develop" >> "$GITHUB_OUTPUT"
+          fi
+          echo "sha=sha-$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v4
+        with:
+          version: latest
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push all images
+        run: |
+          PREFIX="${{ steps.meta.outputs.prefix }}"
+          TAG="${{ steps.meta.outputs.tag }}"
+          SHA="${{ steps.meta.outputs.sha }}"
+          for svc in web control-plane collab-plane execution-plane ai-plane; do
+            IMAGE="${PREFIX}/syncode-${svc}"
+            echo "::group::Building ${svc}"
+            docker buildx build \
+              --file "infra/docker/Dockerfile.${svc}" \
+              --tag "${IMAGE}:${TAG}" \
+              --tag "${IMAGE}:${SHA}" \
+              --push \
+              --cache-from "type=gha,scope=${svc}" \
+              --cache-to "type=gha,mode=max,scope=${svc}" \
+              .
+            echo "::endgroup::"
+          done

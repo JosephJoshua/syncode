@@ -15,4 +15,4 @@ async function bootstrap() {
   logger.log('Execution plane started. Listening for jobs...');
 }
 
-await bootstrap();
+bootstrap();

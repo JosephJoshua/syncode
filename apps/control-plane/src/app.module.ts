@@ -15,6 +15,15 @@ import { ProblemsModule } from './modules/problems/problems.module';
 import { RoomsModule } from './modules/rooms/rooms.module';
 import { UsersModule } from './modules/users/users.module';
 
+const isProd = process.env.NODE_ENV === 'production';
+let hasPinoPretty = false;
+if (!isProd) {
+  try {
+    require.resolve('pino-pretty');
+    hasPinoPretty = true;
+  } catch {}
+}
+
 /**
  * Imports all feature modules and configures application-wide services.
  * NOTE: Module order matters.
@@ -31,18 +40,45 @@ import { UsersModule } from './modules/users/users.module';
     // Logging
     LoggerModule.forRoot({
       pinoHttp: {
-        level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
-        transport:
-          process.env.NODE_ENV !== 'production'
-            ? {
-                target: 'pino-pretty',
-                options: {
-                  colorize: true,
-                  translateTime: 'SYS:standard',
-                  ignore: 'pid,hostname',
-                },
-              }
-            : undefined,
+        level: isProd ? 'info' : 'debug',
+        transport: {
+          targets: [
+            hasPinoPretty
+              ? {
+                  target: 'pino-pretty',
+                  options: {
+                    colorize: true,
+                    translateTime: 'SYS:standard',
+                    ignore: 'pid,hostname',
+                  },
+                }
+              : { target: 'pino/file', options: { destination: 1 } },
+            ...(process.env.OTEL_EXPORTER_OTLP_ENDPOINT
+              ? [
+                  {
+                    target: 'pino-opentelemetry-transport',
+                    options: {
+                      logRecordProcessorOptions: [
+                        {
+                          recordProcessorType: 'batch',
+                          exporterOptions: {
+                            protocol: 'http',
+                            httpExporterOptions: {
+                              url: `${process.env.OTEL_EXPORTER_OTLP_ENDPOINT}/v1/logs`,
+                            },
+                          },
+                        },
+                      ],
+                      resourceAttributes: {
+                        'service.name': 'control-plane',
+                        'service.version': process.env.npm_package_version || '0.0.0',
+                      },
+                    },
+                  },
+                ]
+              : []),
+          ],
+        },
         serializers: {
           req: (req) => ({
             method: req.method,
