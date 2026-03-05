@@ -51,6 +51,11 @@ else
   read -rp "  Origin port — staging [4444]: " ORIGIN_PORT_STAGING
   ORIGIN_PORT_STAGING="${ORIGIN_PORT_STAGING:-4444}"
 
+  if [ -z "$DOMAIN" ] || [ -z "$ACME_EMAIL" ] || [ -z "$ORIGIN_HOST" ]; then
+    error "DOMAIN, ACME_EMAIL, and ORIGIN_HOST are required."
+    exit 1
+  fi
+
   cat > "$CADDY_DIR/.env" <<EOF
 DOMAIN=$DOMAIN
 ACME_EMAIL=$ACME_EMAIL

@@ -4,21 +4,21 @@
   "private": true,
   "type": "module",
   "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "types": "./src/index.ts",
   "typesVersions": {
     "*": {
       "ports": [
-        "./dist/ports/index.d.ts"
+        "./src/ports/index.ts"
       ]
     }
   },
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
+      "types": "./src/index.ts",
       "default": "./dist/index.js"
     },
     "./ports": {
-      "types": "./dist/ports/index.d.ts",
+      "types": "./src/ports/index.ts",
       "default": "./dist/ports/index.js"
     }
   },
