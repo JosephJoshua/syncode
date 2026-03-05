@@ -1,0 +1,37 @@
+# Stage 1: Prune monorepo for web
+FROM node:25-alpine AS pruner
+
+ENV PNPM_HOME="/pnpm" PATH="/pnpm:$PATH"
+RUN npm install -g --force corepack && corepack enable && corepack prepare pnpm@9.0.0 --activate
+RUN pnpm add -g turbo
+
+WORKDIR /app
+COPY . .
+RUN turbo prune @syncode/web --docker
+
+# Stage 2: Install deps & build
+FROM node:25-alpine AS builder
+
+ENV PNPM_HOME="/pnpm" PATH="/pnpm:$PATH"
+RUN npm install -g --force corepack && corepack enable && corepack prepare pnpm@9.0.0 --activate
+
+WORKDIR /app
+
+COPY --from=pruner /app/out/json/ .
+RUN pnpm install --frozen-lockfile
+
+COPY --from=pruner /app/out/full/ .
+RUN pnpm turbo build --filter=@syncode/web
+
+# Stage 3: Serve static files with nginx
+FROM nginx:1.28-alpine AS runner
+
+RUN rm /etc/nginx/conf.d/default.conf
+
+COPY --from=builder /app/apps/web/dist /usr/share/nginx/html
+COPY infra/nginx/web.conf /etc/nginx/conf.d/default.conf
+
+LABEL org.opencontainers.image.source="https://github.com/JosephJoshua/syncode"
+LABEL org.opencontainers.image.title="syncode-web"
+
+EXPOSE 80

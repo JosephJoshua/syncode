@@ -1,0 +1,50 @@
+# Stage 1: Prune monorepo for control-plane
+FROM node:25-alpine AS pruner
+
+ENV PNPM_HOME="/pnpm" PATH="/pnpm:$PATH"
+RUN npm install -g --force corepack && corepack enable && corepack prepare pnpm@9.0.0 --activate
+RUN pnpm add -g turbo
+
+WORKDIR /app
+COPY . .
+RUN turbo prune @syncode/control-plane --docker
+
+# Stage 2: Install deps & build
+FROM node:25-alpine AS builder
+
+ENV PNPM_HOME="/pnpm" PATH="/pnpm:$PATH"
+RUN npm install -g --force corepack && corepack enable && corepack prepare pnpm@9.0.0 --activate
+
+WORKDIR /app
+
+COPY --from=pruner /app/out/json/ .
+RUN pnpm install --frozen-lockfile
+
+COPY --from=pruner /app/out/full/ .
+RUN pnpm turbo build --filter=@syncode/control-plane
+
+RUN pnpm deploy --filter=@syncode/control-plane --prod /app/deploy
+
+# Stage 3: Production runner
+FROM node:25-alpine AS runner
+
+RUN apk add --no-cache tini curl && addgroup -S syncode && adduser -S syncode -G syncode
+
+WORKDIR /app
+
+COPY --from=builder --chown=syncode:syncode /app/deploy .
+
+ENV NODE_ENV=production
+
+USER syncode
+
+EXPOSE 3000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD curl -f http://localhost:3000/health || exit 1
+
+LABEL org.opencontainers.image.source="https://github.com/JosephJoshua/syncode"
+LABEL org.opencontainers.image.title="syncode-control-plane"
+
+ENTRYPOINT ["/sbin/tini", "--"]
+CMD ["node", "dist/main.js"]
