@@ -5,6 +5,7 @@ services:
     restart: unless-stopped
     ports:
       - "${NGINX_PORT:-4443}:80"
+      - "${GRAFANA_PORT:-3334}:3334"
     volumes:
       - ./infra/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
     depends_on:
@@ -14,9 +15,12 @@ services:
         condition: service_healthy
       collab-plane:
         condition: service_healthy
+      grafana:
+        condition: service_started
     networks:
       - frontend
       - proxy
+      - observability
 
   web:
     image: ${REGISTRY_PREFIX:-ghcr.io/josephjoshua}/syncode-web:${IMAGE_TAG:-latest}
@@ -46,6 +50,7 @@ services:
     networks:
       - proxy
       - backend
+      - observability
 
   collab-plane:
     image: ${REGISTRY_PREFIX:-ghcr.io/josephjoshua}/syncode-collab-plane:${IMAGE_TAG:-latest}
@@ -62,6 +67,7 @@ services:
     networks:
       - proxy
       - backend
+      - observability
 
   execution-plane:
     image: ${REGISTRY_PREFIX:-ghcr.io/josephjoshua}/syncode-execution-plane:${IMAGE_TAG:-latest}
@@ -77,6 +83,7 @@ services:
         condition: service_healthy
     networks:
       - backend
+      - observability
 
   ai-plane:
     image: ${REGISTRY_PREFIX:-ghcr.io/josephjoshua}/syncode-ai-plane:${IMAGE_TAG:-latest}
@@ -92,6 +99,7 @@ services:
         condition: service_healthy
     networks:
       - backend
+      - observability
 
   watchtower:
     image: nickfedor/watchtower:1.14.3
@@ -175,6 +183,106 @@ services:
       start_period: 10s
       retries: 3
 
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.147.0
+    restart: unless-stopped
+    volumes:
+      - ./infra/otel/config.yaml:/etc/otelcol-contrib/config.yaml:ro
+    depends_on:
+      prometheus:
+        condition: service_started
+      loki:
+        condition: service_started
+      tempo:
+        condition: service_started
+    networks:
+      - observability
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:13133/"]
+      interval: 10s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+  prometheus:
+    image: prom/prometheus:v3.10.0
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --web.enable-remote-write-receiver
+      - --storage.tsdb.retention.time=7d
+      - --storage.tsdb.retention.size=2GB
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    networks:
+      - observability
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9090/-/healthy"]
+      interval: 10s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+  loki:
+    image: grafana/loki:3.6.7
+    restart: unless-stopped
+    command:
+      - -config.file=/etc/loki/config.yaml
+      - -compactor.retention-enabled=true
+      - -limits.retention-period=168h
+    volumes:
+      - ./infra/loki/config.yaml:/etc/loki/config.yaml:ro
+      - loki_data:/loki
+    networks:
+      - observability
+    healthcheck:
+      test: ["CMD", "/usr/bin/loki", "-health"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 5
+
+  tempo:
+    image: grafana/tempo:2.10.1
+    restart: unless-stopped
+    command:
+      - -config.file=/etc/tempo/config.yaml
+      - -compactor.compaction.block-retention=168h
+    volumes:
+      - ./infra/tempo/config.yaml:/etc/tempo/config.yaml:ro
+      - tempo_data:/var/tempo
+    networks:
+      - observability
+
+  grafana:
+    image: grafana/grafana:12.4.0
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD is required}
+      GF_SERVER_ROOT_URL: https://${GRAFANA_SUBDOMAIN:-grafana}.${DOMAIN:?DOMAIN is required}
+      GF_SERVER_DOMAIN: ${GRAFANA_SUBDOMAIN:-grafana}.${DOMAIN}
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      prometheus:
+        condition: service_healthy
+      loki:
+        condition: service_started
+      tempo:
+        condition: service_started
+    networks:
+      - observability
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:3000/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+
 networks:
   frontend:
     driver: bridge
@@ -182,8 +290,14 @@ networks:
     driver: bridge
   backend:
     driver: bridge
+  observability:
+    driver: bridge
 
 volumes:
   pg_data:
   redis_data:
   seaweedfs_data:
+  prometheus_data:
+  loki_data:
+  tempo_data:
+  grafana_data:

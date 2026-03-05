@@ -77,6 +77,8 @@ init_compose_args() {
   if [ "$STAGING" = true ]; then
     export IMAGE_TAG=develop
     export NGINX_PORT=4444
+    export GRAFANA_PORT=3335
+    export GRAFANA_SUBDOMAIN=grafana.staging
     COMPOSE_ARGS+=("-p" "syncode-staging")
   fi
 }

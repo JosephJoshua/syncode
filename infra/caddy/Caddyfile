@@ -7,6 +7,7 @@
 #   ORIGIN_HOST         - Origin server public IP
 #   ORIGIN_PORT_PROD    - Origin port for production (e.g. 4443)
 #   ORIGIN_PORT_STAGING - Origin port for staging (e.g. 4444)
+#   ORIGIN_PORT_GRAFANA - Origin port for Grafana (e.g. 3334)
 
 {
 	email {$ACME_EMAIL}
@@ -66,6 +67,22 @@
 		reverse_proxy {$ORIGIN_HOST}:{$ORIGIN_PORT_PROD} {
 			import standard_proxy
 		}
+	}
+}
+
+grafana.{$DOMAIN} {
+	header -Server
+
+	reverse_proxy {$ORIGIN_HOST}:{$ORIGIN_PORT_GRAFANA} {
+		import standard_proxy
+	}
+}
+
+grafana.staging.{$DOMAIN} {
+	header -Server
+
+	reverse_proxy {$ORIGIN_HOST}:{$ORIGIN_PORT_STAGING_GRAFANA} {
+		import standard_proxy
 	}
 }
 
