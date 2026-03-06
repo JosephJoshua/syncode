@@ -156,6 +156,21 @@ Format: `type/short-description` — regex: `^(feature|feat|bugfix|fix|hotfix|ch
 - Never push to main or develop directly — always PR
 - Commits under 500 changed lines (enforced by pre-commit hook)
 - Backend test coverage ≥ 80% (SonarCloud quality gate)
+- Every PR should reference an issue with `Closes #N` in the body
+
+## GitHub Projects
+
+Work is tracked on a GitHub Projects board with these fields:
+
+| Field | Options |
+|---|---|
+| **Status** | Backlog → Ready → In progress → In review → Done |
+| **Priority** | P0 (critical), P1 (important), P2 (nice-to-have) |
+| **Size** | XS, S, M, L, XL |
+| **Area** | infra, control-plane, collab-plane, execution-plane, ai-plane, web |
+| **Type** | task, story, bug, spike |
+
+Issues are typed as **story** (user-facing feature from [user stories](docs/user-stories.md)), **task** (technical work item, often a sub-issue of a story), **bug**, or **spike** (time-boxed research).
 
 ## Testing
 

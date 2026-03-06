@@ -56,18 +56,62 @@ feat: add login               # missing scope
 feat(api): add login          # invalid scope (use "control-plane")
 ```
 
+## GitHub Projects
+
+所有工作通过 [SynCode Development](https://github.com/orgs/JosephJoshua/projects) 项目看板进行跟踪。
+
+### 看板字段
+
+看板上的每个 Issue 都有以下字段：
+
+| 字段 | 选项 | 说明 |
+|---|---|---|
+| **Status** | `Backlog` → `Ready` → `In progress` → `In review` → `Done` | 看板工作流阶段 |
+| **Priority** | `P0`、`P1`、`P2` | P0 = 紧急/阻塞，P1 = 重要，P2 = 锦上添花 |
+| **Size** | `XS`、`S`、`M`、`L`、`XL` | 工作量估算 |
+| **Area** | `infra`、`control-plane`、`collab-plane`、`execution-plane`、`ai-plane`、`web` | 涉及的代码库区域 |
+| **Type** | `task`、`story`、`bug`、`spike` | 工作类型 |
+
+### 工作流程
+
+1. 新 Issue 进入 **Backlog**
+2. 被选入迭代后，移至 **Ready**
+3. 开始开发时，移至 **In progress**
+4. 提交 PR 后，移至 **In review**
+5. 合并后，移至 **Done**
+
+## Issues
+
+- 每项非平凡的工作都应创建 GitHub Issue
+- 创建 Issue 时需设置所有项目字段（Priority、Size、Area、Type）
+- 开始工作时将 Issue 指派给自己
+- Issue 类型分为 **story**、**task**、**bug**、**spike**：
+  - **Story**：面向用户的功能（对应[用户故事](docs/user-stories.md)）
+  - **Task**：技术工作项，通常是 Story 的子 Issue
+  - **Bug**：缺陷修复
+  - **Spike**：有时间限制的调研/探索
+
 ## Pull Request 流程
 
 1. 基于 `develop` 分支创建新分支，遵循上述命名规范
 2. 保持提交小而聚焦，每次提交不超过 500 行变更
 3. 推送分支后创建 PR，目标分支为 `develop`
-4. 确保 CI 全部通过（lint、类型检查、测试）
-5. 指定 Joseph 进行 code review
+4. 在 PR 正文中使用 `Closes #N` 关联对应 Issue
+5. 确保 CI 全部通过（lint、类型检查、测试）
+6. 指定 Joseph 进行 code review
+
+**PR 正文格式：**
+```markdown
+Closes #<issue-number>
+
+如变更内容从 Issue 标题不够明显，可在此简要说明。
+```
 
 **规则：**
 - 禁止直接推送到 `main` 或 `develop`，分支保护规则会拒绝推送
 - 所有变更必须通过 PR 合入 `develop`
 - `main` 只接受从 `develop` 的合并
+- 每个 PR 应通过 `Closes #N` 关联对应 Issue
 
 ## 代码风格
 
