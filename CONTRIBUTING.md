@@ -56,18 +56,62 @@ feat: add login               # missing scope
 feat(api): add login          # invalid scope (use "control-plane")
 ```
 
+## GitHub Projects
+
+We track all work on the [SynCode Development](https://github.com/orgs/JosephJoshua/projects) project board.
+
+### Board Fields
+
+Every issue on the board has these fields:
+
+| Field | Options | Description |
+|---|---|---|
+| **Status** | `Backlog` → `Ready` → `In progress` → `In review` → `Done` | Kanban workflow stage |
+| **Priority** | `P0`, `P1`, `P2` | P0 = critical/blocking, P1 = important, P2 = nice-to-have |
+| **Size** | `XS`, `S`, `M`, `L`, `XL` | Effort estimate |
+| **Area** | `infra`, `control-plane`, `collab-plane`, `execution-plane`, `ai-plane`, `web` | Which part of the codebase |
+| **Type** | `task`, `story`, `bug`, `spike` | Nature of the work |
+
+### Workflow
+
+1. New issues start in **Backlog**
+2. When selected for an iteration, move to **Ready**
+3. When you start working, move to **In progress**
+4. When you open a PR, move to **In review**
+5. When merged, move to **Done**
+
+## Issues
+
+- Every non-trivial piece of work should have a GitHub issue
+- Set all project fields (Priority, Size, Area, Type) when creating an issue
+- Assign the issue to yourself when you start working on it
+- Issues are typed as **story**, **task**, **bug**, or **spike**:
+  - **Story**: a user-facing feature (mapped from user stories)
+  - **Task**: a technical work item, often a sub-issue of a story
+  - **Bug**: something broken
+  - **Spike**: research/investigation with a time-box
+
 ## Pull Request Workflow
 
 1. Create a branch from `develop` following the naming convention above
 2. Make your changes in small, focused commits (under 500 changed lines each)
 3. Push your branch and open a PR targeting `develop`
-4. Ensure CI passes (lint, typecheck, tests)
-5. Request review from Joseph
+4. Link the PR to its issue using `Closes #N` in the PR body
+5. Ensure CI passes (lint, typecheck, tests)
+6. Request review from Joseph
+
+**PR body format:**
+```markdown
+Closes #<issue-number>
+
+Brief description of changes if not obvious from the issue.
+```
 
 **Rules:**
 - Never push directly to `main` or `develop` — branch protection rejects it
 - All changes go through PRs to `develop`
 - `main` receives merges from `develop` only
+- Every PR should reference an issue with `Closes #N`
 
 ## Code Style
 
