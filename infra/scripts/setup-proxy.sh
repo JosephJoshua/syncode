@@ -50,6 +50,10 @@ else
   ORIGIN_PORT_PROD="${ORIGIN_PORT_PROD:-4443}"
   read -rp "  Origin port — staging [4444]: " ORIGIN_PORT_STAGING
   ORIGIN_PORT_STAGING="${ORIGIN_PORT_STAGING:-4444}"
+  read -rp "  Origin port — Grafana [3334]: " ORIGIN_PORT_GRAFANA
+  ORIGIN_PORT_GRAFANA="${ORIGIN_PORT_GRAFANA:-3334}"
+  read -rp "  Origin port — Grafana staging [3335]: " ORIGIN_PORT_STAGING_GRAFANA
+  ORIGIN_PORT_STAGING_GRAFANA="${ORIGIN_PORT_STAGING_GRAFANA:-3335}"
 
   if [ -z "$DOMAIN" ] || [ -z "$ACME_EMAIL" ] || [ -z "$ORIGIN_HOST" ]; then
     error "DOMAIN, ACME_EMAIL, and ORIGIN_HOST are required."
@@ -62,6 +66,8 @@ ACME_EMAIL=$ACME_EMAIL
 ORIGIN_HOST=$ORIGIN_HOST
 ORIGIN_PORT_PROD=$ORIGIN_PORT_PROD
 ORIGIN_PORT_STAGING=$ORIGIN_PORT_STAGING
+ORIGIN_PORT_GRAFANA=$ORIGIN_PORT_GRAFANA
+ORIGIN_PORT_STAGING_GRAFANA=$ORIGIN_PORT_STAGING_GRAFANA
 EOF
 
   info ".env written to $CADDY_DIR/.env"
@@ -86,8 +92,8 @@ net.ipv4.tcp_tw_reuse = 1
 net.ipv4.ip_local_port_range = 1024 65535
 
 # UDP buffers for HTTP/3 QUIC
-net.core.rmem_max = 2500000
-net.core.wmem_max = 2500000
+net.core.rmem_max = 7500000
+net.core.wmem_max = 7500000
 EOF
 
 if sysctl --system &>/dev/null; then

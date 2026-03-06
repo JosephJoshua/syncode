@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 320" font-family="system-ui, -apple-system, sans-serif">
+
+  <!-- Unit Tests (bottom trapezoid) -->
+  <polygon points="90,260 470,260 380,180 180,180" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>
+
+  <!-- Integration Tests (middle trapezoid) -->
+  <polygon points="180,180 380,180 320,100 240,100" fill="#e0e7ff" stroke="#6366f1" stroke-width="2"/>
+
+  <!-- E2E Tests (top triangle) -->
+  <polygon points="240,100 320,100 280,30" fill="#ede9fe" stroke="#8b5cf6" stroke-width="2"/>
+
+  <!-- Layer labels -->
+  <text x="280" y="72" text-anchor="middle" font-size="14" font-weight="600" fill="#5b21b6">E2E</text>
+  <text x="280" y="148" text-anchor="middle" font-size="14" font-weight="600" fill="#4338ca">Integration</text>
+  <text x="280" y="228" text-anchor="middle" font-size="14" font-weight="600" fill="#1d4ed8">Unit</text>
+
+  <!-- Right side annotations -->
+  <text x="480" y="62" font-size="12" fill="#6b7280">Few, slow</text>
+  <text x="480" y="78" font-size="12" fill="#9ca3af">Full browser flows</text>
+
+  <text x="480" y="138" font-size="12" fill="#6b7280">Some, medium</text>
+  <text x="480" y="154" font-size="12" fill="#9ca3af">Real DB + HTTP</text>
+
+  <text x="480" y="218" font-size="12" fill="#6b7280">Many, fast</text>
+  <text x="480" y="234" font-size="12" fill="#9ca3af">Isolated logic</text>
+
+  <!-- Bottom caption -->
+  <text x="280" y="300" text-anchor="middle" font-size="12" fill="#374151">Fast feedback at the bottom, high confidence at the top. Most tests should be unit tests.</text>
+</svg>
