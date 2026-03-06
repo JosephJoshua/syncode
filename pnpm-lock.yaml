@@ -510,8 +510,6 @@ importers:
 
   apps/executor: {}
 
-  apps/realtime: {}
-
   apps/web:
     dependencies:
       '@hookform/resolvers':
