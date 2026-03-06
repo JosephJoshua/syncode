@@ -1,5 +1,7 @@
 # Getting Started
 
+> **[中文版](getting-started.zh.md)**
+
 ## Prerequisites
 
 Install these before anything else:
@@ -24,7 +26,7 @@ Don't worry if these are new — you don't need to master them before starting. 
 
 **Monorepo** — One repository containing multiple apps and shared packages. We use [Turborepo](https://turbo.build/repo/docs) to manage builds and tasks across them. The alternative would be separate git repos for frontend, backend, etc. — a monorepo keeps everything in sync.
 
-**TypeScript** — JavaScript with type annotations. If you know JavaScript, you know most of TypeScript. Start with [TypeScript for JavaScript Programmers](https://www.typescriptlang.org/docs/handbook/typescript-in-5-minutes.html).
+**TypeScript** — A language that compiles to JavaScript, adding static types to catch bugs at compile time instead of runtime. If you've used any typed language (Java, C++, Go), the concepts will feel familiar. Start with the [TypeScript Handbook](https://www.typescriptlang.org/docs/handbook/2/basic-types.html) and the [TypeScript Playground](https://www.typescriptlang.org/play/) for experimenting.
 
 **NestJS** — A structured framework for building Node.js backends. It organizes code into modules, controllers (handle HTTP requests), and services (business logic). See [NestJS First Steps](https://docs.nestjs.com/first-steps).
 

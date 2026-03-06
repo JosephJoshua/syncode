@@ -1,15 +1,15 @@
 # SynCode
 
-> **[中文版](README.zh.md)**
+> **[English](README.md)**
 
-A collaborative technical interview training platform where CS students practice coding interviews together — real-time collaborative editing, sandboxed code execution, AI-powered feedback, and session replay.
+面向计算机专业学生的协作式技术面试训练平台，支持实时协同编辑、沙箱代码执行、AI 反馈和会话回放，帮助用户组队练习编程面试。
 
 [![CI](https://github.com/JosephJoshua/syncode/actions/workflows/ci.yml/badge.svg)](https://github.com/JosephJoshua/syncode/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
-## Architecture Overview
+## 架构概览
 
-SynCode is split into four independent **planes**, each responsible for a distinct concern. They communicate via message queues (BullMQ/Redis) and internal HTTP calls.
+SynCode 由四个独立的平面 (plane) 组成，各自负责不同的职责，通过消息队列 (BullMQ/Redis) 和内部 HTTP 调用进行通信。
 
 ```mermaid
 graph TB
@@ -47,20 +47,20 @@ graph TB
     COLLAB --> REDIS
 ```
 
-## Tech Stack
+## 技术栈
 
-| Layer | Technologies |
+| 层级 | 技术选型 |
 |---|---|
-| **Frontend** | React 19, Vite, TanStack Router + Query, Zustand, Tailwind CSS v4, shadcn/ui |
-| **Backend** | NestJS, Drizzle ORM, Passport + JWT, BullMQ, Zod |
-| **Database** | PostgreSQL 17, Redis 7 |
-| **Infrastructure** | Docker, Caddy 2 (SSL), Nginx (routing), SeaweedFS (S3 storage), LiveKit (WebRTC) |
-| **Tooling** | Turborepo, pnpm, Biome 2.x, Vitest, Playwright, GitHub Actions |
-| **Observability** | OpenTelemetry, Prometheus, Loki, Tempo, Grafana |
+| **前端** | React 19, Vite, TanStack Router + Query, Zustand, Tailwind CSS v4, shadcn/ui |
+| **后端** | NestJS, Drizzle ORM, Passport + JWT, BullMQ, Zod |
+| **数据库** | PostgreSQL 17, Redis 7 |
+| **基础设施** | Docker, Caddy 2 (SSL), Nginx (路由), SeaweedFS (S3 存储), LiveKit (WebRTC) |
+| **工具链** | Turborepo, pnpm, Biome 2.x, Vitest, Playwright, GitHub Actions |
+| **可观测性** | OpenTelemetry, Prometheus, Loki, Tempo, Grafana |
 
-## Quick Start
+## 快速开始
 
-**Prerequisites:** Node.js 18+, pnpm 9+, Docker
+**前置要求：** Node.js 18+、pnpm 9+、Docker
 
 ```bash
 git clone https://github.com/JosephJoshua/syncode.git
@@ -72,11 +72,11 @@ pnpm db:migrate             # Run database migrations
 pnpm dev                    # Start all apps in dev mode
 ```
 
-Open [localhost:5173](http://localhost:5173) (web) and [localhost:3000/api](http://localhost:3000/api) (Swagger docs).
+打开 [localhost:5173](http://localhost:5173) 访问前端页面，打开 [localhost:3000/api](http://localhost:3000/api) 查看 Swagger 文档。
 
-See [docs/getting-started.md](docs/getting-started.md) for a detailed setup guide.
+详细的搭建指南请参阅 [docs/getting-started.zh.md](docs/getting-started.zh.md)。
 
-## Project Structure
+## 项目结构
 
 ```
 apps/
@@ -106,17 +106,17 @@ infra/
   scripts/            Deploy and maintenance scripts
 ```
 
-## Documentation
+## 文档
 
-- **[Getting Started](docs/getting-started.md)** — Detailed setup guide with beginner-friendly explanations
-- **[Architecture](docs/architecture.md)** — Deep-dive into the multi-plane architecture, hexagonal pattern, and tech decisions
-- **[Testing](docs/testing.md)** — Testing philosophy, best practices, and practical how-to guide
-- **[Contributing](CONTRIBUTING.md)** — Git conventions, branch naming, commit format, PR workflow
+- **[快速开始](docs/getting-started.zh.md)** - 面向新手的详细搭建指南
+- **[架构设计](docs/architecture.zh.md)** - 多平面架构、六边形模式和技术决策的深入解读
+- **[测试指南](docs/testing.zh.md)** - 测试理念、最佳实践与实操指南
+- **[贡献指南](CONTRIBUTING.zh.md)** - Git 规范、分支命名、提交格式、PR 流程
 
-## Contributing
+## 参与贡献
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for branch naming, commit message format, and PR workflow. All conventions are enforced by git hooks and CI.
+分支命名、提交信息格式和 PR 流程等规范详见 [CONTRIBUTING.zh.md](CONTRIBUTING.zh.md)。所有规范均通过 git hooks 和 CI 强制执行。
 
-## License
+## 许可证
 
 [Apache License 2.0](LICENSE)

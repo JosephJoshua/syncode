@@ -1,5 +1,7 @@
 # Architecture
 
+> **[中文版](architecture.zh.md)**
+
 ## The Big Picture
 
 SynCode is built as four independent **planes** — each one a separate NestJS application with a distinct responsibility. They share code through internal packages but run as separate processes (and separate Docker containers in production).

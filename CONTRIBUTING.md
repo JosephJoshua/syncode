@@ -1,5 +1,7 @@
 # Contributing to SynCode
 
+> **[中文版](CONTRIBUTING.zh.md)**
+
 ## Development Setup
 
 See [docs/getting-started.md](docs/getting-started.md) for a complete setup walkthrough — prerequisites, environment variables, and running the dev servers.

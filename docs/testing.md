@@ -1,5 +1,7 @@
 # Testing
 
+> **[中文版](testing.zh.md)**
+
 ## Why We Test
 
 Tests aren't busywork. They serve three purposes:
@@ -380,20 +382,24 @@ describe('Auth Controller (integration)', () => {
     await app.init();
   });
 
-  test('POST /auth/register → 201 with valid data', async () => {
+  test('GIVEN valid registration data WHEN posting to /auth/register THEN returns 201 with tokens', async () => {
+    // WHEN
     const response = await request(app.getHttpServer())
       .post('/auth/register')
       .send({ email: 'new@example.com', password: 'validpassword123', name: 'Test User' });
 
+    // THEN
     expect(response.status).toBe(201);
     expect(response.body).toHaveProperty('accessToken');
   });
 
-  test('POST /auth/register → 400 with invalid email', async () => {
+  test('GIVEN an invalid email WHEN posting to /auth/register THEN returns 400', async () => {
+    // WHEN
     const response = await request(app.getHttpServer())
       .post('/auth/register')
       .send({ email: 'not-an-email', password: 'validpassword123' });
 
+    // THEN
     expect(response.status).toBe(400);
   });
 });
@@ -437,12 +443,14 @@ Playwright launches a real browser, navigates to your app, and interacts with it
 ```typescript
 import { test, expect } from '@playwright/test';
 
-test('user can log in and see the dashboard', async ({ page }) => {
+test('GIVEN a registered user WHEN logging in with valid credentials THEN shows the dashboard', async ({ page }) => {
+  // WHEN
   await page.goto('http://localhost:5173/login');
   await page.getByLabel('Email').fill('test@example.com');
   await page.getByLabel('Password').fill('secret123');
   await page.getByRole('button', { name: 'Log in' }).click();
 
+  // THEN
   await expect(page.getByText('Dashboard')).toBeVisible();
 });
 ```
