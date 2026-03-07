@@ -1,0 +1,148 @@
+@import "tailwindcss";
+
+/* ─── Dark Mode (default) ─── */
+:root,
+.dark {
+  --bg-base: #09090b;
+  --bg-raised: #0f0f12;
+  --bg-overlay: #161619;
+  --bg-subtle: #1c1c20;
+  --border-default: #27272a;
+  --border-strong: #3f3f46;
+  --text-primary: #fafafa;
+  --text-secondary: #a1a1aa;
+  --text-tertiary: #71717a;
+  --accent: #00e599;
+  --accent-hover: #33edb3;
+  --accent-muted: rgba(0, 229, 153, 0.08);
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --error: #ef4444;
+  --info: #3b82f6;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.6);
+  --shadow-accent-glow: 0 0 30px rgba(0, 229, 153, 0.1);
+}
+
+/* ─── Light Mode ─── */
+.light {
+  --bg-base: #ffffff;
+  --bg-raised: #f9fafb;
+  --bg-overlay: #ffffff;
+  --bg-subtle: #f4f4f5;
+  --border-default: #e4e4e7;
+  --border-strong: #d4d4d8;
+  --text-primary: #09090b;
+  --text-secondary: #52525b;
+  --text-tertiary: #a1a1aa;
+  --accent: #059669;
+  --accent-hover: #047857;
+  --accent-muted: rgba(5, 150, 105, 0.08);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.15);
+  --shadow-accent-glow: 0 0 30px rgba(5, 150, 105, 0.08);
+}
+
+@theme {
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-full: 9999px;
+
+  --font-display: 'Instrument Sans', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-sans: 'IBM Plex Sans', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ─── Base reset ─── */
+*,
+*::before,
+*::after {
+  border-color: var(--border-default);
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition:
+    background-color 200ms ease,
+    color 200ms ease;
+}
+
+/* ─── Dot-Grid Pattern ─── */
+.dot-grid {
+  background-image: radial-gradient(circle, var(--border-default) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+.dot-grid-lg {
+  background-image: radial-gradient(circle, var(--border-default) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+/* ─── Animations ─── */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes glowPulse {
+  0%,
+  100% {
+    opacity: 0.5;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: translate(-50%, -50%) scale(1.1);
+  }
+}
+
+@keyframes modal-slide-up {
+  from {
+    transform: translateY(8px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
