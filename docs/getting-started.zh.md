@@ -8,14 +8,14 @@
 
 | 工具 | 版本要求 | 安装指南 |
 |---|---|---|
-| **Node.js** | 18 及以上（推荐 22+） | [nodejs.org/en/download](https://nodejs.org/en/download/) |
+| **Node.js** | 20 及以上（推荐 22+） | [nodejs.org/en/download](https://nodejs.org/en/download/) |
 | **pnpm** | 9 及以上 | [pnpm.io/installation](https://pnpm.io/installation) |
 | **Docker Desktop** | 最新版 | [docs.docker.com/get-started/get-docker](https://docs.docker.com/get-started/get-docker/) |
 
 确认安装是否成功：
 
 ```bash
-node --version    # v18.x.x or higher (v22+ recommended)
+node --version    # v20.x.x or higher (v22+ recommended)
 pnpm --version    # 9.x.x or higher
 docker --version  # any recent version
 ```
@@ -232,7 +232,7 @@ kill <PID>        # Kill it
 TypeError: Unknown file extension ".ts"
 ```
 
-后端应用依赖 `tsx` 加载器。确认 Node.js 版本是 18 及以上（推荐 22+）。开发脚本里已经带了 `--import tsx`，出现这个错误一般是因为你直接跑了应用，没走 `pnpm dev`。
+后端应用依赖 `tsx` 加载器。确认 Node.js 版本是 20 及以上（推荐 22+）。开发脚本里已经带了 `--import tsx`，出现这个错误一般是因为你直接跑了应用，没走 `pnpm dev`。
 
 ### 数据库连接被拒绝
 

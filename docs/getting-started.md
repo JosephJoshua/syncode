@@ -8,14 +8,14 @@ Install these before anything else:
 
 | Tool | Version | Install Guide |
 |---|---|---|
-| **Node.js** | 18 or later (22+ recommended) | [nodejs.org/en/download](https://nodejs.org/en/download/) |
+| **Node.js** | 20 or later (22+ recommended) | [nodejs.org/en/download](https://nodejs.org/en/download/) |
 | **pnpm** | 9 or later | [pnpm.io/installation](https://pnpm.io/installation) |
 | **Docker Desktop** | Latest | [docs.docker.com/get-started/get-docker](https://docs.docker.com/get-started/get-docker/) |
 
 Verify your setup:
 
 ```bash
-node --version    # v18.x.x or higher (v22+ recommended)
+node --version    # v20.x.x or higher (v22+ recommended)
 pnpm --version    # 9.x.x or higher
 docker --version  # any recent version
 ```
@@ -232,7 +232,7 @@ Or change the port in your `.env` file.
 TypeError: Unknown file extension ".ts"
 ```
 
-The backend apps require the `tsx` loader. Make sure you're using Node.js 18 or later (22+ recommended). The dev scripts already include `--import tsx` — if you see this error, you may be running the app directly instead of through `pnpm dev`.
+The backend apps require the `tsx` loader. Make sure you're using Node.js 20 or later (22+ recommended). The dev scripts already include `--import tsx` — if you see this error, you may be running the app directly instead of through `pnpm dev`.
 
 ### Database connection refused
 
