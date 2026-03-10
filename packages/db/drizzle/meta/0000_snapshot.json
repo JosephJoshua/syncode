@@ -1,0 +1,34 @@
+{
+  "id": "4207d7df-b6bc-4498-b53a-57e2a5fe9c9f",
+  "prevId": "00000000-0000-0000-0000-000000000000",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {},
+  "enums": {
+    "public.difficulty": {
+      "name": "difficulty",
+      "schema": "public",
+      "values": ["easy", "medium", "hard"]
+    },
+    "public.room_status": {
+      "name": "room_status",
+      "schema": "public",
+      "values": ["waiting", "warmup", "coding", "wrapup", "finished"]
+    },
+    "public.user_role": {
+      "name": "user_role",
+      "schema": "public",
+      "values": ["user", "admin"]
+    }
+  },
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}
