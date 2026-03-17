@@ -14,11 +14,11 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json && node ../../scripts/write-cjs-package-json.js",
     "typecheck": "tsc --noEmit",
-    "generate": "drizzle-kit generate",
-    "migrate": "tsx src/migrate.ts",
-    "push": "drizzle-kit push",
-    "seed": "tsx src/seed.ts",
-    "studio": "drizzle-kit studio",
+    "generate": "./load-env.sh drizzle-kit generate",
+    "migrate": "./load-env.sh node --import tsx src/migrate.ts",
+    "push": "./load-env.sh drizzle-kit push",
+    "seed": "./load-env.sh node --import tsx src/seed.ts",
+    "studio": "./load-env.sh drizzle-kit studio",
     "lint": "biome check ."
   },
   "dependencies": {

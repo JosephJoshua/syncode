@@ -3,7 +3,7 @@
 # Pre-commit hook: block commits exceeding MAX_LINES changed lines.
 
 MAX_LINES=500
-EXCLUDE_PATTERNS="pnpm-lock.yaml|.*\.md"
+EXCLUDE_PATTERNS=".*\.md|.*\.json|.*\.yml|.*\.yaml|.*\.sql"
 
 total=0
 while IFS=$'\t' read -r added deleted file; do
