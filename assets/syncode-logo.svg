@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <!-- Left bracket: indigo -->
+    <linearGradient id="left" x1="0.3" y1="0" x2="0.7" y2="1">
+      <stop offset="0%" stop-color="#a5b4fc"/>
+      <stop offset="100%" stop-color="#4338ca"/>
+    </linearGradient>
+
+    <!-- Right bracket: emerald -->
+    <linearGradient id="right" x1="0.3" y1="0" x2="0.7" y2="1">
+      <stop offset="0%" stop-color="#6ee7b7"/>
+      <stop offset="100%" stop-color="#047857"/>
+    </linearGradient>
+
+    <!-- Weave clip: reveals right bracket over left at the lower crossing -->
+    <clipPath id="weave-lower">
+      <rect x="220" y="320" width="130" height="130" rx="12"/>
+    </clipPath>
+  </defs>
+
+  <!-- Background -->
+  <rect width="512" height="512" rx="108" fill="#0a0a14"/>
+
+  <!-- Scale mark to 80% for comfortable padding -->
+  <g transform="translate(256 256) scale(0.80) translate(-256 -256)">
+
+    <!-- === DARK BORDERS (create separation at crossings) === -->
+    <polyline points="192,104 432,280 192,456"
+      fill="none" stroke="#0a0a14" stroke-width="56"
+      stroke-linecap="butt" stroke-linejoin="miter"/>
+    <polyline points="320,56 80,232 320,408"
+      fill="none" stroke="#0a0a14" stroke-width="56"
+      stroke-linecap="butt" stroke-linejoin="miter"/>
+
+    <!-- === LAYER 1: Right bracket > (full, behind) === -->
+    <polyline points="192,104 432,280 192,456"
+      fill="none" stroke="url(#right)" stroke-width="44"
+      stroke-linecap="butt" stroke-linejoin="miter"/>
+
+    <!-- === LAYER 2: Left bracket < (full, OVER right at upper crossing) === -->
+    <polyline points="320,56 80,232 320,408"
+      fill="none" stroke="url(#left)" stroke-width="44"
+      stroke-linecap="butt" stroke-linejoin="miter"/>
+
+    <!-- === LAYER 3: Right bracket > weave (border + color, OVER left at lower crossing) === -->
+    <polyline points="192,104 432,280 192,456"
+      fill="none" stroke="#0a0a14" stroke-width="56"
+      stroke-linecap="butt" stroke-linejoin="miter"
+      clip-path="url(#weave-lower)"/>
+    <polyline points="192,104 432,280 192,456"
+      fill="none" stroke="url(#right)" stroke-width="44"
+      stroke-linecap="butt" stroke-linejoin="miter"
+      clip-path="url(#weave-lower)"/>
+  </g>
+</svg>
