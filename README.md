@@ -60,7 +60,7 @@ graph TB
 
 ## Quick Start
 
-**Prerequisites:** Node.js 18+, pnpm 9+, Docker
+**Prerequisites:** Node.js 20+, pnpm 9+, Docker
 
 ```bash
 git clone https://github.com/JosephJoshua/syncode.git

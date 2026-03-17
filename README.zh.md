@@ -60,7 +60,7 @@ graph TB
 
 ## 快速开始
 
-**前置要求：** Node.js 18+、pnpm 9+、Docker
+**前置要求：** Node.js 20+、pnpm 9+、Docker
 
 ```bash
 git clone https://github.com/JosephJoshua/syncode.git
