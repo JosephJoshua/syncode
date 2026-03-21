@@ -7,7 +7,13 @@ interface AuthState {
   accessToken: string | null;
   refreshToken: string | null;
   isAuthenticated: boolean;
-  login: (user: UserProfile, accessToken: string, refreshToken: string) => void;
+  hasHydrated: boolean;
+  setSession: (session: {
+    accessToken: string;
+    refreshToken: string;
+    user?: UserProfile | null;
+  }) => void;
+  setUser: (user: UserProfile | null) => void;
   logout: () => void;
 }
 
@@ -19,8 +25,10 @@ export const useAuthStore = create<AuthState>()(
       accessToken: null,
       refreshToken: null,
       isAuthenticated: false,
-      login: (user, accessToken, refreshToken) =>
+      hasHydrated: false,
+      setSession: ({ accessToken, refreshToken, user = null }) =>
         set({ user, accessToken, refreshToken, isAuthenticated: true }),
+      setUser: (user) => set({ user }),
       logout: () =>
         set({
           user: null,
@@ -31,6 +39,9 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'syncode-auth',
+      onRehydrateStorage: () => () => {
+        useAuthStore.setState({ hasHydrated: true });
+      },
       partialize: (state) => ({
         user: state.user,
         accessToken: state.accessToken,

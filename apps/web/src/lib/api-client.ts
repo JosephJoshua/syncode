@@ -1,9 +1,17 @@
-import type { RequestOf, ResponseOf, TypedRoute } from '@syncode/contracts';
-import { buildUrl } from '@syncode/contracts';
-import ky from 'ky';
+import type { ErrorResponse, RequestOf, ResponseOf, TypedRoute } from '@syncode/contracts';
+import ky, { HTTPError } from 'ky';
 import { useAuthStore } from '@/stores/auth.store';
 
-const resolveUrl = buildUrl as (template: string, params?: Record<string, string>) => string;
+function resolveUrl(template: string, params?: Record<string, string>): string {
+  if (!params) {
+    return template;
+  }
+
+  return template.replace(/:(\w+)/g, (_, key: string) => {
+    const value = params[key];
+    return value === undefined ? `:${key}` : encodeURIComponent(value);
+  });
+}
 
 const client = ky.create({
   prefixUrl: import.meta.env.VITE_API_URL ?? '/api',
@@ -63,4 +71,16 @@ export async function api<T extends TypedRoute>(
   }
 
   return response.json<ResponseOf<T>>();
+}
+
+export async function readApiError(error: unknown): Promise<ErrorResponse | null> {
+  if (!(error instanceof HTTPError)) {
+    return null;
+  }
+
+  try {
+    return (await error.response.clone().json()) as ErrorResponse;
+  } catch {
+    return null;
+  }
 }
