@@ -5,8 +5,18 @@ import { DB_CLIENT } from '@/modules/db/db.module';
 interface UserProfile {
   id: string;
   email: string;
-  displayName?: string;
+  username: string;
+  displayName: string | null;
+  role: 'user' | 'admin';
+  avatarUrl: string | null;
+  bio: string | null;
+  stats: {
+    totalSessions: number;
+    totalProblems: number;
+    streakDays: number;
+  };
   createdAt: string;
+  updatedAt: string;
 }
 
 @Injectable()
@@ -18,8 +28,13 @@ export class UsersService {
       columns: {
         id: true,
         email: true,
+        username: true,
         displayName: true,
+        role: true,
+        avatarUrl: true,
+        bio: true,
         createdAt: true,
+        updatedAt: true,
       },
       where: (table, { and, eq, isNull }) => and(eq(table.id, id), isNull(table.deletedAt)),
     });
@@ -31,8 +46,18 @@ export class UsersService {
     return {
       id: user.id,
       email: user.email,
-      displayName: user.displayName ?? undefined,
+      username: user.username,
+      displayName: user.displayName ?? null,
+      role: user.role,
+      avatarUrl: user.avatarUrl ?? null,
+      bio: user.bio ?? null,
+      stats: {
+        totalSessions: 0,
+        totalProblems: 0,
+        streakDays: 0,
+      },
       createdAt: user.createdAt.toISOString(),
+      updatedAt: user.updatedAt.toISOString(),
     };
   }
 
@@ -43,8 +68,13 @@ export class UsersService {
       columns: {
         id: true,
         email: true,
+        username: true,
         displayName: true,
+        role: true,
+        avatarUrl: true,
+        bio: true,
         createdAt: true,
+        updatedAt: true,
       },
       where: (table, { and, eq, isNull }) =>
         and(eq(table.email, normalizedEmail), isNull(table.deletedAt)),
@@ -57,8 +87,18 @@ export class UsersService {
     return {
       id: user.id,
       email: user.email,
-      displayName: user.displayName ?? undefined,
+      username: user.username,
+      displayName: user.displayName ?? null,
+      role: user.role,
+      avatarUrl: user.avatarUrl ?? null,
+      bio: user.bio ?? null,
+      stats: {
+        totalSessions: 0,
+        totalProblems: 0,
+        streakDays: 0,
+      },
       createdAt: user.createdAt.toISOString(),
+      updatedAt: user.updatedAt.toISOString(),
     };
   }
 
