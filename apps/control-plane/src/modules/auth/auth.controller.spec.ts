@@ -60,7 +60,7 @@ describe('AuthController', () => {
     return { controller, authService, response };
   }
 
-  it('GIVEN register request WHEN successful THEN returns payload and sets cookies', async () => {
+  it('GIVEN register request WHEN successful THEN returns payload and sets refresh cookie', async () => {
     const { controller, response } = createController();
 
     const result = await controller.register(
@@ -78,10 +78,10 @@ describe('AuthController', () => {
       throw new Error('Expected register response to include user');
     }
     expect(result.user.username).toBe('alice');
-    expect(response.cookie).toHaveBeenCalledTimes(2);
+    expect(response.cookie).toHaveBeenCalledTimes(1);
   });
 
-  it('GIVEN login request WHEN successful THEN returns payload and sets cookies', async () => {
+  it('GIVEN login request WHEN successful THEN returns payload and sets refresh cookie', async () => {
     const { controller, response } = createController();
 
     const result = await controller.login(
@@ -98,7 +98,7 @@ describe('AuthController', () => {
       throw new Error('Expected login response to include user');
     }
     expect(result.user.email).toBe('user@example.com');
-    expect(response.cookie).toHaveBeenCalledTimes(2);
+    expect(response.cookie).toHaveBeenCalledTimes(1);
   });
 
   it('GIVEN missing refresh cookie WHEN refreshing THEN throws unauthorized', async () => {
@@ -109,32 +109,25 @@ describe('AuthController', () => {
     );
   });
 
-  it('GIVEN refresh cookie WHEN refreshing THEN rotates and sets cookies', async () => {
+  it('GIVEN refresh cookie WHEN refreshing THEN rotates and sets refresh cookie', async () => {
     const { controller, response, authService } = createController();
 
     const result = await controller.refresh('refreshToken=refresh-token', response as never);
 
     expect(authService.refreshToken).toHaveBeenCalledWith('refresh-token');
     expect(result.accessToken).toBe('new-access-token');
-    expect(response.cookie).toHaveBeenCalledTimes(2);
+    expect(response.cookie).toHaveBeenCalledTimes(1);
   });
 
-  it('GIVEN refresh cookie WHEN logging out THEN clears cookies', async () => {
+  it('GIVEN refresh cookie WHEN logging out THEN clears refresh cookie', async () => {
     const { controller, response, authService } = createController();
 
     await controller.logout('refreshToken=refresh-token', response as never);
 
     expect(authService.logout).toHaveBeenCalledWith('refresh-token');
-    expect(response.cookie).toHaveBeenCalledTimes(2);
-    expect(response.cookie).toHaveBeenNthCalledWith(
-      1,
+    expect(response.cookie).toHaveBeenCalledTimes(1);
+    expect(response.cookie).toHaveBeenCalledWith(
       'refreshToken',
-      '',
-      expect.objectContaining({ maxAge: 0 }),
-    );
-    expect(response.cookie).toHaveBeenNthCalledWith(
-      2,
-      'accessToken',
       '',
       expect.objectContaining({ maxAge: 0 }),
     );

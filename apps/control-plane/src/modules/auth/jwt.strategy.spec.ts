@@ -24,24 +24,6 @@ function createStrategyFixture() {
 }
 
 describe('JwtStrategy', () => {
-  it('GIVEN accessToken cookie in request WHEN extracting THEN returns decoded token', () => {
-    const strategyClass = JwtStrategy as unknown as {
-      extractAccessTokenFromCookie: (request: {
-        cookies?: Record<string, unknown>;
-        headers?: { cookie?: string };
-      }) => string | null;
-    };
-
-    const token = strategyClass.extractAccessTokenFromCookie({
-      cookies: {},
-      headers: {
-        cookie: 'foo=bar; accessToken=abc%2E123%2Exyz; other=value',
-      },
-    });
-
-    expect(token).toBe('abc.123.xyz');
-  });
-
   it('GIVEN refresh token payload WHEN validating THEN throws unauthorized', async () => {
     const { strategy } = createStrategyFixture();
 

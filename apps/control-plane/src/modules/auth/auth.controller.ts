@@ -37,7 +37,6 @@ export class AuthController {
     },
   } as const;
   private static readonly REFRESH_TOKEN_COOKIE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1_000;
-  private static readonly ACCESS_TOKEN_COOKIE_NAME = 'accessToken';
   private static readonly REFRESH_TOKEN_COOKIE_NAME = 'refreshToken';
 
   @Post(CONTROL_API.AUTH.REGISTER.route)
@@ -50,8 +49,7 @@ export class AuthController {
     description: 'Account created',
     headers: {
       'Set-Cookie': {
-        description:
-          'Refresh and access token cookies (refreshToken=...; Path=/auth, accessToken=...; Path=/)',
+        description: 'Refresh token cookie (refreshToken=...; Path=/auth)',
         schema: { type: 'string' },
       },
     },
@@ -74,7 +72,6 @@ export class AuthController {
     );
 
     this.setRefreshTokenCookie(response, registerResult.refreshToken);
-    this.setAccessTokenCookie(response, registerResult.accessToken);
 
     return {
       accessToken: registerResult.accessToken,
@@ -93,8 +90,7 @@ export class AuthController {
     description: 'Authentication successful',
     headers: {
       'Set-Cookie': {
-        description:
-          'Refresh and access token cookies (refreshToken=...; Path=/auth, accessToken=...; Path=/)',
+        description: 'Refresh token cookie (refreshToken=...; Path=/auth)',
         schema: { type: 'string' },
       },
     },
@@ -110,7 +106,6 @@ export class AuthController {
     const loginResult = await this.authService.login(body.identifier, body.password);
 
     this.setRefreshTokenCookie(response, loginResult.refreshToken);
-    this.setAccessTokenCookie(response, loginResult.accessToken);
 
     return {
       accessToken: loginResult.accessToken,
@@ -129,8 +124,7 @@ export class AuthController {
     description: 'Token refreshed',
     headers: {
       'Set-Cookie': {
-        description:
-          'Rotated refresh and access token cookies (refreshToken=...; Path=/auth, accessToken=...; Path=/)',
+        description: 'Rotated refresh token cookie (refreshToken=...; Path=/auth)',
         schema: { type: 'string' },
       },
     },
@@ -144,7 +138,6 @@ export class AuthController {
     const refreshResult = await this.authService.refreshToken(refreshToken);
 
     this.setRefreshTokenCookie(response, refreshResult.refreshToken);
-    this.setAccessTokenCookie(response, refreshResult.accessToken);
 
     return {
       accessToken: refreshResult.accessToken,
@@ -161,7 +154,7 @@ export class AuthController {
     description: 'Logged out successfully',
     headers: {
       'Set-Cookie': {
-        description: 'Clears refresh and access token cookies',
+        description: 'Clears refresh token cookie',
         schema: { type: 'string' },
       },
     },
@@ -175,7 +168,6 @@ export class AuthController {
     await this.authService.logout(refreshToken);
 
     this.clearRefreshTokenCookie(response);
-    this.clearAccessTokenCookie(response);
   }
 
   private getRefreshTokenFromCookieHeader(cookieHeader: string | undefined): string {
@@ -202,15 +194,6 @@ export class AuthController {
     return decodeURIComponent(encodedToken);
   }
 
-  private setAccessTokenCookie(response: Response, accessToken: string): void {
-    response.cookie(AuthController.ACCESS_TOKEN_COOKIE_NAME, accessToken, {
-      httpOnly: true,
-      secure: true,
-      sameSite: 'strict',
-      path: '/',
-    });
-  }
-
   private setRefreshTokenCookie(response: Response, refreshToken: string): void {
     response.cookie(AuthController.REFRESH_TOKEN_COOKIE_NAME, refreshToken, {
       httpOnly: true,
@@ -218,16 +201,6 @@ export class AuthController {
       sameSite: 'strict',
       path: '/auth',
       maxAge: AuthController.REFRESH_TOKEN_COOKIE_MAX_AGE_MS,
-    });
-  }
-
-  private clearAccessTokenCookie(response: Response): void {
-    response.cookie(AuthController.ACCESS_TOKEN_COOKIE_NAME, '', {
-      httpOnly: true,
-      secure: true,
-      sameSite: 'strict',
-      path: '/',
-      maxAge: 0,
     });
   }
 
