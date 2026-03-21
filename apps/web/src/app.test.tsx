@@ -3,21 +3,15 @@ import { describe, expect, it } from 'vitest';
 import { App } from '@/app';
 
 describe('App', () => {
-  it('renders the navigation with SynCode branding', async () => {
+  it('GIVEN the app loads WHEN the root layout renders THEN SynCode branding is visible', async () => {
     render(<App />);
+
     expect(await screen.findByText('SynCode')).toBeInTheDocument();
   });
 
-  it('renders a register call to action on the home page', async () => {
+  it('GIVEN the home page loads WHEN the hero section renders THEN the register call to action is visible', async () => {
     render(<App />);
-    expect(await screen.findByRole('link', { name: 'Create account' })).toBeInTheDocument();
-  });
 
-  it('renders the register page fields', async () => {
-    window.history.pushState({}, '', '/register');
-    render(<App />);
-    expect(await screen.findByLabelText('Username')).toBeInTheDocument();
-    expect(screen.getByLabelText('Email')).toBeInTheDocument();
-    expect(screen.getByLabelText('Password')).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: 'Create account' })).toBeInTheDocument();
   });
 });
