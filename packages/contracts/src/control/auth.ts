@@ -1,7 +1,15 @@
 import { z } from 'zod';
+import { userProfileResponseSchema, userStatsSchema } from './users';
 
 export const registerSchema = z
   .object({
+    username: z
+      .string()
+      .min(3)
+      .max(30)
+      .regex(/^[a-zA-Z0-9_]+$/)
+      .describe('Username (3-30 chars, letters/numbers/underscore)')
+      .meta({ examples: ['syncoder_01'] }),
     email: z
       .email()
       .describe('Email address')
@@ -18,9 +26,10 @@ export type RegisterInput = z.infer<typeof registerSchema>;
 
 export const loginSchema = z
   .object({
-    email: z
-      .email()
-      .describe('Email address')
+    identifier: z
+      .string()
+      .min(1)
+      .describe('Email address or username')
       .meta({ examples: ['user@example.com'] }),
     password: z
       .string()
@@ -32,36 +41,31 @@ export const loginSchema = z
 
 export type LoginInput = z.infer<typeof loginSchema>;
 
-export const refreshTokenSchema = z
-  .object({
-    refreshToken: z
-      .string()
-      .min(1)
-      .describe('JWT refresh token obtained from login')
-      .meta({ examples: ['dGhpcyBpcyBhIHJlZnJl...'] }),
-  })
-  .strict();
+export const loginStatsSchema = userStatsSchema;
 
-export type RefreshTokenInput = z.infer<typeof refreshTokenSchema>;
+export const loginUserProfileSchema = userProfileResponseSchema;
 
-export const authTokensResponseSchema = z.object({
+export const loginResponseSchema = z.object({
   accessToken: z
     .string()
     .describe('Short-lived JWT access token')
-    .meta({ examples: ['eyJhbGciOiJIUzI1NiIs...'] }),
-  refreshToken: z
-    .string()
-    .describe('Long-lived JWT refresh token')
-    .meta({ examples: ['dGhpcyBpcyBhIHJlZnJl...'] }),
+    .meta({ examples: ['eyJhbGciOiJIUzI1NiIs...'] })
+    .optional(),
+  user: loginUserProfileSchema.optional(),
 });
 
-export type AuthTokensResponse = z.infer<typeof authTokensResponseSchema>;
+export type LoginResponse = z.infer<typeof loginResponseSchema>;
+
+export const registerResponseSchema = loginResponseSchema;
+
+export type RegisterResponse = z.infer<typeof registerResponseSchema>;
 
 export const accessTokenResponseSchema = z.object({
   accessToken: z
     .string()
     .describe('New short-lived JWT access token')
-    .meta({ examples: ['eyJhbGciOiJIUzI1NiIs...'] }),
+    .meta({ examples: ['eyJhbGciOiJIUzI1NiIs...'] })
+    .optional(),
 });
 
 export type AccessTokenResponse = z.infer<typeof accessTokenResponseSchema>;

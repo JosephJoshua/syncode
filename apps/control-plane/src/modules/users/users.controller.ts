@@ -17,34 +17,34 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { CONTROL_API } from '@syncode/contracts';
+import { CurrentUser } from '@/common/decorators/current-user.decorator';
 import { ErrorResponseDto } from '@/common/dto/error-response.dto';
 import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard';
 import { UpdateUserDto, UserProfileResponseDto } from './dto/user.dto';
 import { UsersService } from './users.service';
 
 /**
- * TODO: Implement user management endpoints:
- * - GET /users/me: Get current user profile
- * - GET /users/:id: Get user by ID
- * - PATCH /users/me: Update current user profile
- * - DELETE /users/me: Delete current user account
- * - GET /users/me/rooms: Get user's rooms
+ * User management endpoints.
+ *
+ * Remaining TODO:
+ * - PATCH /users/me
+ * - DELETE /users/me
+ * - GET /users/me/rooms
  */
 @ApiTags('users')
-@ApiBearerAuth()
 @Controller()
+@ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Get(CONTROL_API.USERS.PROFILE.route)
-  @ApiOperation({ summary: 'Get current user profile (TODO)' })
+  @ApiOperation({ summary: 'Get current user profile' })
   @ApiResponse({ status: 200, type: UserProfileResponseDto, description: 'Current user profile' })
   @ApiResponse({ status: 401, type: ErrorResponseDto, description: 'Unauthorized' })
   @ApiResponse({ status: 500, type: ErrorResponseDto, description: 'Internal server error' })
-  async getCurrentUser(): Promise<UserProfileResponseDto> {
-    // TODO: Get current user from @CurrentUser() decorator
-    throw new NotImplementedException();
+  async getCurrentUser(@CurrentUser() user: { id: string }): Promise<UserProfileResponseDto> {
+    return this.usersService.findById(user.id);
   }
 
   @Get(CONTROL_API.USERS.GET_BY_ID.route)
