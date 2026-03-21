@@ -15,14 +15,15 @@ const loginRoute = {
   method: 'POST',
 } as const satisfies TypedRoute<
   {
-    email: string;
+    email?: string;
+    username?: string;
     password: string;
   },
   AuthTokensResponse
 >;
 
 const loginFormSchema = z.object({
-  identifier: z.string().trim().min(1, 'Enter your email address.'),
+  identifier: z.string().trim().min(1, 'Enter your email address or username.'),
   password: z.string().min(1, 'Enter your password.'),
 });
 
@@ -59,13 +60,9 @@ function LoginPage() {
     mutationFn: async (values: LoginFormValues) => {
       const identifier = values.identifier.trim();
 
-      if (!identifier.includes('@')) {
-        throw new Error('Username sign-in is not available yet. Use your email address instead.');
-      }
-
       return (await api(loginRoute, {
         body: {
-          email: identifier,
+          ...(identifier.includes('@') ? { email: identifier } : { username: identifier }),
           password: values.password,
         },
       })) as AuthTokensResponse;
@@ -87,7 +84,7 @@ function LoginPage() {
       }
 
       if (apiError?.statusCode === 401) {
-        setSubmissionError('Invalid email or password. Please try again.');
+        setSubmissionError('Invalid username, email, or password. Please try again.');
         return;
       }
 
@@ -128,10 +125,9 @@ function LoginPage() {
             Access collaborative rooms, saved sessions, and AI feedback from one place.
           </p>
           <div className="mt-8 rounded-3xl border border-indigo-100 bg-indigo-50/70 p-6">
-            <p className="text-sm font-semibold text-indigo-900">Current API note</p>
+            <p className="text-sm font-semibold text-indigo-900">Flexible sign-in</p>
             <p className="mt-2 text-sm leading-6 text-indigo-950/80">
-              The current backend contract only accepts email-based login. Username sign-in can be
-              added later once the auth API supports it.
+              Use either your username and password or your email and password to sign in.
             </p>
           </div>
         </section>
