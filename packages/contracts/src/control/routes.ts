@@ -2,10 +2,8 @@ import type { z } from 'zod';
 import { defineRoute } from '../route-utils';
 import type {
   accessTokenResponseSchema,
-  authTokensResponseSchema,
+  loginResponseSchema,
   loginSchema,
-  logoutSchema,
-  refreshTokenSchema,
   registerResponseSchema,
   registerSchema,
 } from './auth';
@@ -28,15 +26,12 @@ export const CONTROL_API = {
       'auth/register',
       'POST',
     ),
-    LOGIN: defineRoute<z.infer<typeof loginSchema>, z.infer<typeof authTokensResponseSchema>>()(
+    LOGIN: defineRoute<z.infer<typeof loginSchema>, z.infer<typeof loginResponseSchema>>()(
       'auth/login',
       'POST',
     ),
-    REFRESH: defineRoute<
-      z.infer<typeof refreshTokenSchema>,
-      z.infer<typeof accessTokenResponseSchema>
-    >()('auth/refresh', 'POST'),
-    LOGOUT: defineRoute<z.infer<typeof logoutSchema>, void>()('auth/logout', 'POST'),
+    REFRESH: defineRoute<void, z.infer<typeof accessTokenResponseSchema>>()('auth/refresh', 'POST'),
+    LOGOUT: defineRoute<void, void>()('auth/logout', 'POST'),
   },
   USERS: {
     PROFILE: defineRoute<void, z.infer<typeof userProfileResponseSchema>>()('users/me', 'GET'),

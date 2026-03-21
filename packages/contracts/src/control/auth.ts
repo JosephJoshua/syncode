@@ -50,30 +50,6 @@ export const loginSchema = z
 
 export type LoginInput = z.infer<typeof loginSchema>;
 
-export const refreshTokenSchema = z
-  .object({
-    refreshToken: z
-      .string()
-      .min(1)
-      .describe('JWT refresh token obtained from login')
-      .meta({ examples: ['dGhpcyBpcyBhIHJlZnJl...'] }),
-  })
-  .strict();
-
-export type RefreshTokenInput = z.infer<typeof refreshTokenSchema>;
-
-export const logoutSchema = z
-  .object({
-    refreshToken: z
-      .string()
-      .min(1)
-      .describe('JWT refresh token to revoke')
-      .meta({ examples: ['dGhpcyBpcyBhIHJlZnJl...'] }),
-  })
-  .strict();
-
-export type LogoutInput = z.infer<typeof logoutSchema>;
-
 export const loginStatsSchema = z.object({
   totalSessions: z.number().int().nonnegative(),
   totalProblems: z.number().int().nonnegative(),
@@ -140,7 +116,8 @@ export const accessTokenResponseSchema = z.object({
   accessToken: z
     .string()
     .describe('New short-lived JWT access token')
-    .meta({ examples: ['eyJhbGciOiJIUzI1NiIs...'] }),
+    .meta({ examples: ['eyJhbGciOiJIUzI1NiIs...'] })
+    .optional(),
 });
 
 export type AccessTokenResponse = z.infer<typeof accessTokenResponseSchema>;
