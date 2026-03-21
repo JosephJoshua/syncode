@@ -1,35 +1,7 @@
 import { Inject, Injectable, NotFoundException, NotImplementedException } from '@nestjs/common';
 import type { Database } from '@syncode/db';
 import { DB_CLIENT } from '@/modules/db/db.module';
-
-interface UserProfile {
-  id: string;
-  email: string;
-  username: string;
-  displayName: string | null;
-  role: 'user' | 'admin';
-  avatarUrl: string | null;
-  bio: string | null;
-  stats: {
-    totalSessions: number;
-    totalProblems: number;
-    streakDays: number;
-  };
-  createdAt: string;
-  updatedAt: string;
-}
-
-interface UserRecord {
-  id: string;
-  email: string;
-  username: string;
-  displayName: string | null;
-  role: 'user' | 'admin';
-  avatarUrl: string | null;
-  bio: string | null;
-  createdAt: Date;
-  updatedAt: Date;
-}
+import { toUserProfile, type UserProfile } from './user-profile.mapper';
 
 @Injectable()
 export class UsersService {
@@ -55,7 +27,7 @@ export class UsersService {
       throw new NotFoundException('User not found');
     }
 
-    return this.toUserProfile(user);
+    return toUserProfile(user);
   }
 
   async findByEmail(email: string): Promise<UserProfile | null> {
@@ -81,7 +53,7 @@ export class UsersService {
       return null;
     }
 
-    return this.toUserProfile(user);
+    return toUserProfile(user);
   }
 
   async create(_data: {
@@ -101,24 +73,5 @@ export class UsersService {
   async delete(_id: string): Promise<void> {
     // TODO: Implement user soft delete
     throw new NotImplementedException();
-  }
-
-  private toUserProfile(user: UserRecord): UserProfile {
-    return {
-      id: user.id,
-      email: user.email,
-      username: user.username,
-      displayName: user.displayName ?? null,
-      role: user.role,
-      avatarUrl: user.avatarUrl ?? null,
-      bio: user.bio ?? null,
-      stats: {
-        totalSessions: 0,
-        totalProblems: 0,
-        streakDays: 0,
-      },
-      createdAt: user.createdAt.toISOString(),
-      updatedAt: user.updatedAt.toISOString(),
-    };
   }
 }

@@ -14,6 +14,12 @@ export const updateUserSchema = z
 
 export type UpdateUserInput = z.infer<typeof updateUserSchema>;
 
+export const userStatsSchema = z.object({
+  totalSessions: z.number().int().nonnegative(),
+  totalProblems: z.number().int().nonnegative(),
+  streakDays: z.number().int().nonnegative(),
+});
+
 export const userProfileResponseSchema = z.object({
   id: z
     .uuid()
@@ -46,11 +52,7 @@ export const userProfileResponseSchema = z.object({
     .nullable()
     .describe('User bio')
     .meta({ examples: ['I love algorithms.'] }),
-  stats: z.object({
-    totalSessions: z.number().int().nonnegative(),
-    totalProblems: z.number().int().nonnegative(),
-    streakDays: z.number().int().nonnegative(),
-  }),
+  stats: userStatsSchema,
   createdAt: z
     .string()
     .datetime()

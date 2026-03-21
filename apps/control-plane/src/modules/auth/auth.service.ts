@@ -14,6 +14,7 @@ import { refreshTokens, users } from '@syncode/db';
 import { CACHE_SERVICE, type ICacheService } from '@syncode/shared/ports';
 import type { EnvConfig } from '@/config/env.config';
 import { DB_CLIENT } from '@/modules/db/db.module';
+import { toUserProfile, type UserProfile } from '@/modules/users/user-profile.mapper';
 
 const scryptAsync = promisify(scrypt);
 
@@ -24,23 +25,6 @@ interface RefreshTokenPayload {
   jti: string;
   iat: number;
   exp: number;
-}
-
-interface AuthUserProfile {
-  id: string;
-  email: string;
-  username: string;
-  displayName: string | null;
-  role: 'user' | 'admin';
-  avatarUrl: string | null;
-  bio: string | null;
-  stats: {
-    totalSessions: number;
-    totalProblems: number;
-    streakDays: number;
-  };
-  createdAt: string;
-  updatedAt: string;
 }
 
 @Injectable()
@@ -59,7 +43,7 @@ export class AuthService {
   ): Promise<{
     accessToken: string;
     refreshToken: string;
-    user: AuthUserProfile;
+    user: UserProfile;
   }> {
     const normalizedEmail = this.normalizeEmail(email);
     const normalizedUsername = username.trim();
@@ -107,7 +91,7 @@ export class AuthService {
 
       return {
         ...tokenPair,
-        user: this.toAuthUserProfile(createdUser),
+        user: toUserProfile(createdUser),
       };
     } catch (error) {
       if (this.isUniqueConstraintViolation(error)) {
@@ -123,7 +107,7 @@ export class AuthService {
   ): Promise<{
     accessToken: string;
     refreshToken: string;
-    user: AuthUserProfile;
+    user: UserProfile;
   }> {
     const normalizedIdentifier = identifier.trim();
     const normalizedEmailIdentifier = this.normalizeEmail(normalizedIdentifier);
@@ -161,7 +145,7 @@ export class AuthService {
 
     return {
       ...tokenPair,
-      user: this.toAuthUserProfile(user),
+      user: toUserProfile(user),
     };
   }
 
@@ -303,35 +287,6 @@ export class AuthService {
       this.cacheService.set(this.getRevokedTokenKey(payload.jti), true, ttlSeconds),
       this.cacheService.del(this.getActiveTokenKey(payload.sub, payload.jti)),
     ]);
-  }
-
-  private toAuthUserProfile(user: {
-    id: string;
-    email: string;
-    username: string;
-    displayName: string | null;
-    role: 'user' | 'admin';
-    avatarUrl: string | null;
-    bio: string | null;
-    createdAt: Date;
-    updatedAt: Date;
-  }): AuthUserProfile {
-    return {
-      id: user.id,
-      email: user.email,
-      username: user.username,
-      displayName: user.displayName ?? null,
-      role: user.role,
-      avatarUrl: user.avatarUrl ?? null,
-      bio: user.bio ?? null,
-      stats: {
-        totalSessions: 0,
-        totalProblems: 0,
-        streakDays: 0,
-      },
-      createdAt: user.createdAt.toISOString(),
-      updatedAt: user.updatedAt.toISOString(),
-    };
   }
 
   private getRevokedTokenKey(jti: string): string {
