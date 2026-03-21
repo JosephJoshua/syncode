@@ -7,7 +7,7 @@ function resolveUrl(template: string, params?: Record<string, string>): string {
     return template;
   }
 
-  return template.replace(/:(\w+)/g, (_, key: string) => {
+  return template.replaceAll(/:(\w+)/g, (_, key: string) => {
     const value = params[key];
     return value === undefined ? `:${key}` : encodeURIComponent(value);
   });

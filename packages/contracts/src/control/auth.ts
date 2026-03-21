@@ -52,8 +52,8 @@ export const authUserResponseSchema = z.object({
   avatarUrl: z.string().nullable(),
   bio: z.string().nullable(),
   stats: z.record(z.string(), z.unknown()),
-  createdAt: z.string().datetime(),
-  updatedAt: z.string().datetime(),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
 });
 
 export type AuthUserResponse = z.infer<typeof authUserResponseSchema>;

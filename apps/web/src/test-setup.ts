@@ -1,7 +1,7 @@
 import '@testing-library/jest-dom';
 
 class MemoryStorage implements Storage {
-  #store = new Map<string, string>();
+  readonly #store = new Map<string, string>();
 
   get length() {
     return this.#store.size;
@@ -31,18 +31,8 @@ class MemoryStorage implements Storage {
 const localStorageMock = new MemoryStorage();
 const sessionStorageMock = new MemoryStorage();
 
-Object.defineProperty(window, 'localStorage', {
-  value: localStorageMock,
-  configurable: true,
-});
-
 Object.defineProperty(globalThis, 'localStorage', {
   value: localStorageMock,
-  configurable: true,
-});
-
-Object.defineProperty(window, 'sessionStorage', {
-  value: sessionStorageMock,
   configurable: true,
 });
 
