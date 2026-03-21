@@ -73,13 +73,7 @@ export class AuthController {
       body.password,
     );
 
-    response.cookie(AuthController.REFRESH_TOKEN_COOKIE_NAME, registerResult.refreshToken, {
-      httpOnly: true,
-      secure: true,
-      sameSite: 'strict',
-      path: '/auth',
-      maxAge: AuthController.REFRESH_TOKEN_COOKIE_MAX_AGE_MS,
-    });
+    this.setRefreshTokenCookie(response, registerResult.refreshToken);
     this.setAccessTokenCookie(response, registerResult.accessToken);
 
     return {
@@ -115,13 +109,7 @@ export class AuthController {
   ): Promise<LoginResponseDto> {
     const loginResult = await this.authService.login(body.identifier, body.password);
 
-    response.cookie(AuthController.REFRESH_TOKEN_COOKIE_NAME, loginResult.refreshToken, {
-      httpOnly: true,
-      secure: true,
-      sameSite: 'strict',
-      path: '/auth',
-      maxAge: AuthController.REFRESH_TOKEN_COOKIE_MAX_AGE_MS,
-    });
+    this.setRefreshTokenCookie(response, loginResult.refreshToken);
     this.setAccessTokenCookie(response, loginResult.accessToken);
 
     return {
@@ -155,13 +143,7 @@ export class AuthController {
     const refreshToken = this.getRefreshTokenFromCookieHeader(cookieHeader);
     const refreshResult = await this.authService.refreshToken(refreshToken);
 
-    response.cookie(AuthController.REFRESH_TOKEN_COOKIE_NAME, refreshResult.refreshToken, {
-      httpOnly: true,
-      secure: true,
-      sameSite: 'strict',
-      path: '/auth',
-      maxAge: AuthController.REFRESH_TOKEN_COOKIE_MAX_AGE_MS,
-    });
+    this.setRefreshTokenCookie(response, refreshResult.refreshToken);
     this.setAccessTokenCookie(response, refreshResult.accessToken);
 
     return {
@@ -192,13 +174,7 @@ export class AuthController {
     const refreshToken = this.getRefreshTokenFromCookieHeader(cookieHeader);
     await this.authService.logout(refreshToken);
 
-    response.cookie(AuthController.REFRESH_TOKEN_COOKIE_NAME, '', {
-      httpOnly: true,
-      secure: true,
-      sameSite: 'strict',
-      path: '/auth',
-      maxAge: 0,
-    });
+    this.clearRefreshTokenCookie(response);
     this.clearAccessTokenCookie(response);
   }
 
@@ -235,12 +211,32 @@ export class AuthController {
     });
   }
 
+  private setRefreshTokenCookie(response: Response, refreshToken: string): void {
+    response.cookie(AuthController.REFRESH_TOKEN_COOKIE_NAME, refreshToken, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'strict',
+      path: '/auth',
+      maxAge: AuthController.REFRESH_TOKEN_COOKIE_MAX_AGE_MS,
+    });
+  }
+
   private clearAccessTokenCookie(response: Response): void {
     response.cookie(AuthController.ACCESS_TOKEN_COOKIE_NAME, '', {
       httpOnly: true,
       secure: true,
       sameSite: 'strict',
       path: '/',
+      maxAge: 0,
+    });
+  }
+
+  private clearRefreshTokenCookie(response: Response): void {
+    response.cookie(AuthController.REFRESH_TOKEN_COOKIE_NAME, '', {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'strict',
+      path: '/auth',
       maxAge: 0,
     });
   }
