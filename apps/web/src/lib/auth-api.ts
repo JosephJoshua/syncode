@@ -1,6 +1,10 @@
-import type { ErrorResponse, LoginInput, LoginResponse } from '@syncode/contracts';
-import { CONTROL_API } from '@syncode/contracts';
+import type { ErrorResponse, LoginInput, LoginResponse, TypedRoute } from '@syncode/contracts';
 import { api, readApiError } from '@/lib/api-client';
+
+const loginRoute = {
+  route: 'auth/login',
+  method: 'POST',
+} as const satisfies TypedRoute<LoginInput, LoginResponse>;
 
 export class LoginApiError extends Error {
   constructor(
@@ -14,7 +18,7 @@ export class LoginApiError extends Error {
 
 export async function loginUser(input: LoginInput): Promise<LoginResponse> {
   try {
-    const response = await api(CONTROL_API.AUTH.LOGIN, {
+    const response = await api(loginRoute, {
       body: input,
     });
 

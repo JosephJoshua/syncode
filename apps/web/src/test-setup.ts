@@ -40,3 +40,15 @@ Object.defineProperty(globalThis, 'sessionStorage', {
   value: sessionStorageMock,
   configurable: true,
 });
+
+if ('window' in globalThis && globalThis.window) {
+  Object.defineProperty(globalThis.window, 'localStorage', {
+    value: localStorageMock,
+    configurable: true,
+  });
+
+  Object.defineProperty(globalThis.window, 'sessionStorage', {
+    value: sessionStorageMock,
+    configurable: true,
+  });
+}
