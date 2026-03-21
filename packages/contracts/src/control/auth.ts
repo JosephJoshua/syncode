@@ -1,3 +1,4 @@
+import { UserRole } from '@syncode/shared';
 import { z } from 'zod';
 
 export const registerSchema = z
@@ -18,10 +19,11 @@ export type RegisterInput = z.infer<typeof registerSchema>;
 
 export const loginSchema = z
   .object({
-    email: z
-      .email()
-      .describe('Email address')
-      .meta({ examples: ['user@example.com'] }),
+    identifier: z
+      .string()
+      .min(1)
+      .describe('Email address or username')
+      .meta({ examples: ['user@example.com', 'code_partner'] }),
     password: z
       .string()
       .min(1)
@@ -31,6 +33,32 @@ export const loginSchema = z
   .strict();
 
 export type LoginInput = z.infer<typeof loginSchema>;
+
+export const authUserResponseSchema = z.object({
+  id: z.string().describe('User ID').meta({ examples: ['usr_123'] }),
+  email: z.email().describe('Email address').meta({ examples: ['user@example.com'] }),
+  username: z.string().describe('Unique username').meta({ examples: ['code_partner'] }),
+  displayName: z.string().nullable(),
+  role: z.enum([UserRole.USER, UserRole.ADMIN]),
+  avatarUrl: z.string().nullable(),
+  bio: z.string().nullable(),
+  stats: z.record(z.string(), z.unknown()),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+
+export type AuthUserResponse = z.infer<typeof authUserResponseSchema>;
+
+export const loginResponseSchema = z.object({
+  accessToken: z
+    .string()
+    .describe('Short-lived JWT access token')
+    .meta({ examples: ['eyJhbGciOiJIUzI1NiIs...'] })
+    .optional(),
+  user: authUserResponseSchema.optional(),
+});
+
+export type LoginResponse = z.infer<typeof loginResponseSchema>;
 
 export const refreshTokenSchema = z
   .object({

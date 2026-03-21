@@ -3,6 +3,7 @@ import { defineRoute } from '../route-utils';
 import type {
   accessTokenResponseSchema,
   authTokensResponseSchema,
+  loginResponseSchema,
   loginSchema,
   refreshTokenSchema,
   registerSchema,
@@ -26,7 +27,7 @@ export const CONTROL_API = {
       z.infer<typeof registerSchema>,
       z.infer<typeof accessTokenResponseSchema>
     >()('auth/register', 'POST'),
-    LOGIN: defineRoute<z.infer<typeof loginSchema>, z.infer<typeof authTokensResponseSchema>>()(
+    LOGIN: defineRoute<z.infer<typeof loginSchema>, z.infer<typeof loginResponseSchema>>()(
       'auth/login',
       'POST',
     ),

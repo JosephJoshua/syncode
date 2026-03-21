@@ -18,7 +18,7 @@ const mockedLoginUser = vi.mocked(loginUser);
 
 describe('Login page', () => {
   beforeEach(() => {
-    localStorage.clear();
+    window.localStorage.clear();
     window.history.pushState({}, '', '/login');
     useAuthStore.setState({
       user: null,
@@ -99,7 +99,7 @@ describe('Login page', () => {
 
     expect(useAuthStore.getState().accessToken).toBe('access-token');
     expect(useAuthStore.getState().user?.username).toBe('code_partner');
-    expect(localStorage.getItem('syncode-auth')).toContain('access-token');
+    expect(window.localStorage.getItem('syncode-auth')).toContain('access-token');
     expect(locationAssignSpy).toHaveBeenCalledWith('/dashboard');
   });
 
