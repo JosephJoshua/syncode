@@ -103,8 +103,6 @@ describe('App', () => {
     await user.type(screen.getByLabelText('Password'), 'correct-password');
     await user.click(screen.getByRole('button', { name: 'Log in' }));
 
-    await screen.findByText('Collaborative Interview Practice');
-
     await waitFor(() => {
       expect(useAuthStore.getState().isAuthenticated).toBe(true);
     });
@@ -112,6 +110,6 @@ describe('App', () => {
     expect(useAuthStore.getState().accessToken).toBe('access-token');
     expect(useAuthStore.getState().refreshToken).toBe('refresh-token');
     expect(localStorage.getItem('syncode-auth')).toContain('access-token');
-    expect(window.location.pathname).toBe('/');
+    expect(window.location.pathname).toBe('/dashboard');
   });
 });

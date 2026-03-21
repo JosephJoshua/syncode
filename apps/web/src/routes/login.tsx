@@ -32,7 +32,7 @@ type LoginFormValues = z.infer<typeof loginFormSchema>;
 export const Route = createFileRoute('/login')({
   beforeLoad: () => {
     if (useAuthStore.getState().isAuthenticated) {
-      throw redirect({ to: '/' });
+      throw redirect({ to: '/dashboard' });
     }
   },
   component: LoginPage,
@@ -70,7 +70,7 @@ function LoginPage() {
     onSuccess: async ({ accessToken, refreshToken }) => {
       setSession({ accessToken, refreshToken });
       toast.success('Signed in successfully.');
-      await navigate({ to: '/' });
+      await navigate({ to: '/dashboard' });
     },
     onError: async (error) => {
       const apiError = await readApiError(error);
