@@ -1,4 +1,5 @@
-import { createRootRoute, Link, Outlet } from '@tanstack/react-router';
+import { createRootRoute, Link, Outlet, useNavigate } from '@tanstack/react-router';
+import { useAuthStore } from '@/stores/auth.store';
 
 export const Route = createRootRoute({
   component: RootLayout,
@@ -83,14 +84,47 @@ function SynCodeLogo({ className }: { className?: string }) {
 }
 
 function RootLayout() {
+  const navigate = useNavigate();
+  const hasHydrated = useAuthStore((state) => state.hasHydrated);
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const logout = useAuthStore((state) => state.logout);
+
+  const handleLogout = () => {
+    logout();
+    void navigate({ to: '/' });
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       <nav className="border-b border-gray-200 bg-white">
-        <div className="mx-auto flex h-14 max-w-7xl items-center gap-6 px-4">
+        <div className="mx-auto flex h-14 max-w-7xl items-center justify-between gap-6 px-4">
           <Link to="/" className="flex items-center gap-2 font-semibold text-gray-900">
             <SynCodeLogo className="h-6 w-6" />
             SynCode
           </Link>
+          <div className="flex items-center gap-3 text-sm">
+            {!hasHydrated ? (
+              <span className="text-gray-500">Loading session...</span>
+            ) : isAuthenticated ? (
+              <>
+                <span className="hidden text-gray-500 sm:inline">Signed in</span>
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="rounded-md border border-gray-300 px-3 py-2 font-medium text-gray-700 transition hover:border-gray-400 hover:bg-gray-50"
+                >
+                  Log out
+                </button>
+              </>
+            ) : (
+              <Link
+                to="/login"
+                className="rounded-md bg-gray-900 px-3 py-2 font-medium text-white transition hover:bg-gray-800"
+              >
+                Log in
+              </Link>
+            )}
+          </div>
         </div>
       </nav>
       <main>
