@@ -19,6 +19,18 @@ interface UserProfile {
   updatedAt: string;
 }
 
+interface UserRecord {
+  id: string;
+  email: string;
+  username: string;
+  displayName: string | null;
+  role: 'user' | 'admin';
+  avatarUrl: string | null;
+  bio: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 @Injectable()
 export class UsersService {
   constructor(@Inject(DB_CLIENT) private readonly db: Database) {}
@@ -43,22 +55,7 @@ export class UsersService {
       throw new NotFoundException('User not found');
     }
 
-    return {
-      id: user.id,
-      email: user.email,
-      username: user.username,
-      displayName: user.displayName ?? null,
-      role: user.role,
-      avatarUrl: user.avatarUrl ?? null,
-      bio: user.bio ?? null,
-      stats: {
-        totalSessions: 0,
-        totalProblems: 0,
-        streakDays: 0,
-      },
-      createdAt: user.createdAt.toISOString(),
-      updatedAt: user.updatedAt.toISOString(),
-    };
+    return this.toUserProfile(user);
   }
 
   async findByEmail(email: string): Promise<UserProfile | null> {
@@ -84,22 +81,7 @@ export class UsersService {
       return null;
     }
 
-    return {
-      id: user.id,
-      email: user.email,
-      username: user.username,
-      displayName: user.displayName ?? null,
-      role: user.role,
-      avatarUrl: user.avatarUrl ?? null,
-      bio: user.bio ?? null,
-      stats: {
-        totalSessions: 0,
-        totalProblems: 0,
-        streakDays: 0,
-      },
-      createdAt: user.createdAt.toISOString(),
-      updatedAt: user.updatedAt.toISOString(),
-    };
+    return this.toUserProfile(user);
   }
 
   async create(_data: {
@@ -119,5 +101,24 @@ export class UsersService {
   async delete(_id: string): Promise<void> {
     // TODO: Implement user soft delete
     throw new NotImplementedException();
+  }
+
+  private toUserProfile(user: UserRecord): UserProfile {
+    return {
+      id: user.id,
+      email: user.email,
+      username: user.username,
+      displayName: user.displayName ?? null,
+      role: user.role,
+      avatarUrl: user.avatarUrl ?? null,
+      bio: user.bio ?? null,
+      stats: {
+        totalSessions: 0,
+        totalProblems: 0,
+        streakDays: 0,
+      },
+      createdAt: user.createdAt.toISOString(),
+      updatedAt: user.updatedAt.toISOString(),
+    };
   }
 }
