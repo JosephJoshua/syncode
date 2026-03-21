@@ -7,4 +7,17 @@ describe('App', () => {
     render(<App />);
     expect(await screen.findByText('SynCode')).toBeInTheDocument();
   });
+
+  it('renders a register call to action on the home page', async () => {
+    render(<App />);
+    expect(await screen.findByRole('link', { name: 'Create account' })).toBeInTheDocument();
+  });
+
+  it('renders the register page fields', async () => {
+    window.history.pushState({}, '', '/register');
+    render(<App />);
+    expect(await screen.findByLabelText('Username')).toBeInTheDocument();
+    expect(screen.getByLabelText('Email')).toBeInTheDocument();
+    expect(screen.getByLabelText('Password')).toBeInTheDocument();
+  });
 });
