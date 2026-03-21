@@ -45,7 +45,14 @@ export class AuthController {
   @ApiResponse({
     status: 201,
     type: RegisterResponseDto,
-    description: 'User registered successfully',
+    description: 'Account created',
+    headers: {
+      'Set-Cookie': {
+        description:
+          'Refresh token cookie (refreshToken=; HttpOnly; Secure; SameSite=Strict; Path=/auth; Max-Age=604800)',
+        schema: { type: 'string' },
+      },
+    },
   })
   @ApiResponse({ status: 400, type: ErrorResponseDto, description: 'Validation error' })
   @ApiResponse({
@@ -54,8 +61,28 @@ export class AuthController {
     description: 'Email or username already registered',
   })
   @ApiResponse({ status: 500, type: ErrorResponseDto, description: 'Internal server error' })
-  async register(@Body() body: RegisterDto): Promise<RegisterResponseDto> {
-    return this.authService.register(body.username, body.email, body.password);
+  async register(
+    @Body() body: RegisterDto,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<RegisterResponseDto> {
+    const registerResult = await this.authService.register(
+      body.username,
+      body.email,
+      body.password,
+    );
+
+    response.cookie('refreshToken', registerResult.refreshToken, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'strict',
+      path: '/auth',
+      maxAge: AuthController.REFRESH_TOKEN_COOKIE_MAX_AGE_MS,
+    });
+
+    return {
+      accessToken: registerResult.accessToken,
+      user: registerResult.user,
+    };
   }
 
   @Post(CONTROL_API.AUTH.LOGIN.route)

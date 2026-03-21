@@ -26,7 +26,7 @@ interface RefreshTokenPayload {
   exp: number;
 }
 
-interface LoginUserProfile {
+interface AuthUserProfile {
   id: string;
   email: string;
   username: string;
@@ -52,7 +52,15 @@ export class AuthService {
     private readonly config: ConfigService<EnvConfig>,
   ) {}
 
-  async register(username: string, email: string, password: string): Promise<{ userId: string }> {
+  async register(
+    username: string,
+    email: string,
+    password: string,
+  ): Promise<{
+    accessToken: string;
+    refreshToken: string;
+    user: AuthUserProfile;
+  }> {
     const normalizedEmail = this.normalizeEmail(email);
     const normalizedUsername = username.trim();
 
@@ -79,13 +87,28 @@ export class AuthService {
           email: normalizedEmail,
           passwordHash,
         })
-        .returning({ id: users.id });
+        .returning({
+          id: users.id,
+          email: users.email,
+          username: users.username,
+          displayName: users.displayName,
+          role: users.role,
+          avatarUrl: users.avatarUrl,
+          bio: users.bio,
+          createdAt: users.createdAt,
+          updatedAt: users.updatedAt,
+        });
 
       if (!createdUser) {
         throw new Error('Failed to create user');
       }
 
-      return { userId: createdUser.id };
+      const tokenPair = await this.issueTokenPair(createdUser.id, createdUser.email);
+
+      return {
+        ...tokenPair,
+        user: this.toAuthUserProfile(createdUser),
+      };
     } catch (error) {
       if (this.isUniqueConstraintViolation(error)) {
         throw new ConflictException('Email or username already registered');
@@ -100,7 +123,7 @@ export class AuthService {
   ): Promise<{
     accessToken: string;
     refreshToken: string;
-    user: LoginUserProfile;
+    user: AuthUserProfile;
   }> {
     const normalizedIdentifier = identifier.trim();
     const normalizedEmailIdentifier = this.normalizeEmail(normalizedIdentifier);
@@ -138,22 +161,7 @@ export class AuthService {
 
     return {
       ...tokenPair,
-      user: {
-        id: user.id,
-        email: user.email,
-        username: user.username,
-        displayName: user.displayName ?? null,
-        role: user.role,
-        avatarUrl: user.avatarUrl ?? null,
-        bio: user.bio ?? null,
-        stats: {
-          totalSessions: 0,
-          totalProblems: 0,
-          streakDays: 0,
-        },
-        createdAt: user.createdAt.toISOString(),
-        updatedAt: user.updatedAt.toISOString(),
-      },
+      user: this.toAuthUserProfile(user),
     };
   }
 
@@ -295,6 +303,35 @@ export class AuthService {
       this.cacheService.set(this.getRevokedTokenKey(payload.jti), true, ttlSeconds),
       this.cacheService.del(this.getActiveTokenKey(payload.sub, payload.jti)),
     ]);
+  }
+
+  private toAuthUserProfile(user: {
+    id: string;
+    email: string;
+    username: string;
+    displayName: string | null;
+    role: 'user' | 'admin';
+    avatarUrl: string | null;
+    bio: string | null;
+    createdAt: Date;
+    updatedAt: Date;
+  }): AuthUserProfile {
+    return {
+      id: user.id,
+      email: user.email,
+      username: user.username,
+      displayName: user.displayName ?? null,
+      role: user.role,
+      avatarUrl: user.avatarUrl ?? null,
+      bio: user.bio ?? null,
+      stats: {
+        totalSessions: 0,
+        totalProblems: 0,
+        streakDays: 0,
+      },
+      createdAt: user.createdAt.toISOString(),
+      updatedAt: user.updatedAt.toISOString(),
+    };
   }
 
   private getRevokedTokenKey(jti: string): string {

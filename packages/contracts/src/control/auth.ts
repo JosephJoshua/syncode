@@ -24,15 +24,6 @@ export const registerSchema = z
 
 export type RegisterInput = z.infer<typeof registerSchema>;
 
-export const registerResponseSchema = z.object({
-  userId: z
-    .string()
-    .describe('Created user ID')
-    .meta({ examples: ['f47ac10b-58cc-4372-a567-0e02b2c3d479'] }),
-});
-
-export type RegisterResponse = z.infer<typeof registerResponseSchema>;
-
 export const loginSchema = z
   .object({
     identifier: z
@@ -111,6 +102,10 @@ export const loginResponseSchema = z.object({
 });
 
 export type LoginResponse = z.infer<typeof loginResponseSchema>;
+
+export const registerResponseSchema = loginResponseSchema;
+
+export type RegisterResponse = z.infer<typeof registerResponseSchema>;
 
 export const accessTokenResponseSchema = z.object({
   accessToken: z
