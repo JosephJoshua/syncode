@@ -56,9 +56,37 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Log in' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Invalid email or password. Please try again.',
+      'Invalid username, email, or password. Please try again.',
     );
     expect(mockedApi).toHaveBeenCalledTimes(1);
+  });
+
+  it('submits username and password when the user signs in with a username', async () => {
+    const user = userEvent.setup();
+    mockedApi.mockResolvedValue({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+    });
+    window.history.pushState({}, '', '/login');
+
+    render(<App />);
+
+    await user.type(await screen.findByLabelText('Email or username'), 'code_partner');
+    await user.type(screen.getByLabelText('Password'), 'correct-password');
+    await user.click(screen.getByRole('button', { name: 'Log in' }));
+
+    expect(mockedApi).toHaveBeenCalledWith(
+      expect.objectContaining({
+        route: 'auth/login',
+        method: 'POST',
+      }),
+      {
+        body: {
+          username: 'code_partner',
+          password: 'correct-password',
+        },
+      },
+    );
   });
 
   it('stores auth tokens and redirects to the dashboard after a successful login', async () => {
