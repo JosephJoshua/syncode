@@ -1,4 +1,5 @@
 import { Injectable, NotImplementedException } from '@nestjs/common';
+import type { LoginResponse } from '@syncode/contracts';
 
 @Injectable()
 export class AuthService {
@@ -7,10 +8,7 @@ export class AuthService {
     throw new NotImplementedException();
   }
 
-  async login(
-    _email: string,
-    _password: string,
-  ): Promise<{ accessToken: string; refreshToken: string }> {
+  async login(_identifier: string, _password: string): Promise<LoginResponse> {
     // TODO: Implement user login
     throw new NotImplementedException();
   }

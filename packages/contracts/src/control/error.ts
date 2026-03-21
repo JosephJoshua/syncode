@@ -5,6 +5,11 @@ export const errorResponseSchema = z.object({
     .number()
     .describe('HTTP status code')
     .meta({ examples: [500] }),
+  code: z
+    .string()
+    .optional()
+    .describe('Machine-readable error code')
+    .meta({ examples: ['AUTH_INVALID_CREDENTIALS'] }),
   message: z
     .string()
     .describe('Human-readable error message')
