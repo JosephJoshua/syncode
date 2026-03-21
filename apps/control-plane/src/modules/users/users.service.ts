@@ -1,4 +1,6 @@
-import { Injectable, NotImplementedException } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException, NotImplementedException } from '@nestjs/common';
+import type { Database } from '@syncode/db';
+import { DB_CLIENT } from '@/modules/db/db.module';
 
 interface UserProfile {
   id: string;
@@ -9,14 +11,55 @@ interface UserProfile {
 
 @Injectable()
 export class UsersService {
-  async findById(_id: string): Promise<UserProfile> {
-    // TODO: Implement user lookup by ID
-    throw new NotImplementedException();
+  constructor(@Inject(DB_CLIENT) private readonly db: Database) {}
+
+  async findById(id: string): Promise<UserProfile> {
+    const user = await this.db.query.users.findFirst({
+      columns: {
+        id: true,
+        email: true,
+        displayName: true,
+        createdAt: true,
+      },
+      where: (table, { and, eq, isNull }) => and(eq(table.id, id), isNull(table.deletedAt)),
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    return {
+      id: user.id,
+      email: user.email,
+      displayName: user.displayName ?? undefined,
+      createdAt: user.createdAt.toISOString(),
+    };
   }
 
-  async findByEmail(_email: string): Promise<UserProfile | null> {
-    // TODO: Implement user lookup by email
-    throw new NotImplementedException();
+  async findByEmail(email: string): Promise<UserProfile | null> {
+    const normalizedEmail = email.trim().toLowerCase();
+
+    const user = await this.db.query.users.findFirst({
+      columns: {
+        id: true,
+        email: true,
+        displayName: true,
+        createdAt: true,
+      },
+      where: (table, { and, eq, isNull }) =>
+        and(eq(table.email, normalizedEmail), isNull(table.deletedAt)),
+    });
+
+    if (!user) {
+      return null;
+    }
+
+    return {
+      id: user.id,
+      email: user.email,
+      displayName: user.displayName ?? undefined,
+      createdAt: user.createdAt.toISOString(),
+    };
   }
 
   async create(_data: {
