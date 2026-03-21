@@ -35,9 +35,18 @@ export const loginSchema = z
 export type LoginInput = z.infer<typeof loginSchema>;
 
 export const authUserResponseSchema = z.object({
-  id: z.string().describe('User ID').meta({ examples: ['usr_123'] }),
-  email: z.email().describe('Email address').meta({ examples: ['user@example.com'] }),
-  username: z.string().describe('Unique username').meta({ examples: ['code_partner'] }),
+  id: z
+    .string()
+    .describe('User ID')
+    .meta({ examples: ['usr_123'] }),
+  email: z
+    .email()
+    .describe('Email address')
+    .meta({ examples: ['user@example.com'] }),
+  username: z
+    .string()
+    .describe('Unique username')
+    .meta({ examples: ['code_partner'] }),
   displayName: z.string().nullable(),
   role: z.enum([UserRole.USER, UserRole.ADMIN]),
   avatarUrl: z.string().nullable(),

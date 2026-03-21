@@ -2,7 +2,6 @@ import type { z } from 'zod';
 import { defineRoute } from '../route-utils';
 import type {
   accessTokenResponseSchema,
-  authTokensResponseSchema,
   loginResponseSchema,
   loginSchema,
   refreshTokenSchema,
