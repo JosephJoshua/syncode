@@ -15,6 +15,7 @@ function resolveUrl(template: string, params?: Record<string, string>): string {
 
 const client = ky.create({
   prefixUrl: import.meta.env.VITE_API_URL ?? '/api',
+  credentials: 'include',
   hooks: {
     beforeRequest: [
       (request) => {

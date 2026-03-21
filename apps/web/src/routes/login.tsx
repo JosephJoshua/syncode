@@ -1,26 +1,15 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import type { AuthTokensResponse, TypedRoute } from '@syncode/contracts';
+import type { AuthUserResponse, LoginResponse } from '@syncode/contracts';
+import type { UserProfile } from '@syncode/shared';
 import { useMutation } from '@tanstack/react-query';
-import { createFileRoute, Link, redirect, useNavigate } from '@tanstack/react-router';
+import { createFileRoute, Link } from '@tanstack/react-router';
 import { LoaderCircle, LockKeyhole, Mail } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import { z } from 'zod';
-import { api, readApiError } from '@/lib/api-client';
+import { LoginApiError, loginUser } from '@/lib/auth-api';
 import { useAuthStore } from '@/stores/auth.store';
-
-const loginRoute = {
-  route: 'auth/login',
-  method: 'POST',
-} as const satisfies TypedRoute<
-  {
-    email?: string;
-    username?: string;
-    password: string;
-  },
-  AuthTokensResponse
->;
 
 const loginFormSchema = z.object({
   identifier: z.string().trim().min(1, 'Enter your email address or username.'),
@@ -30,16 +19,12 @@ const loginFormSchema = z.object({
 type LoginFormValues = z.infer<typeof loginFormSchema>;
 
 export const Route = createFileRoute('/login')({
-  beforeLoad: () => {
-    if (useAuthStore.getState().isAuthenticated) {
-      throw redirect({ to: '/dashboard' });
-    }
-  },
   component: LoginPage,
 });
 
 function LoginPage() {
-  const navigate = useNavigate();
+  const hasHydrated = useAuthStore((state) => state.hasHydrated);
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const setSession = useAuthStore((state) => state.setSession);
   const [submissionError, setSubmissionError] = useState<string | null>(null);
   const {
@@ -56,40 +41,76 @@ function LoginPage() {
     },
   });
 
-  const loginMutation = useMutation<AuthTokensResponse, unknown, LoginFormValues>({
-    mutationFn: async (values: LoginFormValues) => {
-      const identifier = values.identifier.trim();
+  useEffect(() => {
+    if (hasHydrated && isAuthenticated) {
+      window.location.assign('/dashboard');
+    }
+  }, [hasHydrated, isAuthenticated]);
 
-      return (await api(loginRoute, {
-        body: {
-          ...(identifier.includes('@') ? { email: identifier } : { username: identifier }),
-          password: values.password,
-        },
-      })) as AuthTokensResponse;
-    },
-    onSuccess: async ({ accessToken, refreshToken }) => {
-      setSession({ accessToken, refreshToken });
-      toast.success('Signed in successfully.');
-      await navigate({ to: '/dashboard' });
-    },
-    onError: async (error) => {
-      const apiError = await readApiError(error);
-
-      if (!apiError && error instanceof Error) {
-        setError('identifier', {
-          type: 'manual',
-          message: error.message,
-        });
+  const loginMutation = useMutation<LoginResponse, unknown, LoginFormValues>({
+    mutationFn: async (values: LoginFormValues) =>
+      loginUser({
+        identifier: values.identifier.trim(),
+        password: values.password,
+      }),
+    onSuccess: async ({ accessToken, user }) => {
+      if (!accessToken) {
+        setSubmissionError('We could not establish your session. Please try again.');
         return;
       }
 
-      if (apiError?.statusCode === 401) {
+      setSession({
+        accessToken,
+        user: user ? mapAuthUser(user) : null,
+      });
+      toast.success('Signed in successfully.');
+      window.location.assign('/dashboard');
+    },
+    onError: async (error) => {
+      const apiError = error instanceof LoginApiError ? error.error : null;
+
+      if (apiError?.statusCode === 401 && apiError.code === 'AUTH_INVALID_CREDENTIALS') {
         setSubmissionError('Invalid username, email, or password. Please try again.');
         return;
       }
 
+      if (apiError?.statusCode === 403 && apiError.code === 'USER_BANNED') {
+        setSubmissionError('This account has been suspended. Please contact support.');
+        return;
+      }
+
       if (apiError?.statusCode === 400) {
+        const validationDetails = apiError.details;
+
+        if (validationDetails && typeof validationDetails === 'object') {
+          const identifierMessage = getFieldErrorMessage(validationDetails, 'identifier');
+          const passwordMessage = getFieldErrorMessage(validationDetails, 'password');
+
+          if (identifierMessage) {
+            setError('identifier', {
+              type: 'server',
+              message: identifierMessage,
+            });
+          }
+
+          if (passwordMessage) {
+            setError('password', {
+              type: 'server',
+              message: passwordMessage,
+            });
+          }
+
+          if (identifierMessage || passwordMessage) {
+            return;
+          }
+        }
+
         setSubmissionError(apiError.message || 'Please check your credentials and try again.');
+        return;
+      }
+
+      if (error instanceof Error) {
+        setSubmissionError(error.message);
         return;
       }
 
@@ -108,6 +129,7 @@ function LoginPage() {
   const onSubmit = handleSubmit(async (values) => {
     setSubmissionError(null);
     clearErrors('identifier');
+    clearErrors('password');
     loginMutation.mutate(values);
   });
 
@@ -218,4 +240,41 @@ function LoginPage() {
       </div>
     </div>
   );
+}
+
+function mapAuthUser(user: AuthUserResponse): UserProfile {
+  return {
+    id: user.id,
+    email: user.email,
+    username: user.username,
+    displayName: user.displayName ?? '',
+    role: user.role,
+    avatarUrl: user.avatarUrl ?? undefined,
+    bio: user.bio ?? undefined,
+    createdAt: new Date(user.createdAt),
+    updatedAt: new Date(user.updatedAt),
+  };
+}
+
+function getFieldErrorMessage(details: Record<string, unknown>, field: keyof LoginFormValues) {
+  const value = details[field];
+
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  if (Array.isArray(value) && typeof value[0] === 'string') {
+    return value[0];
+  }
+
+  if (
+    value &&
+    typeof value === 'object' &&
+    'message' in value &&
+    typeof value.message === 'string'
+  ) {
+    return value.message;
+  }
+
+  return null;
 }

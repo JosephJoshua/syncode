@@ -10,7 +10,7 @@ interface AuthState {
   hasHydrated: boolean;
   setSession: (session: {
     accessToken: string;
-    refreshToken: string;
+    refreshToken?: string | null;
     user?: UserProfile | null;
   }) => void;
   setUser: (user: UserProfile | null) => void;
@@ -26,7 +26,7 @@ export const useAuthStore = create<AuthState>()(
       refreshToken: null,
       isAuthenticated: false,
       hasHydrated: false,
-      setSession: ({ accessToken, refreshToken, user = null }) =>
+      setSession: ({ accessToken, refreshToken = null, user = null }) =>
         set({ user, accessToken, refreshToken, isAuthenticated: true }),
       setUser: (user) => set({ user }),
       logout: () =>
