@@ -1,9 +1,12 @@
-import type { ErrorResponse, RequestOf, ResponseOf, TypedRoute } from '@syncode/contracts';
-import * as contracts from '@syncode/contracts';
 import ky, { HTTPError } from 'ky';
 import { useAuthStore } from '@/stores/auth.store';
-
-const { buildUrl } = contracts;
+import type { ErrorResponse } from '../../../../packages/contracts/src/control/error';
+import {
+  buildUrl,
+  type RequestOf,
+  type ResponseOf,
+  type TypedRoute,
+} from '../../../../packages/contracts/src/route-utils';
 
 const client = ky.create({
   prefixUrl: import.meta.env.VITE_API_URL ?? '/api',

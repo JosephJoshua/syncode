@@ -1,5 +1,5 @@
-import type { AuthUserResponse } from '@syncode/contracts';
 import { create } from 'zustand';
+import type { AuthUserResponse } from '../../../../packages/contracts/src/control/auth';
 
 interface AuthState {
   user: AuthUserResponse | null;

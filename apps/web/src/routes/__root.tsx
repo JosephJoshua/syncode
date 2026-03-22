@@ -1,4 +1,4 @@
-import { createRootRoute, Link, Outlet, useNavigate } from '@tanstack/react-router';
+import { createRootRoute, Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router';
 import type { ReactNode } from 'react';
 import { useAuthStore } from '@/stores/auth.store';
 
@@ -86,6 +86,9 @@ function SynCodeLogo({ className }: { className?: string }) {
 
 function RootLayout() {
   const navigate = useNavigate();
+  const pathname = useRouterState({
+    select: (state) => state.location.pathname,
+  });
   const hasHydrated = useAuthStore((state) => state.hasHydrated);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const logout = useAuthStore((state) => state.logout);
@@ -111,7 +114,7 @@ function RootLayout() {
           </button>
         </>
       );
-    } else {
+    } else if (pathname === '/') {
       navContent = (
         <Link
           to="/login"
@@ -120,6 +123,8 @@ function RootLayout() {
           Log in
         </Link>
       );
+    } else {
+      navContent = null;
     }
   } else {
     navContent = <span className="text-gray-500">Loading session...</span>;

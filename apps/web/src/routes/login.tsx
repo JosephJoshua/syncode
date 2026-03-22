@@ -1,6 +1,4 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import type { LoginResponse } from '@syncode/contracts';
-import * as contracts from '@syncode/contracts';
 import { useMutation } from '@tanstack/react-query';
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { LoaderCircle, LockKeyhole, Mail } from 'lucide-react';
@@ -11,8 +9,9 @@ import { toast } from 'sonner';
 import { z } from 'zod';
 import { api, getFieldErrorMessage, readApiError } from '@/lib/api-client';
 import { useAuthStore } from '@/stores/auth.store';
-
-const { CONTROL_API, ERROR_CODES } = contracts;
+import type { LoginResponse } from '../../../../packages/contracts/src/control/auth';
+import { ERROR_CODES } from '../../../../packages/contracts/src/control/error';
+import { CONTROL_API } from '../../../../packages/contracts/src/control/routes';
 
 const loginFormSchema = z.object({
   identifier: z.string().trim().min(1, 'Enter your email address or username.'),
@@ -189,8 +188,8 @@ function LoginPage() {
 
           <p className="mt-6 text-sm text-gray-500">
             Need a new account?{' '}
-            <Link to="/" className="font-semibold text-indigo-600 hover:text-indigo-500">
-              Return to the home page
+            <Link to="/register" className="font-semibold text-indigo-600 hover:text-indigo-500">
+              Register now
             </Link>
           </p>
         </section>

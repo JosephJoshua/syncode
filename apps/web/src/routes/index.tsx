@@ -1,13 +1,10 @@
-import { createFileRoute, Link } from '@tanstack/react-router';
-import { useAuthStore } from '@/stores/auth.store';
+import { createFileRoute } from '@tanstack/react-router';
 
 export const Route = createFileRoute('/')({
   component: HomePage,
 });
 
 function HomePage() {
-  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-
   return (
     <div className="mx-auto max-w-7xl px-4 py-16 text-center">
       <h1 className="text-4xl font-bold tracking-tight text-gray-900">
@@ -17,16 +14,6 @@ function HomePage() {
         Practice coding interviews together with real-time collaboration, code execution, and AI
         feedback.
       </p>
-      {isAuthenticated ? null : (
-        <div className="mt-8">
-          <Link
-            to="/login"
-            className="inline-flex rounded-md bg-gray-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-gray-800"
-          >
-            Log in
-          </Link>
-        </div>
-      )}
     </div>
   );
 }
