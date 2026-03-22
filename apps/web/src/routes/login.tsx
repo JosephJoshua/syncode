@@ -1,16 +1,18 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import type { AuthUserResponse, LoginResponse } from '@syncode/contracts';
-import type { UserProfile } from '@syncode/shared';
+import type { LoginResponse } from '@syncode/contracts';
+import * as contracts from '@syncode/contracts';
 import { useMutation } from '@tanstack/react-query';
-import { createFileRoute, Link } from '@tanstack/react-router';
+import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { LoaderCircle, LockKeyhole, Mail } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { UseFormSetError } from 'react-hook-form';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import { z } from 'zod';
-import { LoginApiError, loginUser } from '@/lib/auth-api';
+import { api, getFieldErrorMessage, readApiError } from '@/lib/api-client';
 import { useAuthStore } from '@/stores/auth.store';
+
+const { CONTROL_API, ERROR_CODES } = contracts;
 
 const loginFormSchema = z.object({
   identifier: z.string().trim().min(1, 'Enter your email address or username.'),
@@ -24,6 +26,7 @@ export const Route = createFileRoute('/login')({
 });
 
 function LoginPage() {
+  const navigate = useNavigate();
   const hasHydrated = useAuthStore((state) => state.hasHydrated);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const setSession = useAuthStore((state) => state.setSession);
@@ -44,17 +47,19 @@ function LoginPage() {
 
   useEffect(() => {
     if (hasHydrated && isAuthenticated) {
-      globalThis.location.assign('/dashboard');
+      navigate({ to: '/dashboard' }).catch(() => {});
     }
-  }, [hasHydrated, isAuthenticated]);
+  }, [hasHydrated, isAuthenticated, navigate]);
 
   const loginMutation = useMutation<LoginResponse, unknown, LoginFormValues>({
-    mutationFn: async (values: LoginFormValues) =>
-      loginUser({
-        identifier: values.identifier.trim(),
-        password: values.password,
-      }),
-    onSuccess: async ({ accessToken, user }) => {
+    mutationFn: (values: LoginFormValues): Promise<LoginResponse> =>
+      api(CONTROL_API.AUTH.LOGIN, {
+        body: {
+          identifier: values.identifier,
+          password: values.password,
+        },
+      }) as Promise<LoginResponse>,
+    onSuccess: ({ accessToken, user }) => {
       if (!accessToken) {
         setSubmissionError('We could not establish your session. Please try again.');
         return;
@@ -62,12 +67,14 @@ function LoginPage() {
 
       setSession({
         accessToken,
-        user: user ? mapAuthUser(user) : null,
+        user: user ?? null,
       });
       toast.success('Signed in successfully.');
-      globalThis.location.assign('/dashboard');
+      navigate({ to: '/dashboard' }).catch(() => {});
     },
-    onError: async (error) => handleLoginError(error, setError, setSubmissionError),
+    onError: (error) => {
+      void handleLoginError(error, setError, setSubmissionError);
+    },
   });
 
   useEffect(() => {
@@ -78,10 +85,8 @@ function LoginPage() {
     setSubmissionError(null);
   }, [loginMutation.isPending]);
 
-  const onSubmit = handleSubmit(async (values) => {
-    setSubmissionError(null);
-    clearErrors('identifier');
-    clearErrors('password');
+  const onSubmit = handleSubmit((values) => {
+    clearErrors();
     loginMutation.mutate(values);
   });
 
@@ -110,7 +115,7 @@ function LoginPage() {
           <div className="mb-8">
             <h2 className="text-2xl font-semibold text-gray-900">Log in</h2>
             <p className="mt-2 text-sm text-gray-600">
-              Use your account credentials to open your dashboard.
+              Use your account credentials to continue your session.
             </p>
           </div>
 
@@ -194,38 +199,24 @@ function LoginPage() {
   );
 }
 
-function mapAuthUser(user: AuthUserResponse): UserProfile {
-  return {
-    id: user.id,
-    email: user.email,
-    username: user.username,
-    displayName: user.displayName ?? '',
-    role: user.role,
-    avatarUrl: user.avatarUrl ?? undefined,
-    bio: user.bio ?? undefined,
-    createdAt: new Date(user.createdAt),
-    updatedAt: new Date(user.updatedAt),
-  };
-}
-
-function handleLoginError(
+async function handleLoginError(
   error: unknown,
   setError: UseFormSetError<LoginFormValues>,
   setSubmissionError: (message: string) => void,
 ) {
-  const apiError = error instanceof LoginApiError ? error.error : null;
+  const apiError = await readApiError(error);
 
-  if (apiError?.statusCode === 401 && apiError.code === 'AUTH_INVALID_CREDENTIALS') {
+  if (apiError?.code === ERROR_CODES.AUTH_INVALID_CREDENTIALS) {
     setSubmissionError('Invalid username, email, or password. Please try again.');
     return;
   }
 
-  if (apiError?.statusCode === 403 && apiError.code === 'USER_BANNED') {
+  if (apiError?.code === ERROR_CODES.USER_BANNED) {
     setSubmissionError('This account has been suspended. Please contact support.');
     return;
   }
 
-  if (apiError?.statusCode === 400) {
+  if (apiError?.code === ERROR_CODES.VALIDATION_ERROR) {
     if (applyValidationErrors(apiError.details, setError)) {
       return;
     }
@@ -266,27 +257,4 @@ function applyValidationErrors(details: unknown, setError: UseFormSetError<Login
   }
 
   return Boolean(identifierMessage || passwordMessage);
-}
-
-function getFieldErrorMessage(details: Record<string, unknown>, field: keyof LoginFormValues) {
-  const value = details[field];
-
-  if (typeof value === 'string') {
-    return value;
-  }
-
-  if (Array.isArray(value) && typeof value[0] === 'string') {
-    return value[0];
-  }
-
-  if (
-    value &&
-    typeof value === 'object' &&
-    'message' in value &&
-    typeof value.message === 'string'
-  ) {
-    return value.message;
-  }
-
-  return null;
 }

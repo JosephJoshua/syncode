@@ -10,7 +10,6 @@ describe('App', () => {
     useAuthStore.setState({
       user: null,
       accessToken: null,
-      refreshToken: null,
       isAuthenticated: false,
       hasHydrated: true,
     });
@@ -29,5 +28,19 @@ describe('App', () => {
   it('GIVEN the home page loads WHEN the hero section renders THEN the login call to action is visible', async () => {
     render(<App />);
     expect((await screen.findAllByRole('link', { name: 'Log in' })).length).toBeGreaterThan(0);
+  });
+
+  it('GIVEN the user is authenticated WHEN the home page renders THEN the hero login call to action is hidden', async () => {
+    useAuthStore.setState({
+      user: null,
+      accessToken: 'access-token',
+      isAuthenticated: true,
+      hasHydrated: true,
+    });
+
+    render(<App />);
+
+    expect(await screen.findByText('Signed in')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Log in' })).not.toBeInTheDocument();
   });
 });

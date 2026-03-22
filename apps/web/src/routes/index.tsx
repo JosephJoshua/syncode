@@ -17,14 +17,16 @@ function HomePage() {
         Practice coding interviews together with real-time collaboration, code execution, and AI
         feedback.
       </p>
-      <div className="mt-8">
-        <Link
-          to="/login"
-          className="inline-flex rounded-md bg-gray-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-gray-800"
-        >
-          {isAuthenticated ? 'Manage session' : 'Log in'}
-        </Link>
-      </div>
+      {isAuthenticated ? null : (
+        <div className="mt-8">
+          <Link
+            to="/login"
+            className="inline-flex rounded-md bg-gray-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-gray-800"
+          >
+            Log in
+          </Link>
+        </div>
+      )}
     </div>
   );
 }

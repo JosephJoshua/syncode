@@ -1,17 +1,9 @@
 import type { ErrorResponse, RequestOf, ResponseOf, TypedRoute } from '@syncode/contracts';
+import * as contracts from '@syncode/contracts';
 import ky, { HTTPError } from 'ky';
 import { useAuthStore } from '@/stores/auth.store';
 
-function resolveUrl(template: string, params?: Record<string, string>): string {
-  if (!params) {
-    return template;
-  }
-
-  return template.replaceAll(/:(\w+)/g, (_, key: string) => {
-    const value = params[key];
-    return value === undefined ? `:${key}` : encodeURIComponent(value);
-  });
-}
+const { buildUrl } = contracts;
 
 const client = ky.create({
   prefixUrl: import.meta.env.VITE_API_URL ?? '/api',
@@ -50,15 +42,21 @@ const client = ky.create({
  *   body: { code, language },
  * });
  */
-export async function api<T extends TypedRoute>(
-  route: T & { readonly route: string; readonly method: string },
+const resolveRouteUrl = buildUrl as (template: string, params: Record<string, string>) => string;
+
+export async function api<
+  R extends TypedRoute & { readonly route: string; readonly method: string },
+>(
+  route: R,
   options?: {
     params?: Record<string, string>;
-    body?: RequestOf<T>;
+    body?: RequestOf<R>;
   },
-): Promise<ResponseOf<T>> {
-  const template = route.route.startsWith('/') ? route.route.slice(1) : route.route;
-  const url = resolveUrl(template, options?.params);
+): Promise<ResponseOf<R>> {
+  const resolvedRoute = options?.params
+    ? resolveRouteUrl(route.route, options.params)
+    : route.route;
+  const url = resolvedRoute.startsWith('/') ? resolvedRoute.slice(1) : resolvedRoute;
 
   const method = route.method.toLowerCase();
 
@@ -68,10 +66,10 @@ export async function api<T extends TypedRoute>(
   });
 
   if (response.status === 204) {
-    return undefined as ResponseOf<T>;
+    return undefined as ResponseOf<R>;
   }
 
-  return response.json<ResponseOf<T>>();
+  return response.json() as Promise<ResponseOf<R>>;
 }
 
 export async function readApiError(error: unknown): Promise<ErrorResponse | null> {
@@ -84,4 +82,27 @@ export async function readApiError(error: unknown): Promise<ErrorResponse | null
   } catch {
     return null;
   }
+}
+
+export function getFieldErrorMessage(details: Record<string, unknown>, field: string) {
+  const value = details[field];
+
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  if (Array.isArray(value) && typeof value[0] === 'string') {
+    return value[0];
+  }
+
+  if (
+    value &&
+    typeof value === 'object' &&
+    'message' in value &&
+    typeof value.message === 'string'
+  ) {
+    return value.message;
+  }
+
+  return null;
 }
