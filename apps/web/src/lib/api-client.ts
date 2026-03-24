@@ -1,12 +1,12 @@
-import ky, { HTTPError } from 'ky';
-import { useAuthStore } from '@/stores/auth.store';
-import type { ErrorResponse } from '../../../../packages/contracts/src/control/error';
+import type { ErrorResponse } from '@syncode/contracts/control/error';
 import {
   buildUrl,
   type RequestOf,
   type ResponseOf,
   type TypedRoute,
-} from '../../../../packages/contracts/src/route-utils';
+} from '@syncode/contracts/route-utils';
+import ky, { HTTPError } from 'ky';
+import { useAuthStore } from '@/stores/auth.store';
 
 const client = ky.create({
   prefixUrl: import.meta.env.VITE_API_URL ?? '/api',
@@ -45,8 +45,6 @@ const client = ky.create({
  *   body: { code, language },
  * });
  */
-const resolveRouteUrl = buildUrl as (template: string, params: Record<string, string>) => string;
-
 export async function api<
   R extends TypedRoute & { readonly route: string; readonly method: string },
 >(
@@ -57,7 +55,10 @@ export async function api<
   },
 ): Promise<ResponseOf<R>> {
   const resolvedRoute = options?.params
-    ? resolveRouteUrl(route.route, options.params)
+    ? (buildUrl as (template: string, params: Record<string, string>) => string)(
+        route.route,
+        options.params,
+      )
     : route.route;
   const url = resolvedRoute.startsWith('/') ? resolvedRoute.slice(1) : resolvedRoute;
 

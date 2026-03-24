@@ -1,4 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
+import type { LoginResponse } from '@syncode/contracts/control/auth';
+import { ERROR_CODES } from '@syncode/contracts/control/error';
+import { CONTROL_API } from '@syncode/contracts/control/routes';
 import { useMutation } from '@tanstack/react-query';
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { LoaderCircle, LockKeyhole, Mail } from 'lucide-react';
@@ -9,9 +12,6 @@ import { toast } from 'sonner';
 import { z } from 'zod';
 import { api, getFieldErrorMessage, readApiError } from '@/lib/api-client';
 import { useAuthStore } from '@/stores/auth.store';
-import type { LoginResponse } from '../../../../packages/contracts/src/control/auth';
-import { ERROR_CODES } from '../../../../packages/contracts/src/control/error';
-import { CONTROL_API } from '../../../../packages/contracts/src/control/routes';
 
 const loginFormSchema = z.object({
   identifier: z.string().trim().min(1, 'Enter your email address or username.'),
@@ -26,7 +26,6 @@ export const Route = createFileRoute('/login')({
 
 function LoginPage() {
   const navigate = useNavigate();
-  const hasHydrated = useAuthStore((state) => state.hasHydrated);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const setSession = useAuthStore((state) => state.setSession);
   const [submissionError, setSubmissionError] = useState<string | null>(null);
@@ -45,25 +44,20 @@ function LoginPage() {
   });
 
   useEffect(() => {
-    if (hasHydrated && isAuthenticated) {
+    if (isAuthenticated) {
       navigate({ to: '/dashboard' }).catch(() => {});
     }
-  }, [hasHydrated, isAuthenticated, navigate]);
+  }, [isAuthenticated, navigate]);
 
   const loginMutation = useMutation<LoginResponse, unknown, LoginFormValues>({
     mutationFn: (values: LoginFormValues): Promise<LoginResponse> =>
-      api(CONTROL_API.AUTH.LOGIN, {
+      api<typeof CONTROL_API.AUTH.LOGIN>(CONTROL_API.AUTH.LOGIN, {
         body: {
           identifier: values.identifier,
           password: values.password,
         },
       }) as Promise<LoginResponse>,
     onSuccess: ({ accessToken, user }) => {
-      if (!accessToken) {
-        setSubmissionError('We could not establish your session. Please try again.');
-        return;
-      }
-
       setSession({
         accessToken,
         user: user ?? null,

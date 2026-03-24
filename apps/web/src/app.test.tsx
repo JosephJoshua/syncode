@@ -11,7 +11,6 @@ describe('App', () => {
       user: null,
       accessToken: null,
       isAuthenticated: false,
-      hasHydrated: true,
     });
   });
 
@@ -25,17 +24,16 @@ describe('App', () => {
     expect(await screen.findByText('SynCode')).toBeInTheDocument();
   });
 
-  it('GIVEN the home page loads WHEN the hero section renders THEN the login call to action is visible', async () => {
+  it('GIVEN the home page loads WHEN the navbar renders THEN the login link is visible', async () => {
     render(<App />);
-    expect((await screen.findAllByRole('link', { name: 'Log in' })).length).toBeGreaterThan(0);
+    expect(await screen.findByRole('link', { name: 'Log in' })).toBeInTheDocument();
   });
 
-  it('GIVEN the user is authenticated WHEN the home page renders THEN the hero login call to action is hidden', async () => {
+  it('GIVEN the user is authenticated WHEN the home page renders THEN the navbar login link is hidden', async () => {
     useAuthStore.setState({
       user: null,
       accessToken: 'access-token',
       isAuthenticated: true,
-      hasHydrated: true,
     });
 
     render(<App />);
