@@ -7,6 +7,7 @@ export const ERROR_CODES = {
 } as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];
+const errorCodeValues = Object.values(ERROR_CODES) as [ErrorCode, ...ErrorCode[]];
 
 export const errorResponseSchema = z.object({
   statusCode: z
@@ -14,11 +15,7 @@ export const errorResponseSchema = z.object({
     .describe('HTTP status code')
     .meta({ examples: [500] }),
   code: z
-    .enum([
-      ERROR_CODES.AUTH_INVALID_CREDENTIALS,
-      ERROR_CODES.USER_BANNED,
-      ERROR_CODES.VALIDATION_ERROR,
-    ])
+    .enum(errorCodeValues)
     .optional()
     .describe('Machine-readable error code')
     .meta({ examples: [ERROR_CODES.AUTH_INVALID_CREDENTIALS] }),

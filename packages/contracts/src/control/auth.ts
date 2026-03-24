@@ -36,6 +36,7 @@ export const loginSchema = z
 export type LoginInput = z.infer<typeof loginSchema>;
 
 export const authUserResponseSchema = userProfileResponseSchema.extend({
+  // TODO: Combine this with userProfileResponseSchema once auth and user payloads fully converge.
   email: z
     .email()
     .describe('Email address')
@@ -58,8 +59,7 @@ export const loginResponseSchema = z.object({
   accessToken: z
     .string()
     .describe('Short-lived JWT access token')
-    .meta({ examples: ['eyJhbGciOiJIUzI1NiIs...'] })
-    .optional(),
+    .meta({ examples: ['eyJhbGciOiJIUzI1NiIs...'] }),
   user: authUserResponseSchema.optional(),
 });
 
