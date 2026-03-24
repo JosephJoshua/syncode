@@ -2,6 +2,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import type { LoginResponse } from '@syncode/contracts/control/auth';
 import { ERROR_CODES } from '@syncode/contracts/control/error';
 import { CONTROL_API } from '@syncode/contracts/control/routes';
+import { Button, Input, Label } from '@syncode/ui';
 import { useMutation } from '@tanstack/react-query';
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { LoaderCircle, LockKeyhole, Mail } from 'lucide-react';
@@ -114,17 +115,15 @@ function LoginPage() {
 
           <form className="space-y-5" onSubmit={onSubmit} noValidate>
             <div className="space-y-2">
-              <label htmlFor="identifier" className="text-sm font-medium text-gray-700">
-                Email or username
-              </label>
+              <Label htmlFor="identifier">Email or username</Label>
               <div className="relative">
                 <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                <input
+                <Input
                   id="identifier"
                   type="text"
                   autoComplete="username"
                   placeholder="you@example.com"
-                  className="w-full rounded-xl border border-gray-300 bg-white py-3 pl-10 pr-4 text-sm text-gray-900 outline-none transition focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100"
+                  className="pl-10 pr-4"
                   aria-invalid={errors.identifier ? 'true' : 'false'}
                   {...register('identifier')}
                 />
@@ -135,17 +134,15 @@ function LoginPage() {
             </div>
 
             <div className="space-y-2">
-              <label htmlFor="password" className="text-sm font-medium text-gray-700">
-                Password
-              </label>
+              <Label htmlFor="password">Password</Label>
               <div className="relative">
                 <LockKeyhole className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                <input
+                <Input
                   id="password"
                   type="password"
                   autoComplete="current-password"
                   placeholder="Enter your password"
-                  className="w-full rounded-xl border border-gray-300 bg-white py-3 pl-10 pr-4 text-sm text-gray-900 outline-none transition focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100"
+                  className="pl-10 pr-4"
                   aria-invalid={errors.password ? 'true' : 'false'}
                   {...register('password')}
                 />
@@ -164,11 +161,7 @@ function LoginPage() {
               </div>
             ) : null}
 
-            <button
-              type="submit"
-              disabled={loginMutation.isPending}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gray-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-400"
-            >
+            <Button type="submit" disabled={loginMutation.isPending} className="w-full">
               {loginMutation.isPending ? (
                 <>
                   <LoaderCircle className="h-4 w-4 animate-spin" />
@@ -177,7 +170,7 @@ function LoginPage() {
               ) : (
                 'Log in'
               )}
-            </button>
+            </Button>
           </form>
 
           <p className="mt-6 text-sm text-gray-500">
