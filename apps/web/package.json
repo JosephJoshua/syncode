@@ -17,6 +17,7 @@
     "@hookform/resolvers": "^5.2.2",
     "@syncode/contracts": "workspace:^",
     "@syncode/shared": "workspace:^",
+    "@syncode/ui": "workspace:^",
     "@tanstack/react-query": "^5.90.21",
     "@tanstack/react-router": "^1.163.3",
     "date-fns": "^4.1.0",

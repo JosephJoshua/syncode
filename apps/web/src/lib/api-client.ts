@@ -1,12 +1,16 @@
-import type { RequestOf, ResponseOf, TypedRoute } from '@syncode/contracts';
-import { buildUrl } from '@syncode/contracts';
-import ky from 'ky';
+import type { ErrorResponse } from '@syncode/contracts/control/error';
+import {
+  buildUrl,
+  type RequestOf,
+  type ResponseOf,
+  type TypedRoute,
+} from '@syncode/contracts/route-utils';
+import ky, { HTTPError } from 'ky';
 import { useAuthStore } from '@/stores/auth.store';
-
-const resolveUrl = buildUrl as (template: string, params?: Record<string, string>) => string;
 
 const client = ky.create({
   prefixUrl: import.meta.env.VITE_API_URL ?? '/api',
+  credentials: 'include',
   hooks: {
     beforeRequest: [
       (request) => {
@@ -41,15 +45,22 @@ const client = ky.create({
  *   body: { code, language },
  * });
  */
-export async function api<T extends TypedRoute>(
-  route: T & { readonly route: string; readonly method: string },
+export async function api<
+  R extends TypedRoute & { readonly route: string; readonly method: string },
+>(
+  route: R,
   options?: {
     params?: Record<string, string>;
-    body?: RequestOf<T>;
+    body?: RequestOf<R>;
   },
-): Promise<ResponseOf<T>> {
-  const template = route.route.startsWith('/') ? route.route.slice(1) : route.route;
-  const url = resolveUrl(template, options?.params);
+): Promise<ResponseOf<R>> {
+  const resolvedRoute = options?.params
+    ? (buildUrl as (template: string, params: Record<string, string>) => string)(
+        route.route,
+        options.params,
+      )
+    : route.route;
+  const url = resolvedRoute.startsWith('/') ? resolvedRoute.slice(1) : resolvedRoute;
 
   const method = route.method.toLowerCase();
 
@@ -59,8 +70,43 @@ export async function api<T extends TypedRoute>(
   });
 
   if (response.status === 204) {
-    return undefined as ResponseOf<T>;
+    return undefined as ResponseOf<R>;
   }
 
-  return response.json<ResponseOf<T>>();
+  return response.json() as Promise<ResponseOf<R>>;
+}
+
+export async function readApiError(error: unknown): Promise<ErrorResponse | null> {
+  if (!(error instanceof HTTPError)) {
+    return null;
+  }
+
+  try {
+    return (await error.response.clone().json()) as ErrorResponse;
+  } catch {
+    return null;
+  }
+}
+
+export function getFieldErrorMessage(details: Record<string, unknown>, field: string) {
+  const value = details[field];
+
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  if (Array.isArray(value) && typeof value[0] === 'string') {
+    return value[0];
+  }
+
+  if (
+    value &&
+    typeof value === 'object' &&
+    'message' in value &&
+    typeof value.message === 'string'
+  ) {
+    return value.message;
+  }
+
+  return null;
 }

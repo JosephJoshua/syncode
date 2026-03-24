@@ -5,8 +5,8 @@ import { ErrorResponseDto } from '@/common/dto/error-response.dto';
 import { AuthService } from './auth.service';
 import {
   AccessTokenResponseDto,
-  AuthTokensResponseDto,
   LoginDto,
+  LoginResponseDto,
   RefreshTokenDto,
   RegisterDto,
 } from './dto/auth.dto';
@@ -42,12 +42,12 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Login and get tokens (TODO)' })
   @ApiBody({ type: LoginDto })
-  @ApiResponse({ status: 200, type: AuthTokensResponseDto, description: 'Login successful' })
+  @ApiResponse({ status: 200, type: LoginResponseDto, description: 'Login successful' })
   @ApiResponse({ status: 400, type: ErrorResponseDto, description: 'Validation error' })
   @ApiResponse({ status: 401, type: ErrorResponseDto, description: 'Invalid credentials' })
   @ApiResponse({ status: 500, type: ErrorResponseDto, description: 'Internal server error' })
-  async login(@Body() body: LoginDto): Promise<AuthTokensResponseDto> {
-    return this.authService.login(body.email, body.password);
+  async login(@Body() body: LoginDto): Promise<LoginResponseDto> {
+    return this.authService.login(body.identifier, body.password);
   }
 
   @Post(CONTROL_API.AUTH.REFRESH.route)
