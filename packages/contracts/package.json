@@ -10,25 +10,9 @@
       "types": "./src/index.ts",
       "default": "./dist/index.js"
     },
-    "./route-utils": {
-      "types": "./src/route-utils.ts",
-      "default": "./dist/route-utils.js"
-    },
-    "./control": {
-      "types": "./src/control/index.ts",
-      "default": "./dist/control/index.js"
-    },
-    "./control/auth": {
-      "types": "./src/control/auth.ts",
-      "default": "./dist/control/auth.js"
-    },
-    "./control/error": {
-      "types": "./src/control/error.ts",
-      "default": "./dist/control/error.js"
-    },
-    "./control/routes": {
-      "types": "./src/control/routes.ts",
-      "default": "./dist/control/routes.js"
+    "./stubs": {
+      "types": "./src/stubs.ts",
+      "default": "./dist/stubs.js"
     }
   },
   "scripts": {

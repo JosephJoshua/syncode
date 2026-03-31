@@ -60,22 +60,10 @@ export const loginResponseSchema = z.object({
     .string()
     .describe('Short-lived JWT access token')
     .meta({ examples: ['eyJhbGciOiJIUzI1NiIs...'] }),
-  user: authUserResponseSchema.optional(),
+  user: authUserResponseSchema,
 });
 
 export type LoginResponse = z.infer<typeof loginResponseSchema>;
-
-export const refreshTokenSchema = z
-  .object({
-    refreshToken: z
-      .string()
-      .min(1)
-      .describe('JWT refresh token obtained from login')
-      .meta({ examples: ['dGhpcyBpcyBhIHJlZnJl...'] }),
-  })
-  .strict();
-
-export type RefreshTokenInput = z.infer<typeof refreshTokenSchema>;
 
 export const accessTokenResponseSchema = z.object({
   accessToken: z

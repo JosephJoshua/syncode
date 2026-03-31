@@ -4,7 +4,6 @@ import type {
   accessTokenResponseSchema,
   loginResponseSchema,
   loginSchema,
-  refreshTokenSchema,
   registerSchema,
 } from './auth';
 import type { executionResultResponseSchema, jobStatusResponseSchema } from './execution';
@@ -30,10 +29,7 @@ export const CONTROL_API = {
       'auth/login',
       'POST',
     ),
-    REFRESH: defineRoute<
-      z.infer<typeof refreshTokenSchema>,
-      z.infer<typeof accessTokenResponseSchema>
-    >()('auth/refresh', 'POST'),
+    REFRESH: defineRoute<void, z.infer<typeof accessTokenResponseSchema>>()('auth/refresh', 'POST'),
   },
   USERS: {
     PROFILE: defineRoute<void, z.infer<typeof userProfileResponseSchema>>()('users/me', 'GET'),

@@ -5,36 +5,15 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   plugins: [react()],
   resolve: {
-    alias: [
-      {
-        find: /^@syncode\/contracts\/route-utils$/,
-        replacement: fileURLToPath(
-          new URL('../../packages/contracts/src/route-utils.ts', import.meta.url),
-        ),
-      },
-      {
-        find: /^@syncode\/contracts\/control\/routes$/,
-        replacement: fileURLToPath(
-          new URL('../../packages/contracts/src/control/routes.ts', import.meta.url),
-        ),
-      },
-      {
-        find: /^@syncode\/contracts\/control\/error$/,
-        replacement: fileURLToPath(
-          new URL('../../packages/contracts/src/control/error.ts', import.meta.url),
-        ),
-      },
-      {
-        find: /^@syncode\/contracts\/control\/auth$/,
-        replacement: fileURLToPath(
-          new URL('../../packages/contracts/src/control/auth.ts', import.meta.url),
-        ),
-      },
-      {
-        find: '@',
-        replacement: fileURLToPath(new URL('./src', import.meta.url)),
-      },
-    ],
+    alias: {
+      '@syncode/contracts': fileURLToPath(
+        new URL('../../packages/contracts/src/index.ts', import.meta.url),
+      ),
+      '@syncode/shared': fileURLToPath(
+        new URL('../../packages/shared/src/index.ts', import.meta.url),
+      ),
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
+    },
   },
   test: {
     environment: 'jsdom',

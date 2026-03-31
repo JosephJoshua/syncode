@@ -10,13 +10,8 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
   return (
     <input
       ref={ref}
-      style={{
-        WebkitBoxShadow: '0 0 0 1000px #ffffff inset',
-        WebkitTextFillColor: '#111827',
-        caretColor: '#111827',
-      }}
       className={cn(
-        'flex h-12 w-full rounded-xl border border-gray-300 bg-white px-4 text-sm text-gray-900 outline-none transition focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-500 disabled:opacity-100 placeholder:text-gray-400 autofill:bg-white',
+        'flex h-12 w-full rounded-xl border border-gray-300 bg-white px-4 text-sm text-gray-900 caret-gray-900 outline-none transition placeholder:text-gray-400 autofill:shadow-[inset_0_0_0_1000px_white] autofill:[-webkit-text-fill-color:theme(colors.gray.900)] focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-500',
         className,
       )}
       {...props}

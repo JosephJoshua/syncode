@@ -1,13 +1,7 @@
 import { Global, Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import {
-  AI_CLIENT,
-  COLLAB_CLIENT,
-  EXECUTION_CLIENT,
-  StubAiClient,
-  StubCollabClient,
-  StubExecutionClient,
-} from '@syncode/contracts';
+import { AI_CLIENT, COLLAB_CLIENT, EXECUTION_CLIENT } from '@syncode/contracts';
+import { StubAiClient, StubCollabClient, StubExecutionClient } from '@syncode/contracts/stubs';
 import {
   BullMqAdapter,
   CircuitBreakerAdapter,

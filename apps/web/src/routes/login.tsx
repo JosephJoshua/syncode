@@ -1,7 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import type { LoginResponse } from '@syncode/contracts/control/auth';
-import { ERROR_CODES } from '@syncode/contracts/control/error';
-import { CONTROL_API } from '@syncode/contracts/control/routes';
+import { CONTROL_API, ERROR_CODES } from '@syncode/contracts';
 import { Button, Input, Label } from '@syncode/ui';
 import { useMutation } from '@tanstack/react-query';
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
@@ -50,19 +48,16 @@ function LoginPage() {
     }
   }, [isAuthenticated, navigate]);
 
-  const loginMutation = useMutation<LoginResponse, unknown, LoginFormValues>({
-    mutationFn: (values: LoginFormValues): Promise<LoginResponse> =>
-      api<typeof CONTROL_API.AUTH.LOGIN>(CONTROL_API.AUTH.LOGIN, {
+  const loginMutation = useMutation({
+    mutationFn: (values: LoginFormValues) =>
+      api(CONTROL_API.AUTH.LOGIN, {
         body: {
           identifier: values.identifier,
           password: values.password,
         },
-      }) as Promise<LoginResponse>,
+      }),
     onSuccess: ({ accessToken, user }) => {
-      setSession({
-        accessToken,
-        user: user ?? null,
-      });
+      setSession({ accessToken, user });
       toast.success('Signed in successfully.');
       navigate({ to: '/dashboard' }).catch(() => {});
     },

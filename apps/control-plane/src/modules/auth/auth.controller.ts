@@ -1,15 +1,10 @@
-import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
-import { ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { Body, Controller, HttpCode, HttpStatus, Post, Req } from '@nestjs/common';
+import { ApiBody, ApiCookieAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { CONTROL_API } from '@syncode/contracts';
+import type { Request } from 'express';
 import { ErrorResponseDto } from '@/common/dto/error-response.dto';
 import { AuthService } from './auth.service';
-import {
-  AccessTokenResponseDto,
-  LoginDto,
-  LoginResponseDto,
-  RefreshTokenDto,
-  RegisterDto,
-} from './dto/auth.dto';
+import { AccessTokenResponseDto, LoginDto, LoginResponseDto, RegisterDto } from './dto/auth.dto';
 
 /**
  * TODO: Implement authentication endpoints:
@@ -53,20 +48,20 @@ export class AuthController {
   @Post(CONTROL_API.AUTH.REFRESH.route)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Refresh access token (TODO)' })
-  @ApiBody({ type: RefreshTokenDto })
+  @ApiCookieAuth('refresh_token')
   @ApiResponse({
     status: 200,
     type: AccessTokenResponseDto,
     description: 'Token refreshed successfully',
   })
-  @ApiResponse({ status: 400, type: ErrorResponseDto, description: 'Validation error' })
   @ApiResponse({
     status: 401,
     type: ErrorResponseDto,
     description: 'Invalid or expired refresh token',
   })
   @ApiResponse({ status: 500, type: ErrorResponseDto, description: 'Internal server error' })
-  async refresh(@Body() body: RefreshTokenDto): Promise<AccessTokenResponseDto> {
-    return this.authService.refreshToken(body.refreshToken);
+  async refresh(@Req() req: Request): Promise<AccessTokenResponseDto> {
+    const refreshToken = (req.cookies as Record<string, string>)?.refresh_token ?? '';
+    return this.authService.refreshToken(refreshToken);
   }
 }

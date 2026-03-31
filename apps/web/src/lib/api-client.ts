@@ -1,12 +1,9 @@
-import type { ErrorResponse } from '@syncode/contracts/control/error';
-import {
-  buildUrl,
-  type RequestOf,
-  type ResponseOf,
-  type TypedRoute,
-} from '@syncode/contracts/route-utils';
+import type { ErrorResponse, RequestOf, ResponseOf, TypedRoute } from '@syncode/contracts';
+import { buildUrl } from '@syncode/contracts';
 import ky, { HTTPError } from 'ky';
 import { useAuthStore } from '@/stores/auth.store';
+
+const resolveUrl = buildUrl as (template: string, params?: Record<string, string>) => string;
 
 const client = ky.create({
   prefixUrl: import.meta.env.VITE_API_URL ?? '/api',
@@ -45,22 +42,16 @@ const client = ky.create({
  *   body: { code, language },
  * });
  */
-export async function api<
-  R extends TypedRoute & { readonly route: string; readonly method: string },
->(
-  route: R,
+// biome-ignore lint/suspicious/noExplicitAny: required for branded phantom type compatibility
+export async function api<T extends TypedRoute<any, any>>(
+  route: T & { readonly route: string; readonly method: string },
   options?: {
     params?: Record<string, string>;
-    body?: RequestOf<R>;
+    body?: RequestOf<T>;
   },
-): Promise<ResponseOf<R>> {
-  const resolvedRoute = options?.params
-    ? (buildUrl as (template: string, params: Record<string, string>) => string)(
-        route.route,
-        options.params,
-      )
-    : route.route;
-  const url = resolvedRoute.startsWith('/') ? resolvedRoute.slice(1) : resolvedRoute;
+): Promise<ResponseOf<T>> {
+  const template = route.route.startsWith('/') ? route.route.slice(1) : route.route;
+  const url = resolveUrl(template, options?.params);
 
   const method = route.method.toLowerCase();
 
@@ -70,10 +61,10 @@ export async function api<
   });
 
   if (response.status === 204) {
-    return undefined as ResponseOf<R>;
+    return undefined as ResponseOf<T>;
   }
 
-  return response.json() as Promise<ResponseOf<R>>;
+  return response.json<ResponseOf<T>>();
 }
 
 export async function readApiError(error: unknown): Promise<ErrorResponse | null> {

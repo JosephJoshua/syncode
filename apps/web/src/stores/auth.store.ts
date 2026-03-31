@@ -1,4 +1,4 @@
-import type { AuthUserResponse } from '@syncode/contracts/control/auth';
+import type { AuthUserResponse } from '@syncode/contracts';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 

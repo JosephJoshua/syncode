@@ -14,4 +14,3 @@ export {
   type KickUserRequest,
   type KickUserResponse,
 } from './internal';
-export { StubCollabClient } from './stub';
