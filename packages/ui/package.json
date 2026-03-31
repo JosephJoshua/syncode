@@ -18,7 +18,8 @@
     ".": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"
-    }
+    },
+    "./theme.css": "./src/theme.css"
   },
   "dependencies": {
     "class-variance-authority": "^0.7.1",
