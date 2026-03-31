@@ -1,16 +1,19 @@
-import { forwardRef, type LabelHTMLAttributes } from 'react';
+import { Label as LabelPrimitive } from 'radix-ui';
+import type * as React from 'react';
+
 import { cn } from '../lib/cn';
 
-export interface LabelProps extends LabelHTMLAttributes<HTMLLabelElement> {}
-
-export const Label = forwardRef<HTMLLabelElement, LabelProps>(function Label(
-  { className, ...props },
-  ref,
-) {
+function Label({ className, ...props }: React.ComponentProps<typeof LabelPrimitive.Root>) {
   return (
-    // biome-ignore lint/a11y/noLabelWithoutControl: This shared primitive forwards htmlFor and accessible text from callers.
-    <label ref={ref} className={cn('text-sm font-medium text-gray-700', className)} {...props} />
+    <LabelPrimitive.Root
+      data-slot="label"
+      className={cn(
+        'flex items-center gap-2 text-sm leading-none font-medium select-none group-data-[disabled=true]:pointer-events-none group-data-[disabled=true]:opacity-50 peer-disabled:cursor-not-allowed peer-disabled:opacity-50',
+        className,
+      )}
+      {...props}
+    />
   );
-});
+}
 
-Label.displayName = 'Label';
+export { Label };
