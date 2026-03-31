@@ -6,6 +6,6 @@
  *
  * Import from `@syncode/contracts/stubs` in NestJS apps only.
  */
-export { StubAiClient } from './ai/stub';
-export { StubCollabClient } from './collab/stub';
-export { StubExecutionClient } from './execution/stub';
+export { StubAiClient } from './ai/stub.js';
+export { StubCollabClient } from './collab/stub.js';
+export { StubExecutionClient } from './execution/stub.js';

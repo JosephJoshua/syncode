@@ -27,9 +27,9 @@ import {
   STORAGE_SERVICE,
 } from '@syncode/shared/ports';
 import type { EnvConfig } from '@/config/env.config';
-import { HttpCollabClient } from './clients/http-collab.client';
-import { QueueAiClient } from './clients/queue-ai.client';
-import { QueueExecutionClient } from './clients/queue-execution.client';
+import { HttpCollabClient } from './clients/http-collab.client.js';
+import { QueueAiClient } from './clients/queue-ai.client.js';
+import { QueueExecutionClient } from './clients/queue-execution.client.js';
 
 /**
  * THE SINGLE SOURCE OF TRUTH for all adapter bindings in the control plane.

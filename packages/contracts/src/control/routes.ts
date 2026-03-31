@@ -1,13 +1,13 @@
 import type { z } from 'zod';
-import { defineRoute } from '../route-utils';
+import { defineRoute } from '../route-utils.js';
 import type {
   accessTokenResponseSchema,
   loginResponseSchema,
   loginSchema,
   registerSchema,
-} from './auth';
-import type { executionResultResponseSchema, jobStatusResponseSchema } from './execution';
-import type { healthCheckResponseSchema } from './health';
+} from './auth.js';
+import type { executionResultResponseSchema, jobStatusResponseSchema } from './execution.js';
+import type { healthCheckResponseSchema } from './health.js';
 import type {
   createRoomResponseSchema,
   createRoomSchema,
@@ -16,8 +16,8 @@ import type {
   runCodeSchema,
   submitProblemSchema,
   submitResultItemSchema,
-} from './rooms';
-import type { updateUserSchema, userProfileResponseSchema } from './users';
+} from './rooms.js';
+import type { updateUserSchema, userProfileResponseSchema } from './users.js';
 
 export const CONTROL_API = {
   AUTH: {

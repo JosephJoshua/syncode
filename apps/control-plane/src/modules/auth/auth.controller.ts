@@ -3,8 +3,8 @@ import { ApiBody, ApiCookieAuth, ApiOperation, ApiResponse, ApiTags } from '@nes
 import { CONTROL_API } from '@syncode/contracts';
 import type { Request } from 'express';
 import { ErrorResponseDto } from '@/common/dto/error-response.dto';
-import { AuthService } from './auth.service';
-import { AccessTokenResponseDto, LoginDto, LoginResponseDto, RegisterDto } from './dto/auth.dto';
+import { AuthService } from './auth.service.js';
+import { AccessTokenResponseDto, LoginDto, LoginResponseDto, RegisterDto } from './dto/auth.dto.js';
 
 /**
  * TODO: Implement authentication endpoints:

@@ -6,12 +6,6 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
-      '@syncode/contracts': fileURLToPath(
-        new URL('../../packages/contracts/src/index.ts', import.meta.url),
-      ),
-      '@syncode/shared': fileURLToPath(
-        new URL('../../packages/shared/src/index.ts', import.meta.url),
-      ),
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
   },

@@ -1,11 +1,11 @@
-export { COLLAB_CLIENT, type ICollabClient } from './client';
+export { COLLAB_CLIENT, type ICollabClient } from './client.js';
 export {
   CONTROL_INTERNAL,
   type SnapshotReadyPayload,
   snapshotReadyPayloadSchema,
   type UserDisconnectedPayload,
   userDisconnectedPayloadSchema,
-} from './events';
+} from './events.js';
 export {
   COLLAB_INTERNAL,
   type CreateDocumentRequest,
@@ -13,4 +13,4 @@ export {
   type DestroyDocumentResponse,
   type KickUserRequest,
   type KickUserResponse,
-} from './internal';
+} from './internal.js';
