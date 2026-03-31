@@ -5,7 +5,6 @@ import { useAuthStore } from '@/stores/auth.store';
 
 describe('App', () => {
   beforeEach(() => {
-    window.localStorage.clear();
     window.history.pushState({}, '', '/');
     useAuthStore.setState({
       user: null,
