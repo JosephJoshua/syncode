@@ -1,12 +1,13 @@
-import type { RequestOf, ResponseOf, TypedRoute } from '@syncode/contracts';
+import type { ErrorResponse, RequestOf, ResponseOf, TypedRoute } from '@syncode/contracts';
 import { buildUrl } from '@syncode/contracts';
-import ky from 'ky';
+import ky, { HTTPError } from 'ky';
 import { useAuthStore } from '@/stores/auth.store';
 
 const resolveUrl = buildUrl as (template: string, params?: Record<string, string>) => string;
 
 const client = ky.create({
   prefixUrl: import.meta.env.VITE_API_URL ?? '/api',
+  credentials: 'include',
   hooks: {
     beforeRequest: [
       (request) => {
@@ -29,7 +30,7 @@ const client = ky.create({
  *
  * // POST with body
  * const tokens = await api(CONTROL_API.AUTH.LOGIN, {
- *   body: { email: 'a@b.com', password: '...' },
+ *   body: { identifier: 'a@b.com', password: '...' },
  * });
  *
  * // DELETE with path params
@@ -41,7 +42,8 @@ const client = ky.create({
  *   body: { code, language },
  * });
  */
-export async function api<T extends TypedRoute>(
+// biome-ignore lint/suspicious/noExplicitAny: required for branded phantom type compatibility
+export async function api<T extends TypedRoute<any, any>>(
   route: T & { readonly route: string; readonly method: string },
   options?: {
     params?: Record<string, string>;
@@ -63,4 +65,39 @@ export async function api<T extends TypedRoute>(
   }
 
   return response.json<ResponseOf<T>>();
+}
+
+export async function readApiError(error: unknown): Promise<ErrorResponse | null> {
+  if (!(error instanceof HTTPError)) {
+    return null;
+  }
+
+  try {
+    return (await error.response.clone().json()) as ErrorResponse;
+  } catch {
+    return null;
+  }
+}
+
+export function getFieldErrorMessage(details: Record<string, unknown>, field: string) {
+  const value = details[field];
+
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  if (Array.isArray(value) && typeof value[0] === 'string') {
+    return value[0];
+  }
+
+  if (
+    value &&
+    typeof value === 'object' &&
+    'message' in value &&
+    typeof value.message === 'string'
+  ) {
+    return value.message;
+  }
+
+  return null;
 }

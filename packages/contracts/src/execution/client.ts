@@ -1,5 +1,5 @@
-import type { JobId, JobStatus, SubmitResult } from '../queues';
-import type { RunCodeRequest, RunCodeResult } from './types';
+import type { JobId, JobStatus, SubmitResult } from '../queues.js';
+import type { RunCodeRequest, RunCodeResult } from './types.js';
 
 export interface IExecutionClient {
   submit(request: RunCodeRequest): Promise<SubmitResult<'execution'>>;

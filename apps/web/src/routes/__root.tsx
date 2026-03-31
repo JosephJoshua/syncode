@@ -1,4 +1,8 @@
-import { createRootRoute, Link, Outlet } from '@tanstack/react-router';
+import { Button } from '@syncode/ui';
+import { createRootRoute, Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router';
+import { LogOut } from 'lucide-react';
+import type { ReactNode } from 'react';
+import { useAuthStore } from '@/stores/auth.store';
 
 export const Route = createRootRoute({
   component: RootLayout,
@@ -83,14 +87,52 @@ function SynCodeLogo({ className }: { className?: string }) {
 }
 
 function RootLayout() {
+  const navigate = useNavigate();
+  const pathname = useRouterState({
+    select: (state) => state.location.pathname,
+  });
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const logout = useAuthStore((state) => state.logout);
+
+  const handleLogout = () => {
+    logout();
+    navigate({ to: '/' }).catch(() => {});
+  };
+
+  let navContent: ReactNode;
+
+  if (isAuthenticated) {
+    navContent = (
+      <>
+        <span className="hidden text-muted-foreground sm:inline">Signed in</span>
+        <Button variant="outline" size="sm" onClick={handleLogout}>
+          <LogOut data-icon="inline-start" />
+          Log out
+        </Button>
+      </>
+    );
+  } else if (pathname === '/') {
+    navContent = (
+      <Button asChild size="sm">
+        <Link to="/login">Log in</Link>
+      </Button>
+    );
+  } else {
+    navContent = null;
+  }
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      <nav className="border-b border-gray-200 bg-white">
-        <div className="mx-auto flex h-14 max-w-7xl items-center gap-6 px-4">
-          <Link to="/" className="flex items-center gap-2 font-semibold text-gray-900">
+    <div className="min-h-screen bg-background text-foreground">
+      <nav className="border-b border-border bg-background/80 backdrop-blur-md">
+        <div className="mx-auto flex h-14 max-w-7xl items-center justify-between gap-6 px-4">
+          <Link
+            to="/"
+            className="flex items-center gap-2 font-semibold text-foreground transition-colors hover:text-primary"
+          >
             <SynCodeLogo className="h-6 w-6" />
             SynCode
           </Link>
+          <div className="flex items-center gap-3 text-sm">{navContent}</div>
         </div>
       </nav>
       <main>

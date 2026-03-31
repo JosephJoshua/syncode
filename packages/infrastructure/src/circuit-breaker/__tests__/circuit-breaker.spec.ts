@@ -5,7 +5,7 @@ import {
   CircuitState,
 } from '@syncode/shared';
 import { beforeEach, describe, expect, test } from 'vitest';
-import { CircuitBreakerAdapter } from '../circuit-breaker.adapter';
+import { CircuitBreakerAdapter } from '../circuit-breaker.adapter.js';
 
 describe('Circuit Breaker Adapter', () => {
   let circuitBreaker: CircuitBreakerAdapter;

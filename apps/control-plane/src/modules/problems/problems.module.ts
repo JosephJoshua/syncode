@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
-import { ProblemsController } from './problems.controller';
-import { ProblemsService } from './problems.service';
+import { ProblemsController } from './problems.controller.js';
+import { ProblemsService } from './problems.service.js';
 
 /**
  * Manages coding problems and submissions.

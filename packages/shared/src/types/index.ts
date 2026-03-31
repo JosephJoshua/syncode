@@ -2,7 +2,7 @@ export {
   CircuitBreakerOpenError,
   CircuitBreakerTimeoutError,
   CircuitState,
-} from './circuit-breaker';
+} from './circuit-breaker.js';
 export type {
   CursorUpdatePayload,
   ErrorPayload,
@@ -12,10 +12,9 @@ export type {
   RoomJoinPayload,
   RoomStatusChangePayload,
   SyncUpdatePayload,
-} from './events';
-export { RoomEvent } from './events';
-export type { ExecutionRequest, ExecutionResult, SupportedLanguage } from './execution';
-export type { RoomParticipant } from './room';
-export { RoomRole, RoomStatus } from './room';
-export type { UserProfile } from './user';
-export { UserRole } from './user';
+} from './events.js';
+export { RoomEvent } from './events.js';
+export type { ExecutionRequest, ExecutionResult, SupportedLanguage } from './execution.js';
+export type { RoomParticipant } from './room.js';
+export { RoomRole, RoomStatus } from './room.js';
+export { UserRole } from './user.js';

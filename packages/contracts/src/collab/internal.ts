@@ -1,4 +1,4 @@
-import { defineRoute } from '../route-utils';
+import { defineRoute } from '../route-utils.js';
 
 export interface CreateDocumentRequest {
   roomId: string;

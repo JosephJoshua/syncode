@@ -11,7 +11,7 @@ import { ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@ne
 import { CONTROL_API } from '@syncode/contracts';
 import { ErrorResponseDto } from '@/common/dto/error-response.dto';
 import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard';
-import { ProblemsService } from './problems.service';
+import { ProblemsService } from './problems.service.js';
 
 /**
  * TODO: Implement problem endpoints:

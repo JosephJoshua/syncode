@@ -18,8 +18,8 @@ import {
   RunCodeResponseDto,
   SubmitProblemDto,
   SubmitResultItemDto,
-} from './dto/rooms.dto';
-import { RoomsService } from './rooms.service';
+} from './dto/rooms.dto.js';
+import { RoomsService } from './rooms.service.js';
 
 /**
  * Manages room lifecycle and code execution operations.

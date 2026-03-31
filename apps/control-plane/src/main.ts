@@ -1,13 +1,13 @@
 // IMPORTANT: Import telemetry FIRST, before any other imports
-import './telemetry';
+import './telemetry.js';
 
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { Logger } from 'nestjs-pino';
 import { cleanupOpenApiDoc, ZodValidationPipe } from 'nestjs-zod';
-import { AppModule } from './app.module';
-import type { EnvConfig } from './config/env.config';
+import { AppModule } from './app.module.js';
+import type { EnvConfig } from './config/env.config.js';
 
 /**
  * Bootstrap the control plane application

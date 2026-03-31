@@ -1,2 +1,2 @@
-export * from './global-permissions';
-export * from './room-permissions';
+export * from './global-permissions.js';
+export * from './room-permissions.js';
