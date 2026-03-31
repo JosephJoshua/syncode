@@ -1,4 +1,6 @@
+import { Button } from '@syncode/ui';
 import { createRootRoute, Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router';
+import { LogOut } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useAuthStore } from '@/stores/auth.store';
 
@@ -102,34 +104,31 @@ function RootLayout() {
   if (isAuthenticated) {
     navContent = (
       <>
-        <span className="hidden text-gray-500 sm:inline">Signed in</span>
-        <button
-          type="button"
-          onClick={handleLogout}
-          className="rounded-md border border-gray-300 px-3 py-2 font-medium text-gray-700 transition hover:border-gray-400 hover:bg-gray-50"
-        >
+        <span className="hidden text-muted-foreground sm:inline">Signed in</span>
+        <Button variant="outline" size="sm" onClick={handleLogout}>
+          <LogOut data-icon="inline-start" />
           Log out
-        </button>
+        </Button>
       </>
     );
   } else if (pathname === '/') {
     navContent = (
-      <Link
-        to="/login"
-        className="rounded-md bg-gray-900 px-3 py-2 font-medium text-white transition hover:bg-gray-800"
-      >
-        Log in
-      </Link>
+      <Button asChild size="sm">
+        <Link to="/login">Log in</Link>
+      </Button>
     );
   } else {
     navContent = null;
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <nav className="border-b border-gray-200 bg-white">
+    <div className="min-h-screen bg-background text-foreground">
+      <nav className="border-b border-border bg-background/80 backdrop-blur-md">
         <div className="mx-auto flex h-14 max-w-7xl items-center justify-between gap-6 px-4">
-          <Link to="/" className="flex items-center gap-2 font-semibold text-gray-900">
+          <Link
+            to="/"
+            className="flex items-center gap-2 font-semibold text-foreground transition-colors hover:text-primary"
+          >
             <SynCodeLogo className="h-6 w-6" />
             SynCode
           </Link>
