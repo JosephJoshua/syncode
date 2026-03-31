@@ -1,12 +1,12 @@
 // IMPORTANT: Import telemetry FIRST, before any other imports
-import './telemetry';
+import './telemetry.js';
 
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { WsAdapter } from '@nestjs/platform-ws';
 import { Logger } from 'nestjs-pino';
-import { AppModule } from './app.module';
-import type { EnvConfig } from './config/env.config';
+import { AppModule } from './app.module.js';
+import type { EnvConfig } from './config/env.config.js';
 
 /**
  * Bootstrap the collab plane application

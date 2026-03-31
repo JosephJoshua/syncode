@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
-import { RoomsController } from './rooms.controller';
-import { RoomsService } from './rooms.service';
+import { RoomsController } from './rooms.controller.js';
+import { RoomsService } from './rooms.service.js';
 
 /**
  * Manages room lifecycle and code execution.
