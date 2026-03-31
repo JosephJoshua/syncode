@@ -27,6 +27,12 @@ export default defineConfig({
         ),
       },
       {
+        find: /^@syncode\/contracts\/control\/auth$/,
+        replacement: fileURLToPath(
+          new URL('../../packages/contracts/src/control/auth.ts', import.meta.url),
+        ),
+      },
+      {
         find: '@',
         replacement: fileURLToPath(new URL('./src', import.meta.url)),
       },

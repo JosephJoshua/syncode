@@ -1,5 +1,8 @@
 import type { AuthUserResponse } from '@syncode/contracts/control/auth';
 import { create } from 'zustand';
+import { createJSONStorage, persist } from 'zustand/middleware';
+
+type PersistedAuthState = Pick<AuthState, 'user' | 'accessToken'>;
 
 interface AuthState {
   user: AuthUserResponse | null;
@@ -10,16 +13,40 @@ interface AuthState {
   logout: () => void;
 }
 
-export const useAuthStore = create<AuthState>()((set) => ({
-  user: null,
-  accessToken: null,
-  isAuthenticated: false,
-  setSession: ({ accessToken, user = null }) => set({ user, accessToken, isAuthenticated: true }),
-  setUser: (user) => set({ user }),
-  logout: () =>
-    set({
+export const useAuthStore = create<AuthState>()(
+  persist(
+    (set) => ({
       user: null,
       accessToken: null,
       isAuthenticated: false,
+      setSession: ({ accessToken, user = null }) =>
+        set({ user, accessToken, isAuthenticated: Boolean(accessToken) }),
+      setUser: (user) => set({ user }),
+      logout: () =>
+        set({
+          user: null,
+          accessToken: null,
+          isAuthenticated: false,
+        }),
     }),
-}));
+    {
+      name: 'syncode-auth',
+      storage: createJSONStorage(() => localStorage),
+      partialize: (state) => ({
+        user: state.user,
+        accessToken: state.accessToken,
+      }),
+      merge: (persistedState, currentState) => {
+        const persisted = persistedState as Partial<PersistedAuthState>;
+        const accessToken = persisted.accessToken ?? null;
+
+        return {
+          ...currentState,
+          ...persisted,
+          accessToken,
+          isAuthenticated: Boolean(accessToken),
+        };
+      },
+    },
+  ),
+);

@@ -33,7 +33,7 @@ const client = ky.create({
  *
  * // POST with body
  * const tokens = await api(CONTROL_API.AUTH.LOGIN, {
- *   body: { email: 'a@b.com', password: '...' },
+ *   body: { identifier: 'a@b.com', password: '...' },
  * });
  *
  * // DELETE with path params
