@@ -20,7 +20,7 @@ import type {
   StorageObjectMetadata,
   StorageUploadOptions,
 } from '@syncode/shared';
-import { type S3Config, S3ConfigSchema } from '../config';
+import { type S3Config, S3ConfigSchema } from '../config.js';
 
 @Injectable()
 export class S3StorageAdapter implements IStorageService, OnModuleDestroy {

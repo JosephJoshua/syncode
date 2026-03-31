@@ -1,4 +1,4 @@
-import type { AdapterCircuitConfig } from './proxy';
+import type { AdapterCircuitConfig } from './proxy.js';
 
 export const S3_ADAPTER_CIRCUIT_CONFIG: AdapterCircuitConfig = {
   upload: { circuitName: 's3-upload' },

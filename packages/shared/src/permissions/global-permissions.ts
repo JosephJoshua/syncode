@@ -1,5 +1,5 @@
-import type { UserRole } from '../types/user';
-import { UserRole as UserRoleValues } from '../types/user';
+import type { UserRole } from '../types/user.js';
+import { UserRole as UserRoleValues } from '../types/user.js';
 
 const ALL_GLOBAL_CAPABILITIES = [
   // Rooms

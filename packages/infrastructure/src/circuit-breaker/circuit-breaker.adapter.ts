@@ -5,8 +5,8 @@ import {
   type CircuitBreakerStats,
   CircuitBreakerTimeoutError,
 } from '@syncode/shared/ports';
-import { Circuit } from './circuit-state';
-import { type CircuitName, DEFAULT_CIRCUIT_CONFIGS } from './config';
+import { Circuit } from './circuit-state.js';
+import { type CircuitName, DEFAULT_CIRCUIT_CONFIGS } from './config.js';
 
 /**
  * Fallback configuration values (when no default found)

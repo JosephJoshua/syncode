@@ -1,7 +1,7 @@
 import { CircuitBreakerOpenError, CircuitState } from '@syncode/shared';
 import { beforeEach, describe, expect, test } from 'vitest';
-import { CircuitBreakerAdapter } from '../circuit-breaker.adapter';
-import { createCircuitBreakerProxy } from '../proxy';
+import { CircuitBreakerAdapter } from '../circuit-breaker.adapter.js';
+import { createCircuitBreakerProxy } from '../proxy.js';
 
 /**
  * Test adapter to demonstrate proxy behavior

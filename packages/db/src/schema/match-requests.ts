@@ -1,7 +1,7 @@
 import { index, jsonb, pgTable, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
-import { difficultyEnum, matchStatusEnum, supportedLanguageEnum } from './enums';
-import { rooms } from './rooms';
-import { users } from './users';
+import { difficultyEnum, matchStatusEnum, supportedLanguageEnum } from './enums.js';
+import { rooms } from './rooms.js';
+import { users } from './users.js';
 
 export const matchRequests = pgTable(
   'match_requests',

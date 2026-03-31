@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { CircuitBreakerAdapter } from './circuit-breaker.adapter';
+import { CircuitBreakerAdapter } from './circuit-breaker.adapter.js';
 
 /**
  * Provides circuit breaker functionality for infrastructure adapters.

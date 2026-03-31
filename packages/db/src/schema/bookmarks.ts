@@ -1,6 +1,6 @@
 import { index, pgTable, primaryKey, timestamp, uuid } from 'drizzle-orm/pg-core';
-import { problems } from './problems';
-import { users } from './users';
+import { problems } from './problems.js';
+import { users } from './users.js';
 
 export const bookmarks = pgTable(
   'bookmarks',

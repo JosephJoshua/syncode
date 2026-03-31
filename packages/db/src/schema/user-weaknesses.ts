@@ -1,6 +1,6 @@
 import { index, integer, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
-import { weaknessCategoryEnum, weaknessTrendEnum } from './enums';
-import { users } from './users';
+import { weaknessCategoryEnum, weaknessTrendEnum } from './enums.js';
+import { users } from './users.js';
 
 export const userWeaknesses = pgTable(
   'user_weaknesses',

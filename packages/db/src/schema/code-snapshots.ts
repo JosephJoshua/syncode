@@ -1,7 +1,7 @@
 import { index, integer, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
-import { snapshotTriggerEnum, supportedLanguageEnum } from './enums';
-import { rooms } from './rooms';
-import { sessions } from './sessions';
+import { snapshotTriggerEnum, supportedLanguageEnum } from './enums.js';
+import { rooms } from './rooms.js';
+import { sessions } from './sessions.js';
 
 export const codeSnapshots = pgTable(
   'code_snapshots',

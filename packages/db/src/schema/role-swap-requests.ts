@@ -1,7 +1,7 @@
 import { index, pgTable, timestamp, uuid } from 'drizzle-orm/pg-core';
-import { roleSwapStatusEnum } from './enums';
-import { rooms } from './rooms';
-import { users } from './users';
+import { roleSwapStatusEnum } from './enums.js';
+import { rooms } from './rooms.js';
+import { users } from './users.js';
 
 export const roleSwapRequests = pgTable(
   'role_swap_requests',

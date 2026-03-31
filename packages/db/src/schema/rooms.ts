@@ -8,10 +8,10 @@ import {
   uuid,
   varchar,
 } from 'drizzle-orm/pg-core';
-import { roomModeEnum, roomStatusEnum, supportedLanguageEnum } from './enums';
-import { timestamps } from './helpers';
-import { problems } from './problems';
-import { users } from './users';
+import { roomModeEnum, roomStatusEnum, supportedLanguageEnum } from './enums.js';
+import { timestamps } from './helpers.js';
+import { problems } from './problems.js';
+import { users } from './users.js';
 
 export const rooms = pgTable(
   'rooms',

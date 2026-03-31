@@ -1,11 +1,11 @@
-export type { CircuitBreakerConfig, CircuitBreakerStats } from '../types/circuit-breaker';
+export type { CircuitBreakerConfig, CircuitBreakerStats } from '../types/circuit-breaker.js';
 export {
   CircuitBreakerOpenError,
   CircuitBreakerTimeoutError,
   CircuitState,
-} from '../types/circuit-breaker';
-export type { ICacheService, TtlResult } from './cache.port';
-export { CACHE_SERVICE } from './cache.port';
+} from '../types/circuit-breaker.js';
+export type { ICacheService, TtlResult } from './cache.port.js';
+export { CACHE_SERVICE } from './cache.port.js';
 export type {
   IMediaService,
   MediaRoomInfo,
@@ -13,8 +13,8 @@ export type {
   MediaTokenOptions,
   MediaTokenResult,
   ParticipantPermissions,
-} from './media.port';
-export { MEDIA_SERVICE } from './media.port';
+} from './media.port.js';
+export { MEDIA_SERVICE } from './media.port.js';
 export type {
   IQueueService,
   QueueEventHandler,
@@ -22,15 +22,15 @@ export type {
   QueueJobOptions,
   QueueProcessOptions,
   QueueStats,
-} from './queue.port';
-export { QUEUE_SERVICE } from './queue.port';
-export type { ISandboxProvider } from './sandbox.port';
-export { SANDBOX_PROVIDER } from './sandbox.port';
+} from './queue.port.js';
+export { QUEUE_SERVICE } from './queue.port.js';
+export type { ISandboxProvider } from './sandbox.port.js';
+export { SANDBOX_PROVIDER } from './sandbox.port.js';
 export type {
   IStorageService,
   StorageListOptions,
   StorageListResult,
   StorageObjectMetadata,
   StorageUploadOptions,
-} from './storage.port';
-export { STORAGE_SERVICE } from './storage.port';
+} from './storage.port.js';
+export { STORAGE_SERVICE } from './storage.port.js';
