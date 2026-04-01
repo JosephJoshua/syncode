@@ -1,9 +1,9 @@
 import { Button } from '@syncode/ui';
 import { createFileRoute, Link } from '@tanstack/react-router';
-import { ArrowRight, Braces, ChevronDown, MessageSquare, Terminal, Users } from 'lucide-react';
-import { motion } from 'motion/react';
+import { ArrowRight, Braces, ChevronDown, MessageSquare, Terminal, Users, Zap } from 'lucide-react';
+import { animate, motion, useInView, useMotionValue } from 'motion/react';
 import type { ReactNode } from 'react';
-import { memo, useMemo } from 'react';
+import { memo, useEffect, useMemo, useRef } from 'react';
 import { GlowOrb, PageBackground } from '@/components/background';
 import { CursorSpotlight } from '@/components/spotlight';
 import { TerminalDemo } from '@/components/terminal-demo';
@@ -98,6 +98,32 @@ function LanguageMarquee() {
         )}
       </div>
     </div>
+  );
+}
+
+function AnimatedNumber({ to }: { to: number }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const isInView = useInView(ref, { once: true });
+  const val = useMotionValue(0);
+
+  useEffect(() => {
+    if (!isInView) return;
+    const controls = animate(val, to, { duration: 2, ease: 'easeOut' });
+    return () => controls.stop();
+  }, [isInView, val, to]);
+
+  useEffect(() => {
+    return val.on('change', (v) => {
+      if (ref.current) ref.current.textContent = String(Math.round(v));
+    });
+  }, [val]);
+
+  return <span ref={ref}>0</span>;
+}
+
+function GradientDivider() {
+  return (
+    <div className="mx-auto h-px max-w-xs bg-gradient-to-r from-transparent via-primary/20 to-transparent" />
   );
 }
 
@@ -336,6 +362,120 @@ function HomePage() {
         </div>
       </section>
 
+      <GradientDivider />
+
+      {/* Stats */}
+      <section className="relative py-24">
+        <div className="mx-auto max-w-4xl px-4">
+          <div className="grid grid-cols-2 gap-10 sm:grid-cols-4">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.5 }}
+              className="text-center"
+            >
+              <div className="font-mono text-4xl font-bold text-foreground sm:text-5xl">
+                <AnimatedNumber to={10} />
+                <span className="text-primary">+</span>
+              </div>
+              <div className="mt-2 text-sm text-muted-foreground">Languages supported</div>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.5, delay: 0.1 }}
+              className="text-center"
+            >
+              <div className="font-mono text-4xl font-bold text-foreground sm:text-5xl">
+                <AnimatedNumber to={2} />
+                <span className="text-primary">x</span>
+              </div>
+              <div className="mt-2 text-sm text-muted-foreground">Faster than solo prep</div>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.5, delay: 0.2 }}
+              className="text-center"
+            >
+              <div className="font-mono text-4xl font-bold text-foreground sm:text-5xl">
+                <AnimatedNumber to={0} />
+                <span className="text-primary"> lag</span>
+              </div>
+              <div className="mt-2 text-sm text-muted-foreground">Real-time editing</div>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.5, delay: 0.3 }}
+              className="text-center"
+            >
+              <div className="font-mono text-4xl font-bold text-foreground sm:text-5xl">
+                <AnimatedNumber to={24} />
+                <span className="text-primary">/7</span>
+              </div>
+              <div className="mt-2 text-sm text-muted-foreground">AI feedback available</div>
+            </motion.div>
+          </div>
+        </div>
+      </section>
+
+      <GradientDivider />
+
+      {/* How It Works */}
+      <section className="relative py-32">
+        <div className="mx-auto max-w-4xl px-4">
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: '-100px' }}
+            transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+            className="mb-16 text-center"
+          >
+            <span className="font-mono text-xs text-primary/60">{'// how it works'}</span>
+            <h2 className="mt-4 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
+              Interview prep in <span className="text-primary">three steps</span>.
+            </h2>
+          </motion.div>
+
+          <div className="relative grid gap-12 sm:grid-cols-3 sm:gap-8">
+            {/* Connecting dashed line(desktop) */}
+            <div className="pointer-events-none absolute top-6 right-20 left-20 hidden h-px border-t border-dashed border-primary/15 sm:block" />
+
+            <StepCard
+              num={1}
+              icon={<Terminal className="size-4" />}
+              title="Spawn a room"
+              description="One click creates an isolated session with a shared editor and voice channel."
+              index={0}
+            />
+            <StepCard
+              num={2}
+              icon={<Users className="size-4" />}
+              title="Code in sync"
+              description="Write code side-by-side. You both see every keystroke instantly — no copy-paste, no screen sharing."
+              index={1}
+            />
+            <StepCard
+              num={3}
+              icon={<Zap className="size-4" />}
+              title="Run & review"
+              description="Execute tests, get AI analysis, and replay sessions to improve."
+              index={2}
+            />
+          </div>
+        </div>
+      </section>
+
+      <GradientDivider />
+
       {/* Terminal Demo */}
       <section className="relative py-20">
         <div className="mx-auto max-w-5xl px-4">
@@ -449,6 +589,45 @@ function FeatureCard({
       <div className="mt-auto pt-4 font-mono text-[11px] text-primary/30 transition-colors group-hover:text-primary/60">
         {decorator}
       </div>
+    </motion.div>
+  );
+}
+
+function StepCard({
+  num,
+  icon,
+  title,
+  description,
+  index,
+}: {
+  num: number;
+  icon: ReactNode;
+  title: string;
+  description: string;
+  index: number;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 24 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: '-50px' }}
+      transition={{ duration: 0.5, delay: index * 0.15, ease: [0.16, 1, 0.3, 1] }}
+      className="text-center"
+    >
+      <motion.div
+        whileInView={{ scale: [0.8, 1.1, 1] }}
+        viewport={{ once: true }}
+        transition={{ duration: 0.5, delay: 0.2 + index * 0.15 }}
+        className="relative z-10 mx-auto mb-5 flex size-12 items-center justify-center rounded-full border border-primary/30 bg-background"
+      >
+        <span className="flex items-center gap-1 text-primary">
+          {icon}
+          <span className="font-mono text-sm font-bold">{num}</span>
+        </span>
+      </motion.div>
+
+      <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+      <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{description}</p>
     </motion.div>
   );
 }
