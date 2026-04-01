@@ -1,19 +1,17 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { CONTROL_API, ERROR_CODES } from '@syncode/contracts';
-import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@syncode/ui';
+import { Button, Card, CardContent } from '@syncode/ui';
 import { useMutation } from '@tanstack/react-query';
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { ArrowRight, Check, LoaderCircle, LockKeyhole, Mail, Terminal } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
-import { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { UseFormSetError } from 'react-hook-form';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import { z } from 'zod';
-import { GlowOrb, PageBackground } from '@/components/background';
+import { PageBackground } from '@/components/background';
 import { AnimatedFormField } from '@/components/form-field';
-import { CursorSpotlight } from '@/components/spotlight';
-import { TiltCard } from '@/components/tilt';
 import { api, getFieldErrorMessage, readApiError } from '@/lib/api-client';
 import { useAuthStore } from '@/stores/auth.store';
 
@@ -28,41 +26,85 @@ export const Route = createFileRoute('/login')({
   component: LoginPage,
 });
 
-const CODE_SYMBOLS = ['</', '/>', '{;}', '( )', '[ ]', '&&', '=>', '::', '/**/', '!=', '++', '0x'];
+function SynCodeLogo({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 512 512"
+      className={className}
+      aria-hidden="true"
+    >
+      <defs>
+        <linearGradient id="login-logo-left" x1="0.3" y1="0" x2="0.7" y2="1">
+          <stop offset="0%" stopColor="#a5b4fc" />
+          <stop offset="100%" stopColor="#4338ca" />
+        </linearGradient>
+        <linearGradient id="login-logo-right" x1="0.3" y1="0" x2="0.7" y2="1">
+          <stop offset="0%" stopColor="#6ee7b7" />
+          <stop offset="100%" stopColor="#047857" />
+        </linearGradient>
+        <clipPath id="login-logo-weave-lower">
+          <rect x="220" y="320" width="130" height="130" rx="12" />
+        </clipPath>
+      </defs>
+      <rect width="512" height="512" rx="108" fill="#0a0a14" />
+      <g transform="translate(256 256) scale(0.80) translate(-256 -256)">
+        <polyline
+          points="192,104 432,280 192,456"
+          fill="none"
+          stroke="#0a0a14"
+          strokeWidth="56"
+          strokeLinecap="butt"
+          strokeLinejoin="miter"
+        />
+        <polyline
+          points="320,56 80,232 320,408"
+          fill="none"
+          stroke="#0a0a14"
+          strokeWidth="56"
+          strokeLinecap="butt"
+          strokeLinejoin="miter"
+        />
+        <polyline
+          points="192,104 432,280 192,456"
+          fill="none"
+          stroke="url(#login-logo-right)"
+          strokeWidth="44"
+          strokeLinecap="butt"
+          strokeLinejoin="miter"
+        />
+        <polyline
+          points="320,56 80,232 320,408"
+          fill="none"
+          stroke="url(#login-logo-left)"
+          strokeWidth="44"
+          strokeLinecap="butt"
+          strokeLinejoin="miter"
+        />
+        <polyline
+          points="192,104 432,280 192,456"
+          fill="none"
+          stroke="#0a0a14"
+          strokeWidth="56"
+          strokeLinecap="butt"
+          strokeLinejoin="miter"
+          clipPath="url(#login-logo-weave-lower)"
+        />
+        <polyline
+          points="192,104 432,280 192,456"
+          fill="none"
+          stroke="url(#login-logo-right)"
+          strokeWidth="44"
+          strokeLinecap="butt"
+          strokeLinejoin="miter"
+          clipPath="url(#login-logo-weave-lower)"
+        />
+      </g>
+    </svg>
+  );
+}
 
 const stagger = (i: number) => ({ delay: 0.1 + i * 0.08 });
-
-const FloatingSymbols = memo(function FloatingSymbols() {
-  const symbols = useMemo(
-    () =>
-      CODE_SYMBOLS.map((symbol, i) => ({
-        symbol,
-        left: `${8 + ((i * 7.3) % 84)}%`,
-        delay: i * 1.2,
-        duration: 12 + (i % 5) * 3,
-        size: 10 + (i % 3) * 2,
-      })),
-    [],
-  );
-
-  return (
-    <div className="pointer-events-none absolute inset-0 overflow-hidden">
-      {symbols.map((s, i) => (
-        <span
-          key={s.symbol}
-          className="absolute font-mono text-primary/[0.07] select-none"
-          style={{
-            left: s.left,
-            fontSize: `${s.size}px`,
-            animation: `float-drift ${s.duration}s ${s.delay}s linear infinite`,
-          }}
-        >
-          {s.symbol}
-        </span>
-      ))}
-    </div>
-  );
-});
 
 function LoginPage() {
   const navigate = useNavigate();
@@ -122,90 +164,100 @@ function LoginPage() {
   });
 
   return (
-    <div className="relative flex min-h-[calc(100vh-3.5rem)] items-center justify-center px-4 py-12">
-      <PageBackground />
-      <FloatingSymbols />
-      <CursorSpotlight />
-
-      <GlowOrb className="left-1/2 top-1/4 -translate-x-1/2 -translate-y-1/2 animate-[glowPulse_4s_ease-in-out_infinite]" />
-      <GlowOrb
-        className="left-1/3 top-2/3 -translate-x-1/2 animate-[glowPulse_6s_ease-in-out_infinite_1s]"
-        size="sm"
+    <div className="relative isolate min-h-[calc(100vh-3.5rem)] overflow-hidden bg-background px-4 py-10 sm:px-6 sm:py-12">
+      <div
+        className="pointer-events-none absolute inset-0"
+        style={{
+          backgroundImage:
+            'radial-gradient(circle at top, color-mix(in oklab, var(--primary) 8%, transparent), transparent 32%)',
+        }}
       />
+      <div className="pointer-events-none absolute inset-0 opacity-15">
+        <PageBackground />
+      </div>
 
-      <div className="relative z-10 w-full max-w-md">
-        {/* Header */}
-        <div className="mb-8 text-center">
+      <div className="relative z-10 mx-auto flex min-h-[calc(100vh-8.5rem)] w-full max-w-md items-center justify-center">
+        <div className="w-full">
+          <div className="mb-8 text-center">
+            <motion.div
+              initial={{ opacity: 0, y: 12, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
+              className="mx-auto mb-5 flex w-fit flex-col items-center gap-3"
+            >
+              <SynCodeLogo className="h-14 w-14" />
+              <div className="space-y-1">
+                <p className="text-sm font-medium tracking-[0.18em] text-muted-foreground uppercase">
+                  SynCode
+                </p>
+                <div className="inline-flex items-center gap-2 text-xs text-primary">
+                  <Terminal className="size-3" />
+                  <span className="font-medium tracking-wide uppercase">Welcome back</span>
+                </div>
+              </div>
+            </motion.div>
+
+            <motion.h1
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, ...stagger(1), ease: [0.16, 1, 0.3, 1] }}
+              className="text-3xl font-bold tracking-tight text-foreground"
+            >
+              Sign in to continue
+            </motion.h1>
+
+            <motion.p
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, ...stagger(2), ease: [0.16, 1, 0.3, 1] }}
+              className="mt-2 text-sm text-muted-foreground"
+            >
+              Use your email or username to access your interview workspace.
+            </motion.p>
+          </div>
+
           <motion.div
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-            className="mx-auto mb-4 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-3 py-1"
+            initial={{ opacity: 0, y: 20, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ duration: 0.7, ...stagger(3), ease: [0.16, 1, 0.3, 1] }}
           >
-            <Terminal className="size-3 text-primary" />
-            <span className="text-xs font-medium tracking-wider text-primary uppercase">
-              Welcome back
-            </span>
-          </motion.div>
+            <Card className="border border-border/60 bg-card shadow-none">
+              <CardContent className="px-5 pt-4.5 pb-4.5 sm:px-6 sm:pt-5 sm:pb-5">
+                <form className="space-y-3" onSubmit={onSubmit} noValidate>
+                  <div className="space-y-2.5">
+                    <AnimatedFormField
+                      id="identifier"
+                      label="Email or username"
+                      icon={Mail}
+                      autoComplete="username"
+                      placeholder="you@example.com"
+                      error={errors.identifier?.message}
+                      registration={register('identifier')}
+                      staggerDelay={stagger(4).delay}
+                      fieldClassName="space-y-1.5"
+                      labelClassName="text-[0.75rem] font-medium tracking-[0.02em] text-foreground/82"
+                      inputWrapperClassName="rounded-xl"
+                      inputClassName="h-12 rounded-xl border-border/80 bg-muted/35 px-4 py-3 pl-11 text-[0.9375rem] placeholder:text-muted-foreground/75 dark:bg-card/75"
+                      iconClassName="left-3.5 size-4 text-foreground/50"
+                    />
 
-          <motion.h1
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, ...stagger(1), ease: [0.16, 1, 0.3, 1] }}
-            className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl"
-          >
-            Sign in to{' '}
-            <span className="bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
-              SynCode
-            </span>
-          </motion.h1>
-
-          <motion.p
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, ...stagger(2), ease: [0.16, 1, 0.3, 1] }}
-            className="mt-2 text-sm text-muted-foreground"
-          >
-            Pick up where you left off with collaborative practice.
-          </motion.p>
-        </div>
-
-        {/* Login Card */}
-        <motion.div
-          initial={{ opacity: 0, y: 20, scale: 0.98 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ duration: 0.7, ...stagger(3), ease: [0.16, 1, 0.3, 1] }}
-        >
-          <TiltCard>
-            <Card className="aurora-border border-border/50 bg-card/80 backdrop-blur-sm">
-              <CardHeader>
-                <CardTitle>Log in</CardTitle>
-                <CardDescription>Use your email or username to continue.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <form className="space-y-5" onSubmit={onSubmit} noValidate>
-                  <AnimatedFormField
-                    id="identifier"
-                    label="Email or username"
-                    icon={Mail}
-                    autoComplete="username"
-                    placeholder="you@example.com"
-                    error={errors.identifier?.message}
-                    registration={register('identifier')}
-                    staggerDelay={stagger(4).delay}
-                  />
-
-                  <AnimatedFormField
-                    id="password"
-                    label="Password"
-                    icon={LockKeyhole}
-                    type="password"
-                    autoComplete="current-password"
-                    placeholder="Enter your password"
-                    error={errors.password?.message}
-                    registration={register('password')}
-                    staggerDelay={stagger(5).delay}
-                  />
+                    <AnimatedFormField
+                      id="password"
+                      label="Password"
+                      icon={LockKeyhole}
+                      type="password"
+                      autoComplete="current-password"
+                      placeholder="Enter your password"
+                      error={errors.password?.message}
+                      registration={register('password')}
+                      staggerDelay={stagger(5).delay}
+                      fieldClassName="space-y-1.5"
+                      labelClassName="text-[0.75rem] font-medium tracking-[0.02em] text-foreground/82"
+                      inputWrapperClassName="rounded-xl"
+                      inputClassName="h-12 rounded-xl border-border/80 bg-muted/35 px-4 py-3 pl-11 text-[0.9375rem] placeholder:text-muted-foreground/75 dark:bg-card/75"
+                      iconClassName="left-3.5 size-4 text-foreground/50"
+                    />
+                  </div>
 
                   <AnimatePresence>
                     {submissionError ? (
@@ -214,7 +266,7 @@ function LoginPage() {
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: -8, scale: 0.95 }}
                         role="alert"
-                        className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+                        className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-2.5 text-sm leading-5 text-destructive"
                       >
                         {submissionError}
                       </motion.div>
@@ -271,34 +323,24 @@ function LoginPage() {
                   </motion.div>
                 </form>
               </CardContent>
-
-              {/* Terminal status bar */}
-              <div className="flex items-center gap-2 border-t border-border/50 px-4 py-2.5 text-xs text-muted-foreground">
-                <span className="relative flex size-2">
-                  <span className="absolute inline-flex size-full animate-ping rounded-full bg-primary/60" />
-                  <span className="relative inline-flex size-2 rounded-full bg-primary" />
-                </span>
-                <span className="font-mono">Encrypted connection</span>
-                <span className="ml-auto font-mono text-muted-foreground/50">TLS 1.3</span>
-              </div>
             </Card>
-          </TiltCard>
-        </motion.div>
+          </motion.div>
 
-        <motion.p
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.5, ...stagger(7) }}
-          className="mt-6 text-center text-sm text-muted-foreground"
-        >
-          Need a new account?{' '}
-          <Link
-            to="/register"
-            className="font-medium text-primary transition-colors hover:text-primary/80"
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.5, ...stagger(7) }}
+            className="mt-3.5 text-center text-sm leading-6 text-muted-foreground"
           >
-            Register now
-          </Link>
-        </motion.p>
+            Need a new account?{' '}
+            <Link
+              to="/register"
+              className="font-medium text-primary underline-offset-4 transition-colors hover:text-primary/80 hover:underline"
+            >
+              Register now
+            </Link>
+          </motion.p>
+        </div>
       </div>
     </div>
   );
