@@ -1,3 +1,8 @@
+export const ROOM_MODES = ['peer', 'ai'] as const;
+export type RoomMode = (typeof ROOM_MODES)[number];
+
+export const ROOM_STATUSES = ['waiting', 'warmup', 'coding', 'wrapup', 'finished'] as const;
+
 export const RoomStatus = {
   WAITING: 'waiting',
   WARMUP: 'warmup',

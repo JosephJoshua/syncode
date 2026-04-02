@@ -1,18 +1,46 @@
-import { SUPPORTED_LANGUAGES } from '@syncode/shared';
+import { ROOM_MODES, ROOM_STATUSES, SUPPORTED_LANGUAGES } from '@syncode/shared';
 import { z } from 'zod';
+
+export const roomConfigSchema = z.object({
+  maxParticipants: z
+    .number()
+    .int()
+    .min(2)
+    .max(8)
+    .default(2)
+    .describe('Maximum number of participants'),
+  maxDuration: z.number().int().positive().default(120).describe('Duration in minutes'),
+  isPrivate: z.boolean().default(true).describe('Requires invite code to join'),
+});
+
+export type RoomConfig = z.infer<typeof roomConfigSchema>;
 
 export const createRoomSchema = z
   .object({
-    roomId: z
+    mode: z
+      .enum(ROOM_MODES)
+      .describe('Room mode')
+      .meta({ examples: ['peer'] }),
+    name: z
       .string()
-      .min(1)
-      .describe('Unique room identifier')
-      .meta({ examples: ['room-abc-123'] }),
-    initialContent: z
-      .string()
+      .max(100)
       .optional()
-      .describe('Initial editor content')
-      .meta({ examples: ['// Start coding here'] }),
+      .describe('Optional room name')
+      .meta({ examples: ['Mock Interview #1'] }),
+    problemId: z
+      .uuid()
+      .optional()
+      .describe('Optional pre-selected problem')
+      .meta({ examples: ['550e8400-e29b-41d4-a716-446655440000'] }),
+    language: z
+      .enum(SUPPORTED_LANGUAGES)
+      .optional()
+      .describe('Programming language')
+      .meta({ examples: ['python'] }),
+    config: roomConfigSchema
+      .optional()
+      .default({ maxParticipants: 2, maxDuration: 120, isPrivate: true })
+      .describe('Room configuration with defaults'),
   })
   .strict();
 
@@ -94,25 +122,22 @@ export const submitProblemSchema = runCodeSchema
 
 export type SubmitProblemInput = z.infer<typeof submitProblemSchema>;
 
-// ── Response schemas ───────────────────────────────────────────────
-
 export const createRoomResponseSchema = z.object({
-  roomId: z
+  roomId: z.uuid().describe('Room identifier'),
+  roomCode: z
     .string()
-    .describe('Room identifier')
-    .meta({ examples: ['room-abc-123'] }),
-  createdAt: z
-    .number()
-    .describe('Room creation timestamp (epoch ms)')
-    .meta({ examples: [1709467200000] }),
-  collabCreated: z
-    .boolean()
-    .describe('Whether the collaborative document was created in the collab plane')
-    .meta({ examples: [true] }),
-  mediaCreated: z
-    .boolean()
-    .describe('Whether the media (audio/video) room was created in LiveKit')
-    .meta({ examples: [true] }),
+    .describe('6-char invite code')
+    .meta({ examples: ['A3K7M2'] }),
+  name: z.string().nullable().describe('Room name'),
+  status: z.enum(ROOM_STATUSES).describe('Room status'),
+  mode: z.enum(ROOM_MODES).describe('Room mode'),
+  hostId: z.uuid().describe('Host user ID'),
+  problemId: z.uuid().nullable().describe('Pre-selected problem'),
+  language: z.enum(SUPPORTED_LANGUAGES).nullable().describe('Programming language'),
+  config: roomConfigSchema.required().describe('Room configuration'),
+  createdAt: z.iso.datetime().describe('ISO 8601 creation timestamp'),
+  collabCreated: z.boolean().describe('Collab-plane integration status'),
+  mediaCreated: z.boolean().describe('LiveKit integration status'),
 });
 
 export type CreateRoomResponse = z.infer<typeof createRoomResponseSchema>;
