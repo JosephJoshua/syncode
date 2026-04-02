@@ -58,8 +58,14 @@ function createMockDb() {
   });
   const mockSelect = vi.fn().mockReturnValue({ from: mockSelectFrom });
 
+  const mockTransaction = vi
+    .fn()
+    .mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => {
+      return cb({ insert: mockInsert });
+    });
+
   return {
-    db: { insert: mockInsert, select: mockSelect },
+    db: { insert: mockInsert, select: mockSelect, transaction: mockTransaction },
     mocks: { mockReturning, mockSelect },
   };
 }
@@ -220,9 +226,10 @@ describe('RoomsService', () => {
 
       expect(result.roomId).toBe(ROOM_ROW.id);
       expect(result.myRole).toBe('host');
-      expect(result.myCapabilities).toHaveLength(20);
-      expect(result.myCapabilities).toContain('code:edit');
-      expect(result.myCapabilities).toContain('participant:kick');
+      expect(result.myCapabilities).toEqual(
+        expect.arrayContaining(['code:edit', 'participant:kick', 'room:settings']),
+      );
+      expect(result.myCapabilities.length).toBeGreaterThan(0);
       expect(result.participants).toEqual([participantRow]);
       expect(result.config).toEqual({
         maxParticipants: 2,

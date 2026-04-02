@@ -47,8 +47,10 @@ export function decodeCursor(cursor: string): string[] | null {
     // Verify round-trip to detect corrupted input
     if (buf.toString('base64url') !== cursor) return null;
     const decoded = buf.toString('utf-8');
+    if (decoded.length === 0) return null;
     const values = decoded.split('\0');
-    return values.length > 0 ? values : null;
+    if (values.some((v) => v.length === 0)) return null;
+    return values;
   } catch {
     return null;
   }

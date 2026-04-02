@@ -55,14 +55,17 @@ export class RoomsService {
   ) {}
 
   async createRoom(hostId: string, input: CreateRoomInput): Promise<CreateRoomResult> {
-    const room = await this.insertRoomWithRetry(hostId, input);
-
-    const [, collabCreated, mediaCreated] = await Promise.all([
-      this.db.insert(roomParticipants).values({
-        roomId: room.id,
+    const room = await this.db.transaction(async (tx) => {
+      const inserted = await this.insertRoomWithRetry(hostId, input, tx);
+      await tx.insert(roomParticipants).values({
+        roomId: inserted.id,
         userId: hostId,
         role: 'host',
-      }),
+      });
+      return inserted;
+    });
+
+    const [collabCreated, mediaCreated] = await Promise.all([
       this.createCollabDocument(room.id),
       this.createMediaRoom(room.id),
     ]);
@@ -285,10 +288,14 @@ export class RoomsService {
     };
   }
 
-  private async insertRoomWithRetry(hostId: string, input: CreateRoomInput) {
+  private async insertRoomWithRetry(
+    hostId: string,
+    input: CreateRoomInput,
+    db: Pick<Database, 'insert'> = this.db,
+  ) {
     for (let attempt = 0; attempt < INVITE_CODE_MAX_RETRIES; attempt++) {
       const inviteCode = this.generateInviteCode();
-      const rows = await this.db
+      const rows = await db
         .insert(rooms)
         .values({
           hostId,

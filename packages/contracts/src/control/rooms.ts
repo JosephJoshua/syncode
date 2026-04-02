@@ -1,6 +1,6 @@
 import { ROOM_MODES, ROOM_ROLES, ROOM_STATUSES, SUPPORTED_LANGUAGES } from '@syncode/shared';
 import { z } from 'zod';
-import { paginationSchema } from './pagination.js';
+import { paginationSchema, SORT_ORDER_OPTIONS } from './pagination.js';
 
 export const roomConfigSchema = z.object({
   maxParticipants: z
@@ -212,10 +212,7 @@ export const listRoomsQuerySchema = z.object({
   status: z.enum(ROOM_STATUSES).optional().describe('Filter by room status'),
   mode: z.enum(ROOM_MODES).optional().describe('Filter by room mode'),
   sortBy: z.enum(ROOMS_SORT_BY_OPTIONS).default('createdAt').describe('Sort field'),
-  sortOrder: z
-    .enum(['asc', 'desc'] as const)
-    .default('desc')
-    .describe('Sort direction'),
+  sortOrder: z.enum(SORT_ORDER_OPTIONS).default('desc').describe('Sort direction'),
 });
 
 export type ListRoomsQuery = z.infer<typeof listRoomsQuerySchema>;

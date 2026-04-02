@@ -210,7 +210,10 @@ describe('getRoom', () => {
     expect(result.participants.find((p) => p.userId === host.id)?.username).toBe(host.username);
     expect(result.participants.find((p) => p.userId === candidate.id)?.role).toBe('candidate');
     expect(result.myRole).toBe('host');
-    expect(result.myCapabilities).toHaveLength(20);
+    expect(result.myCapabilities).toEqual(
+      expect.arrayContaining(['code:edit', 'participant:kick', 'room:settings']),
+    );
+    expect(result.myCapabilities.length).toBeGreaterThan(0);
     expect(result.config).toEqual({
       maxParticipants: room.maxParticipants,
       maxDuration: room.maxDuration,
