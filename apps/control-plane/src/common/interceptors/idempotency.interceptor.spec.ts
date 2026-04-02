@@ -15,15 +15,14 @@ function createMockDb() {
   const fromFn = vi.fn().mockReturnValue({ where: whereFnSelect });
   const selectFn = vi.fn().mockReturnValue({ from: fromFn });
 
-  const whereFnUpdate = vi.fn();
+  const whereFnUpdate = vi.fn().mockResolvedValue(undefined);
   const setFn = vi.fn().mockReturnValue({ where: whereFnUpdate });
   const updateFn = vi.fn().mockReturnValue({ set: setFn });
 
-  const whereFnDelete = vi.fn();
+  const whereFnDelete = vi.fn().mockResolvedValue(undefined);
   const deleteFn = vi.fn().mockReturnValue({ where: whereFnDelete });
 
   return {
-    // biome-ignore lint/suspicious/noExplicitAny: partial mock of Drizzle Database
     db: {
       insert: insertFn,
       select: selectFn,
@@ -53,6 +52,9 @@ function createMockContext(opts: {
     headers: {
       ...(opts.idempotencyKey === undefined ? {} : { 'idempotency-key': opts.idempotencyKey }),
     },
+    method: 'POST',
+    path: '/rooms',
+    route: { path: '/rooms' },
     user: opts.userId ? { id: opts.userId } : undefined,
   };
   const mockResponse = { statusCode: 201, status: statusFn };
@@ -130,7 +132,7 @@ describe('IdempotencyInterceptor', () => {
     expect(() => interceptor.intercept(context, handler)).toThrow(BadRequestException);
   });
 
-  it('GIVEN new idempotency key WHEN handler succeeds THEN processes request and caches response', async () => {
+  it('GIVEN new idempotency key WHEN handler succeeds THEN awaits DB finalize before returning', async () => {
     const { reflector, context, mockResponse } = createMockContext({
       hasMetadata: true,
       idempotencyKey: VALID_UUID,
@@ -148,12 +150,9 @@ describe('IdempotencyInterceptor', () => {
     const result = await lastValueFrom(interceptor.intercept(context, handler));
 
     expect(result).toEqual(responseBody);
-
-    await vi.waitFor(() => {
-      expect(dbSetup.mocks.updateSet).toHaveBeenCalledWith({
-        responseBody,
-        statusCode: 201,
-      });
+    expect(dbSetup.mocks.updateSet).toHaveBeenCalledWith({
+      responseBody,
+      statusCode: 201,
     });
   });
 
@@ -210,7 +209,7 @@ describe('IdempotencyInterceptor', () => {
     );
   });
 
-  it('GIVEN new idempotency key WHEN handler throws THEN deletes key for retry', async () => {
+  it('GIVEN new idempotency key WHEN handler throws THEN awaits key cleanup before rethrowing', async () => {
     const { reflector, context } = createMockContext({
       hasMetadata: true,
       idempotencyKey: VALID_UUID,

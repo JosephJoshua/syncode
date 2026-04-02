@@ -15,7 +15,7 @@ import { IDEMPOTENCY_TTL_MS } from '@syncode/shared';
 import { eq } from 'drizzle-orm';
 import type { Request, Response } from 'express';
 import { from, type Observable, of } from 'rxjs';
-import { catchError, switchMap, tap } from 'rxjs/operators';
+import { catchError, mergeMap, switchMap } from 'rxjs/operators';
 import { DB_CLIENT } from '@/modules/db/db.module';
 import { IDEMPOTENT_KEY } from '../decorators/idempotent.decorator.js';
 
@@ -41,28 +41,35 @@ export class IdempotencyInterceptor implements NestInterceptor {
     if (!isIdempotent) return next.handle();
 
     const request = context.switchToHttp().getRequest<Request>();
-    const idempotencyKey = request.headers['idempotency-key'];
-    if (!idempotencyKey || Array.isArray(idempotencyKey)) return next.handle();
+    const rawKey = request.headers['idempotency-key'];
+    if (!rawKey || Array.isArray(rawKey)) return next.handle();
 
-    if (!UUID_REGEX.test(idempotencyKey)) {
+    if (!UUID_REGEX.test(rawKey)) {
       throw new BadRequestException('Idempotency-Key must be a valid UUID');
     }
 
     const userId = (request as Request & { user?: { id: string } }).user?.id ?? null;
+    const route = `${request.method}:${request.route?.path ?? request.path}`;
+    const scopedKey = `${userId ?? 'anon'}:${route}:${rawKey}`;
 
-    return from(this.acquireOrReturn(idempotencyKey, userId, context)).pipe(
+    return from(this.acquireOrReturn(scopedKey, userId, context)).pipe(
       switchMap((cached) => {
         if (cached !== null) return of(cached);
 
         return next.handle().pipe(
-          tap((body) => {
+          mergeMap((body) => {
             const res = context.switchToHttp().getResponse<Response>();
-            this.finalizeKey(idempotencyKey, res.statusCode, body);
+            return from(this.finalizeKey(scopedKey, res.statusCode, body)).pipe(
+              switchMap(() => of(body)),
+            );
           }),
-          catchError((err) => {
-            this.cleanupKey(idempotencyKey);
-            throw err;
-          }),
+          catchError((err) =>
+            from(this.cleanupKey(scopedKey)).pipe(
+              switchMap(() => {
+                throw err;
+              }),
+            ),
+          ),
         );
       }),
     );
