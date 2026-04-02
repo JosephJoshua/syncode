@@ -7,15 +7,18 @@ import { MEDIA_SERVICE } from '@syncode/shared/ports';
 import { ZodValidationPipe } from 'nestjs-zod';
 import request from 'supertest';
 import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard';
-import { IdempotencyInterceptor } from '@/common/interceptors/idempotency.interceptor';
 import { DB_CLIENT } from '@/modules/db/db.module';
 import { createTestDb, insertParticipant, insertRoom, insertUser } from '@/test/integration-setup';
+import {
+  createMockCollabClient,
+  createMockExecutionClient,
+  createMockMediaService,
+} from '@/test/mock-factories';
 import { RoomsController } from './rooms.controller.js';
 import { RoomsService } from './rooms.service.js';
 
 const TEST_USER_ID = '11111111-1111-1111-1111-111111111111';
 
-// Guard that always passes and attaches a test user
 class MockJwtAuthGuard {
   canActivate(context: any) {
     const req = context.switchToHttp().getRequest();
@@ -23,26 +26,6 @@ class MockJwtAuthGuard {
     return true;
   }
 }
-
-const mockCollabClient = {
-  createDocument: vi.fn().mockResolvedValue({ roomId: 'stub', createdAt: Date.now() }),
-  destroyDocument: vi.fn().mockResolvedValue({ roomId: 'stub' }),
-  kickUser: vi.fn(),
-  healthCheck: vi.fn(),
-};
-
-const mockMediaService = {
-  createRoom: vi.fn().mockResolvedValue(undefined),
-  deleteRoom: vi.fn().mockResolvedValue(undefined),
-  listRooms: vi.fn(),
-  getRoomInfo: vi.fn(),
-  generateToken: vi.fn(),
-  removeParticipant: vi.fn(),
-  muteParticipantTrack: vi.fn(),
-  updateParticipantPermissions: vi.fn(),
-  startRecording: vi.fn(),
-  stopRecording: vi.fn(),
-};
 
 let app: INestApplication;
 let db: Database;
@@ -55,7 +38,6 @@ beforeEach(async () => {
   db = testDb.db;
   cleanup = testDb.cleanup;
 
-  // Seed the test user (JWT guard attaches this user ID)
   await insertUser(db, { id: TEST_USER_ID, email: 'test@example.com', username: 'testuser' });
 
   const module = await Test.createTestingModule({
@@ -63,9 +45,9 @@ beforeEach(async () => {
     providers: [
       RoomsService,
       { provide: DB_CLIENT, useValue: db },
-      { provide: EXECUTION_CLIENT, useValue: { submit: vi.fn() } },
-      { provide: COLLAB_CLIENT, useValue: mockCollabClient },
-      { provide: MEDIA_SERVICE, useValue: mockMediaService },
+      { provide: EXECUTION_CLIENT, useValue: createMockExecutionClient() },
+      { provide: COLLAB_CLIENT, useValue: createMockCollabClient() },
+      { provide: MEDIA_SERVICE, useValue: createMockMediaService() },
       Reflector,
     ],
   })
@@ -94,7 +76,6 @@ describe('POST /rooms', () => {
     expect(res.body.roomCode).toHaveLength(6);
     expect(res.body.status).toBe('waiting');
     expect(res.body.hostId).toBe(TEST_USER_ID);
-    // Controller serializes Date → ISO string
     expect(res.body.createdAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     expect(res.body.config).toEqual({
       maxParticipants: 2,

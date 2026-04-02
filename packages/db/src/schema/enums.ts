@@ -1,7 +1,5 @@
 import { pgEnum } from 'drizzle-orm/pg-core';
 
-// ── Existing enums ──────────────────────────────────────────────────────────────
-
 export const userRoleEnum = pgEnum('user_role', ['user', 'admin']);
 
 export const roomStatusEnum = pgEnum('room_status', [
@@ -13,8 +11,6 @@ export const roomStatusEnum = pgEnum('room_status', [
 ]);
 
 export const difficultyEnum = pgEnum('difficulty', ['easy', 'medium', 'hard']);
-
-// ── New enums ───────────────────────────────────────────────────────────────────
 
 export const supportedLanguageEnum = pgEnum('supported_language', [
   'python',

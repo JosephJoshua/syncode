@@ -1,4 +1,4 @@
-import type { DestroyDocumentResponse, RoomConfig, TestCaseInput } from '@syncode/contracts';
+import type { DestroyDocumentResponse, RoomConfig } from '@syncode/contracts';
 import type {
   RoomCapability,
   RoomMode,
@@ -57,5 +57,3 @@ export interface DestroyRoomResult {
   collab: DestroyDocumentResponse | null;
   mediaDeleted: boolean;
 }
-
-export type TestCase = TestCaseInput;

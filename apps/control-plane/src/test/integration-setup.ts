@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import * as schema from '@syncode/db';
 import { type Database, problems, roomParticipants, rooms, users } from '@syncode/db';
+import type { RoomRole } from '@syncode/shared';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { PG_CONFIG_PATH } from './global-setup.js';
@@ -24,7 +25,7 @@ function readPgConfig(): PgConfig {
   if (!pgConfigCache) {
     pgConfigCache = JSON.parse(readFileSync(PG_CONFIG_PATH, 'utf-8')) as PgConfig;
   }
-  return pgConfigCache as PgConfig;
+  return pgConfigCache;
 }
 
 export async function createTestDb(): Promise<TestDb> {
@@ -50,7 +51,7 @@ export async function createTestDb(): Promise<TestDb> {
       await client.end();
       const dropClient = postgres(adminUrl, { max: 1 });
       try {
-        await dropClient.unsafe(`DROP DATABASE "${dbName}"`);
+        await dropClient.unsafe(`DROP DATABASE IF EXISTS "${dbName}" WITH (FORCE)`);
       } finally {
         await dropClient.end();
       }
@@ -101,7 +102,7 @@ export async function insertParticipant(
   db: Database,
   roomId: string,
   userId: string,
-  role: 'host' | 'interviewer' | 'candidate' | 'spectator' = 'host',
+  role: RoomRole = 'host',
 ) {
   const [row] = await db.insert(roomParticipants).values({ roomId, userId, role }).returning();
   return row;
