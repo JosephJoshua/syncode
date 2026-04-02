@@ -1,11 +1,18 @@
-import type {
-  CreateDocumentResponse,
-  DestroyDocumentResponse,
-  TestCaseInput,
-} from '@syncode/contracts';
+import type { DestroyDocumentResponse, RoomConfig, TestCaseInput } from '@syncode/contracts';
+import type { RoomMode, RoomStatus, SupportedLanguage } from '@syncode/shared';
 
 export interface CreateRoomResult {
-  collab: CreateDocumentResponse | null;
+  roomId: string;
+  roomCode: string;
+  name: string | null;
+  status: RoomStatus;
+  mode: RoomMode;
+  hostId: string;
+  problemId: string | null;
+  language: SupportedLanguage | null;
+  config: RoomConfig;
+  createdAt: Date;
+  collabCreated: boolean;
   mediaCreated: boolean;
 }
 
