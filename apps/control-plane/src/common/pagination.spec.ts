@@ -1,4 +1,4 @@
-import { decodeCursor, encodeCursor, paginate } from '@syncode/shared';
+import { decodeCursor, encodeCursor, paginate } from '@syncode/shared/server';
 
 describe('encodeCursor / decodeCursor', () => {
   it('GIVEN cursor values WHEN encoding and decoding THEN returns original values', () => {

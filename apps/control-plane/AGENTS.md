@@ -101,8 +101,9 @@ Key vars: `DATABASE_URL`, `REDIS_URL`, `JWT_SECRET`, `JWT_REFRESH_SECRET`, `S3_*
 
 ```bash
 pnpm --filter @syncode/control-plane test               # Unit tests
-pnpm --filter @syncode/control-plane test:cov            # Unit tests with coverage
-pnpm --filter @syncode/control-plane test:integration    # Integration tests (requires Docker)
+pnpm --filter @syncode/control-plane test:cov:unit       # Unit tests with coverage
+pnpm --filter @syncode/control-plane test:cov            # Unit + integration with merged coverage (requires Docker)
+pnpm --filter @syncode/control-plane test:integration    # Integration tests only (requires Docker)
 ```
 
 - Uses `unplugin-swc` in `vitest.config.ts` for NestJS decorator support

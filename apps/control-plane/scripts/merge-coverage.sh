@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Merge unit nd integration coverage reports into a single lcov.info
+# Merge unit and integration coverage reports into a single lcov.info
 
 COVERAGE_DIR="coverage"
 

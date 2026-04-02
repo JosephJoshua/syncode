@@ -25,12 +25,11 @@ import {
   INVITE_CODE_CHARSET,
   INVITE_CODE_LENGTH,
   INVITE_CODE_MAX_RETRIES,
-  type PaginatedResult,
-  paginate,
   type RoomRole,
   type RoomStatus,
 } from '@syncode/shared';
 import { type IMediaService, MEDIA_SERVICE } from '@syncode/shared/ports';
+import { type PaginatedResult, paginate } from '@syncode/shared/server';
 import { and, asc, desc, eq, gt, lt, or, sql } from 'drizzle-orm';
 import { DB_CLIENT } from '@/modules/db/db.module';
 import type {
@@ -108,25 +107,26 @@ export class RoomsService {
         if (query.status) conditions.push(eq(rooms.status, query.status));
         if (query.mode) conditions.push(eq(rooms.mode, query.mode));
 
-        if (decoded) {
+        if (decoded?.length === 2 && decoded[0] && decoded[1]) {
           const [cursorSort, cursorId] = decoded;
 
           if (query.sortBy === 'status') {
-            const cursorStatus = cursorSort as RoomStatus;
             conditions.push(
               or(
-                compareOp(rooms.status, cursorStatus),
-                and(eq(rooms.status, cursorStatus), compareOp(rooms.id, cursorId!)),
+                compareOp(rooms.status, cursorSort as RoomStatus),
+                and(eq(rooms.status, cursorSort as RoomStatus), compareOp(rooms.id, cursorId)),
               )!,
             );
           } else {
-            const cursorDate = new Date(cursorSort!);
-            conditions.push(
-              or(
-                compareOp(rooms.createdAt, cursorDate),
-                and(eq(rooms.createdAt, cursorDate), compareOp(rooms.id, cursorId!)),
-              )!,
-            );
+            const cursorDate = new Date(cursorSort);
+            if (!Number.isNaN(cursorDate.getTime())) {
+              conditions.push(
+                or(
+                  compareOp(rooms.createdAt, cursorDate),
+                  and(eq(rooms.createdAt, cursorDate), compareOp(rooms.id, cursorId)),
+                )!,
+              );
+            }
           }
         }
 
