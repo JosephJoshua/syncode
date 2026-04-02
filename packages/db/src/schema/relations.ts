@@ -31,8 +31,7 @@ import { userWeaknesses } from './user-weaknesses.js';
 import { users } from './users.js';
 import { weaknessSessions } from './weakness-sessions.js';
 
-// ── Users ───────────────────────────────────────────────────────────────────────
-
+// Users
 export const usersRelations = relations(users, ({ many }) => ({
   refreshTokens: many(refreshTokens),
   passwordResetTokens: many(passwordResetTokens),

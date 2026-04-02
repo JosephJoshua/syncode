@@ -17,6 +17,7 @@ import {
   type ListRoomsQuery,
   type RoomConfig,
   type RunCodeRequest,
+  type TestCaseInput,
 } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
 import { problems, roomParticipants, rooms, users } from '@syncode/db';
@@ -37,7 +38,6 @@ import type {
   DestroyRoomResult,
   RoomDetailResult,
   RoomSummaryResult,
-  TestCase,
 } from './rooms.types.js';
 
 @Injectable()
@@ -240,7 +240,7 @@ export class RoomsService {
   async submitProblem(
     _roomId: string,
     request: RunCodeRequest,
-    testCases: TestCase[],
+    testCases: TestCaseInput[],
   ): Promise<
     Array<{ jobId: string | null; testCaseIndex: number; description?: string; error?: string }>
   > {

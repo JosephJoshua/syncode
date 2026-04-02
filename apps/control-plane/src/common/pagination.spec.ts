@@ -41,7 +41,6 @@ describe('paginate', () => {
 
     expect(result.data).toHaveLength(2);
     expect(result.pagination.hasMore).toBe(true);
-    // Cursor encodes the last returned row's values
     expect(decodeCursor(result.pagination.nextCursor!)).toEqual(['2026-01-02', '2']);
   });
 

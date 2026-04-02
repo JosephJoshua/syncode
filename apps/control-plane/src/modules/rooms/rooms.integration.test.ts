@@ -3,6 +3,7 @@ import { Test } from '@nestjs/testing';
 import { COLLAB_CLIENT, EXECUTION_CLIENT } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
 import { roomParticipants } from '@syncode/db';
+import { INVITE_CODE_LENGTH } from '@syncode/shared';
 import { MEDIA_SERVICE } from '@syncode/shared/ports';
 import { eq } from 'drizzle-orm';
 import { DB_CLIENT } from '@/modules/db/db.module';
@@ -13,31 +14,12 @@ import {
   insertRoom,
   insertUser,
 } from '@/test/integration-setup';
+import {
+  createMockCollabClient,
+  createMockExecutionClient,
+  createMockMediaService,
+} from '@/test/mock-factories';
 import { RoomsService } from './rooms.service.js';
-
-const mockCollabClient = {
-  createDocument: vi.fn().mockResolvedValue({ roomId: 'stub', createdAt: Date.now() }),
-  destroyDocument: vi.fn().mockResolvedValue({ roomId: 'stub', finalSnapshot: undefined }),
-  kickUser: vi.fn(),
-  healthCheck: vi.fn(),
-};
-
-const mockMediaService = {
-  createRoom: vi.fn().mockResolvedValue(undefined),
-  deleteRoom: vi.fn().mockResolvedValue(undefined),
-  listRooms: vi.fn(),
-  getRoomInfo: vi.fn(),
-  generateToken: vi.fn(),
-  removeParticipant: vi.fn(),
-  muteParticipantTrack: vi.fn(),
-  updateParticipantPermissions: vi.fn(),
-  startRecording: vi.fn(),
-  stopRecording: vi.fn(),
-};
-
-const mockExecutionClient = {
-  submit: vi.fn().mockResolvedValue({ jobId: 'stub-job' }),
-};
 
 let db: Database;
 let cleanup: () => Promise<void>;
@@ -54,9 +36,9 @@ beforeEach(async () => {
     providers: [
       RoomsService,
       { provide: DB_CLIENT, useValue: db },
-      { provide: EXECUTION_CLIENT, useValue: mockExecutionClient },
-      { provide: COLLAB_CLIENT, useValue: mockCollabClient },
-      { provide: MEDIA_SERVICE, useValue: mockMediaService },
+      { provide: EXECUTION_CLIENT, useValue: createMockExecutionClient() },
+      { provide: COLLAB_CLIENT, useValue: createMockCollabClient() },
+      { provide: MEDIA_SERVICE, useValue: createMockMediaService() },
     ],
   }).compile();
 
@@ -78,18 +60,16 @@ describe('createRoom', () => {
 
     expect(result.roomId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
     expect(result.status).toBe('waiting');
-    expect(result.roomCode).toHaveLength(6);
+    expect(result.roomCode).toHaveLength(INVITE_CODE_LENGTH);
     expect(result.hostId).toBe(user.id);
     expect(result.createdAt).toBeInstanceOf(Date);
 
-    // Verify host participant was inserted
     const participants = await db
       .select()
       .from(roomParticipants)
       .where(eq(roomParticipants.roomId, result.roomId));
     expect(participants).toHaveLength(1);
-    expect(participants[0]!.userId).toBe(user.id);
-    expect(participants[0]!.role).toBe('host');
+    expect(participants[0]).toMatchObject({ userId: user.id, role: 'host' });
   });
 });
 
@@ -115,13 +95,15 @@ describe('listRooms', () => {
     expect(result.data).toHaveLength(2);
 
     const withProblem = result.data.find((r) => r.roomId === roomWithProblem.id);
-    expect(withProblem.problemTitle).toBe(problem.title);
-    expect(withProblem.participantCount).toBe(2);
-    expect(withProblem.myRole).toBe('host');
+    expect(withProblem).toBeDefined();
+    expect(withProblem!.problemTitle).toBe(problem.title);
+    expect(withProblem!.participantCount).toBe(2);
+    expect(withProblem!.myRole).toBe('host');
 
     const without = result.data.find((r) => r.roomId === roomWithout.id);
-    expect(without.problemTitle).toBeNull();
-    expect(without.participantCount).toBe(1);
+    expect(without).toBeDefined();
+    expect(without!.problemTitle).toBeNull();
+    expect(without!.participantCount).toBe(1);
   });
 
   it('GIVEN 5 rooms WHEN paginating with limit=2 THEN traverses all pages without gaps or duplicates', async () => {

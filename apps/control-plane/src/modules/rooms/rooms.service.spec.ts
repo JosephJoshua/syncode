@@ -7,6 +7,11 @@ import { Test } from '@nestjs/testing';
 import { COLLAB_CLIENT, EXECUTION_CLIENT } from '@syncode/contracts';
 import { MEDIA_SERVICE } from '@syncode/shared/ports';
 import { DB_CLIENT } from '@/modules/db/db.module';
+import {
+  createMockCollabClient,
+  createMockExecutionClient,
+  createMockMediaService,
+} from '@/test/mock-factories';
 import { RoomsService } from './rooms.service.js';
 
 const ROOM_ROW = {
@@ -73,40 +78,19 @@ function createMockDb() {
 describe('RoomsService', () => {
   let service: RoomsService;
   let dbSetup: ReturnType<typeof createMockDb>;
-  let mockCollabClient: Record<string, ReturnType<typeof vi.fn>>;
-  let mockMediaService: Record<string, ReturnType<typeof vi.fn>>;
+  let mockCollabClient: ReturnType<typeof createMockCollabClient>;
+  let mockMediaService: ReturnType<typeof createMockMediaService>;
 
   beforeEach(async () => {
     dbSetup = createMockDb();
-
-    mockCollabClient = {
-      createDocument: vi.fn().mockResolvedValue({ roomId: ROOM_ROW.id, createdAt: Date.now() }),
-      destroyDocument: vi.fn().mockResolvedValue({ roomId: ROOM_ROW.id, finalSnapshot: undefined }),
-      kickUser: vi.fn(),
-      healthCheck: vi.fn(),
-    };
-
-    mockMediaService = {
-      createRoom: vi.fn().mockResolvedValue(undefined),
-      deleteRoom: vi.fn().mockResolvedValue(undefined),
-      listRooms: vi.fn(),
-      getRoomInfo: vi.fn(),
-      generateToken: vi.fn(),
-      removeParticipant: vi.fn(),
-      muteParticipantTrack: vi.fn(),
-      updateParticipantPermissions: vi.fn(),
-      startRecording: vi.fn(),
-      stopRecording: vi.fn(),
-    };
+    mockCollabClient = createMockCollabClient();
+    mockMediaService = createMockMediaService();
 
     const module = await Test.createTestingModule({
       providers: [
         RoomsService,
         { provide: DB_CLIENT, useValue: dbSetup.db },
-        {
-          provide: EXECUTION_CLIENT,
-          useValue: { submit: vi.fn().mockResolvedValue({ jobId: 'job-123' }) },
-        },
+        { provide: EXECUTION_CLIENT, useValue: createMockExecutionClient() },
         { provide: COLLAB_CLIENT, useValue: mockCollabClient },
         { provide: MEDIA_SERVICE, useValue: mockMediaService },
       ],
@@ -199,7 +183,7 @@ describe('RoomsService', () => {
       await expect(service.getRoom(ROOM_ROW.id, 'stranger')).rejects.toThrow(ForbiddenException);
     });
 
-    it('GIVEN valid participant WHEN getting details THEN returns room with role and all 20 host capabilities', async () => {
+    it('GIVEN valid participant WHEN getting details THEN returns room with role and capabilities', async () => {
       const participantRow = {
         userId: HOST_ID,
         username: 'testuser',

@@ -113,7 +113,6 @@ export class IdempotencyInterceptor implements NestInterceptor {
 
     this.logger.debug(`Returning cached response for idempotency key ${key}`);
 
-    // Replay the original status code
     const res = context.switchToHttp().getResponse<Response>();
     res.status(existing.statusCode);
 
