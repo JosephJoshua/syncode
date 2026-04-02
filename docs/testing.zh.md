@@ -341,26 +341,16 @@ cd apps/control-plane && vitest watch              # Watch mode (re-runs on save
 
 这消除了因本地数据不同导致的"在我机器上是好的"问题，并且能确认你的 SQL 查询和数据库迁移确实能正常运行。
 
-> **当前状态：** Testcontainers 尚未安装。基础设施已经就绪：`supertest` 已经是 `apps/control-plane` 的 devDependency，`@nestjs/testing` 在所有 NestJS 应用中都可用。添加之后，配置大致如下：
-
-```typescript
-import { PostgreSqlContainer } from '@testcontainers/postgresql';
-import { beforeAll, afterAll } from 'vitest';
-
-let container: StartedPostgreSqlContainer;
-
-beforeAll(async () => {
-  // Starts a real PostgreSQL container (takes ~2-5 seconds)
-  container = await new PostgreSqlContainer().start();
-  process.env.DATABASE_URL = container.getConnectionUri();
-  // Run migrations against the test database
-  await runMigrations();
-}, 30_000); // 30s timeout for container startup
-
-afterAll(async () => {
-  await container.stop(); // Container destroyed — clean slate
-});
 ```
+生命周期：
+  globalSetup  →  启动 PG 容器，创建带有迁移的模板数据库
+  beforeEach   →  CREATE DATABASE test_<id> TEMPLATE syncode_template（约 10ms）
+  test         →  在隔离数据库中运行
+  afterEach    →  DROP DATABASE test_<id>
+  globalTeardown → 停止容器
+```
+
+每个测试用例都拥有一个完全独立、已迁移的数据库，零共享状态。在 `apps/control-plane` 目录下运行 `pnpm test:integration`。
 
 ### 用 supertest 测试 Controller
 
