@@ -24,6 +24,10 @@
     "test:e2e": {
       "dependsOn": ["^build"]
     },
+    "test:integration": {
+      "dependsOn": ["^build"],
+      "cache": false
+    },
     "lint": {},
     "generate": {
       "cache": false

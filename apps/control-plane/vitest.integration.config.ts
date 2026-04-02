@@ -4,7 +4,6 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   plugins: [
-    // Required for NestJS decorator support in tests.
     swc.vite({
       module: { type: 'es6' },
     }),
@@ -18,12 +17,15 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     root: './',
-    passWithNoTests: true,
-    exclude: ['**/*.integration.test.ts', '**/node_modules/**', '**/dist/**'],
+    include: ['src/**/*.integration.test.ts'],
+    globalSetup: ['src/test/global-setup.ts'],
+    testTimeout: 30_000,
+    hookTimeout: 60_000,
+    fileParallelism: true,
     coverage: {
       provider: 'v8',
-      reportsDirectory: './coverage/unit',
-      reporter: ['text', 'json', 'html', 'lcov'],
+      reportsDirectory: './coverage/integration',
+      reporter: ['json'],
       include: ['src/**/*.ts'],
       exclude: [
         '**/*.spec.ts',
