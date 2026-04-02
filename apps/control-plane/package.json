@@ -25,6 +25,7 @@
     "@syncode/db": "workspace:^",
     "@syncode/infrastructure": "workspace:^",
     "@syncode/shared": "workspace:^",
+    "drizzle-orm": "^0.45.1",
     "ky": "^1.14.3",
     "nestjs-pino": "^4.6.0",
     "nestjs-zod": "^5.1.1",
