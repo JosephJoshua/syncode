@@ -22,9 +22,9 @@ let pgConfigCache: PgConfig | null = null;
 
 function readPgConfig(): PgConfig {
   if (!pgConfigCache) {
-    pgConfigCache = JSON.parse(readFileSync(PG_CONFIG_PATH, 'utf-8'));
+    pgConfigCache = JSON.parse(readFileSync(PG_CONFIG_PATH, 'utf-8')) as PgConfig;
   }
-  return pgConfigCache;
+  return pgConfigCache as PgConfig;
 }
 
 export async function createTestDb(): Promise<TestDb> {
