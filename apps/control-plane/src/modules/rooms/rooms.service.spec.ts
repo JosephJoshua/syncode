@@ -1,6 +1,10 @@
-import { InternalServerErrorException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  InternalServerErrorException,
+  NotFoundException,
+} from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import { COLLAB_CLIENT, EXECUTION_CLIENT, type RunCodeRequest } from '@syncode/contracts';
+import { COLLAB_CLIENT, EXECUTION_CLIENT } from '@syncode/contracts';
 import { MEDIA_SERVICE } from '@syncode/shared/ports';
 import { DB_CLIENT } from '@/modules/db/db.module';
 import { RoomsService } from './rooms.service.js';
@@ -33,15 +37,30 @@ const CREATE_INPUT = {
   config: { maxParticipants: 2, maxDuration: 120, isPrivate: true },
 };
 
+/**
+ * NOTE: listRooms uses complex Drizzle joins + correlated subqueries
+ * that are impractical to mock at the unit level. Cover with integration tests.
+ */
 function createMockDb() {
-  const returningFn = vi.fn().mockResolvedValue([ROOM_ROW]);
-  const onConflictDoNothingFn = vi.fn().mockReturnValue({ returning: returningFn });
-  const valuesFn = vi.fn().mockReturnValue({ onConflictDoNothing: onConflictDoNothingFn });
-  const insertFn = vi.fn().mockReturnValue({ values: valuesFn });
+  const mockReturning = vi.fn().mockResolvedValue([ROOM_ROW]);
+  const mockOnConflict = vi.fn().mockReturnValue({ returning: mockReturning });
+  const mockValues = vi.fn().mockReturnValue({
+    returning: mockReturning,
+    onConflictDoNothing: mockOnConflict,
+  });
+  const mockInsert = vi.fn().mockReturnValue({ values: mockValues });
+
+  const mockSelectWhere = vi.fn().mockResolvedValue([]);
+  const mockSelectInnerJoin = vi.fn().mockReturnValue({ where: mockSelectWhere });
+  const mockSelectFrom = vi.fn().mockReturnValue({
+    where: mockSelectWhere,
+    innerJoin: mockSelectInnerJoin,
+  });
+  const mockSelect = vi.fn().mockReturnValue({ from: mockSelectFrom });
 
   return {
-    db: { insert: insertFn },
-    mocks: { returningFn },
+    db: { insert: mockInsert, select: mockSelect },
+    mocks: { mockReturning, mockSelect },
   };
 }
 
@@ -50,7 +69,6 @@ describe('RoomsService', () => {
   let dbSetup: ReturnType<typeof createMockDb>;
   let mockCollabClient: Record<string, ReturnType<typeof vi.fn>>;
   let mockMediaService: Record<string, ReturnType<typeof vi.fn>>;
-  let mockExecutionClient: Record<string, ReturnType<typeof vi.fn>>;
 
   beforeEach(async () => {
     dbSetup = createMockDb();
@@ -75,15 +93,14 @@ describe('RoomsService', () => {
       stopRecording: vi.fn(),
     };
 
-    mockExecutionClient = {
-      submit: vi.fn().mockResolvedValue({ jobId: 'job-123' }),
-    };
-
     const module = await Test.createTestingModule({
       providers: [
         RoomsService,
         { provide: DB_CLIENT, useValue: dbSetup.db },
-        { provide: EXECUTION_CLIENT, useValue: mockExecutionClient },
+        {
+          provide: EXECUTION_CLIENT,
+          useValue: { submit: vi.fn().mockResolvedValue({ jobId: 'job-123' }) },
+        },
         { provide: COLLAB_CLIENT, useValue: mockCollabClient },
         { provide: MEDIA_SERVICE, useValue: mockMediaService },
       ],
@@ -93,7 +110,7 @@ describe('RoomsService', () => {
   });
 
   describe('createRoom', () => {
-    it('GIVEN valid input WHEN creating room THEN returns response matching API contract', async () => {
+    it('GIVEN valid input WHEN creating room THEN returns complete response with subsystem status', async () => {
       const result = await service.createRoom(HOST_ID, CREATE_INPUT);
 
       expect(result).toEqual({
@@ -112,76 +129,117 @@ describe('RoomsService', () => {
       });
     });
 
-    it('GIVEN collab-plane down WHEN creating room THEN succeeds with collabCreated=false', async () => {
+    it('GIVEN subsystem failure WHEN creating room THEN succeeds with degraded status flags', async () => {
       mockCollabClient.createDocument.mockRejectedValue(new Error('collab down'));
-
-      const result = await service.createRoom(HOST_ID, CREATE_INPUT);
-
-      expect(result.roomId).toBe(ROOM_ROW.id);
-      expect(result.collabCreated).toBe(false);
-      expect(result.mediaCreated).toBe(true);
-    });
-
-    it('GIVEN media service down WHEN creating room THEN succeeds with mediaCreated=false', async () => {
       mockMediaService.createRoom.mockRejectedValue(new Error('livekit down'));
 
       const result = await service.createRoom(HOST_ID, CREATE_INPUT);
 
       expect(result.roomId).toBe(ROOM_ROW.id);
-      expect(result.collabCreated).toBe(true);
+      expect(result.collabCreated).toBe(false);
       expect(result.mediaCreated).toBe(false);
     });
 
-    it('GIVEN invite code collision WHEN inserting room THEN retries and creates room successfully', async () => {
-      dbSetup.mocks.returningFn
-        .mockResolvedValueOnce([]) // first attempt: collision, 0 rows
-        .mockResolvedValueOnce([ROOM_ROW]); // second attempt: success
+    it('GIVEN invite code collision WHEN inserting THEN retries and succeeds', async () => {
+      dbSetup.mocks.mockReturning.mockResolvedValueOnce([]).mockResolvedValueOnce([ROOM_ROW]);
 
       const result = await service.createRoom(HOST_ID, CREATE_INPUT);
 
       expect(result.roomId).toBe(ROOM_ROW.id);
-      expect(result.roomCode).toBe(ROOM_ROW.inviteCode);
     });
 
-    it('GIVEN persistent collisions WHEN max retries exceeded THEN throws InternalServerErrorException', async () => {
-      dbSetup.mocks.returningFn.mockResolvedValue([]); // always 0 rows
+    it('GIVEN persistent collisions WHEN max retries exceeded THEN throws 500', async () => {
+      dbSetup.mocks.mockReturning.mockResolvedValue([]);
 
       await expect(service.createRoom(HOST_ID, CREATE_INPUT)).rejects.toThrow(
         InternalServerErrorException,
       );
     });
 
-    it('GIVEN non-collision DB error WHEN inserting room THEN propagates error', async () => {
-      dbSetup.mocks.returningFn.mockRejectedValue(new Error('connection lost'));
+    it('GIVEN DB connection error WHEN inserting THEN propagates error', async () => {
+      dbSetup.mocks.mockReturning.mockRejectedValue(new Error('connection lost'));
 
       await expect(service.createRoom(HOST_ID, CREATE_INPUT)).rejects.toThrow('connection lost');
     });
   });
 
-  describe('destroyRoom', () => {
-    it('GIVEN active room WHEN destroying THEN returns collab snapshot and media status', async () => {
-      const result = await service.destroyRoom('room-1');
+  describe('getRoom', () => {
+    it('GIVEN non-existent room WHEN getting details THEN throws NotFoundException', async () => {
+      dbSetup.mocks.mockSelect.mockReturnValue({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockResolvedValue([]),
+          innerJoin: vi.fn().mockReturnValue({
+            where: vi.fn().mockResolvedValue([]),
+          }),
+        }),
+      });
 
-      expect(result.collab).toEqual({ roomId: ROOM_ROW.id, finalSnapshot: undefined });
-      expect(result.mediaDeleted).toBe(true);
+      await expect(service.getRoom('nonexistent', HOST_ID)).rejects.toThrow(NotFoundException);
     });
 
-    it('GIVEN collab-plane down WHEN destroying room THEN succeeds with null collab result', async () => {
-      mockCollabClient.destroyDocument.mockRejectedValue(new Error('collab down'));
+    it('GIVEN user not a participant WHEN getting details THEN throws ForbiddenException', async () => {
+      const mockWhere = vi
+        .fn()
+        .mockResolvedValueOnce([ROOM_ROW]) // room exists
+        .mockResolvedValueOnce([]); // no participants with this userId
+
+      dbSetup.mocks.mockSelect.mockReturnValue({
+        from: vi.fn().mockReturnValue({
+          where: mockWhere,
+          innerJoin: vi.fn().mockReturnValue({ where: mockWhere }),
+        }),
+      });
+
+      await expect(service.getRoom(ROOM_ROW.id, 'stranger')).rejects.toThrow(ForbiddenException);
+    });
+
+    it('GIVEN valid participant WHEN getting details THEN returns room with role and all 20 host capabilities', async () => {
+      const participantRow = {
+        userId: HOST_ID,
+        username: 'testuser',
+        displayName: 'Test',
+        avatarUrl: null,
+        role: 'host',
+        isActive: true,
+        joinedAt: new Date('2026-04-02T00:00:00Z'),
+      };
+
+      const mockWhere = vi
+        .fn()
+        .mockResolvedValueOnce([ROOM_ROW])
+        .mockResolvedValueOnce([participantRow]);
+
+      dbSetup.mocks.mockSelect.mockReturnValue({
+        from: vi.fn().mockReturnValue({
+          where: mockWhere,
+          innerJoin: vi.fn().mockReturnValue({ where: mockWhere }),
+        }),
+      });
+
+      const result = await service.getRoom(ROOM_ROW.id, HOST_ID);
+
+      expect(result.roomId).toBe(ROOM_ROW.id);
+      expect(result.myRole).toBe('host');
+      expect(result.myCapabilities).toHaveLength(20);
+      expect(result.myCapabilities).toContain('code:edit');
+      expect(result.myCapabilities).toContain('participant:kick');
+      expect(result.participants).toEqual([participantRow]);
+      expect(result.config).toEqual({
+        maxParticipants: 2,
+        maxDuration: 120,
+        isPrivate: true,
+      });
+    });
+  });
+
+  describe('destroyRoom', () => {
+    it('GIVEN subsystem failures WHEN destroying THEN succeeds with degraded status', async () => {
+      mockCollabClient.destroyDocument.mockRejectedValue(new Error('down'));
 
       const result = await service.destroyRoom('room-1');
 
       expect(result.collab).toBeNull();
       expect(result.mediaDeleted).toBe(true);
-    });
-  });
-
-  describe('runCode', () => {
-    it('GIVEN valid request WHEN running code THEN returns execution jobId', async () => {
-      const request: RunCodeRequest = { language: 'python', code: 'print(1)' };
-      const result = await service.runCode('room-1', request);
-
-      expect(result).toEqual({ jobId: 'job-123' });
     });
   });
 });

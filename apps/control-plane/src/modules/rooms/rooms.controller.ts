@@ -1,14 +1,26 @@
-import { Body, Controller, Delete, Param, Post, UseGuards, UseInterceptors } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  Query,
+  UseGuards,
+  UseInterceptors,
+} from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiBody,
   ApiHeader,
   ApiOperation,
   ApiParam,
+  ApiQuery,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { CONTROL_API } from '@syncode/contracts';
+import { CONTROL_API, ROOMS_SORT_BY_OPTIONS, SORT_ORDER_OPTIONS } from '@syncode/contracts';
+import { ROOM_MODES, ROOM_STATUSES } from '@syncode/shared';
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
 import { Idempotent } from '@/common/decorators/idempotent.decorator';
 import { ErrorResponseDto } from '@/common/dto/error-response.dto';
@@ -19,6 +31,9 @@ import {
   CreateRoomDto,
   CreateRoomResponseDto,
   DestroyRoomResponseDto,
+  ListRoomsQueryDto,
+  ListRoomsResponseDto,
+  RoomDetailDto,
   RunCodeDto,
   RunCodeResponseDto,
   SubmitProblemDto,
@@ -67,6 +82,54 @@ export class RoomsController {
   ): Promise<CreateRoomResponseDto> {
     const result = await this.roomsService.createRoom(user.id, body);
     return { ...result, createdAt: result.createdAt.toISOString() };
+  }
+
+  @Get(CONTROL_API.ROOMS.LIST.route)
+  @ApiOperation({ summary: 'List rooms for current user' })
+  @ApiQuery({ name: 'cursor', required: false, description: 'Pagination cursor' })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Page size (1-100)' })
+  @ApiQuery({ name: 'status', required: false, enum: [...ROOM_STATUSES] })
+  @ApiQuery({ name: 'mode', required: false, enum: [...ROOM_MODES] })
+  @ApiQuery({ name: 'sortBy', required: false, enum: [...ROOMS_SORT_BY_OPTIONS] })
+  @ApiQuery({ name: 'sortOrder', required: false, enum: [...SORT_ORDER_OPTIONS] })
+  @ApiResponse({ status: 200, type: ListRoomsResponseDto, description: 'Paginated list of rooms' })
+  @ApiResponse({ status: 401, type: ErrorResponseDto, description: 'Unauthorized' })
+  async listRooms(
+    @CurrentUser() user: AuthUser,
+    @Query() query: ListRoomsQueryDto,
+  ): Promise<ListRoomsResponseDto> {
+    const result = await this.roomsService.listRooms(user.id, query);
+    return {
+      data: result.data.map((room) => ({
+        ...room,
+        createdAt: room.createdAt.toISOString(),
+      })),
+      pagination: result.pagination,
+    };
+  }
+
+  @Get(CONTROL_API.ROOMS.GET.route)
+  @ApiOperation({ summary: 'Get room details' })
+  @ApiParam({ name: 'id', description: 'Room ID (UUID)' })
+  @ApiResponse({ status: 200, type: RoomDetailDto, description: 'Room details' })
+  @ApiResponse({ status: 401, type: ErrorResponseDto, description: 'Unauthorized' })
+  @ApiResponse({
+    status: 403,
+    type: ErrorResponseDto,
+    description: 'Not a participant of this room',
+  })
+  @ApiResponse({ status: 404, type: ErrorResponseDto, description: 'Room not found' })
+  async getRoom(@CurrentUser() user: AuthUser, @Param('id') id: string): Promise<RoomDetailDto> {
+    const result = await this.roomsService.getRoom(id, user.id);
+    return {
+      ...result,
+      participants: result.participants.map((p) => ({
+        ...p,
+        joinedAt: p.joinedAt.toISOString(),
+      })),
+      currentPhaseStartedAt: result.currentPhaseStartedAt?.toISOString() ?? null,
+      createdAt: result.createdAt.toISOString(),
+    };
   }
 
   @Delete(CONTROL_API.ROOMS.DESTROY.route)

@@ -1,5 +1,12 @@
 import { randomBytes } from 'node:crypto';
-import { Inject, Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Inject,
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import {
   COLLAB_CLIENT,
   type CreateRoomInput,
@@ -7,18 +14,33 @@ import {
   EXECUTION_CLIENT,
   type ICollabClient,
   type IExecutionClient,
+  type ListRoomsQuery,
+  type RoomConfig,
   type RunCodeRequest,
 } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
-import { rooms } from '@syncode/db';
-import { INVITE_CODE_CHARSET, INVITE_CODE_LENGTH, INVITE_CODE_MAX_RETRIES } from '@syncode/shared';
+import { problems, roomParticipants, rooms, users } from '@syncode/db';
+import {
+  getRoomPermissions,
+  INVITE_CODE_CHARSET,
+  INVITE_CODE_LENGTH,
+  INVITE_CODE_MAX_RETRIES,
+  type PaginatedResult,
+  paginate,
+  type RoomRole,
+  type RoomStatus,
+} from '@syncode/shared';
 import { type IMediaService, MEDIA_SERVICE } from '@syncode/shared/ports';
+import { and, asc, desc, eq, gt, lt, or, sql } from 'drizzle-orm';
 import { DB_CLIENT } from '@/modules/db/db.module';
-import type { CreateRoomResult, DestroyRoomResult, TestCase } from './rooms.types.js';
+import type {
+  CreateRoomResult,
+  DestroyRoomResult,
+  RoomDetailResult,
+  RoomSummaryResult,
+  TestCase,
+} from './rooms.types.js';
 
-/**
- * Core business logic for room lifecycle and code execution.
- */
 @Injectable()
 export class RoomsService {
   private readonly logger = new Logger(RoomsService.name);
@@ -33,13 +55,15 @@ export class RoomsService {
     private readonly mediaService: IMediaService,
   ) {}
 
-  /**
-   * Create a new room.
-   */
   async createRoom(hostId: string, input: CreateRoomInput): Promise<CreateRoomResult> {
     const room = await this.insertRoomWithRetry(hostId, input);
 
-    const [collabCreated, mediaCreated] = await Promise.all([
+    const [, collabCreated, mediaCreated] = await Promise.all([
+      this.db.insert(roomParticipants).values({
+        roomId: room.id,
+        userId: hostId,
+        role: 'host',
+      }),
       this.createCollabDocument(room.id),
       this.createMediaRoom(room.id),
     ]);
@@ -57,20 +81,140 @@ export class RoomsService {
       hostId: room.hostId,
       problemId: room.problemId,
       language: room.language,
-      config: {
-        maxParticipants: room.maxParticipants,
-        maxDuration: room.maxDuration,
-        isPrivate: room.isPrivate,
-      },
+      config: this.buildRoomConfig(room),
       createdAt: room.createdAt,
       collabCreated,
       mediaCreated,
     };
   }
 
-  /**
-   * Destroy a room
-   */
+  async listRooms(
+    userId: string,
+    query: ListRoomsQuery,
+  ): Promise<PaginatedResult<RoomSummaryResult>> {
+    const sortDir = query.sortOrder === 'asc' ? asc : desc;
+    const compareOp = query.sortOrder === 'asc' ? gt : lt;
+
+    return paginate<RoomSummaryResult>({
+      cursor: query.cursor,
+      limit: query.limit,
+      getCursorValues: (row) => [
+        query.sortBy === 'status' ? row.status : row.createdAt.toISOString(),
+        row.roomId,
+      ],
+      fetchPage: async (decoded, fetchLimit) => {
+        const conditions = [eq(roomParticipants.userId, userId)];
+
+        if (query.status) conditions.push(eq(rooms.status, query.status));
+        if (query.mode) conditions.push(eq(rooms.mode, query.mode));
+
+        if (decoded) {
+          const [cursorSort, cursorId] = decoded;
+
+          if (query.sortBy === 'status') {
+            const cursorStatus = cursorSort as RoomStatus;
+            conditions.push(
+              or(
+                compareOp(rooms.status, cursorStatus),
+                and(eq(rooms.status, cursorStatus), compareOp(rooms.id, cursorId!)),
+              )!,
+            );
+          } else {
+            const cursorDate = new Date(cursorSort!);
+            conditions.push(
+              or(
+                compareOp(rooms.createdAt, cursorDate),
+                and(eq(rooms.createdAt, cursorDate), compareOp(rooms.id, cursorId!)),
+              )!,
+            );
+          }
+        }
+
+        const rows = await this.db
+          .select({
+            roomId: rooms.id,
+            roomCode: rooms.inviteCode,
+            name: rooms.name,
+            status: rooms.status,
+            mode: rooms.mode,
+            hostId: rooms.hostId,
+            myRole: roomParticipants.role,
+            problemTitle: problems.title,
+            language: rooms.language,
+            participantCount: sql<number>`(
+              select count(*)::int from room_participants rp
+              where rp.room_id = ${rooms.id} and rp.is_active = true
+            )`.as('participant_count'),
+            createdAt: rooms.createdAt,
+          })
+          .from(roomParticipants)
+          .innerJoin(rooms, eq(rooms.id, roomParticipants.roomId))
+          .leftJoin(problems, eq(problems.id, rooms.problemId))
+          .where(and(...conditions))
+          .orderBy(
+            sortDir(query.sortBy === 'status' ? rooms.status : rooms.createdAt),
+            sortDir(rooms.id),
+          )
+          .limit(fetchLimit);
+
+        return rows.map((row) => ({
+          ...row,
+          problemTitle: row.problemTitle ?? null,
+        }));
+      },
+    });
+  }
+
+  async getRoom(roomId: string, userId: string): Promise<RoomDetailResult> {
+    const [[room], participantRows] = await Promise.all([
+      this.db.select().from(rooms).where(eq(rooms.id, roomId)),
+      this.db
+        .select({
+          userId: roomParticipants.userId,
+          username: users.username,
+          displayName: users.displayName,
+          avatarUrl: users.avatarUrl,
+          role: roomParticipants.role,
+          isActive: roomParticipants.isActive,
+          joinedAt: roomParticipants.joinedAt,
+        })
+        .from(roomParticipants)
+        .innerJoin(users, eq(users.id, roomParticipants.userId))
+        .where(eq(roomParticipants.roomId, roomId)),
+    ]);
+
+    if (!room) {
+      throw new NotFoundException('Room not found');
+    }
+
+    const myParticipation = participantRows.find((p) => p.userId === userId);
+    if (!myParticipation) {
+      throw new ForbiddenException('Not a participant of this room');
+    }
+
+    const myRole = myParticipation.role as RoomRole;
+
+    return {
+      roomId: room.id,
+      roomCode: room.inviteCode,
+      name: room.name,
+      status: room.status,
+      mode: room.mode,
+      hostId: room.hostId,
+      problemId: room.problemId,
+      language: room.language,
+      config: this.buildRoomConfig(room),
+      participants: participantRows,
+      myRole,
+      myCapabilities: [...getRoomPermissions(myRole)],
+      currentPhaseStartedAt: room.phaseStartedAt,
+      timerPaused: room.timerPaused,
+      elapsedMs: room.elapsedMs,
+      editorLocked: room.editorLocked,
+      createdAt: room.createdAt,
+    };
+  }
+
   async destroyRoom(roomId: string): Promise<DestroyRoomResult> {
     const [collab, mediaDeleted] = await Promise.all([
       this.destroyCollabDocument(roomId),
@@ -84,18 +228,12 @@ export class RoomsService {
     return { collab, mediaDeleted };
   }
 
-  /**
-   * Submits code for execution and returns a job ID for polling.
-   */
   async runCode(_roomId: string, request: RunCodeRequest): Promise<{ jobId: string }> {
     const { jobId } = await this.executionClient.submit(request);
     this.logger.debug(`Code execution submitted: ${jobId}`);
     return { jobId };
   }
 
-  /**
-   * Submits code against multiple test cases in parallel.
-   */
   async submitProblem(
     _roomId: string,
     request: RunCodeRequest,
@@ -133,6 +271,18 @@ export class RoomsService {
     });
 
     return Promise.all(submissions);
+  }
+
+  private buildRoomConfig(room: {
+    maxParticipants: number;
+    maxDuration: number;
+    isPrivate: boolean;
+  }): RoomConfig {
+    return {
+      maxParticipants: room.maxParticipants,
+      maxDuration: room.maxDuration,
+      isPrivate: room.isPrivate,
+    };
   }
 
   private async insertRoomWithRetry(hostId: string, input: CreateRoomInput) {
