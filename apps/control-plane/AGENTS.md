@@ -100,14 +100,25 @@ Key vars: `DATABASE_URL`, `REDIS_URL`, `JWT_SECRET`, `JWT_REFRESH_SECRET`, `S3_*
 ## Testing
 
 ```bash
-pnpm --filter @syncode/control-plane test          # Run all tests
-pnpm --filter @syncode/control-plane test:cov      # With coverage
-vitest run src/modules/auth                         # Specific module (from app dir)
+pnpm --filter @syncode/control-plane test               # Unit tests
+pnpm --filter @syncode/control-plane test:cov            # Unit tests with coverage
+pnpm --filter @syncode/control-plane test:integration    # Integration tests (requires Docker)
 ```
 
 - Uses `unplugin-swc` in `vitest.config.ts` for NestJS decorator support
-- Integration tests: `supertest` for HTTP endpoints
 - Coverage target: ≥ 80% statements (SonarCloud quality gate)
+
+### Integration tests
+
+- File pattern: `*.integration.test.ts` next to source
+- Config: `vitest.integration.config.ts` (separate from unit tests)
+- Requires Docker — testcontainers starts PostgreSQL 17
+- **One shared container** per run, template DB created once with migrations
+- **One DB clone per test case** via `CREATE DATABASE ... TEMPLATE` (~10ms) — zero shared state
+- Tests service layer directly with real DB + mocked external services (collab, media, execution)
+- Bypasses ConfigModule/DbModule — injects `DB_CLIENT` from testcontainers
+- Seed data with typed factory functions in `src/test/integration-setup.ts`
+- Only test what unit tests can't: SQL joins, cursor pagination, real constraint behavior
 
 ### Testing principles
 
