@@ -1,5 +1,6 @@
-import { ROOM_MODES, ROOM_STATUSES, SUPPORTED_LANGUAGES } from '@syncode/shared';
+import { ROOM_MODES, ROOM_ROLES, ROOM_STATUSES, SUPPORTED_LANGUAGES } from '@syncode/shared';
 import { z } from 'zod';
+import { paginationSchema, SORT_ORDER_OPTIONS } from './pagination.js';
 
 export const roomConfigSchema = z.object({
   maxParticipants: z
@@ -122,7 +123,7 @@ export const submitProblemSchema = runCodeSchema
 
 export type SubmitProblemInput = z.infer<typeof submitProblemSchema>;
 
-export const createRoomResponseSchema = z.object({
+const roomBaseFields = {
   roomId: z.uuid().describe('Room identifier'),
   roomCode: z
     .string()
@@ -132,10 +133,14 @@ export const createRoomResponseSchema = z.object({
   status: z.enum(ROOM_STATUSES).describe('Room status'),
   mode: z.enum(ROOM_MODES).describe('Room mode'),
   hostId: z.uuid().describe('Host user ID'),
-  problemId: z.uuid().nullable().describe('Pre-selected problem'),
   language: z.enum(SUPPORTED_LANGUAGES).nullable().describe('Programming language'),
-  config: roomConfigSchema.required().describe('Room configuration'),
   createdAt: z.iso.datetime().describe('ISO 8601 creation timestamp'),
+};
+
+export const createRoomResponseSchema = z.object({
+  ...roomBaseFields,
+  problemId: z.uuid().nullable().describe('Pre-selected problem'),
+  config: roomConfigSchema.required().describe('Room configuration'),
   collabCreated: z.boolean().describe('Collab-plane integration status'),
   mediaCreated: z.boolean().describe('LiveKit integration status'),
 });
@@ -196,3 +201,61 @@ export const submitResultItemSchema = z.object({
 });
 
 export type SubmitResultItem = z.infer<typeof submitResultItemSchema>;
+
+// ── List rooms ─────────────────────────────────────────────────────
+
+export const ROOMS_SORT_BY_OPTIONS = ['createdAt', 'status'] as const;
+
+export const listRoomsQuerySchema = z.object({
+  cursor: z.string().optional().describe('Opaque pagination cursor'),
+  limit: z.coerce.number().int().min(1).max(100).default(20).describe('Page size'),
+  status: z.enum(ROOM_STATUSES).optional().describe('Filter by room status'),
+  mode: z.enum(ROOM_MODES).optional().describe('Filter by room mode'),
+  sortBy: z.enum(ROOMS_SORT_BY_OPTIONS).default('createdAt').describe('Sort field'),
+  sortOrder: z.enum(SORT_ORDER_OPTIONS).default('desc').describe('Sort direction'),
+});
+
+export type ListRoomsQuery = z.infer<typeof listRoomsQuerySchema>;
+
+export const roomSummarySchema = z.object({
+  ...roomBaseFields,
+  myRole: z.enum(ROOM_ROLES).describe('Current user role in this room'),
+  problemTitle: z.string().nullable().describe('Problem title'),
+  participantCount: z.number().int().describe('Number of active participants'),
+});
+
+export type RoomSummary = z.infer<typeof roomSummarySchema>;
+
+export const listRoomsResponseSchema = z.object({
+  data: z.array(roomSummarySchema),
+  pagination: paginationSchema,
+});
+
+export type ListRoomsResponse = z.infer<typeof listRoomsResponseSchema>;
+
+export const roomParticipantSummarySchema = z.object({
+  userId: z.uuid().describe('Participant user ID'),
+  username: z.string().describe('Username'),
+  displayName: z.string().nullable().describe('Display name'),
+  avatarUrl: z.string().nullable().describe('Avatar URL'),
+  role: z.enum(ROOM_ROLES).describe('Participant role'),
+  isActive: z.boolean().describe('Whether the participant is currently connected'),
+  joinedAt: z.iso.datetime().describe('ISO 8601 join timestamp'),
+});
+
+export type RoomParticipantSummary = z.infer<typeof roomParticipantSummarySchema>;
+
+export const roomDetailSchema = z.object({
+  ...roomBaseFields,
+  problemId: z.uuid().nullable().describe('Pre-selected problem'),
+  config: roomConfigSchema.required().describe('Room configuration'),
+  participants: z.array(roomParticipantSummarySchema).describe('Room participants'),
+  myRole: z.enum(ROOM_ROLES).describe('Current user role'),
+  myCapabilities: z.array(z.string()).describe('Resolved room capabilities for current user'),
+  currentPhaseStartedAt: z.iso.datetime().nullable().describe('When the current phase started'),
+  timerPaused: z.boolean().describe('Whether the timer is paused'),
+  elapsedMs: z.number().int().describe('Total elapsed coding time in ms'),
+  editorLocked: z.boolean().describe('Whether the editor is locked'),
+});
+
+export type RoomDetail = z.infer<typeof roomDetailSchema>;

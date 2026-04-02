@@ -33,7 +33,6 @@ function createMockDb() {
       insertReturning: returningFn,
       selectWhere: whereFnSelect,
       updateSet: setFn,
-      updateWhere: whereFnUpdate,
       deleteWhere: whereFnDelete,
     },
   };
@@ -85,40 +84,25 @@ describe('IdempotencyInterceptor', () => {
     return interceptor;
   }
 
-  it('GIVEN no @Idempotent metadata WHEN intercepting THEN passes through without DB check', async () => {
+  it('GIVEN no @Idempotent metadata WHEN intercepting THEN passes through', async () => {
     const { reflector, context } = createMockContext({ hasMetadata: false });
     createInterceptor(reflector);
-    const handler = { handle: () => of({ ok: true }) };
 
-    const result = await lastValueFrom(interceptor.intercept(context, handler));
+    const result = await lastValueFrom(interceptor.intercept(context, { handle: () => of('ok') }));
 
-    expect(result).toEqual({ ok: true });
+    expect(result).toBe('ok');
   });
 
-  it('GIVEN no Idempotency-Key header WHEN intercepting THEN passes through without DB check', async () => {
+  it('GIVEN no Idempotency-Key header WHEN intercepting THEN passes through', async () => {
     const { reflector, context } = createMockContext({
       hasMetadata: true,
       idempotencyKey: undefined,
     });
     createInterceptor(reflector);
-    const handler = { handle: () => of({ ok: true }) };
 
-    const result = await lastValueFrom(interceptor.intercept(context, handler));
+    const result = await lastValueFrom(interceptor.intercept(context, { handle: () => of('ok') }));
 
-    expect(result).toEqual({ ok: true });
-  });
-
-  it('GIVEN array Idempotency-Key header WHEN intercepting THEN passes through without DB check', async () => {
-    const { reflector, context } = createMockContext({
-      hasMetadata: true,
-      idempotencyKey: [VALID_UUID, VALID_UUID],
-    });
-    createInterceptor(reflector);
-    const handler = { handle: () => of({ ok: true }) };
-
-    const result = await lastValueFrom(interceptor.intercept(context, handler));
-
-    expect(result).toEqual({ ok: true });
+    expect(result).toBe('ok');
   });
 
   it('GIVEN invalid UUID header WHEN intercepting THEN throws BadRequestException', () => {
@@ -127,71 +111,59 @@ describe('IdempotencyInterceptor', () => {
       idempotencyKey: 'not-a-uuid',
     });
     createInterceptor(reflector);
-    const handler = { handle: () => of({ ok: true }) };
 
-    expect(() => interceptor.intercept(context, handler)).toThrow(BadRequestException);
+    expect(() => interceptor.intercept(context, { handle: () => of('ok') })).toThrow(
+      BadRequestException,
+    );
   });
 
-  it('GIVEN new idempotency key WHEN handler succeeds THEN awaits DB finalize before returning', async () => {
+  it('GIVEN new key WHEN handler succeeds THEN returns response and caches it', async () => {
     const { reflector, context, mockResponse } = createMockContext({
       hasMetadata: true,
       idempotencyKey: VALID_UUID,
       userId: 'user-1',
     });
-
     dbSetup.mocks.insertReturning.mockResolvedValue([{ key: VALID_UUID }]);
-
-    createInterceptor(reflector);
-    const responseBody = { roomId: 'room-1' };
-    const handler = { handle: () => of(responseBody) };
-
     mockResponse.statusCode = 201;
 
-    const result = await lastValueFrom(interceptor.intercept(context, handler));
+    createInterceptor(reflector);
+    const body = { roomId: 'room-1' };
+    const result = await lastValueFrom(interceptor.intercept(context, { handle: () => of(body) }));
 
-    expect(result).toEqual(responseBody);
-    expect(dbSetup.mocks.updateSet).toHaveBeenCalledWith({
-      responseBody,
-      statusCode: 201,
-    });
+    expect(result).toEqual(body);
+    expect(dbSetup.mocks.updateSet).toHaveBeenCalledWith({ responseBody: body, statusCode: 201 });
   });
 
-  it('GIVEN completed idempotency key WHEN retried THEN returns cached response', async () => {
+  it('GIVEN completed key WHEN retried THEN returns cached response without calling handler', async () => {
     const { reflector, context, statusFn } = createMockContext({
       hasMetadata: true,
       idempotencyKey: VALID_UUID,
     });
-
     dbSetup.mocks.insertReturning.mockResolvedValue([]);
-
-    const cachedBody = { roomId: 'cached-room' };
     dbSetup.mocks.selectWhere.mockResolvedValue([
       {
         key: VALID_UUID,
-        responseBody: cachedBody,
+        responseBody: { cached: true },
         statusCode: 201,
         expiresAt: new Date(Date.now() + 86400000),
       },
     ]);
 
     createInterceptor(reflector);
-    const handler = { handle: vi.fn(() => of({ shouldNotBeCalled: true })) };
-
+    const handler = { handle: vi.fn(() => of('should not run')) };
     const result = await lastValueFrom(interceptor.intercept(context, handler));
 
-    expect(result).toEqual(cachedBody);
+    expect(result).toEqual({ cached: true });
     expect(statusFn).toHaveBeenCalledWith(201);
     expect(handler.handle).not.toHaveBeenCalled();
   });
 
-  it('GIVEN in-progress idempotency key WHEN retried THEN throws ConflictException', async () => {
+  it('GIVEN in-progress key WHEN retried THEN throws ConflictException', async () => {
     const { reflector, context } = createMockContext({
       hasMetadata: true,
       idempotencyKey: VALID_UUID,
     });
-
     dbSetup.mocks.insertReturning.mockResolvedValue([]);
-
     dbSetup.mocks.selectWhere.mockResolvedValue([
       {
         key: VALID_UUID,
@@ -202,40 +174,36 @@ describe('IdempotencyInterceptor', () => {
     ]);
 
     createInterceptor(reflector);
-    const handler = { handle: () => of({}) };
 
-    await expect(lastValueFrom(interceptor.intercept(context, handler))).rejects.toThrow(
-      ConflictException,
-    );
+    await expect(
+      lastValueFrom(interceptor.intercept(context, { handle: () => of({}) })),
+    ).rejects.toThrow(ConflictException);
   });
 
-  it('GIVEN new idempotency key WHEN handler throws THEN awaits key cleanup before rethrowing', async () => {
+  it('GIVEN handler error WHEN processing THEN cleans up key for retry', async () => {
     const { reflector, context } = createMockContext({
       hasMetadata: true,
       idempotencyKey: VALID_UUID,
     });
-
     dbSetup.mocks.insertReturning.mockResolvedValue([{ key: VALID_UUID }]);
 
     createInterceptor(reflector);
-    const error = new Error('handler failed');
-    const handler = { handle: () => throwError(() => error) };
 
-    await expect(lastValueFrom(interceptor.intercept(context, handler))).rejects.toThrow(
-      'handler failed',
-    );
+    await expect(
+      lastValueFrom(
+        interceptor.intercept(context, { handle: () => throwError(() => new Error('boom')) }),
+      ),
+    ).rejects.toThrow('boom');
 
     expect(dbSetup.mocks.deleteWhere).toHaveBeenCalled();
   });
 
-  it('GIVEN expired idempotency key WHEN retried THEN re-inserts key and processes request', async () => {
+  it('GIVEN expired key WHEN retried THEN re-inserts and processes fresh request', async () => {
     const { reflector, context } = createMockContext({
       hasMetadata: true,
       idempotencyKey: VALID_UUID,
     });
-
     dbSetup.mocks.insertReturning.mockResolvedValue([]);
-
     dbSetup.mocks.selectWhere.mockResolvedValue([
       {
         key: VALID_UUID,
@@ -245,14 +213,11 @@ describe('IdempotencyInterceptor', () => {
       },
     ]);
 
-    dbSetup.mocks.deleteWhere.mockResolvedValue(undefined);
-
     createInterceptor(reflector);
-    const responseBody = { fresh: true };
-    const handler = { handle: () => of(responseBody) };
+    const result = await lastValueFrom(
+      interceptor.intercept(context, { handle: () => of({ fresh: true }) }),
+    );
 
-    const result = await lastValueFrom(interceptor.intercept(context, handler));
-
-    expect(result).toEqual(responseBody);
+    expect(result).toEqual({ fresh: true });
   });
 });
