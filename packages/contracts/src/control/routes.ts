@@ -4,6 +4,7 @@ import type {
   accessTokenResponseSchema,
   loginResponseSchema,
   loginSchema,
+  registerResponseSchema,
   registerSchema,
 } from './auth.js';
 import type { executionResultResponseSchema, jobStatusResponseSchema } from './execution.js';
@@ -21,10 +22,10 @@ import type { updateUserSchema, userProfileResponseSchema } from './users.js';
 
 export const CONTROL_API = {
   AUTH: {
-    REGISTER: defineRoute<
-      z.infer<typeof registerSchema>,
-      z.infer<typeof accessTokenResponseSchema>
-    >()('auth/register', 'POST'),
+    REGISTER: defineRoute<z.infer<typeof registerSchema>, z.infer<typeof registerResponseSchema>>()(
+      'auth/register',
+      'POST',
+    ),
     LOGIN: defineRoute<z.infer<typeof loginSchema>, z.infer<typeof loginResponseSchema>>()(
       'auth/login',
       'POST',

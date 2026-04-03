@@ -4,6 +4,13 @@ import { userProfileResponseSchema } from './users.js';
 
 export const registerSchema = z
   .object({
+    username: z
+      .string()
+      .min(3)
+      .max(30)
+      .regex(/^[a-zA-Z0-9_]+$/)
+      .describe('Username')
+      .meta({ examples: ['code_partner'] }),
     email: z
       .email()
       .describe('Email address')
@@ -64,6 +71,17 @@ export const loginResponseSchema = z.object({
 });
 
 export type LoginResponse = z.infer<typeof loginResponseSchema>;
+
+export const registerResponseSchema = z.object({
+  accessToken: z
+    .string()
+    .describe('New short-lived JWT access token')
+    .meta({ examples: ['eyJhbGciOiJIUzI1NiIs...'] })
+    .optional(),
+  user: authUserResponseSchema.optional(),
+});
+
+export type RegisterResponse = z.infer<typeof registerResponseSchema>;
 
 export const accessTokenResponseSchema = z.object({
   accessToken: z
