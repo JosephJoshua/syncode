@@ -47,7 +47,7 @@ const FloatingSymbols = memo(function FloatingSymbols() {
 
   return (
     <div className="pointer-events-none absolute inset-0 overflow-hidden">
-      {symbols.map((s, i) => (
+      {symbols.map((s, _i) => (
         <span
           key={s.symbol}
           className="absolute font-mono text-primary/[0.07] select-none"
@@ -321,7 +321,7 @@ async function handleLoginError(
     return;
   }
 
-  if (apiError?.code === ERROR_CODES.VALIDATION_ERROR) {
+  if (apiError?.code === ERROR_CODES.VALIDATION_FAILED) {
     if (applyValidationErrors(apiError.details, setError)) {
       return;
     }
