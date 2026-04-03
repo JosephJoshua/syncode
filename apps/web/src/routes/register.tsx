@@ -176,7 +176,7 @@ function RegisterPage() {
             className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl"
           >
             Create your{' '}
-            <span className="bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
+            <span className="bg-linear-to-r from-primary to-primary/60 bg-clip-text text-transparent">
               SynCode
             </span>{' '}
             account
