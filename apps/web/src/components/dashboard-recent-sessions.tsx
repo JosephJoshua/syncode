@@ -3,10 +3,15 @@ import {
   Avatar,
   AvatarFallback,
   Badge,
+  Button,
   Card,
   cn,
   Input,
   Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
   Table,
   TableBody,
   TableCell,
@@ -17,13 +22,12 @@ import {
 import { Link } from '@tanstack/react-router';
 import { Search } from 'lucide-react';
 import { useDeferredValue, useState } from 'react';
-import {
-  MOCK_SESSION_ROWS,
-  type SessionParticipant,
-  type SessionRole,
-  type SessionRow,
-  type SessionStatus,
-} from '@/lib/session-history.mock';
+import type {
+  SessionParticipant,
+  SessionRole,
+  SessionRow,
+  SessionStatus,
+} from '@/lib/dashboard-session-history';
 import { useAuthStore } from '@/stores/auth.store';
 
 type SessionFilter = 'all' | 'passed' | 'failed';
@@ -137,7 +141,19 @@ function ParticipantAvatar({
   );
 }
 
-export function DashboardRecentSessions() {
+export function DashboardRecentSessions({
+  rows,
+  isLoading = false,
+  isError = false,
+  isUnavailable = false,
+  onRetry,
+}: {
+  rows: SessionRow[];
+  isLoading?: boolean;
+  isError?: boolean;
+  isUnavailable?: boolean;
+  onRetry?: () => void;
+}) {
   const user = useAuthStore((state) => state.user);
   const currentUserInitial = getUserInitial(user) || 'U';
   const [searchQuery, setSearchQuery] = useState('');
@@ -146,20 +162,18 @@ export function DashboardRecentSessions() {
   const [sortBy, setSortBy] = useState<SessionSort>('date-desc');
 
   const normalizedQuery = deferredSearchQuery.trim().toLowerCase();
-
-  const baseRows = MOCK_SESSION_ROWS.map((row) => {
-    if (row.observer?.isCurrentUser) {
-      return {
-        ...row,
-        partner: null,
-        observer: {
-          ...row.observer,
-          initials: currentUserInitial,
-        },
-      };
+  const baseRows = rows.map((row) => {
+    if (!row.observer?.isCurrentUser) {
+      return row;
     }
 
-    return row;
+    return {
+      ...row,
+      observer: {
+        ...row.observer,
+        initials: currentUserInitial,
+      },
+    };
   });
 
   const filteredRows = baseRows
@@ -182,13 +196,13 @@ export function DashboardRecentSessions() {
 
   return (
     <section className="mt-10 sm:mt-12">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <h2 className="text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+        <h2 className="shrink-0 text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
           Recent Sessions
         </h2>
 
-        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap lg:justify-end">
-          <div className="relative w-full sm:w-[320px]">
+        <div className="flex flex-1 flex-col gap-3 md:flex-row md:items-center xl:justify-end xl:gap-4">
+          <div className="relative w-full md:min-w-[320px] md:flex-1 xl:max-w-[400px]">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={searchQuery}
@@ -198,34 +212,69 @@ export function DashboardRecentSessions() {
             />
           </div>
 
-          <Select
-            value={filter}
-            onChange={(event) => setFilter(event.target.value as SessionFilter)}
-            className="min-w-35"
-            aria-label="Filter sessions"
-          >
-            <option value="all">All sessions</option>
-            <option value="passed">Passed only</option>
-            <option value="failed">Failed only</option>
+          <Select value={filter} onValueChange={(value) => setFilter(value as SessionFilter)}>
+            <SelectTrigger
+              className="w-full md:w-[170px] xl:flex-none"
+              aria-label="Filter sessions"
+            >
+              <SelectValue placeholder="All sessions" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All sessions</SelectItem>
+              <SelectItem value="passed">Passed only</SelectItem>
+              <SelectItem value="failed">Failed only</SelectItem>
+            </SelectContent>
           </Select>
 
-          <Select
-            value={sortBy}
-            onChange={(event) => setSortBy(event.target.value as SessionSort)}
-            className="min-w-55"
-            aria-label="Sort sessions"
-          >
-            <option value="date-desc">Date: Newest first</option>
-            <option value="date-asc">Date: Oldest first</option>
-            <option value="score-desc">Score: High to low</option>
-            <option value="score-asc">Score: Low to high</option>
-            <option value="duration-desc">Duration</option>
+          <Select value={sortBy} onValueChange={(value) => setSortBy(value as SessionSort)}>
+            <SelectTrigger className="w-full md:w-[230px] xl:flex-none" aria-label="Sort sessions">
+              <SelectValue placeholder="Date: Newest first" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="date-desc">Date: Newest first</SelectItem>
+              <SelectItem value="date-asc">Date: Oldest first</SelectItem>
+              <SelectItem value="score-desc">Score: High to low</SelectItem>
+              <SelectItem value="score-asc">Score: Low to high</SelectItem>
+              <SelectItem value="duration-desc">Duration</SelectItem>
+            </SelectContent>
           </Select>
         </div>
       </div>
 
       <Card className="mt-5 gap-0 overflow-hidden border border-border/50 bg-card/80 py-0 backdrop-blur-sm">
-        {hasVisibleRows ? (
+        {isLoading ? (
+          <div className="flex min-h-64 flex-col items-center justify-center px-6 py-12 text-center">
+            <h3 className="text-lg font-semibold tracking-tight text-foreground">
+              Loading sessions
+            </h3>
+            <p className="mt-2 max-w-md text-sm text-muted-foreground">
+              We&#39;re pulling your recent interview history from the sessions endpoint.
+            </p>
+          </div>
+        ) : isUnavailable ? (
+          <div className="flex min-h-64 flex-col items-center justify-center px-6 py-12 text-center">
+            <h3 className="text-lg font-semibold tracking-tight text-foreground">
+              Session history unavailable
+            </h3>
+            <p className="mt-2 max-w-md text-sm text-muted-foreground">
+              Session history will appear once your account session is ready.
+            </p>
+          </div>
+        ) : isError ? (
+          <div className="flex min-h-64 flex-col items-center justify-center px-6 py-12 text-center">
+            <h3 className="text-lg font-semibold tracking-tight text-foreground">
+              Unable to load sessions
+            </h3>
+            <p className="mt-2 max-w-md text-sm text-muted-foreground">
+              Session history could not be retrieved right now. Try again in a moment.
+            </p>
+            {onRetry ? (
+              <Button variant="outline" className="mt-4" onClick={onRetry}>
+                Retry
+              </Button>
+            ) : null}
+          </div>
+        ) : hasVisibleRows ? (
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent">

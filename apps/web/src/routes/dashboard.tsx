@@ -1,41 +1,20 @@
 import type { AuthUserResponse } from '@syncode/contracts';
 import { Card, CardContent } from '@syncode/ui';
+import { useQuery } from '@tanstack/react-query';
 import { createFileRoute } from '@tanstack/react-router';
 import type { LucideIcon } from 'lucide-react';
 import { Calendar, Clock3, Target, TrendingUp } from 'lucide-react';
 import { DashboardRecentSessions } from '@/components/dashboard-recent-sessions';
+import {
+  EMPTY_DASHBOARD_STATS,
+  loadDashboardSessionHistory,
+} from '@/lib/dashboard-session-history';
+import { MOCK_SESSION_HISTORY_VIEWER_ID } from '@/lib/session-history.mock';
 import { useAuthStore } from '@/stores/auth.store';
 
 export const Route = createFileRoute('/dashboard')({
   component: DashboardPage,
 });
-
-const DASHBOARD_STATS: Array<{
-  title: string;
-  value: string;
-  icon: LucideIcon;
-}> = [
-  {
-    title: 'Total Sessions',
-    value: '24',
-    icon: Calendar,
-  },
-  {
-    title: 'Pass Rate',
-    value: '78%',
-    icon: Target,
-  },
-  {
-    title: 'Average Score',
-    value: '84%',
-    icon: TrendingUp,
-  },
-  {
-    title: 'Practice Time',
-    value: '18h',
-    icon: Clock3,
-  },
-];
 
 function getDashboardName(user: AuthUserResponse | null) {
   if (user?.displayName?.trim()) {
@@ -55,7 +34,66 @@ function getDashboardName(user: AuthUserResponse | null) {
 
 function DashboardPage() {
   const user = useAuthStore((state) => state.user);
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const dashboardName = getDashboardName(user);
+  const sessionHistorySource =
+    import.meta.env.VITE_DASHBOARD_USE_MOCK_SESSIONS === 'true' ? 'mock' : 'api';
+  const viewerId =
+    sessionHistorySource === 'mock' ? MOCK_SESSION_HISTORY_VIEWER_ID : (user?.id ?? null);
+  const isQueryEnabled = sessionHistorySource === 'mock' || (isAuthenticated && Boolean(user?.id));
+  const sessionHistoryQuery = useQuery({
+    queryKey: ['dashboard', 'session-history', sessionHistorySource, viewerId],
+    enabled: isQueryEnabled,
+    queryFn: () =>
+      loadDashboardSessionHistory({
+        source: sessionHistorySource,
+        currentUserId: viewerId,
+      }),
+  });
+  const sessionHistory = sessionHistoryQuery.data;
+  const isUnavailable = sessionHistorySource === 'api' && !isQueryEnabled;
+  const stats = sessionHistory?.stats ?? EMPTY_DASHBOARD_STATS;
+  const getStatValue = (value: string) => {
+    if (isUnavailable) {
+      return '--';
+    }
+
+    if (sessionHistoryQuery.isLoading) {
+      return '...';
+    }
+
+    if (sessionHistoryQuery.isError) {
+      return '--';
+    }
+
+    return value;
+  };
+  const dashboardStats: Array<{
+    title: string;
+    value: string;
+    icon: LucideIcon;
+  }> = [
+    {
+      title: 'Total Sessions',
+      value: getStatValue(stats.totalSessions),
+      icon: Calendar,
+    },
+    {
+      title: 'Pass Rate',
+      value: getStatValue(stats.passRate),
+      icon: Target,
+    },
+    {
+      title: 'Average Score',
+      value: getStatValue(stats.averageScore),
+      icon: TrendingUp,
+    },
+    {
+      title: 'Practice Time',
+      value: getStatValue(stats.practiceTime),
+      icon: Clock3,
+    },
+  ];
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:py-10 lg:py-12">
@@ -70,13 +108,21 @@ function DashboardPage() {
 
       <section className="mt-8 sm:mt-10">
         <div className="grid gap-8 md:grid-cols-2 xl:grid-cols-4 xl:gap-9">
-          {DASHBOARD_STATS.map((stat) => (
+          {dashboardStats.map((stat) => (
             <StatCard key={stat.title} icon={stat.icon} title={stat.title} value={stat.value} />
           ))}
         </div>
       </section>
 
-      <DashboardRecentSessions />
+      <DashboardRecentSessions
+        rows={sessionHistory?.rows ?? []}
+        isLoading={sessionHistoryQuery.isLoading}
+        isUnavailable={isUnavailable}
+        isError={sessionHistoryQuery.isError}
+        onRetry={() => {
+          void sessionHistoryQuery.refetch();
+        }}
+      />
     </div>
   );
 }

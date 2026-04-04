@@ -48,6 +48,7 @@ export async function api<T extends TypedRoute<any, any>>(
   options?: {
     params?: Record<string, string>;
     body?: RequestOf<T>;
+    searchParams?: Record<string, string | number | boolean | null | undefined>;
   },
 ): Promise<ResponseOf<T>> {
   const template = route.route.startsWith('/') ? route.route.slice(1) : route.route;
@@ -57,6 +58,7 @@ export async function api<T extends TypedRoute<any, any>>(
 
   const response = await client(url, {
     method,
+    searchParams: normalizeSearchParams(options?.searchParams),
     ...(options?.body === undefined ? {} : { json: options.body }),
   });
 
@@ -65,6 +67,28 @@ export async function api<T extends TypedRoute<any, any>>(
   }
 
   return response.json<ResponseOf<T>>();
+}
+
+function normalizeSearchParams(
+  params?: Record<string, string | number | boolean | null | undefined>,
+) {
+  if (!params) {
+    return undefined;
+  }
+
+  const entries = Object.entries(params).flatMap(([key, value]) => {
+    if (value === undefined || value === null) {
+      return [];
+    }
+
+    return [[key, String(value)] as const];
+  });
+
+  if (entries.length === 0) {
+    return undefined;
+  }
+
+  return Object.fromEntries(entries);
 }
 
 export async function readApiError(error: unknown): Promise<ErrorResponse | null> {
