@@ -10,13 +10,20 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as RegisterRouteImport } from './routes/register'
+import { Route as ProblemsRouteImport } from './routes/problems'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as SessionsSessionIdFeedbackRouteImport } from './routes/sessions.$sessionId.feedback'
 
 const RegisterRoute = RegisterRouteImport.update({
   id: '/register',
   path: '/register',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProblemsRoute = ProblemsRouteImport.update({
+  id: '/problems',
+  path: '/problems',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -34,39 +41,72 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SessionsSessionIdFeedbackRoute =
+  SessionsSessionIdFeedbackRouteImport.update({
+    id: '/sessions/$sessionId/feedback',
+    path: '/sessions/$sessionId/feedback',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
+  '/problems': typeof ProblemsRoute
   '/register': typeof RegisterRoute
+  '/sessions/$sessionId/feedback': typeof SessionsSessionIdFeedbackRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
+  '/problems': typeof ProblemsRoute
   '/register': typeof RegisterRoute
+  '/sessions/$sessionId/feedback': typeof SessionsSessionIdFeedbackRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
+  '/problems': typeof ProblemsRoute
   '/register': typeof RegisterRoute
+  '/sessions/$sessionId/feedback': typeof SessionsSessionIdFeedbackRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/dashboard' | '/login' | '/register'
+  fullPaths:
+    | '/'
+    | '/dashboard'
+    | '/login'
+    | '/problems'
+    | '/register'
+    | '/sessions/$sessionId/feedback'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/dashboard' | '/login' | '/register'
-  id: '__root__' | '/' | '/dashboard' | '/login' | '/register'
+  to:
+    | '/'
+    | '/dashboard'
+    | '/login'
+    | '/problems'
+    | '/register'
+    | '/sessions/$sessionId/feedback'
+  id:
+    | '__root__'
+    | '/'
+    | '/dashboard'
+    | '/login'
+    | '/problems'
+    | '/register'
+    | '/sessions/$sessionId/feedback'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   DashboardRoute: typeof DashboardRoute
   LoginRoute: typeof LoginRoute
+  ProblemsRoute: typeof ProblemsRoute
   RegisterRoute: typeof RegisterRoute
+  SessionsSessionIdFeedbackRoute: typeof SessionsSessionIdFeedbackRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -76,6 +116,13 @@ declare module '@tanstack/react-router' {
       path: '/register'
       fullPath: '/register'
       preLoaderRoute: typeof RegisterRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/problems': {
+      id: '/problems'
+      path: '/problems'
+      fullPath: '/problems'
+      preLoaderRoute: typeof ProblemsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -99,6 +146,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/sessions/$sessionId/feedback': {
+      id: '/sessions/$sessionId/feedback'
+      path: '/sessions/$sessionId/feedback'
+      fullPath: '/sessions/$sessionId/feedback'
+      preLoaderRoute: typeof SessionsSessionIdFeedbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -106,7 +160,9 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   DashboardRoute: DashboardRoute,
   LoginRoute: LoginRoute,
+  ProblemsRoute: ProblemsRoute,
   RegisterRoute: RegisterRoute,
+  SessionsSessionIdFeedbackRoute: SessionsSessionIdFeedbackRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
