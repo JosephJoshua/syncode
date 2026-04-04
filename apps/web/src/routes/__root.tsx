@@ -1,6 +1,7 @@
-import { Button } from '@syncode/ui';
+import type { AuthUserResponse } from '@syncode/contracts';
+import { Button, cn } from '@syncode/ui';
 import { createRootRoute, Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router';
-import { LogOut } from 'lucide-react';
+import { User } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useAuthStore } from '@/stores/auth.store';
 
@@ -86,13 +87,29 @@ function SynCodeLogo({ className }: { className?: string }) {
   );
 }
 
+function getAccountInitial(user: AuthUserResponse | null) {
+  const source = user?.displayName || user?.username || user?.email;
+
+  if (!source) {
+    return null;
+  }
+
+  return source.trim().charAt(0).toUpperCase() || null;
+}
+
 function RootLayout() {
   const navigate = useNavigate();
   const pathname = useRouterState({
     select: (state) => state.location.pathname,
   });
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const user = useAuthStore((state) => state.user);
   const logout = useAuthStore((state) => state.logout);
+  const accountInitial = getAccountInitial(user);
+  const isDashboardPage = pathname === '/dashboard';
+  const isProblemsPage = pathname === '/problems';
+  const isSessionFeedbackPage = pathname.startsWith('/sessions/') && pathname.endsWith('/feedback');
+  const showDashboardChrome = isDashboardPage || isProblemsPage || isSessionFeedbackPage;
 
   const handleLogout = () => {
     logout();
@@ -101,15 +118,35 @@ function RootLayout() {
 
   let navContent: ReactNode;
 
-  if (isAuthenticated) {
+  if (showDashboardChrome) {
     navContent = (
-      <>
-        <span className="hidden text-muted-foreground sm:inline">Signed in</span>
-        <Button variant="outline" size="sm" onClick={handleLogout}>
-          <LogOut data-icon="inline-start" />
-          Log out
-        </Button>
-      </>
+      <nav aria-label="Primary" className="flex items-center gap-0.5 sm:gap-1">
+        {[
+          {
+            label: 'Dashboard',
+            to: '/dashboard',
+            isActive: isDashboardPage || isSessionFeedbackPage,
+          },
+          { label: 'Problems', to: '/problems', isActive: isProblemsPage },
+        ].map((item) => (
+          <Link
+            key={item.to}
+            to={item.to}
+            aria-current={item.isActive ? 'page' : undefined}
+            className={cn(
+              'inline-flex h-8 items-center rounded-lg px-2.5 text-xs font-medium transition-colors sm:px-3 sm:text-sm',
+              item.isActive
+                ? 'bg-primary/10 text-primary ring-1 ring-primary/20'
+                : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground',
+            )}
+          >
+            {item.label}
+          </Link>
+        ))}
+        <span className="inline-flex h-8 items-center rounded-lg px-2.5 text-xs font-medium text-muted-foreground sm:px-3 sm:text-sm">
+          Rooms
+        </span>
+      </nav>
     );
   } else if (pathname === '/') {
     navContent = (
@@ -124,16 +161,50 @@ function RootLayout() {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <nav className="border-b border-border bg-background/80 backdrop-blur-md">
-        <div className="mx-auto flex h-14 max-w-7xl items-center justify-between gap-6 px-4">
-          <Link
-            to="/"
-            className="flex items-center gap-2 font-semibold text-foreground transition-colors hover:text-primary"
-          >
-            <SynCodeLogo className="h-6 w-6" />
-            SynCode
-          </Link>
-          <div className="flex items-center gap-3 text-sm">{navContent}</div>
-        </div>
+        {showDashboardChrome ? (
+          <div className="relative h-14">
+            <div className="mx-auto flex h-14 max-w-7xl items-center px-4">
+              <div className="flex min-w-0 items-center gap-3 sm:gap-5">
+                <Link
+                  to="/"
+                  className="flex shrink-0 items-center gap-2 font-semibold text-foreground transition-colors hover:text-primary"
+                >
+                  <SynCodeLogo className="h-6 w-6" />
+                  <span className="truncate">SynCode</span>
+                </Link>
+                {navContent}
+              </div>
+            </div>
+            <div className="absolute right-5 top-1/2 -translate-y-1/2 sm:right-6">
+              <button
+                type="button"
+                onClick={isAuthenticated ? handleLogout : undefined}
+                aria-label="Account"
+                title={isAuthenticated ? 'Log out' : 'Account'}
+                className="inline-flex size-9 shrink-0 items-center justify-center rounded-full border border-border/80 bg-card/85 text-sm font-semibold text-foreground ring-1 ring-foreground/5 transition-all hover:border-primary/30 hover:bg-muted/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+              >
+                {accountInitial ? (
+                  <span>{accountInitial}</span>
+                ) : (
+                  <User className="size-4 text-primary" />
+                )}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="mx-auto flex h-14 max-w-7xl items-center justify-between gap-6 px-4">
+            <div className="flex min-w-0 items-center gap-3 sm:gap-5">
+              <Link
+                to="/"
+                className="flex shrink-0 items-center gap-2 font-semibold text-foreground transition-colors hover:text-primary"
+              >
+                <SynCodeLogo className="h-6 w-6" />
+                <span className="truncate">SynCode</span>
+              </Link>
+            </div>
+            <div className="flex items-center gap-3 text-sm">{navContent}</div>
+          </div>
+        )}
       </nav>
       <main>
         <Outlet />
