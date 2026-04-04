@@ -12,7 +12,7 @@ import {
 } from '@syncode/contracts';
 import type { IQueueService, QueueJob } from '@syncode/shared/ports';
 import { QUEUE_SERVICE } from '@syncode/shared/ports';
-import { AiService } from './ai.service';
+import { AiService } from './ai.service.js';
 
 @Injectable()
 export class AiProcessor implements OnModuleInit {

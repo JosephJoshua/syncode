@@ -1,6 +1,6 @@
 import { index, pgTable, primaryKey, uuid } from 'drizzle-orm/pg-core';
-import { problems } from './problems';
-import { tags } from './tags';
+import { problems } from './problems.js';
+import { tags } from './tags.js';
 
 export const problemTags = pgTable(
   'problem_tags',

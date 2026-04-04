@@ -1,6 +1,6 @@
 import { index, pgTable, primaryKey, timestamp, uuid } from 'drizzle-orm/pg-core';
-import { sessions } from './sessions';
-import { users } from './users';
+import { sessions } from './sessions.js';
+import { users } from './users.js';
 
 export const sessionDeletions = pgTable(
   'session_deletions',

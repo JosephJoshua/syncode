@@ -1,5 +1,5 @@
-import type { RoomRole } from '../types/room';
-import { RoomRole as RoomRoleValues } from '../types/room';
+import type { RoomRole } from '../types/room.js';
+import { RoomRole as RoomRoleValues } from '../types/room.js';
 
 const ALL_ROOM_CAPABILITIES = [
   // Code

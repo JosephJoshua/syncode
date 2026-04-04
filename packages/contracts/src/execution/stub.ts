@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import type { JobId, JobStatus, SubmitResult } from '../queues';
-import type { IExecutionClient } from './client';
-import type { RunCodeRequest, RunCodeResult } from './types';
+import type { JobId, JobStatus, SubmitResult } from '../queues.js';
+import type { IExecutionClient } from './client.js';
+import type { RunCodeRequest, RunCodeResult } from './types.js';
 
 interface StubJob {
   status: JobStatus;

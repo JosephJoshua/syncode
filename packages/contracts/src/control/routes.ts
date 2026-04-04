@@ -1,24 +1,26 @@
 import type { z } from 'zod';
-import { defineRoute } from '../route-utils';
+import { defineRoute } from '../route-utils.js';
 import type {
   accessTokenResponseSchema,
-  authTokensResponseSchema,
+  loginResponseSchema,
   loginSchema,
-  refreshTokenSchema,
   registerSchema,
-} from './auth';
-import type { executionResultResponseSchema, jobStatusResponseSchema } from './execution';
-import type { healthCheckResponseSchema } from './health';
+} from './auth.js';
+import type { executionResultResponseSchema, jobStatusResponseSchema } from './execution.js';
+import type { healthCheckResponseSchema } from './health.js';
 import type {
   createRoomResponseSchema,
   createRoomSchema,
   destroyRoomResponseSchema,
+  listRoomsQuerySchema,
+  listRoomsResponseSchema,
+  roomDetailSchema,
   runCodeResponseSchema,
   runCodeSchema,
   submitProblemSchema,
   submitResultItemSchema,
-} from './rooms';
-import type { updateUserSchema, userProfileResponseSchema } from './users';
+} from './rooms.js';
+import type { updateUserSchema, userProfileResponseSchema } from './users.js';
 
 export const CONTROL_API = {
   AUTH: {
@@ -26,14 +28,11 @@ export const CONTROL_API = {
       z.infer<typeof registerSchema>,
       z.infer<typeof accessTokenResponseSchema>
     >()('auth/register', 'POST'),
-    LOGIN: defineRoute<z.infer<typeof loginSchema>, z.infer<typeof authTokensResponseSchema>>()(
+    LOGIN: defineRoute<z.infer<typeof loginSchema>, z.infer<typeof loginResponseSchema>>()(
       'auth/login',
       'POST',
     ),
-    REFRESH: defineRoute<
-      z.infer<typeof refreshTokenSchema>,
-      z.infer<typeof accessTokenResponseSchema>
-    >()('auth/refresh', 'POST'),
+    REFRESH: defineRoute<void, z.infer<typeof accessTokenResponseSchema>>()('auth/refresh', 'POST'),
   },
   USERS: {
     PROFILE: defineRoute<void, z.infer<typeof userProfileResponseSchema>>()('users/me', 'GET'),
@@ -49,6 +48,11 @@ export const CONTROL_API = {
       z.infer<typeof createRoomSchema>,
       z.infer<typeof createRoomResponseSchema>
     >()('rooms', 'POST'),
+    LIST: defineRoute<
+      z.infer<typeof listRoomsQuerySchema>,
+      z.infer<typeof listRoomsResponseSchema>
+    >()('rooms', 'GET'),
+    GET: defineRoute<void, z.infer<typeof roomDetailSchema>>()('rooms/:id', 'GET'),
     DESTROY: defineRoute<void, z.infer<typeof destroyRoomResponseSchema>>()('rooms/:id', 'DELETE'),
     RUN: defineRoute<z.infer<typeof runCodeSchema>, z.infer<typeof runCodeResponseSchema>>()(
       'rooms/:id/run',

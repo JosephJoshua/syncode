@@ -3,7 +3,7 @@ import { ApiExcludeEndpoint } from '@nestjs/swagger';
 import { SkipThrottle } from '@nestjs/throttler';
 import { CONTROL_INTERNAL } from '@syncode/contracts';
 import { type IStorageService, STORAGE_SERVICE } from '@syncode/shared/ports';
-import { SnapshotReadyDto, UserDisconnectedDto } from './dto/internal.dto';
+import { SnapshotReadyDto, UserDisconnectedDto } from './dto/internal.dto.js';
 
 /**
  * Receives HTTP callbacks FROM other planes.

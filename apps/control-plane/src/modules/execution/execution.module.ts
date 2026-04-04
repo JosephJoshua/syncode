@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { ExecutionController } from './execution.controller';
+import { ExecutionController } from './execution.controller.js';
 
 /**
  * Provides endpoints for retrieving code execution results.

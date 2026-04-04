@@ -5,6 +5,7 @@ import type { Database } from '@syncode/db';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import type { EnvConfig } from '@/config/env.config';
 import { DB_CLIENT } from '@/modules/db/db.module';
+import type { AuthUser } from './auth.types.js';
 
 /**
  * JWT payload structure
@@ -43,7 +44,7 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
    * @param payload - Decoded JWT payload
    * @returns User object or throws UnauthorizedException
    */
-  async validate(payload: JwtPayload) {
+  async validate(payload: JwtPayload): Promise<AuthUser> {
     // TODO: Fetch user from database using payload.sub (user ID)
 
     return {

@@ -1,5 +1,5 @@
 import { boolean, index, integer, pgTable, text, uuid, varchar } from 'drizzle-orm/pg-core';
-import { problems } from './problems';
+import { problems } from './problems.js';
 
 export const testCases = pgTable(
   'test_cases',

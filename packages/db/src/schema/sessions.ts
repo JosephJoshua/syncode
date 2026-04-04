@@ -7,9 +7,9 @@ import {
   uuid,
   varchar,
 } from 'drizzle-orm/pg-core';
-import { roomModeEnum, sessionStatusEnum, supportedLanguageEnum } from './enums';
-import { problems } from './problems';
-import { rooms } from './rooms';
+import { roomModeEnum, sessionStatusEnum, supportedLanguageEnum } from './enums.js';
+import { problems } from './problems.js';
+import { rooms } from './rooms.js';
 
 export const sessions = pgTable(
   'sessions',

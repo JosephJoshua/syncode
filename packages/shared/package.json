@@ -20,10 +20,14 @@
     "./ports": {
       "types": "./src/ports/index.ts",
       "default": "./dist/ports/index.js"
+    },
+    "./server": {
+      "types": "./src/server.ts",
+      "default": "./dist/server.js"
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && node ../../scripts/write-cjs-package-json.js",
+    "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "lint": "biome check ."
   },

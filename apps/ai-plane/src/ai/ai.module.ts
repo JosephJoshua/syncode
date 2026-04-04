@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
-import { AiProcessor } from './ai.processor';
-import { AiService } from './ai.service';
+import { AiProcessor } from './ai.processor.js';
+import { AiService } from './ai.service.js';
 
 @Module({
   providers: [AiService, AiProcessor],

@@ -2,8 +2,8 @@ import { Global, Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { BullMqAdapter, type RedisConfig } from '@syncode/infrastructure';
 import { QUEUE_SERVICE, SANDBOX_PROVIDER } from '@syncode/shared/ports';
-import type { EnvConfig } from '../config/env.config';
-import { E2bSandboxAdapter } from './sandbox/e2b-sandbox.adapter';
+import type { EnvConfig } from '../config/env.config.js';
+import { E2bSandboxAdapter } from './sandbox/e2b-sandbox.adapter.js';
 
 @Global()
 @Module({

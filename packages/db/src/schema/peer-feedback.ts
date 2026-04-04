@@ -8,9 +8,9 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
-import { rooms } from './rooms';
-import { sessions } from './sessions';
-import { users } from './users';
+import { rooms } from './rooms.js';
+import { sessions } from './sessions.js';
+import { users } from './users.js';
 
 export const peerFeedback = pgTable(
   'peer_feedback',

@@ -1,1 +1,44 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/geist";
+@import "@syncode/ui/theme.css";
+
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes gradient-x {
+  0%,
+  100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+.terminal-glow {
+  animation: terminal-breathe 4s ease-in-out infinite;
+}
+
+@keyframes terminal-breathe {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 1px oklch(0.82 0.18 165 / 0.08),
+      0 0 40px -15px oklch(0.82 0.18 165 / 0.15),
+      0 0 80px -30px oklch(0.82 0.18 165 / 0.05);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px oklch(0.82 0.18 165 / 0.15),
+      0 0 60px -10px oklch(0.82 0.18 165 / 0.25),
+      0 0 100px -20px oklch(0.82 0.18 165 / 0.12);
+  }
+}

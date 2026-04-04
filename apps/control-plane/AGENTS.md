@@ -59,8 +59,8 @@ Not all services propagate 503/504. Only document these on endpoints where they 
 
 | Service Method | Catches CB Errors? | Can Return 503/504? |
 |---|---|---|
-| `RoomsService.createRoom` | Yes (`Promise.allSettled`) | No |
-| `RoomsService.destroyRoom` | Yes (`Promise.allSettled`) | No |
+| `RoomsService.createRoom` | Yes (try/catch in helpers) | No |
+| `RoomsService.destroyRoom` | Yes (try/catch in helpers) | No |
 | `RoomsService.submitProblem` | Yes (per-test-case try/catch) | No |
 | `RoomsService.runCode` | No | Yes — 503/504 can propagate |
 | Health check | Yes (all wrapped in try/catch) | No — reports as `"degraded"` |
@@ -100,14 +100,46 @@ Key vars: `DATABASE_URL`, `REDIS_URL`, `JWT_SECRET`, `JWT_REFRESH_SECRET`, `S3_*
 ## Testing
 
 ```bash
-pnpm --filter @syncode/control-plane test          # Run all tests
-pnpm --filter @syncode/control-plane test:cov      # With coverage
-vitest run src/modules/auth                         # Specific module (from app dir)
+pnpm --filter @syncode/control-plane test               # Unit tests
+pnpm --filter @syncode/control-plane test:cov:unit       # Unit tests with coverage
+pnpm --filter @syncode/control-plane test:cov            # Unit + integration with merged coverage (requires Docker)
+pnpm --filter @syncode/control-plane test:integration    # Integration tests only (requires Docker)
 ```
 
 - Uses `unplugin-swc` in `vitest.config.ts` for NestJS decorator support
-- Integration tests: `supertest` for HTTP endpoints
-- Coverage target: ≥ 80% statements
+- Coverage target: ≥ 80% statements (SonarCloud quality gate)
+
+### Integration tests
+
+- File pattern: `*.integration.test.ts` next to source
+- Config: `vitest.integration.config.ts` (separate from unit tests)
+- Requires Docker — testcontainers starts PostgreSQL 17
+- **One shared container** per run, template DB created once with migrations
+- **One DB clone per test case** via `CREATE DATABASE ... TEMPLATE` (~10ms) — zero shared state
+- Tests service layer directly with real DB + mocked external services (collab, media, execution)
+- Bypasses ConfigModule/DbModule — injects `DB_CLIENT` from testcontainers
+- Seed data with typed factory functions in `src/test/integration-setup.ts`
+- Only test what unit tests can't: SQL joins, cursor pagination, real constraint behavior
+
+### Testing principles
+
+- **Test behavior, not implementation.** Assert on return values, thrown errors, and observable side effects — not on which mocks were called or how many times.
+- **Each test must add unique value.** If two tests exercise the same code path with trivially different inputs, merge them or drop one.
+- **Don't mock Drizzle query chains for complex joins.** Methods with multi-table joins, correlated subqueries, or cursor pagination are better tested with integration tests against a real DB. Unit tests for these devolve into implementation-coupled mock wiring.
+- **Do unit-test business logic.** Error handling (graceful degradation, retry, propagation), access control (403/404), response shaping, and pure functions are good unit test targets.
+- **Subsystem failure tests can be merged.** "collab down" and "media down" test the same pattern (graceful degradation). One test covering both-down is sufficient unless they have different error-handling code paths.
+
+## Idempotency
+
+Reusable `@Idempotent()` decorator + `IdempotencyInterceptor` in `src/common/interceptors/`. Uses DB-backed `idempotency_keys` table (not Redis). Keys are scoped by `{userId}:{method}:{route}:{uuid}` to prevent cross-user and cross-endpoint replays. `mergeMap` (not `tap`) ensures DB writes complete before response is returned.
+
+## Domain Types vs API Types
+
+Services return domain types (e.g., `CreateRoomResult` with `Date` fields) defined in `rooms.types.ts`. Controllers map domain types to API response DTOs (e.g., `createdAt.toISOString()`). Services must NOT return contract/DTO types directly — that's a layering violation.
+
+## Auth
+
+`AuthUser` type in `src/modules/auth/auth.types.ts` — `{ id: string; email: string }`. Used with `@CurrentUser()` decorator. `JwtStrategy.validate()` returns `AuthUser`.
 
 ## NestJS Quirks
 
