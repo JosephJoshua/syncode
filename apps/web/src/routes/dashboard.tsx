@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { HostControlPanel } from '../components/HostControlPanel';
+import { HostControlPanel } from '@/components/host-control-panel';
 
 export const Route = createFileRoute('/dashboard')({
   component: DashboardPage,
@@ -13,8 +13,8 @@ function DashboardPage() {
         Your interview practice workspace will live here.
       </p>
 
-      {/* Mocking the Host Control Panel for Issue #115 UI testing */}
-      <HostControlPanel />
+      {/* Render mock host controls only during local development/UI testing. */}
+      {import.meta.env.DEV ? <HostControlPanel /> : null}
     </div>
   );
 }

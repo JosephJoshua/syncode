@@ -1,10 +1,10 @@
 import { getNextStatuses, ROOM_STATUS_LABELS, RoomStatus } from '@syncode/shared';
 import { Button, Card, CardContent, CardHeader, CardTitle } from '@syncode/ui';
 import { CheckCircle2, FastForward, PlayCircle, SquareSquare } from 'lucide-react';
-import { useState } from 'react';
+import { type ReactNode, useState } from 'react';
 
 // Maps transitions to their appropriate lucide-icons
-const TRANSITION_ICONS: Record<string, React.ReactNode> = {
+const TRANSITION_ICONS: Partial<Record<RoomStatus, ReactNode>> = {
   [RoomStatus.WARMUP]: <PlayCircle className="mr-2 h-4 w-4" />,
   [RoomStatus.CODING]: <SquareSquare className="mr-2 h-4 w-4" />,
   [RoomStatus.WRAPUP]: <FastForward className="mr-2 h-4 w-4" />,
@@ -19,7 +19,6 @@ export function HostControlPanel() {
   const nextStages = getNextStatuses(currentStage);
 
   const handleTransition = (target: RoomStatus) => {
-    console.log(`[Mock API] Transitioning room from ${currentStage} -> ${target}`);
     // TODO: Replace this state update with react-query mutation (POST /rooms/{roomId}/control/transition) once Issue #114 is merged.
     setCurrentStage(target);
   };
