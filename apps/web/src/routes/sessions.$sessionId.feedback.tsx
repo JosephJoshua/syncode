@@ -1,6 +1,8 @@
 import { Card, CardContent } from '@syncode/ui';
 import { createFileRoute } from '@tanstack/react-router';
-import { MOCK_SESSION_ROWS } from '@/lib/session-history.mock';
+import { buildDashboardSessionHistory } from '@/lib/dashboard-session-history';
+import { MOCK_SESSION_HISTORY_RESPONSE } from '@/lib/session-history.mock';
+import { useAuthStore } from '@/stores/auth.store';
 
 export const Route = createFileRoute('/sessions/$sessionId/feedback')({
   component: SessionFeedbackPage,
@@ -8,7 +10,11 @@ export const Route = createFileRoute('/sessions/$sessionId/feedback')({
 
 function SessionFeedbackPage() {
   const { sessionId } = Route.useParams();
-  const session = MOCK_SESSION_ROWS.find((item) => item.id === sessionId);
+  const user = useAuthStore((state) => state.user);
+  const session = buildDashboardSessionHistory(
+    MOCK_SESSION_HISTORY_RESPONSE,
+    user?.id ?? null,
+  ).rows.find((item) => item.id === sessionId);
 
   if (!session) {
     return (
@@ -113,9 +119,7 @@ function SessionFeedbackPage() {
                 <dt className="text-xs uppercase tracking-[0.12em] text-muted-foreground">
                   Duration
                 </dt>
-                <dd className="text-sm font-medium text-foreground">
-                  {session.durationMinutes} minutes
-                </dd>
+                <dd className="text-sm font-medium text-foreground">{session.durationMinutes}m</dd>
               </div>
             </dl>
           </CardContent>

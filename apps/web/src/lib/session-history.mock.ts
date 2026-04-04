@@ -1,88 +1,213 @@
-export type SessionRole = 'candidate' | 'interviewer' | 'observer';
-export type SessionStatus = 'passed' | 'failed' | null;
+import type { SessionHistoryResponse } from '@/lib/dashboard-session-history';
 
-export type SessionParticipant = {
-  initials: string;
-  isCurrentUser?: boolean;
+export const MOCK_SESSION_HISTORY_VIEWER_ID = 'user-current';
+
+export const MOCK_SESSION_HISTORY_RESPONSE: SessionHistoryResponse = {
+  data: [
+    {
+      sessionId: 'session-1',
+      roomId: 'room-1',
+      mode: 'peer',
+      problemTitle: 'Two Sum',
+      difficulty: 'easy',
+      language: 'typescript',
+      duration: 2700,
+      participants: [
+        {
+          userId: MOCK_SESSION_HISTORY_VIEWER_ID,
+          role: 'candidate',
+          displayName: 'Mia Evans',
+          username: 'mia',
+          avatarUrl: null,
+        },
+        {
+          userId: 'user-bp',
+          role: 'interviewer',
+          displayName: 'Ben Parker',
+          username: 'benp',
+          avatarUrl: null,
+        },
+      ],
+      overallScore: 100,
+      hasReport: true,
+      hasFeedback: true,
+      createdAt: '2024-03-20T10:00:00.000Z',
+      finishedAt: '2024-03-20T10:45:00.000Z',
+    },
+    {
+      sessionId: 'session-2',
+      roomId: 'room-2',
+      mode: 'peer',
+      problemTitle: 'Longest Substring Without Repeating Characters',
+      difficulty: 'medium',
+      language: 'python',
+      duration: 2280,
+      participants: [
+        {
+          userId: MOCK_SESSION_HISTORY_VIEWER_ID,
+          role: 'candidate',
+          displayName: 'Mia Evans',
+          username: 'mia',
+          avatarUrl: null,
+        },
+        {
+          userId: 'user-cw',
+          role: 'interviewer',
+          displayName: 'Chris Wong',
+          username: 'cwong',
+          avatarUrl: null,
+        },
+        {
+          userId: 'user-al',
+          role: 'observer',
+          displayName: 'Ava Lee',
+          username: 'alee',
+          avatarUrl: null,
+        },
+      ],
+      overallScore: 58,
+      hasReport: true,
+      hasFeedback: true,
+      createdAt: '2024-03-19T11:00:00.000Z',
+      finishedAt: '2024-03-19T11:38:00.000Z',
+    },
+    {
+      sessionId: 'session-3',
+      roomId: 'room-3',
+      mode: 'peer',
+      problemTitle: 'Binary Tree Level Order Traversal',
+      difficulty: 'medium',
+      language: 'java',
+      duration: 1920,
+      participants: [
+        {
+          userId: 'user-dk',
+          role: 'candidate',
+          displayName: 'Dana Kim',
+          username: 'dana',
+          avatarUrl: null,
+        },
+        {
+          userId: MOCK_SESSION_HISTORY_VIEWER_ID,
+          role: 'interviewer',
+          displayName: 'Mia Evans',
+          username: 'mia',
+          avatarUrl: null,
+        },
+      ],
+      overallScore: null,
+      hasReport: false,
+      hasFeedback: false,
+      createdAt: '2024-03-18T09:00:00.000Z',
+      finishedAt: '2024-03-18T09:32:00.000Z',
+    },
+    {
+      sessionId: 'session-4',
+      roomId: 'room-4',
+      mode: 'peer',
+      problemTitle: 'Trapping Rain Water',
+      difficulty: 'hard',
+      language: 'javascript',
+      duration: 3300,
+      participants: [
+        {
+          userId: 'user-me',
+          role: 'candidate',
+          displayName: 'Morgan Ellis',
+          username: 'morgan',
+          avatarUrl: null,
+        },
+        {
+          userId: 'user-rg',
+          role: 'interviewer',
+          displayName: 'Riley Green',
+          username: 'rgreen',
+          avatarUrl: null,
+        },
+        {
+          userId: MOCK_SESSION_HISTORY_VIEWER_ID,
+          role: 'observer',
+          displayName: 'Mia Evans',
+          username: 'mia',
+          avatarUrl: null,
+        },
+      ],
+      overallScore: null,
+      hasReport: false,
+      hasFeedback: false,
+      createdAt: '2024-03-17T14:00:00.000Z',
+      finishedAt: '2024-03-17T14:55:00.000Z',
+    },
+    {
+      sessionId: 'session-5',
+      roomId: 'room-5',
+      mode: 'peer',
+      problemTitle: 'Valid Parentheses',
+      difficulty: 'easy',
+      language: 'go',
+      duration: 1200,
+      participants: [
+        {
+          userId: MOCK_SESSION_HISTORY_VIEWER_ID,
+          role: 'candidate',
+          displayName: 'Mia Evans',
+          username: 'mia',
+          avatarUrl: null,
+        },
+        {
+          userId: 'user-ez',
+          role: 'interviewer',
+          displayName: 'Ethan Zhang',
+          username: 'ethan',
+          avatarUrl: null,
+        },
+        {
+          userId: 'user-mn',
+          role: 'observer',
+          displayName: 'Mina Noor',
+          username: 'mnoor',
+          avatarUrl: null,
+        },
+      ],
+      overallScore: 95,
+      hasReport: true,
+      hasFeedback: true,
+      createdAt: '2024-03-16T16:00:00.000Z',
+      finishedAt: '2024-03-16T16:20:00.000Z',
+    },
+    {
+      sessionId: 'session-6',
+      roomId: 'room-6',
+      mode: 'peer',
+      problemTitle: 'LRU Cache',
+      difficulty: 'hard',
+      language: 'rust',
+      duration: 2880,
+      participants: [
+        {
+          userId: 'user-bp',
+          role: 'candidate',
+          displayName: 'Bianca Price',
+          username: 'bprice',
+          avatarUrl: null,
+        },
+        {
+          userId: MOCK_SESSION_HISTORY_VIEWER_ID,
+          role: 'interviewer',
+          displayName: 'Mia Evans',
+          username: 'mia',
+          avatarUrl: null,
+        },
+      ],
+      overallScore: null,
+      hasReport: false,
+      hasFeedback: false,
+      createdAt: '2024-03-15T08:00:00.000Z',
+      finishedAt: null,
+    },
+  ],
+  pagination: {
+    nextCursor: null,
+    hasMore: false,
+  },
 };
-
-export type SessionRow = {
-  id: string;
-  date: string;
-  problemName: string;
-  partner: SessionParticipant | null;
-  observer: SessionParticipant | null;
-  role: SessionRole;
-  status: SessionStatus;
-  score: number | null;
-  durationMinutes: number;
-};
-
-export const MOCK_SESSION_ROWS: SessionRow[] = [
-  {
-    id: 'session-1',
-    date: '2024-03-20',
-    problemName: 'Two Sum',
-    partner: { initials: 'BP' },
-    observer: null,
-    role: 'candidate',
-    status: 'passed',
-    score: 100,
-    durationMinutes: 45,
-  },
-  {
-    id: 'session-2',
-    date: '2024-03-19',
-    problemName: 'Longest Substring Without Repeating Characters',
-    partner: { initials: 'CW' },
-    observer: { initials: 'AL' },
-    role: 'candidate',
-    status: 'failed',
-    score: 64,
-    durationMinutes: 38,
-  },
-  {
-    id: 'session-3',
-    date: '2024-03-18',
-    problemName: 'Binary Tree Level Order Traversal',
-    partner: { initials: 'DK' },
-    observer: null,
-    role: 'interviewer',
-    status: null,
-    score: null,
-    durationMinutes: 32,
-  },
-  {
-    id: 'session-4',
-    date: '2024-03-17',
-    problemName: 'Trapping Rain Water',
-    partner: null,
-    observer: { initials: 'ME', isCurrentUser: true },
-    role: 'observer',
-    status: null,
-    score: null,
-    durationMinutes: 55,
-  },
-  {
-    id: 'session-5',
-    date: '2024-03-16',
-    problemName: 'Valid Parentheses',
-    partner: { initials: 'EZ' },
-    observer: { initials: 'MN' },
-    role: 'candidate',
-    status: 'passed',
-    score: 95,
-    durationMinutes: 20,
-  },
-  {
-    id: 'session-6',
-    date: '2024-03-15',
-    problemName: 'LRU Cache',
-    partner: { initials: 'BP' },
-    observer: null,
-    role: 'interviewer',
-    status: null,
-    score: null,
-    durationMinutes: 48,
-  },
-];
