@@ -202,7 +202,7 @@ export function DashboardRecentSessions({
         </h2>
 
         <div className="flex flex-1 flex-col gap-3 md:flex-row md:items-center xl:justify-end xl:gap-4">
-          <div className="relative w-full md:min-w-[320px] md:flex-1 xl:max-w-[400px]">
+          <div className="relative w-full md:min-w-[320px] md:flex-1 xl:max-w-100">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={searchQuery}
@@ -213,10 +213,7 @@ export function DashboardRecentSessions({
           </div>
 
           <Select value={filter} onValueChange={(value) => setFilter(value as SessionFilter)}>
-            <SelectTrigger
-              className="w-full md:w-[170px] xl:flex-none"
-              aria-label="Filter sessions"
-            >
+            <SelectTrigger className="w-full md:w-42.5 xl:flex-none" aria-label="Filter sessions">
               <SelectValue placeholder="All sessions" />
             </SelectTrigger>
             <SelectContent>
@@ -227,7 +224,7 @@ export function DashboardRecentSessions({
           </Select>
 
           <Select value={sortBy} onValueChange={(value) => setSortBy(value as SessionSort)}>
-            <SelectTrigger className="w-full md:w-[230px] xl:flex-none" aria-label="Sort sessions">
+            <SelectTrigger className="w-full md:w-57.5 xl:flex-none" aria-label="Sort sessions">
               <SelectValue placeholder="Date: Newest first" />
             </SelectTrigger>
             <SelectContent>
