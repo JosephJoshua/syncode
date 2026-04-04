@@ -201,7 +201,7 @@ export function DashboardRecentSessions() {
           <Select
             value={filter}
             onChange={(event) => setFilter(event.target.value as SessionFilter)}
-            className="min-w-[140px]"
+            className="min-w-35"
             aria-label="Filter sessions"
           >
             <option value="all">All sessions</option>
@@ -212,7 +212,7 @@ export function DashboardRecentSessions() {
           <Select
             value={sortBy}
             onChange={(event) => setSortBy(event.target.value as SessionSort)}
-            className="min-w-[220px]"
+            className="min-w-55"
             aria-label="Sort sessions"
           >
             <option value="date-desc">Date: Newest first</option>
@@ -229,14 +229,14 @@ export function DashboardRecentSessions() {
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
-                <TableHead className="w-[140px] text-center">Date</TableHead>
-                <TableHead className="min-w-[260px] text-center">Problem</TableHead>
-                <TableHead className="w-[88px] text-center">Partner</TableHead>
-                <TableHead className="w-[96px] text-center">Observer</TableHead>
-                <TableHead className="w-[120px] text-center">Role</TableHead>
-                <TableHead className="w-[120px] text-center">Status</TableHead>
-                <TableHead className="w-[90px] text-center">Score</TableHead>
-                <TableHead className="w-[100px] text-center">Duration</TableHead>
+                <TableHead className="w-35 text-center">Date</TableHead>
+                <TableHead className="min-w-65 text-center">Problem</TableHead>
+                <TableHead className="w-22 text-center">Partner</TableHead>
+                <TableHead className="w-24 text-center">Observer</TableHead>
+                <TableHead className="w-30 text-center">Role</TableHead>
+                <TableHead className="w-30 text-center">Status</TableHead>
+                <TableHead className="w-22.5 text-center">Score</TableHead>
+                <TableHead className="w-25 text-center">Duration</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
