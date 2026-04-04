@@ -17,14 +17,14 @@ export { RoomEvent } from './events.js';
 export type { ExecutionRequest, ExecutionResult, SupportedLanguage } from './execution.js';
 export type { RoomMode, RoomParticipant } from './room.js';
 export {
-  getNextStages,
-  isValidTransition,
+  getNextStatuses,
+  isValidStatusTransition,
   ROOM_MODES,
   ROOM_ROLES,
   ROOM_STATUS_LABELS,
   ROOM_STATUSES,
   RoomRole,
   RoomStatus,
-  VALID_STAGE_TRANSITIONS,
+  VALID_STATUS_TRANSITIONS,
 } from './room.js';
 export { UserRole } from './user.js';
