@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as RoomsRouteImport } from './routes/rooms'
 import { Route as RegisterRouteImport } from './routes/register'
 import { Route as ProblemsRouteImport } from './routes/problems'
 import { Route as LoginRouteImport } from './routes/login'
@@ -16,6 +17,11 @@ import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as SessionsSessionIdFeedbackRouteImport } from './routes/sessions.$sessionId.feedback'
 
+const RoomsRoute = RoomsRouteImport.update({
+  id: '/rooms',
+  path: '/rooms',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const RegisterRoute = RegisterRouteImport.update({
   id: '/register',
   path: '/register',
@@ -54,6 +60,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/problems': typeof ProblemsRoute
   '/register': typeof RegisterRoute
+  '/rooms': typeof RoomsRoute
   '/sessions/$sessionId/feedback': typeof SessionsSessionIdFeedbackRoute
 }
 export interface FileRoutesByTo {
@@ -62,6 +69,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/problems': typeof ProblemsRoute
   '/register': typeof RegisterRoute
+  '/rooms': typeof RoomsRoute
   '/sessions/$sessionId/feedback': typeof SessionsSessionIdFeedbackRoute
 }
 export interface FileRoutesById {
@@ -71,6 +79,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/problems': typeof ProblemsRoute
   '/register': typeof RegisterRoute
+  '/rooms': typeof RoomsRoute
   '/sessions/$sessionId/feedback': typeof SessionsSessionIdFeedbackRoute
 }
 export interface FileRouteTypes {
@@ -81,6 +90,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/problems'
     | '/register'
+    | '/rooms'
     | '/sessions/$sessionId/feedback'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -89,6 +99,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/problems'
     | '/register'
+    | '/rooms'
     | '/sessions/$sessionId/feedback'
   id:
     | '__root__'
@@ -97,6 +108,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/problems'
     | '/register'
+    | '/rooms'
     | '/sessions/$sessionId/feedback'
   fileRoutesById: FileRoutesById
 }
@@ -106,11 +118,19 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   ProblemsRoute: typeof ProblemsRoute
   RegisterRoute: typeof RegisterRoute
+  RoomsRoute: typeof RoomsRoute
   SessionsSessionIdFeedbackRoute: typeof SessionsSessionIdFeedbackRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/rooms': {
+      id: '/rooms'
+      path: '/rooms'
+      fullPath: '/rooms'
+      preLoaderRoute: typeof RoomsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/register': {
       id: '/register'
       path: '/register'
@@ -162,6 +182,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   ProblemsRoute: ProblemsRoute,
   RegisterRoute: RegisterRoute,
+  RoomsRoute: RoomsRoute,
   SessionsSessionIdFeedbackRoute: SessionsSessionIdFeedbackRoute,
 }
 export const routeTree = rootRouteImport

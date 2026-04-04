@@ -107,9 +107,11 @@ function RootLayout() {
   const logout = useAuthStore((state) => state.logout);
   const accountInitial = getAccountInitial(user);
   const isDashboardPage = pathname === '/dashboard';
+  const isRoomsPage = pathname === '/rooms';
   const isProblemsPage = pathname === '/problems';
   const isSessionFeedbackPage = pathname.startsWith('/sessions/') && pathname.endsWith('/feedback');
-  const showDashboardChrome = isDashboardPage || isProblemsPage || isSessionFeedbackPage;
+  const showDashboardChrome =
+    isDashboardPage || isRoomsPage || isProblemsPage || isSessionFeedbackPage;
 
   const handleLogout = () => {
     logout();
@@ -127,6 +129,7 @@ function RootLayout() {
             to: '/dashboard',
             isActive: isDashboardPage || isSessionFeedbackPage,
           },
+          { label: 'Rooms', to: '/rooms', isActive: isRoomsPage },
           { label: 'Problems', to: '/problems', isActive: isProblemsPage },
         ].map((item) => (
           <Link
@@ -143,9 +146,6 @@ function RootLayout() {
             {item.label}
           </Link>
         ))}
-        <span className="inline-flex h-8 items-center rounded-lg px-2.5 text-xs font-medium text-muted-foreground sm:px-3 sm:text-sm">
-          Rooms
-        </span>
       </nav>
     );
   } else if (pathname === '/') {
