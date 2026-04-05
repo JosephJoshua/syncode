@@ -43,6 +43,7 @@ export class AuthController {
   @Throttle(AuthController.AUTH_THROTTLE)
   @ApiOperation({ summary: 'Register a new user' })
   @ApiBody({ type: RegisterDto })
+  // TODO: Update return type to RegisterResponseDto and align @ApiResponse once register is implemented (#213)
   @ApiResponse({
     status: 201,
     type: RegisterResponseDto,
