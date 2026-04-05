@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  HttpCode,
   Param,
   Post,
   Query,
@@ -31,6 +32,8 @@ import {
   CreateRoomDto,
   CreateRoomResponseDto,
   DestroyRoomResponseDto,
+  JoinRoomDto,
+  JoinRoomResponseDto,
   ListRoomsQueryDto,
   ListRoomsResponseDto,
   RoomDetailDto,
@@ -121,14 +124,39 @@ export class RoomsController {
   @ApiResponse({ status: 404, type: ErrorResponseDto, description: 'Room not found' })
   async getRoom(@CurrentUser() user: AuthUser, @Param('id') id: string): Promise<RoomDetailDto> {
     const result = await this.roomsService.getRoom(id, user.id);
+    return this.serializeRoomDetail(result);
+  }
+
+  @Post(CONTROL_API.ROOMS.JOIN.route)
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Join a room via room code' })
+  @ApiParam({ name: 'id', description: 'Room ID (UUID)' })
+  @ApiBody({ type: JoinRoomDto })
+  @ApiResponse({
+    status: 200,
+    type: JoinRoomResponseDto,
+    description: 'Successfully joined the room',
+  })
+  @ApiResponse({ status: 400, type: ErrorResponseDto, description: 'Invalid room code' })
+  @ApiResponse({ status: 401, type: ErrorResponseDto, description: 'Unauthorized' })
+  @ApiResponse({ status: 404, type: ErrorResponseDto, description: 'Room not found' })
+  @ApiResponse({
+    status: 409,
+    type: ErrorResponseDto,
+    description: 'Room full, already joined, or finished',
+  })
+  async joinRoom(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() body: JoinRoomDto,
+  ): Promise<JoinRoomResponseDto> {
+    const result = await this.roomsService.joinRoom(id, user.id, body);
     return {
-      ...result,
-      participants: result.participants.map((p) => ({
-        ...p,
-        joinedAt: p.joinedAt.toISOString(),
-      })),
-      currentPhaseStartedAt: result.currentPhaseStartedAt?.toISOString() ?? null,
-      createdAt: result.createdAt.toISOString(),
+      room: this.serializeRoomDetail(result.room),
+      assignedRole: result.assignedRole,
+      myCapabilities: result.myCapabilities,
+      collabToken: result.collabToken,
+      collabUrl: result.collabUrl,
     };
   }
 
@@ -190,5 +218,17 @@ export class RoomsController {
   ): Promise<SubmitResultItemDto[]> {
     const { testCases, ...request } = body;
     return this.roomsService.submitProblem(id, request, testCases);
+  }
+
+  private serializeRoomDetail(detail: Awaited<ReturnType<RoomsService['getRoom']>>): RoomDetailDto {
+    return {
+      ...detail,
+      participants: detail.participants.map((p) => ({
+        ...p,
+        joinedAt: p.joinedAt.toISOString(),
+      })),
+      currentPhaseStartedAt: detail.currentPhaseStartedAt?.toISOString() ?? null,
+      createdAt: detail.createdAt.toISOString(),
+    };
   }
 }
