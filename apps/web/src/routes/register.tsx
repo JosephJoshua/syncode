@@ -13,22 +13,22 @@ import {
   UserRound,
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
-import { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { UseFormSetError } from 'react-hook-form';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import { z } from 'zod';
 import { GlowOrb, PageBackground } from '@/components/background';
+import { FloatingSymbols } from '@/components/floating-symbols';
 import { AnimatedFormField } from '@/components/form-field';
 import { CursorSpotlight } from '@/components/spotlight';
 import { TiltCard } from '@/components/tilt';
 import { api, getFieldErrorMessage, readApiError } from '@/lib/api-client';
+import { useAuthStore } from '@/stores/auth.store';
 
 export const Route = createFileRoute('/register')({
   component: RegisterPage,
 });
-
-const CODE_SYMBOLS = ['</', '/>', '{;}', '( )', '[ ]', '&&', '=>', '::', '/**/', '!=', '++', '0x'];
 
 const stagger = (i: number) => ({ delay: 0.1 + i * 0.08 });
 
@@ -56,40 +56,9 @@ const registerFormSchema = z
 
 type RegisterFormValues = z.infer<typeof registerFormSchema>;
 
-const FloatingSymbols = memo(function FloatingSymbols() {
-  const symbols = useMemo(
-    () =>
-      CODE_SYMBOLS.map((symbol, i) => ({
-        symbol,
-        left: `${8 + ((i * 7.3) % 84)}%`,
-        delay: i * 1.2,
-        duration: 12 + (i % 5) * 3,
-        size: 10 + (i % 3) * 2,
-      })),
-    [],
-  );
-
-  return (
-    <div className="pointer-events-none absolute inset-0 overflow-hidden">
-      {symbols.map((s) => (
-        <span
-          key={s.symbol}
-          className="absolute font-mono text-primary/[0.07] select-none"
-          style={{
-            left: s.left,
-            fontSize: `${s.size}px`,
-            animation: `float-drift ${s.duration}s ${s.delay}s linear infinite`,
-          }}
-        >
-          {s.symbol}
-        </span>
-      ))}
-    </div>
-  );
-});
-
 function RegisterPage() {
   const navigate = useNavigate();
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const [submissionError, setSubmissionError] = useState<string | null>(null);
   const successTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const {
@@ -108,6 +77,12 @@ function RegisterPage() {
     },
   });
 
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate({ to: '/dashboard' }).catch(() => {});
+    }
+  }, [isAuthenticated, navigate]);
+
   const registerMutation = useMutation({
     mutationFn: (values: RegisterFormValues) =>
       api(CONTROL_API.AUTH.REGISTER, {
@@ -117,6 +92,7 @@ function RegisterPage() {
           password: values.password,
         },
       }),
+    // Response body intentionally ignored; user must sign in manually after registration.
     onSuccess: () => {
       successTimerRef.current = setTimeout(() => {
         toast.success('Account created successfully. Please sign in.');
@@ -336,8 +312,8 @@ function RegisterPage() {
                   <span className="absolute inline-flex size-full animate-ping rounded-full bg-primary/60" />
                   <span className="relative inline-flex size-2 rounded-full bg-primary" />
                 </span>
-                <span className="font-mono">Provisioning secure workspace</span>
-                <span className="ml-auto font-mono text-muted-foreground/50">Ready</span>
+                <span className="font-mono">Secure registration</span>
+                <span className="ml-auto font-mono text-muted-foreground/50">TLS 1.3</span>
               </div>
             </Card>
           </TiltCard>

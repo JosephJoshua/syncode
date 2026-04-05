@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 export const ERROR_CODES = {
   AUTH_INVALID_CREDENTIALS: 'AUTH_INVALID_CREDENTIALS',
+  // TODO: Backend must throw these error codes in the register endpoint (#213)
   AUTH_EMAIL_TAKEN: 'AUTH_EMAIL_TAKEN',
   AUTH_USERNAME_TAKEN: 'AUTH_USERNAME_TAKEN',
   USER_BANNED: 'USER_BANNED',

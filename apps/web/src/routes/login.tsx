@@ -5,12 +5,13 @@ import { useMutation } from '@tanstack/react-query';
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { ArrowRight, Check, LoaderCircle, LockKeyhole, Mail, Terminal } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
-import { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { UseFormSetError } from 'react-hook-form';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import { z } from 'zod';
 import { GlowOrb, PageBackground } from '@/components/background';
+import { FloatingSymbols } from '@/components/floating-symbols';
 import { AnimatedFormField } from '@/components/form-field';
 import { CursorSpotlight } from '@/components/spotlight';
 import { TiltCard } from '@/components/tilt';
@@ -28,41 +29,7 @@ export const Route = createFileRoute('/login')({
   component: LoginPage,
 });
 
-const CODE_SYMBOLS = ['</', '/>', '{;}', '( )', '[ ]', '&&', '=>', '::', '/**/', '!=', '++', '0x'];
-
 const stagger = (i: number) => ({ delay: 0.1 + i * 0.08 });
-
-const FloatingSymbols = memo(function FloatingSymbols() {
-  const symbols = useMemo(
-    () =>
-      CODE_SYMBOLS.map((symbol, i) => ({
-        symbol,
-        left: `${8 + ((i * 7.3) % 84)}%`,
-        delay: i * 1.2,
-        duration: 12 + (i % 5) * 3,
-        size: 10 + (i % 3) * 2,
-      })),
-    [],
-  );
-
-  return (
-    <div className="pointer-events-none absolute inset-0 overflow-hidden">
-      {symbols.map((s, _i) => (
-        <span
-          key={s.symbol}
-          className="absolute font-mono text-primary/[0.07] select-none"
-          style={{
-            left: s.left,
-            fontSize: `${s.size}px`,
-            animation: `float-drift ${s.duration}s ${s.delay}s linear infinite`,
-          }}
-        >
-          {s.symbol}
-        </span>
-      ))}
-    </div>
-  );
-});
 
 function LoginPage() {
   const navigate = useNavigate();
@@ -155,7 +122,7 @@ function LoginPage() {
             className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl"
           >
             Sign in to{' '}
-            <span className="bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
+            <span className="bg-linear-to-r from-primary to-primary/60 bg-clip-text text-transparent">
               SynCode
             </span>
           </motion.h1>
