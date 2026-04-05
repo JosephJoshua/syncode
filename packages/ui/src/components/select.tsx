@@ -72,7 +72,7 @@ const SelectTrigger = React.forwardRef<
       ref={ref}
       data-slot="select-trigger"
       className={cn(
-        'flex h-11 w-full items-center justify-between gap-2 rounded-lg border border-input bg-transparent px-3 py-2.5 text-left text-sm outline-none transition-colors data-placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-input/50 disabled:opacity-50 dark:bg-input/30',
+        'flex h-11 w-full items-center justify-between gap-3 rounded-2xl border border-white/5 bg-background/80 px-4 py-2.5 text-left text-sm font-medium outline-none shadow-[inset_0_1px_0_rgb(255_255_255/0.015)] transition-[border-color,background-color,box-shadow] data-placeholder:text-muted-foreground focus-visible:border-ring/60 focus-visible:ring-3 focus-visible:ring-ring/40 disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-input/50 disabled:opacity-50',
         className,
       )}
       {...props}
@@ -97,22 +97,28 @@ const SelectContent = React.forwardRef<
         data-slot="select-content"
         position={position}
         className={cn(
-          'relative z-50 min-w-40 overflow-hidden rounded-xl border border-border/80 bg-card/95 text-popover-foreground shadow-[0_18px_50px_-22px_rgb(0_0_0/0.85)] backdrop-blur-xl data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
+          'isolate relative z-70 max-h-80 min-w-56 overflow-hidden rounded-[1.15rem] p-1.5 text-popover-foreground shadow-[0_24px_64px_-30px_rgb(0_0_0/0.92)] backdrop-blur-xl data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
           position === 'popper' &&
-            'data-[side=bottom]:translate-y-1 data-[side=left]:-translate-x-1 data-[side=right]:translate-x-1 data-[side=top]:-translate-y-1',
+            'data-[side=bottom]:translate-y-2 data-[side=left]:-translate-x-2 data-[side=right]:translate-x-2 data-[side=top]:-translate-y-2',
           className,
         )}
+        style={{
+          backgroundColor: 'rgb(11 13 13 / 0.985)',
+          ...(position === 'popper'
+            ? {
+                width: 'var(--radix-select-trigger-width)',
+                minWidth: 'var(--radix-select-trigger-width)',
+              }
+            : {}),
+        }}
         {...props}
       >
         <SelectPrimitive.ScrollUpButton className="flex cursor-default items-center justify-center py-1">
           <ChevronUpIcon className="size-4" />
         </SelectPrimitive.ScrollUpButton>
         <SelectPrimitive.Viewport
-          className={cn(
-            'p-1.5',
-            position === 'popper' &&
-              'h-(--radix-select-trigger-height) min-w-(--radix-select-trigger-width)',
-          )}
+          className={cn('w-full p-0.5', position === 'popper' && 'min-w-full')}
+          style={{ backgroundColor: 'rgb(11 14 13 / 0.98)' }}
         >
           {children}
         </SelectPrimitive.Viewport>
@@ -149,12 +155,12 @@ const SelectItem = React.forwardRef<
       ref={ref}
       data-slot="select-item"
       className={cn(
-        'relative flex w-full cursor-default select-none items-center rounded-lg py-2.5 pl-8 pr-3 text-sm font-medium outline-none transition-colors data-disabled:pointer-events-none data-highlighted:bg-muted/45 data-highlighted:text-foreground data-[state=checked]:text-foreground data-disabled:opacity-50',
+        'relative flex min-h-11 w-full cursor-default select-none items-center whitespace-nowrap rounded-xl py-2.5 pl-10 pr-4 text-sm font-medium text-foreground/88 outline-none transition-colors data-disabled:pointer-events-none data-highlighted:bg-white/[0.035] data-highlighted:text-foreground data-[state=checked]:bg-white/[0.018] data-[state=checked]:text-foreground data-disabled:opacity-50',
         className,
       )}
       {...props}
     >
-      <span className="absolute left-2.5 flex size-4 items-center justify-center">
+      <span className="absolute left-3.5 flex size-4 items-center justify-center">
         <SelectPrimitive.ItemIndicator>
           <CheckIcon className="size-3.5 text-primary" />
         </SelectPrimitive.ItemIndicator>

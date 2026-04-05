@@ -80,15 +80,15 @@ export function ProblemsResultsToolbar({
         )}
       </div>
 
-      <div className="flex w-full flex-col gap-2 sm:w-48">
-        <p className="font-mono text-[11px] tracking-[0.16em] text-muted-foreground/60 uppercase">
+      <div className="flex w-full flex-col gap-3 sm:w-56 sm:shrink-0 sm:self-start sm:pl-3 sm:pr-1 sm:pt-1">
+        <p className="px-1 font-mono text-[11px] tracking-[0.16em] text-muted-foreground/60 uppercase">
           Sort by
         </p>
         <Select value={sort} onValueChange={(value) => onSortChange(value as ProblemSortKey)}>
-          <SelectTrigger className="h-10 rounded-xl border-border/60 bg-background/70">
+          <SelectTrigger className="h-11 rounded-2xl border-white/[0.05] bg-background/80">
             <SelectValue placeholder="Select sort" />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent align="end" sideOffset={8}>
             {SORT_OPTIONS.map((option) => (
               <SelectItem key={option.value} value={option.value}>
                 {option.label}
