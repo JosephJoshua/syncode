@@ -9,12 +9,13 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
+import type { UserProfileResponse } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
 import { refreshTokens, users } from '@syncode/db';
 import { CACHE_SERVICE, type ICacheService } from '@syncode/shared/ports';
 import type { EnvConfig } from '@/config/env.config';
 import { DB_CLIENT } from '@/modules/db/db.module';
-import { toUserProfile, type UserProfile } from '@/modules/users/user-profile.mapper';
+import { toUserProfile } from '@/modules/users/user-profile.mapper';
 
 const scryptAsync = promisify(scrypt);
 
@@ -43,7 +44,7 @@ export class AuthService {
   ): Promise<{
     accessToken: string;
     refreshToken: string;
-    user: UserProfile;
+    user: UserProfileResponse;
   }> {
     const normalizedEmail = this.normalizeEmail(email);
     const normalizedUsername = username.trim();
@@ -107,7 +108,7 @@ export class AuthService {
   ): Promise<{
     accessToken: string;
     refreshToken: string;
-    user: UserProfile;
+    user: UserProfileResponse;
   }> {
     const normalizedIdentifier = identifier.trim();
     const normalizedEmailIdentifier = this.normalizeEmail(normalizedIdentifier);

@@ -1,19 +1,4 @@
-export interface UserProfile {
-  id: string;
-  email: string;
-  username: string;
-  displayName: string | null;
-  role: 'user' | 'admin';
-  avatarUrl: string | null;
-  bio: string | null;
-  stats: {
-    totalSessions: number;
-    totalProblems: number;
-    streakDays: number;
-  };
-  createdAt: string;
-  updatedAt: string;
-}
+import type { UserProfileResponse } from '@syncode/contracts';
 
 export interface UserProfileRecord {
   id: string;
@@ -27,7 +12,7 @@ export interface UserProfileRecord {
   updatedAt: Date;
 }
 
-export function toUserProfile(user: UserProfileRecord): UserProfile {
+export function toUserProfile(user: UserProfileRecord): UserProfileResponse {
   return {
     id: user.id,
     email: user.email,

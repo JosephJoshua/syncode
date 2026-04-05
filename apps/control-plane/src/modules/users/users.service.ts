@@ -1,13 +1,14 @@
 import { Inject, Injectable, NotFoundException, NotImplementedException } from '@nestjs/common';
+import type { UserProfileResponse } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
 import { DB_CLIENT } from '@/modules/db/db.module';
-import { toUserProfile, type UserProfile } from './user-profile.mapper';
+import { toUserProfile } from './user-profile.mapper';
 
 @Injectable()
 export class UsersService {
   constructor(@Inject(DB_CLIENT) private readonly db: Database) {}
 
-  async findById(id: string): Promise<UserProfile> {
+  async findById(id: string): Promise<UserProfileResponse> {
     const user = await this.db.query.users.findFirst({
       columns: {
         id: true,
@@ -30,7 +31,7 @@ export class UsersService {
     return toUserProfile(user);
   }
 
-  async findByEmail(email: string): Promise<UserProfile | null> {
+  async findByEmail(email: string): Promise<UserProfileResponse | null> {
     const normalizedEmail = email.trim().toLowerCase();
 
     const user = await this.db.query.users.findFirst({
@@ -60,12 +61,12 @@ export class UsersService {
     email: string;
     passwordHash: string;
     name?: string;
-  }): Promise<UserProfile> {
+  }): Promise<UserProfileResponse> {
     // TODO: Implement user creation
     throw new NotImplementedException();
   }
 
-  async update(_id: string, _data: { name?: string; bio?: string }): Promise<UserProfile> {
+  async update(_id: string, _data: { name?: string; bio?: string }): Promise<UserProfileResponse> {
     // TODO: Implement user profile update
     throw new NotImplementedException();
   }
