@@ -1,4 +1,10 @@
-import { ROOM_MODES, ROOM_ROLES, ROOM_STATUSES, SUPPORTED_LANGUAGES } from '@syncode/shared';
+import {
+  JOINABLE_ROLES,
+  ROOM_MODES,
+  ROOM_ROLES,
+  ROOM_STATUSES,
+  SUPPORTED_LANGUAGES,
+} from '@syncode/shared';
 import { z } from 'zod';
 import { paginationQuerySchema, paginationSchema } from './pagination.js';
 
@@ -256,3 +262,26 @@ export const roomDetailSchema = z.object({
 });
 
 export type RoomDetail = z.infer<typeof roomDetailSchema>;
+
+export const joinRoomSchema = z
+  .object({
+    roomCode: z
+      .string()
+      .length(6)
+      .describe('6-char invite code')
+      .meta({ examples: ['A3K7M2'] }),
+    preferredRole: z.enum(JOINABLE_ROLES).optional().describe('Preferred role in the room'),
+  })
+  .strict();
+
+export type JoinRoomInput = z.infer<typeof joinRoomSchema>;
+
+export const joinRoomResponseSchema = z.object({
+  room: roomDetailSchema.describe('Full room detail after joining'),
+  assignedRole: z.enum(ROOM_ROLES).describe('The role assigned to the joining user'),
+  myCapabilities: z.array(z.string()).describe('Resolved room capabilities for assigned role'),
+  collabToken: z.string().describe('Yjs auth token for collab-plane WebSocket'),
+  collabUrl: z.string().describe('Collab-plane WebSocket URL'),
+});
+
+export type JoinRoomResponse = z.infer<typeof joinRoomResponseSchema>;
