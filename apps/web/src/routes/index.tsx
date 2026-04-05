@@ -81,8 +81,8 @@ const LANGUAGES = [
 function LanguageMarquee() {
   return (
     <div className="relative overflow-hidden border-y border-border/20 py-5">
-      <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-24 bg-gradient-to-r from-background to-transparent" />
-      <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-24 bg-gradient-to-l from-background to-transparent" />
+      <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-24 bg-linear-to-r from-background to-transparent" />
+      <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-24 bg-linear-to-l from-background to-transparent" />
 
       <div className="flex w-max animate-[marquee_30s_linear_infinite]">
         {[0, 1].map((copy) =>
@@ -123,7 +123,7 @@ function AnimatedNumber({ to }: { to: number }) {
 
 function GradientDivider() {
   return (
-    <div className="mx-auto h-px max-w-xs bg-gradient-to-r from-transparent via-primary/20 to-transparent" />
+    <div className="mx-auto h-px max-w-xs bg-linear-to-r from-transparent via-primary/20 to-transparent" />
   );
 }
 
@@ -205,7 +205,7 @@ function HomePage() {
           >
             Code interviews,
             <br className="hidden sm:block" />
-            <span className="bg-gradient-to-r from-primary via-primary/60 to-primary bg-[length:200%_auto] bg-clip-text text-transparent animate-[gradient-x_4s_ease-in-out_infinite]">
+            <span className="bg-linear-to-r from-primary via-primary/60 to-primary bg-[length:200%_auto] bg-clip-text text-transparent animate-[gradient-x_4s_ease-in-out_infinite]">
               reimagined.
             </span>
           </motion.h1>
@@ -530,7 +530,7 @@ function HomePage() {
             <h2 className="mt-4 text-4xl font-bold tracking-tighter text-foreground sm:text-5xl">
               Stop grinding <span className="text-muted-foreground/30 line-through">alone</span>
               <br />
-              <span className="bg-gradient-to-r from-primary via-primary/60 to-primary bg-[length:200%_auto] bg-clip-text text-transparent animate-[gradient-x_4s_ease-in-out_infinite]">
+              <span className="bg-linear-to-r from-primary via-primary/60 to-primary bg-[length:200%_auto] bg-clip-text text-transparent animate-[gradient-x_4s_ease-in-out_infinite]">
                 Start syncing.
               </span>
             </h2>
