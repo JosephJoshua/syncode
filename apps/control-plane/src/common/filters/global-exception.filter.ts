@@ -62,8 +62,13 @@ export class GlobalExceptionFilter implements ExceptionFilter {
           message = exceptionResponse;
         } else {
           const res = exceptionResponse as Record<string, unknown>;
-          message = (res.message as string) || exception.message;
-          code = res.code as string | undefined;
+          message =
+            typeof res.message === 'string'
+              ? res.message
+              : Array.isArray(res.message)
+                ? res.message.join(', ')
+                : exception.message;
+          code = typeof res.code === 'string' ? res.code : undefined;
           details = res;
         }
 
