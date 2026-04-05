@@ -1,15 +1,21 @@
 import {
+  BadRequestException,
+  ConflictException,
   ForbiddenException,
   InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import { COLLAB_CLIENT, EXECUTION_CLIENT } from '@syncode/contracts';
 import { MEDIA_SERVICE } from '@syncode/shared/ports';
 import { DB_CLIENT } from '@/modules/db/db.module';
 import {
   createMockCollabClient,
+  createMockConfigService,
   createMockExecutionClient,
+  createMockJwtService,
   createMockMediaService,
 } from '@/test/mock-factories';
 import { RoomsService } from './rooms.service.js';
@@ -93,6 +99,8 @@ describe('RoomsService', () => {
         { provide: EXECUTION_CLIENT, useValue: createMockExecutionClient() },
         { provide: COLLAB_CLIENT, useValue: mockCollabClient },
         { provide: MEDIA_SERVICE, useValue: mockMediaService },
+        { provide: JwtService, useValue: createMockJwtService('mock-collab-token') },
+        { provide: ConfigService, useValue: createMockConfigService() },
       ],
     }).compile();
 
@@ -153,73 +161,237 @@ describe('RoomsService', () => {
     });
   });
 
-  describe('getRoom', () => {
-    it('GIVEN non-existent room WHEN getting details THEN throws NotFoundException', async () => {
-      dbSetup.mocks.mockSelect.mockReturnValue({
+  describe('joinRoom', () => {
+    const JOINING_USER_ID = '22222222-3333-4444-5555-666666666666';
+    const JOIN_INPUT = { roomCode: 'A3K7M2' };
+
+    it('GIVEN non-existent room WHEN joining THEN throws NotFoundException', async () => {
+      dbSetup.mocks.mockSelect.mockReturnValueOnce({
+        from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
+      });
+
+      await expect(service.joinRoom('nonexistent', JOINING_USER_ID, JOIN_INPUT)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('GIVEN wrong invite code WHEN joining THEN throws BadRequestException', async () => {
+      dbSetup.mocks.mockSelect.mockReturnValueOnce({
         from: vi.fn().mockReturnValue({
-          where: vi.fn().mockResolvedValue([]),
+          where: vi.fn().mockResolvedValue([ROOM_ROW]),
+        }),
+      });
+
+      await expect(
+        service.joinRoom(ROOM_ROW.id, JOINING_USER_ID, { roomCode: 'WRONG1' }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('GIVEN finished room WHEN joining THEN throws ConflictException', async () => {
+      dbSetup.mocks.mockSelect.mockReturnValueOnce({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockResolvedValue([{ ...ROOM_ROW, status: 'finished' }]),
+        }),
+      });
+
+      await expect(service.joinRoom(ROOM_ROW.id, JOINING_USER_ID, JOIN_INPUT)).rejects.toThrow(
+        ConflictException,
+      );
+    });
+
+    it('GIVEN user already active in room WHEN joining THEN throws ConflictException', async () => {
+      dbSetup.mocks.mockSelect.mockReturnValueOnce({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockResolvedValue([ROOM_ROW]),
+        }),
+      });
+
+      const txSelectWhere = vi
+        .fn()
+        .mockResolvedValue([{ id: 'p-1', userId: JOINING_USER_ID, isActive: true }]);
+
+      dbSetup.db.transaction = vi.fn().mockImplementation(async (cb) =>
+        cb({
+          select: vi.fn().mockReturnValue({
+            from: vi.fn().mockReturnValue({ where: txSelectWhere }),
+          }),
+        }),
+      );
+
+      await expect(service.joinRoom(ROOM_ROW.id, JOINING_USER_ID, JOIN_INPUT)).rejects.toThrow(
+        ConflictException,
+      );
+    });
+
+    it('GIVEN room at max capacity WHEN joining THEN throws ConflictException', async () => {
+      dbSetup.mocks.mockSelect.mockReturnValueOnce({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockResolvedValue([{ ...ROOM_ROW, maxParticipants: 2 }]),
+        }),
+      });
+
+      const txSelectWhere = vi.fn().mockResolvedValue([
+        { id: 'p-1', userId: HOST_ID, isActive: true },
+        { id: 'p-2', userId: 'other-user', isActive: true },
+      ]);
+
+      dbSetup.db.transaction = vi.fn().mockImplementation(async (cb) =>
+        cb({
+          select: vi.fn().mockReturnValue({
+            from: vi.fn().mockReturnValue({ where: txSelectWhere }),
+          }),
+        }),
+      );
+
+      await expect(service.joinRoom(ROOM_ROW.id, JOINING_USER_ID, JOIN_INPUT)).rejects.toThrow(
+        ConflictException,
+      );
+    });
+
+    it('GIVEN valid input WHEN joining THEN inserts participant and returns room detail with collab credentials', async () => {
+      const participantRow = {
+        userId: JOINING_USER_ID,
+        username: 'joiner',
+        displayName: 'Joiner',
+        avatarUrl: null,
+        role: 'candidate',
+        isActive: true,
+        joinedAt: new Date('2026-04-02T01:00:00Z'),
+      };
+
+      dbSetup.mocks.mockSelect.mockReturnValueOnce({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockResolvedValue([ROOM_ROW]),
+        }),
+      });
+
+      const txInsert = vi.fn().mockReturnValue({
+        values: vi.fn().mockReturnValue({ returning: vi.fn().mockResolvedValue([]) }),
+      });
+      dbSetup.db.transaction = vi.fn().mockImplementation(async (cb) =>
+        cb({
+          select: vi.fn().mockReturnValue({
+            from: vi.fn().mockReturnValue({
+              where: vi.fn().mockResolvedValue([]),
+            }),
+          }),
+          insert: txInsert,
+        }),
+      );
+
+      dbSetup.mocks.mockSelect.mockReturnValueOnce({
+        from: vi.fn().mockReturnValue({
           innerJoin: vi.fn().mockReturnValue({
-            where: vi.fn().mockResolvedValue([]),
+            where: vi.fn().mockResolvedValue([participantRow]),
           }),
         }),
       });
 
-      await expect(service.getRoom('nonexistent', HOST_ID)).rejects.toThrow(NotFoundException);
+      const result = await service.joinRoom(ROOM_ROW.id, JOINING_USER_ID, JOIN_INPUT);
+
+      expect(result.assignedRole).toBe('candidate');
+      expect(result.collabToken).toBe('mock-collab-token');
+      expect(result.collabUrl).toBe('http://localhost:3001');
+      expect(result.myCapabilities.length).toBeGreaterThan(0);
+      expect(result.room.roomId).toBe(ROOM_ROW.id);
     });
 
-    it('GIVEN user not a participant WHEN getting details THEN throws ForbiddenException', async () => {
-      const mockWhere = vi
-        .fn()
-        .mockResolvedValueOnce([ROOM_ROW]) // room exists
-        .mockResolvedValueOnce([]); // no participants with this userId
-
-      dbSetup.mocks.mockSelect.mockReturnValue({
-        from: vi.fn().mockReturnValue({
-          where: mockWhere,
-          innerJoin: vi.fn().mockReturnValue({ where: mockWhere }),
-        }),
-      });
-
-      await expect(service.getRoom(ROOM_ROW.id, 'stranger')).rejects.toThrow(ForbiddenException);
-    });
-
-    it('GIVEN valid participant WHEN getting details THEN returns room with role and capabilities', async () => {
+    it('GIVEN preferred role WHEN joining THEN assigns requested role', async () => {
       const participantRow = {
-        userId: HOST_ID,
-        username: 'testuser',
-        displayName: 'Test',
+        userId: JOINING_USER_ID,
+        username: 'joiner',
+        displayName: 'Joiner',
         avatarUrl: null,
-        role: 'host',
+        role: 'spectator',
         isActive: true,
-        joinedAt: new Date('2026-04-02T00:00:00Z'),
+        joinedAt: new Date('2026-04-02T01:00:00Z'),
       };
 
-      const mockWhere = vi
-        .fn()
-        .mockResolvedValueOnce([ROOM_ROW])
-        .mockResolvedValueOnce([participantRow]);
-
-      dbSetup.mocks.mockSelect.mockReturnValue({
+      dbSetup.mocks.mockSelect.mockReturnValueOnce({
         from: vi.fn().mockReturnValue({
-          where: mockWhere,
-          innerJoin: vi.fn().mockReturnValue({ where: mockWhere }),
+          where: vi.fn().mockResolvedValue([ROOM_ROW]),
         }),
       });
 
-      const result = await service.getRoom(ROOM_ROW.id, HOST_ID);
-
-      expect(result.roomId).toBe(ROOM_ROW.id);
-      expect(result.myRole).toBe('host');
-      expect(result.myCapabilities).toEqual(
-        expect.arrayContaining(['code:edit', 'participant:kick', 'room:settings']),
+      dbSetup.db.transaction = vi.fn().mockImplementation(async (cb) =>
+        cb({
+          select: vi.fn().mockReturnValue({
+            from: vi.fn().mockReturnValue({
+              where: vi.fn().mockResolvedValue([]),
+            }),
+          }),
+          insert: vi.fn().mockReturnValue({
+            values: vi.fn().mockReturnValue({ returning: vi.fn().mockResolvedValue([]) }),
+          }),
+        }),
       );
-      expect(result.myCapabilities.length).toBeGreaterThan(0);
-      expect(result.participants).toEqual([participantRow]);
-      expect(result.config).toEqual({
-        maxParticipants: 2,
-        maxDuration: 120,
-        isPrivate: true,
+
+      dbSetup.mocks.mockSelect.mockReturnValueOnce({
+        from: vi.fn().mockReturnValue({
+          innerJoin: vi.fn().mockReturnValue({
+            where: vi.fn().mockResolvedValue([participantRow]),
+          }),
+        }),
       });
+
+      const result = await service.joinRoom(ROOM_ROW.id, JOINING_USER_ID, {
+        roomCode: 'A3K7M2',
+        preferredRole: 'spectator',
+      });
+
+      expect(result.assignedRole).toBe('spectator');
+    });
+
+    it('GIVEN inactive participant WHEN rejoining THEN updates existing row', async () => {
+      const existingInactive = {
+        id: 'p-existing',
+        userId: JOINING_USER_ID,
+        isActive: false,
+      };
+
+      const participantRow = {
+        userId: JOINING_USER_ID,
+        username: 'joiner',
+        displayName: 'Joiner',
+        avatarUrl: null,
+        role: 'candidate',
+        isActive: true,
+        joinedAt: new Date('2026-04-02T01:00:00Z'),
+      };
+
+      dbSetup.mocks.mockSelect.mockReturnValueOnce({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockResolvedValue([ROOM_ROW]),
+        }),
+      });
+
+      const txUpdate = vi.fn().mockReturnValue({
+        set: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(undefined) }),
+      });
+
+      dbSetup.db.transaction = vi.fn().mockImplementation(async (cb) =>
+        cb({
+          select: vi.fn().mockReturnValue({
+            from: vi.fn().mockReturnValue({
+              where: vi.fn().mockResolvedValue([existingInactive]),
+            }),
+          }),
+          update: txUpdate,
+        }),
+      );
+
+      dbSetup.mocks.mockSelect.mockReturnValueOnce({
+        from: vi.fn().mockReturnValue({
+          innerJoin: vi.fn().mockReturnValue({
+            where: vi.fn().mockResolvedValue([participantRow]),
+          }),
+        }),
+      });
+
+      const result = await service.joinRoom(ROOM_ROW.id, JOINING_USER_ID, JOIN_INPUT);
+
+      expect(result.assignedRole).toBe('candidate');
+      expect(result.room.roomId).toBe(ROOM_ROW.id);
     });
   });
 

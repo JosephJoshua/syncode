@@ -1,11 +1,13 @@
-import { ForbiddenException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import { COLLAB_CLIENT, EXECUTION_CLIENT } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
 import { roomParticipants } from '@syncode/db';
 import { INVITE_CODE_LENGTH } from '@syncode/shared';
 import { MEDIA_SERVICE } from '@syncode/shared/ports';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { DB_CLIENT } from '@/modules/db/db.module';
 import {
   createTestDb,
@@ -16,7 +18,9 @@ import {
 } from '@/test/integration-setup';
 import {
   createMockCollabClient,
+  createMockConfigService,
   createMockExecutionClient,
+  createMockJwtService,
   createMockMediaService,
 } from '@/test/mock-factories';
 import { RoomsService } from './rooms.service.js';
@@ -39,6 +43,8 @@ beforeEach(async () => {
       { provide: EXECUTION_CLIENT, useValue: createMockExecutionClient() },
       { provide: COLLAB_CLIENT, useValue: createMockCollabClient() },
       { provide: MEDIA_SERVICE, useValue: createMockMediaService() },
+      { provide: JwtService, useValue: createMockJwtService() },
+      { provide: ConfigService, useValue: createMockConfigService() },
     ],
   }).compile();
 
@@ -210,5 +216,83 @@ describe('getRoom', () => {
     await insertParticipant(db, room.id, host.id, 'host');
 
     await expect(service.getRoom(room.id, stranger.id)).rejects.toThrow(ForbiddenException);
+  });
+});
+
+describe('joinRoom', () => {
+  it('GIVEN valid room code WHEN joining THEN persists participant and returns room detail with collab credentials', async () => {
+    const host = await insertUser(db);
+    const joiner = await insertUser(db);
+    const room = await insertRoom(db, host.id, { maxParticipants: 4 });
+    await insertParticipant(db, room.id, host.id, 'host');
+
+    const result = await service.joinRoom(room.id, joiner.id, {
+      roomCode: room.inviteCode,
+    });
+
+    expect(result.assignedRole).toBe('candidate');
+    expect(result.collabToken).toBe('test-collab-token');
+    expect(result.collabUrl).toBe('http://localhost:3001');
+    expect(result.room.roomId).toBe(room.id);
+    expect(result.room.participants).toHaveLength(2);
+    expect(result.room.participants.find((p) => p.userId === joiner.id)?.role).toBe('candidate');
+
+    const rows = await db
+      .select()
+      .from(roomParticipants)
+      .where(and(eq(roomParticipants.roomId, room.id), eq(roomParticipants.userId, joiner.id)));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ role: 'candidate', isActive: true });
+  });
+
+  it('GIVEN room at capacity WHEN another user joins THEN throws ConflictException', async () => {
+    const host = await insertUser(db);
+    const existing = await insertUser(db);
+    const joiner = await insertUser(db);
+    const room = await insertRoom(db, host.id, { maxParticipants: 2 });
+    await insertParticipant(db, room.id, host.id, 'host');
+    await insertParticipant(db, room.id, existing.id, 'candidate');
+
+    await expect(
+      service.joinRoom(room.id, joiner.id, { roomCode: room.inviteCode }),
+    ).rejects.toThrow(ConflictException);
+  });
+
+  it('GIVEN user previously left WHEN rejoining THEN reactivates existing row with new role', async () => {
+    const host = await insertUser(db);
+    const joiner = await insertUser(db);
+    const room = await insertRoom(db, host.id, { maxParticipants: 4 });
+    await insertParticipant(db, room.id, host.id, 'host');
+
+    const [leftParticipant] = await db
+      .insert(roomParticipants)
+      .values({ roomId: room.id, userId: joiner.id, role: 'candidate', isActive: false })
+      .returning();
+
+    const result = await service.joinRoom(room.id, joiner.id, {
+      roomCode: room.inviteCode,
+      preferredRole: 'interviewer',
+    });
+
+    expect(result.assignedRole).toBe('interviewer');
+
+    const rows = await db
+      .select()
+      .from(roomParticipants)
+      .where(and(eq(roomParticipants.roomId, room.id), eq(roomParticipants.userId, joiner.id)));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.id).toBe(leftParticipant!.id);
+    expect(rows[0]).toMatchObject({ role: 'interviewer', isActive: true });
+    expect(rows[0]!.leftAt).toBeNull();
+  });
+
+  it('GIVEN non-existent room WHEN joining THEN throws NotFoundException', async () => {
+    const joiner = await insertUser(db);
+
+    await expect(
+      service.joinRoom('00000000-0000-0000-0000-000000000000', joiner.id, {
+        roomCode: 'ABCDEF',
+      }),
+    ).rejects.toThrow(NotFoundException);
   });
 });

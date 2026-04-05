@@ -15,7 +15,7 @@ import { JwtStrategy } from './jwt.strategy.js';
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
       useFactory: (config: ConfigService<EnvConfig>) => ({
-        secret: config.get('JWT_SECRET', { infer: true }),
+        secret: config.get('AUTH_JWT_SECRET', { infer: true }),
         signOptions: {
           expiresIn: config.get('JWT_EXPIRATION', { infer: true }),
         },

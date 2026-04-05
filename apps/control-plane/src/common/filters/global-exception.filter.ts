@@ -22,6 +22,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
 
     let status = HttpStatus.INTERNAL_SERVER_ERROR;
     let message = 'Internal server error';
+    let code: string | undefined;
     let details: unknown;
 
     (() => {
@@ -56,11 +57,16 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       if (exception instanceof HttpException) {
         status = exception.getStatus();
         const exceptionResponse = exception.getResponse();
-        message =
-          typeof exceptionResponse === 'string'
-            ? exceptionResponse
-            : (exceptionResponse as { message?: string }).message || exception.message;
-        details = typeof exceptionResponse === 'object' ? exceptionResponse : undefined;
+
+        if (typeof exceptionResponse === 'string') {
+          message = exceptionResponse;
+        } else {
+          const res = exceptionResponse as Record<string, unknown>;
+          message = (res.message as string) || exception.message;
+          code = res.code as string | undefined;
+          details = res;
+        }
+
         if (status >= 500) {
           this.logger.error(`HTTP ${status}: ${message}`, exception.stack);
         }
@@ -80,6 +86,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
 
     response.status(status).json({
       statusCode: status,
+      ...(code ? { code } : {}),
       message,
       timestamp: new Date().toISOString(),
       ...(details ? { details } : {}),

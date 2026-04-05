@@ -1,5 +1,7 @@
 import type { INestApplication } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
+import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import { COLLAB_CLIENT, EXECUTION_CLIENT } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
@@ -10,22 +12,16 @@ import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard';
 import { DB_CLIENT } from '@/modules/db/db.module';
 import { createTestDb, insertParticipant, insertRoom, insertUser } from '@/test/integration-setup';
 import {
+  asUser,
   createMockCollabClient,
+  createMockConfigService,
   createMockExecutionClient,
+  createMockJwtService,
   createMockMediaService,
+  TestAuthGuard,
 } from '@/test/mock-factories';
 import { RoomsController } from './rooms.controller.js';
 import { RoomsService } from './rooms.service.js';
-
-const TEST_USER_ID = '11111111-1111-1111-1111-111111111111';
-
-class MockJwtAuthGuard {
-  canActivate(context: any) {
-    const req = context.switchToHttp().getRequest();
-    req.user = { id: TEST_USER_ID, email: 'test@example.com' };
-    return true;
-  }
-}
 
 let app: INestApplication;
 let db: Database;
@@ -38,8 +34,6 @@ beforeEach(async () => {
   db = testDb.db;
   cleanup = testDb.cleanup;
 
-  await insertUser(db, { id: TEST_USER_ID, email: 'test@example.com', username: 'testuser' });
-
   const module = await Test.createTestingModule({
     controllers: [RoomsController],
     providers: [
@@ -48,11 +42,13 @@ beforeEach(async () => {
       { provide: EXECUTION_CLIENT, useValue: createMockExecutionClient() },
       { provide: COLLAB_CLIENT, useValue: createMockCollabClient() },
       { provide: MEDIA_SERVICE, useValue: createMockMediaService() },
+      { provide: JwtService, useValue: createMockJwtService() },
+      { provide: ConfigService, useValue: createMockConfigService() },
       Reflector,
     ],
   })
     .overrideGuard(JwtAuthGuard)
-    .useClass(MockJwtAuthGuard)
+    .useClass(TestAuthGuard)
     .compile();
 
   app = module.createNestApplication();
@@ -67,15 +63,16 @@ afterEach(async () => {
 
 describe('POST /rooms', () => {
   it('GIVEN valid body WHEN creating room THEN returns 201 with ISO timestamps and room code', async () => {
-    const res = await request(app.getHttpServer())
-      .post('/rooms')
+    const user = await insertUser(db);
+
+    const res = await asUser(request(app.getHttpServer()).post('/rooms'), user)
       .send({ mode: 'peer' })
       .expect(201);
 
     expect(res.body.roomId).toMatch(/^[0-9a-f-]{36}$/);
     expect(res.body.roomCode).toHaveLength(6);
     expect(res.body.status).toBe('waiting');
-    expect(res.body.hostId).toBe(TEST_USER_ID);
+    expect(res.body.hostId).toBe(user.id);
     expect(res.body.createdAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     expect(res.body.config).toEqual({
       maxParticipants: 2,
@@ -85,16 +82,19 @@ describe('POST /rooms', () => {
   });
 
   it('GIVEN missing mode WHEN creating room THEN returns 400', async () => {
-    await request(app.getHttpServer()).post('/rooms').send({}).expect(400);
+    const user = await insertUser(db);
+
+    await asUser(request(app.getHttpServer()).post('/rooms'), user).send({}).expect(400);
   });
 });
 
 describe('GET /rooms', () => {
   it('GIVEN rooms exist WHEN listing THEN returns paginated response with ISO timestamps', async () => {
-    const room = await insertRoom(db, TEST_USER_ID);
-    await insertParticipant(db, room.id, TEST_USER_ID, 'host');
+    const user = await insertUser(db);
+    const room = await insertRoom(db, user.id);
+    await insertParticipant(db, room.id, user.id, 'host');
 
-    const res = await request(app.getHttpServer()).get('/rooms').expect(200);
+    const res = await asUser(request(app.getHttpServer()).get('/rooms'), user).expect(200);
 
     expect(res.body.data).toHaveLength(1);
     expect(res.body.data[0].roomId).toBe(room.id);
@@ -106,10 +106,13 @@ describe('GET /rooms', () => {
 
 describe('GET /rooms/:id', () => {
   it('GIVEN user is participant WHEN getting room THEN returns detail with ISO timestamps on participants', async () => {
-    const room = await insertRoom(db, TEST_USER_ID);
-    await insertParticipant(db, room.id, TEST_USER_ID, 'host');
+    const user = await insertUser(db);
+    const room = await insertRoom(db, user.id);
+    await insertParticipant(db, room.id, user.id, 'host');
 
-    const res = await request(app.getHttpServer()).get(`/rooms/${room.id}`).expect(200);
+    const res = await asUser(request(app.getHttpServer()).get(`/rooms/${room.id}`), user).expect(
+      200,
+    );
 
     expect(res.body.roomId).toBe(room.id);
     expect(res.body.participants).toHaveLength(1);
@@ -122,16 +125,64 @@ describe('GET /rooms/:id', () => {
   });
 
   it('GIVEN user is not a participant WHEN getting room THEN returns 403', async () => {
+    const user = await insertUser(db);
     const otherUser = await insertUser(db);
     const room = await insertRoom(db, otherUser.id);
     await insertParticipant(db, room.id, otherUser.id, 'host');
 
-    await request(app.getHttpServer()).get(`/rooms/${room.id}`).expect(403);
+    await asUser(request(app.getHttpServer()).get(`/rooms/${room.id}`), user).expect(403);
   });
 
   it('GIVEN room does not exist WHEN getting room THEN returns 404', async () => {
-    await request(app.getHttpServer())
-      .get('/rooms/00000000-0000-0000-0000-000000000000')
+    const user = await insertUser(db);
+
+    await asUser(
+      request(app.getHttpServer()).get('/rooms/00000000-0000-0000-0000-000000000000'),
+      user,
+    ).expect(404);
+  });
+});
+
+describe('POST /rooms/:id/join', () => {
+  it('GIVEN valid room code WHEN joining THEN returns 200 with room detail, collab credentials, and ISO timestamps', async () => {
+    const host = await insertUser(db);
+    const room = await insertRoom(db, host.id, { maxParticipants: 4 });
+    await insertParticipant(db, room.id, host.id, 'host');
+
+    const joiner = await insertUser(db);
+
+    const res = await asUser(request(app.getHttpServer()).post(`/rooms/${room.id}/join`), joiner)
+      .send({ roomCode: room.inviteCode })
+      .expect(200);
+
+    expect(res.body.assignedRole).toBe('candidate');
+    expect(res.body.collabToken).toBe('test-collab-token');
+    expect(res.body.collabUrl).toBe('http://localhost:3001');
+    expect(res.body.myCapabilities).toEqual(expect.arrayContaining(['code:edit', 'code:run']));
+    expect(res.body.room.roomId).toBe(room.id);
+    expect(res.body.room.participants).toHaveLength(2);
+    expect(res.body.room.createdAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(res.body.room.participants[0].joinedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  });
+
+  it('GIVEN room does not exist WHEN joining THEN returns 404', async () => {
+    const user = await insertUser(db);
+
+    await asUser(
+      request(app.getHttpServer()).post('/rooms/00000000-0000-0000-0000-000000000000/join'),
+      user,
+    )
+      .send({ roomCode: 'ABCDEF' })
       .expect(404);
+  });
+
+  it('GIVEN user already a participant WHEN joining THEN returns 409', async () => {
+    const user = await insertUser(db);
+    const room = await insertRoom(db, user.id, { maxParticipants: 4 });
+    await insertParticipant(db, room.id, user.id, 'host');
+
+    await asUser(request(app.getHttpServer()).post(`/rooms/${room.id}/join`), user)
+      .send({ roomCode: room.inviteCode })
+      .expect(409);
   });
 });
