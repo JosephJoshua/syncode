@@ -42,3 +42,53 @@
       0 0 100px -20px oklch(0.82 0.18 165 / 0.12);
   }
 }
+
+.problems-sidebar-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: oklch(0.42 0.03 220 / 0.9) transparent;
+}
+
+.problems-sidebar-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+.problems-sidebar-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.problems-sidebar-scroll::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: linear-gradient(180deg, oklch(0.43 0.035 220 / 0.95), oklch(0.33 0.025 220 / 0.95));
+  background-clip: padding-box;
+}
+
+.problems-sidebar-scroll::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, oklch(0.52 0.055 210 / 0.98), oklch(0.4 0.04 215 / 0.98));
+  background-clip: padding-box;
+}
+
+.problems-sidebar-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: oklch(0.42 0.03 220 / 0.9) transparent;
+}
+
+.problems-sidebar-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+.problems-sidebar-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.problems-sidebar-scroll::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: linear-gradient(180deg, oklch(0.43 0.035 220 / 0.95), oklch(0.33 0.025 220 / 0.95));
+  background-clip: padding-box;
+}
+
+.problems-sidebar-scroll::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, oklch(0.52 0.055 210 / 0.98), oklch(0.4 0.04 215 / 0.98));
+  background-clip: padding-box;
+}
