@@ -112,7 +112,7 @@ describe('AuthController', () => {
   it('GIVEN refresh cookie WHEN refreshing THEN rotates and sets refresh cookie', async () => {
     const { controller, response, authService } = createController();
 
-    const result = await controller.refresh('refreshToken=refresh-token', response as never);
+    const result = await controller.refresh('refresh-token', response as never);
 
     expect(authService.refreshToken).toHaveBeenCalledWith('refresh-token');
     expect(result.accessToken).toBe('new-access-token');
@@ -122,7 +122,7 @@ describe('AuthController', () => {
   it('GIVEN refresh cookie WHEN logging out THEN clears refresh cookie', async () => {
     const { controller, response, authService } = createController();
 
-    await controller.logout('refreshToken=refresh-token', response as never);
+    await controller.logout('refresh-token', response as never);
 
     expect(authService.logout).toHaveBeenCalledWith('refresh-token');
     expect(response.cookie).toHaveBeenCalledTimes(1);

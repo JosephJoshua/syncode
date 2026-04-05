@@ -1,7 +1,6 @@
 import {
   Body,
   Controller,
-  Headers,
   HttpCode,
   HttpStatus,
   Post,
@@ -12,6 +11,7 @@ import { ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { CONTROL_API } from '@syncode/contracts';
 import type { Response } from 'express';
+import { Cookies } from '@/common/decorators/cookies.decorator';
 import { ErrorResponseDto } from '@/common/dto/error-response.dto';
 import { AuthService } from './auth.service';
 import {
@@ -131,10 +131,10 @@ export class AuthController {
   })
   @ApiResponse({ status: 401, type: ErrorResponseDto, description: 'Unauthorized' })
   async refresh(
-    @Headers('cookie') cookieHeader: string | undefined,
+    @Cookies(AuthController.REFRESH_TOKEN_COOKIE_NAME) refreshToken: string | undefined,
     @Res({ passthrough: true }) response: Response,
   ): Promise<AccessTokenResponseDto> {
-    const refreshToken = this.getRefreshTokenFromCookieHeader(cookieHeader);
+    this.assertRefreshTokenCookie(refreshToken);
     const refreshResult = await this.authService.refreshToken(refreshToken);
 
     this.setRefreshTokenCookie(response, refreshResult.refreshToken);
@@ -161,37 +161,21 @@ export class AuthController {
   })
   @ApiResponse({ status: 401, type: ErrorResponseDto, description: 'Unauthorized' })
   async logout(
-    @Headers('cookie') cookieHeader: string | undefined,
+    @Cookies(AuthController.REFRESH_TOKEN_COOKIE_NAME) refreshToken: string | undefined,
     @Res({ passthrough: true }) response: Response,
   ): Promise<void> {
-    const refreshToken = this.getRefreshTokenFromCookieHeader(cookieHeader);
+    this.assertRefreshTokenCookie(refreshToken);
     await this.authService.logout(refreshToken);
 
     this.clearRefreshTokenCookie(response);
   }
 
-  private getRefreshTokenFromCookieHeader(cookieHeader: string | undefined): string {
-    if (!cookieHeader) {
+  private assertRefreshTokenCookie(
+    refreshToken: string | undefined,
+  ): asserts refreshToken is string {
+    if (!refreshToken) {
       throw new UnauthorizedException('Unauthorized');
     }
-
-    const refreshTokenCookie = cookieHeader
-      .split(';')
-      .map((cookiePart) => cookiePart.trim())
-      .find((cookiePart) => cookiePart.startsWith(`${AuthController.REFRESH_TOKEN_COOKIE_NAME}=`));
-
-    if (!refreshTokenCookie) {
-      throw new UnauthorizedException('Unauthorized');
-    }
-
-    const encodedToken = refreshTokenCookie.slice(
-      `${AuthController.REFRESH_TOKEN_COOKIE_NAME}=`.length,
-    );
-    if (!encodedToken) {
-      throw new UnauthorizedException('Unauthorized');
-    }
-
-    return decodeURIComponent(encodedToken);
   }
 
   private setRefreshTokenCookie(response: Response, refreshToken: string): void {
