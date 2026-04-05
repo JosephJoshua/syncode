@@ -1,11 +1,32 @@
+import { defineRoute } from '@syncode/contracts';
 import { Button } from '@syncode/ui';
 import { createFileRoute, Link, notFound } from '@tanstack/react-router';
 import { ArrowLeft } from 'lucide-react';
-import { MOCK_PROBLEMS } from '@/components/problems/problems.mock';
+import {
+  getMockProblemsListResponse,
+  type ProblemsListQuery,
+  type ProblemsListResponse,
+} from '@/components/problems/problems-list.mock';
+import { api } from '@/lib/api-client';
+
+const PROBLEMS_LIST_LIMIT = 100;
+const useMockProblemCards = import.meta.env.VITE_PROBLEMS_CARDS_USE_MOCK_SESSIONS === 'true';
+const problemsListRoute = defineRoute<ProblemsListQuery, ProblemsListResponse>()('problems', 'GET');
+
+async function fetchProblemsList() {
+  if (useMockProblemCards) {
+    return getMockProblemsListResponse({ limit: PROBLEMS_LIST_LIMIT });
+  }
+
+  return api(problemsListRoute, {
+    query: { limit: PROBLEMS_LIST_LIMIT },
+  });
+}
 
 export const Route = createFileRoute('/problems/$problemId')({
-  loader: ({ params }) => {
-    const problem = MOCK_PROBLEMS.find((item) => item.id === params.problemId);
+  loader: async ({ params }) => {
+    const response = await fetchProblemsList();
+    const problem = response.data.find((item) => item.id === params.problemId);
 
     if (!problem) {
       throw notFound();
