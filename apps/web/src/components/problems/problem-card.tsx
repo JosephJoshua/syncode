@@ -9,13 +9,14 @@ const difficultyBadgeVariant: Record<ProblemDifficulty, 'success' | 'warning' | 
 
 export interface ProblemCardProps {
   problem: ProblemItem;
+  tagNames: string[];
 }
 
-export function ProblemCard({ problem }: ProblemCardProps) {
+export function ProblemCard({ problem, tagNames }: ProblemCardProps) {
   return (
     <Card
       size="sm"
-      className="h-full border border-border/60 bg-card/40 backdrop-blur-sm transition-all duration-200 hover:border-primary/25 hover:bg-card/60 hover:shadow-[0_10px_30px_-24px_oklch(0.82_0.18_165/0.8)]"
+      className="h-full border border-white/[0.035] bg-card/40 ring-border/45 backdrop-blur-sm transition-all duration-200 hover:border-primary/12 hover:ring-primary/20 hover:bg-card/60 hover:shadow-[0_10px_30px_-24px_oklch(0.82_0.18_165/0.8)]"
     >
       <CardHeader className="gap-3">
         <div className="flex items-center justify-between gap-3">
@@ -37,9 +38,9 @@ export function ProblemCard({ problem }: ProblemCardProps) {
       </CardHeader>
       <CardContent className="mt-auto space-y-3">
         <div className="flex flex-wrap gap-2">
-          {problem.tags.map((tag) => (
-            <Badge key={tag} variant="outline" size="sm" className="text-muted-foreground">
-              {tag}
+          {tagNames.map((tagName) => (
+            <Badge key={tagName} variant="outline" size="sm" className="text-muted-foreground">
+              {tagName}
             </Badge>
           ))}
         </div>

@@ -1,3 +1,4 @@
+import { defineRoute } from '@syncode/contracts';
 import {
   Pagination,
   PaginationContent,
@@ -7,31 +8,46 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from '@syncode/ui';
+import { useQuery } from '@tanstack/react-query';
 import { createFileRoute, Outlet, useNavigate, useRouterState } from '@tanstack/react-router';
 import { motion } from 'motion/react';
 import { startTransition, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { ProblemCard } from '@/components/problems/problem-card';
 import {
+  getProblemTagName,
+  MOCK_PROBLEM_TAGS_RESPONSE,
   MOCK_PROBLEMS,
   type ProblemDifficulty,
   type ProblemSortKey,
   type ProblemStatus,
+  type ProblemsTagsResponse,
 } from '@/components/problems/problems.mock';
 import { ProblemsEmptyState } from '@/components/problems/problems-empty-state';
 import { ProblemsFilterSidebar } from '@/components/problems/problems-filter-sidebar';
 import { ProblemsResultsToolbar } from '@/components/problems/problems-results-toolbar';
 import { ProblemsSearchBar } from '@/components/problems/problems-search-bar';
+import { api } from '@/lib/api-client';
 
 export const Route = createFileRoute('/problems')({
   component: ProblemsPage,
 });
 
 const PAGE_SIZE = 12;
+const useMockProblemTags = import.meta.env.VITE_PROBLEMS_FILTER_TAGS_USE_MOCK_SESSIONS === 'true';
+const problemsTagsRoute = defineRoute<void, ProblemsTagsResponse>()('problems/tags', 'GET');
 const difficultyRank: Record<ProblemDifficulty, number> = {
   Easy: 0,
   Medium: 1,
   Hard: 2,
 };
+
+async function fetchProblemTags() {
+  if (useMockProblemTags) {
+    return MOCK_PROBLEM_TAGS_RESPONSE;
+  }
+
+  return api(problemsTagsRoute);
+}
 
 function getPaginationItems(currentPage: number, totalPages: number) {
   if (totalPages <= 7) {
@@ -94,6 +110,16 @@ function ProblemsLibraryPage() {
 
   const deferredSearchQuery = useDeferredValue(searchQuery);
   const tagSignature = selectedTags.join('::');
+  const { data: problemTagsResponse } = useQuery({
+    queryKey: ['problems', 'tags', useMockProblemTags ? 'mock' : 'api'],
+    queryFn: fetchProblemTags,
+  });
+
+  const popularTags = problemTagsResponse?.data ?? [];
+  const problemTagNameBySlug = useMemo(
+    () => new Map(popularTags.map((tag) => [tag.slug, tag.name])),
+    [popularTags],
+  );
 
   const difficultyCounts = useMemo(
     () =>
@@ -119,21 +145,6 @@ function ProblemsLibraryPage() {
     [],
   );
 
-  const tagCounts = useMemo(
-    () =>
-      MOCK_PROBLEMS.reduce(
-        (counts, problem) => {
-          for (const tag of problem.tags) {
-            counts[tag] = (counts[tag] ?? 0) + 1;
-          }
-
-          return counts;
-        },
-        {} as Record<string, number>,
-      ),
-    [],
-  );
-
   const filteredProblems = useMemo(() => {
     const normalizedQuery = deferredSearchQuery.trim().toLowerCase();
 
@@ -141,7 +152,11 @@ function ProblemsLibraryPage() {
       const matchesQuery =
         normalizedQuery.length === 0 ||
         problem.title.toLowerCase().includes(normalizedQuery) ||
-        problem.tags.some((tag) => tag.toLowerCase().includes(normalizedQuery));
+        problem.tags.some((tag) =>
+          (problemTagNameBySlug.get(tag) ?? getProblemTagName(tag))
+            .toLowerCase()
+            .includes(normalizedQuery),
+        );
 
       const matchesDifficulty =
         selectedDifficulties.length === 0 || selectedDifficulties.includes(problem.difficulty);
@@ -154,7 +169,13 @@ function ProblemsLibraryPage() {
 
       return matchesQuery && matchesDifficulty && matchesStatus && matchesTags;
     });
-  }, [deferredSearchQuery, selectedDifficulties, selectedStatuses, selectedTags]);
+  }, [
+    deferredSearchQuery,
+    selectedDifficulties,
+    selectedStatuses,
+    selectedTags,
+    problemTagNameBySlug,
+  ]);
 
   const sortedProblems = useMemo(() => {
     return [...filteredProblems].sort((left, right) => {
@@ -216,11 +237,11 @@ function ProblemsLibraryPage() {
       })),
       ...selectedTags.map((tag) => ({
         id: `tag-${tag}`,
-        label: tag,
+        label: problemTagNameBySlug.get(tag) ?? getProblemTagName(tag),
         onRemove: () => setSelectedTags((current) => current.filter((item) => item !== tag)),
       })),
     ],
-    [selectedDifficulties, selectedStatuses, selectedTags],
+    [selectedDifficulties, selectedStatuses, selectedTags, problemTagNameBySlug],
   );
 
   const paginationItems = useMemo(() => getPaginationItems(page, totalPages), [page, totalPages]);
@@ -252,7 +273,7 @@ function ProblemsLibraryPage() {
             selectedTags={selectedTags}
             difficultyCounts={difficultyCounts}
             statusCounts={statusCounts}
-            tagCounts={tagCounts}
+            popularTags={popularTags}
             onToggleDifficulty={(value) => {
               startTransition(() => {
                 setSelectedDifficulties((current) => toggleValue(current, value));
@@ -330,7 +351,12 @@ function ProblemsLibraryPage() {
                         animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
                         transition={{ duration: 0.36, ease: [0.22, 1, 0.36, 1] }}
                       >
-                        <ProblemCard problem={problem} />
+                        <ProblemCard
+                          problem={problem}
+                          tagNames={problem.tags.map(
+                            (tag) => problemTagNameBySlug.get(tag) ?? getProblemTagName(tag),
+                          )}
+                        />
                       </motion.button>
                     );
                   })}

@@ -2,6 +2,18 @@ export type ProblemDifficulty = 'Easy' | 'Medium' | 'Hard';
 export type ProblemStatus = 'Solved' | 'Attempted' | 'Todo';
 export type ProblemSortKey = 'newest' | 'acceptance' | 'difficulty';
 
+export interface ProblemTagInfo {
+  slug: string;
+  name: string;
+  count: number;
+}
+
+interface ProblemTagCatalogItem extends Omit<ProblemTagInfo, 'count'> {}
+
+export interface ProblemsTagsResponse {
+  data: ProblemTagInfo[];
+}
+
 export interface ProblemItem {
   id: string;
   title: string;
@@ -14,16 +26,31 @@ export interface ProblemItem {
 
 export const DIFFICULTY_OPTIONS: ProblemDifficulty[] = ['Easy', 'Medium', 'Hard'];
 export const STATUS_OPTIONS: ProblemStatus[] = ['Solved', 'Attempted', 'Todo'];
-export const TAG_OPTIONS = [
-  'Arrays',
-  'Strings',
-  'DP',
-  'Graphs',
-  'Trees',
-  'Hash Table',
-  'Sliding Window',
-  'Linked List',
+
+const PROBLEM_TAG_CATALOG: ProblemTagCatalogItem[] = [
+  { slug: 'arrays', name: 'Arrays' },
+  { slug: 'strings', name: 'Strings' },
+  { slug: 'dp', name: 'DP' },
+  { slug: 'graphs', name: 'Graphs' },
+  { slug: 'trees', name: 'Trees' },
+  { slug: 'hash-table', name: 'Hash Table' },
+  { slug: 'sliding-window', name: 'Sliding Window' },
+  { slug: 'linked-list', name: 'Linked List' },
+  { slug: 'stack', name: 'Stack' },
+  { slug: 'recursion', name: 'Recursion' },
+  { slug: 'math', name: 'Math' },
+  { slug: 'design', name: 'Design' },
+  { slug: 'bfs', name: 'BFS' },
+  { slug: 'binary-tree', name: 'Binary Tree' },
+  { slug: 'topological-sort', name: 'Topological Sort' },
+  { slug: 'dfs', name: 'DFS' },
+  { slug: 'divide-and-conquer', name: 'Divide and Conquer' },
+  { slug: 'heap', name: 'Heap' },
+  { slug: 'two-pointers', name: 'Two Pointers' },
+  { slug: 'sorting', name: 'Sorting' },
 ] as const;
+
+const problemTagNameBySlug = new Map(PROBLEM_TAG_CATALOG.map((tag) => [tag.slug, tag.name]));
 
 export const SORT_OPTIONS: Array<{ label: string; value: ProblemSortKey }> = [
   { label: 'Newest', value: 'newest' },
@@ -38,7 +65,7 @@ export const MOCK_PROBLEMS: ProblemItem[] = [
     difficulty: 'Easy',
     status: 'Solved',
     acceptanceRate: 67,
-    tags: ['Arrays', 'Hash Table'],
+    tags: ['arrays', 'hash-table'],
     addedAt: 24,
   },
   {
@@ -47,7 +74,7 @@ export const MOCK_PROBLEMS: ProblemItem[] = [
     difficulty: 'Easy',
     status: 'Solved',
     acceptanceRate: 72,
-    tags: ['Strings', 'Stack'],
+    tags: ['strings', 'stack'],
     addedAt: 23,
   },
   {
@@ -56,7 +83,7 @@ export const MOCK_PROBLEMS: ProblemItem[] = [
     difficulty: 'Easy',
     status: 'Attempted',
     acceptanceRate: 74,
-    tags: ['Linked List', 'Recursion'],
+    tags: ['linked-list', 'recursion'],
     addedAt: 22,
   },
   {
@@ -65,7 +92,7 @@ export const MOCK_PROBLEMS: ProblemItem[] = [
     difficulty: 'Medium',
     status: 'Attempted',
     acceptanceRate: 45,
-    tags: ['Strings', 'Sliding Window', 'Hash Table'],
+    tags: ['strings', 'sliding-window', 'hash-table'],
     addedAt: 21,
   },
   {
@@ -74,7 +101,7 @@ export const MOCK_PROBLEMS: ProblemItem[] = [
     difficulty: 'Medium',
     status: 'Todo',
     acceptanceRate: 52,
-    tags: ['Linked List', 'Math', 'Recursion'],
+    tags: ['linked-list', 'math', 'recursion'],
     addedAt: 20,
   },
   {
@@ -83,7 +110,7 @@ export const MOCK_PROBLEMS: ProblemItem[] = [
     difficulty: 'Medium',
     status: 'Todo',
     acceptanceRate: 41,
-    tags: ['Hash Table', 'Design', 'Linked List'],
+    tags: ['hash-table', 'design', 'linked-list'],
     addedAt: 19,
   },
   {
@@ -92,7 +119,7 @@ export const MOCK_PROBLEMS: ProblemItem[] = [
     difficulty: 'Medium',
     status: 'Solved',
     acceptanceRate: 63,
-    tags: ['Trees', 'BFS', 'Binary Tree'],
+    tags: ['trees', 'bfs', 'binary-tree'],
     addedAt: 18,
   },
   {
@@ -101,7 +128,7 @@ export const MOCK_PROBLEMS: ProblemItem[] = [
     difficulty: 'Medium',
     status: 'Attempted',
     acceptanceRate: 48,
-    tags: ['Graphs', 'Topological Sort', 'BFS', 'DFS'],
+    tags: ['graphs', 'topological-sort', 'bfs', 'dfs'],
     addedAt: 17,
   },
   {
@@ -110,7 +137,7 @@ export const MOCK_PROBLEMS: ProblemItem[] = [
     difficulty: 'Hard',
     status: 'Todo',
     acceptanceRate: 34,
-    tags: ['Linked List', 'Divide and Conquer', 'Heap'],
+    tags: ['linked-list', 'divide-and-conquer', 'heap'],
     addedAt: 16,
   },
   {
@@ -119,7 +146,7 @@ export const MOCK_PROBLEMS: ProblemItem[] = [
     difficulty: 'Hard',
     status: 'Attempted',
     acceptanceRate: 28,
-    tags: ['Arrays', 'Two Pointers', 'DP', 'Stack'],
+    tags: ['arrays', 'two-pointers', 'dp', 'stack'],
     addedAt: 15,
   },
   {
@@ -128,7 +155,7 @@ export const MOCK_PROBLEMS: ProblemItem[] = [
     difficulty: 'Hard',
     status: 'Todo',
     acceptanceRate: 31,
-    tags: ['BFS', 'Hash Table', 'Strings'],
+    tags: ['bfs', 'hash-table', 'strings'],
     addedAt: 14,
   },
   {
@@ -137,7 +164,7 @@ export const MOCK_PROBLEMS: ProblemItem[] = [
     difficulty: 'Hard',
     status: 'Todo',
     acceptanceRate: 36,
-    tags: ['Trees', 'Design', 'BFS', 'DFS'],
+    tags: ['trees', 'design', 'bfs', 'dfs'],
     addedAt: 13,
   },
   {
@@ -146,7 +173,7 @@ export const MOCK_PROBLEMS: ProblemItem[] = [
     difficulty: 'Easy',
     status: 'Solved',
     acceptanceRate: 54,
-    tags: ['Arrays', 'DP'],
+    tags: ['arrays', 'dp'],
     addedAt: 12,
   },
   {
@@ -155,7 +182,7 @@ export const MOCK_PROBLEMS: ProblemItem[] = [
     difficulty: 'Medium',
     status: 'Solved',
     acceptanceRate: 50,
-    tags: ['Arrays', 'DP', 'Divide and Conquer'],
+    tags: ['arrays', 'dp', 'divide-and-conquer'],
     addedAt: 11,
   },
   {
@@ -164,7 +191,7 @@ export const MOCK_PROBLEMS: ProblemItem[] = [
     difficulty: 'Medium',
     status: 'Attempted',
     acceptanceRate: 57,
-    tags: ['Arrays', 'Two Pointers'],
+    tags: ['arrays', 'two-pointers'],
     addedAt: 10,
   },
   {
@@ -173,7 +200,7 @@ export const MOCK_PROBLEMS: ProblemItem[] = [
     difficulty: 'Medium',
     status: 'Solved',
     acceptanceRate: 59,
-    tags: ['Hash Table', 'Strings', 'Sorting'],
+    tags: ['hash-table', 'strings', 'sorting'],
     addedAt: 9,
   },
   {
@@ -182,7 +209,7 @@ export const MOCK_PROBLEMS: ProblemItem[] = [
     difficulty: 'Easy',
     status: 'Solved',
     acceptanceRate: 53,
-    tags: ['DP', 'Math'],
+    tags: ['dp', 'math'],
     addedAt: 8,
   },
   {
@@ -191,7 +218,7 @@ export const MOCK_PROBLEMS: ProblemItem[] = [
     difficulty: 'Medium',
     status: 'Todo',
     acceptanceRate: 46,
-    tags: ['DP', 'Arrays'],
+    tags: ['dp', 'arrays'],
     addedAt: 7,
   },
   {
@@ -200,7 +227,7 @@ export const MOCK_PROBLEMS: ProblemItem[] = [
     difficulty: 'Medium',
     status: 'Attempted',
     acceptanceRate: 58,
-    tags: ['Graphs', 'DFS', 'BFS'],
+    tags: ['graphs', 'dfs', 'bfs'],
     addedAt: 6,
   },
   {
@@ -209,7 +236,7 @@ export const MOCK_PROBLEMS: ProblemItem[] = [
     difficulty: 'Medium',
     status: 'Todo',
     acceptanceRate: 49,
-    tags: ['Graphs', 'BFS', 'Arrays'],
+    tags: ['graphs', 'bfs', 'arrays'],
     addedAt: 5,
   },
   {
@@ -218,7 +245,7 @@ export const MOCK_PROBLEMS: ProblemItem[] = [
     difficulty: 'Easy',
     status: 'Solved',
     acceptanceRate: 65,
-    tags: ['Trees', 'DFS', 'Binary Tree'],
+    tags: ['trees', 'dfs', 'binary-tree'],
     addedAt: 4,
   },
   {
@@ -227,7 +254,7 @@ export const MOCK_PROBLEMS: ProblemItem[] = [
     difficulty: 'Easy',
     status: 'Attempted',
     acceptanceRate: 61,
-    tags: ['Trees', 'DFS', 'Binary Tree'],
+    tags: ['trees', 'dfs', 'binary-tree'],
     addedAt: 3,
   },
   {
@@ -236,7 +263,7 @@ export const MOCK_PROBLEMS: ProblemItem[] = [
     difficulty: 'Hard',
     status: 'Todo',
     acceptanceRate: 43,
-    tags: ['DP', 'Strings'],
+    tags: ['dp', 'strings'],
     addedAt: 2,
   },
   {
@@ -245,7 +272,20 @@ export const MOCK_PROBLEMS: ProblemItem[] = [
     difficulty: 'Hard',
     status: 'Attempted',
     acceptanceRate: 39,
-    tags: ['Strings', 'Sliding Window', 'Hash Table'],
+    tags: ['strings', 'sliding-window', 'hash-table'],
     addedAt: 1,
   },
 ];
+
+export const MOCK_PROBLEM_TAGS_RESPONSE: ProblemsTagsResponse = {
+  data: PROBLEM_TAG_CATALOG.map((tag) => ({
+    ...tag,
+    count: MOCK_PROBLEMS.filter((problem) => problem.tags.includes(tag.slug)).length,
+  }))
+    .filter((tag) => tag.count > 0)
+    .sort((left, right) => right.count - left.count || left.name.localeCompare(right.name)),
+};
+
+export function getProblemTagName(slug: string) {
+  return problemTagNameBySlug.get(slug) ?? slug;
+}

@@ -12,8 +12,8 @@ import {
   DIFFICULTY_OPTIONS,
   type ProblemDifficulty,
   type ProblemStatus,
+  type ProblemTagInfo,
   STATUS_OPTIONS,
-  TAG_OPTIONS,
 } from './problems.mock';
 
 interface FilterOptionProps {
@@ -49,7 +49,7 @@ export interface ProblemsFilterSidebarProps {
   selectedTags: string[];
   difficultyCounts: Record<ProblemDifficulty, number>;
   statusCounts: Record<ProblemStatus, number>;
-  tagCounts: Record<string, number>;
+  popularTags: ProblemTagInfo[];
   onToggleDifficulty: (value: ProblemDifficulty) => void;
   onToggleStatus: (value: ProblemStatus) => void;
   onToggleTag: (value: string) => void;
@@ -62,15 +62,15 @@ export function ProblemsFilterSidebar({
   selectedTags,
   difficultyCounts,
   statusCounts,
-  tagCounts,
+  popularTags,
   onToggleDifficulty,
   onToggleStatus,
   onToggleTag,
   onClearAll,
 }: ProblemsFilterSidebarProps) {
   return (
-    <Card className="overflow-hidden border-border/60 bg-card/35 backdrop-blur-sm lg:sticky lg:top-20 lg:max-h-[calc(100vh-7rem)]">
-      <CardHeader className="border-b border-border/60 pb-1.5">
+    <Card className="overflow-hidden border border-white/4 bg-card/35 ring-border/45 backdrop-blur-sm lg:h-188 lg:self-stretch">
+      <CardHeader className="border-b border-white/4 pb-1.5">
         <div className="flex items-center justify-between gap-3">
           <CardTitle className="text-sm tracking-tight">Filters</CardTitle>
           <Button variant="ghost" size="xs" onClick={onClearAll}>
@@ -126,14 +126,14 @@ export function ProblemsFilterSidebar({
             Popular Tags
           </h2>
           <div className="space-y-1">
-            {TAG_OPTIONS.map((tag) => (
+            {popularTags.map((tag) => (
               <FilterOption
-                key={tag}
-                id={`tag-${tag.replace(/\s+/g, '-').toLowerCase()}`}
-                label={tag}
-                checked={selectedTags.includes(tag)}
-                count={tagCounts[tag] ?? 0}
-                onCheckedChange={() => onToggleTag(tag)}
+                key={tag.slug}
+                id={`tag-${tag.slug}`}
+                label={tag.name}
+                checked={selectedTags.includes(tag.slug)}
+                count={tag.count}
+                onCheckedChange={() => onToggleTag(tag.slug)}
               />
             ))}
           </div>
