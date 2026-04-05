@@ -13,6 +13,7 @@ import type { UserProfileResponse } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
 import { refreshTokens, users } from '@syncode/db';
 import { CACHE_SERVICE, type ICacheService } from '@syncode/shared/ports';
+import { lt } from 'drizzle-orm';
 import type { EnvConfig } from '@/config/env.config';
 import { DB_CLIENT } from '@/modules/db/db.module';
 import { toUserProfile } from '@/modules/users/user-profile.mapper';
@@ -190,6 +191,10 @@ export class AuthService {
       this.cacheService.set(this.getRevokedAfterKey(userId), nowUnixSeconds),
       this.cacheService.delByPattern(`${this.getActiveTokenPrefix(userId)}*`),
     ]);
+  }
+
+  async cleanupExpiredRefreshTokens(): Promise<void> {
+    await this.db.delete(refreshTokens).where(lt(refreshTokens.expiresAt, new Date()));
   }
 
   private async issueTokenPair(

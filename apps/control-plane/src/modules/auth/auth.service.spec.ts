@@ -18,6 +18,7 @@ function createAuthServiceFixture() {
   const usersReturning = vi.fn();
   const usersValues = vi.fn(() => ({ returning: usersReturning }));
   const refreshValues = vi.fn(async () => undefined);
+  const deleteWhere = vi.fn(async () => undefined);
 
   const insert = vi.fn((table: unknown) => {
     if (table === users) {
@@ -42,6 +43,15 @@ function createAuthServiceFixture() {
       },
     },
     insert,
+    delete: vi.fn((table: unknown) => {
+      if (table === refreshTokens) {
+        return {
+          where: deleteWhere,
+        };
+      }
+
+      throw new Error('Unexpected table in mock db.delete');
+    }),
   };
 
   const cacheService = {
@@ -94,6 +104,7 @@ function createAuthServiceFixture() {
       usersReturning,
       usersValues,
       refreshValues,
+      deleteWhere,
       cacheService,
       jwtService,
     },
@@ -264,5 +275,13 @@ describe('AuthService', () => {
 
     expect(mocks.cacheService.set).toHaveBeenCalled();
     expect(mocks.cacheService.del).toHaveBeenCalledWith('auth:refresh:active:user-1:jti-1');
+  });
+
+  it('GIVEN expired refresh tokens WHEN cleanup runs THEN deletes expired rows', async () => {
+    const { service, mocks } = createAuthServiceFixture();
+
+    await service.cleanupExpiredRefreshTokens();
+
+    expect(mocks.deleteWhere).toHaveBeenCalledTimes(1);
   });
 });

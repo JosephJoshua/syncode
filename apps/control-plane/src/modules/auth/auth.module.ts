@@ -6,6 +6,7 @@ import type { EnvConfig } from '@/config/env.config';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './jwt.strategy';
+import { RefreshTokenCleanupService } from './refresh-token-cleanup.service';
 
 /**
  * Provides JWT-based authentication.
@@ -24,7 +25,7 @@ import { JwtStrategy } from './jwt.strategy';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy],
+  providers: [AuthService, JwtStrategy, RefreshTokenCleanupService],
   exports: [AuthService, JwtStrategy],
 })
 export class AuthModule {}
