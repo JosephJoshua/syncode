@@ -164,7 +164,7 @@ function RegisterPage() {
             transition={{ duration: 0.5, ...stagger(2), ease: [0.16, 1, 0.3, 1] }}
             className="mt-2 text-sm text-muted-foreground"
           >
-            Start collaborative interview practice with the same focused setup as sign in.
+            Join your peers and start practicing technical interviews together.
           </motion.p>
         </div>
 
