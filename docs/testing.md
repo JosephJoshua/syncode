@@ -341,26 +341,16 @@ Before your test suite runs, Testcontainers starts a real PostgreSQL container w
 
 This eliminates "works on my machine" issues from different local data, and gives you confidence that your SQL queries and migrations actually work.
 
-> **Status:** Testcontainers is not installed yet. The infrastructure is ready for it — `supertest` is already a devDependency in `apps/control-plane`, and `@nestjs/testing` is available in all NestJS apps. When we add it, the setup will look like:
-
-```typescript
-import { PostgreSqlContainer } from '@testcontainers/postgresql';
-import { beforeAll, afterAll } from 'vitest';
-
-let container: StartedPostgreSqlContainer;
-
-beforeAll(async () => {
-  // Starts a real PostgreSQL container (takes ~2-5 seconds)
-  container = await new PostgreSqlContainer().start();
-  process.env.DATABASE_URL = container.getConnectionUri();
-  // Run migrations against the test database
-  await runMigrations();
-}, 30_000); // 30s timeout for container startup
-
-afterAll(async () => {
-  await container.stop(); // Container destroyed — clean slate
-});
 ```
+Lifecycle:
+  globalSetup  →  Start PG container, create template DB with migrations
+  beforeEach   →  CREATE DATABASE test_<id> TEMPLATE syncode_template (~10ms)
+  test         →  Run against isolated DB
+  afterEach    →  DROP DATABASE test_<id>
+  globalTeardown → Stop container
+```
+
+Each test gets a pristine, fully-migrated database with zero shared state. Run with `pnpm test:integration` from `apps/control-plane`.
 
 ### Testing a Controller with supertest
 

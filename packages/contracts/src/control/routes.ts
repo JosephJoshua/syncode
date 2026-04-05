@@ -13,6 +13,11 @@ import type {
   createRoomResponseSchema,
   createRoomSchema,
   destroyRoomResponseSchema,
+  joinRoomResponseSchema,
+  joinRoomSchema,
+  listRoomsQuerySchema,
+  listRoomsResponseSchema,
+  roomDetailSchema,
   runCodeResponseSchema,
   runCodeSchema,
   submitProblemSchema,
@@ -46,6 +51,15 @@ export const CONTROL_API = {
       z.infer<typeof createRoomSchema>,
       z.infer<typeof createRoomResponseSchema>
     >()('rooms', 'POST'),
+    LIST: defineRoute<
+      z.infer<typeof listRoomsQuerySchema>,
+      z.infer<typeof listRoomsResponseSchema>
+    >()('rooms', 'GET'),
+    GET: defineRoute<void, z.infer<typeof roomDetailSchema>>()('rooms/:id', 'GET'),
+    JOIN: defineRoute<z.infer<typeof joinRoomSchema>, z.infer<typeof joinRoomResponseSchema>>()(
+      'rooms/:id/join',
+      'POST',
+    ),
     DESTROY: defineRoute<void, z.infer<typeof destroyRoomResponseSchema>>()('rooms/:id', 'DELETE'),
     RUN: defineRoute<z.infer<typeof runCodeSchema>, z.infer<typeof runCodeResponseSchema>>()(
       'rooms/:id/run',

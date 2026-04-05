@@ -35,6 +35,7 @@ export default {
         'ci',
         'docs',
         'deps',
+        'dx',
       ],
     ],
     'scope-empty': [2, 'never'],
