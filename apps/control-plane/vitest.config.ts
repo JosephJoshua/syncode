@@ -19,9 +19,10 @@ export default defineConfig({
     environment: 'node',
     root: './',
     passWithNoTests: true,
+    exclude: ['**/*.integration.test.ts', '**/node_modules/**', '**/dist/**'],
     coverage: {
       provider: 'v8',
-      reportsDirectory: './coverage',
+      reportsDirectory: './coverage/unit',
       reporter: ['text', 'json', 'html', 'lcov'],
       include: ['src/**/*.ts'],
       exclude: [
@@ -29,6 +30,7 @@ export default defineConfig({
         '**/*.test.ts',
         'src/main.ts',
         'src/telemetry.ts',
+        'src/test/**',
         'src/**/*.module.ts',
         'src/**/*.config.ts',
         'src/**/*.dto.ts',

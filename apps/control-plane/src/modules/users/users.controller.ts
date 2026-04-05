@@ -20,8 +20,8 @@ import { CONTROL_API } from '@syncode/contracts';
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
 import { ErrorResponseDto } from '@/common/dto/error-response.dto';
 import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard';
-import { UpdateUserDto, UserProfileResponseDto } from './dto/user.dto';
-import { UsersService } from './users.service';
+import { UpdateUserDto, UserProfileResponseDto } from './dto/user.dto.js';
+import { UsersService } from './users.service.js';
 
 /**
  * User management endpoints.

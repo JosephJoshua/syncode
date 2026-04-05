@@ -1,13 +1,7 @@
 import { Global, Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import {
-  AI_CLIENT,
-  COLLAB_CLIENT,
-  EXECUTION_CLIENT,
-  StubAiClient,
-  StubCollabClient,
-  StubExecutionClient,
-} from '@syncode/contracts';
+import { AI_CLIENT, COLLAB_CLIENT, EXECUTION_CLIENT } from '@syncode/contracts';
+import { StubAiClient, StubCollabClient, StubExecutionClient } from '@syncode/contracts/stubs';
 import {
   BullMqAdapter,
   CircuitBreakerAdapter,
@@ -33,9 +27,9 @@ import {
   STORAGE_SERVICE,
 } from '@syncode/shared/ports';
 import type { EnvConfig } from '@/config/env.config';
-import { HttpCollabClient } from './clients/http-collab.client';
-import { QueueAiClient } from './clients/queue-ai.client';
-import { QueueExecutionClient } from './clients/queue-execution.client';
+import { HttpCollabClient } from './clients/http-collab.client.js';
+import { QueueAiClient } from './clients/queue-ai.client.js';
+import { QueueExecutionClient } from './clients/queue-execution.client.js';
 
 /**
  * THE SINGLE SOURCE OF TRUTH for all adapter bindings in the control plane.

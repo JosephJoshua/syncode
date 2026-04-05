@@ -2,7 +2,7 @@ import { Global, Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { BullMqAdapter, type RedisConfig } from '@syncode/infrastructure';
 import { QUEUE_SERVICE } from '@syncode/shared/ports';
-import type { EnvConfig } from '../config/env.config';
+import type { EnvConfig } from '../config/env.config.js';
 
 @Global()
 @Module({

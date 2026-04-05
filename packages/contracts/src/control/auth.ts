@@ -1,3 +1,4 @@
+import { UserRole } from '@syncode/shared';
 import { z } from 'zod';
 import { userProfileResponseSchema, userStatsSchema } from './users';
 

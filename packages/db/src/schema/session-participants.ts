@@ -1,7 +1,7 @@
 import { index, pgTable, primaryKey, timestamp, uuid } from 'drizzle-orm/pg-core';
-import { roomRoleEnum } from './enums';
-import { sessions } from './sessions';
-import { users } from './users';
+import { roomRoleEnum } from './enums.js';
+import { sessions } from './sessions.js';
+import { users } from './users.js';
 
 export const sessionParticipants = pgTable(
   'session_participants',

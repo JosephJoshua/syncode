@@ -4,7 +4,7 @@ import type {
   DestroyDocumentResponse,
   KickUserRequest,
   KickUserResponse,
-} from './internal';
+} from './internal.js';
 
 export interface ICollabClient {
   createDocument(request: CreateDocumentRequest): Promise<CreateDocumentResponse>;

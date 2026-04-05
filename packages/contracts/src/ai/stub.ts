@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import type { JobId, JobStatus, SubmitResult } from '../queues';
-import type { IAiClient } from './client';
+import type { JobId, JobStatus, SubmitResult } from '../queues.js';
+import type { IAiClient } from './client.js';
 import type {
   GenerateHintRequest,
   GenerateHintResult,
@@ -8,7 +8,7 @@ import type {
   InterviewResponseResult,
   ReviewCodeRequest,
   ReviewCodeResult,
-} from './types';
+} from './types.js';
 
 type AiJobType = 'hint' | 'review' | 'interview';
 

@@ -1,6 +1,5 @@
-export type { IAiClient } from './client';
-export { AI_CLIENT } from './client';
-export { StubAiClient } from './stub';
+export type { IAiClient } from './client.js';
+export { AI_CLIENT } from './client.js';
 export type {
   GenerateHintRequest,
   GenerateHintResult,
@@ -8,4 +7,4 @@ export type {
   InterviewResponseResult,
   ReviewCodeRequest,
   ReviewCodeResult,
-} from './types';
+} from './types.js';

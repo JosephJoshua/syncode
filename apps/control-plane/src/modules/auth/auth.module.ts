@@ -16,7 +16,7 @@ import { RefreshTokenCleanupService } from './refresh-token-cleanup.service';
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
       useFactory: (config: ConfigService<EnvConfig>) => ({
-        secret: config.get('JWT_SECRET', { infer: true }),
+        secret: config.get('AUTH_JWT_SECRET', { infer: true }),
         signOptions: {
           expiresIn: config.get('JWT_EXPIRATION', { infer: true }),
         },

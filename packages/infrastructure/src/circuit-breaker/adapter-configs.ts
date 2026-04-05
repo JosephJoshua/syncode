@@ -1,4 +1,4 @@
-import type { AdapterCircuitConfig } from './proxy';
+import type { AdapterCircuitConfig } from './proxy.js';
 
 export const S3_ADAPTER_CIRCUIT_CONFIG: AdapterCircuitConfig = {
   upload: { circuitName: 's3-upload' },
@@ -38,7 +38,7 @@ export const BULLMQ_ADAPTER_CIRCUIT_CONFIG: AdapterCircuitConfig = {
   getQueueStats: { circuitName: 'bullmq-get-stats' },
 } as const;
 
-/** Collab HTTP client CB config — healthCheck is excluded (always makes a real HTTP call) */
+/** Collab HTTP client CB config */
 export const COLLAB_CLIENT_CIRCUIT_CONFIG: AdapterCircuitConfig = {
   createDocument: { circuitName: 'collab-http-create' },
   destroyDocument: { circuitName: 'collab-http-destroy' },

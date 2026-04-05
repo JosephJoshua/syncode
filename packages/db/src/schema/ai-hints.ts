@@ -1,7 +1,7 @@
 import { index, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
-import { hintLevelEnum } from './enums';
-import { rooms } from './rooms';
-import { users } from './users';
+import { hintLevelEnum } from './enums.js';
+import { rooms } from './rooms.js';
+import { users } from './users.js';
 
 export const aiHints = pgTable(
   'ai_hints',

@@ -1,42 +1,25 @@
-import type { UserProfile } from '@syncode/shared';
+import type { AuthUserResponse } from '@syncode/contracts';
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
 
 interface AuthState {
-  user: UserProfile | null;
+  user: AuthUserResponse | null;
   accessToken: string | null;
-  refreshToken: string | null;
   isAuthenticated: boolean;
-  login: (user: UserProfile, accessToken: string, refreshToken: string) => void;
+  setSession: (session: { accessToken: string; user?: AuthUserResponse | null }) => void;
+  setUser: (user: AuthUserResponse | null) => void;
   logout: () => void;
 }
 
-export const useAuthStore = create<AuthState>()(
-  // TODO: access token in memory + refresh token in HttpOnly cookie instead
-  persist(
-    (set) => ({
+export const useAuthStore = create<AuthState>()((set) => ({
+  user: null,
+  accessToken: null,
+  isAuthenticated: false,
+  setSession: ({ accessToken, user = null }) => set({ user, accessToken, isAuthenticated: true }),
+  setUser: (user) => set({ user }),
+  logout: () =>
+    set({
       user: null,
       accessToken: null,
-      refreshToken: null,
       isAuthenticated: false,
-      login: (user, accessToken, refreshToken) =>
-        set({ user, accessToken, refreshToken, isAuthenticated: true }),
-      logout: () =>
-        set({
-          user: null,
-          accessToken: null,
-          refreshToken: null,
-          isAuthenticated: false,
-        }),
     }),
-    {
-      name: 'syncode-auth',
-      partialize: (state) => ({
-        user: state.user,
-        accessToken: state.accessToken,
-        refreshToken: state.refreshToken,
-        isAuthenticated: state.isAuthenticated,
-      }),
-    },
-  ),
-);
+}));

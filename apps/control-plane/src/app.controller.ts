@@ -19,7 +19,7 @@ import {
   QUEUE_SERVICE,
   STORAGE_SERVICE,
 } from '@syncode/shared/ports';
-import { HealthCheckResponseDto } from './common/dto/health.dto';
+import { HealthCheckResponseDto } from './common/dto/health.dto.js';
 
 /**
  * Provides application-level endpoints.

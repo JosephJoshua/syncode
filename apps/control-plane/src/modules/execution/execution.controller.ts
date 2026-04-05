@@ -11,7 +11,7 @@ import {
 import { CONTROL_API, EXECUTION_CLIENT, type IExecutionClient } from '@syncode/contracts';
 import { ErrorResponseDto } from '@/common/dto/error-response.dto';
 import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard';
-import { ExecutionResultResponseDto, JobStatusResponseDto } from './dto/execution.dto';
+import { ExecutionResultResponseDto, JobStatusResponseDto } from './dto/execution.dto.js';
 
 /**
  * Provides endpoints for polling code execution results.

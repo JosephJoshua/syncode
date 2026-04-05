@@ -1,6 +1,6 @@
 import { boolean, pgTable, primaryKey, timestamp, uuid } from 'drizzle-orm/pg-core';
-import { rooms } from './rooms';
-import { users } from './users';
+import { rooms } from './rooms.js';
+import { users } from './users.js';
 
 export const recordingConsents = pgTable(
   'recording_consents',

@@ -5,6 +5,7 @@ import type { Database } from '@syncode/db';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import type { EnvConfig } from '@/config/env.config';
 import { DB_CLIENT } from '@/modules/db/db.module';
+import type { AuthUser } from './auth.types.js';
 
 /**
  * JWT payload structure
@@ -31,7 +32,7 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: config.get('JWT_SECRET', { infer: true })!,
+      secretOrKey: config.get('AUTH_JWT_SECRET', { infer: true })!,
     });
   }
 

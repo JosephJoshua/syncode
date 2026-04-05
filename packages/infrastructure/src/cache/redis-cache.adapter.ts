@@ -1,8 +1,8 @@
 import type { OnModuleDestroy } from '@nestjs/common';
 import { Injectable, Logger } from '@nestjs/common';
 import type { ICacheService, TtlResult } from '@syncode/shared';
-import Redis from 'ioredis';
-import { type RedisConfig, RedisConfigSchema } from '../config';
+import { Redis } from 'ioredis';
+import { type RedisConfig, RedisConfigSchema } from '../config.js';
 
 @Injectable()
 export class RedisCacheAdapter implements ICacheService, OnModuleDestroy {

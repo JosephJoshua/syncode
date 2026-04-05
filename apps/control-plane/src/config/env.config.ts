@@ -19,10 +19,12 @@ const envSchema = z
 
     REDIS_URL: z.url(),
 
-    JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters'),
+    AUTH_JWT_SECRET: z.string().min(32, 'AUTH_JWT_SECRET must be at least 32 characters'),
     JWT_REFRESH_SECRET: z.string().min(32, 'JWT_REFRESH_SECRET must be at least 32 characters'),
     JWT_EXPIRATION: z.string().default('15m'),
     JWT_REFRESH_EXPIRATION: z.string().default('7d'),
+
+    COLLAB_JWT_SECRET: z.string().min(32, 'COLLAB_JWT_SECRET must be at least 32 characters'),
 
     S3_ENDPOINT: z.url(),
     S3_ACCESS_KEY: z.string().min(1),

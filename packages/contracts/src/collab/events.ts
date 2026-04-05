@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { defineRoute } from '../route-utils';
+import { defineRoute } from '../route-utils.js';
 
 // Collab-plane -> control-plane
 export const snapshotReadyPayloadSchema = z
