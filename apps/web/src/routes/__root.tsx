@@ -111,14 +111,29 @@ function RootLayout() {
         </Button>
       </>
     );
-  } else if (pathname === '/') {
+  } else if (pathname === '/login') {
     navContent = (
       <Button asChild size="sm">
+        <Link to="/register">Register</Link>
+      </Button>
+    );
+  } else if (pathname === '/register') {
+    navContent = (
+      <Button asChild variant="outline" size="sm">
         <Link to="/login">Log in</Link>
       </Button>
     );
   } else {
-    navContent = null;
+    navContent = (
+      <>
+        <Button asChild variant="outline" size="sm">
+          <Link to="/login">Log in</Link>
+        </Button>
+        <Button asChild size="sm">
+          <Link to="/register">Register</Link>
+        </Button>
+      </>
+    );
   }
 
   return (
