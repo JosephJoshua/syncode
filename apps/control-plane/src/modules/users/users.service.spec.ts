@@ -5,7 +5,9 @@ import { UsersService } from './users.service';
 
 type UsersServiceDatabaseMock = {
   query: {
-    users: Pick<Database['query']['users'], 'findFirst'>;
+    users: {
+      findFirst: (...args: unknown[]) => Promise<unknown>;
+    };
   };
 };
 
@@ -20,7 +22,7 @@ describe('UsersService', () => {
       },
     } satisfies UsersServiceDatabaseMock;
 
-    const service = new UsersService(db as Database);
+    const service = new UsersService(db as unknown as Database);
     return { service, findFirst };
   }
 

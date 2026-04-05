@@ -7,15 +7,32 @@ import type { Database } from '@syncode/db';
 import { refreshTokens, users } from '@syncode/db';
 import type { ICacheService } from '@syncode/shared/ports';
 import { describe, expect, it, vi } from 'vitest';
-import type { EnvConfig } from '@/config/env.config';
 import { AuthService } from './auth.service';
 
 const scryptAsync = promisify(scrypt);
 
-type AuthServiceDatabaseMock = Pick<Database, 'delete' | 'insert'> & {
+type AuthServiceDatabaseMock = {
   query: {
-    users: Pick<Database['query']['users'], 'findFirst'>;
+    users: {
+      findFirst: (...args: unknown[]) => Promise<unknown>;
+    };
   };
+  insert: (table: unknown) => {
+    values: (...args: unknown[]) => unknown;
+  };
+  delete: (table: unknown) => {
+    where: (...args: unknown[]) => unknown;
+  };
+};
+
+type AuthServiceJwtServiceMock = {
+  signAsync: (payload: { tokenType?: 'access' | 'refresh' }) => Promise<string>;
+  verifyAsync: (token: string, options?: unknown) => Promise<unknown>;
+  decode: (token: string) => unknown;
+};
+
+type AuthServiceConfigServiceMock = {
+  get: (key: string, options?: unknown) => string | undefined;
 };
 
 async function createPasswordHash(password: string): Promise<string> {
@@ -65,7 +82,7 @@ function createAuthServiceFixture() {
     }),
   } satisfies AuthServiceDatabaseMock;
 
-  const cacheService = {
+  const cacheService: Partial<ICacheService> = {
     get: vi.fn(async () => null),
     set: vi.fn(async () => undefined),
     del: vi.fn(async () => undefined),
@@ -76,19 +93,7 @@ function createAuthServiceFixture() {
     setIfNotExists: vi.fn(async () => false),
     expire: vi.fn(async () => false),
     shutdown: vi.fn(async () => undefined),
-  } satisfies Pick<
-    ICacheService,
-    | 'del'
-    | 'delByPattern'
-    | 'exists'
-    | 'expire'
-    | 'get'
-    | 'getTtl'
-    | 'incrBy'
-    | 'set'
-    | 'setIfNotExists'
-    | 'shutdown'
-  >;
+  };
 
   const jwtService = {
     signAsync: vi.fn(async (payload: { tokenType?: 'access' | 'refresh' }) =>
@@ -103,7 +108,7 @@ function createAuthServiceFixture() {
       exp: Math.floor(Date.now() / 1000) + 3600,
     })),
     decode: vi.fn(() => ({ exp: Math.floor(Date.now() / 1000) + 3600 })),
-  } satisfies Pick<JwtService, 'decode' | 'signAsync' | 'verifyAsync'>;
+  } satisfies AuthServiceJwtServiceMock;
 
   const configService = {
     get: vi.fn((key: string) => {
@@ -111,13 +116,13 @@ function createAuthServiceFixture() {
       if (key === 'JWT_REFRESH_EXPIRATION') return '7d';
       return undefined;
     }),
-  } satisfies Pick<ConfigService<EnvConfig>, 'get'>;
+  } satisfies AuthServiceConfigServiceMock;
 
   const service = new AuthService(
-    db as Database,
+    db as unknown as Database,
     cacheService as ICacheService,
-    jwtService as JwtService,
-    configService as ConfigService<EnvConfig>,
+    jwtService as unknown as JwtService,
+    configService as unknown as ConfigService,
   );
 
   return {

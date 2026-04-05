@@ -6,6 +6,22 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
+      '@syncode/contracts/stubs': fileURLToPath(
+        new URL('../../packages/contracts/src/stubs.ts', import.meta.url),
+      ),
+      '@syncode/contracts': fileURLToPath(
+        new URL('../../packages/contracts/src/index.ts', import.meta.url),
+      ),
+      '@syncode/db': fileURLToPath(new URL('../../packages/db/src/index.ts', import.meta.url)),
+      '@syncode/shared/ports': fileURLToPath(
+        new URL('../../packages/shared/src/ports/index.ts', import.meta.url),
+      ),
+      '@syncode/shared/server': fileURLToPath(
+        new URL('../../packages/shared/src/server.ts', import.meta.url),
+      ),
+      '@syncode/shared': fileURLToPath(
+        new URL('../../packages/shared/src/index.ts', import.meta.url),
+      ),
     },
   },
   plugins: [

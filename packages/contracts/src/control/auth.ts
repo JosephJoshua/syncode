@@ -1,6 +1,5 @@
-import { UserRole } from '@syncode/shared';
 import { z } from 'zod';
-import { userProfileResponseSchema, userStatsSchema } from './users';
+import { userProfileResponseSchema, userStatsSchema } from './users.js';
 
 export const registerSchema = z
   .object({
