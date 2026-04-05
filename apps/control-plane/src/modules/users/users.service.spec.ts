@@ -1,6 +1,13 @@
 import { NotFoundException } from '@nestjs/common';
+import type { Database } from '@syncode/db';
 import { describe, expect, it, vi } from 'vitest';
 import { UsersService } from './users.service';
+
+type UsersServiceDatabaseMock = {
+  query: {
+    users: Pick<Database['query']['users'], 'findFirst'>;
+  };
+};
 
 describe('UsersService', () => {
   function createUsersServiceFixture() {
@@ -11,9 +18,9 @@ describe('UsersService', () => {
           findFirst,
         },
       },
-    };
+    } satisfies UsersServiceDatabaseMock;
 
-    const service = new UsersService(db as never);
+    const service = new UsersService(db as Database);
     return { service, findFirst };
   }
 

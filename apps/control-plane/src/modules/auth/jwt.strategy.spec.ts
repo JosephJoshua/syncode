@@ -1,6 +1,15 @@
 import { UnauthorizedException } from '@nestjs/common';
+import type { ConfigService } from '@nestjs/config';
+import type { Database } from '@syncode/db';
 import { describe, expect, it, vi } from 'vitest';
+import type { EnvConfig } from '@/config/env.config';
 import { JwtStrategy } from './jwt.strategy';
+
+type JwtStrategyDatabaseMock = {
+  query: {
+    users: Pick<Database['query']['users'], 'findFirst'>;
+  };
+};
 
 function createStrategyFixture() {
   const db = {
@@ -9,13 +18,13 @@ function createStrategyFixture() {
         findFirst: vi.fn(),
       },
     },
-  };
+  } satisfies JwtStrategyDatabaseMock;
 
   const config = {
     get: vi.fn(() => 'x'.repeat(32)),
-  };
+  } satisfies Pick<ConfigService<EnvConfig>, 'get'>;
 
-  const strategy = new JwtStrategy(config as never, db as never);
+  const strategy = new JwtStrategy(config as ConfigService<EnvConfig>, db as Database);
 
   return {
     strategy,

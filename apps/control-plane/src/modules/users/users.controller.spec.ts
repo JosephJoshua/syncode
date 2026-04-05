@@ -1,9 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import { UsersController } from './users.controller';
+import type { UsersService } from './users.service';
 
 describe('UsersController', () => {
   function createUsersControllerFixture() {
-    const usersService = {
+    const usersService: Pick<UsersService, 'findById'> = {
       findById: vi.fn(async (id: string) => ({
         id,
         email: 'user@example.com',
@@ -22,7 +23,7 @@ describe('UsersController', () => {
       })),
     };
 
-    const controller = new UsersController(usersService as never);
+    const controller = new UsersController(usersService as UsersService);
 
     return { controller, usersService };
   }

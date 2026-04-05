@@ -1,11 +1,22 @@
 import { randomBytes, scrypt } from 'node:crypto';
 import { promisify } from 'node:util';
 import { ConflictException, ForbiddenException, UnauthorizedException } from '@nestjs/common';
+import type { ConfigService } from '@nestjs/config';
+import type { JwtService } from '@nestjs/jwt';
+import type { Database } from '@syncode/db';
 import { refreshTokens, users } from '@syncode/db';
+import type { ICacheService } from '@syncode/shared/ports';
 import { describe, expect, it, vi } from 'vitest';
+import type { EnvConfig } from '@/config/env.config';
 import { AuthService } from './auth.service';
 
 const scryptAsync = promisify(scrypt);
+
+type AuthServiceDatabaseMock = Pick<Database, 'delete' | 'insert'> & {
+  query: {
+    users: Pick<Database['query']['users'], 'findFirst'>;
+  };
+};
 
 async function createPasswordHash(password: string): Promise<string> {
   const salt = randomBytes(16).toString('hex');
@@ -52,7 +63,7 @@ function createAuthServiceFixture() {
 
       throw new Error('Unexpected table in mock db.delete');
     }),
-  };
+  } satisfies AuthServiceDatabaseMock;
 
   const cacheService = {
     get: vi.fn(async () => null),
@@ -65,7 +76,19 @@ function createAuthServiceFixture() {
     setIfNotExists: vi.fn(async () => false),
     expire: vi.fn(async () => false),
     shutdown: vi.fn(async () => undefined),
-  };
+  } satisfies Pick<
+    ICacheService,
+    | 'del'
+    | 'delByPattern'
+    | 'exists'
+    | 'expire'
+    | 'get'
+    | 'getTtl'
+    | 'incrBy'
+    | 'set'
+    | 'setIfNotExists'
+    | 'shutdown'
+  >;
 
   const jwtService = {
     signAsync: vi.fn(async (payload: { tokenType?: 'access' | 'refresh' }) =>
@@ -80,7 +103,7 @@ function createAuthServiceFixture() {
       exp: Math.floor(Date.now() / 1000) + 3600,
     })),
     decode: vi.fn(() => ({ exp: Math.floor(Date.now() / 1000) + 3600 })),
-  };
+  } satisfies Pick<JwtService, 'decode' | 'signAsync' | 'verifyAsync'>;
 
   const configService = {
     get: vi.fn((key: string) => {
@@ -88,13 +111,13 @@ function createAuthServiceFixture() {
       if (key === 'JWT_REFRESH_EXPIRATION') return '7d';
       return undefined;
     }),
-  };
+  } satisfies Pick<ConfigService<EnvConfig>, 'get'>;
 
   const service = new AuthService(
-    db as never,
-    cacheService as never,
-    jwtService as never,
-    configService as never,
+    db as Database,
+    cacheService as ICacheService,
+    jwtService as JwtService,
+    configService as ConfigService<EnvConfig>,
   );
 
   return {
