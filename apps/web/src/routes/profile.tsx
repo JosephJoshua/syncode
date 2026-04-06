@@ -144,8 +144,9 @@ function ProfilePage() {
   const profile = profileQuery.data ?? fallbackUser;
   const quotas = quotasQuery.data;
   const isLoading = profileQuery.isLoading && !profile;
+  const profileEmail = profile?.email ?? '';
   const isDeleteConfirmationValid =
-    Boolean(profile?.email) && deleteConfirmation.trim() === profile.email;
+    profileEmail.length > 0 && deleteConfirmation.trim() === profileEmail;
 
   if (!isAuthenticated) {
     return null;
