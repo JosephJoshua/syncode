@@ -1,4 +1,4 @@
-import type { SessionHistoryResponse } from '@/lib/dashboard-session-history';
+import type { SessionHistoryResponse } from '@syncode/contracts';
 
 export const MOCK_SESSION_HISTORY_VIEWER_ID = 'user-current';
 

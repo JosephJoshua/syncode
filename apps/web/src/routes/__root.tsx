@@ -1,8 +1,8 @@
-import type { AuthUserResponse } from '@syncode/contracts';
 import { Button, cn } from '@syncode/ui';
 import { createRootRoute, Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router';
 import { User } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { getUserInitial } from '@/lib/user-utils';
 import { useAuthStore } from '@/stores/auth.store';
 
 export const Route = createRootRoute({
@@ -87,29 +87,23 @@ function SynCodeLogo({ className }: { className?: string }) {
   );
 }
 
-function getAccountInitial(user: AuthUserResponse | null) {
-  const source = user?.displayName || user?.username || user?.email;
-
-  if (!source) {
-    return null;
-  }
-
-  return source.trim().charAt(0).toUpperCase() || null;
-}
-
 function RootLayout() {
   const navigate = useNavigate();
-  const pathname = useRouterState({
-    select: (state) => state.location.pathname,
+  const { pathname, isSessionFeedbackPage } = useRouterState({
+    select: (state) => ({
+      pathname: state.location.pathname,
+      isSessionFeedbackPage: state.matches.some(
+        (match) => match.routeId === '/sessions/$sessionId/feedback',
+      ),
+    }),
   });
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const user = useAuthStore((state) => state.user);
   const logout = useAuthStore((state) => state.logout);
-  const accountInitial = getAccountInitial(user);
+  const accountInitial = getUserInitial(user);
   const isDashboardPage = pathname === '/dashboard';
   const isRoomsPage = pathname === '/rooms';
   const isProblemsPage = pathname === '/problems';
-  const isSessionFeedbackPage = pathname.startsWith('/sessions/') && pathname.endsWith('/feedback');
   const showDashboardChrome =
     isDashboardPage || isRoomsPage || isProblemsPage || isSessionFeedbackPage;
 

@@ -1,5 +1,10 @@
-import { defineRoute } from '@syncode/contracts';
-import { z } from 'zod';
+import {
+  CONTROL_API,
+  type SessionHistoryParticipant,
+  type SessionHistoryResponse,
+  type SessionSummary,
+  sessionHistoryResponseSchema,
+} from '@syncode/contracts';
 import { api } from '@/lib/api-client';
 import {
   MOCK_SESSION_HISTORY_RESPONSE,
@@ -52,51 +57,6 @@ export type DashboardSessionHistory = {
 
 export type DashboardSessionHistorySource = 'api' | 'mock';
 
-const DASHBOARD_SESSION_ROUTES = {
-  LIST: defineRoute<void, SessionHistoryResponse>()('sessions', 'GET'),
-} as const;
-
-const sessionHistoryParticipantSchema = z.object({
-  userId: z.string(),
-  role: z.string(),
-  displayName: z.string().nullable().optional(),
-  username: z.string().nullable().optional(),
-  avatarUrl: z.string().nullable().optional(),
-});
-
-const sessionSummarySchema = z.object({
-  sessionId: z.string(),
-  roomId: z.string(),
-  mode: z.enum(['peer', 'ai']),
-  problemTitle: z.string().nullable(),
-  difficulty: z.string().nullable(),
-  language: z.string().nullable(),
-  duration: z.number().int().nonnegative(),
-  participants: z.array(sessionHistoryParticipantSchema).default([]),
-  overallScore: z.number().nullable().default(null),
-  hasReport: z.boolean(),
-  hasFeedback: z.boolean(),
-  createdAt: z.string(),
-  finishedAt: z.string().nullable().optional().default(null),
-});
-
-const paginationSchema = z.object({
-  nextCursor: z.string().nullable(),
-  hasMore: z.boolean(),
-});
-
-const sessionHistoryResponseSchema = z.object({
-  data: z.array(sessionSummarySchema).default([]),
-  pagination: paginationSchema.default({
-    nextCursor: null,
-    hasMore: false,
-  }),
-});
-
-export type SessionHistoryParticipant = z.infer<typeof sessionHistoryParticipantSchema>;
-export type SessionSummary = z.infer<typeof sessionSummarySchema>;
-export type SessionHistoryResponse = z.infer<typeof sessionHistoryResponseSchema>;
-
 export type DashboardSessionRecord = {
   id: string;
   roomId: string;
@@ -125,16 +85,19 @@ export const EMPTY_DASHBOARD_STATS: DashboardStats = {
   practiceTime: '0h',
 };
 
+const MAX_PAGES = 10;
+
 export async function fetchAllSessionHistory(query?: Omit<SessionHistoryQuery, 'cursor'>) {
   const allSessions: SessionSummary[] = [];
   let cursor: string | undefined;
   let hasMore = true;
+  let pagesFetched = 0;
   let lastPagination: SessionHistoryResponse['pagination'] = {
     nextCursor: null,
     hasMore: false,
   };
 
-  while (hasMore) {
+  while (hasMore && pagesFetched < MAX_PAGES) {
     const response = await fetchSessionHistoryPage({
       limit: 100,
       sortBy: 'createdAt',
@@ -147,6 +110,7 @@ export async function fetchAllSessionHistory(query?: Omit<SessionHistoryQuery, '
     lastPagination = response.pagination;
     cursor = response.pagination.nextCursor ?? undefined;
     hasMore = response.pagination.hasMore && Boolean(cursor);
+    pagesFetched++;
   }
 
   return {
@@ -296,7 +260,7 @@ export function toSessionRow(record: DashboardSessionRecord): SessionRow {
 }
 
 async function fetchSessionHistoryPage(query: SessionHistoryQuery) {
-  const response = await api(DASHBOARD_SESSION_ROUTES.LIST, {
+  const response = await api(CONTROL_API.SESSIONS.LIST, {
     searchParams: query,
   });
 

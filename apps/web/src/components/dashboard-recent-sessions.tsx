@@ -1,4 +1,3 @@
-import type { AuthUserResponse } from '@syncode/contracts';
 import {
   Avatar,
   AvatarFallback,
@@ -28,6 +27,7 @@ import type {
   SessionRow,
   SessionStatus,
 } from '@/lib/dashboard-session-history';
+import { getUserInitial } from '@/lib/user-utils';
 import { useAuthStore } from '@/stores/auth.store';
 
 type SessionFilter = 'all' | 'passed' | 'failed';
@@ -47,16 +47,6 @@ const MONTH_LABELS = [
   'NOV',
   'DEC',
 ];
-
-function getUserInitial(user: AuthUserResponse | null) {
-  const source = user?.displayName || user?.username || user?.email;
-
-  if (!source) {
-    return null;
-  }
-
-  return source.trim().charAt(0).toUpperCase() || null;
-}
 
 function formatSessionDate(date: string) {
   const parsed = new Date(date);

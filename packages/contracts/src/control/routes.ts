@@ -17,6 +17,7 @@ import type {
   submitProblemSchema,
   submitResultItemSchema,
 } from './rooms.js';
+import type { sessionHistoryResponseSchema } from './sessions.js';
 import type { updateUserSchema, userProfileResponseSchema } from './users.js';
 
 export const CONTROL_API = {
@@ -70,6 +71,9 @@ export const CONTROL_API = {
     GET_BY_ID: defineRoute<void, void>()('problems/:id', 'GET'),
     CREATE: defineRoute<void, void>()('problems', 'POST'),
     DELETE: defineRoute<void, void>()('problems/:id', 'DELETE'),
+  },
+  SESSIONS: {
+    LIST: defineRoute<void, z.infer<typeof sessionHistoryResponseSchema>>()('sessions', 'GET'),
   },
   HEALTH: defineRoute<void, z.infer<typeof healthCheckResponseSchema>>()('health', 'GET'),
 };

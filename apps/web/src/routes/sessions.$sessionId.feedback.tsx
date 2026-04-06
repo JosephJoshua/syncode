@@ -1,5 +1,6 @@
 import { Card, CardContent } from '@syncode/ui';
 import { createFileRoute } from '@tanstack/react-router';
+import { useMemo } from 'react';
 import { buildDashboardSessionHistory } from '@/lib/dashboard-session-history';
 import { MOCK_SESSION_HISTORY_RESPONSE } from '@/lib/session-history.mock';
 import { useAuthStore } from '@/stores/auth.store';
@@ -10,11 +11,14 @@ export const Route = createFileRoute('/sessions/$sessionId/feedback')({
 
 function SessionFeedbackPage() {
   const { sessionId } = Route.useParams();
-  const user = useAuthStore((state) => state.user);
-  const session = buildDashboardSessionHistory(
-    MOCK_SESSION_HISTORY_RESPONSE,
-    user?.id ?? null,
-  ).rows.find((item) => item.id === sessionId);
+  const userId = useAuthStore((state) => state.user?.id ?? null);
+  const session = useMemo(
+    () =>
+      buildDashboardSessionHistory(MOCK_SESSION_HISTORY_RESPONSE, userId).rows.find(
+        (item) => item.id === sessionId,
+      ),
+    [userId, sessionId],
+  );
 
   if (!session) {
     return (
