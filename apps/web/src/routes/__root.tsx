@@ -1,8 +1,12 @@
-import { Button, cn } from '@syncode/ui';
+import { CONTROL_API } from '@syncode/contracts';
+import { Avatar, AvatarFallback, Button, cn } from '@syncode/ui';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { createRootRoute, Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router';
-import { LogOut, User } from 'lucide-react';
+import { LogOut, User, UserRound } from 'lucide-react';
 import { DropdownMenu } from 'radix-ui';
 import type { ReactNode } from 'react';
+import { toast } from 'sonner';
+import { api, readApiError } from '@/lib/api-client';
 import { getUserInitial } from '@/lib/user-utils';
 import { useAuthStore } from '@/stores/auth.store';
 
@@ -105,12 +109,40 @@ function RootLayout() {
   const isDashboardPage = pathname === '/dashboard';
   const isRoomsPage = pathname === '/rooms';
   const isProblemsPage = pathname.startsWith('/problems');
+  const isProfilePage = pathname === '/profile';
   const showDashboardChrome =
-    isDashboardPage || isRoomsPage || isProblemsPage || isSessionFeedbackPage;
+    isDashboardPage || isRoomsPage || isProblemsPage || isSessionFeedbackPage || isProfilePage;
+  const queryClient = useQueryClient();
 
-  const handleLogout = () => {
-    logout();
-    navigate({ to: '/' }).catch(() => {});
+  const logoutMutation = useMutation({
+    mutationFn: async () => {
+      try {
+        await api(CONTROL_API.AUTH.LOGOUT);
+      } catch (error) {
+        const apiError = await readApiError(error);
+
+        if (apiError?.statusCode === 401) {
+          return;
+        }
+
+        throw error;
+      }
+    },
+    onSuccess: () => {
+      toast.success('Signed out successfully.');
+    },
+    onError: () => {
+      toast.error('Sign-out request failed, but your local session was cleared.');
+    },
+    onSettled: () => {
+      logout();
+      queryClient.clear();
+      navigate({ to: '/' }).catch(() => {});
+    },
+  });
+
+  const handleLogout = async () => {
+    await logoutMutation.mutateAsync().catch(() => {});
   };
 
   let navContent: ReactNode;
@@ -176,20 +208,18 @@ function RootLayout() {
     <div className="min-h-screen bg-background text-foreground">
       <nav className="border-b border-border bg-background/80 backdrop-blur-md">
         {showDashboardChrome ? (
-          <div className="relative h-14">
-            <div className="mx-auto flex h-14 max-w-7xl items-center px-4">
-              <div className="flex min-w-0 items-center gap-3 sm:gap-5">
-                <Link
-                  to="/"
-                  className="flex shrink-0 items-center gap-2 font-semibold text-foreground transition-colors hover:text-primary"
-                >
-                  <SynCodeLogo className="h-6 w-6" />
-                  <span className="truncate">SynCode</span>
-                </Link>
-                {navContent}
-              </div>
+          <div className="mx-auto flex h-14 max-w-7xl items-center justify-between gap-6 px-4">
+            <div className="flex min-w-0 items-center gap-3 sm:gap-5">
+              <Link
+                to="/"
+                className="flex shrink-0 items-center gap-2 font-semibold text-foreground transition-colors hover:text-primary"
+              >
+                <SynCodeLogo className="h-6 w-6" />
+                <span className="truncate">SynCode</span>
+              </Link>
+              {navContent}
             </div>
-            <div className="absolute right-5 top-1/2 -translate-y-1/2 sm:right-6">
+            <div className="flex shrink-0 items-center">
               {isAuthenticated ? (
                 <DropdownMenu.Root>
                   <DropdownMenu.Trigger asChild>
@@ -198,11 +228,11 @@ function RootLayout() {
                       aria-label="Account menu"
                       className="inline-flex size-9 shrink-0 items-center justify-center rounded-full border border-border/80 bg-card/85 text-sm font-semibold text-foreground ring-1 ring-foreground/5 transition-all hover:border-primary/30 hover:bg-muted/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
                     >
-                      {accountInitial ? (
-                        <span>{accountInitial}</span>
-                      ) : (
-                        <User className="size-4 text-primary" />
-                      )}
+                      <Avatar className="size-9 border-none bg-transparent text-foreground shadow-none ring-0">
+                        <AvatarFallback className="text-foreground">
+                          {accountInitial ?? <User className="size-4 text-primary" />}
+                        </AvatarFallback>
+                      </Avatar>
                     </button>
                   </DropdownMenu.Trigger>
                   <DropdownMenu.Portal>
@@ -211,12 +241,24 @@ function RootLayout() {
                       sideOffset={6}
                       className="z-50 min-w-36 rounded-xl border border-border/60 bg-popover p-1 shadow-lg data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0"
                     >
+                      <DropdownMenu.Item asChild>
+                        <Link
+                          to="/profile"
+                          className="flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm text-foreground outline-none transition-colors data-[highlighted]:bg-muted"
+                        >
+                          <UserRound className="size-3.5" />
+                          Profile
+                        </Link>
+                      </DropdownMenu.Item>
                       <DropdownMenu.Item
-                        onSelect={handleLogout}
-                        className="flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm text-destructive outline-none transition-colors data-[highlighted]:bg-destructive/10"
+                        onSelect={() => {
+                          void handleLogout();
+                        }}
+                        className="flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm text-destructive outline-none transition-colors data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[highlighted]:bg-destructive/10"
+                        disabled={logoutMutation.isPending}
                       >
                         <LogOut className="size-3.5" />
-                        Log out
+                        {logoutMutation.isPending ? 'Logging out...' : 'Log out'}
                       </DropdownMenu.Item>
                     </DropdownMenu.Content>
                   </DropdownMenu.Portal>
