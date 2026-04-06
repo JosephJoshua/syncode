@@ -1,11 +1,13 @@
 import { Card, CardContent } from '@syncode/ui';
 import { createFileRoute } from '@tanstack/react-router';
 import { useMemo } from 'react';
+import { requireAuth } from '@/lib/auth';
 import { buildDashboardSessionHistory } from '@/lib/dashboard-session-history';
 import { MOCK_SESSION_HISTORY_RESPONSE } from '@/lib/session-history.mock';
 import { useAuthStore } from '@/stores/auth.store';
 
 export const Route = createFileRoute('/sessions/$sessionId/feedback')({
+  beforeLoad: requireAuth,
   component: SessionFeedbackPage,
 });
 

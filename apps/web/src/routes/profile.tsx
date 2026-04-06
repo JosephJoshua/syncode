@@ -12,9 +12,11 @@ import { ProfileFormCard } from '@/components/profile/profile-form-card';
 import { ProfileHero } from '@/components/profile/profile-hero';
 import { QuotasPanel } from '@/components/profile/quotas-panel';
 import { api, getFieldErrorMessage, readApiError } from '@/lib/api-client';
+import { requireAuth } from '@/lib/auth';
 import { useAuthStore } from '@/stores/auth.store';
 
 export const Route = createFileRoute('/profile')({
+  beforeLoad: requireAuth,
   component: ProfilePage,
 });
 
@@ -46,12 +48,6 @@ function ProfilePage() {
     },
   });
 
-  useEffect(() => {
-    if (!isAuthenticated) {
-      navigate({ to: '/login' }).catch(() => {});
-    }
-  }, [isAuthenticated, navigate]);
-
   const profileQuery = useQuery({
     queryKey: profileQueryKey,
     enabled: isAuthenticated,
@@ -76,22 +72,6 @@ function ProfilePage() {
       bio: profileQuery.data.bio ?? '',
     });
   }, [profileQuery.data, reset, setUser]);
-
-  useEffect(() => {
-    if (!profileQuery.isError) {
-      return;
-    }
-
-    void handleUnauthorizedProfileError(profileQuery.error, logout, queryClient, navigate);
-  }, [logout, navigate, profileQuery.error, profileQuery.isError, queryClient]);
-
-  useEffect(() => {
-    if (!quotasQuery.isError) {
-      return;
-    }
-
-    void handleUnauthorizedProfileError(quotasQuery.error, logout, queryClient, navigate);
-  }, [logout, navigate, queryClient, quotasQuery.error, quotasQuery.isError]);
 
   const updateMutation = useMutation({
     mutationFn: (values: ProfileFormValues) =>
@@ -127,16 +107,7 @@ function ProfilePage() {
       toast.success('Account deleted.');
       navigate({ to: '/' }).catch(() => {});
     },
-    onError: async (error) => {
-      const apiError = await readApiError(error);
-
-      if (apiError?.statusCode === 401) {
-        logout();
-        queryClient.clear();
-        navigate({ to: '/login' }).catch(() => {});
-        return;
-      }
-
+    onError: () => {
       toast.error('Unable to delete your account right now.');
     },
   });
@@ -226,23 +197,6 @@ function ProfilePage() {
       </section>
     </div>
   );
-}
-
-async function handleUnauthorizedProfileError(
-  error: unknown,
-  logout: () => void,
-  queryClient: ReturnType<typeof useQueryClient>,
-  navigate: ReturnType<typeof useNavigate>,
-) {
-  const apiError = await readApiError(error);
-
-  if (apiError?.statusCode !== 401) {
-    return;
-  }
-
-  logout();
-  queryClient.clear();
-  navigate({ to: '/login' }).catch(() => {});
 }
 
 async function handleProfileUpdateError(

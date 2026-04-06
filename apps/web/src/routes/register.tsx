@@ -24,9 +24,10 @@ import { AnimatedFormField } from '@/components/form-field';
 import { CursorSpotlight } from '@/components/spotlight';
 import { TiltCard } from '@/components/tilt';
 import { api, getFieldErrorMessage, readApiError } from '@/lib/api-client';
-import { useAuthStore } from '@/stores/auth.store';
+import { requireGuest } from '@/lib/auth';
 
 export const Route = createFileRoute('/register')({
+  beforeLoad: requireGuest,
   component: RegisterPage,
 });
 
@@ -58,7 +59,6 @@ type RegisterFormValues = z.infer<typeof registerFormSchema>;
 
 function RegisterPage() {
   const navigate = useNavigate();
-  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const [submissionError, setSubmissionError] = useState<string | null>(null);
   const successTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const {
@@ -76,12 +76,6 @@ function RegisterPage() {
       confirmPassword: '',
     },
   });
-
-  useEffect(() => {
-    if (isAuthenticated) {
-      navigate({ to: '/dashboard' }).catch(() => {});
-    }
-  }, [isAuthenticated, navigate]);
 
   const registerMutation = useMutation({
     mutationFn: (values: RegisterFormValues) =>

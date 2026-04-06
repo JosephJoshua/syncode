@@ -22,9 +22,11 @@ import { Controller, useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { useClipboard } from '@/hooks/use-clipboard';
 import { api, readApiError } from '@/lib/api-client';
+import { requireAuth } from '@/lib/auth';
 import { useAuthStore } from '@/stores/auth.store';
 
 export const Route = createFileRoute('/rooms/create')({
+  beforeLoad: requireAuth,
   component: CreateRoomPage,
 });
 

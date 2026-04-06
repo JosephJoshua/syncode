@@ -18,9 +18,11 @@ import type { ChangeEvent } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { useClipboard } from '@/hooks/use-clipboard';
 import { api, readApiError } from '@/lib/api-client';
+import { requireAuth } from '@/lib/auth';
 import { useAuthStore } from '@/stores/auth.store';
 
 export const Route = createFileRoute('/rooms/$roomId')({
+  beforeLoad: requireAuth,
   component: RoomLobbyPage,
 });
 
