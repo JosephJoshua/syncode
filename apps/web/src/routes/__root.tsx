@@ -105,9 +105,8 @@ function RootLayout() {
   const isDashboardPage = pathname === '/dashboard';
   const isRoomsPage = pathname === '/rooms';
   const isProblemsPage = pathname.startsWith('/problems');
-  const isProblemDetailPage = pathname.startsWith('/problem/');
   const showDashboardChrome =
-    isDashboardPage || isRoomsPage || isProblemsPage || isProblemDetailPage || isSessionFeedbackPage;
+    isDashboardPage || isRoomsPage || isProblemsPage || isSessionFeedbackPage;
 
   const handleLogout = () => {
     logout();
@@ -129,7 +128,7 @@ function RootLayout() {
           {
             label: 'Problems',
             to: '/problems',
-            isActive: isProblemsPage || isProblemDetailPage,
+            isActive: isProblemsPage,
           },
         ].map((item) => (
           <Link

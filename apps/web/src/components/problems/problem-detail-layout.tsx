@@ -279,7 +279,7 @@ function LabeledCodeBlock({ label, value }: { label: string; value: string }) {
       <p className="text-xs font-medium tracking-[0.16em] text-muted-foreground uppercase">
         {label}
       </p>
-      <pre className="mt-1 overflow-x-auto rounded-lg border border-border/60 bg-muted/70 px-3.5 py-2 text-sm leading-6.5 text-foreground">
+      <pre className="mt-1 overflow-x-auto rounded-lg border border-border/60 bg-muted/70 px-3.5 py-2 text-sm leading-[1.625rem] text-foreground">
         <code>{value}</code>
       </pre>
     </div>
@@ -292,7 +292,7 @@ function LabeledTextBlock({ label, value }: { label: string; value: string }) {
       <p className="text-xs font-medium tracking-[0.16em] text-muted-foreground uppercase">
         {label}
       </p>
-      <p className="mt-1 rounded-lg border border-border/60 bg-muted/50 px-3.5 py-2 text-sm leading-6.5 text-foreground">
+      <p className="mt-1 rounded-lg border border-border/60 bg-muted/50 px-3.5 py-2 text-sm leading-[1.625rem] text-foreground">
         {value}
       </p>
     </div>

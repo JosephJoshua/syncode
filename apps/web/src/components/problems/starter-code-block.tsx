@@ -22,7 +22,7 @@ export function StarterCodeBlock({ code, language }: { code: string; language: s
   return (
     <div className="starter-code-block overflow-x-auto rounded-xl border border-border/60 bg-muted/60 px-4 py-2.5">
       <pre
-        className="text-sm leading-6.5 text-foreground"
+        className="text-sm leading-[1.625rem] text-foreground"
         data-language={prismLanguage ?? 'plain-text'}
         data-testid="starter-code-block"
       >

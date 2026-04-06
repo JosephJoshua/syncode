@@ -99,7 +99,7 @@ describe('problem detail data layer', () => {
     vi.mocked(api).mockRejectedValueOnce(new Error('HTTP error'));
     vi.mocked(readApiError).mockResolvedValueOnce({
       statusCode: 404,
-      code: 'ROOM_NOT_FOUND',
+      code: 'PROBLEM_NOT_FOUND',
       message: 'Problem not found',
       timestamp: '2026-04-06T00:00:00.000Z',
       details: { id: 'missing' },
