@@ -4,9 +4,11 @@ import ky, { HTTPError } from 'ky';
 import { useAuthStore } from '@/stores/auth.store';
 
 const resolveUrl = buildUrl as (template: string, params?: Record<string, string>) => string;
+const importMetaEnv = (import.meta as ImportMeta & { env?: Record<string, string | undefined> })
+  .env;
 
 const client = ky.create({
-  prefixUrl: import.meta.env.VITE_API_URL ?? '/api',
+  prefixUrl: importMetaEnv?.VITE_API_URL ?? '/api',
   credentials: 'include',
   hooks: {
     beforeRequest: [
@@ -88,6 +90,17 @@ function normalizeSearchParams(
   }
 
   return Object.fromEntries(entries);
+}
+
+export class ApiError extends Error {
+  readonly response: ErrorResponse;
+
+  constructor(response: ErrorResponse) {
+    super(response.message);
+    this.name = 'ApiError';
+    this.response = response;
+    Object.setPrototypeOf(this, ApiError.prototype);
+  }
 }
 
 export async function readApiError(error: unknown): Promise<ErrorResponse | null> {

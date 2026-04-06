@@ -103,6 +103,11 @@ export const CONTROL_API = {
     CREATE: defineRoute<void, void>()('problems', 'POST'),
     DELETE: defineRoute<void, void>()('problems/:id', 'DELETE'),
   },
+  BOOKMARKS: {
+    LIST: defineRoute<void, void>()('users/me/bookmarks', 'GET'),
+    ADD: defineRoute<void, void>()('users/me/bookmarks/:problemId', 'PUT'),
+    REMOVE: defineRoute<void, void>()('users/me/bookmarks/:problemId', 'DELETE'),
+  },
   SESSIONS: {
     LIST: defineRoute<void, z.infer<typeof sessionHistoryResponseSchema>>()('sessions', 'GET'),
   },
