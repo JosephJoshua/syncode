@@ -98,6 +98,8 @@ function CreateRoomPage() {
   const copiedTimerRef = useRef<ReturnType<typeof setTimeout>>(null);
 
   const [inviteLink, setInviteLink] = useState<string | null>(null);
+  const [createdRoomId, setCreatedRoomId] = useState<string | null>(null);
+  const [createdRoomCode, setCreatedRoomCode] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [problemInput, setProblemInput] = useState('');
   const [isProblemMenuOpen, setIsProblemMenuOpen] = useState(false);
@@ -167,7 +169,9 @@ function CreateRoomPage() {
     try {
       const room = await createRoomMutation.mutateAsync(data);
       setSubmittedData(data);
-      setInviteLink(`${window.location.origin}/rooms/${room.roomId}`);
+      setCreatedRoomId(room.roomId);
+      setCreatedRoomCode(room.roomCode);
+      setInviteLink(`${window.location.origin}/rooms/${room.roomId}?code=${room.roomCode}`);
     } catch (error) {
       const apiError = await readApiError(error);
       setSubmissionError(apiError?.message ?? 'Failed to create room. Please try again.');
@@ -421,16 +425,37 @@ function CreateRoomPage() {
                   className="w-full rounded-xl"
                   onClick={() => {
                     setInviteLink(null);
+                    setCreatedRoomId(null);
+                    setCreatedRoomCode(null);
                     reset();
                     setProblemInput('');
                     setSubmissionError(null);
                     setSubmittedData(null);
+                    setCopied(false);
                   }}
                 >
                   Setup New Room
                 </Button>
-                {/* TODO: Navigate to room workspace when implemented */}
-                <Button size="lg" disabled className="w-full rounded-xl">
+                <Button
+                  size="lg"
+                  className="w-full rounded-xl"
+                  onClick={() => {
+                    if (!createdRoomId) {
+                      return;
+                    }
+
+                    if (createdRoomCode) {
+                      window.location.assign(`/rooms/${createdRoomId}?code=${createdRoomCode}`);
+                      return;
+                    }
+
+                    void navigate({
+                      to: '/rooms/$roomId',
+                      params: { roomId: createdRoomId },
+                    });
+                  }}
+                  disabled={!createdRoomId}
+                >
                   Enter Workspace
                 </Button>
               </div>
