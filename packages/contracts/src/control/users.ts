@@ -9,6 +9,20 @@ export const updateUserSchema = z
       .optional()
       .describe('New display name')
       .meta({ examples: ['Jane Doe'] }),
+    bio: z
+      .string()
+      .max(500)
+      .optional()
+      .describe('New biography')
+      .meta({ examples: ['I love algorithms.'] }),
+    username: z
+      .string()
+      .min(3)
+      .max(30)
+      .regex(/^[a-zA-Z0-9_]+$/)
+      .optional()
+      .describe('New username')
+      .meta({ examples: ['syncoder_01'] }),
   })
   .strict();
 
@@ -66,3 +80,55 @@ export const userProfileResponseSchema = z.object({
 });
 
 export type UserProfileResponse = z.infer<typeof userProfileResponseSchema>;
+
+export const publicUserProfileResponseSchema = z.object({
+  id: z
+    .uuid()
+    .describe('User ID')
+    .meta({ examples: ['497f6eca-6276-4993-bfeb-53cbbbba6f08'] }),
+  username: z
+    .string()
+    .describe('Username')
+    .meta({ examples: ['syncoder_01'] }),
+  displayName: z
+    .string()
+    .nullable()
+    .describe('Display name')
+    .meta({ examples: ['Jane Doe'] }),
+  avatarUrl: z
+    .string()
+    .nullable()
+    .describe('Avatar URL')
+    .meta({ examples: ['https://cdn.syncode.app/avatar.png'] }),
+  bio: z
+    .string()
+    .nullable()
+    .describe('User bio')
+    .meta({ examples: ['I love algorithms.'] }),
+  createdAt: z
+    .string()
+    .datetime()
+    .describe('Account creation timestamp')
+    .meta({ examples: ['2019-08-24T14:15:22.123Z'] }),
+});
+
+export type PublicUserProfileResponse = z.infer<typeof publicUserProfileResponseSchema>;
+
+export const dailyUsageQuotaSchema = z.object({
+  used: z.number().int().nonnegative(),
+  limit: z.number().int().nonnegative(),
+  resetsAt: z.string().datetime(),
+});
+
+export const roomsQuotaSchema = z.object({
+  activeCount: z.number().int().nonnegative(),
+  maxActive: z.number().int().nonnegative(),
+});
+
+export const userQuotasResponseSchema = z.object({
+  ai: dailyUsageQuotaSchema,
+  execution: dailyUsageQuotaSchema,
+  rooms: roomsQuotaSchema,
+});
+
+export type UserQuotasResponse = z.infer<typeof userQuotasResponseSchema>;

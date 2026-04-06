@@ -13,7 +13,7 @@ import { ERROR_CODES, type UserProfileResponse } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
 import { refreshTokens, users } from '@syncode/db';
 import { CACHE_SERVICE, type ICacheService } from '@syncode/shared/ports';
-import { lt } from 'drizzle-orm';
+import { and, eq, isNull, lt } from 'drizzle-orm';
 import type { EnvConfig } from '@/config/env.config.js';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
 import { toUserProfile } from '@/modules/users/user-profile.mapper.js';
@@ -201,10 +201,15 @@ export class AuthService {
 
   async revokeAllRefreshTokensForUser(userId: string): Promise<void> {
     const nowUnixSeconds = Math.floor(Date.now() / 1_000);
+    const now = new Date();
 
     await Promise.all([
       this.cacheService.set(this.getRevokedAfterKey(userId), nowUnixSeconds),
       this.cacheService.delByPattern(`${this.getActiveTokenPrefix(userId)}*`),
+      this.db
+        .update(refreshTokens)
+        .set({ revokedAt: now })
+        .where(and(eq(refreshTokens.userId, userId), isNull(refreshTokens.revokedAt))),
     ]);
   }
 

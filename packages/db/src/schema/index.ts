@@ -6,6 +6,7 @@ export * from './bookmarks.js';
 export * from './code-snapshots.js';
 export * from './enums.js';
 export * from './execution-results.js';
+export * from './global-limits.js';
 export * from './helpers.js';
 export * from './idempotency-keys.js';
 export * from './match-requests.js';
