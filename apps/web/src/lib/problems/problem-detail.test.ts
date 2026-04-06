@@ -1,3 +1,4 @@
+import { SUPPORTED_LANGUAGES } from '@syncode/shared';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { api, readApiError } from '@/lib/api-client';
 import { fetchProblemDetail, ProblemDetailApiError, problemDetailRoute } from './problem-detail';
@@ -60,9 +61,7 @@ describe('problem detail data layer', () => {
       isHidden: expect.any(Boolean),
     });
     expect(response.starterCode).not.toBeNull();
-    expect(Object.keys(response.starterCode ?? {})).toEqual(
-      expect.arrayContaining(['python', 'javascript', 'typescript', 'java', 'cpp']),
-    );
+    expect(Object.keys(response.starterCode ?? {})).toEqual(SUPPORTED_LANGUAGES);
   });
 
   it('throws an API-shaped not found error in mock mode', async () => {

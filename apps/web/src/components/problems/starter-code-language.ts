@@ -1,10 +1,12 @@
+import type { SupportedLanguage } from '@syncode/shared';
+
 type StarterCodeLanguageConfig = {
   aliases: string[];
   label: string;
   prismLanguage: string | null;
 };
 
-const starterCodeLanguageConfigs: Record<string, StarterCodeLanguageConfig> = {
+const starterCodeLanguageConfigs: Record<SupportedLanguage, StarterCodeLanguageConfig> = {
   c: {
     aliases: ['c', 'h'],
     label: 'C',
@@ -25,6 +27,16 @@ const starterCodeLanguageConfigs: Record<string, StarterCodeLanguageConfig> = {
     label: 'JavaScript',
     prismLanguage: 'javascript',
   },
+  go: {
+    aliases: ['go', 'golang'],
+    label: 'Go',
+    prismLanguage: 'go',
+  },
+  rust: {
+    aliases: ['rust', 'rs'],
+    label: 'Rust',
+    prismLanguage: 'rust',
+  },
   python: {
     aliases: ['python', 'py', 'python3'],
     label: 'Python',
@@ -38,10 +50,10 @@ const starterCodeLanguageConfigs: Record<string, StarterCodeLanguageConfig> = {
 };
 
 const starterCodeLanguageAliasMap = Object.entries(starterCodeLanguageConfigs).reduce<
-  Record<string, string>
+  Record<string, SupportedLanguage>
 >((accumulator, [canonicalLanguage, config]) => {
   for (const alias of config.aliases) {
-    accumulator[alias] = canonicalLanguage;
+    accumulator[alias] = canonicalLanguage as SupportedLanguage;
   }
 
   return accumulator;

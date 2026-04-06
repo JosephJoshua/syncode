@@ -1,3 +1,4 @@
+import { SUPPORTED_LANGUAGES, type SupportedLanguage } from '@syncode/shared';
 import { Button } from '@syncode/ui';
 import { Bookmark, LoaderCircle } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -16,7 +17,7 @@ import { formatStarterLanguageLabel } from './starter-code-language';
 export function ProblemDetailLayout({ problem }: { problem: ProblemDetailResponse }) {
   const starterLanguages = getStarterLanguages(problem.starterCode);
   const firstLanguage = starterLanguages[0] ?? null;
-  const [selectedLanguage, setSelectedLanguage] = useState<string | null>(firstLanguage);
+  const [selectedLanguage, setSelectedLanguage] = useState<SupportedLanguage | null>(firstLanguage);
   const publicTestCases = problem.testCases.filter((testCase) => !testCase.isHidden);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const canToggleBookmark = isAuthenticated || isProblemDetailMockEnabled();
@@ -74,7 +75,7 @@ export function ProblemDetailLayout({ problem }: { problem: ProblemDetailRespons
           </aside>
         </div>
 
-        <SectionSurface title="Starter Code / Language Templates">
+        <SectionSurface title="Starter Code">
           {problem.starterCode && starterLanguages.length > 0 ? (
             <div className="space-y-3">
               <div className="flex flex-wrap gap-2">
@@ -446,7 +447,11 @@ function AttemptStatusBadge({
 }
 
 function getStarterLanguages(starterCode: ProblemDetailResponse['starterCode']) {
-  return starterCode ? Object.keys(starterCode) : [];
+  if (!starterCode) {
+    return [];
+  }
+
+  return SUPPORTED_LANGUAGES.filter((language) => typeof starterCode[language] === 'string');
 }
 
 function formatAttemptStatus(status: ProblemDetailResponse['attemptStatus']) {

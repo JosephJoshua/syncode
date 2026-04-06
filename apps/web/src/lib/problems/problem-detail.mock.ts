@@ -1,3 +1,5 @@
+import type { SupportedLanguage } from '@syncode/shared';
+
 export interface ProblemDetailPathParams {
   id: string;
 }
@@ -34,7 +36,7 @@ export interface ProblemDetailResponse {
   constraints: string | null;
   examples: ProblemExample[];
   testCases: ProblemTestCase[];
-  starterCode: Record<string, string> | null;
+  starterCode: Partial<Record<SupportedLanguage, string>> | null;
   userAttempts: number;
   createdAt: string;
 }
@@ -180,6 +182,29 @@ export const canonicalProblemDetailMock: ProblemDetailResponse = {
       '    return {};',
       '  }',
       '};',
+    ].join('\n'),
+    c: [
+      '#include <stdlib.h>',
+      '',
+      'int* twoSum(int* nums, int numsSize, int target, int* returnSize) {',
+      '  // Write your solution here',
+      '  *returnSize = 0;',
+      '  return NULL;',
+      '}',
+    ].join('\n'),
+    go: [
+      'func twoSum(nums []int, target int) []int {',
+      '    // Write your solution here',
+      '    return []int{}',
+      '}',
+    ].join('\n'),
+    rust: [
+      'impl Solution {',
+      '    pub fn two_sum(nums: Vec<i32>, target: i32) -> Vec<i32> {',
+      '        // Write your solution here',
+      '        vec![]',
+      '    }',
+      '}',
     ].join('\n'),
   },
   userAttempts: 4,
