@@ -10,9 +10,9 @@ import {
 import { X } from 'lucide-react';
 import { type ProblemSortKey, SORT_OPTIONS } from './problems.mock';
 
-const activeFilterCyan = 'rgb(34 211 238)';
-const activeFilterCyanSoft = 'rgb(34 211 238 / 0.16)';
-const activeFilterCyanBorder = 'rgb(34 211 238 / 0.28)';
+const activeFilterColor = 'var(--primary)';
+const activeFilterSoft = 'color-mix(in oklch, var(--primary) 16%, transparent)';
+const activeFilterBorder = 'color-mix(in oklch, var(--primary) 28%, transparent)';
 
 export interface ActiveFilterItem {
   id: string;
@@ -57,9 +57,9 @@ export function ProblemsResultsToolbar({
                 size="sm"
                 className="gap-1.5 border-transparent"
                 style={{
-                  backgroundColor: activeFilterCyanSoft,
-                  borderColor: activeFilterCyanBorder,
-                  color: activeFilterCyan,
+                  backgroundColor: activeFilterSoft,
+                  borderColor: activeFilterBorder,
+                  color: activeFilterColor,
                 }}
               >
                 <span>{filter.label}</span>
@@ -67,7 +67,7 @@ export function ProblemsResultsToolbar({
                   type="button"
                   onClick={filter.onRemove}
                   className="inline-flex size-3.5 items-center justify-center rounded-full transition-colors hover:bg-white/5"
-                  style={{ color: activeFilterCyan }}
+                  style={{ color: activeFilterColor }}
                   aria-label={`Remove ${filter.label}`}
                 >
                   <X className="size-3" />

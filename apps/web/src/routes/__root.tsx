@@ -1,7 +1,8 @@
 import type { AuthUserResponse } from '@syncode/contracts';
 import { Button, cn } from '@syncode/ui';
 import { createRootRoute, Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router';
-import { User } from 'lucide-react';
+import { LogOut, User } from 'lucide-react';
+import { DropdownMenu } from 'radix-ui';
 import type { ReactNode } from 'react';
 import { useAuthStore } from '@/stores/auth.store';
 
@@ -108,7 +109,7 @@ function RootLayout() {
   const accountInitial = getAccountInitial(user);
   const isDashboardPage = pathname === '/dashboard';
   const isRoomsPage = pathname === '/rooms';
-  const isProblemsPage = pathname === '/problems';
+  const isProblemsPage = pathname.startsWith('/problems');
   const isSessionFeedbackPage = pathname.startsWith('/sessions/') && pathname.endsWith('/feedback');
   const showDashboardChrome =
     isDashboardPage || isRoomsPage || isProblemsPage || isSessionFeedbackPage;
@@ -176,19 +177,46 @@ function RootLayout() {
               </div>
             </div>
             <div className="absolute right-5 top-1/2 -translate-y-1/2 sm:right-6">
-              <button
-                type="button"
-                onClick={isAuthenticated ? handleLogout : undefined}
-                aria-label="Account"
-                title={isAuthenticated ? 'Log out' : 'Account'}
-                className="inline-flex size-9 shrink-0 items-center justify-center rounded-full border border-border/80 bg-card/85 text-sm font-semibold text-foreground ring-1 ring-foreground/5 transition-all hover:border-primary/30 hover:bg-muted/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-              >
-                {accountInitial ? (
-                  <span>{accountInitial}</span>
-                ) : (
+              {isAuthenticated ? (
+                <DropdownMenu.Root>
+                  <DropdownMenu.Trigger asChild>
+                    <button
+                      type="button"
+                      aria-label="Account menu"
+                      className="inline-flex size-9 shrink-0 items-center justify-center rounded-full border border-border/80 bg-card/85 text-sm font-semibold text-foreground ring-1 ring-foreground/5 transition-all hover:border-primary/30 hover:bg-muted/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                    >
+                      {accountInitial ? (
+                        <span>{accountInitial}</span>
+                      ) : (
+                        <User className="size-4 text-primary" />
+                      )}
+                    </button>
+                  </DropdownMenu.Trigger>
+                  <DropdownMenu.Portal>
+                    <DropdownMenu.Content
+                      align="end"
+                      sideOffset={6}
+                      className="z-50 min-w-36 rounded-xl border border-border/60 bg-popover p-1 shadow-lg data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0"
+                    >
+                      <DropdownMenu.Item
+                        onSelect={handleLogout}
+                        className="flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm text-destructive outline-none transition-colors data-[highlighted]:bg-destructive/10"
+                      >
+                        <LogOut className="size-3.5" />
+                        Log out
+                      </DropdownMenu.Item>
+                    </DropdownMenu.Content>
+                  </DropdownMenu.Portal>
+                </DropdownMenu.Root>
+              ) : (
+                <span
+                  role="img"
+                  aria-label="Account"
+                  className="inline-flex size-9 shrink-0 items-center justify-center rounded-full border border-border/80 bg-card/85 text-sm font-semibold text-foreground ring-1 ring-foreground/5"
+                >
                   <User className="size-4 text-primary" />
-                )}
-              </button>
+                </span>
+              )}
             </div>
           </div>
         ) : (

@@ -1,4 +1,4 @@
-import { defineRoute } from '@syncode/contracts';
+import { CONTROL_API } from '@syncode/contracts';
 import {
   Pagination,
   PaginationContent,
@@ -7,7 +7,7 @@ import {
   PaginationPrevious,
 } from '@syncode/ui';
 import { useQuery } from '@tanstack/react-query';
-import { createFileRoute, Outlet, useNavigate, useRouterState } from '@tanstack/react-router';
+import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { motion } from 'motion/react';
 import { startTransition, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { ProblemCard } from '@/components/problems/problem-card';
@@ -21,10 +21,10 @@ import { ProblemsEmptyState } from '@/components/problems/problems-empty-state';
 import { ProblemsFilterSidebar } from '@/components/problems/problems-filter-sidebar';
 import {
   getMockProblemsListResponse,
+  type MockProblemsListQuery,
+  type MockProblemsListResponse,
   type ProblemSummary,
   type ProblemsApiDifficulty,
-  type ProblemsListQuery,
-  type ProblemsListResponse,
 } from '@/components/problems/problems-list.mock';
 import { ProblemsResultsToolbar } from '@/components/problems/problems-results-toolbar';
 import { ProblemsSearchBar } from '@/components/problems/problems-search-bar';
@@ -35,15 +35,13 @@ import {
 } from '@/components/problems/problems-tags.mock';
 import { api } from '@/lib/api-client';
 
-export const Route = createFileRoute('/problems')({
-  component: ProblemsPage,
+export const Route = createFileRoute('/problems/')({
+  component: ProblemsLibraryPage,
 });
 
 const PROBLEMS_PAGE_SIZE = 12;
 const useMockProblemTags = import.meta.env.VITE_PROBLEMS_FILTER_TAGS_USE_MOCK_SESSIONS === 'true';
 const useMockProblemCards = import.meta.env.VITE_PROBLEMS_CARDS_USE_MOCK_SESSIONS === 'true';
-const problemsListRoute = defineRoute<ProblemsListQuery, ProblemsListResponse>()('problems', 'GET');
-const problemsTagsRoute = defineRoute<void, ProblemsTagsResponse>()('problems/tags', 'GET');
 const apiDifficultyToUiDifficulty: Record<ProblemsApiDifficulty, ProblemDifficulty> = {
   easy: 'Easy',
   medium: 'Medium',
@@ -97,36 +95,32 @@ function getBackendSortQuery(sort: ProblemSortKey) {
   return {};
 }
 
-async function fetchProblemTags() {
+async function fetchProblemTags(): Promise<ProblemsTagsResponse> {
   if (useMockProblemTags) {
     return MOCK_PROBLEM_TAGS_RESPONSE;
   }
 
-  return api(problemsTagsRoute);
+  return api(CONTROL_API.PROBLEMS.TAGS);
 }
 
-async function fetchProblemsList(query: ProblemsListQuery) {
+async function fetchProblemsList(query: MockProblemsListQuery): Promise<MockProblemsListResponse> {
   if (useMockProblemCards) {
     return getMockProblemsListResponse(query);
   }
 
-  return api(problemsListRoute, { query });
+  const response = await api(CONTROL_API.PROBLEMS.LIST, { query });
+  return {
+    ...response,
+    facets: {
+      totalCount: response.data.length,
+      difficultyCounts: { easy: 0, medium: 0, hard: 0 },
+      statusCounts: { solved: 0, attempted: 0, todo: 0 },
+    },
+  };
 }
 
 function toggleValue<T>(values: T[], value: T) {
   return values.includes(value) ? values.filter((item) => item !== value) : [...values, value];
-}
-
-function ProblemsPage() {
-  const pathname = useRouterState({
-    select: (state) => state.location.pathname,
-  });
-
-  if (pathname !== '/problems') {
-    return <Outlet />;
-  }
-
-  return <ProblemsLibraryPage />;
 }
 
 function ProblemsLibraryPage() {
@@ -144,18 +138,18 @@ function ProblemsLibraryPage() {
   const normalizedSearchQuery = deferredSearchQuery.trim();
   const tagSignature = selectedTags.join('::');
   const backendSortQuery = useMemo(() => getBackendSortQuery(sort), [sort]);
-  const pushedDifficulty = useMemo(() => {
-    const [selectedDifficulty] = selectedDifficulties;
-
-    return selectedDifficulties.length === 1 && selectedDifficulty
-      ? uiDifficultyToApiDifficulty[selectedDifficulty]
-      : undefined;
-  }, [selectedDifficulties]);
-  const problemsListQuery = useMemo<ProblemsListQuery>(
+  const problemsListQuery = useMemo<MockProblemsListQuery>(
     () => ({
       cursor: paginationState.currentCursor,
       limit: PROBLEMS_PAGE_SIZE,
-      difficulty: pushedDifficulty,
+      difficulty:
+        selectedDifficulties.length > 0
+          ? selectedDifficulties.map((d) => uiDifficultyToApiDifficulty[d]).join(',')
+          : undefined,
+      status:
+        selectedStatuses.length > 0
+          ? selectedStatuses.map((s) => (s === 'Todo' ? 'todo' : s.toLowerCase())).join(',')
+          : undefined,
       tags: selectedTags.length > 0 ? selectedTags.join(',') : undefined,
       search: normalizedSearchQuery.length > 0 ? normalizedSearchQuery : undefined,
       sortBy: backendSortQuery.sortBy,
@@ -166,7 +160,8 @@ function ProblemsLibraryPage() {
       backendSortQuery.sortOrder,
       normalizedSearchQuery,
       paginationState.currentCursor,
-      pushedDifficulty,
+      selectedDifficulties,
+      selectedStatuses,
       selectedTags,
     ],
   );
@@ -187,7 +182,8 @@ function ProblemsLibraryPage() {
     () => problemsListResponse?.data.map(normalizeProblemSummary) ?? [],
     [problemsListResponse],
   );
-  const problemsCount = problemsListResponse?.data.length ?? 0;
+  const problemsCount =
+    problemsListResponse?.facets.totalCount ?? problemsListResponse?.data.length ?? 0;
 
   const popularTags = useMemo(() => {
     return [...(problemTagsResponse?.data ?? [])].sort(
@@ -199,51 +195,45 @@ function ProblemsLibraryPage() {
     [popularTags],
   );
 
-  const difficultyCounts = useMemo(
-    () =>
-      problems.reduce(
-        (counts, problem) => {
-          counts[problem.difficulty] += 1;
-          return counts;
-        },
-        { Easy: 0, Medium: 0, Hard: 0 } as Record<ProblemDifficulty, number>,
-      ),
-    [problems],
-  );
+  const difficultyCounts = useMemo(() => {
+    const fc = problemsListResponse?.facets?.difficultyCounts;
+    if (fc) {
+      return { Easy: fc.easy, Medium: fc.medium, Hard: fc.hard };
+    }
 
-  const statusCounts = useMemo(
-    () =>
-      problems.reduce(
-        (counts, problem) => {
-          counts[problem.status] += 1;
-          return counts;
-        },
-        { Solved: 0, Attempted: 0, Todo: 0 } as Record<ProblemStatus, number>,
-      ),
-    [problems],
-  );
+    return problems.reduce(
+      (counts, problem) => {
+        counts[problem.difficulty] += 1;
+        return counts;
+      },
+      { Easy: 0, Medium: 0, Hard: 0 } as Record<ProblemDifficulty, number>,
+    );
+  }, [problemsListResponse, problems]);
 
-  const filteredProblems = useMemo(() => {
-    return problems.filter((problem) => {
-      const matchesDifficulty =
-        selectedDifficulties.length <= 1 || selectedDifficulties.includes(problem.difficulty);
+  const statusCounts = useMemo(() => {
+    const sc = problemsListResponse?.facets?.statusCounts;
+    if (sc) {
+      return { Solved: sc.solved, Attempted: sc.attempted, Todo: sc.todo };
+    }
 
-      const matchesStatus =
-        selectedStatuses.length === 0 || selectedStatuses.includes(problem.status);
-
-      return matchesDifficulty && matchesStatus;
-    });
-  }, [problems, selectedDifficulties, selectedStatuses]);
+    return problems.reduce(
+      (counts, problem) => {
+        counts[problem.status] += 1;
+        return counts;
+      },
+      { Solved: 0, Attempted: 0, Todo: 0 } as Record<ProblemStatus, number>,
+    );
+  }, [problemsListResponse, problems]);
 
   const visibleProblems = useMemo(() => {
     if (sort !== 'acceptance') {
-      return filteredProblems;
+      return problems;
     }
 
-    return [...filteredProblems].sort((left, right) => {
+    return [...problems].sort((left, right) => {
       return right.acceptanceRate - left.acceptanceRate || right.addedAt - left.addedAt;
     });
-  }, [filteredProblems, sort]);
+  }, [problems, sort]);
   const didTagFiltersChange = previousTagSignatureRef.current !== tagSignature;
   const previousVisibleProblemIds = previousVisibleProblemIdsRef.current;
 
@@ -376,7 +366,7 @@ function ProblemsLibraryPage() {
               onClearAll={clearAll}
             />
 
-            {!problemsListResponse ? null : (
+            {problemsListResponse ? (
               <>
                 {visibleProblems.length === 0 ? (
                   <ProblemsEmptyState
@@ -401,15 +391,6 @@ function ProblemsLibraryPage() {
                               to: '/problems/$problemId',
                               params: { problemId: problem.id },
                             }).catch(() => {});
-                          }}
-                          onKeyDown={(event) => {
-                            if (event.key === 'Enter' || event.key === ' ') {
-                              event.preventDefault();
-                              navigate({
-                                to: '/problems/$problemId',
-                                params: { problemId: problem.id },
-                              }).catch(() => {});
-                            }
                           }}
                           whileTap={{ scale: 0.995 }}
                           initial={
@@ -474,7 +455,7 @@ function ProblemsLibraryPage() {
                   </Pagination>
                 ) : null}
               </>
-            )}
+            ) : null}
           </div>
         </div>
       </div>

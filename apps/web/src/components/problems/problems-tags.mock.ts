@@ -1,18 +1,13 @@
+import type { TagInfo } from '@syncode/contracts';
 import { MOCK_PROBLEM_SUMMARIES } from './problems-list.mock';
 
-export interface ProblemTagInfo {
-  slug: string;
-  name: string;
-  count: number;
-}
+export type ProblemTagInfo = TagInfo;
 
 export interface ProblemsTagsResponse {
   data: ProblemTagInfo[];
 }
 
-interface ProblemTagCatalogItem extends Omit<ProblemTagInfo, 'count'> {}
-
-const PROBLEM_TAG_CATALOG: ProblemTagCatalogItem[] = [
+const PROBLEM_TAG_CATALOG: { slug: string; name: string }[] = [
   { slug: 'arrays', name: 'Arrays' },
   { slug: 'strings', name: 'Strings' },
   { slug: 'dp', name: 'DP' },
@@ -33,7 +28,7 @@ const PROBLEM_TAG_CATALOG: ProblemTagCatalogItem[] = [
   { slug: 'heap', name: 'Heap' },
   { slug: 'two-pointers', name: 'Two Pointers' },
   { slug: 'sorting', name: 'Sorting' },
-] as const;
+];
 
 const problemTagNameBySlug = new Map(PROBLEM_TAG_CATALOG.map((tag) => [tag.slug, tag.name]));
 

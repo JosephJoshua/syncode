@@ -8,10 +8,11 @@ export type ProblemsListSortBy =
   | 'totalSubmissions';
 export type ProblemsListSortOrder = 'asc' | 'desc';
 
-export interface ProblemsListQuery {
+export interface MockProblemsListQuery {
   cursor?: string;
   limit?: number;
-  difficulty?: ProblemsApiDifficulty;
+  difficulty?: string;
+  status?: string;
   tags?: string;
   company?: string;
   search?: string;
@@ -34,12 +35,19 @@ export interface ProblemSummary {
   updatedAt?: string;
 }
 
-export interface ProblemsListResponse {
+export interface MockProblemsFacets {
+  totalCount: number;
+  difficultyCounts: { easy: number; medium: number; hard: number };
+  statusCounts: { solved: number; attempted: number; todo: number };
+}
+
+export interface MockProblemsListResponse {
   data: ProblemSummary[];
   pagination: {
     nextCursor: string | null;
     hasMore: boolean;
   };
+  facets: MockProblemsFacets;
 }
 
 const difficultyRank: Record<ProblemsApiDifficulty, number> = {
@@ -387,6 +395,34 @@ export const MOCK_PROBLEM_SUMMARIES: ProblemSummary[] = [
   },
 ];
 
+function parseCommaSeparated(value: string | undefined): string[] {
+  return (
+    value
+      ?.split(',')
+      .map((v) => v.trim())
+      .filter(Boolean) ?? []
+  );
+}
+
+function computeFacets(problems: ProblemSummary[]): MockProblemsFacets {
+  const difficultyCounts = { easy: 0, medium: 0, hard: 0 };
+  const statusCounts = { solved: 0, attempted: 0, todo: 0 };
+
+  for (const problem of problems) {
+    difficultyCounts[problem.difficulty] += 1;
+
+    if (problem.attemptStatus === 'solved') {
+      statusCounts.solved += 1;
+    } else if (problem.attemptStatus === 'attempted') {
+      statusCounts.attempted += 1;
+    } else {
+      statusCounts.todo += 1;
+    }
+  }
+
+  return { totalCount: problems.length, difficultyCounts, statusCounts };
+}
+
 function sortProblemSummaries(
   problems: ProblemSummary[],
   sortBy?: ProblemsListSortBy,
@@ -418,18 +454,18 @@ function sortProblemSummaries(
   });
 }
 
-export function getMockProblemsListResponse(query: ProblemsListQuery = {}): ProblemsListResponse {
+export function getMockProblemsListResponse(
+  query: MockProblemsListQuery = {},
+): MockProblemsListResponse {
   const normalizedSearch = query.search?.trim().toLowerCase() ?? '';
-  const requestedTags =
-    query.tags
-      ?.split(',')
-      .map((tag) => tag.trim())
-      .filter(Boolean) ?? [];
+  const requestedTags = parseCommaSeparated(query.tags);
+  const requestedDifficulties = parseCommaSeparated(query.difficulty);
+  const requestedStatuses = parseCommaSeparated(query.status);
 
-  let problems = [...MOCK_PROBLEM_SUMMARIES];
+  let baseFiltered: ProblemSummary[] = MOCK_PROBLEM_SUMMARIES;
 
   if (normalizedSearch.length > 0) {
-    problems = problems.filter((problem) => {
+    baseFiltered = baseFiltered.filter((problem) => {
       const matchesTitle = problem.title.toLowerCase().includes(normalizedSearch);
       const matchesTags = problem.tags.some((tag) => tag.toLowerCase().includes(normalizedSearch));
       const matchesCompany = problem.company?.toLowerCase().includes(normalizedSearch) ?? false;
@@ -438,21 +474,40 @@ export function getMockProblemsListResponse(query: ProblemsListQuery = {}): Prob
     });
   }
 
-  if (query.difficulty) {
-    problems = problems.filter((problem) => problem.difficulty === query.difficulty);
-  }
-
   if (requestedTags.length > 0) {
-    problems = problems.filter((problem) =>
+    baseFiltered = baseFiltered.filter((problem) =>
       requestedTags.every((tag) => problem.tags.includes(tag)),
     );
   }
 
   if (query.company) {
-    problems = problems.filter((problem) => problem.company === query.company);
+    baseFiltered = baseFiltered.filter((problem) => problem.company === query.company);
   }
 
-  const sortedProblems = sortProblemSummaries(problems, query.sortBy, query.sortOrder);
+  const { difficultyCounts, statusCounts } = computeFacets(baseFiltered);
+
+  let finalFiltered = baseFiltered;
+
+  if (requestedDifficulties.length > 0) {
+    finalFiltered = finalFiltered.filter((problem) =>
+      requestedDifficulties.includes(problem.difficulty),
+    );
+  }
+
+  if (requestedStatuses.length > 0) {
+    finalFiltered = finalFiltered.filter((problem) => {
+      const status = problem.attemptStatus ?? 'todo';
+      return requestedStatuses.includes(status);
+    });
+  }
+
+  const facets: MockProblemsFacets = {
+    totalCount: finalFiltered.length,
+    difficultyCounts,
+    statusCounts,
+  };
+
+  const sortedProblems = sortProblemSummaries(finalFiltered, query.sortBy, query.sortOrder);
   const offset = query.cursor ? Number.parseInt(query.cursor, 10) || 0 : 0;
   const limit = Math.min(Math.max(query.limit ?? sortedProblems.length, 1), 100);
   const data = sortedProblems.slice(offset, offset + limit);
@@ -465,7 +520,12 @@ export function getMockProblemsListResponse(query: ProblemsListQuery = {}): Prob
       nextCursor: hasMore ? String(nextOffset) : null,
       hasMore,
     },
+    facets,
   };
+}
+
+export function getMockProblemById(id: string): ProblemSummary | undefined {
+  return MOCK_PROBLEM_SUMMARIES.find((problem) => problem.id === id);
 }
 
 export const MOCK_PROBLEMS_LIST_RESPONSE = getMockProblemsListResponse();
