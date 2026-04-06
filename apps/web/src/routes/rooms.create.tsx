@@ -13,9 +13,10 @@ import {
   Lock,
   type LucideIcon,
 } from 'lucide-react';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { type FieldError, useForm } from 'react-hook-form';
 import { z } from 'zod';
+import { RoomCard } from '@/components/rooms/room-card';
 import { api, readApiError } from '@/lib/api-client';
 import { useAuthStore } from '@/stores/auth.store';
 
@@ -75,14 +76,6 @@ function matchesProblemQuery(label: string, query: string) {
 }
 
 // ─── 2. UI Components ──────────────────────────────────────────
-const Card = ({ children, className = '' }: { children: React.ReactNode; className?: string }) => (
-  <div
-    className={`bg-[#0a0a0a] border border-zinc-800/80 rounded-2xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.7)] ${className}`}
-  >
-    {children}
-  </div>
-);
-
 const Label = ({ children, className = '' }: { children: React.ReactNode; className?: string }) => (
   <p
     className={`block text-xs font-semibold uppercase tracking-wider text-zinc-400 mb-2 ${className}`}
@@ -177,6 +170,8 @@ function CreateRoomPage() {
     }
   }, [isAuthenticated, navigate]);
 
+  const comboboxRef = useRef<HTMLDivElement>(null);
+
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [problemInput, setProblemInput] = useState('');
@@ -201,6 +196,28 @@ function CreateRoomPage() {
   });
 
   const selectedProblemId = watch('problemId');
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (comboboxRef.current && !comboboxRef.current.contains(event.target as Node)) {
+        setIsProblemMenuOpen(false);
+
+        const selectedProblem = ROOM_PROBLEMS.find(
+          (problem) => problem.value === selectedProblemId,
+        );
+
+        if (selectedProblem) {
+          setProblemInput(selectedProblem.label);
+        }
+      }
+    }
+
+    if (isProblemMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isProblemMenuOpen, selectedProblemId]);
 
   const createRoomMutation = useMutation({
     mutationFn: (data: CreateRoomFormData) =>
@@ -256,7 +273,7 @@ function CreateRoomPage() {
           <p className="text-zinc-500 text-base">Setup your shared real-time coding environment</p>
         </div>
 
-        <Card className="p-8">
+        <RoomCard className="p-8">
           {/* Show form if not yet submitted */}
           {!inviteLink ? (
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-7">
@@ -265,68 +282,65 @@ function CreateRoomPage() {
                 <Label>Problem to Solve</Label>
                 <input type="hidden" {...register('problemId')} />
 
-                <div className="relative">
-                  <FileCode2
-                    className="pointer-events-none absolute left-3.5 top-3.5 text-zinc-500"
-                    size={18}
-                  />
-                  <input
-                    type="text"
-                    value={problemInput}
-                    onFocus={() => setIsProblemMenuOpen(true)}
-                    onBlur={() => {
-                      setTimeout(() => {
-                        setIsProblemMenuOpen(false);
+                <div ref={comboboxRef}>
+                  <div className="relative">
+                    <FileCode2
+                      className="pointer-events-none absolute left-3.5 top-3.5 text-zinc-500"
+                      size={18}
+                    />
+                    <input
+                      type="text"
+                      value={problemInput}
+                      onFocus={() => setIsProblemMenuOpen(true)}
+                      onChange={(event) => {
+                        const nextValue = event.target.value;
+                        setProblemInput(nextValue);
+                        setIsProblemMenuOpen(true);
 
-                        const selectedProblem = ROOM_PROBLEMS.find(
-                          (problem) => problem.value === selectedProblemId,
-                        );
+                        // Clear selected value while user is actively typing.
+                        setValue('problemId', '', { shouldValidate: true });
+                      }}
+                      placeholder="Type to search and select a problem"
+                      role="combobox"
+                      aria-expanded={isProblemMenuOpen}
+                      aria-controls="problem-listbox"
+                      aria-autocomplete="list"
+                      aria-haspopup="listbox"
+                      className="w-full rounded-xl border border-zinc-700/80 bg-zinc-900 py-3 pr-11 pl-11 text-sm text-zinc-100 outline-none transition-all duration-150 placeholder:text-zinc-500 focus:border-[oklch(0.45_0.18_165)] focus:shadow-[0_0_15px_oklch(0.88_0.18_165/0.4)]"
+                    />
+                    <ChevronDown
+                      className="pointer-events-none absolute right-3 top-3.5 text-zinc-500"
+                      size={18}
+                    />
 
-                        // Restore selected label after free typing.
-                        if (selectedProblem) {
-                          setProblemInput(selectedProblem.label);
-                        }
-                      }, 120);
-                    }}
-                    onChange={(event) => {
-                      const nextValue = event.target.value;
-                      setProblemInput(nextValue);
-                      setIsProblemMenuOpen(true);
-
-                      // Clear selected value while user is actively typing.
-                      setValue('problemId', '', { shouldValidate: true });
-                    }}
-                    placeholder="Type to search and select a problem"
-                    className="w-full rounded-xl border border-zinc-700/80 bg-zinc-900 py-3 pr-11 pl-11 text-sm text-zinc-100 outline-none transition-all duration-150 placeholder:text-zinc-500 focus:border-[oklch(0.45_0.18_165)] focus:shadow-[0_0_15px_oklch(0.88_0.18_165/0.4)]"
-                  />
-                  <ChevronDown
-                    className="pointer-events-none absolute right-3 top-3.5 text-zinc-500"
-                    size={18}
-                  />
-
-                  {isProblemMenuOpen && (
-                    <div className="absolute z-20 mt-2 max-h-56 w-full overflow-auto rounded-xl border border-zinc-700 bg-zinc-900 p-1.5 shadow-2xl">
-                      {filteredProblems.length > 0 ? (
-                        filteredProblems.map((problem) => (
-                          <button
-                            key={problem.value}
-                            type="button"
-                            onMouseDown={(event) => event.preventDefault()}
-                            onClick={() => {
-                              setValue('problemId', problem.value, { shouldValidate: true });
-                              setProblemInput(problem.label);
-                              setIsProblemMenuOpen(false);
-                            }}
-                            className="flex w-full items-center rounded-lg px-3 py-2 text-left text-sm text-zinc-200 transition-colors hover:bg-zinc-800"
-                          >
-                            {problem.label}
-                          </button>
-                        ))
-                      ) : (
-                        <p className="px-3 py-2 text-sm text-zinc-500">No matching problems</p>
-                      )}
-                    </div>
-                  )}
+                    {isProblemMenuOpen && (
+                      <div
+                        id="problem-listbox"
+                        role="listbox"
+                        className="absolute z-20 mt-2 max-h-56 w-full overflow-auto rounded-xl border border-zinc-700 bg-zinc-900 p-1.5 shadow-2xl"
+                      >
+                        {filteredProblems.length > 0 ? (
+                          filteredProblems.map((problem) => (
+                            <button
+                              key={problem.value}
+                              type="button"
+                              role="option"
+                              onClick={() => {
+                                setValue('problemId', problem.value, { shouldValidate: true });
+                                setProblemInput(problem.label);
+                                setIsProblemMenuOpen(false);
+                              }}
+                              className="flex w-full items-center rounded-lg px-3 py-2 text-left text-sm text-zinc-200 transition-colors hover:bg-zinc-800"
+                            >
+                              {problem.label}
+                            </button>
+                          ))
+                        ) : (
+                          <p className="px-3 py-2 text-sm text-zinc-500">No matching problems</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {errors.problemId && (
@@ -460,7 +474,7 @@ function CreateRoomPage() {
               </div>
             </div>
           )}
-        </Card>
+        </RoomCard>
       </div>
     </div>
   );
