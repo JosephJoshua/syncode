@@ -1,4 +1,3 @@
-import type { UserProfileResponse } from '@syncode/contracts';
 import { Card, CardContent } from '@syncode/ui';
 import { useQuery } from '@tanstack/react-query';
 import { createFileRoute } from '@tanstack/react-router';
@@ -11,32 +10,17 @@ import {
   loadDashboardSessionHistory,
 } from '@/lib/dashboard-session-history';
 import { MOCK_SESSION_HISTORY_VIEWER_ID } from '@/lib/session-history.mock';
+import { getUserDisplayName } from '@/lib/user-utils';
 import { useAuthStore } from '@/stores/auth.store';
 
 export const Route = createFileRoute('/dashboard')({
   component: DashboardPage,
 });
 
-function getDashboardName(user: UserProfileResponse | null) {
-  if (user?.displayName?.trim()) {
-    return user.displayName.trim();
-  }
-
-  if (user?.username?.trim()) {
-    return user.username.trim();
-  }
-
-  if (user?.email?.trim()) {
-    return user.email.split('@')[0]?.trim() || null;
-  }
-
-  return null;
-}
-
 function DashboardPage() {
   const user = useAuthStore((state) => state.user);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-  const dashboardName = getDashboardName(user);
+  const dashboardName = getUserDisplayName(user);
   const sessionHistorySource =
     import.meta.env.VITE_DASHBOARD_USE_MOCK_SESSIONS === 'true' ? 'mock' : 'api';
   const viewerId =
