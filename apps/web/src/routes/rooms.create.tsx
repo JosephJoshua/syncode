@@ -170,7 +170,16 @@ function CreateRoomPage() {
     }
   }, [isAuthenticated, navigate]);
 
+  useEffect(() => {
+    return () => {
+      if (copiedTimerRef.current) {
+        clearTimeout(copiedTimerRef.current);
+      }
+    };
+  }, []);
+
   const comboboxRef = useRef<HTMLDivElement>(null);
+  const copiedTimerRef = useRef<ReturnType<typeof setTimeout>>(null);
 
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -253,7 +262,12 @@ function CreateRoomPage() {
       try {
         await navigator.clipboard.writeText(inviteLink);
         setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
+
+        if (copiedTimerRef.current) {
+          clearTimeout(copiedTimerRef.current);
+        }
+
+        copiedTimerRef.current = setTimeout(() => setCopied(false), 2000);
       } catch {
         // Clipboard API not available
       }
