@@ -25,6 +25,7 @@ import {
   PublicUserProfileResponseDto,
   UpdateUserDto,
   UserProfileResponseDto,
+  UserQuotasResponseDto,
 } from './dto/user.dto.js';
 import { UsersService } from './users.service.js';
 
@@ -48,6 +49,15 @@ export class UsersController {
   @ApiResponse({ status: 500, type: ErrorResponseDto, description: 'Internal server error' })
   async getCurrentUser(@CurrentUser() user: { id: string }): Promise<UserProfileResponseDto> {
     return this.usersService.findById(user.id);
+  }
+
+  @Get(CONTROL_API.USERS.QUOTAS.route)
+  @ApiOperation({ summary: 'Get current user usage quotas' })
+  @ApiResponse({ status: 200, type: UserQuotasResponseDto, description: 'Current usage quotas' })
+  @ApiResponse({ status: 401, type: ErrorResponseDto, description: 'Unauthorized' })
+  @ApiResponse({ status: 500, type: ErrorResponseDto, description: 'Internal server error' })
+  async getCurrentUserQuotas(@CurrentUser() user: { id: string }): Promise<UserQuotasResponseDto> {
+    return this.usersService.getQuotas(user.id);
   }
 
   @Get(CONTROL_API.USERS.GET_BY_ID.route)

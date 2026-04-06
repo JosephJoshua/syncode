@@ -4,7 +4,10 @@ import type { UsersService } from './users.service';
 
 describe('UsersController', () => {
   function createUsersControllerFixture() {
-    const usersService: Pick<UsersService, 'delete' | 'findById' | 'findPublicById' | 'update'> = {
+    const usersService: Pick<
+      UsersService,
+      'delete' | 'findById' | 'findPublicById' | 'getQuotas' | 'update'
+    > = {
       findById: vi.fn(async (id: string) => ({
         id,
         email: 'user@example.com',
@@ -28,6 +31,22 @@ describe('UsersController', () => {
         avatarUrl: null,
         bio: null,
         createdAt: new Date('2026-01-01T00:00:00.000Z').toISOString(),
+      })),
+      getQuotas: vi.fn(async () => ({
+        ai: {
+          used: 1,
+          limit: 20,
+          resetsAt: '2026-01-02T00:00:00.000Z',
+        },
+        execution: {
+          used: 2,
+          limit: 50,
+          resetsAt: '2026-01-02T00:00:00.000Z',
+        },
+        rooms: {
+          activeCount: 1,
+          maxActive: 3,
+        },
       })),
       update: vi.fn(
         async (id: string, body: { displayName?: string; bio?: string; username?: string }) => ({
@@ -62,6 +81,16 @@ describe('UsersController', () => {
 
     expect(usersService.findById).toHaveBeenCalledWith('user-1');
     expect(result.id).toBe('user-1');
+  });
+
+  it('GIVEN authenticated user WHEN getCurrentUserQuotas THEN returns quotas for current id', async () => {
+    const { controller, usersService } = createUsersControllerFixture();
+
+    const result = await controller.getCurrentUserQuotas({ id: 'user-1' });
+
+    expect(usersService.getQuotas).toHaveBeenCalledWith('user-1');
+    expect(result.ai?.used).toBe(1);
+    expect(result.rooms?.maxActive).toBe(3);
   });
 
   it('GIVEN requested user id WHEN getUserById THEN returns profile', async () => {

@@ -113,3 +113,22 @@ export const publicUserProfileResponseSchema = z.object({
 });
 
 export type PublicUserProfileResponse = z.infer<typeof publicUserProfileResponseSchema>;
+
+export const dailyUsageQuotaSchema = z.object({
+  used: z.number().int().nonnegative(),
+  limit: z.number().int().nonnegative(),
+  resetsAt: z.string().datetime(),
+});
+
+export const roomsQuotaSchema = z.object({
+  activeCount: z.number().int().nonnegative(),
+  maxActive: z.number().int().nonnegative(),
+});
+
+export const userQuotasResponseSchema = z.object({
+  ai: dailyUsageQuotaSchema.optional(),
+  execution: dailyUsageQuotaSchema.optional(),
+  rooms: roomsQuotaSchema.optional(),
+});
+
+export type UserQuotasResponse = z.infer<typeof userQuotasResponseSchema>;

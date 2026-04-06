@@ -10,10 +10,21 @@ import {
   type PublicUserProfileResponse,
   type UpdateUserInput,
   type UserProfileResponse,
+  type UserQuotasResponse,
 } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
-import { users } from '@syncode/db';
-import { and, eq, isNull, ne } from 'drizzle-orm';
+import {
+  aiHints,
+  aiMessages,
+  aiReviews,
+  GLOBAL_LIMIT_KEYS,
+  rooms,
+  runs,
+  submissions,
+  users,
+} from '@syncode/db';
+import { and, eq, gte, inArray, isNull, ne, type SQL, sql } from 'drizzle-orm';
+import type { AnyPgTable } from 'drizzle-orm/pg-core';
 import { DB_CLIENT } from '@/modules/db/db.module';
 import { AuthService } from '../auth/auth.service';
 import { toPublicUserProfile, toUserProfile } from './user-profile.mapper';
@@ -88,6 +99,71 @@ export class UsersService {
     }
 
     return toUserProfile(user);
+  }
+
+  async getQuotas(userId: string): Promise<UserQuotasResponse> {
+    const startOfUtcDay = this.getStartOfUtcDay();
+    const resetsAt = this.getNextUtcMidnight().toISOString();
+
+    const [
+      aiHintsCount,
+      aiReviewsCount,
+      aiMessagesCount,
+      runsCount,
+      submissionsCount,
+      roomCount,
+      limitRows,
+    ] = await Promise.all([
+      this.countRows(
+        aiHints,
+        and(eq(aiHints.userId, userId), gte(aiHints.createdAt, startOfUtcDay)),
+      ),
+      this.countRows(
+        aiReviews,
+        and(eq(aiReviews.userId, userId), gte(aiReviews.createdAt, startOfUtcDay)),
+      ),
+      this.countRows(
+        aiMessages,
+        and(eq(aiMessages.userId, userId), gte(aiMessages.createdAt, startOfUtcDay)),
+      ),
+      this.countRows(runs, and(eq(runs.userId, userId), gte(runs.createdAt, startOfUtcDay))),
+      this.countRows(
+        submissions,
+        and(eq(submissions.userId, userId), gte(submissions.submittedAt, startOfUtcDay)),
+      ),
+      this.countRows(rooms, and(eq(rooms.hostId, userId), ne(rooms.status, 'finished'))),
+      this.db.query.globalLimits.findMany({
+        columns: {
+          key: true,
+          value: true,
+        },
+        where: (table) =>
+          inArray(table.key, [
+            GLOBAL_LIMIT_KEYS.AI_DAILY,
+            GLOBAL_LIMIT_KEYS.EXECUTION_DAILY,
+            GLOBAL_LIMIT_KEYS.ROOMS_MAX_ACTIVE,
+          ]),
+      }),
+    ]);
+
+    const limits = this.toLimitMap(limitRows);
+
+    return {
+      ai: {
+        used: aiHintsCount + aiReviewsCount + aiMessagesCount,
+        limit: limits[GLOBAL_LIMIT_KEYS.AI_DAILY] ?? 0,
+        resetsAt,
+      },
+      execution: {
+        used: runsCount + submissionsCount,
+        limit: limits[GLOBAL_LIMIT_KEYS.EXECUTION_DAILY] ?? 0,
+        resetsAt,
+      },
+      rooms: {
+        activeCount: roomCount,
+        maxActive: limits[GLOBAL_LIMIT_KEYS.ROOMS_MAX_ACTIVE] ?? 0,
+      },
+    };
   }
 
   async create(_data: {
@@ -177,6 +253,31 @@ export class UsersService {
   private normalizeOptionalProfileText(value: string): string | null {
     const normalized = value.trim();
     return normalized.length > 0 ? normalized : null;
+  }
+
+  private async countRows(table: AnyPgTable, whereClause: SQL | undefined) {
+    const [result] = await this.db
+      .select({
+        count: sql<number>`count(*)::int`,
+      })
+      .from(table)
+      .where(whereClause);
+
+    return result?.count ?? 0;
+  }
+
+  private getStartOfUtcDay(): Date {
+    const now = new Date();
+    return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  }
+
+  private getNextUtcMidnight(): Date {
+    const now = new Date();
+    return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1));
+  }
+
+  private toLimitMap(rows: Array<{ key: string; value: number }>): Record<string, number> {
+    return Object.fromEntries(rows.map((row) => [row.key, row.value]));
   }
 
   private isUniqueConstraintViolation(error: unknown): boolean {
