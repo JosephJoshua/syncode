@@ -23,6 +23,7 @@ import {
   submissions,
   users,
 } from '@syncode/db';
+import { ROOM_STATUSES, RoomStatus } from '@syncode/shared';
 import { and, eq, gte, inArray, isNull, ne, type SQL, sql } from 'drizzle-orm';
 import type { AnyPgTable } from 'drizzle-orm/pg-core';
 import { DB_CLIENT } from '@/modules/db/db.module';
@@ -64,7 +65,10 @@ export class UsersService {
     });
 
     if (!user) {
-      throw new NotFoundException('User not found');
+      throw new NotFoundException({
+        message: 'User not found',
+        code: ERROR_CODES.USER_NOT_FOUND,
+      });
     }
 
     return toUserProfile(user);
@@ -131,7 +135,16 @@ export class UsersService {
         submissions,
         and(eq(submissions.userId, userId), gte(submissions.submittedAt, startOfUtcDay)),
       ),
-      this.countRows(rooms, and(eq(rooms.hostId, userId), ne(rooms.status, 'finished'))),
+      this.countRows(
+        rooms,
+        and(
+          eq(rooms.hostId, userId),
+          inArray(
+            rooms.status,
+            ROOM_STATUSES.filter((s) => s !== RoomStatus.FINISHED),
+          ),
+        ),
+      ),
       this.db.query.globalLimits.findMany({
         columns: {
           key: true,
@@ -176,7 +189,7 @@ export class UsersService {
   }
 
   async update(id: string, data: UpdateUserInput): Promise<UserProfileResponse> {
-    const normalizedUsername = data.username?.trim();
+    const normalizedUsername = data.username?.trim() || undefined;
 
     if (normalizedUsername) {
       const existingUser = await this.db.query.users.findFirst({
@@ -237,6 +250,8 @@ export class UsersService {
   }
 
   async delete(id: string): Promise<void> {
+    await this.authService.revokeAllRefreshTokensForUser(id);
+
     const now = new Date();
 
     await this.db
@@ -246,8 +261,6 @@ export class UsersService {
         updatedAt: now,
       })
       .where(and(eq(users.id, id), isNull(users.deletedAt)));
-
-    await this.authService.revokeAllRefreshTokensForUser(id);
   }
 
   private normalizeOptionalProfileText(value: string): string | null {

@@ -57,9 +57,7 @@ beforeEach(async () => {
       {
         provide: ConfigService,
         useValue: createMockConfigService({
-          AI_DAILY_LIMIT: 20,
           AUTH_JWT_SECRET: ACCESS_TOKEN_SECRET,
-          EXECUTION_DAILY_LIMIT: 50,
           JWT_REFRESH_SECRET: 'refresh-secret-refresh-secret-1234',
           JWT_REFRESH_EXPIRATION: '7d',
         }),

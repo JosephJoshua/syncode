@@ -89,8 +89,8 @@ describe('UsersController', () => {
     const result = await controller.getCurrentUserQuotas({ id: 'user-1' });
 
     expect(usersService.getQuotas).toHaveBeenCalledWith('user-1');
-    expect(result.ai?.used).toBe(1);
-    expect(result.rooms?.maxActive).toBe(3);
+    expect(result.ai.used).toBe(1);
+    expect(result.rooms.maxActive).toBe(3);
   });
 
   it('GIVEN requested user id WHEN getUserById THEN returns profile', async () => {

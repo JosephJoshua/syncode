@@ -126,9 +126,9 @@ export const roomsQuotaSchema = z.object({
 });
 
 export const userQuotasResponseSchema = z.object({
-  ai: dailyUsageQuotaSchema.optional(),
-  execution: dailyUsageQuotaSchema.optional(),
-  rooms: roomsQuotaSchema.optional(),
+  ai: dailyUsageQuotaSchema,
+  execution: dailyUsageQuotaSchema,
+  rooms: roomsQuotaSchema,
 });
 
 export type UserQuotasResponse = z.infer<typeof userQuotasResponseSchema>;

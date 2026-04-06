@@ -102,11 +102,16 @@ describe('UsersService', () => {
     });
   });
 
-  it('GIVEN unknown user id WHEN findById THEN throws not found', async () => {
+  it('GIVEN unknown user id WHEN findById THEN throws not found with user code', async () => {
     const { service, findFirst } = createUsersServiceFixture();
     findFirst.mockResolvedValueOnce(null);
 
-    await expect(service.findById('missing')).rejects.toBeInstanceOf(NotFoundException);
+    await expect(service.findById('missing')).rejects.toMatchObject({
+      response: {
+        message: 'User not found',
+        code: ERROR_CODES.USER_NOT_FOUND,
+      },
+    });
   });
 
   it('GIVEN existing user id WHEN findPublicById THEN returns public profile only', async () => {
@@ -200,8 +205,8 @@ describe('UsersService', () => {
       activeCount: 2,
       maxActive: 100,
     });
-    expect(result.ai?.resetsAt).toEqual(expect.any(String));
-    expect(result.execution?.resetsAt).toEqual(expect.any(String));
+    expect(result.ai.resetsAt).toEqual(expect.any(String));
+    expect(result.execution.resetsAt).toEqual(expect.any(String));
   });
 
   it('GIVEN missing global limit rows WHEN getQuotas THEN falls back to zero limits', async () => {
