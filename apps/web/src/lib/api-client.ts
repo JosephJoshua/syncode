@@ -92,6 +92,17 @@ function normalizeSearchParams(
   return Object.fromEntries(entries);
 }
 
+export class ApiError extends Error {
+  readonly response: ErrorResponse;
+
+  constructor(response: ErrorResponse) {
+    super(response.message);
+    this.name = 'ApiError';
+    this.response = response;
+    Object.setPrototypeOf(this, ApiError.prototype);
+  }
+}
+
 export async function readApiError(error: unknown): Promise<ErrorResponse | null> {
   if (!(error instanceof HTTPError)) {
     return null;

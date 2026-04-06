@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { ProblemDetailLayout } from '@/components/problems/problem-detail-layout';
-import { ProblemDetailApiError, useProblemDetailQuery } from '@/lib/problems/problem-detail';
+import { ApiError } from '@/lib/api-client';
+import { useProblemDetailQuery } from '@/lib/problems/problem-detail';
 
 export const Route = createFileRoute('/problem/$problemId')({
   component: ProblemDetailRouteComponent,
@@ -47,7 +48,7 @@ export function ProblemDetailPage({ problemId }: { problemId: string }) {
 }
 
 function getProblemDetailErrorCopy(error: unknown) {
-  if (error instanceof ProblemDetailApiError) {
+  if (error instanceof ApiError) {
     return {
       statusLabel: `${error.response.statusCode} Error`,
       title: error.response.message,

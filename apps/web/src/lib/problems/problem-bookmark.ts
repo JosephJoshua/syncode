@@ -1,25 +1,9 @@
 import { CONTROL_API, type ProblemDetail } from '@syncode/contracts';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { api, readApiError } from '@/lib/api-client';
-import {
-  getProblemDetailQueryKey,
-  isProblemDetailMockEnabled,
-  normalizeErrorResponse,
-  type ProblemDetailErrorResponse,
-} from './problem-detail';
+import { ApiError, api, readApiError } from '@/lib/api-client';
+import { getProblemDetailQueryKey, isProblemDetailMockEnabled } from './problem-detail';
 import { setMockProblemBookmark } from './problem-detail.mock';
-
-export class ProblemBookmarkApiError extends Error {
-  readonly response: ProblemDetailErrorResponse;
-
-  constructor(response: ProblemDetailErrorResponse) {
-    super(response.message);
-    this.name = 'ProblemBookmarkApiError';
-    this.response = response;
-    Object.setPrototypeOf(this, ProblemBookmarkApiError.prototype);
-  }
-}
 
 type ToggleBookmarkVariables = {
   currentIsBookmarked: boolean;
@@ -40,10 +24,10 @@ async function setBookmark(problemId: string, bookmarked: boolean) {
   try {
     await api(route, { params: { problemId } });
   } catch (error) {
-    const apiError = normalizeErrorResponse(await readApiError(error));
+    const apiError = await readApiError(error);
 
     if (apiError) {
-      throw new ProblemBookmarkApiError(apiError);
+      throw new ApiError(apiError);
     }
 
     throw error;
@@ -101,7 +85,7 @@ export function useToggleProblemBookmarkMutation(problemId: string) {
       }
 
       const message =
-        error instanceof ProblemBookmarkApiError
+        error instanceof ApiError
           ? error.response.message
           : 'We could not update this bookmark right now.';
 

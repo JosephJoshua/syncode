@@ -1,26 +1,7 @@
 import { CONTROL_API, type ProblemDetail } from '@syncode/contracts';
 import { useQuery } from '@tanstack/react-query';
-import { api, readApiError } from '@/lib/api-client';
+import { ApiError, api, readApiError } from '@/lib/api-client';
 import { createProblemDetailNotFoundError, getMockProblemDetail } from './problem-detail.mock';
-
-export interface ProblemDetailErrorResponse {
-  statusCode: number;
-  code: string;
-  message: string;
-  timestamp: string;
-  details?: Record<string, unknown>;
-}
-
-export class ProblemDetailApiError extends Error {
-  readonly response: ProblemDetailErrorResponse;
-
-  constructor(response: ProblemDetailErrorResponse) {
-    super(response.message);
-    this.name = 'ProblemDetailApiError';
-    this.response = response;
-    Object.setPrototypeOf(this, ProblemDetailApiError.prototype);
-  }
-}
 
 export function isProblemDetailMockEnabled() {
   return import.meta.env.VITE_USE_PROBLEM_DETAIL_MOCK === 'true';
@@ -30,34 +11,12 @@ export function getProblemDetailQueryKey(problemId: string) {
   return ['problem-detail', problemId] as const;
 }
 
-export function normalizeErrorResponse(
-  error: {
-    statusCode: number;
-    code?: string;
-    message: string;
-    timestamp: string;
-    details?: Record<string, unknown>;
-  } | null,
-): ProblemDetailErrorResponse | null {
-  if (!error) {
-    return null;
-  }
-
-  return {
-    statusCode: error.statusCode,
-    code: error.code ?? 'UNKNOWN_ERROR',
-    message: error.message,
-    timestamp: error.timestamp,
-    details: error.details,
-  };
-}
-
 export async function fetchProblemDetail(problemId: string): Promise<ProblemDetail> {
   if (isProblemDetailMockEnabled()) {
     const mockProblemDetail = getMockProblemDetail(problemId);
 
     if (!mockProblemDetail) {
-      throw new ProblemDetailApiError(createProblemDetailNotFoundError(problemId));
+      throw new ApiError(createProblemDetailNotFoundError(problemId));
     }
 
     return mockProblemDetail;
@@ -68,10 +27,10 @@ export async function fetchProblemDetail(problemId: string): Promise<ProblemDeta
       params: { id: problemId },
     });
   } catch (error) {
-    const apiError = normalizeErrorResponse(await readApiError(error));
+    const apiError = await readApiError(error);
 
     if (apiError) {
-      throw new ProblemDetailApiError(apiError);
+      throw new ApiError(apiError);
     }
 
     throw error;

@@ -1,5 +1,4 @@
-import type { ProblemDetail } from '@syncode/contracts';
-import type { ProblemDetailErrorResponse } from './problem-detail';
+import type { ErrorResponse, ProblemDetail } from '@syncode/contracts';
 
 export const canonicalProblemDetailMock: ProblemDetail = {
   id: '550e8400-e29b-41d4-a716-446655440000',
@@ -251,7 +250,7 @@ export function resetProblemDetailMockRecords() {
   problemDetailMockRecords = createInitialProblemDetailMockRecords();
 }
 
-export function createProblemDetailNotFoundError(problemId: string): ProblemDetailErrorResponse {
+export function createProblemDetailNotFoundError(problemId: string): ErrorResponse {
   return {
     statusCode: 404,
     code: 'PROBLEM_NOT_FOUND',

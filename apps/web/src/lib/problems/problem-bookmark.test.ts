@@ -3,10 +3,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react';
 import { createElement, type PropsWithChildren } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { api, readApiError } from '@/lib/api-client';
+import { ApiError, api, readApiError } from '@/lib/api-client';
 import {
   bookmarkProblem,
-  ProblemBookmarkApiError,
   removeBookmark,
   useToggleProblemBookmarkMutation,
 } from './problem-bookmark';
@@ -18,7 +17,8 @@ import {
   secondaryProblemDetailMock,
 } from './problem-detail.mock';
 
-vi.mock('@/lib/api-client', () => ({
+vi.mock('@/lib/api-client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/api-client')>()),
   api: vi.fn(),
   readApiError: vi.fn(),
 }));
@@ -101,7 +101,7 @@ describe('problem bookmark data layer', () => {
     });
   });
 
-  it('wraps parsed API errors into ProblemBookmarkApiError', async () => {
+  it('wraps parsed API errors into ApiError', async () => {
     vi.stubEnv('VITE_USE_PROBLEM_DETAIL_MOCK', 'false');
 
     vi.mocked(api).mockRejectedValueOnce(new Error('HTTP error'));
@@ -113,7 +113,7 @@ describe('problem bookmark data layer', () => {
       details: { problemId: 'missing' },
     });
 
-    await expect(removeBookmark('missing')).rejects.toBeInstanceOf(ProblemBookmarkApiError);
+    await expect(removeBookmark('missing')).rejects.toBeInstanceOf(ApiError);
   });
 
   it('patches the current problem detail query cache on successful toggle in real mode', async () => {

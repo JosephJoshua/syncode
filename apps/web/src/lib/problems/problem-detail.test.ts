@@ -1,11 +1,12 @@
 import { CONTROL_API, type ProblemDetail } from '@syncode/contracts';
 import { SUPPORTED_LANGUAGES } from '@syncode/shared';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { api, readApiError } from '@/lib/api-client';
-import { fetchProblemDetail, ProblemDetailApiError } from './problem-detail';
+import { ApiError, api, readApiError } from '@/lib/api-client';
+import { fetchProblemDetail } from './problem-detail';
 import { canonicalProblemDetailMock, resetProblemDetailMockRecords } from './problem-detail.mock';
 
-vi.mock('@/lib/api-client', () => ({
+vi.mock('@/lib/api-client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/api-client')>()),
   api: vi.fn(),
   readApiError: vi.fn(),
 }));
@@ -65,7 +66,7 @@ describe('problem detail data layer', () => {
     vi.stubEnv('VITE_USE_PROBLEM_DETAIL_MOCK', 'true');
 
     await expect(fetchProblemDetail('00000000-0000-0000-0000-000000000000')).rejects.toMatchObject({
-      name: 'ProblemDetailApiError',
+      name: 'ApiError',
       response: {
         statusCode: 404,
         code: 'PROBLEM_NOT_FOUND',
@@ -92,7 +93,7 @@ describe('problem detail data layer', () => {
     expect(response).toEqual(expectedResponse);
   });
 
-  it('wraps parsed API errors into ProblemDetailApiError for the page layer', async () => {
+  it('wraps parsed API errors into ApiError for the page layer', async () => {
     vi.stubEnv('VITE_USE_PROBLEM_DETAIL_MOCK', 'false');
 
     vi.mocked(api).mockRejectedValueOnce(new Error('HTTP error'));
@@ -104,6 +105,6 @@ describe('problem detail data layer', () => {
       details: { id: 'missing' },
     });
 
-    await expect(fetchProblemDetail('missing')).rejects.toBeInstanceOf(ProblemDetailApiError);
+    await expect(fetchProblemDetail('missing')).rejects.toBeInstanceOf(ApiError);
   });
 });
