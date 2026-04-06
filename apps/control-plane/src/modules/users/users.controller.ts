@@ -59,15 +59,18 @@ export class UsersController {
   }
 
   @Patch(CONTROL_API.USERS.UPDATE.route)
-  @ApiOperation({ summary: 'Update current user profile (TODO)' })
+  @ApiOperation({ summary: 'Update current user profile' })
   @ApiBody({ type: UpdateUserDto })
   @ApiResponse({ status: 200, type: UserProfileResponseDto, description: 'Updated user profile' })
   @ApiResponse({ status: 400, type: ErrorResponseDto, description: 'Validation error' })
   @ApiResponse({ status: 401, type: ErrorResponseDto, description: 'Unauthorized' })
+  @ApiResponse({ status: 409, type: ErrorResponseDto, description: 'Username taken' })
   @ApiResponse({ status: 500, type: ErrorResponseDto, description: 'Internal server error' })
-  async updateCurrentUser(@Body() _body: UpdateUserDto): Promise<UserProfileResponseDto> {
-    // TODO: Update current user
-    throw new NotImplementedException();
+  async updateCurrentUser(
+    @CurrentUser() user: { id: string },
+    @Body() body: UpdateUserDto,
+  ): Promise<UserProfileResponseDto> {
+    return this.usersService.update(user.id, body);
   }
 
   @Delete(CONTROL_API.USERS.DELETE.route)

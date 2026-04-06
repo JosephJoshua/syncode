@@ -4,7 +4,7 @@ import type { UsersService } from './users.service';
 
 describe('UsersController', () => {
   function createUsersControllerFixture() {
-    const usersService: Pick<UsersService, 'findById'> = {
+    const usersService: Pick<UsersService, 'findById' | 'update'> = {
       findById: vi.fn(async (id: string) => ({
         id,
         email: 'user@example.com',
@@ -21,6 +21,24 @@ describe('UsersController', () => {
         createdAt: new Date('2026-01-01T00:00:00.000Z').toISOString(),
         updatedAt: new Date('2026-01-01T00:00:00.000Z').toISOString(),
       })),
+      update: vi.fn(
+        async (id: string, body: { displayName?: string; bio?: string; username?: string }) => ({
+          id,
+          email: 'user@example.com',
+          username: body.username ?? 'alice',
+          displayName: body.displayName ?? null,
+          role: 'user' as const,
+          avatarUrl: null,
+          bio: body.bio ?? null,
+          stats: {
+            totalSessions: 0,
+            totalProblems: 0,
+            streakDays: 0,
+          },
+          createdAt: new Date('2026-01-01T00:00:00.000Z').toISOString(),
+          updatedAt: new Date('2026-01-01T00:00:00.000Z').toISOString(),
+        }),
+      ),
     };
 
     const controller = new UsersController(usersService as UsersService);
@@ -44,5 +62,26 @@ describe('UsersController', () => {
 
     expect(usersService.findById).toHaveBeenCalledWith('user-2');
     expect(result.id).toBe('user-2');
+  });
+
+  it('GIVEN authenticated user WHEN updateCurrentUser THEN delegates to service and returns updated profile', async () => {
+    const { controller, usersService } = createUsersControllerFixture();
+
+    const result = await controller.updateCurrentUser(
+      { id: 'user-3' },
+      {
+        displayName: 'Alice Doe',
+        bio: 'Hello world',
+        username: 'alice_doe',
+      },
+    );
+
+    expect(usersService.update).toHaveBeenCalledWith('user-3', {
+      displayName: 'Alice Doe',
+      bio: 'Hello world',
+      username: 'alice_doe',
+    });
+    expect(result.id).toBe('user-3');
+    expect(result.username).toBe('alice_doe');
   });
 });

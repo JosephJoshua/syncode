@@ -9,6 +9,20 @@ export const updateUserSchema = z
       .optional()
       .describe('New display name')
       .meta({ examples: ['Jane Doe'] }),
+    bio: z
+      .string()
+      .max(500)
+      .optional()
+      .describe('New biography')
+      .meta({ examples: ['I love algorithms.'] }),
+    username: z
+      .string()
+      .min(3)
+      .max(30)
+      .regex(/^[a-zA-Z0-9_]+$/)
+      .optional()
+      .describe('New username')
+      .meta({ examples: ['syncoder_01'] }),
   })
   .strict();
 

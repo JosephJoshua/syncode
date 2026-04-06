@@ -1,4 +1,4 @@
-import { NotFoundException } from '@nestjs/common';
+import { ConflictException, NotFoundException } from '@nestjs/common';
 import type { Database } from '@syncode/db';
 import { describe, expect, it, vi } from 'vitest';
 import { UsersService } from './users.service';
@@ -9,21 +9,33 @@ type UsersServiceDatabaseMock = {
       findFirst: (...args: unknown[]) => Promise<unknown>;
     };
   };
+  update: (...args: unknown[]) => {
+    set: (...args: unknown[]) => {
+      where: (...args: unknown[]) => {
+        returning: (...args: unknown[]) => Promise<unknown>;
+      };
+    };
+  };
 };
 
 describe('UsersService', () => {
   function createUsersServiceFixture() {
     const findFirst = vi.fn();
+    const returning = vi.fn();
+    const where = vi.fn(() => ({ returning }));
+    const set = vi.fn(() => ({ where }));
+    const update = vi.fn(() => ({ set }));
     const db = {
       query: {
         users: {
           findFirst,
         },
       },
+      update,
     } satisfies UsersServiceDatabaseMock;
 
     const service = new UsersService(db as unknown as Database);
-    return { service, findFirst };
+    return { service, findFirst, update, set, where, returning };
   }
 
   it('GIVEN existing user id WHEN findById THEN returns mapped profile', async () => {
@@ -87,5 +99,67 @@ describe('UsersService', () => {
     findFirst.mockResolvedValueOnce(null);
 
     await expect(service.findByEmail('missing@example.com')).resolves.toBeNull();
+  });
+
+  it('GIVEN valid update payload WHEN update THEN returns mapped profile', async () => {
+    const { service, findFirst, update, set, where, returning } = createUsersServiceFixture();
+    findFirst.mockResolvedValueOnce(null);
+    returning.mockResolvedValueOnce([
+      {
+        id: '497f6eca-6276-4993-bfeb-53cbbbba6f08',
+        email: 'user@example.com',
+        username: 'alice_doe',
+        displayName: 'Alice Doe',
+        role: 'user',
+        avatarUrl: null,
+        bio: 'Hello world',
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        updatedAt: new Date('2026-01-02T00:00:00.000Z'),
+      },
+    ]);
+
+    const result = await service.update('497f6eca-6276-4993-bfeb-53cbbbba6f08', {
+      displayName: ' Alice Doe ',
+      bio: ' Hello world ',
+      username: 'alice_doe',
+    });
+
+    expect(findFirst).toHaveBeenCalledTimes(1);
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        displayName: 'Alice Doe',
+        bio: 'Hello world',
+        username: 'alice_doe',
+        updatedAt: expect.any(Date),
+      }),
+    );
+    expect(where).toHaveBeenCalledTimes(1);
+    expect(result.username).toBe('alice_doe');
+    expect(result.displayName).toBe('Alice Doe');
+    expect(result.bio).toBe('Hello world');
+  });
+
+  it('GIVEN taken username WHEN update THEN throws conflict', async () => {
+    const { service, findFirst } = createUsersServiceFixture();
+    findFirst.mockResolvedValueOnce({ id: 'other-user' });
+
+    await expect(
+      service.update('497f6eca-6276-4993-bfeb-53cbbbba6f08', {
+        username: 'alice_doe',
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('GIVEN unique constraint race WHEN update THEN throws conflict', async () => {
+    const { service, findFirst, returning } = createUsersServiceFixture();
+    findFirst.mockResolvedValueOnce(null);
+    returning.mockRejectedValueOnce({ code: '23505' });
+
+    await expect(
+      service.update('497f6eca-6276-4993-bfeb-53cbbbba6f08', {
+        username: 'alice_doe',
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
   });
 });
