@@ -107,21 +107,23 @@ function RootLayout() {
   const logout = useAuthStore((state) => state.logout);
   const wasAuthenticated = useRef(isAuthenticated);
   const accountInitial = getUserInitial(user);
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     if (wasAuthenticated.current && !isAuthenticated) {
+      queryClient.clear();
       navigate({ to: '/login' }).catch(() => {});
     }
 
     wasAuthenticated.current = isAuthenticated;
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated, navigate, queryClient]);
+
   const isDashboardPage = pathname === '/dashboard';
   const isRoomsPage = pathname === '/rooms';
   const isProblemsPage = pathname.startsWith('/problems');
   const isProfilePage = pathname === '/profile';
   const showDashboardChrome =
     isDashboardPage || isRoomsPage || isProblemsPage || isSessionFeedbackPage || isProfilePage;
-  const queryClient = useQueryClient();
 
   const logoutMutation = useMutation({
     mutationFn: async () => {

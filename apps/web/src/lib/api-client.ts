@@ -1,5 +1,5 @@
 import type { ErrorResponse, RequestOf, ResponseOf, TypedRoute } from '@syncode/contracts';
-import { buildUrl } from '@syncode/contracts';
+import { buildUrl, CONTROL_API } from '@syncode/contracts';
 import ky, { HTTPError } from 'ky';
 import { useAuthStore } from '@/stores/auth.store';
 
@@ -25,21 +25,26 @@ const client = ky.create({
 });
 
 let refreshPromise: Promise<boolean> | null = null;
+
 async function refreshAccessToken(): Promise<boolean> {
   if (refreshPromise) return refreshPromise;
 
   refreshPromise = (async () => {
     try {
-      const url = `${prefixUrl.replace(/\/$/, '')}/auth/refresh`;
+      const refreshRoute = CONTROL_API.AUTH.REFRESH.route;
+      const url = `${prefixUrl.replace(/\/$/, '')}/${refreshRoute}`;
 
-      // We're not using the ky client to avoid infinite retry loops.
       const response = await fetch(url, {
         method: 'POST',
         credentials: 'include',
       });
 
-      if (!response.ok) {
+      if (response.status === 401) {
         useAuthStore.getState().logout();
+        return false;
+      }
+
+      if (!response.ok) {
         return false;
       }
 
@@ -47,7 +52,6 @@ async function refreshAccessToken(): Promise<boolean> {
       useAuthStore.getState().setSession({ accessToken: data.accessToken });
       return true;
     } catch {
-      useAuthStore.getState().logout();
       return false;
     } finally {
       refreshPromise = null;
