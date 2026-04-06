@@ -1,6 +1,6 @@
 import type { ErrorResponse, ProblemDetail } from '@syncode/contracts';
 
-export const canonicalProblemDetailMock: ProblemDetail = {
+const canonicalProblemDetailMock: ProblemDetail = {
   id: '550e8400-e29b-41d4-a716-446655440000',
   title: 'Two Sum',
   difficulty: 'easy',
@@ -162,7 +162,7 @@ export const canonicalProblemDetailMock: ProblemDetail = {
   createdAt: '2026-02-18T08:30:00.000Z',
 };
 
-export const secondaryProblemDetailMock: ProblemDetail = {
+const secondaryProblemDetailMock: ProblemDetail = {
   id: '6b7f3c96-4ab0-471f-98f3-8e09f6353bf5',
   title: 'Valid Parentheses',
   difficulty: 'easy',
@@ -207,7 +207,7 @@ function createInitialProblemDetailMockRecords(): Record<string, ProblemDetail> 
   };
 }
 
-export let problemDetailMockRecords: Record<string, ProblemDetail> =
+let problemDetailMockRecords: Record<string, ProblemDetail> =
   createInitialProblemDetailMockRecords();
 
 function cloneProblemDetail(problem: ProblemDetail): ProblemDetail {
@@ -244,10 +244,6 @@ export function setMockProblemBookmark(problemId: string, isBookmarked: boolean)
   };
 
   return cloneProblemDetail(updatedProblem);
-}
-
-export function resetProblemDetailMockRecords() {
-  problemDetailMockRecords = createInitialProblemDetailMockRecords();
 }
 
 export function createProblemDetailNotFoundError(problemId: string): ErrorResponse {

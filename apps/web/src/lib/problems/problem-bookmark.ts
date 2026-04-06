@@ -34,11 +34,11 @@ async function setBookmark(problemId: string, bookmarked: boolean) {
   }
 }
 
-export async function bookmarkProblem(problemId: string) {
+async function bookmarkProblem(problemId: string) {
   return setBookmark(problemId, true);
 }
 
-export async function removeBookmark(problemId: string) {
+async function removeBookmark(problemId: string) {
   return setBookmark(problemId, false);
 }
 
