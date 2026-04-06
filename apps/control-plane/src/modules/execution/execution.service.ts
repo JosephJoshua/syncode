@@ -1,9 +1,10 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { ERROR_CODES, type ExecutionDetailsResponse } from '@syncode/contracts';
+import { ERROR_CODES } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
 import { executionResults, submissions } from '@syncode/db';
 import { and, asc, eq } from 'drizzle-orm';
 import { DB_CLIENT } from '@/modules/db/db.module';
+import type { ExecutionDetailsResult } from './execution.types.js';
 
 @Injectable()
 export class ExecutionService {
@@ -12,7 +13,7 @@ export class ExecutionService {
   async getSubmissionDetails(
     submissionId: string,
     userId: string,
-  ): Promise<ExecutionDetailsResponse> {
+  ): Promise<ExecutionDetailsResult> {
     // Scope the lookup by both submission ID and current user to enforce ownership.
     const [submission] = await this.db
       .select({
@@ -64,8 +65,8 @@ export class ExecutionService {
       failedTestCases: submission.failedTestCases,
       errorTestCases: submission.errorTestCases,
       totalDurationMs: submission.totalDurationMs,
-      submittedAt: submission.submittedAt.toISOString(),
-      completedAt: submission.completedAt?.toISOString() ?? null,
+      submittedAt: submission.submittedAt,
+      completedAt: submission.completedAt,
       testCases: rows.map((row) => ({
         testCaseIndex: row.testCaseIndex,
         passed: row.passed,

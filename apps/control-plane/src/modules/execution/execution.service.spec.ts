@@ -125,8 +125,8 @@ describe('ExecutionService', () => {
       failedTestCases: 1,
       errorTestCases: 0,
       totalDurationMs: 37,
-      submittedAt: submittedAt.toISOString(),
-      completedAt: completedAt.toISOString(),
+      submittedAt,
+      completedAt,
       testCases: [
         {
           testCaseIndex: 0,

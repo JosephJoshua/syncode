@@ -58,7 +58,12 @@ export class ExecutionController {
     @Param('submissionId') submissionId: string,
     @CurrentUser() user: AuthUser,
   ): Promise<ExecutionDetailsResponseDto> {
-    return this.executionService.getSubmissionDetails(submissionId, user.id);
+    const result = await this.executionService.getSubmissionDetails(submissionId, user.id);
+    return {
+      ...result,
+      submittedAt: result.submittedAt.toISOString(),
+      completedAt: result.completedAt?.toISOString() ?? null,
+    };
   }
 
   @Get(CONTROL_API.EXECUTION.GET_RESULT.route)
