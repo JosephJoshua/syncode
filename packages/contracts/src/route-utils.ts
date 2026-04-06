@@ -39,7 +39,7 @@ export function buildUrl<T extends string>(
 export interface TypedRoute<_TReq = void, _TRes = void> {
   readonly route: string;
   readonly method: string;
-  /** @internal — enables phantom type inference; never set at runtime. */
+  /** @internal - enables phantom type inference; never set at runtime. */
   readonly __brand?: { req: _TReq; res: _TRes };
 }
 

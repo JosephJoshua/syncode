@@ -70,8 +70,9 @@ REDIS_URL=redis://localhost:6379
 ### JWT 密钥（生成随机值）
 
 ```env
-JWT_SECRET=change-me-in-production-min-32-chars
+AUTH_JWT_SECRET=change-me-in-production-min-32-chars
 JWT_REFRESH_SECRET=change-me-in-production-min-32-chars
+COLLAB_JWT_SECRET=change-me-in-production-min-32-chars
 ```
 
 本地开发使用默认值即可。如果是共享或部署环境，请生成随机字符串：
@@ -251,7 +252,7 @@ pnpm infra:up                # Start them if not
 
 ```
 ZodError: [
-  { path: ["JWT_SECRET"], message: "Required" }
+  { path: ["AUTH_JWT_SECRET"], message: "Required" }
 ]
 ```
 

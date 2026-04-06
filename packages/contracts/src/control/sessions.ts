@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { paginationSchema } from './pagination.js';
 
 export const sessionHistoryParticipantSchema = z.object({
   userId: z.string(),
@@ -24,14 +25,9 @@ export const sessionSummarySchema = z.object({
   finishedAt: z.string().nullable().optional().default(null),
 });
 
-export const sessionPaginationSchema = z.object({
-  nextCursor: z.string().nullable(),
-  hasMore: z.boolean(),
-});
-
 export const sessionHistoryResponseSchema = z.object({
   data: z.array(sessionSummarySchema).default([]),
-  pagination: sessionPaginationSchema.default({
+  pagination: paginationSchema.default({
     nextCursor: null,
     hasMore: false,
   }),

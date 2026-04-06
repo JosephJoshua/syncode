@@ -1,12 +1,56 @@
+import type { DestroyDocumentResponse, RoomConfig } from '@syncode/contracts';
 import type {
-  CreateDocumentResponse,
-  DestroyDocumentResponse,
-  TestCaseInput,
-} from '@syncode/contracts';
+  RoomCapability,
+  RoomMode,
+  RoomRole,
+  RoomStatus,
+  SupportedLanguage,
+} from '@syncode/shared';
 
-export interface CreateRoomResult {
-  collab: CreateDocumentResponse | null;
+interface RoomBaseResult {
+  roomId: string;
+  roomCode: string;
+  name: string | null;
+  status: RoomStatus;
+  mode: RoomMode;
+  hostId: string;
+  language: SupportedLanguage | null;
+  createdAt: Date;
+}
+
+export interface CreateRoomResult extends RoomBaseResult {
+  problemId: string | null;
+  config: RoomConfig;
+  collabCreated: boolean;
   mediaCreated: boolean;
+}
+
+export interface RoomSummaryResult extends RoomBaseResult {
+  myRole: RoomRole;
+  problemTitle: string | null;
+  participantCount: number;
+}
+
+export interface ParticipantResult {
+  userId: string;
+  username: string;
+  displayName: string | null;
+  avatarUrl: string | null;
+  role: RoomRole;
+  isActive: boolean;
+  joinedAt: Date;
+}
+
+export interface RoomDetailResult extends RoomBaseResult {
+  problemId: string | null;
+  config: RoomConfig;
+  participants: ParticipantResult[];
+  myRole: RoomRole;
+  myCapabilities: RoomCapability[];
+  currentPhaseStartedAt: Date | null;
+  timerPaused: boolean;
+  elapsedMs: number;
+  editorLocked: boolean;
 }
 
 export interface DestroyRoomResult {
@@ -14,4 +58,10 @@ export interface DestroyRoomResult {
   mediaDeleted: boolean;
 }
 
-export type TestCase = TestCaseInput;
+export interface JoinRoomResult {
+  room: RoomDetailResult;
+  assignedRole: RoomRole;
+  myCapabilities: RoomCapability[];
+  collabToken: string;
+  collabUrl: string;
+}
