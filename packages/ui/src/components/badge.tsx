@@ -4,31 +4,70 @@ import type * as React from 'react';
 import { cn } from '../lib/cn';
 
 const badgeVariants = cva(
-  'inline-flex items-center justify-center rounded-full border px-2.5 py-1 text-[11px] font-medium leading-none whitespace-nowrap',
+  'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium whitespace-nowrap transition-colors',
   {
     variants: {
       variant: {
+        default: 'border-transparent bg-primary/15 text-primary',
+        secondary: 'border-transparent bg-secondary text-secondary-foreground',
+        outline: 'border-border bg-transparent text-muted-foreground',
         neutral: 'border-border/70 bg-muted/85 text-foreground/90',
         candidate: 'border-cyan-400/35 bg-cyan-400/18 text-cyan-300',
         interviewer: 'border-fuchsia-400/35 bg-fuchsia-400/18 text-fuchsia-300',
         observer: 'border-indigo-400/35 bg-indigo-400/18 text-indigo-300',
-        success: 'border-primary/25 bg-primary/18 text-primary',
-        warning: 'border-amber-400/25 bg-amber-400/16 text-amber-400',
+        success: 'border-transparent',
+        warning: 'border-transparent',
+        destructive: 'border-transparent',
+      },
+      size: {
+        default: 'h-6 px-2.5',
+        sm: 'h-5 px-2.5 text-[11px]',
       },
     },
     defaultVariants: {
-      variant: 'neutral',
+      variant: 'default',
+      size: 'default',
     },
   },
 );
 
+const semanticBadgeStyles = {
+  success: {
+    backgroundColor: 'color-mix(in oklab, var(--success) 15%, transparent)',
+    borderColor: 'color-mix(in oklab, var(--success) 20%, transparent)',
+    color: 'var(--success)',
+  },
+  warning: {
+    backgroundColor: 'color-mix(in oklab, var(--warning) 15%, transparent)',
+    borderColor: 'color-mix(in oklab, var(--warning) 20%, transparent)',
+    color: 'var(--warning)',
+  },
+  destructive: {
+    backgroundColor: 'color-mix(in oklab, var(--destructive) 15%, transparent)',
+    borderColor: 'color-mix(in oklab, var(--destructive) 20%, transparent)',
+    color: 'var(--destructive)',
+  },
+} satisfies Record<'success' | 'warning' | 'destructive', React.CSSProperties>;
+
 function Badge({
   className,
   variant,
+  size,
+  style,
   ...props
 }: React.ComponentProps<'span'> & VariantProps<typeof badgeVariants>) {
+  const semanticStyle =
+    variant === 'success' || variant === 'warning' || variant === 'destructive'
+      ? semanticBadgeStyles[variant]
+      : undefined;
+
   return (
-    <span data-slot="badge" className={cn(badgeVariants({ variant, className }))} {...props} />
+    <span
+      data-slot="badge"
+      className={cn(badgeVariants({ variant, size }), className)}
+      style={{ ...semanticStyle, ...style }}
+      {...props}
+    />
   );
 }
 

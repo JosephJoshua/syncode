@@ -15,6 +15,12 @@ export type {
 } from './events.js';
 export { RoomEvent } from './events.js';
 export type { ExecutionRequest, ExecutionResult, SupportedLanguage } from './execution.js';
+export type { ProblemAttemptStatus, ProblemDifficulty, ProblemSortBy } from './problem.js';
+export {
+  PROBLEM_ATTEMPT_STATUSES,
+  PROBLEM_DIFFICULTIES,
+  PROBLEMS_SORT_BY_OPTIONS,
+} from './problem.js';
 export type { RoomMode, RoomParticipant } from './room.js';
 export {
   ALL_ROOM_ROLES as ROOM_ROLES,

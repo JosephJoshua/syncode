@@ -42,8 +42,7 @@ const client = ky.create({
  *   body: { code, language },
  * });
  */
-// biome-ignore lint/suspicious/noExplicitAny: required for branded phantom type compatibility
-export async function api<T extends TypedRoute<any, any>>(
+export async function api<T extends TypedRoute<unknown, unknown>>(
   route: T & { readonly route: string; readonly method: string },
   options?: {
     params?: Record<string, string>;
