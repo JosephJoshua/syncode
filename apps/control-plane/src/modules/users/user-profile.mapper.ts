@@ -1,16 +1,18 @@
 import type { UserProfileResponse } from '@syncode/contracts';
+import { users } from '@syncode/db';
 
-export interface UserProfileRecord {
-  id: string;
-  email: string;
-  username: string;
-  displayName: string | null;
-  role: 'user' | 'admin';
-  avatarUrl: string | null;
-  bio: string | null;
-  createdAt: Date;
-  updatedAt: Date;
-}
+type UserProfileRecord = Pick<
+  typeof users.$inferSelect,
+  | 'id'
+  | 'email'
+  | 'username'
+  | 'displayName'
+  | 'role'
+  | 'avatarUrl'
+  | 'bio'
+  | 'createdAt'
+  | 'updatedAt'
+>;
 
 export function toUserProfile(user: UserProfileRecord): UserProfileResponse {
   return {
