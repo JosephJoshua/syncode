@@ -1,3 +1,4 @@
+import type { ProblemDetail, ProblemExample, ProblemTestCase } from '@syncode/contracts';
 import { SUPPORTED_LANGUAGES, type SupportedLanguage } from '@syncode/shared';
 import { Button } from '@syncode/ui';
 import { Bookmark, LoaderCircle } from 'lucide-react';
@@ -5,16 +6,11 @@ import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 import { useToggleProblemBookmarkMutation } from '@/lib/problems/problem-bookmark';
 import { isProblemDetailMockEnabled } from '@/lib/problems/problem-detail';
-import type {
-  ProblemDetailResponse,
-  ProblemExample,
-  ProblemTestCase,
-} from '@/lib/problems/problem-detail.types';
 import { useAuthStore } from '@/stores/auth.store';
 import { StarterCodeBlock } from './starter-code-block';
 import { formatStarterLanguageLabel } from './starter-code-language';
 
-export function ProblemDetailLayout({ problem }: { problem: ProblemDetailResponse }) {
+export function ProblemDetailLayout({ problem }: { problem: ProblemDetail }) {
   const starterLanguages = getStarterLanguages(problem.starterCode);
   const firstLanguage = starterLanguages[0] ?? null;
   const [selectedLanguage, setSelectedLanguage] = useState<SupportedLanguage | null>(firstLanguage);
@@ -130,7 +126,7 @@ function ProblemHeader({
   isBookmarkPending,
   onToggleBookmark,
 }: {
-  problem: ProblemDetailResponse;
+  problem: ProblemDetail;
   canToggleBookmark: boolean;
   isBookmarkPending: boolean;
   onToggleBookmark: () => void;
@@ -178,7 +174,7 @@ function ProblemHeader({
   );
 }
 
-function SummaryRail({ problem }: { problem: ProblemDetailResponse }) {
+function SummaryRail({ problem }: { problem: ProblemDetail }) {
   return (
     <div className="rounded-2xl border border-border/60 bg-card/70 p-3">
       <div className="border-b border-border/60 pb-2.5">
@@ -394,7 +390,7 @@ function BookmarkToggleButton({
   );
 }
 
-function DifficultyBadge({ difficulty }: { difficulty: ProblemDetailResponse['difficulty'] }) {
+function DifficultyBadge({ difficulty }: { difficulty: ProblemDetail['difficulty'] }) {
   if (difficulty === 'easy') {
     return (
       <span className="inline-flex rounded-full border border-emerald-400/30 bg-emerald-500/14 px-3 py-1.5 text-xs font-semibold text-emerald-300 ring-1 ring-emerald-400/10">
@@ -418,11 +414,7 @@ function DifficultyBadge({ difficulty }: { difficulty: ProblemDetailResponse['di
   );
 }
 
-function AttemptStatusBadge({
-  attemptStatus,
-}: {
-  attemptStatus: ProblemDetailResponse['attemptStatus'];
-}) {
+function AttemptStatusBadge({ attemptStatus }: { attemptStatus: ProblemDetail['attemptStatus'] }) {
   if (attemptStatus === 'solved') {
     return (
       <span className="inline-flex rounded-full border border-violet-400/34 bg-violet-500/16 px-3 py-1.5 text-xs font-semibold text-violet-300 ring-1 ring-violet-400/12">
@@ -446,7 +438,7 @@ function AttemptStatusBadge({
   );
 }
 
-function getStarterLanguages(starterCode: ProblemDetailResponse['starterCode']) {
+function getStarterLanguages(starterCode: ProblemDetail['starterCode']) {
   if (!starterCode) {
     return [];
   }
@@ -454,7 +446,7 @@ function getStarterLanguages(starterCode: ProblemDetailResponse['starterCode']) 
   return SUPPORTED_LANGUAGES.filter((language) => typeof starterCode[language] === 'string');
 }
 
-function formatAttemptStatus(status: ProblemDetailResponse['attemptStatus']) {
+function formatAttemptStatus(status: ProblemDetail['attemptStatus']) {
   if (status === 'solved') {
     return 'Solved';
   }

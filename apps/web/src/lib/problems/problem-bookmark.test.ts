@@ -1,3 +1,4 @@
+import { CONTROL_API } from '@syncode/contracts';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react';
 import { createElement, type PropsWithChildren } from 'react';
@@ -5,10 +6,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { api, readApiError } from '@/lib/api-client';
 import {
   bookmarkProblem,
-  bookmarkProblemRoute,
   ProblemBookmarkApiError,
   removeBookmark,
-  removeBookmarkRoute,
   useToggleProblemBookmarkMutation,
 } from './problem-bookmark';
 import { getProblemDetailQueryKey } from './problem-detail';
@@ -85,7 +84,7 @@ describe('problem bookmark data layer', () => {
 
     await bookmarkProblem(canonicalProblemDetailMock.id);
 
-    expect(api).toHaveBeenCalledWith(bookmarkProblemRoute, {
+    expect(api).toHaveBeenCalledWith(CONTROL_API.BOOKMARKS.ADD, {
       params: { problemId: canonicalProblemDetailMock.id },
     });
   });
@@ -97,7 +96,7 @@ describe('problem bookmark data layer', () => {
 
     await removeBookmark(canonicalProblemDetailMock.id);
 
-    expect(api).toHaveBeenCalledWith(removeBookmarkRoute, {
+    expect(api).toHaveBeenCalledWith(CONTROL_API.BOOKMARKS.REMOVE, {
       params: { problemId: canonicalProblemDetailMock.id },
     });
   });

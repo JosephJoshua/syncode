@@ -1,14 +1,19 @@
-import { defineRoute } from '@syncode/contracts';
+import { CONTROL_API, type ProblemDetail } from '@syncode/contracts';
 import { useQuery } from '@tanstack/react-query';
 import { api, readApiError } from '@/lib/api-client';
 import { createProblemDetailNotFoundError, getMockProblemDetail } from './problem-detail.mock';
-import type { ProblemDetailErrorResponse, ProblemDetailResponse } from './problem-detail.types';
+
+export interface ProblemDetailErrorResponse {
+  statusCode: number;
+  code: string;
+  message: string;
+  timestamp: string;
+  details?: Record<string, unknown>;
+}
 
 function getImportMetaEnv() {
   return (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env;
 }
-
-export const problemDetailRoute = defineRoute<void, ProblemDetailResponse>()('problems/:id', 'GET');
 
 export class ProblemDetailApiError extends Error {
   readonly response: ProblemDetailErrorResponse;
@@ -58,7 +63,7 @@ export function normalizeErrorResponse(
   };
 }
 
-export async function fetchProblemDetail(problemId: string): Promise<ProblemDetailResponse> {
+export async function fetchProblemDetail(problemId: string): Promise<ProblemDetail> {
   if (shouldUseProblemDetailMock()) {
     const mockProblemDetail = getMockProblemDetail(problemId);
 
@@ -70,7 +75,7 @@ export async function fetchProblemDetail(problemId: string): Promise<ProblemDeta
   }
 
   try {
-    return await api(problemDetailRoute, {
+    return await api(CONTROL_API.PROBLEMS.GET_BY_ID, {
       params: { id: problemId },
     });
   } catch (error) {

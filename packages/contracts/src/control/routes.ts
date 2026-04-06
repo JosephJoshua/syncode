@@ -4,7 +4,6 @@ import type {
   accessTokenResponseSchema,
   loginResponseSchema,
   loginSchema,
-  registerResponseSchema,
   registerSchema,
 } from './auth.js';
 import type { executionResultResponseSchema, jobStatusResponseSchema } from './execution.js';
@@ -33,16 +32,15 @@ import type { updateUserSchema, userProfileResponseSchema } from './users.js';
 
 export const CONTROL_API = {
   AUTH: {
-    REGISTER: defineRoute<z.infer<typeof registerSchema>, z.infer<typeof registerResponseSchema>>()(
-      'auth/register',
-      'POST',
-    ),
+    REGISTER: defineRoute<
+      z.infer<typeof registerSchema>,
+      z.infer<typeof accessTokenResponseSchema>
+    >()('auth/register', 'POST'),
     LOGIN: defineRoute<z.infer<typeof loginSchema>, z.infer<typeof loginResponseSchema>>()(
       'auth/login',
       'POST',
     ),
     REFRESH: defineRoute<void, z.infer<typeof accessTokenResponseSchema>>()('auth/refresh', 'POST'),
-    LOGOUT: defineRoute<void, void>()('auth/logout', 'POST'),
   },
   USERS: {
     PROFILE: defineRoute<void, z.infer<typeof userProfileResponseSchema>>()('users/me', 'GET'),
@@ -93,6 +91,11 @@ export const CONTROL_API = {
     TAGS: defineRoute<void, z.infer<typeof problemsTagsResponseSchema>>()('problems/tags', 'GET'),
     CREATE: defineRoute<void, void>()('problems', 'POST'),
     DELETE: defineRoute<void, void>()('problems/:id', 'DELETE'),
+  },
+  BOOKMARKS: {
+    LIST: defineRoute<void, void>()('users/me/bookmarks', 'GET'),
+    ADD: defineRoute<void, void>()('users/me/bookmarks/:problemId', 'PUT'),
+    REMOVE: defineRoute<void, void>()('users/me/bookmarks/:problemId', 'DELETE'),
   },
   SESSIONS: {
     LIST: defineRoute<void, z.infer<typeof sessionHistoryResponseSchema>>()('sessions', 'GET'),

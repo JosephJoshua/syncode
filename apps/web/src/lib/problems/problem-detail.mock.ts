@@ -1,6 +1,7 @@
-import type { ProblemDetailErrorResponse, ProblemDetailResponse } from './problem-detail.types';
+import type { ProblemDetail } from '@syncode/contracts';
+import type { ProblemDetailErrorResponse } from './problem-detail';
 
-export const canonicalProblemDetailMock: ProblemDetailResponse = {
+export const canonicalProblemDetailMock: ProblemDetail = {
   id: '550e8400-e29b-41d4-a716-446655440000',
   title: 'Two Sum',
   difficulty: 'easy',
@@ -162,7 +163,7 @@ export const canonicalProblemDetailMock: ProblemDetailResponse = {
   createdAt: '2026-02-18T08:30:00.000Z',
 };
 
-export const secondaryProblemDetailMock: ProblemDetailResponse = {
+export const secondaryProblemDetailMock: ProblemDetail = {
   id: '6b7f3c96-4ab0-471f-98f3-8e09f6353bf5',
   title: 'Valid Parentheses',
   difficulty: 'easy',
@@ -200,17 +201,17 @@ export const secondaryProblemDetailMock: ProblemDetailResponse = {
   createdAt: '2026-03-10T07:45:00.000Z',
 };
 
-function createInitialProblemDetailMockRecords(): Record<string, ProblemDetailResponse> {
+function createInitialProblemDetailMockRecords(): Record<string, ProblemDetail> {
   return {
     [canonicalProblemDetailMock.id]: cloneProblemDetail(canonicalProblemDetailMock),
     [secondaryProblemDetailMock.id]: cloneProblemDetail(secondaryProblemDetailMock),
   };
 }
 
-export let problemDetailMockRecords: Record<string, ProblemDetailResponse> =
+export let problemDetailMockRecords: Record<string, ProblemDetail> =
   createInitialProblemDetailMockRecords();
 
-function cloneProblemDetail(problem: ProblemDetailResponse): ProblemDetailResponse {
+function cloneProblemDetail(problem: ProblemDetail): ProblemDetail {
   return {
     ...problem,
     tags: [...problem.tags],
@@ -220,7 +221,7 @@ function cloneProblemDetail(problem: ProblemDetailResponse): ProblemDetailRespon
   };
 }
 
-export function getMockProblemDetail(problemId: string): ProblemDetailResponse | null {
+export function getMockProblemDetail(problemId: string): ProblemDetail | null {
   const problem = problemDetailMockRecords[problemId];
 
   return problem ? cloneProblemDetail(problem) : null;

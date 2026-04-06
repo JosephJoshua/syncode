@@ -1,4 +1,4 @@
-import { defineRoute } from '@syncode/contracts';
+import { CONTROL_API, type ProblemDetail } from '@syncode/contracts';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { api, readApiError } from '@/lib/api-client';
@@ -6,18 +6,9 @@ import {
   getProblemDetailQueryKey,
   isProblemDetailMockEnabled,
   normalizeErrorResponse,
+  type ProblemDetailErrorResponse,
 } from './problem-detail';
 import { setMockProblemBookmark } from './problem-detail.mock';
-import type { ProblemDetailErrorResponse, ProblemDetailResponse } from './problem-detail.types';
-
-export const bookmarkProblemRoute = defineRoute<void, void>()(
-  'users/me/bookmarks/:problemId',
-  'PUT',
-);
-export const removeBookmarkRoute = defineRoute<void, void>()(
-  'users/me/bookmarks/:problemId',
-  'DELETE',
-);
 
 export class ProblemBookmarkApiError extends Error {
   readonly response: ProblemDetailErrorResponse;
@@ -35,7 +26,7 @@ type ToggleBookmarkVariables = {
 };
 
 type ToggleBookmarkContext = {
-  previousProblemDetail: ProblemDetailResponse | undefined;
+  previousProblemDetail: ProblemDetail | undefined;
 };
 
 export async function bookmarkProblem(problemId: string) {
@@ -45,7 +36,7 @@ export async function bookmarkProblem(problemId: string) {
   }
 
   try {
-    await api(bookmarkProblemRoute, {
+    await api(CONTROL_API.BOOKMARKS.ADD, {
       params: { problemId },
     });
   } catch (error) {
@@ -66,7 +57,7 @@ export async function removeBookmark(problemId: string) {
   }
 
   try {
-    await api(removeBookmarkRoute, {
+    await api(CONTROL_API.BOOKMARKS.REMOVE, {
       params: { problemId },
     });
   } catch (error) {
@@ -97,9 +88,9 @@ export function useToggleProblemBookmarkMutation(problemId: string) {
 
       await queryClient.cancelQueries({ queryKey });
 
-      const previousProblemDetail = queryClient.getQueryData<ProblemDetailResponse>(queryKey);
+      const previousProblemDetail = queryClient.getQueryData<ProblemDetail>(queryKey);
 
-      queryClient.setQueryData<ProblemDetailResponse>(queryKey, (currentProblemDetail) => {
+      queryClient.setQueryData<ProblemDetail>(queryKey, (currentProblemDetail) => {
         if (!currentProblemDetail) {
           return currentProblemDetail;
         }

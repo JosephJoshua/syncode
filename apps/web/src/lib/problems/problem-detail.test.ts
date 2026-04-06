@@ -1,9 +1,9 @@
+import { CONTROL_API, type ProblemDetail } from '@syncode/contracts';
 import { SUPPORTED_LANGUAGES } from '@syncode/shared';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { api, readApiError } from '@/lib/api-client';
-import { fetchProblemDetail, ProblemDetailApiError, problemDetailRoute } from './problem-detail';
+import { fetchProblemDetail, ProblemDetailApiError } from './problem-detail';
 import { canonicalProblemDetailMock, resetProblemDetailMockRecords } from './problem-detail.mock';
-import type { ProblemDetailResponse } from './problem-detail.types';
 
 vi.mock('@/lib/api-client', () => ({
   api: vi.fn(),
@@ -80,13 +80,13 @@ describe('problem detail data layer', () => {
   it('calls the unified api client with path params when mock mode is disabled', async () => {
     vi.stubEnv('VITE_USE_PROBLEM_DETAIL_MOCK', 'false');
 
-    const expectedResponse: ProblemDetailResponse = canonicalProblemDetailMock;
+    const expectedResponse: ProblemDetail = canonicalProblemDetailMock;
 
     vi.mocked(api).mockResolvedValueOnce(expectedResponse);
 
     const response = await fetchProblemDetail(expectedResponse.id);
 
-    expect(api).toHaveBeenCalledWith(problemDetailRoute, {
+    expect(api).toHaveBeenCalledWith(CONTROL_API.PROBLEMS.GET_BY_ID, {
       params: { id: expectedResponse.id },
     });
     expect(response).toEqual(expectedResponse);
