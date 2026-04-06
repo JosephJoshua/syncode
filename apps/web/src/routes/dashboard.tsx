@@ -5,6 +5,7 @@ import type { LucideIcon } from 'lucide-react';
 import { Calendar, Clock3, Target, TrendingUp } from 'lucide-react';
 import { DashboardRecentSessions } from '@/components/dashboard-recent-sessions';
 import { HostControlPanel } from '@/components/host-control-panel';
+import { requireAuth } from '@/lib/auth';
 import {
   EMPTY_DASHBOARD_STATS,
   loadDashboardSessionHistory,
@@ -14,6 +15,7 @@ import { getUserDisplayName } from '@/lib/user-utils';
 import { useAuthStore } from '@/stores/auth.store';
 
 export const Route = createFileRoute('/dashboard')({
+  beforeLoad: requireAuth,
   component: DashboardPage,
 });
 

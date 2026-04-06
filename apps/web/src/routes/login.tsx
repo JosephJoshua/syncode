@@ -16,6 +16,7 @@ import { AnimatedFormField } from '@/components/form-field';
 import { CursorSpotlight } from '@/components/spotlight';
 import { TiltCard } from '@/components/tilt';
 import { api, getFieldErrorMessage, readApiError } from '@/lib/api-client';
+import { requireGuest } from '@/lib/auth';
 import { useAuthStore } from '@/stores/auth.store';
 
 const loginFormSchema = z.object({
@@ -26,6 +27,7 @@ const loginFormSchema = z.object({
 type LoginFormValues = z.infer<typeof loginFormSchema>;
 
 export const Route = createFileRoute('/login')({
+  beforeLoad: requireGuest,
   component: LoginPage,
 });
 
@@ -33,7 +35,6 @@ const stagger = (i: number) => ({ delay: 0.1 + i * 0.08 });
 
 function LoginPage() {
   const navigate = useNavigate();
-  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const setSession = useAuthStore((state) => state.setSession);
   const [submissionError, setSubmissionError] = useState<string | null>(null);
   const successTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -50,12 +51,6 @@ function LoginPage() {
       password: '',
     },
   });
-
-  useEffect(() => {
-    if (isAuthenticated) {
-      navigate({ to: '/dashboard' }).catch(() => {});
-    }
-  }, [isAuthenticated, navigate]);
 
   useEffect(() => {
     return () => clearTimeout(successTimerRef.current);
