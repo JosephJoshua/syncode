@@ -2,6 +2,7 @@
   "extends": "@syncode/tsconfig/react.json",
   "compilerOptions": {
     "baseUrl": ".",
+    "types": ["vitest/globals", "@testing-library/jest-dom"],
     "paths": {
       "@/*": ["src/*"]
     }
