@@ -3,7 +3,8 @@ import {
   Controller,
   Delete,
   Get,
-  NotImplementedException,
+  HttpCode,
+  HttpStatus,
   Param,
   Patch,
   UseGuards,
@@ -27,8 +28,6 @@ import { UsersService } from './users.service.js';
  * User management endpoints.
  *
  * Remaining TODO:
- * - PATCH /users/me
- * - DELETE /users/me
  * - GET /users/me/rooms
  */
 @ApiTags('users')
@@ -74,12 +73,12 @@ export class UsersController {
   }
 
   @Delete(CONTROL_API.USERS.DELETE.route)
-  @ApiOperation({ summary: 'Delete current user account (TODO)' })
-  @ApiResponse({ status: 200, description: 'User account deleted (empty response body)' })
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Soft delete current user account' })
+  @ApiResponse({ status: 204, description: 'Account soft-deleted' })
   @ApiResponse({ status: 401, type: ErrorResponseDto, description: 'Unauthorized' })
   @ApiResponse({ status: 500, type: ErrorResponseDto, description: 'Internal server error' })
-  async deleteCurrentUser(): Promise<void> {
-    // TODO: Delete current user
-    throw new NotImplementedException();
+  async deleteCurrentUser(@CurrentUser() user: { id: string }): Promise<void> {
+    await this.usersService.delete(user.id);
   }
 }

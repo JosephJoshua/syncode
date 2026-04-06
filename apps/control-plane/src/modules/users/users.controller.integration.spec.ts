@@ -4,11 +4,15 @@ import { JwtService } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { Test } from '@nestjs/testing';
 import type { Database } from '@syncode/db';
+import { CACHE_SERVICE } from '@syncode/shared/ports';
+import { eq } from 'drizzle-orm';
 import { ZodValidationPipe } from 'nestjs-zod';
 import request from 'supertest';
 import { GlobalExceptionFilter } from '@/common/filters/global-exception.filter';
 import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard';
+import { AuthService } from '@/modules/auth/auth.service';
 import { DB_CLIENT } from '@/modules/db/db.module';
+import { InMemoryCacheService } from '@/test/in-memory-cache.service';
 import { createTestDb, insertUser } from '@/test/integration-setup';
 import { createMockConfigService } from '@/test/mock-factories';
 import { JwtStrategy } from '../auth/jwt.strategy.js';
@@ -36,13 +40,18 @@ beforeEach(async () => {
     controllers: [UsersController],
     providers: [
       UsersService,
+      AuthService,
       JwtAuthGuard,
       JwtStrategy,
       { provide: DB_CLIENT, useValue: db },
+      { provide: CACHE_SERVICE, useValue: new InMemoryCacheService() },
+      { provide: JwtService, useValue: jwtService },
       {
         provide: ConfigService,
         useValue: createMockConfigService({
           AUTH_JWT_SECRET: ACCESS_TOKEN_SECRET,
+          JWT_REFRESH_SECRET: 'refresh-secret-refresh-secret-1234',
+          JWT_REFRESH_EXPIRATION: '7d',
         }),
       },
     ],
@@ -177,5 +186,46 @@ describe('PATCH /users/me', () => {
     expect(res.status).toBe(409);
     expect(res.body.code).toBe('USER_USERNAME_TAKEN');
     expect(res.body.message).toBe('Username already taken');
+  });
+});
+
+describe('DELETE /users/me', () => {
+  it('GIVEN valid bearer token WHEN soft deleting current account THEN returns 204 and invalidates later access', async () => {
+    const user = await insertUser(db, {
+      email: 'alice@example.com',
+      username: 'alice_sync',
+    });
+    const accessToken = await jwtService.signAsync({
+      sub: user.id,
+      email: user.email,
+      tokenType: 'access',
+    });
+
+    const deleteResponse = await request(app.getHttpServer())
+      .delete('/users/me')
+      .set('Authorization', `Bearer ${accessToken}`);
+
+    expect(deleteResponse.status).toBe(204);
+    expect(deleteResponse.body).toEqual({});
+
+    const deletedUser = await db.query.users.findFirst({
+      columns: {
+        deletedAt: true,
+      },
+      where: (table) => eq(table.id, user.id),
+    });
+
+    expect(deletedUser?.deletedAt).toBeInstanceOf(Date);
+
+    const profileResponse = await request(app.getHttpServer())
+      .get('/users/me')
+      .set('Authorization', `Bearer ${accessToken}`);
+
+    expect(profileResponse.status).toBe(401);
+  });
+
+  it('GIVEN no bearer token WHEN deleting current account THEN returns 401', async () => {
+    const res = await request(app.getHttpServer()).delete('/users/me');
+    expect(res.status).toBe(401);
   });
 });

@@ -23,6 +23,11 @@ type AuthServiceDatabaseMock = {
   delete: (table: unknown) => {
     where: (...args: unknown[]) => unknown;
   };
+  update: (table: unknown) => {
+    set: (...args: unknown[]) => {
+      where: (...args: unknown[]) => unknown;
+    };
+  };
 };
 
 type AuthServiceJwtServiceMock = {
@@ -47,6 +52,8 @@ function createAuthServiceFixture() {
   const usersValues = vi.fn(() => ({ returning: usersReturning }));
   const refreshValues = vi.fn(async () => undefined);
   const deleteWhere = vi.fn(async () => undefined);
+  const updateWhere = vi.fn(async () => undefined);
+  const updateSet = vi.fn(() => ({ where: updateWhere }));
 
   const insert = vi.fn((table: unknown) => {
     if (table === users) {
@@ -71,6 +78,15 @@ function createAuthServiceFixture() {
       },
     },
     insert,
+    update: vi.fn((table: unknown) => {
+      if (table === refreshTokens) {
+        return {
+          set: updateSet,
+        };
+      }
+
+      throw new Error('Unexpected table in mock db.update');
+    }),
     delete: vi.fn((table: unknown) => {
       if (table === refreshTokens) {
         return {
@@ -133,6 +149,8 @@ function createAuthServiceFixture() {
       usersValues,
       refreshValues,
       deleteWhere,
+      updateSet,
+      updateWhere,
       cacheService,
       jwtService,
     },
@@ -294,6 +312,7 @@ describe('AuthService', () => {
       UnauthorizedException,
     );
     expect(revokeAllSpy).toHaveBeenCalledWith('user-1');
+    expect(mocks.updateWhere).toHaveBeenCalledTimes(1);
   });
 
   it('GIVEN valid refresh token WHEN logging out THEN revokes active refresh token', async () => {
@@ -311,5 +330,21 @@ describe('AuthService', () => {
     await service.cleanupExpiredRefreshTokens();
 
     expect(mocks.deleteWhere).toHaveBeenCalledTimes(1);
+  });
+
+  it('GIVEN user id WHEN revoking all refresh tokens THEN removes redis actives and marks DB rows revoked', async () => {
+    const { service, mocks } = createAuthServiceFixture();
+
+    await service.revokeAllRefreshTokensForUser('user-1');
+
+    expect(mocks.cacheService.set).toHaveBeenCalledWith(
+      'auth:refresh:revoked-after:user-1',
+      expect.any(Number),
+    );
+    expect(mocks.cacheService.delByPattern).toHaveBeenCalledWith('auth:refresh:active:user-1:*');
+    expect(mocks.updateSet).toHaveBeenCalledWith({
+      revokedAt: expect.any(Date),
+    });
+    expect(mocks.updateWhere).toHaveBeenCalledTimes(1);
   });
 });

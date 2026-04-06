@@ -1,6 +1,7 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import type { Database } from '@syncode/db';
 import { describe, expect, it, vi } from 'vitest';
+import type { AuthService } from '../auth/auth.service';
 import { UsersService } from './users.service';
 
 type UsersServiceDatabaseMock = {
@@ -25,6 +26,10 @@ describe('UsersService', () => {
     const where = vi.fn(() => ({ returning }));
     const set = vi.fn(() => ({ where }));
     const update = vi.fn(() => ({ set }));
+    const authService: Pick<AuthService, 'revokeAllRefreshTokensForUser'> = {
+      revokeAllRefreshTokensForUser: vi.fn(async () => undefined),
+    };
+
     const db = {
       query: {
         users: {
@@ -34,8 +39,8 @@ describe('UsersService', () => {
       update,
     } satisfies UsersServiceDatabaseMock;
 
-    const service = new UsersService(db as unknown as Database);
-    return { service, findFirst, update, set, where, returning };
+    const service = new UsersService(db as unknown as Database, authService as AuthService);
+    return { service, findFirst, update, set, where, returning, authService };
   }
 
   it('GIVEN existing user id WHEN findById THEN returns mapped profile', async () => {
@@ -161,5 +166,23 @@ describe('UsersService', () => {
         username: 'alice_doe',
       }),
     ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('GIVEN existing user id WHEN delete THEN soft deletes via update query', async () => {
+    const { service, update, set, where, authService } = createUsersServiceFixture();
+
+    await service.delete('497f6eca-6276-4993-bfeb-53cbbbba6f08');
+
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        deletedAt: expect.any(Date),
+        updatedAt: expect.any(Date),
+      }),
+    );
+    expect(where).toHaveBeenCalledTimes(1);
+    expect(authService.revokeAllRefreshTokensForUser).toHaveBeenCalledWith(
+      '497f6eca-6276-4993-bfeb-53cbbbba6f08',
+    );
   });
 });

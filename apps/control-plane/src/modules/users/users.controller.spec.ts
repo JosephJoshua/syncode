@@ -4,7 +4,7 @@ import type { UsersService } from './users.service';
 
 describe('UsersController', () => {
   function createUsersControllerFixture() {
-    const usersService: Pick<UsersService, 'findById' | 'update'> = {
+    const usersService: Pick<UsersService, 'delete' | 'findById' | 'update'> = {
       findById: vi.fn(async (id: string) => ({
         id,
         email: 'user@example.com',
@@ -39,6 +39,7 @@ describe('UsersController', () => {
           updatedAt: new Date('2026-01-01T00:00:00.000Z').toISOString(),
         }),
       ),
+      delete: vi.fn(async () => undefined),
     };
 
     const controller = new UsersController(usersService as UsersService);
@@ -83,5 +84,13 @@ describe('UsersController', () => {
     });
     expect(result.id).toBe('user-3');
     expect(result.username).toBe('alice_doe');
+  });
+
+  it('GIVEN authenticated user WHEN deleteCurrentUser THEN delegates to service', async () => {
+    const { controller, usersService } = createUsersControllerFixture();
+
+    await controller.deleteCurrentUser({ id: 'user-4' });
+
+    expect(usersService.delete).toHaveBeenCalledWith('user-4');
   });
 });

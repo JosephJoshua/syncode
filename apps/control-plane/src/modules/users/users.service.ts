@@ -10,6 +10,7 @@ import type { Database } from '@syncode/db';
 import { users } from '@syncode/db';
 import { and, eq, isNull, ne } from 'drizzle-orm';
 import { DB_CLIENT } from '@/modules/db/db.module';
+import { AuthService } from '../auth/auth.service';
 import { toUserProfile } from './user-profile.mapper';
 
 @Injectable()
@@ -26,7 +27,10 @@ export class UsersService {
     updatedAt: true,
   } as const;
 
-  constructor(@Inject(DB_CLIENT) private readonly db: Database) {}
+  constructor(
+    @Inject(DB_CLIENT) private readonly db: Database,
+    private readonly authService: AuthService,
+  ) {}
 
   async findById(id: string): Promise<UserProfileResponse> {
     const user = await this.db.query.users.findFirst({
@@ -126,9 +130,18 @@ export class UsersService {
     }
   }
 
-  async delete(_id: string): Promise<void> {
-    // TODO: Implement user soft delete
-    throw new NotImplementedException();
+  async delete(id: string): Promise<void> {
+    const now = new Date();
+
+    await this.db
+      .update(users)
+      .set({
+        deletedAt: now,
+        updatedAt: now,
+      })
+      .where(and(eq(users.id, id), isNull(users.deletedAt)));
+
+    await this.authService.revokeAllRefreshTokensForUser(id);
   }
 
   private normalizeOptionalProfileText(value: string): string | null {
