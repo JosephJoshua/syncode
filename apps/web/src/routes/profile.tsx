@@ -98,8 +98,8 @@ function ProfilePage() {
       api(CONTROL_API.USERS.UPDATE, {
         body: {
           username: values.username?.trim() || undefined,
-          displayName: values.displayName?.trim() || '',
-          bio: values.bio?.trim() || '',
+          displayName: values.displayName?.trim() || undefined,
+          bio: values.bio?.trim() || undefined,
         },
       }),
     onSuccess: (user) => {
@@ -146,7 +146,8 @@ function ProfilePage() {
   const isLoading = profileQuery.isLoading && !profile;
   const profileEmail = profile?.email ?? '';
   const isDeleteConfirmationValid =
-    profileEmail.length > 0 && deleteConfirmation.trim() === profileEmail;
+    profileEmail.length > 0 &&
+    deleteConfirmation.trim().toLowerCase() === profileEmail.toLowerCase();
 
   if (!isAuthenticated) {
     return null;
@@ -175,6 +176,13 @@ function ProfilePage() {
               register={register}
               reset={reset}
               onCancel={() => {
+                if (profile) {
+                  reset({
+                    username: profile.username,
+                    displayName: profile.displayName ?? '',
+                    bio: profile.bio ?? '',
+                  });
+                }
                 setIsEditing(false);
               }}
               onSubmit={handleSubmit((values) => {

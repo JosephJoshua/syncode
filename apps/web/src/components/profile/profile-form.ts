@@ -1,9 +1,8 @@
 import { updateUserSchema } from '@syncode/contracts';
 import { z } from 'zod';
 
+// Extends the contract schema with client-friendly validation messages.
 export const profileFormSchema = updateUserSchema.extend({
-  displayName: z.string().max(100).optional(),
-  bio: z.string().max(500).optional(),
   username: z
     .string()
     .min(3, 'Username must be at least 3 characters.')
