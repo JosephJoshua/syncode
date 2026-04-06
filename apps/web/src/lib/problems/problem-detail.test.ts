@@ -1,7 +1,11 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { api, readApiError } from '@/lib/api-client';
 import { fetchProblemDetail, ProblemDetailApiError, problemDetailRoute } from './problem-detail';
-import { canonicalProblemDetailMock, type ProblemDetailResponse } from './problem-detail.mock';
+import {
+  canonicalProblemDetailMock,
+  type ProblemDetailResponse,
+  resetProblemDetailMockRecords,
+} from './problem-detail.mock';
 
 vi.mock('@/lib/api-client', () => ({
   api: vi.fn(),
@@ -9,6 +13,12 @@ vi.mock('@/lib/api-client', () => ({
 }));
 
 describe('problem detail data layer', () => {
+  afterEach(() => {
+    resetProblemDetailMockRecords();
+    vi.clearAllMocks();
+    vi.unstubAllEnvs();
+  });
+
   it('returns the canonical mock response with every required top-level key', async () => {
     vi.stubEnv('VITE_USE_PROBLEM_DETAIL_MOCK', 'true');
 

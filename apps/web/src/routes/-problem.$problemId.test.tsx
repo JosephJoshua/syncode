@@ -1,9 +1,28 @@
+import type { AuthUserResponse } from '@syncode/contracts';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { canonicalProblemDetailMock } from '@/lib/problems/problem-detail.mock';
+import {
+  canonicalProblemDetailMock,
+  resetProblemDetailMockRecords,
+  secondaryProblemDetailMock,
+} from '@/lib/problems/problem-detail.mock';
+import { useAuthStore } from '@/stores/auth.store';
 import { ProblemDetailPage } from './problem.$problemId';
+
+const authenticatedUser: AuthUserResponse = {
+  id: 'user-1',
+  createdAt: '2026-01-01T00:00:00.000Z',
+  email: 'dev@syncode.test',
+  displayName: 'SynCode Dev',
+  role: 'user',
+  username: 'syncode-dev',
+  avatarUrl: null,
+  bio: null,
+  stats: {},
+  updatedAt: '2026-01-01T00:00:00.000Z',
+};
 
 function renderProblemDetailPage(problemId: string) {
   const queryClient = new QueryClient({
@@ -24,6 +43,12 @@ function renderProblemDetailPage(problemId: string) {
 describe('problem detail route page', () => {
   afterEach(() => {
     cleanup();
+    resetProblemDetailMockRecords();
+    useAuthStore.setState({
+      user: null,
+      accessToken: null,
+      isAuthenticated: false,
+    });
     vi.unstubAllEnvs();
   });
 
@@ -36,7 +61,10 @@ describe('problem detail route page', () => {
       await screen.findByRole('heading', { name: canonicalProblemDetailMock.title }),
     ).toBeInTheDocument();
     expect(screen.getByText(`problems / ${canonicalProblemDetailMock.title}`)).toBeInTheDocument();
-    expect(screen.getByText('Bookmarked')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Remove bookmark' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
     expect(screen.getByText('Acceptance Rate')).toBeInTheDocument();
     expect(screen.getByText('Total Submissions')).toBeInTheDocument();
     expect(screen.getByText('1,843,201')).toBeInTheDocument();
@@ -70,6 +98,42 @@ describe('problem detail route page', () => {
 
     expect(screen.getByTestId('starter-code-block')).toHaveTextContent(
       'function twoSum(nums, target)',
+    );
+  });
+
+  it('uses problem.isBookmarked as the initial state and toggles it in mock mode without signing in', async () => {
+    vi.stubEnv('VITE_USE_PROBLEM_DETAIL_MOCK', 'true');
+
+    const user = userEvent.setup();
+
+    renderProblemDetailPage(canonicalProblemDetailMock.id);
+
+    const bookmarkedButton = await screen.findByRole('button', { name: 'Remove bookmark' });
+    expect(bookmarkedButton).toHaveAttribute('aria-pressed', 'true');
+    expect(bookmarkedButton).toBeEnabled();
+
+    await user.click(bookmarkedButton);
+
+    expect(await screen.findByRole('button', { name: 'Add bookmark' })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
+  });
+
+  it('renders an outline bookmark when problem.isBookmarked is false', async () => {
+    vi.stubEnv('VITE_USE_PROBLEM_DETAIL_MOCK', 'true');
+
+    useAuthStore.setState({
+      user: authenticatedUser,
+      accessToken: 'token',
+      isAuthenticated: true,
+    });
+
+    renderProblemDetailPage(secondaryProblemDetailMock.id);
+
+    expect(await screen.findByRole('button', { name: 'Add bookmark' })).toHaveAttribute(
+      'aria-pressed',
+      'false',
     );
   });
 
