@@ -20,6 +20,7 @@ import { Check, ChevronDown, Code2, Copy, FileCode2, Globe, Lock } from 'lucide-
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { z } from 'zod';
+import { useClipboard } from '@/hooks/use-clipboard';
 import { api, readApiError } from '@/lib/api-client';
 import { useAuthStore } from '@/stores/auth.store';
 
@@ -86,19 +87,12 @@ function CreateRoomPage() {
     }
   }, [isAuthenticated, navigate]);
 
-  useEffect(() => {
-    return () => {
-      if (copiedTimerRef.current) {
-        clearTimeout(copiedTimerRef.current);
-      }
-    };
-  }, []);
-
   const comboboxRef = useRef<HTMLDivElement>(null);
-  const copiedTimerRef = useRef<ReturnType<typeof setTimeout>>(null);
 
   const [inviteLink, setInviteLink] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [createdRoomId, setCreatedRoomId] = useState<string | null>(null);
+  const [createdRoomCode, setCreatedRoomCode] = useState<string | null>(null);
+  const { copied, copy } = useClipboard();
   const [problemInput, setProblemInput] = useState('');
   const [isProblemMenuOpen, setIsProblemMenuOpen] = useState(false);
   const [submissionError, setSubmissionError] = useState<string | null>(null);
@@ -167,27 +161,18 @@ function CreateRoomPage() {
     try {
       const room = await createRoomMutation.mutateAsync(data);
       setSubmittedData(data);
-      setInviteLink(`${window.location.origin}/rooms/${room.roomId}`);
+      setCreatedRoomId(room.roomId);
+      setCreatedRoomCode(room.roomCode);
+      setInviteLink(`${window.location.origin}/rooms/${room.roomId}?code=${room.roomCode}`);
     } catch (error) {
       const apiError = await readApiError(error);
       setSubmissionError(apiError?.message ?? 'Failed to create room. Please try again.');
     }
   };
 
-  const copyToClipboard = async () => {
+  const copyToClipboard = () => {
     if (inviteLink) {
-      try {
-        await navigator.clipboard.writeText(inviteLink);
-        setCopied(true);
-
-        if (copiedTimerRef.current) {
-          clearTimeout(copiedTimerRef.current);
-        }
-
-        copiedTimerRef.current = setTimeout(() => setCopied(false), 2000);
-      } catch {
-        // Clipboard API not available
-      }
+      copy(inviteLink);
     }
   };
 
@@ -206,7 +191,6 @@ function CreateRoomPage() {
         <Card className="rounded-2xl border-border/60 bg-card/95 p-8 shadow-[0_10px_40px_-10px_rgba(0,0,0,0.7)]">
           {!inviteLink ? (
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-7">
-              {/* Problem Selector */}
               <div>
                 <Label className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Problem to Solve
@@ -280,7 +264,6 @@ function CreateRoomPage() {
                 )}
               </div>
 
-              {/* Language Picker */}
               <div>
                 <Label className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Coding Language
@@ -316,7 +299,6 @@ function CreateRoomPage() {
                 )}
               </div>
 
-              {/* Visibility Toggle */}
               <div>
                 <Label className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Visibility
@@ -338,7 +320,6 @@ function CreateRoomPage() {
                 </div>
               </div>
 
-              {/* Submit Button */}
               <div className="pt-2">
                 <Button
                   type="submit"
@@ -421,6 +402,8 @@ function CreateRoomPage() {
                   className="w-full rounded-xl"
                   onClick={() => {
                     setInviteLink(null);
+                    setCreatedRoomId(null);
+                    setCreatedRoomCode(null);
                     reset();
                     setProblemInput('');
                     setSubmissionError(null);
@@ -429,8 +412,26 @@ function CreateRoomPage() {
                 >
                   Setup New Room
                 </Button>
-                {/* TODO: Navigate to room workspace when implemented */}
-                <Button size="lg" disabled className="w-full rounded-xl">
+                <Button
+                  size="lg"
+                  className="w-full rounded-xl"
+                  onClick={() => {
+                    if (!createdRoomId) {
+                      return;
+                    }
+
+                    if (createdRoomCode) {
+                      window.location.assign(`/rooms/${createdRoomId}?code=${createdRoomCode}`);
+                      return;
+                    }
+
+                    void navigate({
+                      to: '/rooms/$roomId',
+                      params: { roomId: createdRoomId },
+                    });
+                  }}
+                  disabled={!createdRoomId}
+                >
                   Enter Workspace
                 </Button>
               </div>
