@@ -9,23 +9,57 @@ import {
   getSchemaPath,
 } from '@nestjs/swagger';
 import { CONTROL_API, EXECUTION_CLIENT, type IExecutionClient } from '@syncode/contracts';
+import { CurrentUser } from '@/common/decorators/current-user.decorator';
 import { ErrorResponseDto } from '@/common/dto/error-response.dto';
 import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard';
-import { ExecutionResultResponseDto, JobStatusResponseDto } from './dto/execution.dto.js';
+import type { AuthUser } from '@/modules/auth/auth.types';
+import {
+  ExecutionDetailsResponseDto,
+  ExecutionResultResponseDto,
+  JobStatusResponseDto,
+} from './dto/execution.dto.js';
+import { ExecutionService } from './execution.service.js';
 
 /**
  * Provides endpoints for polling code execution results.
  */
 @ApiTags('execution')
 @ApiBearerAuth()
-@ApiExtraModels(ExecutionResultResponseDto, JobStatusResponseDto)
+@ApiExtraModels(ExecutionResultResponseDto, JobStatusResponseDto, ExecutionDetailsResponseDto)
 @UseGuards(JwtAuthGuard)
 @Controller()
 export class ExecutionController {
   constructor(
     @Inject(EXECUTION_CLIENT)
     private readonly executionClient: IExecutionClient,
+    private readonly executionService: ExecutionService,
   ) {}
+
+  @Get(CONTROL_API.EXECUTION.GET_SUBMISSION_DETAILS.route)
+  @ApiOperation({
+    summary: 'Get detailed execution results for a submission',
+    description:
+      'Returns submission-level execution details with per-test-case expected/actual output, ' +
+      'timing, memory, and logs for rendering detailed result panels.',
+  })
+  @ApiParam({
+    name: 'submissionId',
+    description: 'Submission ID (UUID)',
+    example: '550e8400-e29b-41d4-a716-446655440000',
+  })
+  @ApiResponse({
+    status: 200,
+    type: ExecutionDetailsResponseDto,
+    description: 'Detailed execution result payload for the submission',
+  })
+  @ApiResponse({ status: 401, type: ErrorResponseDto, description: 'Unauthorized' })
+  @ApiResponse({ status: 404, type: ErrorResponseDto, description: 'Submission not found' })
+  async getSubmissionDetails(
+    @Param('submissionId') submissionId: string,
+    @CurrentUser() user: AuthUser,
+  ): Promise<ExecutionDetailsResponseDto> {
+    return this.executionService.getSubmissionDetails(submissionId, user.id);
+  }
 
   @Get(CONTROL_API.EXECUTION.GET_RESULT.route)
   @ApiOperation({

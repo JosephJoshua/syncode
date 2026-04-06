@@ -7,7 +7,11 @@ import type {
   registerResponseSchema,
   registerSchema,
 } from './auth.js';
-import type { executionResultResponseSchema, jobStatusResponseSchema } from './execution.js';
+import type {
+  executionDetailsResponseSchema,
+  executionResultResponseSchema,
+  jobStatusResponseSchema,
+} from './execution.js';
 import type { healthCheckResponseSchema } from './health.js';
 import type {
   problemDetailSchema,
@@ -83,6 +87,10 @@ export const CONTROL_API = {
     >()('execution/:jobId', 'GET'),
     GET_STATUS: defineRoute<void, z.infer<typeof jobStatusResponseSchema>>()(
       'execution/:jobId/status',
+      'GET',
+    ),
+    GET_SUBMISSION_DETAILS: defineRoute<void, z.infer<typeof executionDetailsResponseSchema>>()(
+      'submissions/:submissionId',
       'GET',
     ),
   },

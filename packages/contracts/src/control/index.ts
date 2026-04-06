@@ -1,5 +1,6 @@
 export * from './auth.js';
 export * from './error.js';
+export type { ExecutionDetailsResponse } from './execution.js';
 export * from './execution.js';
 export * from './health.js';
 export * from './pagination.js';
