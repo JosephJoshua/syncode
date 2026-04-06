@@ -37,7 +37,7 @@
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx,json,css,md}": [
-      "biome check --write --no-errors-on-unmatched"
+      "node node_modules/@biomejs/biome/bin/biome check --write --no-errors-on-unmatched"
     ]
   },
   "packageManager": "pnpm@9.0.0",
