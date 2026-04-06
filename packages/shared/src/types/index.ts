@@ -22,5 +22,12 @@ export {
   PROBLEMS_SORT_BY_OPTIONS,
 } from './problem.js';
 export type { RoomMode, RoomParticipant } from './room.js';
-export { ROOM_MODES, ROOM_ROLES, ROOM_STATUSES, RoomRole, RoomStatus } from './room.js';
+export {
+  ALL_ROOM_ROLES as ROOM_ROLES,
+  JOINABLE_ROOM_ROLES as JOINABLE_ROLES,
+  ROOM_MODES,
+  ROOM_STATUSES,
+  RoomRole,
+  RoomStatus,
+} from './room.js';
 export { UserRole } from './user.js';

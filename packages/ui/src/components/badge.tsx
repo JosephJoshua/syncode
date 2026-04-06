@@ -1,5 +1,6 @@
 import { cva, type VariantProps } from 'class-variance-authority';
 import type * as React from 'react';
+
 import { cn } from '../lib/cn';
 
 const badgeVariants = cva(
@@ -10,6 +11,10 @@ const badgeVariants = cva(
         default: 'border-transparent bg-primary/15 text-primary',
         secondary: 'border-transparent bg-secondary text-secondary-foreground',
         outline: 'border-border bg-transparent text-muted-foreground',
+        neutral: 'border-border/70 bg-muted/85 text-foreground/90',
+        candidate: 'border-cyan-400/35 bg-cyan-400/18 text-cyan-300',
+        interviewer: 'border-fuchsia-400/35 bg-fuchsia-400/18 text-fuchsia-300',
+        observer: 'border-indigo-400/35 bg-indigo-400/18 text-indigo-300',
         success: 'border-transparent',
         warning: 'border-transparent',
         destructive: 'border-transparent',
@@ -58,6 +63,7 @@ function Badge({
 
   return (
     <span
+      data-slot="badge"
       className={cn(badgeVariants({ variant, size }), className)}
       style={{ ...semanticStyle, ...style }}
       {...props}

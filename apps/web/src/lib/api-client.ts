@@ -4,7 +4,6 @@ import ky, { HTTPError } from 'ky';
 import { useAuthStore } from '@/stores/auth.store';
 
 const resolveUrl = buildUrl as (template: string, params?: Record<string, string>) => string;
-type ApiQueryValue = string | number | boolean | null | undefined;
 
 const client = ky.create({
   prefixUrl: import.meta.env.VITE_API_URL ?? '/api',
@@ -43,36 +42,22 @@ const client = ky.create({
  *   body: { code, language },
  * });
  */
-export async function api<
-  T extends TypedRoute<unknown, unknown>,
-  TQuery extends object = Record<string, ApiQueryValue>,
->(
+export async function api<T extends TypedRoute<unknown, unknown>>(
   route: T & { readonly route: string; readonly method: string },
   options?: {
     params?: Record<string, string>;
     body?: RequestOf<T>;
-    query?: TQuery;
+    searchParams?: Record<string, string | number | boolean | null | undefined>;
   },
 ): Promise<ResponseOf<T>> {
   const template = route.route.startsWith('/') ? route.route.slice(1) : route.route;
   const url = resolveUrl(template, options?.params);
 
   const method = route.method.toLowerCase();
-  const searchParams = new URLSearchParams();
-
-  for (const [key, value] of Object.entries(
-    (options?.query ?? {}) as Record<string, ApiQueryValue>,
-  )) {
-    if (value === undefined || value === null) {
-      continue;
-    }
-
-    searchParams.set(key, String(value));
-  }
 
   const response = await client(url, {
     method,
-    ...(searchParams.size === 0 ? {} : { searchParams }),
+    searchParams: normalizeSearchParams(options?.searchParams),
     ...(options?.body === undefined ? {} : { json: options.body }),
   });
 
@@ -81,6 +66,28 @@ export async function api<
   }
 
   return response.json<ResponseOf<T>>();
+}
+
+function normalizeSearchParams(
+  params?: Record<string, string | number | boolean | null | undefined>,
+) {
+  if (!params) {
+    return undefined;
+  }
+
+  const entries = Object.entries(params).flatMap(([key, value]) => {
+    if (value === undefined || value === null) {
+      return [];
+    }
+
+    return [[key, String(value)] as const];
+  });
+
+  if (entries.length === 0) {
+    return undefined;
+  }
+
+  return Object.fromEntries(entries);
 }
 
 export async function readApiError(error: unknown): Promise<ErrorResponse | null> {

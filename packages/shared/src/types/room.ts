@@ -13,7 +13,8 @@ export const RoomStatus = {
 
 export type RoomStatus = (typeof RoomStatus)[keyof typeof RoomStatus];
 
-export const ROOM_ROLES = ['host', 'interviewer', 'candidate', 'spectator'] as const;
+export const ALL_ROOM_ROLES = ['host', 'interviewer', 'candidate', 'spectator'] as const;
+export const JOINABLE_ROOM_ROLES = ['interviewer', 'candidate', 'spectator'] as const;
 
 export const RoomRole = {
   HOST: 'host',

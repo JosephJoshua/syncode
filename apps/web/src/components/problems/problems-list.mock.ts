@@ -527,5 +527,3 @@ export function getMockProblemsListResponse(
 export function getMockProblemById(id: string): ProblemSummary | undefined {
   return MOCK_PROBLEM_SUMMARIES.find((problem) => problem.id === id);
 }
-
-export const MOCK_PROBLEMS_LIST_RESPONSE = getMockProblemsListResponse();

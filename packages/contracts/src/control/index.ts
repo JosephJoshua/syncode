@@ -6,4 +6,5 @@ export * from './pagination.js';
 export * from './problems.js';
 export * from './rooms.js';
 export * from './routes.js';
+export * from './sessions.js';
 export * from './users.js';

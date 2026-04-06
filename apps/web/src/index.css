@@ -3,6 +3,7 @@
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist";
 @import "@syncode/ui/theme.css";
+@source "../../../packages/ui/src";
 
 @keyframes marquee {
   from {

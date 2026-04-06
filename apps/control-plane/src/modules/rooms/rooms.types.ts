@@ -57,3 +57,11 @@ export interface DestroyRoomResult {
   collab: DestroyDocumentResponse | null;
   mediaDeleted: boolean;
 }
+
+export interface JoinRoomResult {
+  room: RoomDetailResult;
+  assignedRole: RoomRole;
+  myCapabilities: RoomCapability[];
+  collabToken: string;
+  collabUrl: string;
+}

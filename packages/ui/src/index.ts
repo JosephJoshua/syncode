@@ -1,3 +1,4 @@
+export * from './components/avatar';
 export * from './components/badge';
 export * from './components/button';
 export * from './components/card';
@@ -8,4 +9,5 @@ export * from './components/pagination';
 export * from './components/progress';
 export * from './components/select';
 export * from './components/separator';
+export * from './components/table';
 export * from './lib/cn';

@@ -52,6 +52,16 @@ const uiDifficultyToApiDifficulty: Record<ProblemDifficulty, ProblemsApiDifficul
   Medium: 'medium',
   Hard: 'hard',
 };
+const apiStatusToUiStatus: Record<string, ProblemStatus> = {
+  solved: 'Solved',
+  attempted: 'Attempted',
+  todo: 'Todo',
+};
+const uiStatusToApiStatus: Record<ProblemStatus, string> = {
+  Solved: 'solved',
+  Attempted: 'attempted',
+  Todo: 'todo',
+};
 
 function createInitialPaginationState() {
   return {
@@ -65,12 +75,7 @@ function normalizeProblemSummary(problem: ProblemSummary): ProblemItem {
     id: problem.id,
     title: problem.title,
     difficulty: apiDifficultyToUiDifficulty[problem.difficulty],
-    status:
-      problem.attemptStatus === 'solved'
-        ? 'Solved'
-        : problem.attemptStatus === 'attempted'
-          ? 'Attempted'
-          : 'Todo',
+    status: apiStatusToUiStatus[problem.attemptStatus ?? 'todo'] ?? 'Todo',
     acceptanceRate: problem.acceptanceRate ?? 0,
     tags: problem.tags,
     addedAt: problem.updatedAt ? Date.parse(problem.updatedAt) || 0 : 0,
@@ -108,7 +113,9 @@ async function fetchProblemsList(query: MockProblemsListQuery): Promise<MockProb
     return getMockProblemsListResponse(query);
   }
 
-  const response = await api(CONTROL_API.PROBLEMS.LIST, { query });
+  const response = await api(CONTROL_API.PROBLEMS.LIST, {
+    searchParams: query as Record<string, string | number | boolean | undefined>,
+  });
   return {
     ...response,
     facets: {
@@ -148,7 +155,7 @@ function ProblemsLibraryPage() {
           : undefined,
       status:
         selectedStatuses.length > 0
-          ? selectedStatuses.map((s) => (s === 'Todo' ? 'todo' : s.toLowerCase())).join(',')
+          ? selectedStatuses.map((s) => uiStatusToApiStatus[s]).join(',')
           : undefined,
       tags: selectedTags.length > 0 ? selectedTags.join(',') : undefined,
       search: normalizedSearchQuery.length > 0 ? normalizedSearchQuery : undefined,
@@ -190,11 +197,6 @@ function ProblemsLibraryPage() {
       (left, right) => right.count - left.count || left.name.localeCompare(right.name),
     );
   }, [problemTagsResponse]);
-  const problemTagNameBySlug = useMemo(
-    () => new Map(popularTags.map((tag) => [tag.slug, tag.name])),
-    [popularTags],
-  );
-
   const difficultyCounts = useMemo(() => {
     const fc = problemsListResponse?.facets?.difficultyCounts;
     if (fc) {
@@ -280,7 +282,7 @@ function ProblemsLibraryPage() {
     })),
     ...selectedTags.map((tag) => ({
       id: `tag-${tag}`,
-      label: problemTagNameBySlug.get(tag) ?? getProblemTagName(tag),
+      label: getProblemTagName(tag),
       onRemove: () => {
         startTransition(() => {
           setSelectedTags((current) => current.filter((item) => item !== tag));
@@ -403,9 +405,7 @@ function ProblemsLibraryPage() {
                         >
                           <ProblemCard
                             problem={problem}
-                            tagNames={problem.tags.map(
-                              (tag) => problemTagNameBySlug.get(tag) ?? getProblemTagName(tag),
-                            )}
+                            tagNames={problem.tags.map((tag) => getProblemTagName(tag))}
                           />
                         </motion.button>
                       );
