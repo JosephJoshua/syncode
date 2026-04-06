@@ -5,6 +5,7 @@ import { createFileRoute } from '@tanstack/react-router';
 import type { LucideIcon } from 'lucide-react';
 import { Calendar, Clock3, Target, TrendingUp } from 'lucide-react';
 import { DashboardRecentSessions } from '@/components/dashboard-recent-sessions';
+import { HostControlPanel } from '@/components/host-control-panel';
 import {
   EMPTY_DASHBOARD_STATS,
   loadDashboardSessionHistory,
@@ -123,6 +124,9 @@ function DashboardPage() {
           void sessionHistoryQuery.refetch();
         }}
       />
+
+      {/* Render mock host controls only during local development/UI testing. */}
+      {import.meta.env.DEV ? <HostControlPanel /> : null}
     </div>
   );
 }
