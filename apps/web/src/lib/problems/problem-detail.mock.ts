@@ -224,10 +224,15 @@ export const secondaryProblemDetailMock: ProblemDetailResponse = {
   createdAt: '2026-03-10T07:45:00.000Z',
 };
 
-export const problemDetailMockRecords: Record<string, ProblemDetailResponse> = {
-  [canonicalProblemDetailMock.id]: canonicalProblemDetailMock,
-  [secondaryProblemDetailMock.id]: secondaryProblemDetailMock,
-};
+function createInitialProblemDetailMockRecords(): Record<string, ProblemDetailResponse> {
+  return {
+    [canonicalProblemDetailMock.id]: cloneProblemDetail(canonicalProblemDetailMock),
+    [secondaryProblemDetailMock.id]: cloneProblemDetail(secondaryProblemDetailMock),
+  };
+}
+
+export let problemDetailMockRecords: Record<string, ProblemDetailResponse> =
+  createInitialProblemDetailMockRecords();
 
 function cloneProblemDetail(problem: ProblemDetailResponse): ProblemDetailResponse {
   return {
@@ -243,6 +248,30 @@ export function getMockProblemDetail(problemId: string): ProblemDetailResponse |
   const problem = problemDetailMockRecords[problemId];
 
   return problem ? cloneProblemDetail(problem) : null;
+}
+
+export function setMockProblemBookmark(problemId: string, isBookmarked: boolean) {
+  const problem = problemDetailMockRecords[problemId];
+
+  if (!problem) {
+    return null;
+  }
+
+  const updatedProblem = {
+    ...problem,
+    isBookmarked,
+  };
+
+  problemDetailMockRecords = {
+    ...problemDetailMockRecords,
+    [problemId]: updatedProblem,
+  };
+
+  return cloneProblemDetail(updatedProblem);
+}
+
+export function resetProblemDetailMockRecords() {
+  problemDetailMockRecords = createInitialProblemDetailMockRecords();
 }
 
 export function createProblemDetailNotFoundError(problemId: string): ProblemDetailErrorResponse {

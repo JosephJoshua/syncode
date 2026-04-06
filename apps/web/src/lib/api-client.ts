@@ -4,9 +4,11 @@ import ky, { HTTPError } from 'ky';
 import { useAuthStore } from '@/stores/auth.store';
 
 const resolveUrl = buildUrl as (template: string, params?: Record<string, string>) => string;
+const importMetaEnv = (import.meta as ImportMeta & { env?: Record<string, string | undefined> })
+  .env;
 
 const client = ky.create({
-  prefixUrl: import.meta.env.VITE_API_URL ?? '/api',
+  prefixUrl: importMetaEnv?.VITE_API_URL ?? '/api',
   credentials: 'include',
   hooks: {
     beforeRequest: [

@@ -8,6 +8,10 @@ import {
   type ProblemDetailResponse,
 } from './problem-detail.mock';
 
+function getImportMetaEnv() {
+  return (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env;
+}
+
 export const problemDetailRoute = defineRoute<void, ProblemDetailResponse>()('problems/:id', 'GET');
 
 export class ProblemDetailApiError extends Error {
@@ -22,7 +26,18 @@ export class ProblemDetailApiError extends Error {
 }
 
 function shouldUseProblemDetailMock() {
-  return import.meta.env.VITE_USE_PROBLEM_DETAIL_MOCK === 'true';
+  const processEnvValue =
+    typeof process !== 'undefined' ? process.env.VITE_USE_PROBLEM_DETAIL_MOCK : undefined;
+
+  return (processEnvValue ?? getImportMetaEnv()?.VITE_USE_PROBLEM_DETAIL_MOCK) === 'true';
+}
+
+export function isProblemDetailMockEnabled() {
+  return shouldUseProblemDetailMock();
+}
+
+export function getProblemDetailQueryKey(problemId: string) {
+  return ['problem-detail', problemId] as const;
 }
 
 function normalizeProblemDetailErrorResponse(
@@ -75,7 +90,7 @@ export async function fetchProblemDetail(problemId: string): Promise<ProblemDeta
 
 export function problemDetailQueryOptions(problemId: string) {
   return {
-    queryKey: ['problem-detail', problemId] as const,
+    queryKey: getProblemDetailQueryKey(problemId),
     queryFn: () => fetchProblemDetail(problemId),
     enabled: Boolean(problemId),
   };
