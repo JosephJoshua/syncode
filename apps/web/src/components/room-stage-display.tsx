@@ -1,45 +1,40 @@
-import React from 'react';
-
-// Five phases aligned with the API documentation
-export type RoomPhase = 'waiting' | 'warmup' | 'coding' | 'wrapup' | 'finished';
+import type { RoomStatus } from '@syncode/shared';
 
 interface RoomStageIndicatorProps {
-  phase: RoomPhase;
+  phase: RoomStatus;
   className?: string;
 }
 
-// Core config: phase-specific ASCII face, neon color, and glow style
 const phaseConfig: Record<
-  RoomPhase,
+  RoomStatus,
   { ascii: string; label: string; colorClass: string; glowClass: string }
 > = {
   waiting: {
-    ascii: '[ O _ O ]', // Wide-eyed waiting state
+    ascii: '[ O _ O ]',
     label: 'AWAITING_SYNC',
-    colorClass: 'text-zinc-400',
-    glowClass: 'shadow-[0_0_10px_rgba(161,161,170,0.15)] border-zinc-800',
+    colorClass: 'text-muted-foreground',
+    glowClass: 'border-border',
   },
   warmup: {
-    ascii: '[ ? _ ? ]', // Thinking / ice-breaker phase
+    ascii: '[ ? _ ? ]',
     label: 'SYSTEM_WARMUP',
     colorClass: 'text-amber-400',
     glowClass: 'shadow-[0_0_15px_rgba(251,191,36,0.25)] border-amber-500/40',
   },
   coding: {
-    ascii: '[ > _ < ]', // Focused coding expression
+    ascii: '[ > _ < ]',
     label: 'ACTIVE_CODING',
-    // Use the neon green from the existing visual direction
-    colorClass: 'text-[oklch(0.88_0.22_165)]',
-    glowClass: 'shadow-[0_0_20px_oklch(0.88_0.22_165/0.35)] border-[oklch(0.88_0.22_165)]/50',
+    colorClass: 'text-primary',
+    glowClass: 'shadow-[0_0_20px_hsl(var(--primary)/0.35)] border-primary/50',
   },
   wrapup: {
-    ascii: '[ = _ = ]', // Tired / wrap-up expression
+    ascii: '[ = _ = ]',
     label: 'PHASE_WRAPUP',
     colorClass: 'text-fuchsia-400',
     glowClass: 'shadow-[0_0_15px_rgba(232,121,249,0.25)] border-fuchsia-500/40',
   },
   finished: {
-    ascii: '[ ^ _ ^ ]', // Happy / completed state
+    ascii: '[ ^ _ ^ ]',
     label: 'SESSION_END',
     colorClass: 'text-cyan-400',
     glowClass: 'shadow-[0_0_15px_rgba(34,211,238,0.25)] border-cyan-500/40',
@@ -51,24 +46,20 @@ export function RoomStageIndicator({ phase, className = '' }: RoomStageIndicator
 
   return (
     <div
-      className={`relative overflow-hidden inline-flex items-center gap-3.5 px-4 py-2.5 rounded-xl border bg-[#0a0a0a] transition-all duration-500 ${config.glowClass} ${className}`}
+      className={`relative inline-flex items-center gap-3.5 overflow-hidden rounded-xl border bg-card px-4 py-2.5 transition-all duration-500 ${config.glowClass} ${className}`}
     >
-      {/* CRT-style scanline overlay */}
-      <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.03)_50%,transparent_50%)] bg-[length:100%_4px] pointer-events-none" />
+      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.03)_50%,transparent_50%)] bg-[length:100%_4px]" />
 
-      {/* ASCII pixel-style face */}
       <div
-        className={`font-mono text-xl font-black tracking-widest ${config.colorClass} drop-shadow-[0_0_8px_currentColor] transition-colors duration-500`}
+        className={`font-mono text-xl font-black tracking-widest drop-shadow-[0_0_8px_currentColor] transition-colors duration-500 ${config.colorClass}`}
       >
         {config.ascii}
       </div>
 
-      {/* Vertical divider */}
-      <div className="w-px h-6 bg-zinc-800/80" />
+      <div className="h-6 w-px bg-border" />
 
-      {/* Phase label */}
       <div
-        className={`font-mono text-xs font-bold tracking-widest uppercase ${config.colorClass} drop-shadow-[0_0_5px_currentColor] transition-colors duration-500`}
+        className={`font-mono text-xs font-bold uppercase tracking-widest drop-shadow-[0_0_5px_currentColor] transition-colors duration-500 ${config.colorClass}`}
       >
         {config.label}
       </div>
