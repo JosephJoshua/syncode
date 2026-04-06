@@ -11,10 +11,6 @@ export interface ProblemDetailErrorResponse {
   details?: Record<string, unknown>;
 }
 
-function getImportMetaEnv() {
-  return (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env;
-}
-
 export class ProblemDetailApiError extends Error {
   readonly response: ProblemDetailErrorResponse;
 
@@ -26,15 +22,8 @@ export class ProblemDetailApiError extends Error {
   }
 }
 
-function shouldUseProblemDetailMock() {
-  const processEnvValue =
-    typeof process !== 'undefined' ? process.env.VITE_USE_PROBLEM_DETAIL_MOCK : undefined;
-
-  return (processEnvValue ?? getImportMetaEnv()?.VITE_USE_PROBLEM_DETAIL_MOCK) === 'true';
-}
-
 export function isProblemDetailMockEnabled() {
-  return shouldUseProblemDetailMock();
+  return import.meta.env.VITE_USE_PROBLEM_DETAIL_MOCK === 'true';
 }
 
 export function getProblemDetailQueryKey(problemId: string) {
@@ -64,7 +53,7 @@ export function normalizeErrorResponse(
 }
 
 export async function fetchProblemDetail(problemId: string): Promise<ProblemDetail> {
-  if (shouldUseProblemDetailMock()) {
+  if (isProblemDetailMockEnabled()) {
     const mockProblemDetail = getMockProblemDetail(problemId);
 
     if (!mockProblemDetail) {

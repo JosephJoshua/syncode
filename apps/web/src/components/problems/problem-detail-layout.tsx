@@ -3,7 +3,7 @@ import { SUPPORTED_LANGUAGES, type SupportedLanguage } from '@syncode/shared';
 import { Button } from '@syncode/ui';
 import { Bookmark, LoaderCircle } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Markdown from 'react-markdown';
 import { useToggleProblemBookmarkMutation } from '@/lib/problems/problem-bookmark';
 import { isProblemDetailMockEnabled } from '@/lib/problems/problem-detail';
@@ -15,7 +15,10 @@ export function ProblemDetailLayout({ problem }: { problem: ProblemDetail }) {
   const starterLanguages = getStarterLanguages(problem.starterCode);
   const firstLanguage = starterLanguages[0] ?? null;
   const [selectedLanguage, setSelectedLanguage] = useState<SupportedLanguage | null>(firstLanguage);
-  const publicTestCases = problem.testCases.filter((testCase) => !testCase.isHidden);
+  const publicTestCases = useMemo(
+    () => problem.testCases.filter((testCase) => !testCase.isHidden),
+    [problem.testCases],
+  );
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const canToggleBookmark = isAuthenticated || isProblemDetailMockEnabled();
   const toggleBookmarkMutation = useToggleProblemBookmarkMutation(problem.id);
@@ -403,25 +406,17 @@ function DifficultyBadge({ difficulty }: { difficulty: ProblemDetail['difficulty
 }
 
 function AttemptStatusBadge({ attemptStatus }: { attemptStatus: ProblemDetail['attemptStatus'] }) {
-  if (attemptStatus === 'solved') {
+  if (attemptStatus) {
     return (
       <span className="inline-flex rounded-full border border-violet-400/34 bg-violet-500/16 px-3 py-1.5 text-xs font-semibold text-violet-300 ring-1 ring-violet-400/12">
-        Solved
-      </span>
-    );
-  }
-
-  if (attemptStatus === 'attempted') {
-    return (
-      <span className="inline-flex rounded-full border border-violet-400/34 bg-violet-500/16 px-3 py-1.5 text-xs font-semibold text-violet-300 ring-1 ring-violet-400/12">
-        Attempted
+        {formatAttemptStatus(attemptStatus)}
       </span>
     );
   }
 
   return (
     <span className="inline-flex rounded-full border border-violet-400/24 bg-violet-500/10 px-3 py-1.5 text-xs font-medium text-violet-200/90 ring-1 ring-violet-400/8">
-      No attempts yet
+      {formatAttemptStatus(attemptStatus)}
     </span>
   );
 }

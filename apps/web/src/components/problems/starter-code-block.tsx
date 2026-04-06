@@ -7,13 +7,13 @@ import 'prismjs/components/prism-javascript';
 import 'prismjs/components/prism-python';
 import 'prismjs/components/prism-rust';
 import 'prismjs/components/prism-typescript';
-import type { ReactNode } from 'react';
+import { type ReactNode, useMemo } from 'react';
 import { resolvePrismLanguage } from './starter-code-language';
 
 export function StarterCodeBlock({ code, language }: { code: string; language: string }) {
   const prismLanguage = resolvePrismLanguage(language);
   const grammar = prismLanguage ? Prism.languages[prismLanguage] : null;
-  const tokens = grammar ? Prism.tokenize(code, grammar) : [code];
+  const tokens = useMemo(() => (grammar ? Prism.tokenize(code, grammar) : [code]), [code, grammar]);
   const languageKey = prismLanguage ?? 'plain-text';
   const codeClassName = prismLanguage
     ? `language-${prismLanguage} block min-w-full font-mono`

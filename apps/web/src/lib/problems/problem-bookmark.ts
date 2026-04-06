@@ -29,16 +29,16 @@ type ToggleBookmarkContext = {
   previousProblemDetail: ProblemDetail | undefined;
 };
 
-export async function bookmarkProblem(problemId: string) {
+async function setBookmark(problemId: string, bookmarked: boolean) {
   if (isProblemDetailMockEnabled()) {
-    setMockProblemBookmark(problemId, true);
+    setMockProblemBookmark(problemId, bookmarked);
     return;
   }
 
+  const route = bookmarked ? CONTROL_API.BOOKMARKS.ADD : CONTROL_API.BOOKMARKS.REMOVE;
+
   try {
-    await api(CONTROL_API.BOOKMARKS.ADD, {
-      params: { problemId },
-    });
+    await api(route, { params: { problemId } });
   } catch (error) {
     const apiError = normalizeErrorResponse(await readApiError(error));
 
@@ -50,25 +50,12 @@ export async function bookmarkProblem(problemId: string) {
   }
 }
 
+export async function bookmarkProblem(problemId: string) {
+  return setBookmark(problemId, true);
+}
+
 export async function removeBookmark(problemId: string) {
-  if (isProblemDetailMockEnabled()) {
-    setMockProblemBookmark(problemId, false);
-    return;
-  }
-
-  try {
-    await api(CONTROL_API.BOOKMARKS.REMOVE, {
-      params: { problemId },
-    });
-  } catch (error) {
-    const apiError = normalizeErrorResponse(await readApiError(error));
-
-    if (apiError) {
-      throw new ProblemBookmarkApiError(apiError);
-    }
-
-    throw error;
-  }
+  return setBookmark(problemId, false);
 }
 
 export function useToggleProblemBookmarkMutation(problemId: string) {
