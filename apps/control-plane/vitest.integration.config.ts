@@ -23,7 +23,7 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     root: './',
-    include: ['src/**/*.integration.test.ts'],
+    include: ['src/**/*.integration.spec.ts'],
     globalSetup: ['src/test/global-setup.ts'],
     testTimeout: 30_000,
     hookTimeout: 60_000,
@@ -35,7 +35,6 @@ export default defineConfig({
       include: ['src/**/*.ts'],
       exclude: [
         '**/*.spec.ts',
-        '**/*.test.ts',
         'src/main.ts',
         'src/telemetry.ts',
         'src/test/**',
