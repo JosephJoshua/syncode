@@ -1,4 +1,5 @@
-import { CONTROL_API } from '@syncode/contracts';
+import { CONTROL_API, ERROR_CODES } from '@syncode/contracts';
+import type { RoomRole } from '@syncode/shared';
 import { Badge, Button, Card, Input } from '@syncode/ui';
 import { createFileRoute } from '@tanstack/react-router';
 import {
@@ -14,7 +15,8 @@ import {
   Users,
 } from 'lucide-react';
 import type { ChangeEvent } from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useClipboard } from '@/hooks/use-clipboard';
 import { api, readApiError } from '@/lib/api-client';
 import { useAuthStore } from '@/stores/auth.store';
 
@@ -22,17 +24,17 @@ export const Route = createFileRoute('/rooms/$roomId')({
   component: RoomLobbyPage,
 });
 
-type Role = 'host' | 'interviewer' | 'candidate' | 'spectator' | 'unassigned';
+type LobbyRole = RoomRole | 'unassigned';
 
 type Participant = {
   id: string;
   username: string;
   isReady: boolean;
   isHost?: boolean;
-  role: Role;
+  role: LobbyRole;
 };
 
-function formatRoleLabel(role: Role) {
+function formatRoleLabel(role: LobbyRole) {
   switch (role) {
     case 'host':
       return 'Host';
@@ -53,24 +55,10 @@ function RoomLobbyPage() {
 
   const [isJoining, setIsJoining] = useState(true);
   const [joinError, setJoinError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
   const [isReady, setIsReady] = useState(false);
-  const [currentUrl, setCurrentUrl] = useState('');
-  const [myRole, setMyRole] = useState<Role>('unassigned');
+  const [myRole, setMyRole] = useState<LobbyRole>('unassigned');
   const [participants, setParticipants] = useState<Participant[]>([]);
-  const copiedTimerRef = useRef<ReturnType<typeof setTimeout>>(null);
-
-  useEffect(() => {
-    setCurrentUrl(window.location.href);
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (copiedTimerRef.current) {
-        clearTimeout(copiedTimerRef.current);
-      }
-    };
-  }, []);
+  const { copied, copy } = useClipboard();
 
   useEffect(() => {
     const joinRoom = async () => {
@@ -78,29 +66,29 @@ function RoomLobbyPage() {
       setJoinError(null);
       setParticipants([]);
 
+      const applyDetail = (
+        detail: Awaited<ReturnType<typeof api<typeof CONTROL_API.ROOMS.GET>>>,
+        resolvedRole: LobbyRole,
+      ) => {
+        setParticipants(
+          detail.participants.map((participant) => {
+            const baseName = participant.displayName ?? participant.username;
+            const isMe = participant.userId === currentUserId;
+            return {
+              id: participant.userId,
+              username: isMe ? `${baseName} (You)` : baseName,
+              isReady: false,
+              isHost: participant.role === 'host',
+              role: participant.role,
+            };
+          }),
+        );
+        setMyRole(resolvedRole);
+      };
+
       try {
         const url = new URL(window.location.href);
         const roomCode = url.searchParams.get('code')?.toUpperCase();
-
-        const applyDetail = (
-          detail: Awaited<ReturnType<typeof api<typeof CONTROL_API.ROOMS.GET>>>,
-          resolvedRole: Role,
-        ) => {
-          setParticipants(
-            detail.participants.map((participant) => {
-              const baseName = participant.displayName ?? participant.username;
-              const isMe = participant.userId === currentUserId;
-              return {
-                id: participant.userId,
-                username: isMe ? `${baseName} (You)` : baseName,
-                isReady: false,
-                isHost: participant.role === 'host',
-                role: participant.role,
-              };
-            }),
-          );
-          setMyRole(resolvedRole);
-        };
 
         if (roomCode) {
           const joined = await api(CONTROL_API.ROOMS.JOIN, {
@@ -120,28 +108,14 @@ function RoomLobbyPage() {
         setIsJoining(false);
       } catch (error) {
         const apiError = await readApiError(error);
-        const fallbackAllowed = apiError?.code === 'ROOM_ALREADY_JOINED';
 
-        if (fallbackAllowed) {
+        if (apiError?.code === ERROR_CODES.ROOM_ALREADY_JOINED) {
           try {
             const detail = await api(CONTROL_API.ROOMS.GET, {
               params: { id: roomId },
             });
 
-            setParticipants(
-              detail.participants.map((participant) => {
-                const baseName = participant.displayName ?? participant.username;
-                const isMe = participant.userId === currentUserId;
-                return {
-                  id: participant.userId,
-                  username: isMe ? `${baseName} (You)` : baseName,
-                  isReady: false,
-                  isHost: participant.role === 'host',
-                  role: participant.role,
-                };
-              }),
-            );
-            setMyRole(detail.myRole);
+            applyDetail(detail, detail.myRole);
             setJoinError(null);
             setIsJoining(false);
             return;
@@ -160,7 +134,7 @@ function RoomLobbyPage() {
   }, [roomId, currentUserId]);
 
   const handleRoleChange = (e: ChangeEvent<HTMLSelectElement>) => {
-    const newRole = e.target.value as Role;
+    const newRole = e.target.value as LobbyRole;
     setMyRole(newRole);
     setParticipants((prev) =>
       prev.map((p) => (p.id === currentUserId ? { ...p, role: newRole } : p)),
@@ -176,20 +150,28 @@ function RoomLobbyPage() {
     );
   };
 
-  const copyInviteLink = async () => {
-    try {
-      await navigator.clipboard.writeText(currentUrl);
-      setCopied(true);
+  const copyInviteLink = () => copy(window.location.href);
 
-      if (copiedTimerRef.current) {
-        clearTimeout(copiedTimerRef.current);
-      }
+  const { allReady, readyCount, totalCount, isRoomValid, asciiProgress } = useMemo(() => {
+    const ready = participants.filter((p) => p.isReady).length;
+    const total = participants.length;
+    const every = ready === total && total > 0;
 
-      copiedTimerRef.current = setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // Clipboard API not available
-    }
-  };
+    const hasCandidate = participants.some((p) => p.role === 'candidate');
+    const hasInterviewer = participants.some((p) => p.role === 'interviewer');
+
+    const boxes = Array.from({ length: total })
+      .map((_, i) => (i < ready ? '\u25a0' : '\u25a1'))
+      .join(' ');
+
+    return {
+      allReady: every,
+      readyCount: ready,
+      totalCount: total,
+      isRoomValid: hasCandidate && hasInterviewer,
+      asciiProgress: `[ ${boxes} ]`,
+    };
+  }, [participants]);
 
   if (joinError) {
     return (
@@ -215,19 +197,6 @@ function RoomLobbyPage() {
     );
   }
 
-  const allReady = participants.every((p) => p.isReady);
-  const readyCount = participants.filter((p) => p.isReady).length;
-  const totalCount = participants.length;
-
-  const hasCandidate = participants.some((p) => p.role === 'candidate');
-  const hasInterviewer = participants.some((p) => p.role === 'interviewer');
-  const isRoomValid = hasCandidate && hasInterviewer;
-
-  const asciiBarBoxes = Array.from({ length: totalCount })
-    .map((_, i) => (i < readyCount ? '\u25a0' : '\u25a1'))
-    .join(' ');
-  const asciiProgress = `[ ${asciiBarBoxes} ]`;
-
   return (
     <div className="flex min-h-screen flex-col items-center justify-start bg-background px-4 py-12 text-foreground">
       <div className="animate-in fade-in slide-in-from-bottom-8 w-full max-w-5xl duration-700">
@@ -249,7 +218,7 @@ function RoomLobbyPage() {
               <Input
                 type="text"
                 readOnly
-                value={currentUrl}
+                value={window.location.href}
                 className="flex-1 border-none bg-transparent font-mono shadow-none focus-visible:ring-0"
               />
               <button
