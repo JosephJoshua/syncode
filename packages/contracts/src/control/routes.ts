@@ -10,6 +10,11 @@ import type {
 import type { executionResultResponseSchema, jobStatusResponseSchema } from './execution.js';
 import type { healthCheckResponseSchema } from './health.js';
 import type {
+  problemDetailSchema,
+  problemsListResponseSchema,
+  problemsTagsResponseSchema,
+} from './problems.js';
+import type {
   createRoomResponseSchema,
   createRoomSchema,
   destroyRoomResponseSchema,
@@ -23,6 +28,7 @@ import type {
   submitProblemSchema,
   submitResultItemSchema,
 } from './rooms.js';
+import type { sessionHistoryResponseSchema } from './sessions.js';
 import type { updateUserSchema, userProfileResponseSchema } from './users.js';
 
 export const CONTROL_API = {
@@ -82,10 +88,14 @@ export const CONTROL_API = {
     ),
   },
   PROBLEMS: {
-    LIST: defineRoute<void, void>()('problems', 'GET'),
-    GET_BY_ID: defineRoute<void, void>()('problems/:id', 'GET'),
+    LIST: defineRoute<void, z.infer<typeof problemsListResponseSchema>>()('problems', 'GET'),
+    GET_BY_ID: defineRoute<void, z.infer<typeof problemDetailSchema>>()('problems/:id', 'GET'),
+    TAGS: defineRoute<void, z.infer<typeof problemsTagsResponseSchema>>()('problems/tags', 'GET'),
     CREATE: defineRoute<void, void>()('problems', 'POST'),
     DELETE: defineRoute<void, void>()('problems/:id', 'DELETE'),
+  },
+  SESSIONS: {
+    LIST: defineRoute<void, z.infer<typeof sessionHistoryResponseSchema>>()('sessions', 'GET'),
   },
   HEALTH: defineRoute<void, z.infer<typeof healthCheckResponseSchema>>()('health', 'GET'),
 };

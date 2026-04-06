@@ -45,3 +45,6 @@ pnpm-debug.log*
 
 # Misc
 *.pem
+.claude/
+CLAUDE.md
+**/.tanstack
