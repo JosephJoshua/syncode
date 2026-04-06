@@ -285,3 +285,21 @@ export const joinRoomResponseSchema = z.object({
 });
 
 export type JoinRoomResponse = z.infer<typeof joinRoomResponseSchema>;
+
+export const transitionRoomPhaseSchema = z
+  .object({
+    targetStatus: z.enum(ROOM_STATUSES).describe('Target room status to transition to'),
+  })
+  .strict();
+
+export type TransitionRoomPhaseInput = z.infer<typeof transitionRoomPhaseSchema>;
+
+export const transitionRoomPhaseResponseSchema = z.object({
+  roomId: z.uuid().describe('Room identifier'),
+  previousStatus: z.enum(ROOM_STATUSES).describe('Status before transition'),
+  currentStatus: z.enum(ROOM_STATUSES).describe('Status after transition'),
+  transitionedAt: z.iso.datetime().describe('ISO 8601 transition timestamp'),
+  transitionedBy: z.uuid().describe('User ID that triggered the transition'),
+});
+
+export type TransitionRoomPhaseResponse = z.infer<typeof transitionRoomPhaseResponseSchema>;

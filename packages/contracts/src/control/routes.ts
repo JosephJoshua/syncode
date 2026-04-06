@@ -27,6 +27,8 @@ import type {
   runCodeSchema,
   submitProblemSchema,
   submitResultItemSchema,
+  transitionRoomPhaseResponseSchema,
+  transitionRoomPhaseSchema,
 } from './rooms.js';
 import type { sessionHistoryResponseSchema } from './sessions.js';
 import type { updateUserSchema, userProfileResponseSchema } from './users.js';
@@ -76,6 +78,10 @@ export const CONTROL_API = {
       z.infer<typeof submitProblemSchema>,
       z.infer<typeof submitResultItemSchema>[]
     >()('rooms/:id/submit', 'POST'),
+    TRANSITION_PHASE: defineRoute<
+      z.infer<typeof transitionRoomPhaseSchema>,
+      z.infer<typeof transitionRoomPhaseResponseSchema>
+    >()('rooms/:id/control/transition', 'POST'),
   },
   EXECUTION: {
     GET_RESULT: defineRoute<
