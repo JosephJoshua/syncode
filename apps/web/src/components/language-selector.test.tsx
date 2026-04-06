@@ -4,6 +4,7 @@ import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { LanguageSelector } from './language-selector';
+import { getLanguageSelectorOption } from './language-selector.data';
 
 const EXPECTED_LANGUAGE_ORDER = [
   'Python',
@@ -68,6 +69,43 @@ describe('LanguageSelector', () => {
     ).toEqual(EXPECTED_LANGUAGE_ORDER);
   });
 
+  it('renders svg icons for every shared language and maps cpp to the cplusplus asset', async () => {
+    const user = userEvent.setup();
+
+    render(<LanguageSelector value="cpp" onValueChange={vi.fn()} />);
+
+    const trigger = screen.getByLabelText('Programming language');
+    const triggerImage = trigger.querySelector('img');
+
+    expect(triggerImage).not.toBeNull();
+    expect(triggerImage).toHaveAttribute('src', getLanguageSelectorOption('cpp').iconSrc);
+
+    await user.click(trigger);
+
+    const optionImages = screen
+      .getAllByRole('option')
+      .map((option) => option.querySelector('img'))
+      .filter((image): image is HTMLImageElement => image instanceof HTMLImageElement);
+
+    expect(optionImages).toHaveLength(8);
+    expect(optionImages.map((image) => image.getAttribute('src'))).toEqual(
+      EXPECTED_LANGUAGE_ORDER.map((label) => {
+        const option = {
+          Python: 'python',
+          JavaScript: 'javascript',
+          TypeScript: 'typescript',
+          Java: 'java',
+          'C++': 'cpp',
+          C: 'c',
+          Go: 'go',
+          Rust: 'rust',
+        }[label] as SupportedLanguage;
+
+        return getLanguageSelectorOption(option).iconSrc;
+      }),
+    );
+  });
+
   it('calls onValueChange and reflects the selected value after controlled rerender', async () => {
     const user = userEvent.setup();
     const onValueChange = vi.fn();
@@ -110,6 +148,15 @@ describe('LanguageSelector', () => {
     expect(
       screen.getAllByRole('option').map((option) => option.getAttribute('aria-label')),
     ).toEqual(['Python', 'Go', 'Rust']);
+    expect(
+      screen
+        .getAllByRole('option')
+        .map((option) => option.querySelector('img')?.getAttribute('src')),
+    ).toEqual([
+      getLanguageSelectorOption('python').iconSrc,
+      getLanguageSelectorOption('go').iconSrc,
+      getLanguageSelectorOption('rust').iconSrc,
+    ]);
   });
 
   it('falls back to placeholder display when the current value is outside the allowed subset', () => {

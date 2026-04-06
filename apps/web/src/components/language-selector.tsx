@@ -41,7 +41,9 @@ export function LanguageSelector({
       >
         {selectedOption ? (
           <LanguageSelectorValue
+            iconSrc={selectedOption.iconSrc}
             badgeText={selectedOption.fallbackIconText}
+            language={selectedOption.value}
             label={selectedOption.label}
           />
         ) : (
@@ -58,7 +60,9 @@ export function LanguageSelector({
             textValue={option.label}
           >
             <LanguageSelectorValue
+              iconSrc={option.iconSrc}
               badgeText={option.fallbackIconText}
+              language={option.value}
               label={option.label}
               mutedBadge={option.value !== selectedOption?.value}
             />
@@ -70,34 +74,69 @@ export function LanguageSelector({
 }
 
 function LanguageSelectorValue({
+  iconSrc,
   badgeText,
+  language,
   label,
   mutedBadge = false,
 }: {
+  iconSrc: string;
   badgeText: string;
+  language: SupportedLanguage;
   label: string;
   mutedBadge?: boolean;
 }) {
   return (
     <span className="flex min-w-0 items-center gap-3">
-      <LanguageBadge text={badgeText} muted={mutedBadge} />
+      <LanguageIcon
+        iconSrc={iconSrc}
+        fallbackText={badgeText}
+        language={language}
+        muted={mutedBadge}
+      />
       <span className="truncate text-sm font-medium text-foreground">{label}</span>
     </span>
   );
 }
 
-function LanguageBadge({ text, muted = false }: { text: string; muted?: boolean }) {
+function LanguageIcon({
+  iconSrc,
+  fallbackText,
+  language,
+  muted = false,
+}: {
+  iconSrc: string;
+  fallbackText: string;
+  language: SupportedLanguage;
+  muted?: boolean;
+}) {
   return (
     <span
       aria-hidden="true"
       className={cn(
-        'inline-flex h-7 min-w-10 shrink-0 items-center justify-center rounded-xl border px-2.5 font-mono text-[11px] font-semibold tracking-[0.16em] uppercase transition-colors',
+        'inline-flex size-8 shrink-0 items-center justify-center rounded-xl border p-1.5 transition-colors',
         muted
-          ? 'border-border/70 bg-muted/70 text-muted-foreground'
-          : 'border-primary/20 bg-primary/10 text-primary',
+          ? 'border-border/70 bg-white/88 shadow-[inset_0_1px_0_rgb(255_255_255/0.28)]'
+          : 'border-primary/20 bg-white/96 shadow-[inset_0_1px_0_rgb(255_255_255/0.36)]',
       )}
     >
-      {text}
+      {iconSrc ? (
+        <img
+          src={iconSrc}
+          alt=""
+          className={cn(
+            'block h-4.5 w-4.5 object-contain',
+            language === 'cpp' && 'h-5 w-5',
+            language === 'rust' && 'h-5 w-5',
+          )}
+          loading="lazy"
+          decoding="async"
+        />
+      ) : (
+        <span className="font-mono text-[11px] font-semibold tracking-[0.16em] uppercase text-slate-900">
+          {fallbackText}
+        </span>
+      )}
     </span>
   );
 }
