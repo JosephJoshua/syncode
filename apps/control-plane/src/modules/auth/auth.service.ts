@@ -2,21 +2,21 @@ import { createHash, randomBytes, randomUUID, scrypt, timingSafeEqual } from 'no
 import { promisify } from 'node:util';
 import {
   ConflictException,
-  ForbiddenException,
   Inject,
   Injectable,
+  Logger,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import type { UserProfileResponse } from '@syncode/contracts';
+import { ERROR_CODES, type UserProfileResponse } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
 import { refreshTokens, users } from '@syncode/db';
 import { CACHE_SERVICE, type ICacheService } from '@syncode/shared/ports';
 import { lt } from 'drizzle-orm';
-import type { EnvConfig } from '@/config/env.config';
-import { DB_CLIENT } from '@/modules/db/db.module';
-import { toUserProfile } from '@/modules/users/user-profile.mapper';
+import type { EnvConfig } from '@/config/env.config.js';
+import { DB_CLIENT } from '@/modules/db/db.module.js';
+import { toUserProfile } from '@/modules/users/user-profile.mapper.js';
 
 const scryptAsync = promisify(scrypt);
 
@@ -31,6 +31,11 @@ interface RefreshTokenPayload {
 
 @Injectable()
 export class AuthService {
+  private static readonly DUMMY_PASSWORD_HASH =
+    '00000000000000000000000000000000:00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000';
+
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     @Inject(DB_CLIENT) private readonly db: Database,
     @Inject(CACHE_SERVICE) private readonly cacheService: ICacheService,
@@ -135,12 +140,22 @@ export class AuthService {
         ),
     });
 
-    if (!user || !(await this.verifyPassword(password, user.passwordHash))) {
+    // Always run password verification to prevent timing side-channels
+    // that could reveal whether a username/email exists.
+    const passwordValid = await this.verifyPassword(
+      password,
+      user?.passwordHash ?? AuthService.DUMMY_PASSWORD_HASH,
+    );
+
+    if (!user || !passwordValid) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
     if (user.bannedAt) {
-      throw new ForbiddenException('User is banned');
+      throw new UnauthorizedException({
+        message: 'User is banned',
+        code: ERROR_CODES.USER_BANNED,
+      });
     }
 
     const tokenPair = await this.issueTokenPair(user.id, user.email);
@@ -378,6 +393,7 @@ export class AuthService {
   private async verifyPassword(password: string, storedPasswordHash: string): Promise<boolean> {
     const [salt, storedHash] = storedPasswordHash.split(':');
     if (!salt || !storedHash) {
+      this.logger.warn('Encountered malformed password hash during verification');
       return false;
     }
 

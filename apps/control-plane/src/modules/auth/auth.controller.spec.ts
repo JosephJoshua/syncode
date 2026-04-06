@@ -1,4 +1,5 @@
 import { UnauthorizedException } from '@nestjs/common';
+import type { ConfigService } from '@nestjs/config';
 import type { Response } from 'express';
 import { describe, expect, it, vi } from 'vitest';
 import { AuthController } from './auth.controller';
@@ -54,7 +55,11 @@ describe('AuthController', () => {
       logout: vi.fn(async () => undefined),
     } satisfies Pick<AuthService, 'login' | 'logout' | 'refreshToken' | 'register'>;
 
-    const controller = new AuthController(authService as AuthService);
+    const configService = {
+      get: vi.fn((key: string) => (key === 'NODE_ENV' ? 'test' : undefined)),
+    } as unknown as ConfigService;
+
+    const controller = new AuthController(authService as AuthService, configService);
     const response = {
       cookie: vi.fn(),
     } satisfies Pick<Response, 'cookie'>;
@@ -75,10 +80,6 @@ describe('AuthController', () => {
     );
 
     expect(result.accessToken).toBe('access-token');
-    expect(result.user).toBeDefined();
-    if (!result.user) {
-      throw new Error('Expected register response to include user');
-    }
     expect(result.user.username).toBe('alice');
     expect(response.cookie).toHaveBeenCalledTimes(1);
   });
@@ -95,10 +96,6 @@ describe('AuthController', () => {
     );
 
     expect(result.accessToken).toBe('access-token');
-    expect(result.user).toBeDefined();
-    if (!result.user) {
-      throw new Error('Expected login response to include user');
-    }
     expect(result.user.email).toBe('user@example.com');
     expect(response.cookie).toHaveBeenCalledTimes(1);
   });

@@ -21,6 +21,7 @@ export function toUserProfile(user: UserProfileRecord): UserProfileResponse {
     role: user.role,
     avatarUrl: user.avatarUrl ?? null,
     bio: user.bio ?? null,
+    // TODO: Compute real stats from sessions/submissions tables
     stats: {
       totalSessions: 0,
       totalProblems: 0,

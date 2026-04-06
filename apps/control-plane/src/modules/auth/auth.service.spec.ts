@@ -1,6 +1,6 @@
 import { randomBytes, scrypt } from 'node:crypto';
 import { promisify } from 'node:util';
-import { ConflictException, ForbiddenException, UnauthorizedException } from '@nestjs/common';
+import { ConflictException, UnauthorizedException } from '@nestjs/common';
 import type { ConfigService } from '@nestjs/config';
 import type { JwtService } from '@nestjs/jwt';
 import type { Database } from '@syncode/db';
@@ -211,7 +211,7 @@ describe('AuthService', () => {
     await expect(service.login('alice', 'secret123')).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
-  it('GIVEN banned user WHEN logging in THEN throws forbidden', async () => {
+  it('GIVEN banned user WHEN logging in THEN throws unauthorized with USER_BANNED code', async () => {
     const { service, mocks } = createAuthServiceFixture();
     const passwordHash = await createPasswordHash('secret123');
 
@@ -229,7 +229,7 @@ describe('AuthService', () => {
       updatedAt: new Date(),
     });
 
-    await expect(service.login('alice', 'secret123')).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(service.login('alice', 'secret123')).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
   it('GIVEN valid credentials WHEN logging in THEN returns access/refresh and user profile', async () => {

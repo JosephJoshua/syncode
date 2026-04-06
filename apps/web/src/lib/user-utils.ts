@@ -1,6 +1,6 @@
-import type { AuthUserResponse } from '@syncode/contracts';
+import type { UserProfileResponse } from '@syncode/contracts';
 
-export function getUserInitial(user: AuthUserResponse | null): string | null {
+export function getUserInitial(user: UserProfileResponse | null): string | null {
   const source = user?.displayName || user?.username || user?.email;
 
   if (!source) {

@@ -7,20 +7,22 @@ import {
   Res,
   UnauthorizedException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { CONTROL_API } from '@syncode/contracts';
 import type { Response } from 'express';
-import { Cookies } from '@/common/decorators/cookies.decorator';
-import { ErrorResponseDto } from '@/common/dto/error-response.dto';
-import { AuthService } from './auth.service';
+import { Cookies } from '@/common/decorators/cookies.decorator.js';
+import { ErrorResponseDto } from '@/common/dto/error-response.dto.js';
+import type { EnvConfig } from '@/config/env.config.js';
+import { AuthService } from './auth.service.js';
 import {
   AccessTokenResponseDto,
   LoginDto,
   LoginResponseDto,
   RegisterDto,
   RegisterResponseDto,
-} from './dto/auth.dto';
+} from './dto/auth.dto.js';
 
 /**
  * Provides authentication endpoints for registration, login, logout, and token refresh.
@@ -28,7 +30,14 @@ import {
 @ApiTags('auth')
 @Controller()
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  private readonly secureCookies: boolean;
+
+  constructor(
+    private readonly authService: AuthService,
+    config: ConfigService<EnvConfig>,
+  ) {
+    this.secureCookies = config.get('NODE_ENV', { infer: true }) === 'production';
+  }
 
   private static readonly AUTH_THROTTLE = {
     default: {
@@ -38,12 +47,12 @@ export class AuthController {
   } as const;
   private static readonly REFRESH_TOKEN_COOKIE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1_000;
   private static readonly REFRESH_TOKEN_COOKIE_NAME = 'refreshToken';
+  private static readonly REFRESH_TOKEN_COOKIE_PATH = '/auth';
 
   @Post(CONTROL_API.AUTH.REGISTER.route)
   @Throttle(AuthController.AUTH_THROTTLE)
   @ApiOperation({ summary: 'Register a new user' })
   @ApiBody({ type: RegisterDto })
-  // TODO: Update return type to RegisterResponseDto and align @ApiResponse once register is implemented (#213)
   @ApiResponse({
     status: 201,
     type: RegisterResponseDto,
@@ -98,7 +107,6 @@ export class AuthController {
   })
   @ApiResponse({ status: 400, type: ErrorResponseDto, description: 'Validation error' })
   @ApiResponse({ status: 401, type: ErrorResponseDto, description: 'Invalid credentials' })
-  @ApiResponse({ status: 403, type: ErrorResponseDto, description: 'Forbidden' })
   @ApiResponse({ status: 500, type: ErrorResponseDto, description: 'Internal server error' })
   async login(
     @Body() body: LoginDto,
@@ -179,22 +187,25 @@ export class AuthController {
     }
   }
 
+  private get cookieBaseOptions() {
+    return {
+      httpOnly: true,
+      secure: this.secureCookies,
+      sameSite: 'strict' as const,
+      path: AuthController.REFRESH_TOKEN_COOKIE_PATH,
+    };
+  }
+
   private setRefreshTokenCookie(response: Response, refreshToken: string): void {
     response.cookie(AuthController.REFRESH_TOKEN_COOKIE_NAME, refreshToken, {
-      httpOnly: true,
-      secure: true,
-      sameSite: 'strict',
-      path: '/auth',
+      ...this.cookieBaseOptions,
       maxAge: AuthController.REFRESH_TOKEN_COOKIE_MAX_AGE_MS,
     });
   }
 
   private clearRefreshTokenCookie(response: Response): void {
     response.cookie(AuthController.REFRESH_TOKEN_COOKIE_NAME, '', {
-      httpOnly: true,
-      secure: true,
-      sameSite: 'strict',
-      path: '/auth',
+      ...this.cookieBaseOptions,
       maxAge: 0,
     });
   }

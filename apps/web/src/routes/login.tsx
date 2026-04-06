@@ -62,23 +62,13 @@ function LoginPage() {
   }, []);
 
   const loginMutation = useMutation({
-    mutationFn: async (values: LoginFormValues) => {
-      const response = await api(CONTROL_API.AUTH.LOGIN, {
+    mutationFn: (values: LoginFormValues) =>
+      api(CONTROL_API.AUTH.LOGIN, {
         body: {
           identifier: values.identifier,
           password: values.password,
         },
-      });
-
-      if (!response.accessToken || !response.user) {
-        throw new Error('Login response is missing session data.');
-      }
-
-      return {
-        accessToken: response.accessToken,
-        user: response.user,
-      };
-    },
+      }),
     onSuccess: ({ accessToken, user }) => {
       // Delay navigation to show the success animation
       successTimerRef.current = setTimeout(() => {

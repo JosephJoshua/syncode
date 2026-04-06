@@ -3,11 +3,12 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import type { Database } from '@syncode/db';
-import { CACHE_SERVICE, type ICacheService, type TtlResult } from '@syncode/shared/ports';
+import { CACHE_SERVICE } from '@syncode/shared/ports';
 import cookieParser from 'cookie-parser';
 import { ZodValidationPipe } from 'nestjs-zod';
 import request from 'supertest';
 import { DB_CLIENT } from '@/modules/db/db.module';
+import { InMemoryCacheService } from '@/test/in-memory-cache.service';
 import { createTestDb } from '@/test/integration-setup';
 import { createMockConfigService } from '@/test/mock-factories';
 import { AuthController } from './auth.controller.js';
@@ -15,65 +16,6 @@ import { AuthService } from './auth.service.js';
 
 const ACCESS_TOKEN_SECRET = 'access-secret-access-secret-123456';
 const REFRESH_TOKEN_SECRET = 'refresh-secret-refresh-secret-1234';
-
-class InMemoryCacheService implements ICacheService {
-  private readonly values = new Map<string, unknown>();
-
-  async get<T = unknown>(key: string): Promise<T | null> {
-    return (this.values.get(key) as T | undefined) ?? null;
-  }
-
-  async set<T = unknown>(key: string, value: T): Promise<void> {
-    this.values.set(key, value);
-  }
-
-  async del(key: string): Promise<void> {
-    this.values.delete(key);
-  }
-
-  async delByPattern(pattern: string): Promise<number> {
-    const prefix = pattern.endsWith('*') ? pattern.slice(0, -1) : pattern;
-    let deleted = 0;
-
-    for (const key of this.values.keys()) {
-      if (key.startsWith(prefix)) {
-        this.values.delete(key);
-        deleted++;
-      }
-    }
-
-    return deleted;
-  }
-
-  async exists(key: string): Promise<boolean> {
-    return this.values.has(key);
-  }
-
-  async getTtl(key: string): Promise<TtlResult> {
-    return this.values.has(key) ? { state: 'permanent' } : { state: 'missing' };
-  }
-
-  async incrBy(key: string, amount = 1): Promise<number> {
-    const nextValue = (Number(this.values.get(key) ?? 0) || 0) + amount;
-    this.values.set(key, nextValue);
-    return nextValue;
-  }
-
-  async setIfNotExists<T = unknown>(key: string, value: T): Promise<boolean> {
-    if (this.values.has(key)) {
-      return false;
-    }
-
-    this.values.set(key, value);
-    return true;
-  }
-
-  async expire(key: string): Promise<boolean> {
-    return this.values.has(key);
-  }
-
-  async shutdown(): Promise<void> {}
-}
 
 let app: INestApplication;
 let db: Database;

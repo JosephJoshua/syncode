@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { userProfileResponseSchema, userStatsSchema } from './users.js';
+import { userProfileResponseSchema } from './users.js';
 
 export const registerSchema = z
   .object({
@@ -41,17 +41,12 @@ export const loginSchema = z
 
 export type LoginInput = z.infer<typeof loginSchema>;
 
-export const loginStatsSchema = userStatsSchema;
-
-export const loginUserProfileSchema = userProfileResponseSchema;
-
 export const loginResponseSchema = z.object({
   accessToken: z
     .string()
     .describe('Short-lived JWT access token')
-    .meta({ examples: ['eyJhbGciOiJIUzI1NiIs...'] })
-    .optional(),
-  user: loginUserProfileSchema.optional(),
+    .meta({ examples: ['eyJhbGciOiJIUzI1NiIs...'] }),
+  user: userProfileResponseSchema,
 });
 
 export type LoginResponse = z.infer<typeof loginResponseSchema>;
@@ -64,8 +59,7 @@ export const accessTokenResponseSchema = z.object({
   accessToken: z
     .string()
     .describe('New short-lived JWT access token')
-    .meta({ examples: ['eyJhbGciOiJIUzI1NiIs...'] })
-    .optional(),
+    .meta({ examples: ['eyJhbGciOiJIUzI1NiIs...'] }),
 });
 
 export type AccessTokenResponse = z.infer<typeof accessTokenResponseSchema>;
