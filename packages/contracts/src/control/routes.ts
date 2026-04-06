@@ -42,6 +42,7 @@ export const CONTROL_API = {
       'POST',
     ),
     REFRESH: defineRoute<void, z.infer<typeof accessTokenResponseSchema>>()('auth/refresh', 'POST'),
+    LOGOUT: defineRoute<void, void>()('auth/logout', 'POST'),
   },
   USERS: {
     PROFILE: defineRoute<void, z.infer<typeof userProfileResponseSchema>>()('users/me', 'GET'),

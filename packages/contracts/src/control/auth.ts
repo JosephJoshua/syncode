@@ -1,4 +1,3 @@
-import { UserRole } from '@syncode/shared';
 import { z } from 'zod';
 import { userProfileResponseSchema } from './users.js';
 
@@ -9,8 +8,8 @@ export const registerSchema = z
       .min(3)
       .max(30)
       .regex(/^[a-zA-Z0-9_]+$/)
-      .describe('Username')
-      .meta({ examples: ['code_partner'] }),
+      .describe('Username (3-30 chars, letters/numbers/underscore)')
+      .meta({ examples: ['syncoder_01'] }),
     email: z
       .email()
       .describe('Email address')
@@ -31,7 +30,7 @@ export const loginSchema = z
       .string()
       .min(1)
       .describe('Email address or username')
-      .meta({ examples: ['user@example.com', 'code_partner'] }),
+      .meta({ examples: ['user@example.com'] }),
     password: z
       .string()
       .min(1)
@@ -42,44 +41,17 @@ export const loginSchema = z
 
 export type LoginInput = z.infer<typeof loginSchema>;
 
-export const authUserResponseSchema = userProfileResponseSchema.extend({
-  // TODO: Combine this with userProfileResponseSchema once auth and user payloads fully converge.
-  email: z
-    .email()
-    .describe('Email address')
-    .meta({ examples: ['user@example.com'] }),
-  displayName: z.string().nullable(),
-  role: z.enum([UserRole.USER, UserRole.ADMIN]),
-  username: z
-    .string()
-    .describe('Unique username')
-    .meta({ examples: ['code_partner'] }),
-  avatarUrl: z.string().nullable(),
-  bio: z.string().nullable(),
-  stats: z.record(z.string(), z.unknown()),
-  updatedAt: z.iso.datetime(),
-});
-
-export type AuthUserResponse = z.infer<typeof authUserResponseSchema>;
-
 export const loginResponseSchema = z.object({
   accessToken: z
     .string()
     .describe('Short-lived JWT access token')
     .meta({ examples: ['eyJhbGciOiJIUzI1NiIs...'] }),
-  user: authUserResponseSchema,
+  user: userProfileResponseSchema,
 });
 
 export type LoginResponse = z.infer<typeof loginResponseSchema>;
 
-export const registerResponseSchema = z.object({
-  accessToken: z
-    .string()
-    .describe('New short-lived JWT access token')
-    .meta({ examples: ['eyJhbGciOiJIUzI1NiIs...'] })
-    .optional(),
-  user: authUserResponseSchema.optional(),
-});
+export const registerResponseSchema = loginResponseSchema;
 
 export type RegisterResponse = z.infer<typeof registerResponseSchema>;
 

@@ -11,13 +11,19 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, 'src'),
+      '@syncode/contracts/stubs': path.resolve(__dirname, '../../packages/contracts/src/stubs.ts'),
+      '@syncode/contracts': path.resolve(__dirname, '../../packages/contracts/src/index.ts'),
+      '@syncode/db': path.resolve(__dirname, '../../packages/db/src/index.ts'),
+      '@syncode/shared/ports': path.resolve(__dirname, '../../packages/shared/src/ports/index.ts'),
+      '@syncode/shared/server': path.resolve(__dirname, '../../packages/shared/src/server.ts'),
+      '@syncode/shared': path.resolve(__dirname, '../../packages/shared/src/index.ts'),
     },
   },
   test: {
     globals: true,
     environment: 'node',
     root: './',
-    include: ['src/**/*.integration.test.ts'],
+    include: ['src/**/*.integration.spec.ts'],
     globalSetup: ['src/test/global-setup.ts'],
     testTimeout: 30_000,
     hookTimeout: 60_000,
@@ -29,7 +35,6 @@ export default defineConfig({
       include: ['src/**/*.ts'],
       exclude: [
         '**/*.spec.ts',
-        '**/*.test.ts',
         'src/main.ts',
         'src/telemetry.ts',
         'src/test/**',
