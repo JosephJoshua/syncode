@@ -1,7 +1,8 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { CONTROL_API } from '@syncode/contracts';
+import { SUPPORTED_LANGUAGES, type SupportedLanguage } from '@syncode/shared';
 import { useMutation } from '@tanstack/react-query';
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import {
   Check,
   ChevronDown,
@@ -12,24 +13,35 @@ import {
   Lock,
   type LucideIcon,
 } from 'lucide-react';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { type FieldError, useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { api, readApiError } from '@/lib/api-client';
+import { useAuthStore } from '@/stores/auth.store';
 
 export const Route = createFileRoute('/rooms/create')({
   component: CreateRoomPage,
 });
 
 // ─── 1. Validation Schema ───────────────────────────────────────
-const LANGUAGE_OPTIONS = [
-  { value: 'javascript', label: 'JavaScript (Node.js 20)' },
-  { value: 'typescript', label: 'TypeScript (TSX)' },
-  { value: 'python', label: 'Python 3.12' },
-  { value: 'cpp', label: 'C++ (GCC 13)' },
-  { value: 'java', label: 'Java 21' },
-] as const;
+const LANGUAGE_LABELS: Record<SupportedLanguage, string> = {
+  python: 'Python 3.12',
+  javascript: 'JavaScript (Node.js 20)',
+  typescript: 'TypeScript (TSX)',
+  java: 'Java 21',
+  cpp: 'C++ (GCC 13)',
+  c: 'C (GCC 13)',
+  go: 'Go 1.22',
+  rust: 'Rust 1.77',
+};
 
+const LANGUAGE_OPTIONS = SUPPORTED_LANGUAGES.map((lang) => ({
+  value: lang,
+  label: LANGUAGE_LABELS[lang],
+}));
+
+// TODO: Replace with useQuery against CONTROL_API.PROBLEMS.LIST
+// Values are placeholder slugs — backend expects UUIDs for problemId
 const ROOM_PROBLEMS = [
   { value: 'two-sum', label: 'Two Sum (Easy)' },
   { value: 'valid-parentheses', label: 'Valid Parentheses (Medium)' },
@@ -38,12 +50,7 @@ const ROOM_PROBLEMS = [
 
 const createRoomFormSchema = z.object({
   problemId: z.string().min(1, 'Please select a problem'),
-  language: z.enum(
-    LANGUAGE_OPTIONS.map((option) => option.value) as [
-      (typeof LANGUAGE_OPTIONS)[number]['value'],
-      ...(typeof LANGUAGE_OPTIONS)[number]['value'][],
-    ],
-  ),
+  language: z.enum(SUPPORTED_LANGUAGES),
   isPublic: z.boolean(),
 });
 type CreateRoomFormData = z.infer<typeof createRoomFormSchema>;
@@ -157,9 +164,19 @@ const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
     </div>
   ),
 );
+Select.displayName = 'Select';
 
 // ─── 3. Main Page Component ───────────────────────────────────────
 function CreateRoomPage() {
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      navigate({ to: '/login' }).catch(() => {});
+    }
+  }, [isAuthenticated, navigate]);
+
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [problemInput, setProblemInput] = useState('');
@@ -176,6 +193,7 @@ function CreateRoomPage() {
     handleSubmit,
     setValue,
     watch,
+    reset,
     formState: { errors, isSubmitting },
   } = useForm<CreateRoomFormData>({
     resolver: zodResolver(createRoomFormSchema),
@@ -213,11 +231,15 @@ function CreateRoomPage() {
     }
   };
 
-  const copyToClipboard = () => {
+  const copyToClipboard = async () => {
     if (inviteLink) {
-      navigator.clipboard.writeText(inviteLink);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      try {
+        await navigator.clipboard.writeText(inviteLink);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      } catch {
+        // Clipboard API not available
+      }
     }
   };
 
@@ -419,10 +441,22 @@ function CreateRoomPage() {
 
               {/* Action Buttons */}
               <div className="flex gap-4 pt-3">
-                <Button variant="secondary" onClick={() => setInviteLink(null)}>
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setInviteLink(null);
+                    reset();
+                    setProblemInput('');
+                    setSubmissionError(null);
+                    setSubmittedData(null);
+                  }}
+                >
                   Setup New Room
                 </Button>
-                <Button>Enter Workspace</Button>
+                {/* TODO: Navigate to room workspace when implemented */}
+                <Button disabled className="opacity-50 cursor-not-allowed">
+                  Enter Workspace
+                </Button>
               </div>
             </div>
           )}
