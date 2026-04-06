@@ -83,6 +83,7 @@ jobs:
             apps/execution-plane/coverage/lcov.info
             apps/ai-plane/coverage/lcov.info
             packages/infrastructure/coverage/lcov.info
+            packages/shared/coverage/lcov.info
           retention-days: 1
 
   sonar:

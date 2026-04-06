@@ -9,29 +9,19 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as RoomsRouteImport } from './routes/rooms'
 import { Route as RegisterRouteImport } from './routes/register'
-import { Route as ProblemsRouteImport } from './routes/problems'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ProblemsIndexRouteImport } from './routes/problems.index'
+import { Route as RoomsCreateRouteImport } from './routes/rooms.create'
+import { Route as RoomsRoomIdRouteImport } from './routes/rooms.$roomId'
 import { Route as ProblemsProblemIdRouteImport } from './routes/problems.$problemId'
 import { Route as SessionsSessionIdFeedbackRouteImport } from './routes/sessions.$sessionId.feedback'
 
-const RoomsRoute = RoomsRouteImport.update({
-  id: '/rooms',
-  path: '/rooms',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const RegisterRoute = RegisterRouteImport.update({
   id: '/register',
   path: '/register',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ProblemsRoute = ProblemsRouteImport.update({
-  id: '/problems',
-  path: '/problems',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -50,14 +40,24 @@ const IndexRoute = IndexRouteImport.update({
   getParentRoute: () => rootRouteImport,
 } as any)
 const ProblemsIndexRoute = ProblemsIndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => ProblemsRoute,
+  id: '/problems/',
+  path: '/problems/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RoomsCreateRoute = RoomsCreateRouteImport.update({
+  id: '/rooms/create',
+  path: '/rooms/create',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RoomsRoomIdRoute = RoomsRoomIdRouteImport.update({
+  id: '/rooms/$roomId',
+  path: '/rooms/$roomId',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ProblemsProblemIdRoute = ProblemsProblemIdRouteImport.update({
-  id: '/$problemId',
-  path: '/$problemId',
-  getParentRoute: () => ProblemsRoute,
+  id: '/problems/$problemId',
+  path: '/problems/$problemId',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const SessionsSessionIdFeedbackRoute =
   SessionsSessionIdFeedbackRouteImport.update({
@@ -70,10 +70,10 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
-  '/problems': typeof ProblemsRouteWithChildren
   '/register': typeof RegisterRoute
-  '/rooms': typeof RoomsRoute
   '/problems/$problemId': typeof ProblemsProblemIdRoute
+  '/rooms/$roomId': typeof RoomsRoomIdRoute
+  '/rooms/create': typeof RoomsCreateRoute
   '/problems/': typeof ProblemsIndexRoute
   '/sessions/$sessionId/feedback': typeof SessionsSessionIdFeedbackRoute
 }
@@ -82,8 +82,9 @@ export interface FileRoutesByTo {
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
-  '/rooms': typeof RoomsRoute
   '/problems/$problemId': typeof ProblemsProblemIdRoute
+  '/rooms/$roomId': typeof RoomsRoomIdRoute
+  '/rooms/create': typeof RoomsCreateRoute
   '/problems': typeof ProblemsIndexRoute
   '/sessions/$sessionId/feedback': typeof SessionsSessionIdFeedbackRoute
 }
@@ -92,10 +93,10 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
-  '/problems': typeof ProblemsRouteWithChildren
   '/register': typeof RegisterRoute
-  '/rooms': typeof RoomsRoute
   '/problems/$problemId': typeof ProblemsProblemIdRoute
+  '/rooms/$roomId': typeof RoomsRoomIdRoute
+  '/rooms/create': typeof RoomsCreateRoute
   '/problems/': typeof ProblemsIndexRoute
   '/sessions/$sessionId/feedback': typeof SessionsSessionIdFeedbackRoute
 }
@@ -105,10 +106,10 @@ export interface FileRouteTypes {
     | '/'
     | '/dashboard'
     | '/login'
-    | '/problems'
     | '/register'
-    | '/rooms'
     | '/problems/$problemId'
+    | '/rooms/$roomId'
+    | '/rooms/create'
     | '/problems/'
     | '/sessions/$sessionId/feedback'
   fileRoutesByTo: FileRoutesByTo
@@ -117,8 +118,9 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/login'
     | '/register'
-    | '/rooms'
     | '/problems/$problemId'
+    | '/rooms/$roomId'
+    | '/rooms/create'
     | '/problems'
     | '/sessions/$sessionId/feedback'
   id:
@@ -126,10 +128,10 @@ export interface FileRouteTypes {
     | '/'
     | '/dashboard'
     | '/login'
-    | '/problems'
     | '/register'
-    | '/rooms'
     | '/problems/$problemId'
+    | '/rooms/$roomId'
+    | '/rooms/create'
     | '/problems/'
     | '/sessions/$sessionId/feedback'
   fileRoutesById: FileRoutesById
@@ -138,33 +140,21 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   DashboardRoute: typeof DashboardRoute
   LoginRoute: typeof LoginRoute
-  ProblemsRoute: typeof ProblemsRouteWithChildren
   RegisterRoute: typeof RegisterRoute
-  RoomsRoute: typeof RoomsRoute
+  ProblemsProblemIdRoute: typeof ProblemsProblemIdRoute
+  RoomsRoomIdRoute: typeof RoomsRoomIdRoute
+  RoomsCreateRoute: typeof RoomsCreateRoute
+  ProblemsIndexRoute: typeof ProblemsIndexRoute
   SessionsSessionIdFeedbackRoute: typeof SessionsSessionIdFeedbackRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/rooms': {
-      id: '/rooms'
-      path: '/rooms'
-      fullPath: '/rooms'
-      preLoaderRoute: typeof RoomsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/register': {
       id: '/register'
       path: '/register'
       fullPath: '/register'
       preLoaderRoute: typeof RegisterRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/problems': {
-      id: '/problems'
-      path: '/problems'
-      fullPath: '/problems'
-      preLoaderRoute: typeof ProblemsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -190,17 +180,31 @@ declare module '@tanstack/react-router' {
     }
     '/problems/': {
       id: '/problems/'
-      path: '/'
+      path: '/problems'
       fullPath: '/problems/'
       preLoaderRoute: typeof ProblemsIndexRouteImport
-      parentRoute: typeof ProblemsRoute
+      parentRoute: typeof rootRouteImport
+    }
+    '/rooms/create': {
+      id: '/rooms/create'
+      path: '/rooms/create'
+      fullPath: '/rooms/create'
+      preLoaderRoute: typeof RoomsCreateRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/rooms/$roomId': {
+      id: '/rooms/$roomId'
+      path: '/rooms/$roomId'
+      fullPath: '/rooms/$roomId'
+      preLoaderRoute: typeof RoomsRoomIdRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/problems/$problemId': {
       id: '/problems/$problemId'
-      path: '/$problemId'
+      path: '/problems/$problemId'
       fullPath: '/problems/$problemId'
       preLoaderRoute: typeof ProblemsProblemIdRouteImport
-      parentRoute: typeof ProblemsRoute
+      parentRoute: typeof rootRouteImport
     }
     '/sessions/$sessionId/feedback': {
       id: '/sessions/$sessionId/feedback'
@@ -212,27 +216,15 @@ declare module '@tanstack/react-router' {
   }
 }
 
-interface ProblemsRouteChildren {
-  ProblemsProblemIdRoute: typeof ProblemsProblemIdRoute
-  ProblemsIndexRoute: typeof ProblemsIndexRoute
-}
-
-const ProblemsRouteChildren: ProblemsRouteChildren = {
-  ProblemsProblemIdRoute: ProblemsProblemIdRoute,
-  ProblemsIndexRoute: ProblemsIndexRoute,
-}
-
-const ProblemsRouteWithChildren = ProblemsRoute._addFileChildren(
-  ProblemsRouteChildren,
-)
-
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   DashboardRoute: DashboardRoute,
   LoginRoute: LoginRoute,
-  ProblemsRoute: ProblemsRouteWithChildren,
   RegisterRoute: RegisterRoute,
-  RoomsRoute: RoomsRoute,
+  ProblemsProblemIdRoute: ProblemsProblemIdRoute,
+  RoomsRoomIdRoute: RoomsRoomIdRoute,
+  RoomsCreateRoute: RoomsCreateRoute,
+  ProblemsIndexRoute: ProblemsIndexRoute,
   SessionsSessionIdFeedbackRoute: SessionsSessionIdFeedbackRoute,
 }
 export const routeTree = rootRouteImport

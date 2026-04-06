@@ -1,12 +1,12 @@
-import type { AuthUserResponse } from '@syncode/contracts';
+import type { UserProfileResponse } from '@syncode/contracts';
 import { create } from 'zustand';
 
 interface AuthState {
-  user: AuthUserResponse | null;
+  user: UserProfileResponse | null;
   accessToken: string | null;
   isAuthenticated: boolean;
-  setSession: (session: { accessToken: string; user?: AuthUserResponse | null }) => void;
-  setUser: (user: AuthUserResponse | null) => void;
+  setSession: (session: { accessToken: string; user?: UserProfileResponse | null }) => void;
+  setUser: (user: UserProfileResponse | null) => void;
   logout: () => void;
 }
 

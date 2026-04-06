@@ -125,7 +125,11 @@ function RootLayout() {
             isActive: isDashboardPage || isSessionFeedbackPage,
           },
           { label: 'Rooms', to: '/rooms', isActive: isRoomsPage },
-          { label: 'Problems', to: '/problems', isActive: isProblemsPage },
+          {
+            label: 'Problems',
+            to: '/problems',
+            isActive: isProblemsPage,
+          },
         ].map((item) => (
           <Link
             key={item.to}

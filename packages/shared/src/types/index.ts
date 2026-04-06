@@ -24,10 +24,14 @@ export {
 export type { RoomMode, RoomParticipant } from './room.js';
 export {
   ALL_ROOM_ROLES as ROOM_ROLES,
+  getNextStatuses,
+  isValidStatusTransition,
   JOINABLE_ROOM_ROLES as JOINABLE_ROLES,
   ROOM_MODES,
+  ROOM_STATUS_LABELS,
   ROOM_STATUSES,
   RoomRole,
   RoomStatus,
+  VALID_STATUS_TRANSITIONS,
 } from './room.js';
 export { UserRole } from './user.js';

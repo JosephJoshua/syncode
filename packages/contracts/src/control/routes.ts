@@ -31,6 +31,8 @@ import type {
   runCodeSchema,
   submitProblemSchema,
   submitResultItemSchema,
+  transitionRoomPhaseResponseSchema,
+  transitionRoomPhaseSchema,
 } from './rooms.js';
 import type { sessionHistoryResponseSchema } from './sessions.js';
 import type { updateUserSchema, userProfileResponseSchema } from './users.js';
@@ -46,6 +48,7 @@ export const CONTROL_API = {
       'POST',
     ),
     REFRESH: defineRoute<void, z.infer<typeof accessTokenResponseSchema>>()('auth/refresh', 'POST'),
+    LOGOUT: defineRoute<void, void>()('auth/logout', 'POST'),
   },
   USERS: {
     PROFILE: defineRoute<void, z.infer<typeof userProfileResponseSchema>>()('users/me', 'GET'),
@@ -79,6 +82,10 @@ export const CONTROL_API = {
       z.infer<typeof submitProblemSchema>,
       z.infer<typeof submitResultItemSchema>[]
     >()('rooms/:id/submit', 'POST'),
+    TRANSITION_PHASE: defineRoute<
+      z.infer<typeof transitionRoomPhaseSchema>,
+      z.infer<typeof transitionRoomPhaseResponseSchema>
+    >()('rooms/:id/control/transition', 'POST'),
   },
   EXECUTION: {
     GET_RESULT: defineRoute<
@@ -100,6 +107,11 @@ export const CONTROL_API = {
     TAGS: defineRoute<void, z.infer<typeof problemsTagsResponseSchema>>()('problems/tags', 'GET'),
     CREATE: defineRoute<void, void>()('problems', 'POST'),
     DELETE: defineRoute<void, void>()('problems/:id', 'DELETE'),
+  },
+  BOOKMARKS: {
+    LIST: defineRoute<void, void>()('users/me/bookmarks', 'GET'),
+    ADD: defineRoute<void, void>()('users/me/bookmarks/:problemId', 'PUT'),
+    REMOVE: defineRoute<void, void>()('users/me/bookmarks/:problemId', 'DELETE'),
   },
   SESSIONS: {
     LIST: defineRoute<void, z.infer<typeof sessionHistoryResponseSchema>>()('sessions', 'GET'),
