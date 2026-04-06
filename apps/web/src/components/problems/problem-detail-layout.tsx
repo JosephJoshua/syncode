@@ -9,7 +9,7 @@ import type {
   ProblemDetailResponse,
   ProblemExample,
   ProblemTestCase,
-} from '@/lib/problems/problem-detail.mock';
+} from '@/lib/problems/problem-detail.types';
 import { useAuthStore } from '@/stores/auth.store';
 import { StarterCodeBlock } from './starter-code-block';
 import { formatStarterLanguageLabel } from './starter-code-language';

@@ -2,11 +2,8 @@ import { SUPPORTED_LANGUAGES } from '@syncode/shared';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { api, readApiError } from '@/lib/api-client';
 import { fetchProblemDetail, ProblemDetailApiError, problemDetailRoute } from './problem-detail';
-import {
-  canonicalProblemDetailMock,
-  type ProblemDetailResponse,
-  resetProblemDetailMockRecords,
-} from './problem-detail.mock';
+import { canonicalProblemDetailMock, resetProblemDetailMockRecords } from './problem-detail.mock';
+import type { ProblemDetailResponse } from './problem-detail.types';
 
 vi.mock('@/lib/api-client', () => ({
   api: vi.fn(),

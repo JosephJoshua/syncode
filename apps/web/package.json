@@ -21,7 +21,6 @@
     "@syncode/ui": "workspace:^",
     "@tanstack/react-query": "^5.90.21",
     "@tanstack/react-router": "^1.163.3",
-    "@types/prismjs": "^1.26.6",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
@@ -41,6 +40,7 @@
     "zustand": "^5.0.11"
   },
   "devDependencies": {
+    "@types/prismjs": "^1.26.6",
     "@syncode/tsconfig": "workspace:^",
     "@tailwindcss/vite": "^4.2.1",
     "@tanstack/router-plugin": "^1.164.0",

@@ -2,16 +2,13 @@ import { defineRoute } from '@syncode/contracts';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { api, readApiError } from '@/lib/api-client';
-import { getProblemDetailQueryKey } from './problem-detail';
 import {
-  type ProblemDetailErrorResponse,
-  type ProblemDetailResponse,
-  setMockProblemBookmark,
-} from './problem-detail.mock';
-
-function getImportMetaEnv() {
-  return (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env;
-}
+  getProblemDetailQueryKey,
+  isProblemDetailMockEnabled,
+  normalizeErrorResponse,
+} from './problem-detail';
+import { setMockProblemBookmark } from './problem-detail.mock';
+import type { ProblemDetailErrorResponse, ProblemDetailResponse } from './problem-detail.types';
 
 export const bookmarkProblemRoute = defineRoute<void, void>()(
   'users/me/bookmarks/:problemId',
@@ -41,37 +38,8 @@ type ToggleBookmarkContext = {
   previousProblemDetail: ProblemDetailResponse | undefined;
 };
 
-function shouldUseProblemDetailMock() {
-  const processEnvValue =
-    typeof process !== 'undefined' ? process.env.VITE_USE_PROBLEM_DETAIL_MOCK : undefined;
-
-  return (processEnvValue ?? getImportMetaEnv()?.VITE_USE_PROBLEM_DETAIL_MOCK) === 'true';
-}
-
-function normalizeProblemBookmarkErrorResponse(
-  error: {
-    statusCode: number;
-    code?: string;
-    message: string;
-    timestamp: string;
-    details?: Record<string, unknown>;
-  } | null,
-): ProblemDetailErrorResponse | null {
-  if (!error) {
-    return null;
-  }
-
-  return {
-    statusCode: error.statusCode,
-    code: error.code ?? 'UNKNOWN_ERROR',
-    message: error.message,
-    timestamp: error.timestamp,
-    details: error.details,
-  };
-}
-
 export async function bookmarkProblem(problemId: string) {
-  if (shouldUseProblemDetailMock()) {
+  if (isProblemDetailMockEnabled()) {
     setMockProblemBookmark(problemId, true);
     return;
   }
@@ -81,7 +49,7 @@ export async function bookmarkProblem(problemId: string) {
       params: { problemId },
     });
   } catch (error) {
-    const apiError = normalizeProblemBookmarkErrorResponse(await readApiError(error));
+    const apiError = normalizeErrorResponse(await readApiError(error));
 
     if (apiError) {
       throw new ProblemBookmarkApiError(apiError);
@@ -92,7 +60,7 @@ export async function bookmarkProblem(problemId: string) {
 }
 
 export async function removeBookmark(problemId: string) {
-  if (shouldUseProblemDetailMock()) {
+  if (isProblemDetailMockEnabled()) {
     setMockProblemBookmark(problemId, false);
     return;
   }
@@ -102,7 +70,7 @@ export async function removeBookmark(problemId: string) {
       params: { problemId },
     });
   } catch (error) {
-    const apiError = normalizeProblemBookmarkErrorResponse(await readApiError(error));
+    const apiError = normalizeErrorResponse(await readApiError(error));
 
     if (apiError) {
       throw new ProblemBookmarkApiError(apiError);
