@@ -1,22 +1,25 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { CONTROL_API } from '@syncode/contracts';
 import { SUPPORTED_LANGUAGES, type SupportedLanguage } from '@syncode/shared';
+import {
+  Badge,
+  Button,
+  Card,
+  cn,
+  Input,
+  Label,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@syncode/ui';
 import { useMutation } from '@tanstack/react-query';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import {
-  Check,
-  ChevronDown,
-  Code2,
-  Copy,
-  FileCode2,
-  Globe,
-  Lock,
-  type LucideIcon,
-} from 'lucide-react';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { type FieldError, useForm } from 'react-hook-form';
+import { Check, ChevronDown, Code2, Copy, FileCode2, Globe, Lock } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Controller, useForm } from 'react-hook-form';
 import { z } from 'zod';
-import { RoomCard } from '@/components/rooms/room-card';
 import { api, readApiError } from '@/lib/api-client';
 import { useAuthStore } from '@/stores/auth.store';
 
@@ -24,7 +27,6 @@ export const Route = createFileRoute('/rooms/create')({
   component: CreateRoomPage,
 });
 
-// ─── 1. Validation Schema ───────────────────────────────────────
 const LANGUAGE_LABELS: Record<SupportedLanguage, string> = {
   python: 'Python 3.12',
   javascript: 'JavaScript (Node.js 20)',
@@ -64,7 +66,6 @@ function matchesProblemQuery(label: string, query: string) {
     return true;
   }
 
-  // Support subsequence matching: e.g. "ts" can match "Two Sum".
   let queryIndex = 0;
   for (let i = 0; i < normalizedLabel.length && queryIndex < normalizedQuery.length; i++) {
     if (normalizedLabel[i] === normalizedQuery[queryIndex]) {
@@ -75,91 +76,6 @@ function matchesProblemQuery(label: string, query: string) {
   return queryIndex === normalizedQuery.length;
 }
 
-// ─── 2. UI Components ──────────────────────────────────────────
-const Label = ({ children, className = '' }: { children: React.ReactNode; className?: string }) => (
-  <p
-    className={`block text-xs font-semibold uppercase tracking-wider text-zinc-400 mb-2 ${className}`}
-  >
-    {children}
-  </p>
-);
-
-type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
-  children: React.ReactNode;
-  variant?: 'primary' | 'secondary';
-};
-
-const Button = ({ children, variant = 'primary', type = 'button', ...props }: ButtonProps) => {
-  const baseStyle =
-    'w-full font-semibold py-3 px-6 rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-2 text-sm';
-  const variants = {
-    // Green neon button with glow effect
-    primary:
-      'bg-[oklch(0.82_0.18_165)] hover:bg-[oklch(0.88_0.18_165)] text-zinc-950 shadow-[0_0_25px_oklch(0.82_0.18_165/0.4)] hover:shadow-[0_0_35px_oklch(0.82_0.18_165/0.6)] active:scale-[0.98]',
-    secondary:
-      'bg-zinc-800 hover:bg-zinc-700 text-zinc-100 border border-zinc-700 active:scale-[0.98]',
-  };
-  return (
-    <button type={type} className={`${baseStyle} ${variants[variant]}`} {...props}>
-      {children}
-    </button>
-  );
-};
-
-const Badge = ({ children, icon: Icon }: { children: React.ReactNode; icon?: LucideIcon }) => (
-  <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-zinc-900 border border-zinc-700 text-zinc-200 text-sm font-medium">
-    {/* Badge icon color using green neon */}
-    {Icon && <Icon size={16} className="text-[oklch(0.82_0.18_165)]" />}
-    {children}
-  </span>
-);
-
-type SelectOption = {
-  value: string;
-  label: string;
-};
-
-type SelectProps = React.SelectHTMLAttributes<HTMLSelectElement> & {
-  icon?: LucideIcon;
-  options: readonly SelectOption[];
-  error?: FieldError;
-  placeholder?: string;
-};
-
-// Custom Select wrapper component to fix display and unify styling
-const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
-  ({ icon: Icon, options, error, placeholder, ...props }, ref) => (
-    <div>
-      <div className="relative">
-        {Icon && <Icon size={18} className="absolute left-3.5 top-3.5 text-zinc-500" />}
-        <select
-          ref={ref}
-          className={`w-full bg-zinc-900 border ${error ? 'border-red-500' : 'border-zinc-700/80'} ${Icon ? 'pl-11' : 'pl-4'} pr-11 py-3 text-zinc-100 rounded-xl appearance-none outline-none transition-all duration-150 focus:border-[oklch(0.45_0.18_165)] focus:shadow-[0_0_15px_oklch(0.88_0.18_165/0.6)] text-sm`}
-          {...props}
-        >
-          {placeholder && (
-            <option value="" disabled className="bg-zinc-900 text-zinc-500">
-              {placeholder}
-            </option>
-          )}
-          {options.map((opt) => (
-            <option key={opt.value} value={opt.value} className="bg-zinc-900 text-zinc-100">
-              {opt.label}
-            </option>
-          ))}
-        </select>
-        <ChevronDown
-          className="absolute right-3 top-3.5 text-zinc-500 pointer-events-none"
-          size={18}
-        />
-      </div>
-      {error && <p className="text-red-400 text-xs mt-1.5 pl-1">{error.message}</p>}
-    </div>
-  ),
-);
-Select.displayName = 'Select';
-
-// ─── 3. Main Page Component ───────────────────────────────────────
 function CreateRoomPage() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const navigate = useNavigate();
@@ -198,6 +114,7 @@ function CreateRoomPage() {
     setValue,
     watch,
     reset,
+    control,
     formState: { errors, isSubmitting },
   } = useForm<CreateRoomFormData>({
     resolver: zodResolver(createRoomFormSchema),
@@ -275,34 +192,34 @@ function CreateRoomPage() {
   };
 
   return (
-    // Main page background
-    <div className="min-h-screen bg-[#050505] text-zinc-100 py-16 px-4 flex justify-center items-start">
+    <div className="flex min-h-screen items-start justify-center bg-background px-4 py-16 text-foreground">
       <div className="w-full max-w-lg">
-        {/* Header */}
         <div className="mb-10 text-center">
-          {/* Page title in green neon */}
-          <h1 className="text-4xl font-extrabold tracking-tighter text-[oklch(0.82_0.18_165)] mb-2.5">
+          <h1 className="mb-2.5 text-4xl font-extrabold tracking-tighter text-primary">
             Create Workspace
           </h1>
-          <p className="text-zinc-500 text-base">Setup your shared real-time coding environment</p>
+          <p className="text-base text-muted-foreground">
+            Setup your shared real-time coding environment
+          </p>
         </div>
 
-        <RoomCard className="p-8">
-          {/* Show form if not yet submitted */}
+        <Card className="rounded-2xl border-border/60 bg-card/95 p-8 shadow-[0_10px_40px_-10px_rgba(0,0,0,0.7)]">
           {!inviteLink ? (
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-7">
               {/* Problem Selector */}
               <div>
-                <Label>Problem to Solve</Label>
+                <Label className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Problem to Solve
+                </Label>
                 <input type="hidden" {...register('problemId')} />
 
                 <div ref={comboboxRef}>
                   <div className="relative">
                     <FileCode2
-                      className="pointer-events-none absolute left-3.5 top-3.5 text-zinc-500"
+                      className="pointer-events-none absolute left-3.5 top-3.5 text-muted-foreground"
                       size={18}
                     />
-                    <input
+                    <Input
                       type="text"
                       value={problemInput}
                       onFocus={() => setIsProblemMenuOpen(true)}
@@ -310,8 +227,6 @@ function CreateRoomPage() {
                         const nextValue = event.target.value;
                         setProblemInput(nextValue);
                         setIsProblemMenuOpen(true);
-
-                        // Clear selected value while user is actively typing.
                         setValue('problemId', '', { shouldValidate: true });
                       }}
                       placeholder="Type to search and select a problem"
@@ -320,10 +235,10 @@ function CreateRoomPage() {
                       aria-controls="problem-listbox"
                       aria-autocomplete="list"
                       aria-haspopup="listbox"
-                      className="w-full rounded-xl border border-zinc-700/80 bg-zinc-900 py-3 pr-11 pl-11 text-sm text-zinc-100 outline-none transition-all duration-150 placeholder:text-zinc-500 focus:border-[oklch(0.45_0.18_165)] focus:shadow-[0_0_15px_oklch(0.88_0.18_165/0.4)]"
+                      className="rounded-xl pl-11"
                     />
                     <ChevronDown
-                      className="pointer-events-none absolute right-3 top-3.5 text-zinc-500"
+                      className="pointer-events-none absolute right-3 top-3.5 text-muted-foreground"
                       size={18}
                     />
 
@@ -331,7 +246,7 @@ function CreateRoomPage() {
                       <div
                         id="problem-listbox"
                         role="listbox"
-                        className="absolute z-20 mt-2 max-h-56 w-full overflow-auto rounded-xl border border-zinc-700 bg-zinc-900 p-1.5 shadow-2xl"
+                        className="absolute z-20 mt-2 max-h-56 w-full overflow-auto rounded-xl border border-border bg-popover p-1.5 shadow-2xl"
                       >
                         {filteredProblems.length > 0 ? (
                           filteredProblems.map((problem) => (
@@ -339,18 +254,21 @@ function CreateRoomPage() {
                               key={problem.value}
                               type="button"
                               role="option"
+                              aria-selected={problem.value === selectedProblemId}
                               onClick={() => {
                                 setValue('problemId', problem.value, { shouldValidate: true });
                                 setProblemInput(problem.label);
                                 setIsProblemMenuOpen(false);
                               }}
-                              className="flex w-full items-center rounded-lg px-3 py-2 text-left text-sm text-zinc-200 transition-colors hover:bg-zinc-800"
+                              className="flex w-full items-center rounded-lg px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-muted"
                             >
                               {problem.label}
                             </button>
                           ))
                         ) : (
-                          <p className="px-3 py-2 text-sm text-zinc-500">No matching problems</p>
+                          <p className="px-3 py-2 text-sm text-muted-foreground">
+                            No matching problems
+                          </p>
                         )}
                       </div>
                     )}
@@ -358,119 +276,149 @@ function CreateRoomPage() {
                 </div>
 
                 {errors.problemId && (
-                  <p className="mt-1.5 pl-1 text-xs text-red-400">{errors.problemId.message}</p>
+                  <p className="mt-1.5 pl-1 text-xs text-destructive">{errors.problemId.message}</p>
                 )}
               </div>
 
               {/* Language Picker */}
               <div>
-                <Label>Coding Language</Label>
-                <Select
-                  icon={Code2}
-                  error={errors.language}
-                  {...register('language')}
-                  defaultValue=""
-                  placeholder="Select a language"
-                  options={LANGUAGE_OPTIONS}
+                <Label className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Coding Language
+                </Label>
+                <Controller
+                  name="language"
+                  control={control}
+                  render={({ field }) => (
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <SelectTrigger
+                        className={cn(
+                          'rounded-xl',
+                          errors.language && 'border-destructive ring-destructive/20',
+                        )}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <Code2 size={18} className="text-muted-foreground" />
+                          <SelectValue placeholder="Select a language" />
+                        </div>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {LANGUAGE_OPTIONS.map((opt) => (
+                          <SelectItem key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
                 />
+                {errors.language && (
+                  <p className="mt-1.5 pl-1 text-xs text-destructive">{errors.language.message}</p>
+                )}
               </div>
 
               {/* Visibility Toggle */}
               <div>
-                <Label>Visibility</Label>
-                <div className="flex items-center gap-4 p-4 rounded-xl border border-zinc-800 bg-zinc-900/40">
+                <Label className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Visibility
+                </Label>
+                <div className="flex items-center gap-4 rounded-xl border border-border p-4">
                   <input
                     {...register('isPublic')}
                     type="checkbox"
                     id="isPublic"
-                    className="h-5 w-5 rounded border-zinc-700 bg-zinc-800 text-[oklch(0.82_0.18_165)] focus:ring-[oklch(0.45_0.18_165)/0.5] focus:ring-offset-[#0a0a0a]"
+                    className="size-5 rounded border-input bg-background text-primary focus:ring-ring/50 focus:ring-offset-background"
                   />
-                  <label htmlFor="isPublic" className="flex flex-col cursor-pointer flex-1">
-                    <span className="text-sm font-semibold text-zinc-200">Public Room</span>
-                    <span className="text-xs text-zinc-500 mt-0.5">
+                  <label htmlFor="isPublic" className="flex flex-1 cursor-pointer flex-col">
+                    <span className="text-sm font-semibold text-foreground">Public Room</span>
+                    <span className="mt-0.5 text-xs text-muted-foreground">
                       Anyone with the link can join directly
                     </span>
                   </label>
-                  <Globe className="text-zinc-600" size={20} />
+                  <Globe className="text-muted-foreground/60" size={20} />
                 </div>
               </div>
 
               {/* Submit Button */}
               <div className="pt-2">
-                <Button type="submit" disabled={isSubmitting || createRoomMutation.isPending}>
+                <Button
+                  type="submit"
+                  size="lg"
+                  disabled={isSubmitting || createRoomMutation.isPending}
+                  className="w-full rounded-xl shadow-[0_0_25px_hsl(var(--primary)/0.4)] hover:shadow-[0_0_35px_hsl(var(--primary)/0.6)]"
+                >
                   {isSubmitting || createRoomMutation.isPending
                     ? 'Provisioning Workspace...'
                     : 'Create Collaborative Room'}
                 </Button>
                 {submissionError && (
-                  <p className="mt-2 text-sm text-red-400" role="alert">
+                  <p className="mt-2 text-sm text-destructive" role="alert">
                     {submissionError}
                   </p>
                 )}
               </div>
             </form>
           ) : (
-            /* Show success section after submission */
-            <div className="space-y-7 animate-in fade-in slide-in-from-bottom-5 duration-500">
-              {/* Workspace configuration summary */}
-              <div className="space-y-3.5 p-5 bg-zinc-900/40 rounded-xl border border-zinc-800">
-                <Label className="mb-0">Selected Workspace Details</Label>
+            <div className="animate-in fade-in slide-in-from-bottom-5 space-y-7 duration-500">
+              <div className="space-y-3.5 rounded-xl border border-border p-5">
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Selected Workspace Details
+                </p>
                 <div className="flex flex-wrap gap-2.5 pt-1">
-                  {/* Display selected options with friendly names */}
-                  <Badge icon={FileCode2}>
+                  <Badge variant="outline" className="gap-2 px-4 py-1.5 text-sm">
+                    <FileCode2 size={16} className="text-primary" />
                     {ROOM_PROBLEMS.find((problem) => problem.value === submittedData?.problemId)
                       ?.label ?? submittedData?.problemId}
                   </Badge>
-                  <Badge icon={Code2}>
+                  <Badge variant="outline" className="gap-2 px-4 py-1.5 text-sm">
+                    <Code2 size={16} className="text-primary" />
                     {LANGUAGE_OPTIONS.find((language) => language.value === submittedData?.language)
                       ?.label ?? submittedData?.language}
                   </Badge>
-                  <Badge icon={submittedData?.isPublic ? Globe : Lock}>
+                  <Badge variant="outline" className="gap-2 px-4 py-1.5 text-sm">
+                    {submittedData?.isPublic ? (
+                      <Globe size={16} className="text-primary" />
+                    ) : (
+                      <Lock size={16} className="text-primary" />
+                    )}
                     {submittedData?.isPublic ? 'Public Access' : 'Private'}
                   </Badge>
                 </div>
               </div>
 
-              <div className="h-px w-full bg-zinc-800/80" />
+              <div className="h-px w-full bg-border/60" />
 
-              {/* Invite link section */}
               <div>
-                <div className="text-[oklch(0.82_0.18_165)] flex items-center gap-2.5 mb-3.5 text-xl font-bold drop-shadow-[0_0_12px_oklch(0.82_0.18_165/0.6)]">
+                <div className="mb-3.5 flex items-center gap-2.5 text-xl font-bold text-primary drop-shadow-[0_0_12px_hsl(var(--primary)/0.6)]">
                   <Check size={24} />
                   <span>Room Provisioned Successfully!</span>
                 </div>
-                <p className="text-sm text-zinc-400 mb-3.5 pl-1">
+                <p className="mb-3.5 pl-1 text-sm text-muted-foreground">
                   Share this invite link with collaborators:
                 </p>
 
-                {/* Invite link input with green focus state */}
-                <div className="flex items-center bg-zinc-950 border border-zinc-700 rounded-xl p-1.5 focus-within:border-[oklch(0.45_0.18_165)] focus-within:shadow-[0_0_15px_oklch(0.88_0.18_165/0.6)] transition-all duration-300">
-                  <input
+                <div className="flex items-center rounded-xl border border-border bg-background p-1.5 transition-all duration-300 focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50">
+                  <Input
                     type="text"
                     readOnly
-                    value={inviteLink}
-                    className="flex-1 bg-transparent border-none outline-none text-zinc-100 text-sm px-3.5 w-full"
+                    value={inviteLink ?? ''}
+                    className="flex-1 border-none bg-transparent shadow-none focus-visible:ring-0"
                   />
                   <button
                     type="button"
                     onClick={copyToClipboard}
-                    className="p-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg transition-colors flex items-center justify-center shrink-0"
+                    className="flex shrink-0 items-center justify-center rounded-lg bg-muted p-3 text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground"
                     title="Copy link"
                   >
-                    {/* Copy button icon changes to green when copied */}
-                    {copied ? (
-                      <Check size={18} className="text-[oklch(0.82_0.18_165)]" />
-                    ) : (
-                      <Copy size={18} />
-                    )}
+                    {copied ? <Check size={18} className="text-primary" /> : <Copy size={18} />}
                   </button>
                 </div>
               </div>
 
-              {/* Action Buttons */}
               <div className="flex gap-4 pt-3">
                 <Button
-                  variant="secondary"
+                  variant="outline"
+                  size="lg"
+                  className="w-full rounded-xl"
                   onClick={() => {
                     setInviteLink(null);
                     reset();
@@ -482,13 +430,13 @@ function CreateRoomPage() {
                   Setup New Room
                 </Button>
                 {/* TODO: Navigate to room workspace when implemented */}
-                <Button disabled className="opacity-50 cursor-not-allowed">
+                <Button size="lg" disabled className="w-full rounded-xl">
                   Enter Workspace
                 </Button>
               </div>
             </div>
           )}
-        </RoomCard>
+        </Card>
       </div>
     </div>
   );
