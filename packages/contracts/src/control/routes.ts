@@ -4,14 +4,22 @@ import type {
   accessTokenResponseSchema,
   loginResponseSchema,
   loginSchema,
+  registerResponseSchema,
   registerSchema,
 } from './auth.js';
 import type { executionResultResponseSchema, jobStatusResponseSchema } from './execution.js';
 import type { healthCheckResponseSchema } from './health.js';
 import type {
+  problemDetailSchema,
+  problemsListResponseSchema,
+  problemsTagsResponseSchema,
+} from './problems.js';
+import type {
   createRoomResponseSchema,
   createRoomSchema,
   destroyRoomResponseSchema,
+  joinRoomResponseSchema,
+  joinRoomSchema,
   listRoomsQuerySchema,
   listRoomsResponseSchema,
   roomDetailSchema,
@@ -20,14 +28,15 @@ import type {
   submitProblemSchema,
   submitResultItemSchema,
 } from './rooms.js';
+import type { sessionHistoryResponseSchema } from './sessions.js';
 import type { updateUserSchema, userProfileResponseSchema } from './users.js';
 
 export const CONTROL_API = {
   AUTH: {
-    REGISTER: defineRoute<
-      z.infer<typeof registerSchema>,
-      z.infer<typeof accessTokenResponseSchema>
-    >()('auth/register', 'POST'),
+    REGISTER: defineRoute<z.infer<typeof registerSchema>, z.infer<typeof registerResponseSchema>>()(
+      'auth/register',
+      'POST',
+    ),
     LOGIN: defineRoute<z.infer<typeof loginSchema>, z.infer<typeof loginResponseSchema>>()(
       'auth/login',
       'POST',
@@ -53,6 +62,10 @@ export const CONTROL_API = {
       z.infer<typeof listRoomsResponseSchema>
     >()('rooms', 'GET'),
     GET: defineRoute<void, z.infer<typeof roomDetailSchema>>()('rooms/:id', 'GET'),
+    JOIN: defineRoute<z.infer<typeof joinRoomSchema>, z.infer<typeof joinRoomResponseSchema>>()(
+      'rooms/:id/join',
+      'POST',
+    ),
     DESTROY: defineRoute<void, z.infer<typeof destroyRoomResponseSchema>>()('rooms/:id', 'DELETE'),
     RUN: defineRoute<z.infer<typeof runCodeSchema>, z.infer<typeof runCodeResponseSchema>>()(
       'rooms/:id/run',
@@ -74,10 +87,14 @@ export const CONTROL_API = {
     ),
   },
   PROBLEMS: {
-    LIST: defineRoute<void, void>()('problems', 'GET'),
-    GET_BY_ID: defineRoute<void, void>()('problems/:id', 'GET'),
+    LIST: defineRoute<void, z.infer<typeof problemsListResponseSchema>>()('problems', 'GET'),
+    GET_BY_ID: defineRoute<void, z.infer<typeof problemDetailSchema>>()('problems/:id', 'GET'),
+    TAGS: defineRoute<void, z.infer<typeof problemsTagsResponseSchema>>()('problems/tags', 'GET'),
     CREATE: defineRoute<void, void>()('problems', 'POST'),
     DELETE: defineRoute<void, void>()('problems/:id', 'DELETE'),
+  },
+  SESSIONS: {
+    LIST: defineRoute<void, z.infer<typeof sessionHistoryResponseSchema>>()('sessions', 'GET'),
   },
   HEALTH: defineRoute<void, z.infer<typeof healthCheckResponseSchema>>()('health', 'GET'),
 };

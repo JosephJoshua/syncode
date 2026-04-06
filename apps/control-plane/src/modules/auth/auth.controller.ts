@@ -21,6 +21,7 @@ export class AuthController {
   @Post(CONTROL_API.AUTH.REGISTER.route)
   @ApiOperation({ summary: 'Register a new user (TODO)' })
   @ApiBody({ type: RegisterDto })
+  // TODO: Update return type to RegisterResponseDto and align @ApiResponse once register is implemented (#213)
   @ApiResponse({
     status: 201,
     type: AccessTokenResponseDto,

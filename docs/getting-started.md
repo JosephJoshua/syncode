@@ -70,8 +70,9 @@ These connect to the Docker containers started by `pnpm infra:up`. No changes ne
 ### JWT Secrets (generate random values)
 
 ```env
-JWT_SECRET=change-me-in-production-min-32-chars
+AUTH_JWT_SECRET=change-me-in-production-min-32-chars
 JWT_REFRESH_SECRET=change-me-in-production-min-32-chars
+COLLAB_JWT_SECRET=change-me-in-production-min-32-chars
 ```
 
 For local development, the defaults work fine. For anything shared or deployed, generate random strings:
@@ -251,7 +252,7 @@ pnpm infra:up                # Start them if not
 
 ```
 ZodError: [
-  { path: ["JWT_SECRET"], message: "Required" }
+  { path: ["AUTH_JWT_SECRET"], message: "Required" }
 ]
 ```
 

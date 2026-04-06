@@ -9,6 +9,7 @@ import {
   type NestInterceptor,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { ERROR_CODES } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
 import { idempotencyKeys } from '@syncode/db';
 import { IDEMPOTENCY_TTL_MS } from '@syncode/shared';
@@ -108,7 +109,10 @@ export class IdempotencyInterceptor implements NestInterceptor {
     }
 
     if (existing.responseBody === null) {
-      throw new ConflictException('A request with this Idempotency-Key is already being processed');
+      throw new ConflictException({
+        message: 'A request with this Idempotency-Key is already being processed',
+        code: ERROR_CODES.IDEMPOTENCY_CONFLICT,
+      });
     }
 
     this.logger.debug(`Returning cached response for idempotency key ${key}`);

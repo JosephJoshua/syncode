@@ -95,7 +95,7 @@ All REST routes defined in `packages/contracts/src/control/routes.ts`.
 
 `src/config/env.config.ts` validates ALL env vars at startup with Zod. Stubs cannot be enabled in production (`.refine()` check).
 
-Key vars: `DATABASE_URL`, `REDIS_URL`, `JWT_SECRET`, `JWT_REFRESH_SECRET`, `S3_*`, `LIVEKIT_*`, `COLLAB_PLANE_URL`, `USE_*_STUB`, `CORS_ORIGINS`, `THROTTLE_TTL_SECS`, `THROTTLE_LIMIT`
+Key vars: `DATABASE_URL`, `REDIS_URL`, `AUTH_JWT_SECRET`, `JWT_REFRESH_SECRET`, `COLLAB_JWT_SECRET`, `S3_*`, `LIVEKIT_*`, `COLLAB_PLANE_URL`, `USE_*_STUB`, `CORS_ORIGINS`, `THROTTLE_TTL_SECS`, `THROTTLE_LIMIT`
 
 ## Testing
 
