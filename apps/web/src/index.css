@@ -4,6 +4,7 @@
 @import "@fontsource-variable/geist";
 @import "@syncode/ui/theme.css";
 @source "../../../packages/ui/src";
+@plugin "@tailwindcss/typography";
 
 @keyframes marquee {
   from {

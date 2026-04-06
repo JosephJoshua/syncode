@@ -19,6 +19,7 @@
     "@syncode/contracts": "workspace:^",
     "@syncode/shared": "workspace:^",
     "@syncode/ui": "workspace:^",
+    "@tailwindcss/typography": "^0.5.19",
     "@tanstack/react-query": "^5.90.21",
     "@tanstack/react-router": "^1.163.3",
     "class-variance-authority": "^0.7.1",
@@ -32,6 +33,7 @@
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-hook-form": "^7.71.2",
+    "react-markdown": "^10.1.0",
     "shadcn": "^4.1.1",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.5.0",
@@ -40,7 +42,6 @@
     "zustand": "^5.0.11"
   },
   "devDependencies": {
-    "@types/prismjs": "^1.26.6",
     "@syncode/tsconfig": "workspace:^",
     "@tailwindcss/vite": "^4.2.1",
     "@tanstack/router-plugin": "^1.164.0",
@@ -48,6 +49,7 @@
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
     "@types/node": "^25.3.3",
+    "@types/prismjs": "^1.26.6",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react-swc": "^4.2.3",

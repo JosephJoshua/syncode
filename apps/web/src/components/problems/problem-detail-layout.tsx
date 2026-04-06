@@ -4,6 +4,7 @@ import { Button } from '@syncode/ui';
 import { Bookmark, LoaderCircle } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
+import Markdown from 'react-markdown';
 import { useToggleProblemBookmarkMutation } from '@/lib/problems/problem-bookmark';
 import { isProblemDetailMockEnabled } from '@/lib/problems/problem-detail';
 import { useAuthStore } from '@/stores/auth.store';
@@ -296,22 +297,9 @@ function LabeledTextBlock({ label, value }: { label: string; value: string }) {
 }
 
 function MarkdownBlock({ value }: { value: string }) {
-  const paragraphs = value
-    .split(/\n{2,}/)
-    .map((paragraph) => paragraph.trim())
-    .filter(Boolean);
-
-  if (paragraphs.length === 0) {
-    return null;
-  }
-
   return (
-    <div className="space-y-2 text-sm leading-6 text-foreground">
-      {paragraphs.map((paragraph, index) => (
-        <p key={`${paragraph.slice(0, 24)}-${index}`} className="whitespace-pre-line">
-          {paragraph}
-        </p>
-      ))}
+    <div className="prose prose-sm prose-invert max-w-none text-foreground prose-headings:text-foreground prose-strong:text-foreground prose-code:rounded prose-code:bg-muted/70 prose-code:px-1.5 prose-code:py-0.5 prose-code:text-foreground prose-pre:bg-muted/70 prose-li:marker:text-muted-foreground">
+      <Markdown>{value}</Markdown>
     </div>
   );
 }
