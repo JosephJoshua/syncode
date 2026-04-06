@@ -1,12 +1,15 @@
 import { Button } from '@syncode/ui';
-import { Bookmark } from 'lucide-react';
+import { Bookmark, LoaderCircle } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
+import { useToggleProblemBookmarkMutation } from '@/lib/problems/problem-bookmark';
+import { isProblemDetailMockEnabled } from '@/lib/problems/problem-detail';
 import type {
   ProblemDetailResponse,
   ProblemExample,
   ProblemTestCase,
 } from '@/lib/problems/problem-detail.mock';
+import { useAuthStore } from '@/stores/auth.store';
 import { StarterCodeBlock } from './starter-code-block';
 import { formatStarterLanguageLabel } from './starter-code-language';
 
@@ -15,6 +18,9 @@ export function ProblemDetailLayout({ problem }: { problem: ProblemDetailRespons
   const firstLanguage = starterLanguages[0] ?? null;
   const [selectedLanguage, setSelectedLanguage] = useState<string | null>(firstLanguage);
   const publicTestCases = problem.testCases.filter((testCase) => !testCase.isHidden);
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const canToggleBookmark = isAuthenticated || isProblemDetailMockEnabled();
+  const toggleBookmarkMutation = useToggleProblemBookmarkMutation(problem.id);
 
   useEffect(() => {
     if (!problem.starterCode) {
@@ -33,7 +39,16 @@ export function ProblemDetailLayout({ problem }: { problem: ProblemDetailRespons
   return (
     <div className="mx-auto max-w-7xl px-4 py-10">
       <div className="space-y-7">
-        <ProblemHeader problem={problem} />
+        <ProblemHeader
+          problem={problem}
+          canToggleBookmark={canToggleBookmark}
+          isBookmarkPending={toggleBookmarkMutation.isPending}
+          onToggleBookmark={() =>
+            toggleBookmarkMutation.mutate({
+              currentIsBookmarked: problem.isBookmarked,
+            })
+          }
+        />
 
         <div className="grid gap-7 xl:grid-cols-[minmax(0,1fr)_320px]">
           <div className="space-y-5">
@@ -108,7 +123,17 @@ export function ProblemDetailLayout({ problem }: { problem: ProblemDetailRespons
   );
 }
 
-function ProblemHeader({ problem }: { problem: ProblemDetailResponse }) {
+function ProblemHeader({
+  problem,
+  canToggleBookmark,
+  isBookmarkPending,
+  onToggleBookmark,
+}: {
+  problem: ProblemDetailResponse;
+  canToggleBookmark: boolean;
+  isBookmarkPending: boolean;
+  onToggleBookmark: () => void;
+}) {
   return (
     <header className="rounded-2xl border border-border/60 bg-card/60 px-5 py-5">
       <p className="text-xs font-medium tracking-[0.2em] text-muted-foreground uppercase">
@@ -128,7 +153,12 @@ function ProblemHeader({ problem }: { problem: ProblemDetailResponse }) {
             ))}
           </div>
 
-          <BookmarkPill isBookmarked={problem.isBookmarked} />
+          <BookmarkToggleButton
+            isBookmarked={problem.isBookmarked}
+            canToggleBookmark={canToggleBookmark}
+            isPending={isBookmarkPending}
+            onToggle={onToggleBookmark}
+          />
         </div>
 
         <div className="flex flex-col gap-2.5 md:flex-row md:items-start md:justify-between">
@@ -154,8 +184,7 @@ function SummaryRail({ problem }: { problem: ProblemDetailResponse }) {
         <Button
           type="button"
           size="lg"
-          className="w-full disabled:cursor-default disabled:opacity-100"
-          disabled
+          className="w-full cursor-pointer bg-primary text-primary-foreground shadow-[0_10px_24px_-12px_hsl(var(--primary)/0.9)] hover:-translate-y-0.5 hover:bg-primary/90 hover:shadow-[0_16px_32px_-16px_hsl(var(--primary)/0.95)]"
         >
           Practice this problem
         </Button>
@@ -321,20 +350,46 @@ function TagChip({ children }: { children: ReactNode }) {
   );
 }
 
-function BookmarkPill({ isBookmarked }: { isBookmarked: boolean }) {
+function BookmarkToggleButton({
+  isBookmarked,
+  canToggleBookmark,
+  isPending,
+  onToggle,
+}: {
+  isBookmarked: boolean;
+  canToggleBookmark: boolean;
+  isPending: boolean;
+  onToggle: () => void;
+}) {
+  const isDisabled = !canToggleBookmark || isPending;
+  const label = !canToggleBookmark
+    ? 'Sign in to manage bookmarks'
+    : isBookmarked
+      ? 'Remove bookmark'
+      : 'Add bookmark';
+
   return (
-    <span
-      role="img"
-      aria-label={isBookmarked ? 'Bookmarked' : 'Not bookmarked'}
-      title={isBookmarked ? 'Bookmarked' : 'Not bookmarked'}
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon-lg"
+      aria-label={label}
+      aria-pressed={isBookmarked}
+      title={label}
+      disabled={isDisabled}
+      onClick={onToggle}
       className={
         isBookmarked
-          ? 'inline-flex size-9 items-center justify-center rounded-full border border-amber-400/40 bg-amber-500/14 text-amber-300 ring-1 ring-amber-400/12'
-          : 'inline-flex size-9 items-center justify-center rounded-full border border-border/60 bg-background/70 text-muted-foreground'
+          ? 'rounded-full border border-amber-400/40 bg-amber-500/14 text-amber-300 ring-1 ring-amber-400/12 hover:border-amber-300/50 hover:bg-amber-500/18 hover:text-amber-200 disabled:opacity-100'
+          : 'rounded-full border border-amber-400/45 bg-transparent text-amber-300 ring-1 ring-amber-400/10 hover:border-amber-300/55 hover:bg-amber-500/10 hover:text-amber-200 disabled:opacity-100'
       }
     >
-      <Bookmark className={isBookmarked ? 'size-4 fill-current' : 'size-4'} strokeWidth={1.9} />
-    </span>
+      {isPending ? (
+        <LoaderCircle className="size-4 animate-spin" strokeWidth={1.9} />
+      ) : (
+        <Bookmark className={isBookmarked ? 'size-4 fill-current' : 'size-4'} strokeWidth={1.9} />
+      )}
+    </Button>
   );
 }
 
