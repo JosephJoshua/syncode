@@ -24,7 +24,11 @@ export function App() {
   }, []);
 
   if (!authReady) {
-    return null;
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="size-6 animate-spin rounded-full border-2 border-muted-foreground/20 border-t-primary" />
+      </div>
+    );
   }
 
   return (

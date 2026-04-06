@@ -48,12 +48,6 @@ function ProfilePage() {
     },
   });
 
-  useEffect(() => {
-    if (!isAuthenticated) {
-      navigate({ to: '/login' }).catch(() => {});
-    }
-  }, [isAuthenticated, navigate]);
-
   const profileQuery = useQuery({
     queryKey: profileQueryKey,
     enabled: isAuthenticated,
@@ -113,16 +107,7 @@ function ProfilePage() {
       toast.success('Account deleted.');
       navigate({ to: '/' }).catch(() => {});
     },
-    onError: async (error) => {
-      const apiError = await readApiError(error);
-
-      if (apiError?.statusCode === 401) {
-        logout();
-        queryClient.clear();
-        navigate({ to: '/login' }).catch(() => {});
-        return;
-      }
-
+    onError: () => {
       toast.error('Unable to delete your account right now.');
     },
   });

@@ -4,7 +4,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { createRootRoute, Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router';
 import { LogOut, User, UserRound } from 'lucide-react';
 import { DropdownMenu } from 'radix-ui';
-import type { ReactNode } from 'react';
+import { type ReactNode, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import { api, readApiError } from '@/lib/api-client';
 import { getUserInitial } from '@/lib/user-utils';
@@ -105,7 +105,16 @@ function RootLayout() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const user = useAuthStore((state) => state.user);
   const logout = useAuthStore((state) => state.logout);
+  const wasAuthenticated = useRef(isAuthenticated);
   const accountInitial = getUserInitial(user);
+
+  useEffect(() => {
+    if (wasAuthenticated.current && !isAuthenticated) {
+      navigate({ to: '/login' }).catch(() => {});
+    }
+
+    wasAuthenticated.current = isAuthenticated;
+  }, [isAuthenticated, navigate]);
   const isDashboardPage = pathname === '/dashboard';
   const isRoomsPage = pathname === '/rooms';
   const isProblemsPage = pathname.startsWith('/problems');
