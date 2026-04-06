@@ -40,6 +40,7 @@
   "devDependencies": {
     "@syncode/tsconfig": "workspace:^",
     "@types/node": "^25.3.3",
+    "@vitest/coverage-v8": "^3.0.0",
     "typescript": "5.9.2",
     "vitest": "^3.0.0"
   }

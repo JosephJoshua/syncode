@@ -3,6 +3,7 @@ import {
   getNextStatuses,
   isValidStatusTransition,
   ROOM_STATUS_LABELS,
+  ROOM_STATUSES,
   RoomStatus,
 } from '../room.js';
 
@@ -54,7 +55,7 @@ describe('isValidStatusTransition', () => {
 
 describe('ROOM_STATUS_LABELS', () => {
   it('GIVEN every room status WHEN reading labels THEN each has a non-empty string', () => {
-    for (const status of Object.values(RoomStatus)) {
+    for (const status of ROOM_STATUSES) {
       expect(ROOM_STATUS_LABELS[status]).toEqual(expect.any(String));
       expect(ROOM_STATUS_LABELS[status].length).toBeGreaterThan(0);
     }
