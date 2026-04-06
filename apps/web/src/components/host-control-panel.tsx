@@ -1,12 +1,12 @@
 import { getNextStatuses, ROOM_STATUS_LABELS, RoomStatus } from '@syncode/shared';
 import { Button, Card, CardContent, CardHeader, CardTitle } from '@syncode/ui';
-import { CheckCircle2, FastForward, PlayCircle, SquareSquare } from 'lucide-react';
+import { CheckCircle2, Code2, FastForward, PlayCircle } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 
 // Maps transitions to their appropriate lucide-icons
 const TRANSITION_ICONS: Partial<Record<RoomStatus, ReactNode>> = {
   [RoomStatus.WARMUP]: <PlayCircle className="mr-2 h-4 w-4" />,
-  [RoomStatus.CODING]: <SquareSquare className="mr-2 h-4 w-4" />,
+  [RoomStatus.CODING]: <Code2 className="mr-2 h-4 w-4" />,
   [RoomStatus.WRAPUP]: <FastForward className="mr-2 h-4 w-4" />,
   [RoomStatus.FINISHED]: <CheckCircle2 className="mr-2 h-4 w-4" />,
 };
@@ -27,7 +27,7 @@ export function HostControlPanel() {
     <Card className="w-full max-w-sm">
       <CardHeader>
         <CardTitle className="text-lg flex items-center justify-between">
-          Host Control
+          <span>Host Control</span>
           <span className="text-sm font-normal text-muted-foreground bg-muted px-2 py-1 rounded-md">
             Stage:{' '}
             <span className="font-medium text-foreground">{ROOM_STATUS_LABELS[currentStage]}</span>
@@ -51,7 +51,9 @@ export function HostControlPanel() {
                 onClick={() => handleTransition(stage)}
               >
                 {TRANSITION_ICONS[stage]}
-                Advance to {ROOM_STATUS_LABELS[stage]}
+                {stage === RoomStatus.FINISHED
+                  ? 'End Session'
+                  : `Advance to ${ROOM_STATUS_LABELS[stage]}`}
               </Button>
             ))}
           </div>
