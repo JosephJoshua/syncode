@@ -1,4 +1,4 @@
-import type { UserProfileResponse } from '@syncode/contracts';
+import type { PublicUserProfileResponse, UserProfileResponse } from '@syncode/contracts';
 import { users } from '@syncode/db';
 
 type UserProfileRecord = Pick<
@@ -12,6 +12,11 @@ type UserProfileRecord = Pick<
   | 'bio'
   | 'createdAt'
   | 'updatedAt'
+>;
+
+type PublicUserProfileRecord = Pick<
+  typeof users.$inferSelect,
+  'id' | 'username' | 'displayName' | 'avatarUrl' | 'bio' | 'createdAt'
 >;
 
 export function toUserProfile(user: UserProfileRecord): UserProfileResponse {
@@ -31,5 +36,16 @@ export function toUserProfile(user: UserProfileRecord): UserProfileResponse {
     },
     createdAt: user.createdAt.toISOString(),
     updatedAt: user.updatedAt.toISOString(),
+  };
+}
+
+export function toPublicUserProfile(user: PublicUserProfileRecord): PublicUserProfileResponse {
+  return {
+    id: user.id,
+    username: user.username,
+    displayName: user.displayName ?? null,
+    avatarUrl: user.avatarUrl ?? null,
+    bio: user.bio ?? null,
+    createdAt: user.createdAt.toISOString(),
   };
 }

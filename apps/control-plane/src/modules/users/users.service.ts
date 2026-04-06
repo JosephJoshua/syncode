@@ -5,13 +5,18 @@ import {
   NotFoundException,
   NotImplementedException,
 } from '@nestjs/common';
-import { ERROR_CODES, type UpdateUserInput, type UserProfileResponse } from '@syncode/contracts';
+import {
+  ERROR_CODES,
+  type PublicUserProfileResponse,
+  type UpdateUserInput,
+  type UserProfileResponse,
+} from '@syncode/contracts';
 import type { Database } from '@syncode/db';
 import { users } from '@syncode/db';
 import { and, eq, isNull, ne } from 'drizzle-orm';
 import { DB_CLIENT } from '@/modules/db/db.module';
 import { AuthService } from '../auth/auth.service';
-import { toUserProfile } from './user-profile.mapper';
+import { toPublicUserProfile, toUserProfile } from './user-profile.mapper';
 
 @Injectable()
 export class UsersService {
@@ -25,6 +30,15 @@ export class UsersService {
     bio: true,
     createdAt: true,
     updatedAt: true,
+  } as const;
+
+  private static readonly publicUserProfileColumns = {
+    id: true,
+    username: true,
+    displayName: true,
+    avatarUrl: true,
+    bio: true,
+    createdAt: true,
   } as const;
 
   constructor(
@@ -43,6 +57,22 @@ export class UsersService {
     }
 
     return toUserProfile(user);
+  }
+
+  async findPublicById(id: string): Promise<PublicUserProfileResponse> {
+    const user = await this.db.query.users.findFirst({
+      columns: UsersService.publicUserProfileColumns,
+      where: (table) => and(eq(table.id, id), isNull(table.deletedAt)),
+    });
+
+    if (!user) {
+      throw new NotFoundException({
+        message: 'User not found',
+        code: ERROR_CODES.USER_NOT_FOUND,
+      });
+    }
+
+    return toPublicUserProfile(user);
   }
 
   async findByEmail(email: string): Promise<UserProfileResponse | null> {

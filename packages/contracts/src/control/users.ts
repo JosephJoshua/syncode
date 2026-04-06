@@ -80,3 +80,36 @@ export const userProfileResponseSchema = z.object({
 });
 
 export type UserProfileResponse = z.infer<typeof userProfileResponseSchema>;
+
+export const publicUserProfileResponseSchema = z.object({
+  id: z
+    .uuid()
+    .describe('User ID')
+    .meta({ examples: ['497f6eca-6276-4993-bfeb-53cbbbba6f08'] }),
+  username: z
+    .string()
+    .describe('Username')
+    .meta({ examples: ['syncoder_01'] }),
+  displayName: z
+    .string()
+    .nullable()
+    .describe('Display name')
+    .meta({ examples: ['Jane Doe'] }),
+  avatarUrl: z
+    .string()
+    .nullable()
+    .describe('Avatar URL')
+    .meta({ examples: ['https://cdn.syncode.app/avatar.png'] }),
+  bio: z
+    .string()
+    .nullable()
+    .describe('User bio')
+    .meta({ examples: ['I love algorithms.'] }),
+  createdAt: z
+    .string()
+    .datetime()
+    .describe('Account creation timestamp')
+    .meta({ examples: ['2019-08-24T14:15:22.123Z'] }),
+});
+
+export type PublicUserProfileResponse = z.infer<typeof publicUserProfileResponseSchema>;

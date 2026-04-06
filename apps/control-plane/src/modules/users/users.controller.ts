@@ -21,7 +21,11 @@ import { CONTROL_API } from '@syncode/contracts';
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
 import { ErrorResponseDto } from '@/common/dto/error-response.dto';
 import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard';
-import { UpdateUserDto, UserProfileResponseDto } from './dto/user.dto.js';
+import {
+  PublicUserProfileResponseDto,
+  UpdateUserDto,
+  UserProfileResponseDto,
+} from './dto/user.dto.js';
 import { UsersService } from './users.service.js';
 
 /**
@@ -47,14 +51,22 @@ export class UsersController {
   }
 
   @Get(CONTROL_API.USERS.GET_BY_ID.route)
-  @ApiOperation({ summary: 'Get user by ID (TODO)' })
-  @ApiParam({ name: 'id', description: 'User ID', example: 'clx1a2b3c' })
-  @ApiResponse({ status: 200, type: UserProfileResponseDto, description: 'User profile' })
+  @ApiOperation({ summary: 'Get public user profile by ID' })
+  @ApiParam({
+    name: 'id',
+    description: 'User ID',
+    example: '497f6eca-6276-4993-bfeb-53cbbbba6f08',
+  })
+  @ApiResponse({
+    status: 200,
+    type: PublicUserProfileResponseDto,
+    description: 'Public user profile',
+  })
   @ApiResponse({ status: 401, type: ErrorResponseDto, description: 'Unauthorized' })
   @ApiResponse({ status: 404, type: ErrorResponseDto, description: 'User not found' })
   @ApiResponse({ status: 500, type: ErrorResponseDto, description: 'Internal server error' })
-  async getUserById(@Param('id') id: string): Promise<UserProfileResponseDto> {
-    return this.usersService.findById(id);
+  async getUserById(@Param('id') id: string): Promise<PublicUserProfileResponseDto> {
+    return this.usersService.findPublicById(id);
   }
 
   @Patch(CONTROL_API.USERS.UPDATE.route)

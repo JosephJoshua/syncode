@@ -105,6 +105,68 @@ describe('GET /users/me', () => {
   });
 });
 
+describe('GET /users/:id', () => {
+  it('GIVEN valid bearer token WHEN fetching another public profile THEN returns public fields only', async () => {
+    const requester = await insertUser(db, {
+      email: 'requester@example.com',
+      username: 'requester_sync',
+    });
+    const target = await insertUser(db, {
+      email: 'alice@example.com',
+      username: 'alice_sync',
+      displayName: 'Alice',
+      bio: 'Public bio',
+    });
+    const accessToken = await jwtService.signAsync({
+      sub: requester.id,
+      email: requester.email,
+      tokenType: 'access',
+    });
+
+    const res = await request(app.getHttpServer())
+      .get(`/users/${target.id}`)
+      .set('Authorization', `Bearer ${accessToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      id: target.id,
+      username: target.username,
+      displayName: target.displayName,
+      avatarUrl: target.avatarUrl,
+      bio: target.bio,
+      createdAt: target.createdAt.toISOString(),
+    });
+  });
+
+  it('GIVEN valid bearer token WHEN public profile is missing THEN returns 404 with user code', async () => {
+    const requester = await insertUser(db, {
+      email: 'requester@example.com',
+      username: 'requester_sync',
+    });
+    const accessToken = await jwtService.signAsync({
+      sub: requester.id,
+      email: requester.email,
+      tokenType: 'access',
+    });
+
+    const res = await request(app.getHttpServer())
+      .get('/users/497f6eca-6276-4993-bfeb-53cbbbba6f08')
+      .set('Authorization', `Bearer ${accessToken}`);
+
+    expect(res.status).toBe(404);
+    expect(res.body.code).toBe('USER_NOT_FOUND');
+    expect(res.body.message).toBe('User not found');
+  });
+
+  it('GIVEN no bearer token WHEN fetching another public profile THEN returns 401', async () => {
+    const res = await request(app.getHttpServer()).get(
+      '/users/497f6eca-6276-4993-bfeb-53cbbbba6f08',
+    );
+
+    expect(res.status).toBe(401);
+  });
+});
+
 describe('PATCH /users/me', () => {
   it('GIVEN valid bearer token and body WHEN updating current profile THEN returns updated profile', async () => {
     const user = await insertUser(db, {

@@ -4,7 +4,7 @@ import type { UsersService } from './users.service';
 
 describe('UsersController', () => {
   function createUsersControllerFixture() {
-    const usersService: Pick<UsersService, 'delete' | 'findById' | 'update'> = {
+    const usersService: Pick<UsersService, 'delete' | 'findById' | 'findPublicById' | 'update'> = {
       findById: vi.fn(async (id: string) => ({
         id,
         email: 'user@example.com',
@@ -20,6 +20,14 @@ describe('UsersController', () => {
         },
         createdAt: new Date('2026-01-01T00:00:00.000Z').toISOString(),
         updatedAt: new Date('2026-01-01T00:00:00.000Z').toISOString(),
+      })),
+      findPublicById: vi.fn(async (id: string) => ({
+        id,
+        username: 'alice',
+        displayName: null,
+        avatarUrl: null,
+        bio: null,
+        createdAt: new Date('2026-01-01T00:00:00.000Z').toISOString(),
       })),
       update: vi.fn(
         async (id: string, body: { displayName?: string; bio?: string; username?: string }) => ({
@@ -61,8 +69,9 @@ describe('UsersController', () => {
 
     const result = await controller.getUserById('user-2');
 
-    expect(usersService.findById).toHaveBeenCalledWith('user-2');
+    expect(usersService.findPublicById).toHaveBeenCalledWith('user-2');
     expect(result.id).toBe('user-2');
+    expect(result).not.toHaveProperty('email');
   });
 
   it('GIVEN authenticated user WHEN updateCurrentUser THEN delegates to service and returns updated profile', async () => {

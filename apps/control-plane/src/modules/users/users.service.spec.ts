@@ -1,4 +1,5 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
+import { ERROR_CODES } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
 import { describe, expect, it, vi } from 'vitest';
 import type { AuthService } from '../auth/auth.service';
@@ -77,6 +78,41 @@ describe('UsersService', () => {
     findFirst.mockResolvedValueOnce(null);
 
     await expect(service.findById('missing')).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('GIVEN existing user id WHEN findPublicById THEN returns public profile only', async () => {
+    const { service, findFirst } = createUsersServiceFixture();
+    findFirst.mockResolvedValueOnce({
+      id: '497f6eca-6276-4993-bfeb-53cbbbba6f08',
+      username: 'alice',
+      displayName: 'Alice',
+      avatarUrl: 'https://cdn.example.com/avatar.png',
+      bio: 'hello',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+    });
+
+    const result = await service.findPublicById('497f6eca-6276-4993-bfeb-53cbbbba6f08');
+
+    expect(result).toEqual({
+      id: '497f6eca-6276-4993-bfeb-53cbbbba6f08',
+      username: 'alice',
+      displayName: 'Alice',
+      avatarUrl: 'https://cdn.example.com/avatar.png',
+      bio: 'hello',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    });
+  });
+
+  it('GIVEN unknown user id WHEN findPublicById THEN throws not found with user code', async () => {
+    const { service, findFirst } = createUsersServiceFixture();
+    findFirst.mockResolvedValueOnce(null);
+
+    await expect(service.findPublicById('missing')).rejects.toMatchObject({
+      response: {
+        message: 'User not found',
+        code: ERROR_CODES.USER_NOT_FOUND,
+      },
+    });
   });
 
   it('GIVEN normalized email exists WHEN findByEmail THEN returns mapped profile', async () => {

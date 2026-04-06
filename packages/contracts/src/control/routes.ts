@@ -29,7 +29,11 @@ import type {
   submitResultItemSchema,
 } from './rooms.js';
 import type { sessionHistoryResponseSchema } from './sessions.js';
-import type { updateUserSchema, userProfileResponseSchema } from './users.js';
+import type {
+  publicUserProfileResponseSchema,
+  updateUserSchema,
+  userProfileResponseSchema,
+} from './users.js';
 
 export const CONTROL_API = {
   AUTH: {
@@ -46,7 +50,10 @@ export const CONTROL_API = {
   },
   USERS: {
     PROFILE: defineRoute<void, z.infer<typeof userProfileResponseSchema>>()('users/me', 'GET'),
-    GET_BY_ID: defineRoute<void, z.infer<typeof userProfileResponseSchema>>()('users/:id', 'GET'),
+    GET_BY_ID: defineRoute<void, z.infer<typeof publicUserProfileResponseSchema>>()(
+      'users/:id',
+      'GET',
+    ),
     UPDATE: defineRoute<
       z.infer<typeof updateUserSchema>,
       z.infer<typeof userProfileResponseSchema>
