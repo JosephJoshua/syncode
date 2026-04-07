@@ -1,0 +1,47 @@
+{
+  "brand": "SynCode",
+  "nav": {
+    "dashboard": "Dashboard",
+    "rooms": "Rooms",
+    "problems": "Problems",
+    "bookmarks": "Bookmarks"
+  },
+  "auth": {
+    "register": "Register",
+    "logIn": "Log in",
+    "logOut": "Log out",
+    "loggingOut": "Logging out...",
+    "accountMenu": "Account menu",
+    "profile": "Profile"
+  },
+  "toast": {
+    "signedOut": "Signed out successfully.",
+    "signOutFailed": "Sign-out request failed, but your local session was cleared."
+  },
+  "retry": "Retry",
+  "cancel": "Cancel",
+  "loading": "Loading...",
+  "genericError": "Something went wrong. Please try again.",
+  "execution": {
+    "details": "Execution Details",
+    "tip": "Tip: click a case arrow to view that case log viewer.",
+    "submission": "Submission {{submissionId}}",
+    "total": "Total",
+    "passed": "Passed",
+    "failed": "Failed",
+    "errors": "Errors",
+    "totalTime": "Total Time",
+    "caseIndex": "Case #{{index}}",
+    "statusPass": "pass",
+    "statusFail": "fail",
+    "statusPending": "pending",
+    "statusTimeout": "timeout",
+    "duration": "Duration",
+    "memory": "Memory",
+    "outputDiff": "Output Diff",
+    "logViewer": "Execution Log Viewer",
+    "stdout": "stdout",
+    "stderr": "stderr",
+    "empty": "(empty)"
+  }
+}

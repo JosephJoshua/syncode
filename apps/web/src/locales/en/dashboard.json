@@ -1,0 +1,53 @@
+{
+  "heading": "Welcome back, {{name}}",
+  "headingNoName": "Welcome back",
+  "sub": "Review your recent sessions, track your pass rate, and jump into your next practice.",
+  "stats": {
+    "totalSessions": "Total Sessions",
+    "passRate": "Pass Rate",
+    "averageScore": "Average Score",
+    "practiceTime": "Practice Time"
+  },
+  "recentSessions": "Recent Sessions",
+  "search": {
+    "placeholder": "Search by problem name"
+  },
+  "filter": {
+    "all": "All sessions",
+    "passedOnly": "Passed only",
+    "failedOnly": "Failed only"
+  },
+  "sort": {
+    "dateNewest": "Date: Newest first",
+    "dateOldest": "Date: Oldest first",
+    "scoreHigh": "Score: High to low",
+    "scoreLow": "Score: Low to high",
+    "duration": "Duration"
+  },
+  "table": {
+    "date": "Date",
+    "problem": "Problem",
+    "partner": "Partner",
+    "observer": "Observer",
+    "role": "Role",
+    "status": "Status",
+    "score": "Score",
+    "duration": "Duration"
+  },
+  "status": {
+    "pass": "Pass",
+    "failed": "Failed"
+  },
+  "empty": {
+    "loadingTitle": "Loading sessions",
+    "loadingDescription": "We're pulling your recent interview history from the sessions endpoint.",
+    "unavailableTitle": "Session history unavailable",
+    "unavailableDescription": "Session history will appear once your account session is ready.",
+    "errorTitle": "Unable to load sessions",
+    "errorDescription": "Session history could not be retrieved right now. Try again in a moment.",
+    "noMatchTitle": "No matching sessions",
+    "noMatchDescription": "Try adjusting your search, filter, or sort settings to surface more session history.",
+    "noSessionsTitle": "No sessions yet",
+    "noSessionsDescription": "Your completed interview practices will appear here once you start training."
+  }
+}

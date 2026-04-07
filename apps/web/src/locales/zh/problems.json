@@ -1,0 +1,16 @@
+{
+  "heading": "题库",
+  "sub": {
+    "loading": "加载题目中...",
+    "count": "{{count}} 道题目"
+  },
+  "error": {
+    "withStatusCode": "{{statusCode}} 错误",
+    "requestError": "请求错误",
+    "unableToLoad": "无法加载题目详情",
+    "notFound": "该 URL 对应的题目未找到。",
+    "cannotLoad": "当前无法加载此题目。",
+    "unexpected": "加载题目时发生意外错误。"
+  },
+  "loading": "加载题目详情..."
+}

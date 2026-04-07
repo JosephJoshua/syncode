@@ -1,0 +1,16 @@
+{
+  "heading": "Problem Library",
+  "sub": {
+    "loading": "Loading problems...",
+    "count": "{{count}} problems"
+  },
+  "error": {
+    "withStatusCode": "{{statusCode}} Error",
+    "requestError": "Request Error",
+    "unableToLoad": "Unable to load problem details",
+    "notFound": "The requested problem could not be found for this URL.",
+    "cannotLoad": "We could not load this problem right now.",
+    "unexpected": "An unexpected error occurred while loading this problem."
+  },
+  "loading": "Loading problem details..."
+}

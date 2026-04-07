@@ -1,0 +1,39 @@
+{
+  "badge": "欢迎回来",
+  "heading": "登录 SynCode",
+  "sub": "继续你的协作练习之旅。",
+  "cardTitle": "登录",
+  "cardDescription": "使用邮箱或用户名继续。",
+  "field": {
+    "emailOrUsername": "邮箱或用户名",
+    "emailOrUsernamePlaceholder": "you@example.com",
+    "password": "密码",
+    "passwordPlaceholder": "输入你的密码"
+  },
+  "validation": {
+    "emailOrUsernameRequired": "请输入邮箱地址或用户名。",
+    "passwordRequired": "请输入密码。"
+  },
+  "button": {
+    "logIn": "登录",
+    "signingIn": "正在登录...",
+    "success": "登录成功"
+  },
+  "statusBar": {
+    "encrypted": "加密连接",
+    "tls": "TLS 1.3"
+  },
+  "footer": {
+    "needAccount": "还没有账号？",
+    "registerNow": "立即注册"
+  },
+  "toast": {
+    "signedIn": "登录成功。"
+  },
+  "error": {
+    "invalidCredentials": "用户名、邮箱或密码无效，请重试。",
+    "accountSuspended": "此账号已被停用，请联系客服。",
+    "checkCredentials": "请检查你的登录凭据后重试。",
+    "cannotSignIn": "当前无法完成登录，请稍后再试。"
+  }
+}
