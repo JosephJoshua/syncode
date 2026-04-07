@@ -13,8 +13,8 @@ import {
   type ProblemDifficulty,
   type ProblemStatus,
   STATUS_OPTIONS,
-} from './problems.mock';
-import type { ProblemTagInfo } from './problems-tags.mock';
+} from './problems.types';
+import type { ProblemTagInfo } from './problems-tags';
 
 interface FilterOptionProps {
   id: string;

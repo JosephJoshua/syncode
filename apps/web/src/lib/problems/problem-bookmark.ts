@@ -2,8 +2,7 @@ import { CONTROL_API, type ProblemDetail } from '@syncode/contracts';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { ApiError, api, readApiError } from '@/lib/api-client';
-import { getProblemDetailQueryKey, isProblemDetailMockEnabled } from './problem-detail';
-import { setMockProblemBookmark } from './problem-detail.mock';
+import { getProblemDetailQueryKey } from './problem-detail';
 
 type ToggleBookmarkVariables = {
   currentIsBookmarked: boolean;
@@ -14,11 +13,6 @@ type ToggleBookmarkContext = {
 };
 
 async function setBookmark(problemId: string, bookmarked: boolean) {
-  if (isProblemDetailMockEnabled()) {
-    setMockProblemBookmark(problemId, bookmarked);
-    return;
-  }
-
   const route = bookmarked ? CONTROL_API.BOOKMARKS.ADD : CONTROL_API.BOOKMARKS.REMOVE;
 
   try {

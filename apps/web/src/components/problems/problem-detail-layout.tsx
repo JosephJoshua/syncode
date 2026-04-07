@@ -6,7 +6,6 @@ import type { ReactNode } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import Markdown from 'react-markdown';
 import { useToggleProblemBookmarkMutation } from '@/lib/problems/problem-bookmark';
-import { isProblemDetailMockEnabled } from '@/lib/problems/problem-detail';
 import { useAuthStore } from '@/stores/auth.store';
 import { StarterCodeBlock } from './starter-code-block';
 import { formatStarterLanguageLabel } from './starter-code-language';
@@ -20,7 +19,6 @@ export function ProblemDetailLayout({ problem }: { problem: ProblemDetail }) {
     [problem.testCases],
   );
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-  const canToggleBookmark = isAuthenticated || isProblemDetailMockEnabled();
   const toggleBookmarkMutation = useToggleProblemBookmarkMutation(problem.id);
 
   useEffect(() => {
@@ -42,7 +40,7 @@ export function ProblemDetailLayout({ problem }: { problem: ProblemDetail }) {
       <div className="space-y-7">
         <ProblemHeader
           problem={problem}
-          canToggleBookmark={canToggleBookmark}
+          canToggleBookmark={isAuthenticated}
           isBookmarkPending={toggleBookmarkMutation.isPending}
           onToggleBookmark={() =>
             toggleBookmarkMutation.mutate({

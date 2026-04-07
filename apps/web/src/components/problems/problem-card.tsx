@@ -1,5 +1,5 @@
 import { Badge, Card, CardContent, CardHeader, CardTitle, Progress } from '@syncode/ui';
-import type { ProblemDifficulty, ProblemItem } from './problems.mock';
+import type { ProblemDifficulty, ProblemItem } from './problems.types';
 
 const difficultyBadgeVariant: Record<ProblemDifficulty, 'success' | 'warning' | 'destructive'> = {
   Easy: 'success',

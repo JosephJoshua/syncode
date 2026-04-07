@@ -6,10 +6,6 @@ import {
   sessionHistoryResponseSchema,
 } from '@syncode/contracts';
 import { api } from '@/lib/api-client';
-import {
-  MOCK_SESSION_HISTORY_RESPONSE,
-  MOCK_SESSION_HISTORY_VIEWER_ID,
-} from '@/lib/session-history.mock';
 
 export type SessionRole = 'candidate' | 'interviewer' | 'observer';
 export type SessionStatus = 'passed' | 'failed' | null;
@@ -54,8 +50,6 @@ export type DashboardSessionHistory = {
   rows: SessionRow[];
   stats: DashboardStats;
 };
-
-export type DashboardSessionHistorySource = 'api' | 'mock';
 
 export type DashboardSessionRecord = {
   id: string;
@@ -123,29 +117,6 @@ export async function fetchDashboardSessionHistory(currentUserId: string) {
   const response = await fetchAllSessionHistory();
 
   return buildDashboardSessionHistory(response, currentUserId);
-}
-
-export async function loadDashboardSessionHistory({
-  source,
-  currentUserId,
-}: {
-  source: DashboardSessionHistorySource;
-  currentUserId: string | null;
-}) {
-  if (source === 'mock') {
-    return buildDashboardSessionHistory(
-      MOCK_SESSION_HISTORY_RESPONSE,
-      currentUserId ?? MOCK_SESSION_HISTORY_VIEWER_ID,
-    );
-  }
-
-  if (!currentUserId) {
-    throw new Error(
-      'A current user id is required when loading dashboard session history from the API.',
-    );
-  }
-
-  return fetchDashboardSessionHistory(currentUserId);
 }
 
 export function buildDashboardSessionHistory(

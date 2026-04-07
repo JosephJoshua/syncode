@@ -8,7 +8,7 @@ import {
   SelectValue,
 } from '@syncode/ui';
 import { X } from 'lucide-react';
-import { type ProblemSortKey, SORT_OPTIONS } from './problems.mock';
+import { type ProblemSortKey, SORT_OPTIONS } from './problems.types';
 
 const activeFilterColor = 'var(--primary)';
 const activeFilterSoft = 'color-mix(in oklch, var(--primary) 16%, transparent)';
