@@ -9,7 +9,7 @@
   },
   "form": {
     "title": "编辑资料",
-    "description": "保持你的公开资料为最新状态。更改用户名会影响他人找到你的方式。",
+    "description": "确保你的公开资料是最新的。更改用户名会影响他人如何找到你。",
     "usernameHelp": "3-30 个字符，仅限字母、数字和下划线。",
     "displayNameHelp": "可选。显示在你的个人资料和共享空间中。",
     "bioHelp": "可选。最多 500 个字符。"
@@ -32,9 +32,18 @@
   "quotas": {
     "heading": "使用配额",
     "description": "当前每日计数器和活跃房间上限。",
+    "ai": "AI",
+    "execution": "执行",
+    "rooms": "房间",
     "dailyLimit": "每日限额",
     "activeRooms": "活跃房间",
-    "resetsAt": "{{time}} 重置"
+    "resetsAt": "{{time}} 重置",
+    "soon": "即将"
+  },
+  "validation": {
+    "usernameMinLength": "用户名至少需要 3 个字符。",
+    "usernameMaxLength": "用户名不能超过 30 个字符。",
+    "usernamePattern": "用户名只能包含字母、数字和下划线。"
   },
   "dangerZone": {
     "heading": "危险操作",

@@ -38,6 +38,15 @@
     "pass": "Pass",
     "failed": "Failed"
   },
+  "aria": {
+    "filterSessions": "Filter sessions",
+    "sortSessions": "Sort sessions"
+  },
+  "role": {
+    "candidate": "Candidate",
+    "interviewer": "Interviewer",
+    "observer": "Observer"
+  },
   "empty": {
     "loadingTitle": "Loading sessions",
     "loadingDescription": "We're pulling your recent interview history from the sessions endpoint.",

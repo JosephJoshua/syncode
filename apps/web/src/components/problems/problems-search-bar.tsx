@@ -15,7 +15,7 @@ export function ProblemsSearchBar({ value, onChange }: ProblemsSearchBarProps) {
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={t('search.placeholder')}
-        aria-label="Search problems"
+        aria-label={t('search.ariaLabel')}
         className="h-12 w-full rounded-xl border-0 bg-transparent px-3 py-2.5 pl-10 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-0 focus:outline-none focus:ring-0 focus-visible:border-0 focus-visible:outline-none focus-visible:ring-0"
       />
     </div>

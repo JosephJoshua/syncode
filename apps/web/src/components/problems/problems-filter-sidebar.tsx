@@ -14,8 +14,8 @@ import {
   type ProblemDifficulty,
   type ProblemStatus,
   STATUS_OPTIONS,
-} from './problems.types';
-import type { ProblemTagInfo } from './problems-tags';
+} from './problems.types.js';
+import type { ProblemTagInfo } from './problems-tags.js';
 
 interface FilterOptionProps {
   id: string;
@@ -92,7 +92,7 @@ export function ProblemsFilterSidebar({
               <FilterOption
                 key={difficulty}
                 id={`difficulty-${difficulty}`}
-                label={difficulty}
+                label={t(`filter.${difficulty.toLowerCase()}`)}
                 checked={selectedDifficulties.includes(difficulty)}
                 count={difficultyCounts[difficulty]}
                 onCheckedChange={() => onToggleDifficulty(difficulty)}
@@ -112,7 +112,9 @@ export function ProblemsFilterSidebar({
               <FilterOption
                 key={status}
                 id={`status-${status}`}
-                label={status === 'Todo' ? t('filter.todoNotDone') : status}
+                label={
+                  status === 'Todo' ? t('filter.todoNotDone') : t(`filter.${status.toLowerCase()}`)
+                }
                 checked={selectedStatuses.includes(status)}
                 count={statusCounts[status]}
                 onCheckedChange={() => onToggleStatus(status)}

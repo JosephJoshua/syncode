@@ -19,14 +19,15 @@ import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { z } from 'zod';
-import { GlowOrb, PageBackground } from '@/components/background';
-import { FloatingSymbols } from '@/components/floating-symbols';
-import { AnimatedFormField } from '@/components/form-field';
-import { CursorSpotlight } from '@/components/spotlight';
-import { TiltCard } from '@/components/tilt';
-import { api, readApiError } from '@/lib/api-client';
-import { requireGuest } from '@/lib/auth';
-import { resolveRegisterFormError } from '@/lib/auth-form-errors';
+import { GlowOrb, PageBackground } from '@/components/background.js';
+import { FloatingSymbols } from '@/components/floating-symbols.js';
+import { AnimatedFormField } from '@/components/form-field.js';
+import { CursorSpotlight } from '@/components/spotlight.js';
+import { TiltCard } from '@/components/tilt.js';
+import { api, readApiError } from '@/lib/api-client.js';
+import { requireGuest } from '@/lib/auth.js';
+import { resolveRegisterFormError } from '@/lib/auth-form-errors.js';
+import i18n from '@/lib/i18n.js';
 
 export const Route = createFileRoute('/register')({
   beforeLoad: requireGuest,
@@ -40,19 +41,19 @@ const registerFormSchema = z
     username: z
       .string()
       .trim()
-      .min(3, 'Username must be at least 3 characters.')
-      .max(30, 'Username must be 30 characters or fewer.')
-      .regex(/^[a-zA-Z0-9_]+$/, 'Username can only contain letters, numbers, and underscores.'),
-    email: z.email('Enter a valid email address.'),
-    password: z.string().min(8, 'Password must be at least 8 characters.'),
-    confirmPassword: z.string().min(1, 'Confirm your password.'),
+      .min(3, i18n.t('register:validation.usernameMinLength'))
+      .max(30, i18n.t('register:validation.usernameMaxLength'))
+      .regex(/^[a-zA-Z0-9_]+$/, i18n.t('register:validation.usernamePattern')),
+    email: z.email(i18n.t('register:validation.emailInvalid')),
+    password: z.string().min(8, i18n.t('register:validation.passwordMinLength')),
+    confirmPassword: z.string().min(1, i18n.t('register:validation.confirmPasswordRequired')),
   })
   .superRefine(({ password, confirmPassword }, context) => {
     if (password !== confirmPassword) {
       context.addIssue({
         code: 'custom',
         path: ['confirmPassword'],
-        message: 'Passwords do not match.',
+        message: i18n.t('register:validation.passwordsMismatch'),
       });
     }
   });

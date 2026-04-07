@@ -18,6 +18,9 @@
     "signedOut": "Signed out successfully.",
     "signOutFailed": "Sign-out request failed, but your local session was cleared."
   },
+  "copyLink": "Copy link",
+  "switchLanguage": "Switch language to {{language}}",
+  "untitledProblem": "Untitled Problem",
   "retry": "Retry",
   "cancel": "Cancel",
   "loading": "Loading...",

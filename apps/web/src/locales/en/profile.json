@@ -32,9 +32,18 @@
   "quotas": {
     "heading": "Usage quotas",
     "description": "Current daily counters and active room cap.",
+    "ai": "AI",
+    "execution": "Execution",
+    "rooms": "Rooms",
     "dailyLimit": "Daily limit",
     "activeRooms": "Active rooms",
-    "resetsAt": "Resets {{time}}"
+    "resetsAt": "Resets {{time}}",
+    "soon": "soon"
+  },
+  "validation": {
+    "usernameMinLength": "Username must be at least 3 characters.",
+    "usernameMaxLength": "Username must be 30 characters or fewer.",
+    "usernamePattern": "Username can only contain letters, numbers, and underscores."
   },
   "dangerZone": {
     "heading": "Danger zone",

@@ -5,9 +5,9 @@ import { animate, motion, useInView, useMotionValue } from 'motion/react';
 import type { ReactNode } from 'react';
 import { memo, useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { GlowOrb, PageBackground } from '@/components/background';
-import { CursorSpotlight } from '@/components/spotlight';
-import { TerminalDemo } from '@/components/terminal-demo';
+import { GlowOrb, PageBackground } from '@/components/background.js';
+import { CursorSpotlight } from '@/components/spotlight.js';
+import { TerminalDemo } from '@/components/terminal-demo.js';
 
 export const Route = createFileRoute('/')({
   component: HomePage,
@@ -528,7 +528,7 @@ function HomePage() {
             <span className="font-mono text-xs text-primary/60">{t('cta.comment')}</span>
             <h2 className="mt-4 text-4xl font-bold tracking-tighter text-foreground sm:text-5xl">
               {t('cta.heading1')}{' '}
-              <span className="text-muted-foreground/30 line-through">alone</span>
+              <span className="text-muted-foreground/30 line-through">{t('cta.alone')}</span>
               <br />
               <span className="bg-linear-to-r from-primary via-primary/60 to-primary bg-[length:200%_auto] bg-clip-text text-transparent animate-[gradient-x_4s_ease-in-out_infinite]">
                 {t('cta.heading2')}

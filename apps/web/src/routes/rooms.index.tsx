@@ -1,5 +1,5 @@
 import { CONTROL_API } from '@syncode/contracts';
-import { ROOM_STATUS_LABELS, ROOM_STATUSES, RoomRole, type RoomStatus } from '@syncode/shared';
+import { ROOM_STATUSES, RoomRole, RoomStatus } from '@syncode/shared';
 import { Badge, Button, Card, cn, Input } from '@syncode/ui';
 import { useQuery } from '@tanstack/react-query';
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
@@ -20,8 +20,8 @@ import { motion } from 'motion/react';
 import type React from 'react';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { api } from '@/lib/api-client';
-import { requireAuth } from '@/lib/auth';
+import { api } from '@/lib/api-client.js';
+import { requireAuth } from '@/lib/auth.js';
 
 export const Route = createFileRoute('/rooms/')({
   beforeLoad: requireAuth,
@@ -60,10 +60,13 @@ const ROLE_LABEL_KEYS: Record<string, string> = {
   [RoomRole.SPECTATOR]: 'role.observer',
 };
 
-const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
-  { value: 'all', label: 'All' },
-  ...ROOM_STATUSES.map((s) => ({ value: s, label: ROOM_STATUS_LABELS[s] })),
-];
+const ROOM_STATUS_KEYS: Record<RoomStatus, string> = {
+  [RoomStatus.WAITING]: 'status.waiting',
+  [RoomStatus.WARMUP]: 'status.warmup',
+  [RoomStatus.CODING]: 'status.coding',
+  [RoomStatus.WRAPUP]: 'status.wrapup',
+  [RoomStatus.FINISHED]: 'status.finished',
+};
 
 function parseInviteInput(raw: string): { roomId: string; code: string } | null {
   const trimmed = raw.trim();
@@ -93,6 +96,14 @@ function RoomsPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [inviteInput, setInviteInput] = useState('');
   const [joinError, setJoinError] = useState<string | null>(null);
+
+  const statusFilters = useMemo(
+    () => [
+      { value: 'all' as StatusFilter, label: t('filter.all') },
+      ...ROOM_STATUSES.map((s) => ({ value: s as StatusFilter, label: t(ROOM_STATUS_KEYS[s]) })),
+    ],
+    [t],
+  );
 
   const roomsQuery = useQuery({
     queryKey: ['rooms', 'list', statusFilter],
@@ -201,7 +212,7 @@ function RoomsPage() {
       </Card>
 
       <div className="mb-6 flex flex-wrap gap-2">
-        {STATUS_FILTERS.map((f) => (
+        {statusFilters.map((f) => (
           <button
             key={f.value}
             type="button"
@@ -214,7 +225,7 @@ function RoomsPage() {
                 : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground',
             )}
           >
-            {f.value === 'all' ? t('filter.all') : f.label}
+            {f.label}
           </button>
         ))}
       </div>
@@ -248,7 +259,7 @@ function RoomsPage() {
             {statusFilter === 'all'
               ? t('empty.noRoomsDescription')
               : t('empty.noRoomsWithStatus', {
-                  status: STATUS_FILTERS.find((f) => f.value === statusFilter)?.label,
+                  status: statusFilters.find((f) => f.value === statusFilter)?.label,
                 })}
           </p>
         </div>
@@ -281,7 +292,7 @@ function RoomsPage() {
                         className={cn('gap-1.5 px-2.5 py-1 text-xs', styles.badge)}
                       >
                         <span className={cn('inline-block size-1.5 rounded-full', styles.dot)} />
-                        {ROOM_STATUS_LABELS[room.status as RoomStatus] ?? room.status}
+                        {t(ROOM_STATUS_KEYS[room.status as RoomStatus] ?? room.status)}
                       </Badge>
 
                       <div className="flex items-center gap-3 text-xs text-muted-foreground">

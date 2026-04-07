@@ -14,7 +14,8 @@
   },
   "loading": "Loading problem details...",
   "search": {
-    "placeholder": "Search by problem title"
+    "placeholder": "Search by problem title",
+    "ariaLabel": "Search problems"
   },
   "empty": {
     "libraryTitle": "Problem library is still empty",
@@ -27,7 +28,12 @@
     "heading": "Filters",
     "resetAll": "Reset all",
     "difficulty": "Difficulty",
+    "easy": "Easy",
+    "medium": "Medium",
+    "hard": "Hard",
     "problemStatus": "Problem Status",
+    "solved": "Solved",
+    "attempted": "Attempted",
     "todoNotDone": "Todo / Not done",
     "popularTags": "Popular Tags"
   },
@@ -35,7 +41,9 @@
     "activeFilters": "Active Filters",
     "clearAll": "Clear all",
     "noFilters": "No filters applied yet.",
-    "sortBy": "Sort by"
+    "sortBy": "Sort by",
+    "selectSort": "Select sort",
+    "removeFilter": "Remove {{label}}"
   },
   "detail": {
     "breadcrumb": "problems / {{title}}",

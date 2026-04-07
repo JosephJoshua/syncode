@@ -41,6 +41,13 @@
     "observer": "Observer",
     "unassigned": "Unassigned"
   },
+  "status": {
+    "waiting": "Waiting",
+    "warmup": "Warm-up",
+    "coding": "Coding",
+    "wrapup": "Wrap-up",
+    "finished": "Finished"
+  },
   "create": {
     "heading": "Create Workspace",
     "sub": "Setup your shared real-time coding environment",
@@ -53,7 +60,9 @@
     "publicRoomDescription": "Anyone with the link can join directly",
     "button": "Create Collaborative Room",
     "provisioning": "Provisioning Workspace...",
-    "noMatchingProblems": "No matching problems"
+    "noMatchingProblems": "No matching problems",
+    "problemRequired": "Please select a problem",
+    "createFailed": "Failed to create room. Please try again."
   },
   "success": {
     "details": "Selected Workspace Details",
@@ -105,6 +114,8 @@
     "sessionEnd": "SESSION_END"
   },
   "timer": {
-    "percent": "{{percent}}% of session"
+    "percent": "{{percent}}% of session",
+    "resumeTimer": "Resume timer",
+    "pauseTimer": "Pause timer"
   }
 }

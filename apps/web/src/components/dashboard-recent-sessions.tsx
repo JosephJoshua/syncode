@@ -27,27 +27,18 @@ import type {
   SessionRole,
   SessionRow,
   SessionStatus,
-} from '@/lib/dashboard-session-history';
-import { getUserInitial } from '@/lib/user-utils';
-import { useAuthStore } from '@/stores/auth.store';
+} from '@/lib/dashboard-session-history.js';
+import { getUserInitial } from '@/lib/user-utils.js';
+import { useAuthStore } from '@/stores/auth.store.js';
 
 type SessionFilter = 'all' | 'passed' | 'failed';
 type SessionSort = 'date-desc' | 'date-asc' | 'score-desc' | 'score-asc' | 'duration-desc';
 
-const MONTH_LABELS = [
-  'JAN',
-  'FEB',
-  'MAR',
-  'APR',
-  'MAY',
-  'JUN',
-  'JUL',
-  'AUG',
-  'SEP',
-  'OCT',
-  'NOV',
-  'DEC',
-];
+const SESSION_DATE_FORMAT = new Intl.DateTimeFormat(undefined, {
+  year: 'numeric',
+  month: 'short',
+  day: '2-digit',
+});
 
 function formatSessionDate(date: string) {
   const parsed = new Date(date);
@@ -56,7 +47,7 @@ function formatSessionDate(date: string) {
     return date;
   }
 
-  return `${parsed.getFullYear()} ${MONTH_LABELS[parsed.getMonth()]} ${String(parsed.getDate()).padStart(2, '0')}`;
+  return SESSION_DATE_FORMAT.format(parsed);
 }
 
 function getStatusBadgeVariant(status: SessionStatus) {
@@ -205,7 +196,10 @@ export function DashboardRecentSessions({
           </div>
 
           <Select value={filter} onValueChange={(value) => setFilter(value as SessionFilter)}>
-            <SelectTrigger className="w-full md:w-42.5 xl:flex-none" aria-label="Filter sessions">
+            <SelectTrigger
+              className="w-full md:w-42.5 xl:flex-none"
+              aria-label={t('aria.filterSessions')}
+            >
               <SelectValue placeholder={t('filter.all')} />
             </SelectTrigger>
             <SelectContent>
@@ -216,7 +210,10 @@ export function DashboardRecentSessions({
           </Select>
 
           <Select value={sortBy} onValueChange={(value) => setSortBy(value as SessionSort)}>
-            <SelectTrigger className="w-full md:w-57.5 xl:flex-none" aria-label="Sort sessions">
+            <SelectTrigger
+              className="w-full md:w-57.5 xl:flex-none"
+              aria-label={t('aria.sortSessions')}
+            >
               <SelectValue placeholder={t('sort.dateNewest')} />
             </SelectTrigger>
             <SelectContent>
@@ -306,9 +303,7 @@ export function DashboardRecentSessions({
                     />
                   </TableCell>
                   <TableCell className="text-center">
-                    <Badge variant={getRoleBadgeVariant(row.role)} className="capitalize">
-                      {row.role}
-                    </Badge>
+                    <Badge variant={getRoleBadgeVariant(row.role)}>{t(`role.${row.role}`)}</Badge>
                   </TableCell>
                   <TableCell className="text-center">
                     {row.role === 'candidate' && row.status ? (

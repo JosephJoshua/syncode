@@ -14,7 +14,8 @@
   },
   "loading": "加载题目详情...",
   "search": {
-    "placeholder": "按题目标题搜索"
+    "placeholder": "按题目标题搜索",
+    "ariaLabel": "搜索题目"
   },
   "empty": {
     "libraryTitle": "题库暂无内容",
@@ -27,7 +28,12 @@
     "heading": "筛选",
     "resetAll": "重置全部",
     "difficulty": "难度",
+    "easy": "简单",
+    "medium": "中等",
+    "hard": "困难",
     "problemStatus": "题目状态",
+    "solved": "已解决",
+    "attempted": "已尝试",
     "todoNotDone": "待完成 / 未做",
     "popularTags": "热门标签"
   },
@@ -35,7 +41,9 @@
     "activeFilters": "已启用筛选",
     "clearAll": "清除全部",
     "noFilters": "暂未应用任何筛选。",
-    "sortBy": "排序方式"
+    "sortBy": "排序方式",
+    "selectSort": "选择排序",
+    "removeFilter": "移除 {{label}}"
   },
   "detail": {
     "breadcrumb": "题库 / {{title}}",

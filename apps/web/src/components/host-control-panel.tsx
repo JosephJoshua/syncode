@@ -1,12 +1,21 @@
-import { getNextStatuses, ROOM_STATUS_LABELS, ROOM_STATUSES, RoomStatus } from '@syncode/shared';
+import { getNextStatuses, ROOM_STATUSES, RoomStatus } from '@syncode/shared';
 import { Button, Card, CardContent, CardHeader, CardTitle } from '@syncode/ui';
 import { CheckCircle2, Code2, FastForward, Pause, Play, PlayCircle } from 'lucide-react';
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
+const ROOM_STATUS_KEYS: Record<RoomStatus, string> = {
+  [RoomStatus.WAITING]: 'status.waiting',
+  [RoomStatus.WARMUP]: 'status.warmup',
+  [RoomStatus.CODING]: 'status.coding',
+  [RoomStatus.WRAPUP]: 'status.wrapup',
+  [RoomStatus.FINISHED]: 'status.finished',
+};
+
 const PHASE_COUNT = ROOM_STATUSES.length;
 
 function PhaseProgressBar({ currentStatus }: { currentStatus: RoomStatus }) {
+  const { t } = useTranslation('rooms');
   const currentIndex = ROOM_STATUSES.indexOf(currentStatus);
 
   return (
@@ -35,7 +44,7 @@ function PhaseProgressBar({ currentStatus }: { currentStatus: RoomStatus }) {
         })}
       </div>
       <span className="text-xs text-muted-foreground">
-        {currentIndex + 1}/{PHASE_COUNT} &middot; {ROOM_STATUS_LABELS[currentStatus]}
+        {currentIndex + 1}/{PHASE_COUNT} &middot; {t(ROOM_STATUS_KEYS[currentStatus])}
       </span>
     </div>
   );
@@ -98,7 +107,7 @@ function PhaseTimer({ running }: { running: boolean }) {
           variant="ghost"
           size="xs"
           onClick={togglePause}
-          aria-label={paused ? 'Resume timer' : 'Pause timer'}
+          aria-label={paused ? t('timer.resumeTimer') : t('timer.pauseTimer')}
         >
           {paused ? <Play className="h-3.5 w-3.5" /> : <Pause className="h-3.5 w-3.5" />}
         </Button>
@@ -153,7 +162,7 @@ export function HostControlPanel() {
                 {TRANSITION_ICONS[stage]}
                 {stage === RoomStatus.FINISHED
                   ? t('hostControl.endSession')
-                  : t('hostControl.advanceTo', { stageName: ROOM_STATUS_LABELS[stage] })}
+                  : t('hostControl.advanceTo', { stageName: t(ROOM_STATUS_KEYS[stage]) })}
               </Button>
             ))}
           </div>

@@ -13,7 +13,7 @@
   },
   "join": {
     "heading": "加入房间",
-    "description": "粘贴搭档分享的邀请链接以加入其工作区。",
+    "description": "将搭档分享的邀请链接粘贴到下方即可加入。",
     "button": "加入",
     "placeholder": "https://\u2026/rooms/abc123?code=A3K7M2",
     "error": "请粘贴有效的邀请链接（如 https://\u2026/rooms/id?code=XXXXXX）"
@@ -41,9 +41,16 @@
     "observer": "观察者",
     "unassigned": "未分配"
   },
+  "status": {
+    "waiting": "等待中",
+    "warmup": "热身",
+    "coding": "编码中",
+    "wrapup": "收尾",
+    "finished": "已结束"
+  },
   "create": {
     "heading": "创建工作区",
-    "sub": "设置你的共享实时编码环境",
+    "sub": "创建实时协作编码空间",
     "problemLabel": "待解题目",
     "languageLabel": "编程语言",
     "visibilityLabel": "可见性",
@@ -53,7 +60,9 @@
     "publicRoomDescription": "任何拥有链接的人都可以直接加入",
     "button": "创建协作房间",
     "provisioning": "正在配置工作区...",
-    "noMatchingProblems": "没有匹配的题目"
+    "noMatchingProblems": "没有匹配的题目",
+    "problemRequired": "请选择一道题目",
+    "createFailed": "创建房间失败，请重试。"
   },
   "success": {
     "details": "工作区详情",
@@ -85,7 +94,7 @@
     "cancelReady": "取消准备",
     "enterWorkspace": "进入工作区"
   },
-  "warning": "操作要求：请确保至少分配一名候选人和一名面试官方可开始。",
+  "warning": "请确保至少分配一名候选人和一名面试官才能开始。",
   "systemStatus": {
     "ready": "> SYSTEM_READY",
     "awaitingPeers": "> AWAITING_PEERS_"
@@ -105,6 +114,8 @@
     "sessionEnd": "SESSION_END"
   },
   "timer": {
-    "percent": "会话进度 {{percent}}%"
+    "percent": "会话进度 {{percent}}%",
+    "resumeTimer": "继续计时",
+    "pauseTimer": "暂停计时"
   }
 }

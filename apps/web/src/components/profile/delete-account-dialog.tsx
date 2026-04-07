@@ -81,10 +81,10 @@ export function DeleteAccountDialog({
               {isPending ? (
                 <span className="inline-flex items-center gap-2">
                   <LoaderCircle className="size-4 animate-spin" />
-                  Deleting...
+                  {t('deleteDialog.deleting')}
                 </span>
               ) : (
-                'Delete permanently'
+                t('deleteDialog.deletePermanently')
               )}
             </Button>
           </div>

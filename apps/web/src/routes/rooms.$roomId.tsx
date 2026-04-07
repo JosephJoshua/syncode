@@ -17,10 +17,10 @@ import {
 import type { ChangeEvent } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useClipboard } from '@/hooks/use-clipboard';
-import { api, readApiError } from '@/lib/api-client';
-import { requireAuth } from '@/lib/auth';
-import { useAuthStore } from '@/stores/auth.store';
+import { useClipboard } from '@/hooks/use-clipboard.js';
+import { api, readApiError } from '@/lib/api-client.js';
+import { requireAuth } from '@/lib/auth.js';
+import { useAuthStore } from '@/stores/auth.store.js';
 
 export const Route = createFileRoute('/rooms/$roomId')({
   beforeLoad: requireAuth,
@@ -222,7 +222,7 @@ function RoomLobbyPage() {
                 type="button"
                 onClick={copyInviteLink}
                 className="flex shrink-0 items-center justify-center rounded-lg bg-muted p-2.5 text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground"
-                title="Copy link"
+                title={t('common:copyLink')}
               >
                 {copied ? <Check size={16} className="text-primary" /> : <Copy size={16} />}
               </button>

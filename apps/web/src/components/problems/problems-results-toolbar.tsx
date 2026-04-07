@@ -9,7 +9,7 @@ import {
 } from '@syncode/ui';
 import { X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { type ProblemSortKey, SORT_OPTIONS } from './problems.types';
+import { type ProblemSortKey, SORT_KEYS } from './problems.types.js';
 
 const activeFilterColor = 'var(--primary)';
 const activeFilterSoft = 'color-mix(in oklch, var(--primary) 16%, transparent)';
@@ -70,7 +70,7 @@ export function ProblemsResultsToolbar({
                   onClick={filter.onRemove}
                   className="inline-flex size-3.5 items-center justify-center rounded-full transition-colors hover:bg-white/5"
                   style={{ color: activeFilterColor }}
-                  aria-label={`Remove ${filter.label}`}
+                  aria-label={t('toolbar.removeFilter', { label: filter.label })}
                 >
                   <X className="size-3" />
                 </button>
@@ -88,12 +88,12 @@ export function ProblemsResultsToolbar({
         </p>
         <Select value={sort} onValueChange={(value) => onSortChange(value as ProblemSortKey)}>
           <SelectTrigger className="h-11 rounded-2xl border-white/[0.05] bg-background/80">
-            <SelectValue placeholder="Select sort" />
+            <SelectValue placeholder={t('toolbar.selectSort')} />
           </SelectTrigger>
           <SelectContent align="end" sideOffset={8}>
-            {SORT_OPTIONS.map((option) => (
-              <SelectItem key={option.value} value={option.value}>
-                {option.label}
+            {SORT_KEYS.map((key) => (
+              <SelectItem key={key} value={key}>
+                {t(`sort.${key}`)}
               </SelectItem>
             ))}
           </SelectContent>

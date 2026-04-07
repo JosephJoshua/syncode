@@ -16,19 +16,19 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { motion } from 'motion/react';
 import { startTransition, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ProblemCard } from '@/components/problems/problem-card';
+import { ProblemCard } from '@/components/problems/problem-card.js';
 import type {
   ProblemDifficulty,
   ProblemItem,
   ProblemSortKey,
   ProblemStatus,
-} from '@/components/problems/problems.types';
-import { ProblemsEmptyState } from '@/components/problems/problems-empty-state';
-import { ProblemsFilterSidebar } from '@/components/problems/problems-filter-sidebar';
-import { ProblemsResultsToolbar } from '@/components/problems/problems-results-toolbar';
-import { ProblemsSearchBar } from '@/components/problems/problems-search-bar';
-import { formatTagSlug, type ProblemTagInfo } from '@/components/problems/problems-tags';
-import { api } from '@/lib/api-client';
+} from '@/components/problems/problems.types.js';
+import { ProblemsEmptyState } from '@/components/problems/problems-empty-state.js';
+import { ProblemsFilterSidebar } from '@/components/problems/problems-filter-sidebar.js';
+import { ProblemsResultsToolbar } from '@/components/problems/problems-results-toolbar.js';
+import { ProblemsSearchBar } from '@/components/problems/problems-search-bar.js';
+import { formatTagSlug, type ProblemTagInfo } from '@/components/problems/problems-tags.js';
+import { api } from '@/lib/api-client.js';
 
 export const Route = createFileRoute('/problems/')({
   component: ProblemsLibraryPage,
@@ -229,7 +229,7 @@ function ProblemsLibraryPage() {
   const activeFilters = [
     ...selectedDifficulties.map((difficulty) => ({
       id: `difficulty-${difficulty}`,
-      label: difficulty,
+      label: t(`filter.${difficulty.toLowerCase()}`),
       onRemove: () => {
         startTransition(() => {
           setSelectedDifficulties((current) => current.filter((item) => item !== difficulty));
@@ -239,7 +239,7 @@ function ProblemsLibraryPage() {
     })),
     ...selectedStatuses.map((status) => ({
       id: `status-${status}`,
-      label: status === 'Todo' ? 'Todo / Not done' : status,
+      label: status === 'Todo' ? t('filter.todoNotDone') : t(`filter.${status.toLowerCase()}`),
       onRemove: () => {
         startTransition(() => {
           setSelectedStatuses((current) => current.filter((item) => item !== status));

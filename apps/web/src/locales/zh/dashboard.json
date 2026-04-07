@@ -1,7 +1,7 @@
 {
   "heading": "欢迎回来，{{name}}",
   "headingNoName": "欢迎回来",
-  "sub": "回顾你的近期会话、追踪通过率，开始下一次练习。",
+  "sub": "回顾近期会话、查看通过率，开始下一次练习。",
   "stats": {
     "totalSessions": "总会话数",
     "passRate": "通过率",
@@ -38,9 +38,18 @@
     "pass": "通过",
     "failed": "失败"
   },
+  "aria": {
+    "filterSessions": "筛选会话",
+    "sortSessions": "排序会话"
+  },
+  "role": {
+    "candidate": "候选人",
+    "interviewer": "面试官",
+    "observer": "观察者"
+  },
   "empty": {
     "loadingTitle": "加载会话中",
-    "loadingDescription": "正在从会话接口拉取你的近期面试记录。",
+    "loadingDescription": "正在获取你的近期面试记录。",
     "unavailableTitle": "会话记录不可用",
     "unavailableDescription": "账户会话就绪后将显示会话历史。",
     "errorTitle": "无法加载会话",

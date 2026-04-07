@@ -1,7 +1,8 @@
 import type { UserQuotasResponse } from '@syncode/contracts';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@syncode/ui';
 import { useTranslation } from 'react-i18next';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Skeleton } from '@/components/ui/skeleton.js';
+import i18n from '@/lib/i18n.js';
 
 interface QuotasPanelProps {
   quotas: UserQuotasResponse | undefined;
@@ -12,21 +13,21 @@ export function QuotasPanel({ quotas, isLoading }: QuotasPanelProps) {
   const { t } = useTranslation('profile');
   const items = [
     {
-      label: 'AI',
+      label: t('quotas.ai'),
       value: quotas?.ai ? `${quotas.ai.used} / ${quotas.ai.limit}` : '--',
       hint: quotas?.ai
         ? t('quotas.resetsAt', { time: formatResetTime(quotas.ai.resetsAt) })
         : t('quotas.dailyLimit'),
     },
     {
-      label: 'Execution',
+      label: t('quotas.execution'),
       value: quotas?.execution ? `${quotas.execution.used} / ${quotas.execution.limit}` : '--',
       hint: quotas?.execution
         ? t('quotas.resetsAt', { time: formatResetTime(quotas.execution.resetsAt) })
         : t('quotas.dailyLimit'),
     },
     {
-      label: 'Rooms',
+      label: t('quotas.rooms'),
       value: quotas?.rooms ? `${quotas.rooms.activeCount} / ${quotas.rooms.maxActive}` : '--',
       hint: t('quotas.activeRooms'),
     },
@@ -67,7 +68,7 @@ function formatResetTime(value: string) {
   const date = new Date(value);
 
   if (Number.isNaN(date.getTime())) {
-    return 'soon';
+    return i18n.t('profile:quotas.soon');
   }
 
   return date.toLocaleString(undefined, {

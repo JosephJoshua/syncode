@@ -1,5 +1,6 @@
 import { Badge, Card, CardContent, CardHeader, CardTitle, Progress } from '@syncode/ui';
-import type { ProblemDifficulty, ProblemItem } from './problems.types';
+import { useTranslation } from 'react-i18next';
+import type { ProblemDifficulty, ProblemItem } from './problems.types.js';
 
 const difficultyBadgeVariant: Record<ProblemDifficulty, 'success' | 'warning' | 'destructive'> = {
   Easy: 'success',
@@ -13,6 +14,7 @@ export interface ProblemCardProps {
 }
 
 export function ProblemCard({ problem, tagNames }: ProblemCardProps) {
+  const { t } = useTranslation('problems');
   return (
     <Card
       size="sm"
@@ -21,7 +23,7 @@ export function ProblemCard({ problem, tagNames }: ProblemCardProps) {
       <CardHeader className="gap-3">
         <div className="flex items-center justify-between gap-3">
           <Badge variant={difficultyBadgeVariant[problem.difficulty]} size="sm">
-            {problem.difficulty}
+            {t(`filter.${problem.difficulty.toLowerCase()}`)}
           </Badge>
           <div className="ml-auto flex shrink-0 items-center gap-2">
             <Progress

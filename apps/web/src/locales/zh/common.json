@@ -18,6 +18,9 @@
     "signedOut": "已成功退出登录。",
     "signOutFailed": "退出请求失败，但本地会话已清除。"
   },
+  "copyLink": "复制链接",
+  "switchLanguage": "切换语言为{{language}}",
+  "untitledProblem": "未命名题目",
   "retry": "重试",
   "cancel": "取消",
   "loading": "加载中...",

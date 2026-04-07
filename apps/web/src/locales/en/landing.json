@@ -46,7 +46,8 @@
   },
   "cta": {
     "comment": "// ready?",
-    "heading1": "Stop grinding alone",
+    "heading1": "Stop grinding",
+    "alone": "alone",
     "heading2": "Start syncing.",
     "sub": "Join your peers and practice interviews the way they actually happen \u2014 together.",
     "noCreditCard": "No credit card required"
