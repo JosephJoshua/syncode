@@ -360,11 +360,7 @@ function RoomLobbyPage() {
                   >
                     {t('roleSelect.heading')}
                   </label>
-                  <Select
-                    value={myRole === 'unassigned' ? undefined : myRole}
-                    onValueChange={handleRoleChange}
-                    disabled={isReady}
-                  >
+                  <Select value={myRole} onValueChange={handleRoleChange} disabled={isReady}>
                     <SelectTrigger id="role-select">
                       <div className="flex items-center gap-2.5">
                         <UserCog size={18} className="text-muted-foreground" />
@@ -372,6 +368,7 @@ function RoomLobbyPage() {
                       </div>
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="unassigned">{t('roleSelect.placeholder')}</SelectItem>
                       {myRole === 'host' && (
                         <SelectItem value="host">{t('roleSelect.host')}</SelectItem>
                       )}

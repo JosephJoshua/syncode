@@ -99,10 +99,14 @@ function CreateRoomPage() {
   });
 
   const availableProblems = useMemo(() => {
-    return (problemsQuery.data?.data ?? []).map((p) => ({
-      value: p.id,
-      label: `${p.title} (${DIFFICULTY_KEYS[p.difficulty] != null ? i18n.t(DIFFICULTY_KEYS[p.difficulty] as string) : p.difficulty})`,
-    }));
+    return (problemsQuery.data?.data ?? []).map((p) => {
+      const difficultyKey = DIFFICULTY_KEYS[p.difficulty];
+      const difficultyLabel = difficultyKey ? i18n.t(difficultyKey) : p.difficulty;
+      return {
+        value: p.id,
+        label: `${p.title} (${difficultyLabel})`,
+      };
+    });
   }, [problemsQuery.data]);
 
   const comboboxRef = useRef<HTMLDivElement>(null);
