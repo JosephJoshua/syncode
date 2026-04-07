@@ -38,7 +38,8 @@
     "host": "Host",
     "candidate": "Candidate",
     "interviewer": "Interviewer",
-    "observer": "Observer"
+    "observer": "Observer",
+    "unassigned": "Unassigned"
   },
   "create": {
     "heading": "Create Workspace",
@@ -68,7 +69,8 @@
     "ready": "Ready",
     "connecting": "Establishing Connection...",
     "authenticating": "Authenticating and joining workspace {{roomId}}...",
-    "unableToJoin": "Unable to join room"
+    "unableToJoin": "Unable to join room",
+    "joinFailed": "Failed to join room. Please check invite link or login state."
   },
   "roleSelect": {
     "heading": "Select Your Role",

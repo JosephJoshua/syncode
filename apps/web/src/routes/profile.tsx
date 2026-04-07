@@ -209,7 +209,7 @@ async function handleProfileUpdateError(
   const apiError = await readApiError(error);
 
   if (!apiError) {
-    toast.error(i18n.t('toast.updateFailed', { ns: 'profile' }));
+    toast.error(i18n.t('profile:toast.updateFailed'));
     return;
   }
 

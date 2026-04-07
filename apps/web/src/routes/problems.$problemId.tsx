@@ -2,6 +2,7 @@ import { createFileRoute } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
 import { ProblemDetailLayout } from '@/components/problems/problem-detail-layout';
 import { ApiError } from '@/lib/api-client';
+import i18n from '@/lib/i18n';
 import { useProblemDetailQuery } from '@/lib/problems/problem-detail';
 
 export const Route = createFileRoute('/problems/$problemId')({
@@ -29,7 +30,7 @@ export function ProblemDetailPage({ problemId }: { problemId: string }) {
   }
 
   if (problemDetailQuery.isError) {
-    const errorCopy = getProblemDetailErrorCopy(problemDetailQuery.error, t);
+    const errorCopy = getProblemDetailErrorCopy(problemDetailQuery.error);
 
     return (
       <div className="mx-auto max-w-5xl px-4 py-10">
@@ -49,10 +50,10 @@ export function ProblemDetailPage({ problemId }: { problemId: string }) {
   return <ProblemDetailLayout problem={problemDetailQuery.data} />;
 }
 
-function getProblemDetailErrorCopy(
-  error: unknown,
-  t: (key: string, options?: Record<string, unknown>) => string,
-) {
+function getProblemDetailErrorCopy(error: unknown) {
+  const t = (key: string, options?: Record<string, unknown>) =>
+    i18n.t(key, { ns: 'problems', ...options });
+
   if (error instanceof ApiError) {
     return {
       statusLabel: t('error.withStatusCode', { statusCode: error.response.statusCode }),

@@ -6,6 +6,7 @@ import type { ReactNode } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import Markdown from 'react-markdown';
+import i18n from '@/lib/i18n';
 import { useToggleProblemBookmarkMutation } from '@/lib/problems/problem-bookmark';
 import { useAuthStore } from '@/stores/auth.store';
 import { StarterCodeBlock } from './starter-code-block';
@@ -204,12 +205,12 @@ function SummaryRail({ problem }: { problem: ProblemDetail }) {
         />
         <SummaryStat
           label={t('detail.totalSubmissions')}
-          value={problem.totalSubmissions.toLocaleString('en-US')}
+          value={problem.totalSubmissions.toLocaleString()}
         />
         <SummaryStat label={t('detail.yourAttempts')} value={problem.userAttempts.toString()} />
         <SummaryStat
           label={t('detail.currentStatus')}
-          value={formatAttemptStatus(problem.attemptStatus, t)}
+          value={formatAttemptStatus(problem.attemptStatus)}
         />
       </dl>
     </div>
@@ -419,18 +420,17 @@ function DifficultyBadge({ difficulty }: { difficulty: ProblemDetail['difficulty
 }
 
 function AttemptStatusBadge({ attemptStatus }: { attemptStatus: ProblemDetail['attemptStatus'] }) {
-  const { t } = useTranslation('problems');
   if (attemptStatus) {
     return (
       <span className="inline-flex rounded-full border border-violet-400/34 bg-violet-500/16 px-3 py-1.5 text-xs font-semibold text-violet-300 ring-1 ring-violet-400/12">
-        {formatAttemptStatus(attemptStatus, t)}
+        {formatAttemptStatus(attemptStatus)}
       </span>
     );
   }
 
   return (
     <span className="inline-flex rounded-full border border-violet-400/24 bg-violet-500/10 px-3 py-1.5 text-xs font-medium text-violet-200/90 ring-1 ring-violet-400/8">
-      {formatAttemptStatus(attemptStatus, t)}
+      {formatAttemptStatus(attemptStatus)}
     </span>
   );
 }
@@ -443,20 +443,20 @@ function getStarterLanguages(starterCode: ProblemDetail['starterCode']) {
   return SUPPORTED_LANGUAGES.filter((language) => typeof starterCode[language] === 'string');
 }
 
-function formatAttemptStatus(status: ProblemDetail['attemptStatus'], t: (key: string) => string) {
+function formatAttemptStatus(status: ProblemDetail['attemptStatus']) {
   if (status === 'solved') {
-    return t('detail.solved');
+    return i18n.t('detail.solved', { ns: 'problems' });
   }
 
   if (status === 'attempted') {
-    return t('detail.attempted');
+    return i18n.t('detail.attempted', { ns: 'problems' });
   }
 
-  return t('detail.noAttemptsYet');
+  return i18n.t('detail.noAttemptsYet', { ns: 'problems' });
 }
 
 function formatDate(value: string) {
-  return new Date(value).toLocaleString('en-US', {
+  return new Date(value).toLocaleString(undefined, {
     dateStyle: 'medium',
     timeStyle: 'short',
   });

@@ -37,20 +37,13 @@ type Participant = {
   role: LobbyRole;
 };
 
-function formatRoleLabel(role: LobbyRole) {
-  switch (role) {
-    case 'host':
-      return 'Host';
-    case 'candidate':
-      return 'Candidate';
-    case 'interviewer':
-      return 'Interviewer';
-    case 'spectator':
-      return 'Observer';
-    default:
-      return 'Unassigned';
-  }
-}
+const ROLE_LABEL_KEYS: Record<LobbyRole, string> = {
+  host: 'role.host',
+  candidate: 'role.candidate',
+  interviewer: 'role.interviewer',
+  spectator: 'role.observer',
+  unassigned: 'role.unassigned',
+};
 
 function RoomLobbyPage() {
   const { t } = useTranslation('rooms');
@@ -128,14 +121,12 @@ function RoomLobbyPage() {
           }
         }
 
-        setJoinError(
-          apiError?.message ?? 'Failed to join room. Please check invite link or login state.',
-        );
+        setJoinError(apiError?.message ?? t('lobby.joinFailed'));
         setIsJoining(false);
       }
     };
     joinRoom();
-  }, [roomId, currentUserId]);
+  }, [roomId, currentUserId, t]);
 
   const handleRoleChange = (e: ChangeEvent<HTMLSelectElement>) => {
     const newRole = e.target.value as LobbyRole;
@@ -270,7 +261,7 @@ function RoomLobbyPage() {
                           {participant.username}
                           {participant.isHost && (
                             <span className="rounded bg-foreground px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-background">
-                              Host
+                              {t('role.host')}
                             </span>
                           )}
                         </span>
@@ -282,7 +273,7 @@ function RoomLobbyPage() {
                           }`}
                         >
                           <UserCog size={14} />
-                          {formatRoleLabel(participant.role)}
+                          {t(ROLE_LABEL_KEYS[participant.role])}
                         </span>
                       </div>
                     </div>
@@ -350,7 +341,7 @@ function RoomLobbyPage() {
                   onClick={toggleReady}
                 >
                   {isReady ? (
-                    <>{t('readyButton.cancelReady')}</>
+                    t('readyButton.cancelReady')
                   ) : (
                     <>
                       <CheckCircle2 size={20} /> {t('readyButton.ready')}

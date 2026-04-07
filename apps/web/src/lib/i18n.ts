@@ -24,7 +24,7 @@ import zhProfile from '../locales/zh/profile.json';
 import zhRegister from '../locales/zh/register.json';
 import zhRooms from '../locales/zh/rooms.json';
 
-const supportedLngs = ['en', 'zh'] as const;
+export const supportedLngs = ['en', 'zh'] as const;
 
 const namespaces = [
   'common',

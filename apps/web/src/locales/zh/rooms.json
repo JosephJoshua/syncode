@@ -38,7 +38,8 @@
     "host": "主持人",
     "candidate": "候选人",
     "interviewer": "面试官",
-    "observer": "观察者"
+    "observer": "观察者",
+    "unassigned": "未分配"
   },
   "create": {
     "heading": "创建工作区",
@@ -68,7 +69,8 @@
     "ready": "就绪",
     "connecting": "正在建立连接...",
     "authenticating": "正在认证并加入工作区 {{roomId}}...",
-    "unableToJoin": "无法加入房间"
+    "unableToJoin": "无法加入房间",
+    "joinFailed": "加入房间失败，请检查邀请链接或登录状态。"
   },
   "roleSelect": {
     "heading": "选择你的角色",
