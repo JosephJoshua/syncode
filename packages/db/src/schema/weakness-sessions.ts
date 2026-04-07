@@ -1,6 +1,6 @@
 import { index, pgTable, primaryKey, uuid } from 'drizzle-orm/pg-core';
-import { sessions } from './sessions';
-import { userWeaknesses } from './user-weaknesses';
+import { sessions } from './sessions.js';
+import { userWeaknesses } from './user-weaknesses.js';
 
 export const weaknessSessions = pgTable(
   'weakness_sessions',

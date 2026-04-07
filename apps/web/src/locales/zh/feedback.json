@@ -1,0 +1,30 @@
+{
+  "heading": "反馈展示",
+  "notFound": {
+    "description": "未找到此会话，因此反馈占位内容暂时无法显示。",
+    "invalidSessionId": "无效的会话 ID：{{sessionId}}"
+  },
+  "found": {
+    "description": "查看此会话特定反馈展示的当前占位布局。"
+  },
+  "label": {
+    "sessionFeedback": "会话反馈",
+    "summary": "总结",
+    "focusAreas": "重点领域",
+    "nextIteration": "下一步改进"
+  },
+  "placeholder": "会话 {{sessionId}} 目前使用针对 {{problemName}} 的占位评语。最终版本将以结构化的会话专属反馈内容替换此区块。",
+  "focusItems": {
+    "clarify": "明确问题定义和边界情况的沟通。",
+    "pacing": "改善推理解题路径时的节奏把控。",
+    "explanation": "加强权衡讨论中的解释质量。"
+  },
+  "nextIteration": "此区域后续将用于具体的会话建议、代码审查意见和沟通反馈。",
+  "details": {
+    "heading": "会话详情",
+    "sessionId": "会话 ID",
+    "role": "角色",
+    "date": "日期",
+    "duration": "时长"
+  }
+}

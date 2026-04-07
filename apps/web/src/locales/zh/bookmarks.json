@@ -1,0 +1,13 @@
+{
+  "heading": "收藏夹",
+  "sub": {
+    "loading": "加载收藏中...",
+    "count_one": "{{count}} 道已收藏题目",
+    "count_other": "{{count}} 道已收藏题目"
+  },
+  "empty": {
+    "title": "暂无收藏",
+    "description": "从题库中收藏题目，方便在这里快速访问。",
+    "browseProblems": "浏览题库"
+  }
+}

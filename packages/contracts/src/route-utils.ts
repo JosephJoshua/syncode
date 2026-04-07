@@ -26,15 +26,21 @@ export function buildUrl<T extends string>(
 ): string {
   const params = args[0] as Record<string, string> | undefined;
   if (!params) return template;
-  return template.replace(/:(\w+)/g, (_, key) => encodeURIComponent(params[key] as string));
+  return template.replaceAll(/:(\w+)/g, (_, key) => encodeURIComponent(params[key] as string));
 }
 
 /**
  * Phantom-typed route. Request/Response types exist only at the type level.
+ *
+ * The `__brand` field carries phantom types through TypeScript's structural
+ * type system so that `RequestOf` / `ResponseOf` can extract them via
+ * conditional type inference.
  */
 export interface TypedRoute<_TReq = void, _TRes = void> {
   readonly route: string;
   readonly method: string;
+  /** @internal - enables phantom type inference; never set at runtime. */
+  readonly __brand?: { req: _TReq; res: _TRes };
 }
 
 /** Extract the Request type from a TypedRoute */

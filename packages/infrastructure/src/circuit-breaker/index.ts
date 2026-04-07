@@ -4,24 +4,24 @@ export {
   LIVEKIT_ADAPTER_CIRCUIT_CONFIG,
   REDIS_ADAPTER_CIRCUIT_CONFIG,
   S3_ADAPTER_CIRCUIT_CONFIG,
-} from './adapter-configs';
-export { CircuitBreakerAdapter } from './circuit-breaker.adapter';
-export { CircuitBreakerModule } from './circuit-breaker.module';
-export { Circuit } from './circuit-state';
+} from './adapter-configs.js';
+export { CircuitBreakerAdapter } from './circuit-breaker.adapter.js';
+export { CircuitBreakerModule } from './circuit-breaker.module.js';
+export { Circuit } from './circuit-state.js';
 export {
   type CircuitName,
   DEFAULT_CIRCUIT_CONFIGS,
   getDefaultCircuitConfig,
-} from './config';
+} from './config.js';
 export {
   createProtectedBullMqAdapter,
   createProtectedCollabClient,
   createProtectedLiveKitAdapter,
   createProtectedRedisAdapter,
   createProtectedS3Adapter,
-} from './factories';
+} from './factories.js';
 export {
   type AdapterCircuitConfig,
   createCircuitBreakerProxy,
   type MethodCircuitConfig,
-} from './proxy';
+} from './proxy.js';

@@ -1,4 +1,4 @@
-import type { RoomParticipant, RoomStatus } from './room';
+import type { RoomParticipant, RoomStatus } from './room.js';
 
 export const RoomEvent = {
   // Connection

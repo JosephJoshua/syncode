@@ -9,38 +9,221 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as RegisterRouteImport } from './routes/register'
+import { Route as ProfileRouteImport } from './routes/profile'
+import { Route as LoginRouteImport } from './routes/login'
+import { Route as DashboardRouteImport } from './routes/dashboard'
+import { Route as BookmarksRouteImport } from './routes/bookmarks'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as RoomsIndexRouteImport } from './routes/rooms.index'
+import { Route as ProblemsIndexRouteImport } from './routes/problems.index'
+import { Route as RoomsCreateRouteImport } from './routes/rooms.create'
+import { Route as RoomsRoomIdRouteImport } from './routes/rooms.$roomId'
+import { Route as ProblemsProblemIdRouteImport } from './routes/problems.$problemId'
+import { Route as SessionsSessionIdFeedbackRouteImport } from './routes/sessions.$sessionId.feedback'
 
+const RegisterRoute = RegisterRouteImport.update({
+  id: '/register',
+  path: '/register',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProfileRoute = ProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DashboardRoute = DashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BookmarksRoute = BookmarksRouteImport.update({
+  id: '/bookmarks',
+  path: '/bookmarks',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const RoomsIndexRoute = RoomsIndexRouteImport.update({
+  id: '/rooms/',
+  path: '/rooms/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProblemsIndexRoute = ProblemsIndexRouteImport.update({
+  id: '/problems/',
+  path: '/problems/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RoomsCreateRoute = RoomsCreateRouteImport.update({
+  id: '/rooms/create',
+  path: '/rooms/create',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RoomsRoomIdRoute = RoomsRoomIdRouteImport.update({
+  id: '/rooms/$roomId',
+  path: '/rooms/$roomId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProblemsProblemIdRoute = ProblemsProblemIdRouteImport.update({
+  id: '/problems/$problemId',
+  path: '/problems/$problemId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SessionsSessionIdFeedbackRoute =
+  SessionsSessionIdFeedbackRouteImport.update({
+    id: '/sessions/$sessionId/feedback',
+    path: '/sessions/$sessionId/feedback',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/bookmarks': typeof BookmarksRoute
+  '/dashboard': typeof DashboardRoute
+  '/login': typeof LoginRoute
+  '/profile': typeof ProfileRoute
+  '/register': typeof RegisterRoute
+  '/problems/$problemId': typeof ProblemsProblemIdRoute
+  '/rooms/$roomId': typeof RoomsRoomIdRoute
+  '/rooms/create': typeof RoomsCreateRoute
+  '/problems/': typeof ProblemsIndexRoute
+  '/rooms/': typeof RoomsIndexRoute
+  '/sessions/$sessionId/feedback': typeof SessionsSessionIdFeedbackRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/bookmarks': typeof BookmarksRoute
+  '/dashboard': typeof DashboardRoute
+  '/login': typeof LoginRoute
+  '/profile': typeof ProfileRoute
+  '/register': typeof RegisterRoute
+  '/problems/$problemId': typeof ProblemsProblemIdRoute
+  '/rooms/$roomId': typeof RoomsRoomIdRoute
+  '/rooms/create': typeof RoomsCreateRoute
+  '/problems': typeof ProblemsIndexRoute
+  '/rooms': typeof RoomsIndexRoute
+  '/sessions/$sessionId/feedback': typeof SessionsSessionIdFeedbackRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/bookmarks': typeof BookmarksRoute
+  '/dashboard': typeof DashboardRoute
+  '/login': typeof LoginRoute
+  '/profile': typeof ProfileRoute
+  '/register': typeof RegisterRoute
+  '/problems/$problemId': typeof ProblemsProblemIdRoute
+  '/rooms/$roomId': typeof RoomsRoomIdRoute
+  '/rooms/create': typeof RoomsCreateRoute
+  '/problems/': typeof ProblemsIndexRoute
+  '/rooms/': typeof RoomsIndexRoute
+  '/sessions/$sessionId/feedback': typeof SessionsSessionIdFeedbackRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/bookmarks'
+    | '/dashboard'
+    | '/login'
+    | '/profile'
+    | '/register'
+    | '/problems/$problemId'
+    | '/rooms/$roomId'
+    | '/rooms/create'
+    | '/problems/'
+    | '/rooms/'
+    | '/sessions/$sessionId/feedback'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/bookmarks'
+    | '/dashboard'
+    | '/login'
+    | '/profile'
+    | '/register'
+    | '/problems/$problemId'
+    | '/rooms/$roomId'
+    | '/rooms/create'
+    | '/problems'
+    | '/rooms'
+    | '/sessions/$sessionId/feedback'
+  id:
+    | '__root__'
+    | '/'
+    | '/bookmarks'
+    | '/dashboard'
+    | '/login'
+    | '/profile'
+    | '/register'
+    | '/problems/$problemId'
+    | '/rooms/$roomId'
+    | '/rooms/create'
+    | '/problems/'
+    | '/rooms/'
+    | '/sessions/$sessionId/feedback'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  BookmarksRoute: typeof BookmarksRoute
+  DashboardRoute: typeof DashboardRoute
+  LoginRoute: typeof LoginRoute
+  ProfileRoute: typeof ProfileRoute
+  RegisterRoute: typeof RegisterRoute
+  ProblemsProblemIdRoute: typeof ProblemsProblemIdRoute
+  RoomsRoomIdRoute: typeof RoomsRoomIdRoute
+  RoomsCreateRoute: typeof RoomsCreateRoute
+  ProblemsIndexRoute: typeof ProblemsIndexRoute
+  RoomsIndexRoute: typeof RoomsIndexRoute
+  SessionsSessionIdFeedbackRoute: typeof SessionsSessionIdFeedbackRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/register': {
+      id: '/register'
+      path: '/register'
+      fullPath: '/register'
+      preLoaderRoute: typeof RegisterRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/profile': {
+      id: '/profile'
+      path: '/profile'
+      fullPath: '/profile'
+      preLoaderRoute: typeof ProfileRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dashboard': {
+      id: '/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof DashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/bookmarks': {
+      id: '/bookmarks'
+      path: '/bookmarks'
+      fullPath: '/bookmarks'
+      preLoaderRoute: typeof BookmarksRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -48,11 +231,64 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/rooms/': {
+      id: '/rooms/'
+      path: '/rooms'
+      fullPath: '/rooms/'
+      preLoaderRoute: typeof RoomsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/problems/': {
+      id: '/problems/'
+      path: '/problems'
+      fullPath: '/problems/'
+      preLoaderRoute: typeof ProblemsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/rooms/create': {
+      id: '/rooms/create'
+      path: '/rooms/create'
+      fullPath: '/rooms/create'
+      preLoaderRoute: typeof RoomsCreateRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/rooms/$roomId': {
+      id: '/rooms/$roomId'
+      path: '/rooms/$roomId'
+      fullPath: '/rooms/$roomId'
+      preLoaderRoute: typeof RoomsRoomIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/problems/$problemId': {
+      id: '/problems/$problemId'
+      path: '/problems/$problemId'
+      fullPath: '/problems/$problemId'
+      preLoaderRoute: typeof ProblemsProblemIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sessions/$sessionId/feedback': {
+      id: '/sessions/$sessionId/feedback'
+      path: '/sessions/$sessionId/feedback'
+      fullPath: '/sessions/$sessionId/feedback'
+      preLoaderRoute: typeof SessionsSessionIdFeedbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  BookmarksRoute: BookmarksRoute,
+  DashboardRoute: DashboardRoute,
+  LoginRoute: LoginRoute,
+  ProfileRoute: ProfileRoute,
+  RegisterRoute: RegisterRoute,
+  ProblemsProblemIdRoute: ProblemsProblemIdRoute,
+  RoomsRoomIdRoute: RoomsRoomIdRoute,
+  RoomsCreateRoute: RoomsCreateRoute,
+  ProblemsIndexRoute: ProblemsIndexRoute,
+  RoomsIndexRoute: RoomsIndexRoute,
+  SessionsSessionIdFeedbackRoute: SessionsSessionIdFeedbackRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

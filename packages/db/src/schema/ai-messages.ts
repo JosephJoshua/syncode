@@ -1,8 +1,8 @@
 import { index, pgTable, text, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
-import { aiMessageRoleEnum, difficultyEnum, followUpTypeEnum } from './enums';
-import { rooms } from './rooms';
-import { sessions } from './sessions';
-import { users } from './users';
+import { aiMessageRoleEnum, difficultyEnum, followUpTypeEnum } from './enums.js';
+import { rooms } from './rooms.js';
+import { sessions } from './sessions.js';
+import { users } from './users.js';
 
 export const aiMessages = pgTable(
   'ai_messages',

@@ -8,6 +8,7 @@
     "test": "turbo run test --continue",
     "test:cov": "turbo run test:cov",
     "test:e2e": "turbo run test:e2e",
+    "test:integration": "turbo run test:integration",
     "lint": "turbo run lint",
     "lint:fix": "biome check --write .",
     "format": "biome format --write .",
@@ -17,6 +18,7 @@
     "studio": "turbo run studio",
     "db:generate": "pnpm --filter @syncode/db generate",
     "db:migrate": "pnpm --filter @syncode/db migrate",
+    "db:seed": "pnpm --filter @syncode/db seed",
     "db:studio": "pnpm --filter @syncode/db studio",
     "infra:up": "docker compose -f docker-compose.yml up -d",
     "infra:down": "docker compose down",
@@ -36,7 +38,7 @@
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx,json,css,md}": [
-      "biome check --write --no-errors-on-unmatched"
+      "pnpm exec biome check --write --no-errors-on-unmatched"
     ]
   },
   "packageManager": "pnpm@9.0.0",

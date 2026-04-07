@@ -1,6 +1,6 @@
 import { index, integer, jsonb, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
-import { rooms } from './rooms';
-import { users } from './users';
+import { rooms } from './rooms.js';
+import { users } from './users.js';
 
 export const aiReviews = pgTable(
   'ai_reviews',

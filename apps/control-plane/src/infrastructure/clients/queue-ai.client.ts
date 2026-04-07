@@ -23,7 +23,7 @@ import {
   type IQueueService,
   QUEUE_SERVICE,
 } from '@syncode/shared/ports';
-import { QueueClientHelper } from './queue-client.helpers';
+import { QueueClientHelper } from './queue-client.helpers.js';
 
 /**
  * Queue-based AI client implementation

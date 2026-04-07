@@ -12,13 +12,13 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
+    setupFiles: ['./src/test/setup.ts'],
     passWithNoTests: true,
-    setupFiles: ['./src/test-setup.ts'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html', 'lcov'],
       include: ['src/**/*.{ts,tsx}'],
-      exclude: ['src/routeTree.gen.ts', 'src/vite-env.d.ts', 'src/test-setup.ts'],
+      exclude: ['src/routeTree.gen.ts', 'src/vite-env.d.ts'],
     },
   },
 });

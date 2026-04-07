@@ -1,8 +1,8 @@
 import { index, integer, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
-import { submissionStatusEnum, supportedLanguageEnum } from './enums';
-import { problems } from './problems';
-import { rooms } from './rooms';
-import { users } from './users';
+import { submissionStatusEnum, supportedLanguageEnum } from './enums.js';
+import { problems } from './problems.js';
+import { rooms } from './rooms.js';
+import { users } from './users.js';
 
 export const submissions = pgTable(
   'submissions',

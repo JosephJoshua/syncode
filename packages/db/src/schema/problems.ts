@@ -10,8 +10,8 @@ import {
   uuid,
   varchar,
 } from 'drizzle-orm/pg-core';
-import { difficultyEnum } from './enums';
-import { timestamps } from './helpers';
+import { difficultyEnum } from './enums.js';
+import { timestamps } from './helpers.js';
 
 export const problems = pgTable(
   'problems',

@@ -1,0 +1,39 @@
+{
+  "badge": "Welcome back",
+  "heading": "Sign in to SynCode",
+  "sub": "Pick up where you left off with collaborative practice.",
+  "cardTitle": "Log in",
+  "cardDescription": "Use your email or username to continue.",
+  "field": {
+    "emailOrUsername": "Email or username",
+    "emailOrUsernamePlaceholder": "you@example.com",
+    "password": "Password",
+    "passwordPlaceholder": "Enter your password"
+  },
+  "validation": {
+    "emailOrUsernameRequired": "Enter your email address or username.",
+    "passwordRequired": "Enter your password."
+  },
+  "button": {
+    "logIn": "Log in",
+    "signingIn": "Signing in...",
+    "success": "Success"
+  },
+  "statusBar": {
+    "encrypted": "Encrypted connection",
+    "tls": "TLS 1.3"
+  },
+  "footer": {
+    "needAccount": "Need a new account?",
+    "registerNow": "Register now"
+  },
+  "toast": {
+    "signedIn": "Signed in successfully."
+  },
+  "error": {
+    "invalidCredentials": "Invalid username, email, or password. Please try again.",
+    "accountSuspended": "This account has been suspended. Please contact support.",
+    "checkCredentials": "Please check your credentials and try again.",
+    "cannotSignIn": "We could not sign you in right now."
+  }
+}

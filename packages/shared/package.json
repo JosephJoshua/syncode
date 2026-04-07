@@ -20,12 +20,19 @@
     "./ports": {
       "types": "./src/ports/index.ts",
       "default": "./dist/ports/index.js"
+    },
+    "./server": {
+      "types": "./src/server.ts",
+      "default": "./dist/server.js"
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && node ../../scripts/write-cjs-package-json.js",
+    "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
-    "lint": "biome check ."
+    "lint": "biome check .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:cov": "vitest run --coverage"
   },
   "dependencies": {
     "zod": "^4.3.6"
@@ -33,6 +40,8 @@
   "devDependencies": {
     "@syncode/tsconfig": "workspace:^",
     "@types/node": "^25.3.3",
-    "typescript": "5.9.2"
+    "@vitest/coverage-v8": "^3.0.0",
+    "typescript": "5.9.2",
+    "vitest": "^3.0.0"
   }
 }

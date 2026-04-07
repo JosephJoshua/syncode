@@ -1,38 +1,37 @@
 import { relations } from 'drizzle-orm';
-import { aiHints } from './ai-hints';
-import { aiMessages } from './ai-messages';
-import { aiReviews } from './ai-reviews';
-import { auditLogs } from './audit-logs';
-import { bookmarks } from './bookmarks';
-import { codeSnapshots } from './code-snapshots';
-import { executionResults } from './execution-results';
-import { idempotencyKeys } from './idempotency-keys';
-import { matchRequests } from './match-requests';
-import { passwordResetTokens } from './password-reset-tokens';
-import { peerFeedback } from './peer-feedback';
-import { problemTags } from './problem-tags';
-import { problems } from './problems';
-import { recordingConsents } from './recording-consents';
-import { refreshTokens } from './refresh-tokens';
-import { roleSwapRequests } from './role-swap-requests';
-import { roomParticipants } from './room-participants';
-import { rooms } from './rooms';
-import { runs } from './runs';
-import { sessionDeletions } from './session-deletions';
-import { sessionEvents } from './session-events';
-import { sessionParticipants } from './session-participants';
-import { sessionRecordings } from './session-recordings';
-import { sessionReports } from './session-reports';
-import { sessions } from './sessions';
-import { submissions } from './submissions';
-import { tags } from './tags';
-import { testCases } from './test-cases';
-import { userWeaknesses } from './user-weaknesses';
-import { users } from './users';
-import { weaknessSessions } from './weakness-sessions';
+import { aiHints } from './ai-hints.js';
+import { aiMessages } from './ai-messages.js';
+import { aiReviews } from './ai-reviews.js';
+import { auditLogs } from './audit-logs.js';
+import { bookmarks } from './bookmarks.js';
+import { codeSnapshots } from './code-snapshots.js';
+import { executionResults } from './execution-results.js';
+import { idempotencyKeys } from './idempotency-keys.js';
+import { matchRequests } from './match-requests.js';
+import { passwordResetTokens } from './password-reset-tokens.js';
+import { peerFeedback } from './peer-feedback.js';
+import { problemTags } from './problem-tags.js';
+import { problems } from './problems.js';
+import { recordingConsents } from './recording-consents.js';
+import { refreshTokens } from './refresh-tokens.js';
+import { roleSwapRequests } from './role-swap-requests.js';
+import { roomParticipants } from './room-participants.js';
+import { rooms } from './rooms.js';
+import { runs } from './runs.js';
+import { sessionDeletions } from './session-deletions.js';
+import { sessionEvents } from './session-events.js';
+import { sessionParticipants } from './session-participants.js';
+import { sessionRecordings } from './session-recordings.js';
+import { sessionReports } from './session-reports.js';
+import { sessions } from './sessions.js';
+import { submissions } from './submissions.js';
+import { tags } from './tags.js';
+import { testCases } from './test-cases.js';
+import { userWeaknesses } from './user-weaknesses.js';
+import { users } from './users.js';
+import { weaknessSessions } from './weakness-sessions.js';
 
-// ── Users ───────────────────────────────────────────────────────────────────────
-
+// Users
 export const usersRelations = relations(users, ({ many }) => ({
   refreshTokens: many(refreshTokens),
   passwordResetTokens: many(passwordResetTokens),

@@ -1,0 +1,55 @@
+{
+  "badge": "$ syncode --init",
+  "hero": {
+    "heading1": "Code interviews,",
+    "heading2": "reimagined.",
+    "sub1": "Real-time pair programming. Sandboxed execution. AI\u2011powered feedback.",
+    "sub2": "Practice like it's the real thing."
+  },
+  "button": {
+    "getStarted": "Get started",
+    "signIn": "Sign in",
+    "getStartedFree": "Get started for free"
+  },
+  "onlineBadge": "{{count}} engineers online now",
+  "features": {
+    "comment": "// what's inside",
+    "heading": "Built for engineers, by engineers.",
+    "sub": "Everything you need to simulate a real technical interview.",
+    "pairProgramming": "Pair Programming",
+    "pairProgrammingDesc": "Edit the same file at the same time. Both cursors work \u2014 no conflicts, no lag.",
+    "liveExecution": "Live Execution",
+    "liveExecutionDesc": "Hit run. See your code execute against real test cases in seconds \u2014 not a simulation.",
+    "aiFeedback": "AI Feedback",
+    "aiFeedbackDesc": "Get told where your solution is slow, what edge cases you missed, and how to fix it."
+  },
+  "stats": {
+    "languages": "Languages supported",
+    "faster": "Faster than solo prep",
+    "realTime": "Real-time editing",
+    "aiFeedback": "AI feedback available"
+  },
+  "howItWorks": {
+    "comment": "// how it works",
+    "heading": "Interview prep in three steps.",
+    "step1Title": "Spawn a room",
+    "step1Desc": "One click creates an isolated session with a shared editor and voice channel.",
+    "step2Title": "Code in sync",
+    "step2Desc": "Write code side-by-side. You both see every keystroke instantly \u2014 no copy-paste, no screen sharing.",
+    "step3Title": "Run & review",
+    "step3Desc": "Execute tests, get AI analysis, and replay sessions to improve."
+  },
+  "demo": {
+    "comment": "// see it in action",
+    "heading": "Watch it come together.",
+    "sub": "A complete interview session \u2014 from problem to passing tests \u2014 in seconds."
+  },
+  "cta": {
+    "comment": "// ready?",
+    "heading1": "Stop grinding",
+    "alone": "alone",
+    "heading2": "Start syncing.",
+    "sub": "Join your peers and practice interviews the way they actually happen \u2014 together.",
+    "noCreditCard": "No credit card required"
+  }
+}

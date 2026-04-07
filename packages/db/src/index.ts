@@ -1,4 +1,4 @@
-export type { Database } from './client';
-export { createDb } from './client';
-export { runMigrations } from './run-migrations';
-export * from './schema/index';
+export type { Database } from './client.js';
+export { createDb } from './client.js';
+export { runMigrations } from './run-migrations.js';
+export * from './schema/index.js';

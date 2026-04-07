@@ -2,7 +2,7 @@ export {
   CircuitBreakerOpenError,
   CircuitBreakerTimeoutError,
   CircuitState,
-} from './circuit-breaker';
+} from './circuit-breaker.js';
 export type {
   CursorUpdatePayload,
   ErrorPayload,
@@ -12,10 +12,26 @@ export type {
   RoomJoinPayload,
   RoomStatusChangePayload,
   SyncUpdatePayload,
-} from './events';
-export { RoomEvent } from './events';
-export type { ExecutionRequest, ExecutionResult, SupportedLanguage } from './execution';
-export type { RoomParticipant } from './room';
-export { RoomRole, RoomStatus } from './room';
-export type { UserProfile } from './user';
-export { UserRole } from './user';
+} from './events.js';
+export { RoomEvent } from './events.js';
+export type { ExecutionRequest, ExecutionResult, SupportedLanguage } from './execution.js';
+export type { ProblemAttemptStatus, ProblemDifficulty, ProblemSortBy } from './problem.js';
+export {
+  PROBLEM_ATTEMPT_STATUSES,
+  PROBLEM_DIFFICULTIES,
+  PROBLEMS_SORT_BY_OPTIONS,
+} from './problem.js';
+export type { RoomMode, RoomParticipant } from './room.js';
+export {
+  ALL_ROOM_ROLES as ROOM_ROLES,
+  getNextStatuses,
+  isValidStatusTransition,
+  JOINABLE_ROOM_ROLES as JOINABLE_ROLES,
+  ROOM_MODES,
+  ROOM_STATUS_LABELS,
+  ROOM_STATUSES,
+  RoomRole,
+  RoomStatus,
+  VALID_STATUS_TRANSITIONS,
+} from './room.js';
+export { UserRole } from './user.js';

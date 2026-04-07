@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
-import { CollaborationModule } from '../collaboration/collaboration.module';
-import { InternalController } from './internal.controller';
+import { CollaborationModule } from '../collaboration/collaboration.module.js';
+import { InternalController } from './internal.controller.js';
 
 @Module({
   imports: [CollaborationModule],

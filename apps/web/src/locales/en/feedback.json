@@ -1,0 +1,30 @@
+{
+  "heading": "Feedback Display",
+  "notFound": {
+    "description": "This session could not be found, so the feedback placeholder cannot be displayed yet.",
+    "invalidSessionId": "Invalid session id: {{sessionId}}"
+  },
+  "found": {
+    "description": "Review the current placeholder layout for this session-specific feedback display."
+  },
+  "label": {
+    "sessionFeedback": "Session Feedback",
+    "summary": "Summary",
+    "focusAreas": "Focus Areas",
+    "nextIteration": "Next Iteration"
+  },
+  "placeholder": "Session {{sessionId}} currently uses placeholder commentary tailored to {{problemName}}. The final version will replace this block with structured, session-specific feedback content.",
+  "focusItems": {
+    "clarify": "Clarify problem framing and edge-case communication.",
+    "pacing": "Improve pacing when reasoning through the solution path.",
+    "explanation": "Strengthen explanation quality during tradeoff discussion."
+  },
+  "nextIteration": "Use this space later for concrete, session-bound recommendations, code review notes, and communication feedback.",
+  "details": {
+    "heading": "Session Details",
+    "sessionId": "Session ID",
+    "role": "Role",
+    "date": "Date",
+    "duration": "Duration"
+  }
+}
