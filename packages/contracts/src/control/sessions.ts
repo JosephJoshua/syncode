@@ -1,3 +1,4 @@
+import { ROOM_MODES } from '@syncode/shared';
 import { z } from 'zod';
 import { paginationQuerySchema, paginationSchema } from './pagination.js';
 
@@ -15,7 +16,7 @@ export const sessionHistoryParticipantSchema = z.object({
 });
 
 export const listSessionsQuerySchema = paginationQuerySchema.extend({
-  mode: z.enum(['peer', 'ai']).optional().describe('Filter by session mode'),
+  mode: z.enum(ROOM_MODES).optional().describe('Filter by session mode'),
   fromDate: z.iso.datetime().optional().describe('Inclusive lower bound (ISO 8601)'),
   toDate: z.iso.datetime().optional().describe('Inclusive upper bound (ISO 8601)'),
   problemId: z.uuid().optional().describe('Filter by problem'),
@@ -27,7 +28,7 @@ export type ListSessionsQuery = z.infer<typeof listSessionsQuerySchema>;
 export const sessionSummarySchema = z.object({
   sessionId: z.uuid(),
   roomId: z.uuid(),
-  mode: z.enum(['peer', 'ai']),
+  mode: z.enum(ROOM_MODES),
   problemTitle: z.string().nullable(),
   difficulty: z.string().nullable(),
   language: z.string().nullable(),
@@ -74,7 +75,7 @@ export const sessionSubmissionSchema = z.object({
 export const sessionDetailSchema = z.object({
   sessionId: z.uuid(),
   roomId: z.uuid(),
-  mode: z.enum(['peer', 'ai']),
+  mode: z.enum(ROOM_MODES),
   problem: z
     .object({
       id: z.uuid(),

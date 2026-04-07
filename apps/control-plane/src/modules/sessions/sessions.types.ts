@@ -8,6 +8,8 @@ export interface SessionSummaryResult {
   difficulty: string | null;
   language: SupportedLanguage | null;
   duration: number;
+  /** Raw milliseconds used internally for lossless cursor encoding. */
+  durationMs: number;
   participants: SessionHistoryParticipantResult[];
   overallScore: number | null;
   hasReport: boolean;

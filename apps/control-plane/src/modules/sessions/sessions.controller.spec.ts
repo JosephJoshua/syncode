@@ -54,6 +54,7 @@ const LIST_RESULT = {
       difficulty: 'easy',
       language: 'python' as const,
       duration: 3600,
+      durationMs: 3600000,
       participants: [{ userId: 'user-1', username: 'alice', role: 'candidate' as const }],
       overallScore: 85,
       hasReport: true,
@@ -92,6 +93,7 @@ describe('SessionsController', () => {
       expect(sessionsService.listSessions).toHaveBeenCalledWith('user-1', query, false);
       expect(result.data[0].createdAt).toBe('2026-04-01T00:00:00.000Z');
       expect(result.data[0].finishedAt).toBe('2026-04-01T01:00:00.000Z');
+      expect(result.data[0]).not.toHaveProperty('durationMs');
       expect(result.pagination).toEqual({ nextCursor: null, hasMore: false });
     });
 

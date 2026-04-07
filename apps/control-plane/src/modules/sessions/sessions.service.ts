@@ -1,9 +1,5 @@
 import { ForbiddenException, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
-import {
-  ERROR_CODES,
-  type ListSessionsQuery,
-  type SESSIONS_SORT_BY_OPTIONS,
-} from '@syncode/contracts';
+import { ERROR_CODES, type ListSessionsQuery, SESSIONS_SORT_BY_OPTIONS } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
 import {
   peerFeedback,
@@ -130,7 +126,7 @@ export class SessionsService {
                 })
                 .from(sessionParticipants)
                 .innerJoin(users, eq(users.id, sessionParticipants.userId))
-                .where(sql`${sessionParticipants.sessionId} IN ${sessionIds}`)
+                .where(inArray(sessionParticipants.sessionId, sessionIds))
             : [];
 
         const participantsBySession = new Map<string, typeof participantRows>();
@@ -148,6 +144,7 @@ export class SessionsService {
           difficulty: row.difficulty ?? null,
           language: row.language,
           duration: Math.round((row.durationMs ?? 0) / 1000),
+          durationMs: row.durationMs ?? 0,
           participants: (participantsBySession.get(row.sessionId) ?? []).map((p) => ({
             userId: p.userId,
             username: p.username,
@@ -377,7 +374,7 @@ export class SessionsService {
     if (sortBy === 'overallScore' || sortBy === 'duration') {
       const cursorNum = Number(cursorSort);
       if (Number.isNaN(cursorNum)) return null;
-      const compareValue = sortBy === 'duration' ? cursorNum * 1000 : cursorNum;
+      const compareValue = cursorNum;
       return or(
         compareOp(sortColumn as Column, compareValue),
         and(eq(sortColumn as Column, compareValue), compareOp(sessions.id, cursorId)),
@@ -400,7 +397,7 @@ export class SessionsService {
       case 'overallScore':
         return row.overallScore == null ? NULL_SENTINEL : String(row.overallScore);
       case 'duration':
-        return String(row.duration);
+        return String(row.durationMs);
       default:
         return row.createdAt.toISOString();
     }

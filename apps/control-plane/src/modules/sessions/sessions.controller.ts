@@ -51,7 +51,7 @@ export class SessionsController {
     const isAdmin = await this.sessionsService.isAdmin(user.id);
     const result = await this.sessionsService.listSessions(user.id, query, isAdmin);
     return {
-      data: result.data.map((session) => ({
+      data: result.data.map(({ durationMs: _, ...session }) => ({
         ...session,
         createdAt: session.createdAt.toISOString(),
         finishedAt: session.finishedAt?.toISOString() ?? null,
