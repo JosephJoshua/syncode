@@ -121,9 +121,15 @@ function RootLayout() {
   const isDashboardPage = pathname === '/dashboard';
   const isRoomsPage = pathname.startsWith('/rooms');
   const isProblemsPage = pathname.startsWith('/problems');
+  const isBookmarksPage = pathname === '/bookmarks';
   const isProfilePage = pathname === '/profile';
   const showDashboardChrome =
-    isDashboardPage || isRoomsPage || isProblemsPage || isSessionFeedbackPage || isProfilePage;
+    isDashboardPage ||
+    isRoomsPage ||
+    isProblemsPage ||
+    isBookmarksPage ||
+    isSessionFeedbackPage ||
+    isProfilePage;
 
   const logoutMutation = useMutation({
     mutationFn: async () => {
@@ -172,6 +178,11 @@ function RootLayout() {
             label: 'Problems',
             to: '/problems',
             isActive: isProblemsPage,
+          },
+          {
+            label: 'Bookmarks',
+            to: '/bookmarks',
+            isActive: isBookmarksPage,
           },
         ].map((item) => (
           <Link
