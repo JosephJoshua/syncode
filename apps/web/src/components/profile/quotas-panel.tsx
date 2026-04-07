@@ -35,25 +35,25 @@ export function QuotasPanel({ quotas, isLoading }: QuotasPanelProps) {
 
   return (
     <Card className="bg-card/70 py-0 ring-0 shadow-[0_24px_60px_-40px_oklch(0.22_0.02_260/0.45)]">
-      <CardHeader className="border-b border-border/40 pb-5">
+      <CardHeader className="border-b border-border/40 px-5 pt-6 pb-5 sm:px-6 sm:pt-7">
         <CardTitle>{t('quotas.heading')}</CardTitle>
         <CardDescription>{t('quotas.description')}</CardDescription>
       </CardHeader>
-      <CardContent className="grid gap-3 px-4 py-5 sm:px-6">
+      <CardContent className="grid gap-3 px-5 pt-5 pb-6 sm:px-6 sm:pb-6">
         {isLoading
           ? ['ai', 'execution', 'rooms'].map((item) => (
-              <div key={item} className="rounded-2xl bg-background/70 p-4">
+              <div key={item} className="rounded-2xl bg-background/75 p-4 sm:p-5">
                 <Skeleton className="h-4 w-20" />
                 <Skeleton className="mt-3 h-8 w-28" />
                 <Skeleton className="mt-2 h-4 w-32" />
               </div>
             ))
           : items.map((item) => (
-              <div key={item.label} className="rounded-2xl bg-background/70 p-4">
+              <div key={item.label} className="rounded-2xl bg-background/75 p-4 sm:p-5">
                 <p className="text-xs font-medium tracking-[0.18em] text-muted-foreground uppercase">
                   {item.label}
                 </p>
-                <p className="mt-3 text-3xl font-semibold tracking-tight text-foreground">
+                <p className="mt-3 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
                   {item.value}
                 </p>
                 <p className="mt-2 text-sm text-muted-foreground">{item.hint}</p>
