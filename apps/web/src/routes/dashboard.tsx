@@ -8,9 +8,8 @@ import { HostControlPanel } from '@/components/host-control-panel';
 import { requireAuth } from '@/lib/auth';
 import {
   EMPTY_DASHBOARD_STATS,
-  loadDashboardSessionHistory,
+  fetchDashboardSessionHistory,
 } from '@/lib/dashboard-session-history';
-import { MOCK_SESSION_HISTORY_VIEWER_ID } from '@/lib/session-history.mock';
 import { getUserDisplayName } from '@/lib/user-utils';
 import { useAuthStore } from '@/stores/auth.store';
 
@@ -23,22 +22,15 @@ function DashboardPage() {
   const user = useAuthStore((state) => state.user);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const dashboardName = getUserDisplayName(user);
-  const sessionHistorySource =
-    import.meta.env.VITE_DASHBOARD_USE_MOCK_SESSIONS === 'true' ? 'mock' : 'api';
-  const viewerId =
-    sessionHistorySource === 'mock' ? MOCK_SESSION_HISTORY_VIEWER_ID : (user?.id ?? null);
-  const isQueryEnabled = sessionHistorySource === 'mock' || (isAuthenticated && Boolean(user?.id));
+  const viewerId = user?.id ?? null;
+  const isQueryEnabled = isAuthenticated && Boolean(viewerId);
   const sessionHistoryQuery = useQuery({
-    queryKey: ['dashboard', 'session-history', sessionHistorySource, viewerId],
+    queryKey: ['dashboard', 'session-history', viewerId],
     enabled: isQueryEnabled,
-    queryFn: () =>
-      loadDashboardSessionHistory({
-        source: sessionHistorySource,
-        currentUserId: viewerId,
-      }),
+    queryFn: () => fetchDashboardSessionHistory(viewerId!),
   });
   const sessionHistory = sessionHistoryQuery.data;
-  const isUnavailable = sessionHistorySource === 'api' && !isQueryEnabled;
+  const isUnavailable = !isQueryEnabled;
   const stats = sessionHistory?.stats ?? EMPTY_DASHBOARD_STATS;
   const getStatValue = (value: string) => {
     if (isUnavailable) {

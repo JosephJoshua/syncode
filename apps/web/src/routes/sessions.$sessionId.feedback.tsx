@@ -1,9 +1,8 @@
 import { Card, CardContent } from '@syncode/ui';
+import { useQuery } from '@tanstack/react-query';
 import { createFileRoute } from '@tanstack/react-router';
-import { useMemo } from 'react';
 import { requireAuth } from '@/lib/auth';
-import { buildDashboardSessionHistory } from '@/lib/dashboard-session-history';
-import { MOCK_SESSION_HISTORY_RESPONSE } from '@/lib/session-history.mock';
+import { fetchDashboardSessionHistory } from '@/lib/dashboard-session-history';
 import { useAuthStore } from '@/stores/auth.store';
 
 export const Route = createFileRoute('/sessions/$sessionId/feedback')({
@@ -14,13 +13,12 @@ export const Route = createFileRoute('/sessions/$sessionId/feedback')({
 function SessionFeedbackPage() {
   const { sessionId } = Route.useParams();
   const userId = useAuthStore((state) => state.user?.id ?? null);
-  const session = useMemo(
-    () =>
-      buildDashboardSessionHistory(MOCK_SESSION_HISTORY_RESPONSE, userId).rows.find(
-        (item) => item.id === sessionId,
-      ),
-    [userId, sessionId],
-  );
+  const sessionHistoryQuery = useQuery({
+    queryKey: ['dashboard', 'session-history', userId],
+    enabled: Boolean(userId),
+    queryFn: () => fetchDashboardSessionHistory(userId!),
+  });
+  const session = sessionHistoryQuery.data?.rows.find((item) => item.id === sessionId);
 
   if (!session) {
     return (

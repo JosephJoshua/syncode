@@ -14,7 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@syncode/ui';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { Check, ChevronDown, Code2, Copy, FileCode2, Globe, Lock } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -46,13 +46,11 @@ const LANGUAGE_OPTIONS = SUPPORTED_LANGUAGES.map((lang) => ({
   label: LANGUAGE_LABELS[lang],
 }));
 
-// TODO: Replace with useQuery against CONTROL_API.PROBLEMS.LIST
-// Values are placeholder slugs — backend expects UUIDs for problemId
-const ROOM_PROBLEMS = [
-  { value: 'two-sum', label: 'Two Sum (Easy)' },
-  { value: 'valid-parentheses', label: 'Valid Parentheses (Medium)' },
-  { value: 'lru-cache', label: 'LRU Cache (Hard)' },
-] as const;
+const DIFFICULTY_DISPLAY: Record<string, string> = {
+  easy: 'Easy',
+  medium: 'Medium',
+  hard: 'Hard',
+};
 
 const createRoomFormSchema = z.object({
   problemId: z.string().min(1, 'Please select a problem'),
@@ -89,6 +87,18 @@ function CreateRoomPage() {
     }
   }, [isAuthenticated, navigate]);
 
+  const problemsQuery = useQuery({
+    queryKey: ['problems', 'list-for-room'],
+    queryFn: () => api(CONTROL_API.PROBLEMS.LIST, { searchParams: { limit: 100 } }),
+  });
+
+  const availableProblems = useMemo(() => {
+    return (problemsQuery.data?.data ?? []).map((p) => ({
+      value: p.id,
+      label: `${p.title} (${DIFFICULTY_DISPLAY[p.difficulty] ?? p.difficulty})`,
+    }));
+  }, [problemsQuery.data]);
+
   const comboboxRef = useRef<HTMLDivElement>(null);
 
   const [inviteLink, setInviteLink] = useState<string | null>(null);
@@ -101,8 +111,8 @@ function CreateRoomPage() {
   const [submittedData, setSubmittedData] = useState<CreateRoomFormData | null>(null);
 
   const filteredProblems = useMemo(() => {
-    return ROOM_PROBLEMS.filter((problem) => matchesProblemQuery(problem.label, problemInput));
-  }, [problemInput]);
+    return availableProblems.filter((problem) => matchesProblemQuery(problem.label, problemInput));
+  }, [availableProblems, problemInput]);
 
   const {
     register,
@@ -124,7 +134,7 @@ function CreateRoomPage() {
       if (comboboxRef.current && !comboboxRef.current.contains(event.target as Node)) {
         setIsProblemMenuOpen(false);
 
-        const selectedProblem = ROOM_PROBLEMS.find(
+        const selectedProblem = availableProblems.find(
           (problem) => problem.value === selectedProblemId,
         );
 
@@ -139,14 +149,15 @@ function CreateRoomPage() {
     }
 
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isProblemMenuOpen, selectedProblemId]);
+  }, [availableProblems, isProblemMenuOpen, selectedProblemId]);
 
   const createRoomMutation = useMutation({
     mutationFn: (data: CreateRoomFormData) =>
       api(CONTROL_API.ROOMS.CREATE, {
         body: {
           mode: 'peer',
-          name: `${ROOM_PROBLEMS.find((problem) => problem.value === data.problemId)?.label ?? 'Interview'} Room`,
+          name: `${availableProblems.find((problem) => problem.value === data.problemId)?.label ?? 'Interview'} Room`,
+          problemId: data.problemId,
           language: data.language,
           config: {
             maxParticipants: 2,
@@ -349,7 +360,7 @@ function CreateRoomPage() {
                 <div className="flex flex-wrap gap-2.5 pt-1">
                   <Badge variant="outline" className="gap-2 px-4 py-1.5 text-sm">
                     <FileCode2 size={16} className="text-primary" />
-                    {ROOM_PROBLEMS.find((problem) => problem.value === submittedData?.problemId)
+                    {availableProblems.find((problem) => problem.value === submittedData?.problemId)
                       ?.label ?? submittedData?.problemId}
                   </Badge>
                   <Badge variant="outline" className="gap-2 px-4 py-1.5 text-sm">
