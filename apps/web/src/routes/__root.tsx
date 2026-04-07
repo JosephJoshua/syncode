@@ -124,6 +124,7 @@ function RootLayout() {
   const isProfilePage = pathname === '/profile';
   const showDashboardChrome =
     isDashboardPage || isRoomsPage || isProblemsPage || isSessionFeedbackPage || isProfilePage;
+  const logoTo = isAuthenticated ? '/dashboard' : '/';
 
   const logoutMutation = useMutation({
     mutationFn: async () => {
@@ -222,7 +223,7 @@ function RootLayout() {
           <div className="mx-auto flex h-14 max-w-7xl items-center justify-between gap-6 px-4">
             <div className="flex min-w-0 items-center gap-3 sm:gap-5">
               <Link
-                to="/"
+                to={logoTo}
                 className="flex shrink-0 items-center gap-2 font-semibold text-foreground transition-colors hover:text-primary"
               >
                 <SynCodeLogo className="h-6 w-6" />
@@ -288,7 +289,7 @@ function RootLayout() {
           <div className="mx-auto flex h-14 max-w-7xl items-center justify-between gap-6 px-4">
             <div className="flex min-w-0 items-center gap-3 sm:gap-5">
               <Link
-                to="/"
+                to={logoTo}
                 className="flex shrink-0 items-center gap-2 font-semibold text-foreground transition-colors hover:text-primary"
               >
                 <SynCodeLogo className="h-6 w-6" />
