@@ -148,7 +148,10 @@ export class AuthService {
     );
 
     if (!user || !passwordValid) {
-      throw new UnauthorizedException('Invalid credentials');
+      throw new UnauthorizedException({
+        message: 'Invalid credentials',
+        code: ERROR_CODES.AUTH_INVALID_CREDENTIALS,
+      });
     }
 
     if (user.bannedAt) {

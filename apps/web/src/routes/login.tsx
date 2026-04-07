@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { CONTROL_API, ERROR_CODES } from '@syncode/contracts';
+import { CONTROL_API } from '@syncode/contracts';
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@syncode/ui';
 import { useMutation } from '@tanstack/react-query';
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
@@ -15,8 +15,9 @@ import { FloatingSymbols } from '@/components/floating-symbols';
 import { AnimatedFormField } from '@/components/form-field';
 import { CursorSpotlight } from '@/components/spotlight';
 import { TiltCard } from '@/components/tilt';
-import { api, getFieldErrorMessage, readApiError } from '@/lib/api-client';
+import { api, readApiError } from '@/lib/api-client';
 import { requireGuest } from '@/lib/auth';
+import { resolveLoginFormError } from '@/lib/auth-form-errors';
 import { useAuthStore } from '@/stores/auth.store';
 
 const loginFormSchema = z.object({
@@ -272,56 +273,23 @@ async function handleLoginError(
   setSubmissionError: (message: string) => void,
 ) {
   const apiError = await readApiError(error);
+  const resolution = resolveLoginFormError(apiError, error);
 
-  if (apiError?.code === ERROR_CODES.AUTH_INVALID_CREDENTIALS) {
-    setSubmissionError('Invalid username, email, or password. Please try again.');
-    return;
-  }
-
-  if (apiError?.code === ERROR_CODES.USER_BANNED) {
-    setSubmissionError('This account has been suspended. Please contact support.');
-    return;
-  }
-
-  if (apiError?.code === ERROR_CODES.VALIDATION_FAILED) {
-    if (applyValidationErrors(apiError.details, setError)) {
-      return;
-    }
-
-    setSubmissionError(apiError.message || 'Please check your credentials and try again.');
-    return;
-  }
-
-  if (error instanceof Error) {
-    setSubmissionError(error.message);
-    return;
-  }
-
-  setSubmissionError('We could not sign you in right now. Please try again in a moment.');
-}
-
-function applyValidationErrors(details: unknown, setError: UseFormSetError<LoginFormValues>) {
-  if (!details || typeof details !== 'object') {
-    return false;
-  }
-
-  const validationDetails = details as Record<string, unknown>;
-  const identifierMessage = getFieldErrorMessage(validationDetails, 'identifier');
-  const passwordMessage = getFieldErrorMessage(validationDetails, 'password');
-
-  if (identifierMessage) {
+  if (resolution.fieldErrors.identifier) {
     setError('identifier', {
       type: 'server',
-      message: identifierMessage,
+      message: resolution.fieldErrors.identifier,
     });
   }
 
-  if (passwordMessage) {
+  if (resolution.fieldErrors.password) {
     setError('password', {
       type: 'server',
-      message: passwordMessage,
+      message: resolution.fieldErrors.password,
     });
   }
 
-  return Boolean(identifierMessage || passwordMessage);
+  if (resolution.submissionError) {
+    setSubmissionError(resolution.submissionError);
+  }
 }

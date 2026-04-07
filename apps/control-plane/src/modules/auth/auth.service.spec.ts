@@ -3,6 +3,7 @@ import { promisify } from 'node:util';
 import { ConflictException, UnauthorizedException } from '@nestjs/common';
 import type { ConfigService } from '@nestjs/config';
 import type { JwtService } from '@nestjs/jwt';
+import { ERROR_CODES } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
 import { refreshTokens, users } from '@syncode/db';
 import type { ICacheService } from '@syncode/shared/ports';
@@ -222,11 +223,16 @@ describe('AuthService', () => {
     ).rejects.toBeInstanceOf(ConflictException);
   });
 
-  it('GIVEN missing user WHEN logging in THEN throws unauthorized', async () => {
+  it('GIVEN missing user WHEN logging in THEN throws unauthorized with AUTH_INVALID_CREDENTIALS code', async () => {
     const { service, mocks } = createAuthServiceFixture();
     mocks.findFirst.mockResolvedValueOnce(null);
 
-    await expect(service.login('alice', 'secret123')).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(service.login('alice', 'secret123')).rejects.toMatchObject({
+      response: {
+        message: 'Invalid credentials',
+        code: ERROR_CODES.AUTH_INVALID_CREDENTIALS,
+      },
+    } satisfies Partial<UnauthorizedException>);
   });
 
   it('GIVEN banned user WHEN logging in THEN throws unauthorized with USER_BANNED code', async () => {

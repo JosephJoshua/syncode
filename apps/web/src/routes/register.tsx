@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { CONTROL_API, ERROR_CODES } from '@syncode/contracts';
+import { CONTROL_API } from '@syncode/contracts';
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@syncode/ui';
 import { useMutation } from '@tanstack/react-query';
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
@@ -23,8 +23,9 @@ import { FloatingSymbols } from '@/components/floating-symbols';
 import { AnimatedFormField } from '@/components/form-field';
 import { CursorSpotlight } from '@/components/spotlight';
 import { TiltCard } from '@/components/tilt';
-import { api, getFieldErrorMessage, readApiError } from '@/lib/api-client';
+import { api, readApiError } from '@/lib/api-client';
 import { requireGuest } from '@/lib/auth';
+import { resolveRegisterFormError } from '@/lib/auth-form-errors';
 
 export const Route = createFileRoute('/register')({
   beforeLoad: requireGuest,
@@ -338,78 +339,30 @@ async function handleRegisterError(
   setSubmissionError: (message: string) => void,
 ) {
   const apiError = await readApiError(error);
+  const resolution = resolveRegisterFormError(apiError, error);
 
-  if (apiError?.code === ERROR_CODES.AUTH_EMAIL_TAKEN) {
-    setError('email', {
-      type: 'server',
-      message: apiError.message || 'This email is already in use.',
-    });
-    return;
-  }
-
-  if (apiError?.code === ERROR_CODES.AUTH_USERNAME_TAKEN) {
+  if (resolution.fieldErrors.username) {
     setError('username', {
       type: 'server',
-      message: apiError.message || 'This username is already taken.',
-    });
-    return;
-  }
-
-  if (apiError?.code === ERROR_CODES.VALIDATION_FAILED) {
-    if (applyRegisterValidationErrors(apiError.details, setError)) {
-      return;
-    }
-
-    setSubmissionError(apiError.message || 'Please check your details and try again.');
-    return;
-  }
-
-  if (apiError) {
-    setSubmissionError(apiError.message || 'We could not create your account right now.');
-    return;
-  }
-
-  if (error instanceof Error) {
-    setSubmissionError(error.message);
-    return;
-  }
-
-  setSubmissionError('We could not create your account right now. Please try again shortly.');
-}
-
-function applyRegisterValidationErrors(
-  details: unknown,
-  setError: UseFormSetError<RegisterFormValues>,
-) {
-  if (!details || typeof details !== 'object') {
-    return false;
-  }
-
-  const validationDetails = details as Record<string, unknown>;
-  const usernameMessage = getFieldErrorMessage(validationDetails, 'username');
-  const emailMessage = getFieldErrorMessage(validationDetails, 'email');
-  const passwordMessage = getFieldErrorMessage(validationDetails, 'password');
-
-  if (usernameMessage) {
-    setError('username', {
-      type: 'server',
-      message: usernameMessage,
+      message: resolution.fieldErrors.username,
     });
   }
 
-  if (emailMessage) {
+  if (resolution.fieldErrors.email) {
     setError('email', {
       type: 'server',
-      message: emailMessage,
+      message: resolution.fieldErrors.email,
     });
   }
 
-  if (passwordMessage) {
+  if (resolution.fieldErrors.password) {
     setError('password', {
       type: 'server',
-      message: passwordMessage,
+      message: resolution.fieldErrors.password,
     });
   }
 
-  return Boolean(usernameMessage || emailMessage || passwordMessage);
+  if (resolution.submissionError) {
+    setSubmissionError(resolution.submissionError);
+  }
 }
