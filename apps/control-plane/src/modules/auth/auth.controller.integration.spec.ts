@@ -2,6 +2,7 @@ import type { INestApplication } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
+import { ERROR_CODES } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
 import { CACHE_SERVICE } from '@syncode/shared/ports';
 import cookieParser from 'cookie-parser';
@@ -154,6 +155,10 @@ describe('POST /auth/login', () => {
     });
 
     expect(res.status).toBe(401);
+    expect(res.body).toMatchObject({
+      code: ERROR_CODES.AUTH_INVALID_CREDENTIALS,
+      message: 'Invalid credentials',
+    });
   });
 });
 
