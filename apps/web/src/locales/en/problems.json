@@ -12,5 +12,70 @@
     "cannotLoad": "We could not load this problem right now.",
     "unexpected": "An unexpected error occurred while loading this problem."
   },
-  "loading": "Loading problem details..."
+  "loading": "Loading problem details...",
+  "search": {
+    "placeholder": "Search by problem title"
+  },
+  "empty": {
+    "libraryTitle": "Problem library is still empty",
+    "libraryDescription": "Add a few mock problems first so the discovery surface has something to render.",
+    "filteredTitle": "No problems match your filters",
+    "filteredDescription": "Try clearing some filters or broadening the search term to bring more problems back.",
+    "clearFilters": "Clear filters"
+  },
+  "filter": {
+    "heading": "Filters",
+    "resetAll": "Reset all",
+    "difficulty": "Difficulty",
+    "problemStatus": "Problem Status",
+    "todoNotDone": "Todo / Not done",
+    "popularTags": "Popular Tags"
+  },
+  "toolbar": {
+    "activeFilters": "Active Filters",
+    "clearAll": "Clear all",
+    "noFilters": "No filters applied yet.",
+    "sortBy": "Sort by"
+  },
+  "detail": {
+    "breadcrumb": "problems / {{title}}",
+    "practiceButton": "Practice this problem",
+    "description": "Description",
+    "constraints": "Constraints",
+    "noConstraints": "No constraints provided yet.",
+    "examples": "Examples ({{count}})",
+    "exampleTitle": "Example {{index}}",
+    "input": "Input",
+    "output": "Output",
+    "explanation": "Explanation",
+    "starterCode": "Starter Code",
+    "noStarterCode": "No starter code is available for this problem yet.",
+    "publicTestCases": "Public Test Cases",
+    "noPublicTestCases": "No public test cases are available yet.",
+    "testCaseTitle": "Test Case {{index}}",
+    "expectedOutput": "Expected Output",
+    "timeLimit": "Time Limit",
+    "memoryLimit": "Memory Limit",
+    "default": "Default",
+    "acceptanceRate": "Acceptance Rate",
+    "notAvailable": "Not available",
+    "totalSubmissions": "Total Submissions",
+    "yourAttempts": "Your Attempts",
+    "currentStatus": "Current Status",
+    "signInBookmarks": "Sign in to manage bookmarks",
+    "removeBookmark": "Remove bookmark",
+    "addBookmark": "Add bookmark",
+    "easy": "Easy",
+    "medium": "Medium",
+    "hard": "Hard",
+    "solved": "Solved",
+    "attempted": "Attempted",
+    "noAttemptsYet": "No attempts yet",
+    "lastUpdated": "Last updated: {{date}}"
+  },
+  "sort": {
+    "newest": "Newest",
+    "acceptance": "Acceptance rate",
+    "difficulty": "Difficulty"
+  }
 }

@@ -15,6 +15,7 @@ import { useQuery } from '@tanstack/react-query';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { motion } from 'motion/react';
 import { startTransition, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ProblemCard } from '@/components/problems/problem-card';
 import type {
   ProblemDifficulty,
@@ -107,6 +108,7 @@ function toggleValue<T>(values: T[], value: T) {
 }
 
 function ProblemsLibraryPage() {
+  const { t } = useTranslation('problems');
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDifficulties, setSelectedDifficulties] = useState<ProblemDifficulty[]>([]);
@@ -271,12 +273,12 @@ function ProblemsLibraryPage() {
     <div className="mx-auto max-w-7xl px-4 py-8 sm:py-10 lg:py-12">
       <section className="max-w-3xl">
         <h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-          Problem Library
+          {t('heading')}
         </h1>
         <p className="mt-3 text-sm text-muted-foreground sm:text-base">
           {isProblemsPending && !problemsListResponse
-            ? 'Loading problems...'
-            : `${problemsCount} problems`}
+            ? t('sub.loading')
+            : t('sub.count', { count: problemsCount })}
         </p>
       </section>
 

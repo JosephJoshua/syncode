@@ -8,6 +8,7 @@ import {
   SelectValue,
 } from '@syncode/ui';
 import { X } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { type ProblemSortKey, SORT_OPTIONS } from './problems.types';
 
 const activeFilterColor = 'var(--primary)';
@@ -33,6 +34,7 @@ export function ProblemsResultsToolbar({
   onSortChange,
   onClearAll,
 }: ProblemsResultsToolbarProps) {
+  const { t } = useTranslation('problems');
   const hasActiveFilters = activeFilters.length > 0;
 
   return (
@@ -40,11 +42,11 @@ export function ProblemsResultsToolbar({
       <div className="min-w-0 space-y-2">
         <div className="flex items-center gap-2">
           <p className="font-mono text-[11px] tracking-[0.16em] text-muted-foreground/60 uppercase">
-            Active Filters
+            {t('toolbar.activeFilters')}
           </p>
           {hasActiveFilters ? (
             <Button variant="ghost" size="xs" onClick={onClearAll}>
-              Clear all
+              {t('toolbar.clearAll')}
             </Button>
           ) : null}
         </div>
@@ -76,13 +78,13 @@ export function ProblemsResultsToolbar({
             ))}
           </div>
         ) : (
-          <p className="text-sm text-muted-foreground">No filters applied yet.</p>
+          <p className="text-sm text-muted-foreground">{t('toolbar.noFilters')}</p>
         )}
       </div>
 
       <div className="flex w-full flex-col gap-3 sm:w-56 sm:shrink-0 sm:self-start sm:pl-3 sm:pr-1 sm:pt-1">
         <p className="px-1 font-mono text-[11px] tracking-[0.16em] text-muted-foreground/60 uppercase">
-          Sort by
+          {t('toolbar.sortBy')}
         </p>
         <Select value={sort} onValueChange={(value) => onSortChange(value as ProblemSortKey)}>
           <SelectTrigger className="h-11 rounded-2xl border-white/[0.05] bg-background/80">

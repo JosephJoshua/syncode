@@ -4,6 +4,7 @@ import { Button } from '@syncode/ui';
 import { Bookmark, LoaderCircle } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import Markdown from 'react-markdown';
 import { useToggleProblemBookmarkMutation } from '@/lib/problems/problem-bookmark';
 import { useAuthStore } from '@/stores/auth.store';
@@ -11,6 +12,7 @@ import { StarterCodeBlock } from './starter-code-block';
 import { formatStarterLanguageLabel } from './starter-code-language';
 
 export function ProblemDetailLayout({ problem }: { problem: ProblemDetail }) {
+  const { t } = useTranslation('problems');
   const starterLanguages = getStarterLanguages(problem.starterCode);
   const firstLanguage = starterLanguages[0] ?? null;
   const [selectedLanguage, setSelectedLanguage] = useState<SupportedLanguage | null>(firstLanguage);
@@ -51,15 +53,15 @@ export function ProblemDetailLayout({ problem }: { problem: ProblemDetail }) {
 
         <div className="grid gap-7 xl:grid-cols-[minmax(0,1fr)_320px]">
           <div className="space-y-5">
-            <SectionSurface title="Description">
+            <SectionSurface title={t('detail.description')}>
               <MarkdownBlock value={problem.description} />
             </SectionSurface>
 
-            <SectionSurface title="Constraints">
-              <MarkdownBlock value={problem.constraints ?? 'No constraints provided yet.'} />
+            <SectionSurface title={t('detail.constraints')}>
+              <MarkdownBlock value={problem.constraints ?? t('detail.noConstraints')} />
             </SectionSurface>
 
-            <SectionSurface title={`Examples (${problem.examples.length})`}>
+            <SectionSurface title={t('detail.examples', { count: problem.examples.length })}>
               <div className="space-y-3">
                 {problem.examples.map((example, index) => (
                   <ExamplePanel key={`${example.input}-${index}`} example={example} index={index} />
@@ -73,7 +75,7 @@ export function ProblemDetailLayout({ problem }: { problem: ProblemDetail }) {
           </aside>
         </div>
 
-        <SectionSurface title="Starter Code">
+        <SectionSurface title={t('detail.starterCode')}>
           {problem.starterCode && starterLanguages.length > 0 ? (
             <div className="space-y-3">
               <div className="flex flex-wrap gap-2">
@@ -98,11 +100,11 @@ export function ProblemDetailLayout({ problem }: { problem: ProblemDetail }) {
               ) : null}
             </div>
           ) : (
-            <EmptySurfaceCopy message="No starter code is available for this problem yet." />
+            <EmptySurfaceCopy message={t('detail.noStarterCode')} />
           )}
         </SectionSurface>
 
-        <SectionSurface title="Public Test Cases">
+        <SectionSurface title={t('detail.publicTestCases')}>
           {publicTestCases.length > 0 ? (
             <div className="space-y-3">
               {publicTestCases.map((testCase, index) => (
@@ -114,7 +116,7 @@ export function ProblemDetailLayout({ problem }: { problem: ProblemDetail }) {
               ))}
             </div>
           ) : (
-            <EmptySurfaceCopy message="No public test cases are available yet." />
+            <EmptySurfaceCopy message={t('detail.noPublicTestCases')} />
           )}
         </SectionSurface>
       </div>
@@ -133,10 +135,11 @@ function ProblemHeader({
   isBookmarkPending: boolean;
   onToggleBookmark: () => void;
 }) {
+  const { t } = useTranslation('problems');
   return (
     <header className="rounded-2xl border border-border/60 bg-card/60 px-5 py-5">
       <p className="text-xs font-medium tracking-[0.2em] text-muted-foreground uppercase">
-        problems / {problem.title}
+        {t('detail.breadcrumb', { title: problem.title })}
       </p>
 
       <h1 className="mt-3 text-[1.8rem] font-semibold tracking-tight text-foreground sm:text-[2.4rem]">
@@ -169,7 +172,7 @@ function ProblemHeader({
         </div>
 
         <p className="text-sm text-muted-foreground">
-          Last updated: {formatDate(problem.updatedAt)}
+          {t('detail.lastUpdated', { date: formatDate(problem.updatedAt) })}
         </p>
       </div>
     </header>
@@ -177,6 +180,7 @@ function ProblemHeader({
 }
 
 function SummaryRail({ problem }: { problem: ProblemDetail }) {
+  const { t } = useTranslation('problems');
   return (
     <div className="rounded-2xl border border-border/60 bg-card/70 p-3">
       <div className="border-b border-border/60 pb-2.5">
@@ -185,25 +189,28 @@ function SummaryRail({ problem }: { problem: ProblemDetail }) {
           size="lg"
           className="w-full cursor-pointer bg-primary text-primary-foreground shadow-[0_10px_24px_-12px_hsl(var(--primary)/0.9)] hover:-translate-y-0.5 hover:bg-primary/90 hover:shadow-[0_16px_32px_-16px_hsl(var(--primary)/0.95)]"
         >
-          Practice this problem
+          {t('detail.practiceButton')}
         </Button>
       </div>
 
       <dl className="divide-y divide-border/60">
         <SummaryStat
-          label="Acceptance Rate"
+          label={t('detail.acceptanceRate')}
           value={
             problem.acceptanceRate === null
-              ? 'Not available'
+              ? t('detail.notAvailable')
               : `${problem.acceptanceRate.toFixed(1)}%`
           }
         />
         <SummaryStat
-          label="Total Submissions"
+          label={t('detail.totalSubmissions')}
           value={problem.totalSubmissions.toLocaleString('en-US')}
         />
-        <SummaryStat label="Your Attempts" value={problem.userAttempts.toString()} />
-        <SummaryStat label="Current Status" value={formatAttemptStatus(problem.attemptStatus)} />
+        <SummaryStat label={t('detail.yourAttempts')} value={problem.userAttempts.toString()} />
+        <SummaryStat
+          label={t('detail.currentStatus')}
+          value={formatAttemptStatus(problem.attemptStatus, t)}
+        />
       </dl>
     </div>
   );
@@ -232,14 +239,17 @@ function SectionSurface({ title, children }: { title: string; children: ReactNod
 }
 
 function ExamplePanel({ example, index }: { example: ProblemExample; index: number }) {
+  const { t } = useTranslation('problems');
   return (
     <div className="rounded-xl border border-border/60 bg-background/70 p-3">
-      <h3 className="text-sm font-semibold text-foreground">Example {index + 1}</h3>
+      <h3 className="text-sm font-semibold text-foreground">
+        {t('detail.exampleTitle', { index: index + 1 })}
+      </h3>
       <div className="mt-2.5 space-y-2.5">
-        <LabeledCodeBlock label="Input" value={example.input} />
-        <LabeledCodeBlock label="Output" value={example.output} />
+        <LabeledCodeBlock label={t('detail.input')} value={example.input} />
+        <LabeledCodeBlock label={t('detail.output')} value={example.output} />
         {example.explanation ? (
-          <LabeledTextBlock label="Explanation" value={example.explanation} />
+          <LabeledTextBlock label={t('detail.explanation')} value={example.explanation} />
         ) : null}
       </div>
     </div>
@@ -247,23 +257,26 @@ function ExamplePanel({ example, index }: { example: ProblemExample; index: numb
 }
 
 function PublicTestCasePanel({ testCase, index }: { testCase: ProblemTestCase; index: number }) {
+  const { t } = useTranslation('problems');
   return (
     <div className="rounded-xl border border-border/60 bg-background/70 p-3">
-      <h3 className="text-sm font-semibold text-foreground">Test Case {index + 1}</h3>
+      <h3 className="text-sm font-semibold text-foreground">
+        {t('detail.testCaseTitle', { index: index + 1 })}
+      </h3>
       <div className="mt-2.5 space-y-2.5">
-        <LabeledCodeBlock label="Input" value={testCase.input} />
-        <LabeledCodeBlock label="Expected Output" value={testCase.expectedOutput} />
+        <LabeledCodeBlock label={t('detail.input')} value={testCase.input} />
+        <LabeledCodeBlock label={t('detail.expectedOutput')} value={testCase.expectedOutput} />
         {testCase.description ? (
-          <LabeledTextBlock label="Description" value={testCase.description} />
+          <LabeledTextBlock label={t('detail.explanation')} value={testCase.description} />
         ) : null}
         <div className="grid gap-2.5 sm:grid-cols-2">
           <InlineStat
-            label="Time Limit"
-            value={testCase.timeoutMs ? `${testCase.timeoutMs} ms` : 'Default'}
+            label={t('detail.timeLimit')}
+            value={testCase.timeoutMs ? `${testCase.timeoutMs} ms` : t('detail.default')}
           />
           <InlineStat
-            label="Memory Limit"
-            value={testCase.memoryMb ? `${testCase.memoryMb} MB` : 'Default'}
+            label={t('detail.memoryLimit')}
+            value={testCase.memoryMb ? `${testCase.memoryMb} MB` : t('detail.default')}
           />
         </div>
       </div>
@@ -347,12 +360,13 @@ function BookmarkToggleButton({
   isPending: boolean;
   onToggle: () => void;
 }) {
+  const { t } = useTranslation('problems');
   const isDisabled = !canToggleBookmark || isPending;
   const label = !canToggleBookmark
-    ? 'Sign in to manage bookmarks'
+    ? t('detail.signInBookmarks')
     : isBookmarked
-      ? 'Remove bookmark'
-      : 'Add bookmark';
+      ? t('detail.removeBookmark')
+      : t('detail.addBookmark');
 
   return (
     <Button
@@ -380,10 +394,11 @@ function BookmarkToggleButton({
 }
 
 function DifficultyBadge({ difficulty }: { difficulty: ProblemDetail['difficulty'] }) {
+  const { t } = useTranslation('problems');
   if (difficulty === 'easy') {
     return (
       <span className="inline-flex rounded-full border border-emerald-400/30 bg-emerald-500/14 px-3 py-1.5 text-xs font-semibold text-emerald-300 ring-1 ring-emerald-400/10">
-        Easy
+        {t('detail.easy')}
       </span>
     );
   }
@@ -391,30 +406,31 @@ function DifficultyBadge({ difficulty }: { difficulty: ProblemDetail['difficulty
   if (difficulty === 'medium') {
     return (
       <span className="inline-flex rounded-full border border-orange-400/30 bg-orange-500/14 px-3 py-1.5 text-xs font-semibold text-orange-300 ring-1 ring-orange-400/10">
-        Medium
+        {t('detail.medium')}
       </span>
     );
   }
 
   return (
     <span className="inline-flex rounded-full border border-rose-400/30 bg-rose-500/14 px-3 py-1.5 text-xs font-semibold text-rose-300 ring-1 ring-rose-400/10">
-      Hard
+      {t('detail.hard')}
     </span>
   );
 }
 
 function AttemptStatusBadge({ attemptStatus }: { attemptStatus: ProblemDetail['attemptStatus'] }) {
+  const { t } = useTranslation('problems');
   if (attemptStatus) {
     return (
       <span className="inline-flex rounded-full border border-violet-400/34 bg-violet-500/16 px-3 py-1.5 text-xs font-semibold text-violet-300 ring-1 ring-violet-400/12">
-        {formatAttemptStatus(attemptStatus)}
+        {formatAttemptStatus(attemptStatus, t)}
       </span>
     );
   }
 
   return (
     <span className="inline-flex rounded-full border border-violet-400/24 bg-violet-500/10 px-3 py-1.5 text-xs font-medium text-violet-200/90 ring-1 ring-violet-400/8">
-      {formatAttemptStatus(attemptStatus)}
+      {formatAttemptStatus(attemptStatus, t)}
     </span>
   );
 }
@@ -427,16 +443,16 @@ function getStarterLanguages(starterCode: ProblemDetail['starterCode']) {
   return SUPPORTED_LANGUAGES.filter((language) => typeof starterCode[language] === 'string');
 }
 
-function formatAttemptStatus(status: ProblemDetail['attemptStatus']) {
+function formatAttemptStatus(status: ProblemDetail['attemptStatus'], t: (key: string) => string) {
   if (status === 'solved') {
-    return 'Solved';
+    return t('detail.solved');
   }
 
   if (status === 'attempted') {
-    return 'Attempted';
+    return t('detail.attempted');
   }
 
-  return 'No attempts yet';
+  return t('detail.noAttemptsYet');
 }
 
 function formatDate(value: string) {
