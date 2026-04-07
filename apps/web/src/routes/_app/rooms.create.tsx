@@ -32,6 +32,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
+import { ConfettiBurst } from '@/components/confetti-burst.js';
 import { useClipboard } from '@/hooks/use-clipboard.js';
 import { api, readApiError } from '@/lib/api-client.js';
 import i18n from '@/lib/i18n.js';
@@ -170,6 +171,9 @@ function CreateRoomPage() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
       >
+        <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
+          <Code2 size={24} className="text-primary" />
+        </div>
         <h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
           {t('create.heading')}
         </h1>
@@ -183,9 +187,13 @@ function CreateRoomPage() {
         transition={{ duration: 0.45, delay: 0.08, ease: [0.22, 1, 0.36, 1] }}
       >
         {!inviteLink ? (
-          <Card className="border border-border/50 bg-card/80 p-6 backdrop-blur-sm sm:p-8">
+          <Card className="rounded-xl border border-border/50 bg-card/80 p-6 backdrop-blur-sm sm:p-8">
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-7">
-              <div>
+              <motion.div
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.45, delay: 0.05, ease: [0.22, 1, 0.36, 1] }}
+              >
                 <Label className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   {t('create.problemLabel')}
                 </Label>
@@ -242,9 +250,13 @@ function CreateRoomPage() {
                     {t('create.problemRequired')}
                   </p>
                 )}
-              </div>
+              </motion.div>
 
-              <div>
+              <motion.div
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.45, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
+              >
                 <Label className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   {t('create.languageLabel')}
                 </Label>
@@ -274,9 +286,13 @@ function CreateRoomPage() {
                 {errors.language && (
                   <p className="mt-1.5 pl-1 text-xs text-destructive">{errors.language.message}</p>
                 )}
-              </div>
+              </motion.div>
 
-              <div>
+              <motion.div
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.45, delay: 0.15, ease: [0.22, 1, 0.36, 1] }}
+              >
                 <Label className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   {t('create.visibilityLabel')}
                 </Label>
@@ -309,9 +325,14 @@ function CreateRoomPage() {
                     </label>
                   )}
                 />
-              </div>
+              </motion.div>
 
-              <div className="pt-2">
+              <motion.div
+                className="pt-2"
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.45, delay: 0.2, ease: [0.22, 1, 0.36, 1] }}
+              >
                 <Button
                   type="submit"
                   size="lg"
@@ -327,114 +348,133 @@ function CreateRoomPage() {
                     {submissionError}
                   </p>
                 )}
-              </div>
+              </motion.div>
             </form>
           </Card>
         ) : (
-          <Card className="border border-border/50 bg-card/80 p-6 backdrop-blur-sm sm:p-8">
+          <>
+            <ConfettiBurst />
             <motion.div
-              className="space-y-7"
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
             >
-              <div className="space-y-3.5 rounded-lg border border-border p-5">
-                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  {t('success.details')}
-                </p>
-                <div className="flex flex-wrap gap-2.5 pt-1">
-                  <Badge variant="outline" className="gap-2 px-4 py-1.5 text-sm">
-                    <FileCode2 size={16} className="text-primary" />
-                    {availableProblems.find((problem) => problem.value === submittedData?.problemId)
-                      ?.label ?? submittedData?.problemId}
-                  </Badge>
-                  <Badge variant="outline" className="gap-2 px-4 py-1.5 text-sm">
-                    <Code2 size={16} className="text-primary" />
-                    {LANGUAGE_OPTIONS.find((language) => language.value === submittedData?.language)
-                      ?.label ?? submittedData?.language}
-                  </Badge>
-                  <Badge variant="outline" className="gap-2 px-4 py-1.5 text-sm">
-                    {submittedData?.isPublic ? (
-                      <Globe size={16} className="text-primary" />
-                    ) : (
-                      <Lock size={16} className="text-primary" />
-                    )}
-                    {submittedData?.isPublic ? t('success.publicAccess') : t('success.private')}
-                  </Badge>
-                </div>
-              </div>
-
-              <div className="h-px w-full bg-border/60" />
-
-              <div>
-                <div className="mb-3.5 flex items-center gap-2.5 text-xl font-bold text-primary drop-shadow-[0_0_12px_hsl(var(--primary)/0.6)]">
-                  <Check size={24} />
-                  <span>{t('success.provisioned')}</span>
-                </div>
-                <p className="mb-3.5 pl-1 text-sm text-muted-foreground">
-                  {t('success.shareLink')}
-                </p>
-
-                <div className="relative flex items-center gap-2">
-                  <Input
-                    type="text"
-                    readOnly
-                    value={inviteLink ?? ''}
-                    className="flex-1 font-mono text-sm"
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="lg"
-                    onClick={copyToClipboard}
-                    title={t('common:copyLink')}
+              <Card className="rounded-xl border border-border/50 bg-card/80 p-6 backdrop-blur-sm sm:p-8">
+                <div className="space-y-7">
+                  <motion.div
+                    className="space-y-3.5 rounded-xl border border-border p-5"
+                    initial={{ opacity: 0, y: 16 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.45, delay: 0.05, ease: [0.22, 1, 0.36, 1] }}
                   >
-                    {copied ? <Check size={16} className="text-primary" /> : <Copy size={16} />}
-                  </Button>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      {t('success.details')}
+                    </p>
+                    <div className="flex flex-wrap gap-2.5 pt-1">
+                      <Badge variant="outline" className="gap-2 px-4 py-1.5 text-sm">
+                        <FileCode2 size={16} className="text-primary" />
+                        {availableProblems.find(
+                          (problem) => problem.value === submittedData?.problemId,
+                        )?.label ?? submittedData?.problemId}
+                      </Badge>
+                      <Badge variant="outline" className="gap-2 px-4 py-1.5 text-sm">
+                        <Code2 size={16} className="text-primary" />
+                        {LANGUAGE_OPTIONS.find(
+                          (language) => language.value === submittedData?.language,
+                        )?.label ?? submittedData?.language}
+                      </Badge>
+                      <Badge variant="outline" className="gap-2 px-4 py-1.5 text-sm">
+                        {submittedData?.isPublic ? (
+                          <Globe size={16} className="text-primary" />
+                        ) : (
+                          <Lock size={16} className="text-primary" />
+                        )}
+                        {submittedData?.isPublic ? t('success.publicAccess') : t('success.private')}
+                      </Badge>
+                    </div>
+                  </motion.div>
+
+                  <div className="h-px w-full bg-border/60" />
+
+                  <motion.div
+                    initial={{ opacity: 0, y: 16 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.45, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
+                  >
+                    <p className="mb-3 text-sm font-medium text-foreground">
+                      {t('success.shareLink')}
+                    </p>
+
+                    <div className="relative flex items-center gap-2">
+                      <div className="relative flex-1">
+                        <Input
+                          type="text"
+                          readOnly
+                          value={inviteLink ?? ''}
+                          className="w-full font-mono text-sm"
+                        />
+                        <div className="pointer-events-none absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-card to-transparent" />
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="lg"
+                        onClick={copyToClipboard}
+                        title={t('common:copyLink')}
+                      >
+                        {copied ? <Check size={16} className="text-primary" /> : <Copy size={16} />}
+                      </Button>
+                    </div>
+                  </motion.div>
+
+                  <motion.div
+                    className="grid grid-cols-2 gap-3 pt-3"
+                    initial={{ opacity: 0, y: 16 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.45, delay: 0.15, ease: [0.22, 1, 0.36, 1] }}
+                  >
+                    <Button
+                      variant="outline"
+                      size="lg"
+                      className="w-full"
+                      onClick={() => {
+                        setInviteLink(null);
+                        setCreatedRoomId(null);
+                        setCreatedRoomCode(null);
+                        reset();
+                        setSubmissionError(null);
+                        setSubmittedData(null);
+                      }}
+                    >
+                      {t('success.setupNew')}
+                    </Button>
+                    <Button
+                      size="lg"
+                      className="w-full"
+                      onClick={() => {
+                        if (!createdRoomId) {
+                          return;
+                        }
+
+                        if (createdRoomCode) {
+                          window.location.assign(`/rooms/${createdRoomId}?code=${createdRoomCode}`);
+                          return;
+                        }
+
+                        void navigate({
+                          to: '/rooms/$roomId',
+                          params: { roomId: createdRoomId },
+                        });
+                      }}
+                      disabled={!createdRoomId}
+                    >
+                      {t('success.enterWorkspace')}
+                    </Button>
+                  </motion.div>
                 </div>
-              </div>
-
-              <div className="flex gap-4 pt-3">
-                <Button
-                  variant="outline"
-                  size="lg"
-                  className="w-full"
-                  onClick={() => {
-                    setInviteLink(null);
-                    setCreatedRoomId(null);
-                    setCreatedRoomCode(null);
-                    reset();
-                    setSubmissionError(null);
-                    setSubmittedData(null);
-                  }}
-                >
-                  {t('success.setupNew')}
-                </Button>
-                <Button
-                  size="lg"
-                  className="w-full"
-                  onClick={() => {
-                    if (!createdRoomId) {
-                      return;
-                    }
-
-                    if (createdRoomCode) {
-                      window.location.assign(`/rooms/${createdRoomId}?code=${createdRoomCode}`);
-                      return;
-                    }
-
-                    void navigate({
-                      to: '/rooms/$roomId',
-                      params: { roomId: createdRoomId },
-                    });
-                  }}
-                  disabled={!createdRoomId}
-                >
-                  {t('success.enterWorkspace')}
-                </Button>
-              </div>
+              </Card>
             </motion.div>
-          </Card>
+          </>
         )}
       </motion.div>
     </div>
