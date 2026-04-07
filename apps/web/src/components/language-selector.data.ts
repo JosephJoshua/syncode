@@ -5,6 +5,7 @@ export interface LanguageSelectorMetadata {
   shortLabel: string;
   fallbackIconText: string;
   iconSrc: string;
+  iconClassName?: string;
   isRunnable?: boolean;
   isComingSoon?: boolean;
 }
@@ -58,6 +59,7 @@ export const LANGUAGE_SELECTOR_METADATA: Record<SupportedLanguage, LanguageSelec
     shortLabel: 'C++',
     fallbackIconText: 'C++',
     iconSrc: languageIconSources.cpp,
+    iconClassName: 'h-4.5 w-4.5',
     isRunnable: true,
   },
   c: {
@@ -65,18 +67,21 @@ export const LANGUAGE_SELECTOR_METADATA: Record<SupportedLanguage, LanguageSelec
     shortLabel: 'C',
     fallbackIconText: 'C',
     iconSrc: languageIconSources.c,
+    iconClassName: 'h-3 w-3',
   },
   go: {
     label: 'Go',
     shortLabel: 'Go',
     fallbackIconText: 'Go',
     iconSrc: languageIconSources.go,
+    iconClassName: 'h-4.5 w-4.5',
   },
   rust: {
     label: 'Rust',
     shortLabel: 'Rs',
     fallbackIconText: 'Rs',
     iconSrc: languageIconSources.rust,
+    iconClassName: 'h-4.5 w-4.5',
   },
 };
 

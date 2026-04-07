@@ -1,6 +1,6 @@
 import type { SupportedLanguage } from '@syncode/shared';
 import { cn, Select, SelectContent, SelectItem, SelectTrigger } from '@syncode/ui';
-import { getLanguageSelectorOption, getLanguageSelectorOptions } from './language-selector.data';
+import { getLanguageSelectorOptions } from './language-selector.data';
 
 const DEFAULT_PLACEHOLDER = 'Select language';
 const EMPTY_PLACEHOLDER = 'No languages available';
@@ -42,8 +42,8 @@ export function LanguageSelector({
         {selectedOption ? (
           <LanguageSelectorValue
             iconSrc={selectedOption.iconSrc}
+            iconClassName={selectedOption.iconClassName}
             badgeText={selectedOption.fallbackIconText}
-            language={selectedOption.value}
             label={selectedOption.label}
           />
         ) : (
@@ -61,8 +61,8 @@ export function LanguageSelector({
           >
             <LanguageSelectorValue
               iconSrc={option.iconSrc}
+              iconClassName={option.iconClassName}
               badgeText={option.fallbackIconText}
-              language={option.value}
               label={option.label}
               mutedBadge={option.value !== selectedOption?.value}
             />
@@ -75,14 +75,14 @@ export function LanguageSelector({
 
 function LanguageSelectorValue({
   iconSrc,
+  iconClassName,
   badgeText,
-  language,
   label,
   mutedBadge = false,
 }: {
   iconSrc: string;
+  iconClassName?: string;
   badgeText: string;
-  language: SupportedLanguage;
   label: string;
   mutedBadge?: boolean;
 }) {
@@ -90,8 +90,8 @@ function LanguageSelectorValue({
     <span className="flex min-w-0 items-center gap-2">
       <LanguageIcon
         iconSrc={iconSrc}
+        iconClassName={iconClassName}
         fallbackText={badgeText}
-        language={language}
         muted={mutedBadge}
       />
       <span className="truncate text-sm font-medium text-foreground">{label}</span>
@@ -101,13 +101,13 @@ function LanguageSelectorValue({
 
 function LanguageIcon({
   iconSrc,
+  iconClassName,
   fallbackText,
-  language,
   muted = false,
 }: {
   iconSrc: string;
+  iconClassName?: string;
   fallbackText: string;
-  language: SupportedLanguage;
   muted?: boolean;
 }) {
   return (
@@ -124,13 +124,7 @@ function LanguageIcon({
         <img
           src={iconSrc}
           alt=""
-          className={cn(
-            'block h-4 w-4 object-contain',
-            language === 'c' && 'h-3 w-3',
-            language === 'cpp' && 'h-4.5 w-4.5',
-            language === 'rust' && 'h-4.5 w-4.5',
-            language === 'go' && 'h-4.5 w-4.5',
-          )}
+          className={cn('block h-4 w-4 object-contain', iconClassName)}
           loading="lazy"
           decoding="async"
         />
@@ -141,8 +135,4 @@ function LanguageIcon({
       )}
     </span>
   );
-}
-
-export function getLanguageSelectorLabel(language: SupportedLanguage) {
-  return getLanguageSelectorOption(language).label;
 }
