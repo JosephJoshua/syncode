@@ -1,7 +1,18 @@
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import * as schema from '@syncode/db';
-import { type Database, problems, roomParticipants, rooms, users } from '@syncode/db';
+import {
+  bookmarks,
+  type Database,
+  problems,
+  problemTags,
+  roomParticipants,
+  rooms,
+  submissions,
+  tags,
+  testCases,
+  users,
+} from '@syncode/db';
 import type { RoomRole } from '@syncode/shared';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
@@ -119,6 +130,69 @@ export async function insertProblem(
       title: `Problem ${n}`,
       description: `Description for problem ${n}`,
       difficulty: 'medium',
+      ...overrides,
+    })
+    .returning();
+  return row;
+}
+
+export async function insertTag(db: Database, overrides?: Partial<typeof tags.$inferInsert>) {
+  const n = seq();
+  const [row] = await db
+    .insert(tags)
+    .values({
+      name: `Tag ${n}`,
+      slug: `tag-${n}`,
+      ...overrides,
+    })
+    .returning();
+  return row;
+}
+
+export async function insertProblemTag(db: Database, problemId: string, tagId: string) {
+  const [row] = await db.insert(problemTags).values({ problemId, tagId }).returning();
+  return row;
+}
+
+export async function insertBookmark(db: Database, userId: string, problemId: string) {
+  const [row] = await db.insert(bookmarks).values({ userId, problemId }).returning();
+  return row;
+}
+
+export async function insertTestCase(
+  db: Database,
+  problemId: string,
+  overrides?: Partial<typeof testCases.$inferInsert>,
+) {
+  const n = seq();
+  const [row] = await db
+    .insert(testCases)
+    .values({
+      problemId,
+      input: `input-${n}`,
+      expectedOutput: `output-${n}`,
+      ...overrides,
+    })
+    .returning();
+  return row;
+}
+
+export async function insertSubmission(
+  db: Database,
+  userId: string,
+  roomId: string,
+  problemId: string,
+  overrides?: Partial<typeof submissions.$inferInsert>,
+) {
+  const [row] = await db
+    .insert(submissions)
+    .values({
+      userId,
+      roomId,
+      problemId,
+      code: 'print("hello")',
+      language: 'python',
+      totalTestCases: 1,
       ...overrides,
     })
     .returning();
