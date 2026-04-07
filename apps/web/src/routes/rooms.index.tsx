@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { formatDistanceToNowStrict } from 'date-fns';
 import {
+  AlertTriangle,
   ArrowRight,
   Clock3,
   Code2,
@@ -16,10 +17,10 @@ import {
   Users,
 } from 'lucide-react';
 import { motion } from 'motion/react';
+import type React from 'react';
 import { useMemo, useState } from 'react';
 import { api } from '@/lib/api-client';
 import { requireAuth } from '@/lib/auth';
-import { useAuthStore } from '@/stores/auth.store';
 
 export const Route = createFileRoute('/rooms/')({
   beforeLoad: requireAuth,
@@ -119,11 +120,11 @@ function RoomsPage() {
       return;
     }
 
-    navigate({
+    void navigate({
       to: '/rooms/$roomId',
       params: { roomId: parsed.roomId },
       search: { code: parsed.code },
-    });
+    }).catch(() => {});
   };
 
   return (
@@ -200,6 +201,7 @@ function RoomsPage() {
           <button
             key={f.value}
             type="button"
+            aria-pressed={statusFilter === f.value}
             onClick={() => setStatusFilter(f.value)}
             className={cn(
               'inline-flex h-8 items-center rounded-lg px-3 text-xs font-medium transition-colors',
@@ -216,6 +218,21 @@ function RoomsPage() {
       {roomsQuery.isLoading ? (
         <div className="flex items-center justify-center py-24">
           <Loader2 size={32} className="animate-spin text-primary/60" />
+        </div>
+      ) : roomsQuery.isError ? (
+        <div className="flex flex-col items-center justify-center py-24 text-center">
+          <AlertTriangle size={32} className="mb-4 text-destructive/60" />
+          <h3 className="text-lg font-semibold text-foreground">Failed to load rooms</h3>
+          <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+            Something went wrong. Please try again.
+          </p>
+          <Button
+            variant="outline"
+            className="mt-4 rounded-xl"
+            onClick={() => roomsQuery.refetch()}
+          >
+            Retry
+          </Button>
         </div>
       ) : rooms.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-24 text-center">
