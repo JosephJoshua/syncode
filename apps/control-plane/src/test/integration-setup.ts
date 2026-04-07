@@ -4,10 +4,17 @@ import * as schema from '@syncode/db';
 import {
   bookmarks,
   type Database,
+  peerFeedback,
   problems,
   problemTags,
   roomParticipants,
   rooms,
+  runs,
+  sessionDeletions,
+  sessionParticipants,
+  sessionRecordings,
+  sessionReports,
+  sessions,
   submissions,
   tags,
   testCases,
@@ -177,6 +184,128 @@ export async function insertTestCase(
   return row;
 }
 
+export async function insertSession(
+  db: Database,
+  roomId: string,
+  overrides?: Partial<typeof sessions.$inferInsert>,
+) {
+  const [row] = await db
+    .insert(sessions)
+    .values({
+      roomId,
+      mode: 'peer',
+      status: 'finished',
+      ...overrides,
+    })
+    .returning();
+  return row;
+}
+
+export async function insertSessionParticipant(
+  db: Database,
+  sessionId: string,
+  userId: string,
+  role: RoomRole = 'candidate',
+) {
+  const [row] = await db
+    .insert(sessionParticipants)
+    .values({ sessionId, userId, role })
+    .returning();
+  return row;
+}
+
+export async function insertSessionReport(
+  db: Database,
+  sessionId: string,
+  overrides?: Partial<typeof sessionReports.$inferInsert>,
+) {
+  const [row] = await db
+    .insert(sessionReports)
+    .values({
+      sessionId,
+      overallScore: 80,
+      categoryScores: { problemSolving: 80, communication: 80 },
+      feedback: 'Good job',
+      ...overrides,
+    })
+    .returning();
+  return row;
+}
+
+export async function insertSessionDeletion(db: Database, sessionId: string, userId: string) {
+  const [row] = await db.insert(sessionDeletions).values({ sessionId, userId }).returning();
+  return row;
+}
+
+export async function insertSessionRecording(
+  db: Database,
+  sessionId: string,
+  overrides?: Partial<typeof sessionRecordings.$inferInsert>,
+) {
+  const [row] = await db
+    .insert(sessionRecordings)
+    .values({
+      sessionId,
+      storageKey: `recordings/${sessionId}.webm`,
+      ...overrides,
+    })
+    .returning();
+  return row;
+}
+
+export async function insertPeerFeedbackRow(
+  db: Database,
+  opts: {
+    sessionId: string;
+    roomId: string;
+    reviewerId: string;
+    candidateId: string;
+  },
+  overrides?: Partial<typeof peerFeedback.$inferInsert>,
+) {
+  const [row] = await db
+    .insert(peerFeedback)
+    .values({
+      sessionId: opts.sessionId,
+      roomId: opts.roomId,
+      reviewerId: opts.reviewerId,
+      candidateId: opts.candidateId,
+      problemSolvingRating: 4,
+      communicationRating: 4,
+      codeQualityRating: 4,
+      debuggingRating: 4,
+      overallRating: 4,
+      strengths: 'Good',
+      improvements: 'None',
+      wouldPairAgain: true,
+      ...overrides,
+    })
+    .returning();
+  return row;
+}
+
+export async function insertRun(
+  db: Database,
+  roomId: string,
+  userId: string,
+  overrides?: Partial<typeof runs.$inferInsert>,
+) {
+  const n = seq();
+  const [row] = await db
+    .insert(runs)
+    .values({
+      roomId,
+      userId,
+      jobId: `job-${n}`,
+      code: 'print("hello")',
+      language: 'python',
+      status: 'completed',
+      ...overrides,
+    })
+    .returning();
+  return row;
+}
+
 export async function insertSubmission(
   db: Database,
   userId: string,
@@ -192,7 +321,9 @@ export async function insertSubmission(
       problemId,
       code: 'print("hello")',
       language: 'python',
-      totalTestCases: 1,
+      status: 'completed',
+      totalTestCases: 5,
+      passedTestCases: 5,
       ...overrides,
     })
     .returning();

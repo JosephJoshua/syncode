@@ -14,6 +14,7 @@ import { ExecutionModule } from './modules/execution/execution.module.js';
 import { InternalModule } from './modules/internal/internal.module.js';
 import { ProblemsModule } from './modules/problems/problems.module.js';
 import { RoomsModule } from './modules/rooms/rooms.module.js';
+import { SessionsModule } from './modules/sessions/sessions.module.js';
 import { UsersModule } from './modules/users/users.module.js';
 
 const isProd = process.env.NODE_ENV === 'production';
@@ -114,6 +115,7 @@ if (!isProd) {
     AuthModule,
     UsersModule,
     RoomsModule,
+    SessionsModule,
     ProblemsModule,
     ExecutionModule,
     InternalModule,

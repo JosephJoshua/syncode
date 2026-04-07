@@ -35,7 +35,11 @@ import type {
   transitionRoomPhaseResponseSchema,
   transitionRoomPhaseSchema,
 } from './rooms.js';
-import type { sessionHistoryResponseSchema } from './sessions.js';
+import type {
+  listSessionsQuerySchema,
+  sessionDetailSchema,
+  sessionHistoryResponseSchema,
+} from './sessions.js';
 import type {
   publicUserProfileResponseSchema,
   updateUserSchema,
@@ -127,7 +131,12 @@ export const CONTROL_API = {
     REMOVE: defineRoute<void, void>()('users/me/bookmarks/:problemId', 'DELETE'),
   },
   SESSIONS: {
-    LIST: defineRoute<void, z.infer<typeof sessionHistoryResponseSchema>>()('sessions', 'GET'),
+    LIST: defineRoute<
+      z.infer<typeof listSessionsQuerySchema>,
+      z.infer<typeof sessionHistoryResponseSchema>
+    >()('sessions', 'GET'),
+    GET: defineRoute<void, z.infer<typeof sessionDetailSchema>>()('sessions/:id', 'GET'),
+    DELETE: defineRoute<void, void>()('sessions/:id', 'DELETE'),
   },
   HEALTH: defineRoute<void, z.infer<typeof healthCheckResponseSchema>>()('health', 'GET'),
 };
