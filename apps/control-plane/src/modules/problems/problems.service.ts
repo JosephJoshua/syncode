@@ -1,19 +1,21 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import {
   ERROR_CODES,
+  type ListBookmarksQuery,
   type ProblemDetail,
   type ProblemSummary,
   type ProblemsListQuery,
   type ProblemsTagsResponse,
 } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
-import { problems, problemTags, tags, testCases } from '@syncode/db';
+import { bookmarks, problems, problemTags, tags, testCases } from '@syncode/db';
 import type { ProblemSortBy } from '@syncode/shared';
 import { type PaginatedResult, paginate } from '@syncode/shared/server';
 import { and, asc, count, desc, eq, gt, ilike, isNull, lt, or, sql } from 'drizzle-orm';
 import { DB_CLIENT } from '@/modules/db/db.module';
 
 type ProblemSummaryRow = ProblemSummary & { sortValue: string };
+type BookmarkRow = ProblemSummary & { bookmarkedAt: Date };
 
 @Injectable()
 export class ProblemsService {
@@ -146,14 +148,7 @@ export class ProblemsService {
           .limit(fetchLimit);
 
         return rows.map((row) => ({
-          id: row.id,
-          title: row.title,
-          difficulty: row.difficulty,
-          tags: row.tagsAgg ? row.tagsAgg.split(',') : [],
-          company: row.company ?? null,
-          acceptanceRate: row.acceptanceRate != null ? Number(row.acceptanceRate) : null,
-          isBookmarked: Boolean(row.isBookmarked),
-          attemptStatus: row.attemptStatus as ProblemSummary['attemptStatus'],
+          ...this.mapToSummary(row, Boolean(row.isBookmarked)),
           totalSubmissions: row.totalSubmissions,
           updatedAt: row.updatedAt.toISOString(),
           sortValue: this.computeSortValue(row, sortField),
@@ -267,6 +262,105 @@ export class ProblemsService {
         name: row.name,
         count: Number(row.count),
       })),
+    };
+  }
+
+  async addBookmark(userId: string, problemId: string): Promise<void> {
+    const [problem] = await this.db
+      .select({ id: problems.id })
+      .from(problems)
+      .where(and(eq(problems.id, problemId), isNull(problems.deletedAt)));
+
+    if (!problem) {
+      throw new NotFoundException({
+        message: 'Problem not found',
+        code: ERROR_CODES.PROBLEM_NOT_FOUND,
+      });
+    }
+
+    await this.db.insert(bookmarks).values({ userId, problemId }).onConflictDoNothing();
+  }
+
+  async removeBookmark(userId: string, problemId: string): Promise<void> {
+    await this.db
+      .delete(bookmarks)
+      .where(and(eq(bookmarks.userId, userId), eq(bookmarks.problemId, problemId)));
+  }
+
+  async listBookmarks(
+    userId: string,
+    query: ListBookmarksQuery,
+  ): Promise<PaginatedResult<ProblemSummary>> {
+    const result = await paginate<BookmarkRow>({
+      cursor: query.cursor,
+      limit: query.limit,
+      getCursorValues: (row) => [row.bookmarkedAt.toISOString(), row.id],
+      fetchPage: async (decoded, fetchLimit) => {
+        const conditions = [eq(bookmarks.userId, userId), isNull(problems.deletedAt)];
+
+        if (decoded?.length === 2 && decoded[0] && decoded[1]) {
+          const cursorDate = new Date(decoded[0]);
+          const cursorId = decoded[1];
+
+          conditions.push(
+            or(
+              lt(bookmarks.createdAt, cursorDate),
+              and(eq(bookmarks.createdAt, cursorDate), lt(problems.id, cursorId)),
+            )!,
+          );
+        }
+
+        const rows = await this.db
+          .select({
+            id: problems.id,
+            title: problems.title,
+            difficulty: problems.difficulty,
+            tagsAgg: this.tagsAggExpr(),
+            company: problems.company,
+            acceptanceRate: this.acceptanceRateExpr(),
+            attemptStatus: this.attemptStatusExpr(userId),
+            bookmarkedAt: bookmarks.createdAt,
+          })
+          .from(bookmarks)
+          .innerJoin(problems, eq(problems.id, bookmarks.problemId))
+          .where(and(...conditions))
+          .orderBy(desc(bookmarks.createdAt), desc(problems.id))
+          .limit(fetchLimit);
+
+        return rows.map((row) => ({
+          ...this.mapToSummary(row, true),
+          bookmarkedAt: row.bookmarkedAt,
+        }));
+      },
+    });
+
+    return {
+      data: result.data.map(({ bookmarkedAt: _, ...summary }) => summary),
+      pagination: result.pagination,
+    };
+  }
+
+  private mapToSummary(
+    row: {
+      id: string;
+      title: string;
+      difficulty: string;
+      tagsAgg: string | null;
+      company: string | null;
+      acceptanceRate: number | null;
+      attemptStatus: string | null;
+    },
+    isBookmarked: boolean,
+  ): ProblemSummary {
+    return {
+      id: row.id,
+      title: row.title,
+      difficulty: row.difficulty as ProblemSummary['difficulty'],
+      tags: row.tagsAgg ? row.tagsAgg.split(',') : [],
+      company: row.company ?? null,
+      acceptanceRate: row.acceptanceRate != null ? Number(row.acceptanceRate) : null,
+      isBookmarked,
+      attemptStatus: row.attemptStatus as ProblemSummary['attemptStatus'],
     };
   }
 

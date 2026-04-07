@@ -6,8 +6,8 @@ import { ProblemsService } from './problems.service.js';
 const USER_ID = '00000000-0000-0000-0000-000000000099';
 
 /**
- * NOTE: listProblems, findById, and listTags use complex Drizzle joins +
- * correlated subqueries that are impractical to mock at the unit level.
+ * NOTE: listProblems, findById, listTags, and listBookmarks use complex Drizzle
+ * joins + correlated subqueries that are impractical to mock at the unit level.
  * Cover with integration tests.
  */
 function createMockDb(rows: unknown[] = []) {
@@ -24,10 +24,44 @@ function createMockDb(rows: unknown[] = []) {
   const mockFrom = vi.fn().mockReturnValue({ where: mockWhere });
   const mockSelect = vi.fn().mockReturnValue({ from: mockFrom });
 
-  return { select: mockSelect };
+  const onConflictDoNothing = vi.fn().mockResolvedValue(undefined);
+  const insertValues = vi.fn(() => ({ onConflictDoNothing }));
+  const insert = vi.fn(() => ({ values: insertValues }));
+
+  const deleteWhere = vi.fn().mockResolvedValue(undefined);
+  const deleteFn = vi.fn(() => ({ where: deleteWhere }));
+
+  return { select: mockSelect, insert, delete: deleteFn };
 }
 
 describe('ProblemsService', () => {
+  describe('addBookmark', () => {
+    it('GIVEN existing problem WHEN addBookmark THEN resolves without error', async () => {
+      const db = createMockDb([{ id: 'problem-1' }]);
+      const service = new ProblemsService(db as unknown as Database);
+
+      await expect(service.addBookmark('user-1', 'problem-1')).resolves.toBeUndefined();
+    });
+
+    it('GIVEN non-existent problem WHEN addBookmark THEN throws NotFoundException', async () => {
+      const db = createMockDb([]);
+      const service = new ProblemsService(db as unknown as Database);
+
+      await expect(service.addBookmark('user-1', 'nonexistent')).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe('removeBookmark', () => {
+    it('GIVEN any problemId WHEN removeBookmark THEN resolves without error', async () => {
+      const db = createMockDb();
+      const service = new ProblemsService(db as unknown as Database);
+
+      await expect(service.removeBookmark('user-1', 'problem-1')).resolves.toBeUndefined();
+    });
+  });
+
   describe('findById', () => {
     it('GIVEN non-existent problem WHEN finding THEN throws NotFoundException with PROBLEM_NOT_FOUND', async () => {
       const db = createMockDb([]);
