@@ -1,12 +1,17 @@
 import type { SupportedLanguage } from '@syncode/shared';
 import { Card, CardContent, CardHeader, CardTitle } from '@syncode/ui';
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, redirect } from '@tanstack/react-router';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { LanguageSelector } from '@/components';
 import { getLanguageSelectorOption } from '@/components/language-selector.data';
 
 export const Route = createFileRoute('/dev/language-selector')({
+  beforeLoad: () => {
+    if (!import.meta.env.DEV) {
+      throw redirect({ to: '/' });
+    }
+  },
   component: LanguageSelectorPreviewPage,
 });
 
