@@ -6,9 +6,18 @@ import {
   Button,
   Card,
   Checkbox,
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
   cn,
   Input,
   Label,
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
   Select,
   SelectContent,
   SelectItem,
@@ -17,9 +26,9 @@ import {
 } from '@syncode/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { Check, ChevronDown, Code2, Copy, FileCode2, Globe, Lock } from 'lucide-react';
+import { Check, Code2, Copy, FileCode2, Globe, Lock } from 'lucide-react';
 import { motion } from 'motion/react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
@@ -61,24 +70,6 @@ const createRoomFormSchema = z.object({
 });
 type CreateRoomFormData = z.infer<typeof createRoomFormSchema>;
 
-function matchesProblemQuery(label: string, query: string) {
-  const normalizedLabel = label.toLowerCase();
-  const normalizedQuery = query.trim().toLowerCase();
-
-  if (!normalizedQuery) {
-    return true;
-  }
-
-  let queryIndex = 0;
-  for (let i = 0; i < normalizedLabel.length && queryIndex < normalizedQuery.length; i++) {
-    if (normalizedLabel[i] === normalizedQuery[queryIndex]) {
-      queryIndex++;
-    }
-  }
-
-  return queryIndex === normalizedQuery.length;
-}
-
 function CreateRoomPage() {
   const { t } = useTranslation('rooms');
   const queryClient = useQueryClient();
@@ -107,23 +98,15 @@ function CreateRoomPage() {
     });
   }, [problemsQuery.data]);
 
-  const comboboxRef = useRef<HTMLDivElement>(null);
-
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [createdRoomId, setCreatedRoomId] = useState<string | null>(null);
   const [createdRoomCode, setCreatedRoomCode] = useState<string | null>(null);
   const { copied, copy } = useClipboard();
-  const [problemInput, setProblemInput] = useState('');
-  const [isProblemMenuOpen, setIsProblemMenuOpen] = useState(false);
+  const [isProblemOpen, setIsProblemOpen] = useState(false);
   const [submissionError, setSubmissionError] = useState<string | null>(null);
   const [submittedData, setSubmittedData] = useState<CreateRoomFormData | null>(null);
 
-  const filteredProblems = useMemo(() => {
-    return availableProblems.filter((problem) => matchesProblemQuery(problem.label, problemInput));
-  }, [availableProblems, problemInput]);
-
   const {
-    register,
     handleSubmit,
     setValue,
     watch,
@@ -136,28 +119,7 @@ function CreateRoomPage() {
   });
 
   const selectedProblemId = watch('problemId');
-
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (comboboxRef.current && !comboboxRef.current.contains(event.target as Node)) {
-        setIsProblemMenuOpen(false);
-
-        const selectedProblem = availableProblems.find(
-          (problem) => problem.value === selectedProblemId,
-        );
-
-        if (selectedProblem) {
-          setProblemInput(selectedProblem.label);
-        }
-      }
-    }
-
-    if (isProblemMenuOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [availableProblems, isProblemMenuOpen, selectedProblemId]);
+  const selectedProblemLabel = availableProblems.find((p) => p.value === selectedProblemId)?.label;
 
   const createRoomMutation = useMutation({
     mutationFn: (data: CreateRoomFormData) =>
@@ -201,9 +163,9 @@ function CreateRoomPage() {
   };
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-8 sm:py-10 lg:py-12">
+    <div className="mx-auto max-w-2xl px-4 py-8 sm:py-10 lg:py-12">
       <motion.section
-        className="max-w-3xl"
+        className="text-center"
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
@@ -215,7 +177,7 @@ function CreateRoomPage() {
       </motion.section>
 
       <motion.div
-        className="mt-8 max-w-2xl"
+        className="mt-8"
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.45, delay: 0.08, ease: [0.22, 1, 0.36, 1] }}
@@ -227,70 +189,54 @@ function CreateRoomPage() {
                 <Label className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   {t('create.problemLabel')}
                 </Label>
-                <input type="hidden" {...register('problemId')} />
-
-                <div ref={comboboxRef}>
-                  <div className="relative">
-                    <FileCode2
-                      className="pointer-events-none absolute left-3.5 top-3.5 text-muted-foreground"
-                      size={18}
-                    />
-                    <Input
-                      type="text"
-                      value={problemInput}
-                      onFocus={() => setIsProblemMenuOpen(true)}
-                      onChange={(event) => {
-                        const nextValue = event.target.value;
-                        setProblemInput(nextValue);
-                        setIsProblemMenuOpen(true);
-                        setValue('problemId', '', { shouldValidate: true });
-                      }}
-                      placeholder={t('create.problemPlaceholder')}
+                <Popover open={isProblemOpen} onOpenChange={setIsProblemOpen}>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
                       role="combobox"
-                      aria-expanded={isProblemMenuOpen}
-                      aria-controls="problem-listbox"
-                      aria-autocomplete="list"
-                      aria-haspopup="listbox"
-                      className="pl-11"
-                    />
-                    <ChevronDown
-                      className="pointer-events-none absolute right-3 top-3.5 text-muted-foreground"
-                      size={18}
-                    />
-
-                    {isProblemMenuOpen && (
-                      <div
-                        id="problem-listbox"
-                        role="listbox"
-                        className="absolute z-20 mt-2 max-h-56 w-full overflow-auto rounded-lg border border-border bg-popover p-1.5 shadow-2xl"
-                      >
-                        {filteredProblems.length > 0 ? (
-                          filteredProblems.map((problem) => (
-                            <button
+                      aria-expanded={isProblemOpen}
+                      className={cn(
+                        'flex h-11 w-full items-center gap-2 rounded-lg border border-input bg-background px-3.5 text-left text-sm font-medium outline-none transition-[border-color,background-color,box-shadow] focus-visible:border-ring/60 focus-visible:ring-3 focus-visible:ring-ring/40',
+                        !selectedProblemLabel && 'text-muted-foreground',
+                        errors.problemId && 'border-destructive ring-destructive/20',
+                      )}
+                    >
+                      <FileCode2 size={16} className="shrink-0 text-muted-foreground" />
+                      <span className="flex-1 truncate">
+                        {selectedProblemLabel ?? t('create.problemPlaceholder')}
+                      </span>
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent className="p-0">
+                    <Command>
+                      <CommandInput placeholder={t('create.problemPlaceholder')} />
+                      <CommandList>
+                        <CommandEmpty>{t('create.noMatchingProblems')}</CommandEmpty>
+                        <CommandGroup>
+                          {availableProblems.map((problem) => (
+                            <CommandItem
                               key={problem.value}
-                              type="button"
-                              role="option"
-                              aria-selected={problem.value === selectedProblemId}
-                              onClick={() => {
+                              value={problem.label}
+                              onSelect={() => {
                                 setValue('problemId', problem.value, { shouldValidate: true });
-                                setProblemInput(problem.label);
-                                setIsProblemMenuOpen(false);
+                                setIsProblemOpen(false);
                               }}
-                              className="flex w-full items-center rounded-lg px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-muted"
                             >
+                              <Check
+                                size={14}
+                                className={cn(
+                                  'shrink-0',
+                                  problem.value === selectedProblemId ? 'opacity-100' : 'opacity-0',
+                                )}
+                              />
                               {problem.label}
-                            </button>
-                          ))
-                        ) : (
-                          <p className="px-3 py-2 text-sm text-muted-foreground">
-                            {t('create.noMatchingProblems')}
-                          </p>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
                 {errors.problemId && (
                   <p className="mt-1.5 pl-1 text-xs text-destructive">
                     {t('create.problemRequired')}
@@ -310,8 +256,8 @@ function CreateRoomPage() {
                       <SelectTrigger
                         className={cn(errors.language && 'border-destructive ring-destructive/20')}
                       >
-                        <div className="flex items-center gap-2.5">
-                          <Code2 size={18} className="text-muted-foreground" />
+                        <div className="flex items-center gap-2">
+                          <Code2 size={16} className="text-muted-foreground" />
                           <SelectValue placeholder={t('create.languagePlaceholder')} />
                         </div>
                       </SelectTrigger>
@@ -429,22 +375,22 @@ function CreateRoomPage() {
                   {t('success.shareLink')}
                 </p>
 
-                <div className="relative flex items-center rounded-lg border border-border bg-background p-1.5 transition-all duration-300 focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50">
+                <div className="relative flex items-center gap-2">
                   <Input
                     type="text"
                     readOnly
                     value={inviteLink ?? ''}
-                    className="flex-1 border-none bg-transparent font-mono text-sm shadow-none focus-visible:ring-0"
+                    className="flex-1 font-mono text-sm"
                   />
-                  <div className="pointer-events-none absolute right-14 top-0 bottom-0 w-8 bg-gradient-to-l from-background to-transparent" />
-                  <button
+                  <Button
                     type="button"
+                    variant="outline"
+                    size="lg"
                     onClick={copyToClipboard}
-                    className="flex shrink-0 items-center justify-center rounded-md bg-muted p-3 text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground"
                     title={t('common:copyLink')}
                   >
-                    {copied ? <Check size={18} className="text-primary" /> : <Copy size={18} />}
-                  </button>
+                    {copied ? <Check size={16} className="text-primary" /> : <Copy size={16} />}
+                  </Button>
                 </div>
               </div>
 
@@ -458,7 +404,6 @@ function CreateRoomPage() {
                     setCreatedRoomId(null);
                     setCreatedRoomCode(null);
                     reset();
-                    setProblemInput('');
                     setSubmissionError(null);
                     setSubmittedData(null);
                   }}

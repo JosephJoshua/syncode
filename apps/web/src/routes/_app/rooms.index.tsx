@@ -180,8 +180,11 @@ function RoomsPage() {
             className="flex flex-1 flex-col gap-3 sm:flex-row sm:items-start"
           >
             <div className="flex-1">
-              <div className="relative flex items-center rounded-lg border border-border/60 bg-background p-1.5 transition-all duration-300 focus-within:border-primary focus-within:ring-3 focus-within:ring-primary/20">
-                <Hash size={18} className="ml-2.5 shrink-0 text-muted-foreground/60" />
+              <div className="relative">
+                <Hash
+                  size={16}
+                  className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground/60"
+                />
                 <Input
                   type="text"
                   value={inviteInput}
@@ -190,9 +193,8 @@ function RoomsPage() {
                     setJoinError(null);
                   }}
                   placeholder={t('join.placeholder')}
-                  className="flex-1 border-none bg-transparent font-mono text-sm shadow-none focus-visible:ring-0"
+                  className="pl-10 font-mono text-sm"
                 />
-                <div className="pointer-events-none absolute right-1.5 top-0 bottom-0 w-8 bg-gradient-to-l from-background to-transparent" />
               </div>
               {joinError && <p className="mt-1.5 pl-1 text-xs text-destructive">{joinError}</p>}
             </div>
@@ -200,7 +202,7 @@ function RoomsPage() {
               type="submit"
               variant="outline"
               size="lg"
-              className="shrink-0 gap-2 sm:mt-1.5"
+              className="shrink-0 gap-2"
               disabled={!inviteInput.trim()}
             >
               {t('join.button')}

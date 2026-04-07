@@ -1,10 +1,10 @@
 {
   "heading": "Rooms",
   "subtitle": {
-    "activeCount_one": "{{activeCount}} active room",
-    "activeCount_other": "{{activeCount}} active rooms",
-    "totalCount_one": "{{totalCount}} room",
-    "totalCount_other": "{{totalCount}} rooms",
+    "activeCount_one": "{{count}} active room",
+    "activeCount_other": "{{count}} active rooms",
+    "totalCount_one": "{{count}} room",
+    "totalCount_other": "{{count}} rooms",
     "totalLabel": "{{totalCount}} total",
     "noActive": "No active rooms"
   },

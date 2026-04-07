@@ -231,28 +231,23 @@ function RoomLobbyPage() {
           <p className="mt-3 text-sm text-muted-foreground sm:text-base">{t('lobby.sub')}</p>
         </section>
 
-        <div className="mt-6 flex flex-col items-start gap-4 sm:flex-row sm:items-center">
-          <Badge variant="outline" className="gap-2 px-4 py-1.5 text-sm">
-            <Users size={16} className="text-primary" />
+        <div className="mt-6 flex flex-col items-start gap-3 sm:flex-row sm:items-center">
+          <Badge variant="outline" className="gap-2 px-3 py-1.5 text-sm">
+            <Users size={14} className="text-primary" />
             {readyCount} / {totalCount} {t('lobby.ready')}
           </Badge>
 
-          <div className="relative flex w-full items-center rounded-lg border border-border bg-background p-1.5 transition-all duration-300 focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50 sm:max-w-md">
-            <Input
-              type="text"
-              readOnly
-              value={inviteLink}
-              className="flex-1 border-none bg-transparent font-mono text-sm shadow-none focus-visible:ring-0"
-            />
-            <div className="pointer-events-none absolute right-14 top-0 bottom-0 w-8 bg-gradient-to-l from-background to-transparent" />
-            <button
+          <div className="flex w-full items-center gap-2 sm:max-w-md">
+            <Input type="text" readOnly value={inviteLink} className="flex-1 font-mono text-sm" />
+            <Button
               type="button"
+              variant="outline"
+              size="lg"
               onClick={copyInviteLink}
-              className="flex shrink-0 items-center justify-center rounded-md bg-muted p-2.5 text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground"
               title={t('common:copyLink')}
             >
               {copied ? <Check size={16} className="text-primary" /> : <Copy size={16} />}
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -360,8 +355,8 @@ function RoomLobbyPage() {
                   </label>
                   <Select value={myRole} onValueChange={handleRoleChange} disabled={isReady}>
                     <SelectTrigger id="role-select">
-                      <div className="flex items-center gap-2.5">
-                        <UserCog size={18} className="text-muted-foreground" />
+                      <div className="flex items-center gap-2">
+                        <UserCog size={16} className="text-muted-foreground" />
                         <SelectValue placeholder={t('roleSelect.placeholder')} />
                       </div>
                     </SelectTrigger>

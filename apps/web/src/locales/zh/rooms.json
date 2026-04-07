@@ -1,10 +1,10 @@
 {
   "heading": "房间",
   "subtitle": {
-    "activeCount_one": "{{activeCount}} 个活跃房间",
-    "activeCount_other": "{{activeCount}} 个活跃房间",
-    "totalCount_one": "{{totalCount}} 个房间",
-    "totalCount_other": "{{totalCount}} 个房间",
+    "activeCount_one": "{{count}} 个活跃房间",
+    "activeCount_other": "{{count}} 个活跃房间",
+    "totalCount_one": "{{count}} 个房间",
+    "totalCount_other": "{{count}} 个房间",
     "totalLabel": "共 {{totalCount}} 个",
     "noActive": "无活跃房间"
   },
