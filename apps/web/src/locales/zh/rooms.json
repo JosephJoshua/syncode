@@ -38,8 +38,7 @@
     "host": "主持人",
     "candidate": "候选人",
     "interviewer": "面试官",
-    "observer": "观察者",
-    "unassigned": "未分配"
+    "observer": "观察者"
   },
   "status": {
     "waiting": "等待中",
@@ -84,7 +83,7 @@
     "joinFailed": "加入房间失败，请检查邀请链接或登录状态。"
   },
   "roleSelect": {
-    "heading": "选择你的角色",
+    "heading": "你的角色",
     "placeholder": "选择角色...",
     "host": "主持人（房间所有者）",
     "candidate": "候选人（编写代码）",
@@ -96,7 +95,7 @@
     "cancelReady": "取消准备",
     "enterWorkspace": "进入工作区"
   },
-  "warning": "请确保至少分配一名候选人和一名面试官才能开始。",
+  "warning": "至少需要一名候选人和一名面试官（或主持人）才能开始。",
   "systemStatus": {
     "ready": "> SYSTEM_READY",
     "awaitingPeers": "> AWAITING_PEERS_"

@@ -38,8 +38,7 @@
     "host": "Host",
     "candidate": "Candidate",
     "interviewer": "Interviewer",
-    "observer": "Observer",
-    "unassigned": "Unassigned"
+    "observer": "Observer"
   },
   "status": {
     "waiting": "Waiting",
@@ -84,7 +83,7 @@
     "joinFailed": "Failed to join room. Please check invite link or login state."
   },
   "roleSelect": {
-    "heading": "Select Your Role",
+    "heading": "Your Role",
     "placeholder": "Pick a role...",
     "host": "Host (Room Owner)",
     "candidate": "Candidate (Writing Code)",
@@ -96,7 +95,7 @@
     "cancelReady": "Cancel Ready",
     "enterWorkspace": "Enter Workspace"
   },
-  "warning": "Action Required: Ensure at least one Candidate and one Interviewer are assigned to start.",
+  "warning": "Needs at least one candidate and one interviewer (or host) to start.",
   "systemStatus": {
     "ready": "> SYSTEM_READY",
     "awaitingPeers": "> AWAITING_PEERS_"
