@@ -1,5 +1,6 @@
 import type { UserProfileResponse } from '@syncode/contracts';
 import { Avatar, AvatarFallback, Button } from '@syncode/ui';
+import { useTranslation } from 'react-i18next';
 import { Skeleton } from '@/components/ui/skeleton';
 import { getUserDisplayName, getUserInitial } from '@/lib/user-utils';
 
@@ -11,6 +12,8 @@ interface ProfileHeroProps {
 }
 
 export function ProfileHero({ profile, isEditing, isLoading, onEditToggle }: ProfileHeroProps) {
+  const { t } = useTranslation('profile');
+
   if (isLoading) {
     return (
       <div className="rounded-[28px] bg-card/75 p-6 shadow-[0_24px_60px_-38px_oklch(0.2_0.02_260/0.55)] ring-0 sm:p-7">
@@ -37,17 +40,17 @@ export function ProfileHero({ profile, isEditing, isLoading, onEditToggle }: Pro
         <div className="min-w-0 space-y-3">
           <div>
             <p className="text-xs font-medium tracking-[0.18em] text-muted-foreground uppercase">
-              Profile
+              {t('hero.label')}
             </p>
             <h1 className="mt-2 text-3xl font-semibold tracking-tight text-foreground">
-              {getUserDisplayName(profile) ?? 'Your profile'}
+              {getUserDisplayName(profile) ?? t('hero.heading')}
             </h1>
             <p className="mt-1 text-sm text-primary">@{profile?.username ?? 'username'}</p>
           </div>
 
           <div className="space-y-1 text-sm text-muted-foreground">
-            <p>{profile?.email ?? 'No email available'}</p>
-            <p>{profile?.bio?.trim() ? profile.bio : 'No bio yet. Add a short intro below.'}</p>
+            <p>{profile?.email ?? t('hero.noEmail')}</p>
+            <p>{profile?.bio?.trim() ? profile.bio : t('hero.noBio')}</p>
           </div>
 
           <div className="pt-1">
@@ -56,7 +59,7 @@ export function ProfileHero({ profile, isEditing, isLoading, onEditToggle }: Pro
               variant={isEditing ? 'secondary' : 'default'}
               onClick={onEditToggle}
             >
-              {isEditing ? 'Hide editor' : 'Edit profile'}
+              {isEditing ? t('hero.hideEditor') : t('hero.editProfile')}
             </Button>
           </div>
         </div>

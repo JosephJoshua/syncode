@@ -1,4 +1,5 @@
 import type { RoomStatus } from '@syncode/shared';
+import { useTranslation } from 'react-i18next';
 
 interface RoomStageIndicatorProps {
   phase: RoomStatus;
@@ -7,41 +8,42 @@ interface RoomStageIndicatorProps {
 
 const phaseConfig: Record<
   RoomStatus,
-  { ascii: string; label: string; colorClass: string; glowClass: string }
+  { ascii: string; labelKey: string; colorClass: string; glowClass: string }
 > = {
   waiting: {
     ascii: '[ O _ O ]',
-    label: 'AWAITING_SYNC',
+    labelKey: 'stage.awaitingSync',
     colorClass: 'text-muted-foreground',
     glowClass: 'border-border',
   },
   warmup: {
     ascii: '[ ? _ ? ]',
-    label: 'SYSTEM_WARMUP',
+    labelKey: 'stage.systemWarmup',
     colorClass: 'text-amber-400',
     glowClass: 'shadow-[0_0_15px_rgba(251,191,36,0.25)] border-amber-500/40',
   },
   coding: {
     ascii: '[ > _ < ]',
-    label: 'ACTIVE_CODING',
+    labelKey: 'stage.activeCoding',
     colorClass: 'text-primary',
     glowClass: 'shadow-[0_0_20px_hsl(var(--primary)/0.35)] border-primary/50',
   },
   wrapup: {
     ascii: '[ = _ = ]',
-    label: 'PHASE_WRAPUP',
+    labelKey: 'stage.phaseWrapup',
     colorClass: 'text-fuchsia-400',
     glowClass: 'shadow-[0_0_15px_rgba(232,121,249,0.25)] border-fuchsia-500/40',
   },
   finished: {
     ascii: '[ ^ _ ^ ]',
-    label: 'SESSION_END',
+    labelKey: 'stage.sessionEnd',
     colorClass: 'text-cyan-400',
     glowClass: 'shadow-[0_0_15px_rgba(34,211,238,0.25)] border-cyan-500/40',
   },
 };
 
 export function RoomStageIndicator({ phase, className = '' }: RoomStageIndicatorProps) {
+  const { t } = useTranslation('rooms');
   const config = phaseConfig[phase];
 
   return (
@@ -61,7 +63,7 @@ export function RoomStageIndicator({ phase, className = '' }: RoomStageIndicator
       <div
         className={`font-mono text-xs font-bold uppercase tracking-widest drop-shadow-[0_0_5px_currentColor] transition-colors duration-500 ${config.colorClass}`}
       >
-        {config.label}
+        {t(config.labelKey)}
       </div>
     </div>
   );

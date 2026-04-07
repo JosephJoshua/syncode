@@ -19,6 +19,7 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { Check, ChevronDown, Code2, Copy, FileCode2, Globe, Lock } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
+import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
 import { useClipboard } from '@/hooks/use-clipboard';
 import { api, readApiError } from '@/lib/api-client';
@@ -78,6 +79,7 @@ function matchesProblemQuery(label: string, query: string) {
 }
 
 function CreateRoomPage() {
+  const { t } = useTranslation('rooms');
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const navigate = useNavigate();
 
@@ -194,11 +196,9 @@ function CreateRoomPage() {
       <div className="w-full max-w-lg">
         <div className="mb-10 text-center">
           <h1 className="mb-2.5 text-4xl font-extrabold tracking-tighter text-primary">
-            Create Workspace
+            {t('create.heading')}
           </h1>
-          <p className="text-base text-muted-foreground">
-            Setup your shared real-time coding environment
-          </p>
+          <p className="text-base text-muted-foreground">{t('create.sub')}</p>
         </div>
 
         <Card className="rounded-2xl border-border/60 bg-card/95 p-8 shadow-[0_10px_40px_-10px_rgba(0,0,0,0.7)]">
@@ -206,7 +206,7 @@ function CreateRoomPage() {
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-7">
               <div>
                 <Label className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Problem to Solve
+                  {t('create.problemLabel')}
                 </Label>
                 <input type="hidden" {...register('problemId')} />
 
@@ -226,7 +226,7 @@ function CreateRoomPage() {
                         setIsProblemMenuOpen(true);
                         setValue('problemId', '', { shouldValidate: true });
                       }}
-                      placeholder="Type to search and select a problem"
+                      placeholder={t('create.problemPlaceholder')}
                       role="combobox"
                       aria-expanded={isProblemMenuOpen}
                       aria-controls="problem-listbox"
@@ -264,7 +264,7 @@ function CreateRoomPage() {
                           ))
                         ) : (
                           <p className="px-3 py-2 text-sm text-muted-foreground">
-                            No matching problems
+                            {t('create.noMatchingProblems')}
                           </p>
                         )}
                       </div>
@@ -279,7 +279,7 @@ function CreateRoomPage() {
 
               <div>
                 <Label className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Coding Language
+                  {t('create.languageLabel')}
                 </Label>
                 <Controller
                   name="language"
@@ -294,7 +294,7 @@ function CreateRoomPage() {
                       >
                         <div className="flex items-center gap-2.5">
                           <Code2 size={18} className="text-muted-foreground" />
-                          <SelectValue placeholder="Select a language" />
+                          <SelectValue placeholder={t('create.languagePlaceholder')} />
                         </div>
                       </SelectTrigger>
                       <SelectContent>

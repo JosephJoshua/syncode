@@ -2,6 +2,7 @@ import { getNextStatuses, ROOM_STATUS_LABELS, ROOM_STATUSES, RoomStatus } from '
 import { Button, Card, CardContent, CardHeader, CardTitle } from '@syncode/ui';
 import { CheckCircle2, Code2, FastForward, Pause, Play, PlayCircle } from 'lucide-react';
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 const PHASE_COUNT = ROOM_STATUSES.length;
 
@@ -52,6 +53,7 @@ const MOCK_MAX_DURATION_MS = 120 * 60 * 1000;
 const WARNING_THRESHOLD = 0.85;
 
 function PhaseTimer({ running }: { running: boolean }) {
+  const { t } = useTranslation('rooms');
   const [elapsedMs, setElapsedMs] = useState(0);
   const [paused, setPaused] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -86,7 +88,7 @@ function PhaseTimer({ running }: { running: boolean }) {
         </span>
         {warning && (
           <span className="text-xs text-destructive font-medium">
-            {Math.round(ratio * 100)}% of session
+            {t('timer.percent', { percent: Math.round(ratio * 100) })}
           </span>
         )}
       </div>
@@ -113,6 +115,7 @@ const TRANSITION_ICONS: Partial<Record<RoomStatus, ReactNode>> = {
 };
 
 export function HostControlPanel() {
+  const { t } = useTranslation('rooms');
   const [currentStage, setCurrentStage] = useState<RoomStatus>(RoomStatus.WAITING);
   const nextStages = getNextStatuses(currentStage);
 
@@ -126,7 +129,7 @@ export function HostControlPanel() {
   return (
     <Card className="w-full max-w-sm">
       <CardHeader>
-        <CardTitle className="text-lg">Host Control</CardTitle>
+        <CardTitle className="text-lg">{t('hostControl.heading')}</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <PhaseProgressBar currentStatus={currentStage} />
@@ -135,11 +138,11 @@ export function HostControlPanel() {
         {currentStage === RoomStatus.FINISHED ? (
           <div className="text-center py-4 text-muted-foreground">
             <CheckCircle2 className="h-8 w-8 mx-auto mb-2 opacity-50" />
-            <p>Session has concluded.</p>
+            <p>{t('hostControl.sessionConcluded')}</p>
           </div>
         ) : (
           <div className="flex flex-col gap-2">
-            <p className="text-sm text-muted-foreground">Advance interview stage:</p>
+            <p className="text-sm text-muted-foreground">{t('hostControl.advanceStage')}</p>
             {nextStages.map((stage) => (
               <Button
                 key={stage}
@@ -149,8 +152,8 @@ export function HostControlPanel() {
               >
                 {TRANSITION_ICONS[stage]}
                 {stage === RoomStatus.FINISHED
-                  ? 'End Session'
-                  : `Advance to ${ROOM_STATUS_LABELS[stage]}`}
+                  ? t('hostControl.endSession')
+                  : t('hostControl.advanceTo', { stageName: ROOM_STATUS_LABELS[stage] })}
               </Button>
             ))}
           </div>

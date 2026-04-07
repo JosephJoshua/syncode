@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { DeleteAccountDialog } from '@/components/profile/delete-account-dialog';
 import { type ProfileFormValues, profileFormSchema } from '@/components/profile/profile-form';
@@ -13,6 +14,7 @@ import { ProfileHero } from '@/components/profile/profile-hero';
 import { QuotasPanel } from '@/components/profile/quotas-panel';
 import { api, getFieldErrorMessage, readApiError } from '@/lib/api-client';
 import { requireAuth } from '@/lib/auth';
+import i18n from '@/lib/i18n';
 import { useAuthStore } from '@/stores/auth.store';
 
 export const Route = createFileRoute('/profile')({
@@ -24,6 +26,7 @@ const profileQueryKey = ['users', 'me'] as const;
 const quotasQueryKey = ['users', 'me', 'quotas'] as const;
 
 function ProfilePage() {
+  const { t } = useTranslation('profile');
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
@@ -91,7 +94,7 @@ function ProfilePage() {
         bio: user.bio ?? '',
       });
       setIsEditing(false);
-      toast.success('Profile updated.');
+      toast.success(t('toast.profileUpdated'));
     },
     onError: (error) => {
       void handleProfileUpdateError(error, setError);
@@ -104,11 +107,11 @@ function ProfilePage() {
       setIsDeleteDialogOpen(false);
       logout();
       queryClient.clear();
-      toast.success('Account deleted.');
+      toast.success(t('deleteToast.accountDeleted'));
       navigate({ to: '/' }).catch(() => {});
     },
     onError: () => {
-      toast.error('Unable to delete your account right now.');
+      toast.error(t('deleteToast.deleteFailed'));
     },
   });
 
@@ -168,9 +171,9 @@ function ProfilePage() {
 
           <Card className="bg-[linear-gradient(180deg,oklch(0.18_0.02_22/0.96),oklch(0.15_0.015_18/0.98))] py-0 text-white ring-0">
             <CardHeader className="border-b border-white/10 pb-5">
-              <CardTitle className="text-white">Danger zone</CardTitle>
+              <CardTitle className="text-white">{t('dangerZone.heading')}</CardTitle>
               <CardDescription className="text-white/70">
-                Soft-deleting your account will sign you out and disable future access.
+                {t('dangerZone.description')}
               </CardDescription>
             </CardHeader>
             <CardContent className="px-4 py-5 sm:px-6">
@@ -206,7 +209,7 @@ async function handleProfileUpdateError(
   const apiError = await readApiError(error);
 
   if (!apiError) {
-    toast.error('Unable to update your profile right now.');
+    toast.error(i18n.t('toast.updateFailed', { ns: 'profile' }));
     return;
   }
 

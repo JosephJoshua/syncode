@@ -1,6 +1,7 @@
 import { Button, Input, Label } from '@syncode/ui';
 import { LoaderCircle } from 'lucide-react';
 import { Dialog } from 'radix-ui';
+import { useTranslation } from 'react-i18next';
 
 interface DeleteAccountDialogProps {
   confirmationEmail: string;
@@ -23,6 +24,8 @@ export function DeleteAccountDialog({
   onDelete,
   onOpenChange,
 }: DeleteAccountDialogProps) {
+  const { t } = useTranslation('profile');
+
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Button
@@ -33,30 +36,26 @@ export function DeleteAccountDialog({
           onOpenChange(true);
         }}
       >
-        Delete account
+        {t('deleteDialog.title')}
       </Button>
 
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-background/70 backdrop-blur-sm" />
         <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100vw-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-[28px] bg-card p-6 shadow-[0_28px_80px_-32px_oklch(0.12_0.02_260/0.7)] ring-1 ring-border/60">
           <Dialog.Title className="text-xl font-semibold tracking-tight text-foreground">
-            Delete account
+            {t('deleteDialog.title')}
           </Dialog.Title>
           <Dialog.Description className="mt-2 text-sm leading-6 text-muted-foreground">
-            This will soft-delete your account, sign you out immediately, and prevent future access.
-            Your historical records may still remain on the platform.
+            {t('deleteDialog.description')}
           </Dialog.Description>
 
           <div className="mt-5 rounded-2xl bg-muted/60 p-4 text-sm text-muted-foreground">
-            <p className="font-medium text-foreground">Confirmation required</p>
-            <p className="mt-2">
-              Type <span className="font-semibold text-foreground">{profileEmail}</span> exactly to
-              confirm deletion.
-            </p>
+            <p className="font-medium text-foreground">{t('deleteDialog.confirmationRequired')}</p>
+            <p className="mt-2">{t('deleteDialog.typeEmail', { email: profileEmail })}</p>
           </div>
 
           <div className="mt-5 space-y-2">
-            <Label htmlFor="delete-confirmation-email">Email confirmation</Label>
+            <Label htmlFor="delete-confirmation-email">{t('deleteDialog.emailConfirmation')}</Label>
             <Input
               id="delete-confirmation-email"
               autoComplete="off"
@@ -70,7 +69,7 @@ export function DeleteAccountDialog({
           <div className="mt-6 flex items-center justify-end gap-3">
             <Dialog.Close asChild>
               <Button type="button" variant="ghost" disabled={isPending}>
-                Cancel
+                {t('deleteDialog.cancel')}
               </Button>
             </Dialog.Close>
             <Button

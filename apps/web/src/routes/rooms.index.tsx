@@ -19,6 +19,7 @@ import {
 import { motion } from 'motion/react';
 import type React from 'react';
 import { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { api } from '@/lib/api-client';
 import { requireAuth } from '@/lib/auth';
 
@@ -52,11 +53,11 @@ const STATUS_STYLES: Record<string, { dot: string; badge: string }> = {
   },
 };
 
-const ROLE_LABELS: Record<string, string> = {
-  [RoomRole.HOST]: 'Host',
-  [RoomRole.CANDIDATE]: 'Candidate',
-  [RoomRole.INTERVIEWER]: 'Interviewer',
-  [RoomRole.SPECTATOR]: 'Observer',
+const ROLE_LABEL_KEYS: Record<string, string> = {
+  [RoomRole.HOST]: 'role.host',
+  [RoomRole.CANDIDATE]: 'role.candidate',
+  [RoomRole.INTERVIEWER]: 'role.interviewer',
+  [RoomRole.SPECTATOR]: 'role.observer',
 };
 
 const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
@@ -87,6 +88,7 @@ function formatTimeAgo(iso: string): string {
 }
 
 function RoomsPage() {
+  const { t } = useTranslation('rooms');
   const navigate = useNavigate();
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [inviteInput, setInviteInput] = useState('');
@@ -116,7 +118,7 @@ function RoomsPage() {
 
     const parsed = parseInviteInput(inviteInput);
     if (!parsed) {
-      setJoinError('Paste a valid invite link (e.g. https://…/rooms/id?code=XXXXXX)');
+      setJoinError(t('join.error'));
       return;
     }
 
@@ -131,20 +133,22 @@ function RoomsPage() {
     <div className="mx-auto max-w-6xl px-4 py-8 sm:py-10 lg:py-12">
       <div className="mb-10 flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">Rooms</h1>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
+            {t('heading')}
+          </h1>
           <p className="mt-1.5 text-sm text-muted-foreground">
             {statusFilter === 'all'
               ? activeCount > 0
-                ? `${activeCount} active room${activeCount === 1 ? '' : 's'} · ${totalCount} total`
-                : 'No active rooms'
-              : `${totalCount} room${totalCount === 1 ? '' : 's'}`}
+                ? `${t('subtitle.activeCount', { count: activeCount })} · ${t('subtitle.totalLabel', { totalCount })}`
+                : t('subtitle.noActive')
+              : t('subtitle.totalCount', { count: totalCount })}
           </p>
         </div>
 
         <Link to="/rooms/create">
           <Button className="gap-2 rounded-xl shadow-[0_0_25px_hsl(var(--primary)/0.3)] hover:shadow-[0_0_35px_hsl(var(--primary)/0.5)]">
             <Plus size={18} />
-            Create Room
+            {t('button.createRoom')}
           </Button>
         </Link>
       </div>
@@ -156,11 +160,11 @@ function RoomsPage() {
               <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/20">
                 <LinkIcon size={18} />
               </div>
-              <h2 className="text-lg font-semibold tracking-tight text-foreground">Join a Room</h2>
+              <h2 className="text-lg font-semibold tracking-tight text-foreground">
+                {t('join.heading')}
+              </h2>
             </div>
-            <p className="text-sm text-muted-foreground lg:max-w-xs">
-              Paste an invite link from your partner to join their workspace.
-            </p>
+            <p className="text-sm text-muted-foreground lg:max-w-xs">{t('join.description')}</p>
           </div>
 
           <form
@@ -177,7 +181,7 @@ function RoomsPage() {
                     setInviteInput(e.target.value);
                     setJoinError(null);
                   }}
-                  placeholder="https://…/rooms/abc123?code=A3K7M2"
+                  placeholder={t('join.placeholder')}
                   className="flex-1 border-none bg-transparent font-mono text-sm shadow-none focus-visible:ring-0"
                 />
               </div>
@@ -189,7 +193,7 @@ function RoomsPage() {
               className="shrink-0 gap-2 rounded-xl sm:mt-1.5"
               disabled={!inviteInput.trim()}
             >
-              Join
+              {t('join.button')}
               <ArrowRight size={16} />
             </Button>
           </form>
@@ -210,7 +214,7 @@ function RoomsPage() {
                 : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground',
             )}
           >
-            {f.label}
+            {f.value === 'all' ? t('filter.all') : f.label}
           </button>
         ))}
       </div>
@@ -222,16 +226,16 @@ function RoomsPage() {
       ) : roomsQuery.isError ? (
         <div className="flex flex-col items-center justify-center py-24 text-center">
           <AlertTriangle size={32} className="mb-4 text-destructive/60" />
-          <h3 className="text-lg font-semibold text-foreground">Failed to load rooms</h3>
+          <h3 className="text-lg font-semibold text-foreground">{t('error.loadFailed')}</h3>
           <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-            Something went wrong. Please try again.
+            {t('error.loadFailedDescription')}
           </p>
           <Button
             variant="outline"
             className="mt-4 rounded-xl"
             onClick={() => roomsQuery.refetch()}
           >
-            Retry
+            {t('error.retry')}
           </Button>
         </div>
       ) : rooms.length === 0 ? (
@@ -239,11 +243,13 @@ function RoomsPage() {
           <div className="mb-4 flex size-16 items-center justify-center rounded-2xl border border-border/50 bg-card/60">
             <Radio size={28} className="text-muted-foreground/40" />
           </div>
-          <h3 className="text-lg font-semibold text-foreground">No rooms yet</h3>
+          <h3 className="text-lg font-semibold text-foreground">{t('empty.noRooms')}</h3>
           <p className="mt-1 max-w-sm text-sm text-muted-foreground">
             {statusFilter === 'all'
-              ? 'Create a room to start practicing, or join one using an invite link above.'
-              : `No rooms with status "${STATUS_FILTERS.find((f) => f.value === statusFilter)?.label}".`}
+              ? t('empty.noRoomsDescription')
+              : t('empty.noRoomsWithStatus', {
+                  status: STATUS_FILTERS.find((f) => f.value === statusFilter)?.label,
+                })}
           </p>
         </div>
       ) : (
@@ -292,7 +298,7 @@ function RoomsPage() {
 
                     {/* Room name / problem */}
                     <h3 className="mb-1.5 text-base font-semibold tracking-tight text-foreground transition-colors group-hover:text-primary">
-                      {room.name ?? 'Untitled Room'}
+                      {room.name ?? t('card.untitledRoom')}
                     </h3>
 
                     {room.problemTitle && (
@@ -302,7 +308,7 @@ function RoomsPage() {
                     {/* Bottom row: role + language + code */}
                     <div className="flex flex-wrap items-center gap-2">
                       <Badge variant="secondary" className="text-xs">
-                        {ROLE_LABELS[room.myRole] ?? room.myRole}
+                        {t(ROLE_LABEL_KEYS[room.myRole] ?? room.myRole)}
                       </Badge>
 
                       {room.language && (

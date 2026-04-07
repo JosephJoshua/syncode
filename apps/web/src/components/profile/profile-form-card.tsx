@@ -13,6 +13,7 @@ import {
 import { LoaderCircle } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { FieldErrors, UseFormRegister, UseFormReset } from 'react-hook-form';
+import { useTranslation } from 'react-i18next';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { ProfileFormValues } from './profile-form';
 
@@ -39,13 +40,13 @@ export function ProfileFormCard({
   onCancel,
   onSubmit,
 }: ProfileFormCardProps) {
+  const { t } = useTranslation('profile');
+
   return (
     <Card className="bg-card/75 py-0 shadow-[0_24px_60px_-38px_oklch(0.2_0.02_260/0.55)] ring-0">
       <CardHeader className="border-b border-border/40 pb-5">
-        <CardTitle>Edit profile</CardTitle>
-        <CardDescription>
-          Keep your public profile current. Username changes affect how others find you.
-        </CardDescription>
+        <CardTitle>{t('form.title')}</CardTitle>
+        <CardDescription>{t('form.description')}</CardDescription>
       </CardHeader>
       <CardContent className="px-4 py-5 sm:px-6">
         {isLoading ? (
@@ -54,8 +55,8 @@ export function ProfileFormCard({
           <form className="space-y-5" onSubmit={onSubmit}>
             <Field
               id="username"
-              label="Username"
-              hint="3-30 characters, letters, numbers, and underscores only."
+              label={t('field.username')}
+              hint={t('form.usernameHelp')}
               error={errors.username?.message}
             >
               <Input id="username" autoComplete="username" {...register('username')} />
@@ -63,8 +64,8 @@ export function ProfileFormCard({
 
             <Field
               id="displayName"
-              label="Display name"
-              hint="Optional. Shown on your profile and in shared spaces."
+              label={t('field.displayName')}
+              hint={t('form.displayNameHelp')}
               error={errors.displayName?.message}
             >
               <Input id="displayName" {...register('displayName')} />
@@ -72,8 +73,8 @@ export function ProfileFormCard({
 
             <Field
               id="bio"
-              label="Bio"
-              hint="Optional. Up to 500 characters."
+              label={t('field.bio')}
+              hint={t('form.bioHelp')}
               error={errors.bio?.message}
             >
               <textarea
@@ -104,19 +105,19 @@ export function ProfileFormCard({
                   });
                 }}
               >
-                Reset
+                {t('button.reset')}
               </Button>
               <Button type="button" variant="ghost" disabled={isPending} onClick={onCancel}>
-                Cancel
+                {t('button.cancel')}
               </Button>
               <Button type="submit" disabled={isPending || !isDirty}>
                 {isPending ? (
                   <span className="inline-flex items-center gap-2">
                     <LoaderCircle className="size-4 animate-spin" />
-                    Saving...
+                    {t('button.saving')}
                   </span>
                 ) : (
-                  'Save changes'
+                  t('button.saveChanges')
                 )}
               </Button>
             </div>

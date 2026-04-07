@@ -1,5 +1,6 @@
 import type { UserQuotasResponse } from '@syncode/contracts';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@syncode/ui';
+import { useTranslation } from 'react-i18next';
 import { Skeleton } from '@/components/ui/skeleton';
 
 interface QuotasPanelProps {
@@ -8,31 +9,34 @@ interface QuotasPanelProps {
 }
 
 export function QuotasPanel({ quotas, isLoading }: QuotasPanelProps) {
+  const { t } = useTranslation('profile');
   const items = [
     {
       label: 'AI',
       value: quotas?.ai ? `${quotas.ai.used} / ${quotas.ai.limit}` : '--',
-      hint: quotas?.ai ? `Resets ${formatResetTime(quotas.ai.resetsAt)}` : 'Daily limit',
+      hint: quotas?.ai
+        ? t('quotas.resetsAt', { time: formatResetTime(quotas.ai.resetsAt) })
+        : t('quotas.dailyLimit'),
     },
     {
       label: 'Execution',
       value: quotas?.execution ? `${quotas.execution.used} / ${quotas.execution.limit}` : '--',
       hint: quotas?.execution
-        ? `Resets ${formatResetTime(quotas.execution.resetsAt)}`
-        : 'Daily limit',
+        ? t('quotas.resetsAt', { time: formatResetTime(quotas.execution.resetsAt) })
+        : t('quotas.dailyLimit'),
     },
     {
       label: 'Rooms',
       value: quotas?.rooms ? `${quotas.rooms.activeCount} / ${quotas.rooms.maxActive}` : '--',
-      hint: 'Active rooms',
+      hint: t('quotas.activeRooms'),
     },
   ];
 
   return (
     <Card className="bg-card/70 py-0 ring-0 shadow-[0_24px_60px_-40px_oklch(0.22_0.02_260/0.45)]">
       <CardHeader className="border-b border-border/40 pb-5">
-        <CardTitle>Usage quotas</CardTitle>
-        <CardDescription>Current daily counters and active room cap.</CardDescription>
+        <CardTitle>{t('quotas.heading')}</CardTitle>
+        <CardDescription>{t('quotas.description')}</CardDescription>
       </CardHeader>
       <CardContent className="grid gap-3 px-4 py-5 sm:px-6">
         {isLoading
