@@ -18,6 +18,7 @@
     "studio": "turbo run studio",
     "db:generate": "pnpm --filter @syncode/db generate",
     "db:migrate": "pnpm --filter @syncode/db migrate",
+    "db:seed": "pnpm --filter @syncode/db seed",
     "db:studio": "pnpm --filter @syncode/db studio",
     "infra:up": "docker compose -f docker-compose.yml up -d",
     "infra:down": "docker compose down",
