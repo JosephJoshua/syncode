@@ -1,5 +1,10 @@
 import { CONTROL_API } from '@syncode/contracts';
-import { ROOM_STATUSES, RoomRole, RoomStatus } from '@syncode/shared';
+import {
+  ROOM_STATUSES,
+  RoomRole,
+  RoomStatus,
+  type RoomStatus as RoomStatusType,
+} from '@syncode/shared';
 import { Badge, Button, Card, cn, Input } from '@syncode/ui';
 import { useQuery } from '@tanstack/react-query';
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
@@ -28,7 +33,22 @@ export const Route = createFileRoute('/rooms/')({
   component: RoomsPage,
 });
 
-type StatusFilter = RoomStatus | 'all';
+type StatusFilter = RoomStatusType | 'all';
+
+const ROOM_STATUS_KEYS: Record<RoomStatusType, string> = {
+  [RoomStatus.WAITING]: 'status.waiting',
+  [RoomStatus.WARMUP]: 'status.warmup',
+  [RoomStatus.CODING]: 'status.coding',
+  [RoomStatus.WRAPUP]: 'status.wrapup',
+  [RoomStatus.FINISHED]: 'status.finished',
+};
+
+const ROLE_LABEL_KEYS: Record<string, string> = {
+  [RoomRole.HOST]: 'role.host',
+  [RoomRole.CANDIDATE]: 'role.candidate',
+  [RoomRole.INTERVIEWER]: 'role.interviewer',
+  [RoomRole.SPECTATOR]: 'role.observer',
+};
 
 const STATUS_STYLES: Record<string, { dot: string; badge: string }> = {
   waiting: {
@@ -53,20 +73,7 @@ const STATUS_STYLES: Record<string, { dot: string; badge: string }> = {
   },
 };
 
-const ROLE_LABEL_KEYS: Record<string, string> = {
-  [RoomRole.HOST]: 'role.host',
-  [RoomRole.CANDIDATE]: 'role.candidate',
-  [RoomRole.INTERVIEWER]: 'role.interviewer',
-  [RoomRole.SPECTATOR]: 'role.observer',
-};
-
-const ROOM_STATUS_KEYS: Record<RoomStatus, string> = {
-  [RoomStatus.WAITING]: 'status.waiting',
-  [RoomStatus.WARMUP]: 'status.warmup',
-  [RoomStatus.CODING]: 'status.coding',
-  [RoomStatus.WRAPUP]: 'status.wrapup',
-  [RoomStatus.FINISHED]: 'status.finished',
-};
+const STATUS_FILTER_VALUES: StatusFilter[] = ['all', ...ROOM_STATUSES];
 
 function parseInviteInput(raw: string): { roomId: string; code: string } | null {
   const trimmed = raw.trim();
@@ -96,14 +103,6 @@ function RoomsPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [inviteInput, setInviteInput] = useState('');
   const [joinError, setJoinError] = useState<string | null>(null);
-
-  const statusFilters = useMemo(
-    () => [
-      { value: 'all' as StatusFilter, label: t('filter.all') },
-      ...ROOM_STATUSES.map((s) => ({ value: s as StatusFilter, label: t(ROOM_STATUS_KEYS[s]) })),
-    ],
-    [t],
-  );
 
   const roomsQuery = useQuery({
     queryKey: ['rooms', 'list', statusFilter],
@@ -141,7 +140,7 @@ function RoomsPage() {
   };
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8 sm:py-10 lg:py-12">
+    <div className="mx-auto max-w-7xl px-4 py-8 sm:py-10 lg:py-12">
       <div className="mb-10 flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
@@ -157,7 +156,7 @@ function RoomsPage() {
         </div>
 
         <Link to="/rooms/create">
-          <Button className="gap-2 rounded-xl shadow-[0_0_25px_hsl(var(--primary)/0.3)] hover:shadow-[0_0_35px_hsl(var(--primary)/0.5)]">
+          <Button className="gap-2 shadow-[0_0_25px_hsl(var(--primary)/0.3)] hover:shadow-[0_0_35px_hsl(var(--primary)/0.5)]">
             <Plus size={18} />
             {t('button.createRoom')}
           </Button>
@@ -183,7 +182,7 @@ function RoomsPage() {
             className="flex flex-1 flex-col gap-3 sm:flex-row sm:items-start"
           >
             <div className="flex-1">
-              <div className="flex items-center rounded-xl border border-border/60 bg-background p-1.5 transition-all duration-300 focus-within:border-primary focus-within:ring-3 focus-within:ring-primary/20">
+              <div className="relative flex items-center rounded-lg border border-border/60 bg-background p-1.5 transition-all duration-300 focus-within:border-primary focus-within:ring-3 focus-within:ring-primary/20">
                 <Hash size={18} className="ml-2.5 shrink-0 text-muted-foreground/60" />
                 <Input
                   type="text"
@@ -195,13 +194,15 @@ function RoomsPage() {
                   placeholder={t('join.placeholder')}
                   className="flex-1 border-none bg-transparent font-mono text-sm shadow-none focus-visible:ring-0"
                 />
+                <div className="pointer-events-none absolute right-1.5 top-0 bottom-0 w-8 bg-gradient-to-l from-background to-transparent" />
               </div>
               {joinError && <p className="mt-1.5 pl-1 text-xs text-destructive">{joinError}</p>}
             </div>
             <Button
               type="submit"
               variant="outline"
-              className="shrink-0 gap-2 rounded-xl sm:mt-1.5"
+              size="lg"
+              className="shrink-0 gap-2 sm:mt-1.5"
               disabled={!inviteInput.trim()}
             >
               {t('join.button')}
@@ -212,20 +213,20 @@ function RoomsPage() {
       </Card>
 
       <div className="mb-6 flex flex-wrap gap-2">
-        {statusFilters.map((f) => (
+        {STATUS_FILTER_VALUES.map((value) => (
           <button
-            key={f.value}
+            key={value}
             type="button"
-            aria-pressed={statusFilter === f.value}
-            onClick={() => setStatusFilter(f.value)}
+            aria-pressed={statusFilter === value}
+            onClick={() => setStatusFilter(value)}
             className={cn(
               'inline-flex h-8 items-center rounded-lg px-3 text-xs font-medium transition-colors',
-              statusFilter === f.value
+              statusFilter === value
                 ? 'bg-primary/10 text-primary ring-1 ring-primary/20'
                 : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground',
             )}
           >
-            {f.label}
+            {value === 'all' ? t('filter.all') : t(ROOM_STATUS_KEYS[value])}
           </button>
         ))}
       </div>
@@ -241,11 +242,7 @@ function RoomsPage() {
           <p className="mt-1 max-w-sm text-sm text-muted-foreground">
             {t('error.loadFailedDescription')}
           </p>
-          <Button
-            variant="outline"
-            className="mt-4 rounded-xl"
-            onClick={() => roomsQuery.refetch()}
-          >
+          <Button variant="outline" className="mt-4" onClick={() => roomsQuery.refetch()}>
             {t('error.retry')}
           </Button>
         </div>
@@ -258,9 +255,7 @@ function RoomsPage() {
           <p className="mt-1 max-w-sm text-sm text-muted-foreground">
             {statusFilter === 'all'
               ? t('empty.noRoomsDescription')
-              : t('empty.noRoomsWithStatus', {
-                  status: statusFilters.find((f) => f.value === statusFilter)?.label,
-                })}
+              : t('empty.noRoomsWithStatus', { status: t(ROOM_STATUS_KEYS[statusFilter]) })}
           </p>
         </div>
       ) : (
@@ -292,7 +287,7 @@ function RoomsPage() {
                         className={cn('gap-1.5 px-2.5 py-1 text-xs', styles.badge)}
                       >
                         <span className={cn('inline-block size-1.5 rounded-full', styles.dot)} />
-                        {t(ROOM_STATUS_KEYS[room.status as RoomStatus] ?? room.status)}
+                        {t(ROOM_STATUS_KEYS[room.status as RoomStatusType] ?? room.status)}
                       </Badge>
 
                       <div className="flex items-center gap-3 text-xs text-muted-foreground">

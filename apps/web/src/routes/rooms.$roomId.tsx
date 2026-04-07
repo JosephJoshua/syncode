@@ -1,6 +1,16 @@
 import { CONTROL_API, ERROR_CODES } from '@syncode/contracts';
 import type { RoomRole } from '@syncode/shared';
-import { Badge, Button, Card, Input } from '@syncode/ui';
+import {
+  Badge,
+  Button,
+  Card,
+  Input,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@syncode/ui';
 import { createFileRoute } from '@tanstack/react-router';
 import {
   AlertTriangle,
@@ -14,7 +24,7 @@ import {
   UserCog,
   Users,
 } from 'lucide-react';
-import type { ChangeEvent } from 'react';
+import { motion } from 'motion/react';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useClipboard } from '@/hooks/use-clipboard.js';
@@ -37,13 +47,23 @@ type Participant = {
   role: LobbyRole;
 };
 
-const ROLE_LABEL_KEYS: Record<LobbyRole, string> = {
+const ROLE_LABEL_KEYS: Record<string, string> = {
   host: 'role.host',
   candidate: 'role.candidate',
   interviewer: 'role.interviewer',
   spectator: 'role.observer',
   unassigned: 'role.unassigned',
 };
+
+const ROLE_OPTIONS: Array<{ value: LobbyRole; labelKey: string; descriptionKey: string }> = [
+  { value: 'candidate', labelKey: 'roleSelect.candidate', descriptionKey: 'roleSelect.candidate' },
+  {
+    value: 'interviewer',
+    labelKey: 'roleSelect.interviewer',
+    descriptionKey: 'roleSelect.interviewer',
+  },
+  { value: 'spectator', labelKey: 'roleSelect.observer', descriptionKey: 'roleSelect.observer' },
+];
 
 function RoomLobbyPage() {
   const { t } = useTranslation('rooms');
@@ -55,6 +75,7 @@ function RoomLobbyPage() {
   const [isReady, setIsReady] = useState(false);
   const [myRole, setMyRole] = useState<LobbyRole>('unassigned');
   const [participants, setParticipants] = useState<Participant[]>([]);
+  const [inviteLink] = useState(() => window.location.href);
   const { copied, copy } = useClipboard();
 
   useEffect(() => {
@@ -73,7 +94,7 @@ function RoomLobbyPage() {
             const isMe = participant.userId === currentUserId;
             return {
               id: participant.userId,
-              username: isMe ? `${baseName} (You)` : baseName,
+              username: isMe ? `${baseName} ${t('lobby.you')}` : baseName,
               isReady: false,
               isHost: participant.role === 'host',
               role: participant.role,
@@ -101,7 +122,6 @@ function RoomLobbyPage() {
           applyDetail(detail, detail.myRole);
         }
 
-        setJoinError(null);
         setIsJoining(false);
       } catch (error) {
         const apiError = await readApiError(error);
@@ -128,12 +148,10 @@ function RoomLobbyPage() {
     joinRoom();
   }, [roomId, currentUserId, t]);
 
-  const handleRoleChange = (e: ChangeEvent<HTMLSelectElement>) => {
-    const newRole = e.target.value as LobbyRole;
-    setMyRole(newRole);
-    setParticipants((prev) =>
-      prev.map((p) => (p.id === currentUserId ? { ...p, role: newRole } : p)),
-    );
+  const handleRoleChange = (newRole: string) => {
+    const role = newRole as LobbyRole;
+    setMyRole(role);
+    setParticipants((prev) => prev.map((p) => (p.id === currentUserId ? { ...p, role } : p)));
   };
 
   const toggleReady = () => {
@@ -145,7 +163,7 @@ function RoomLobbyPage() {
     );
   };
 
-  const copyInviteLink = () => copy(window.location.href);
+  const copyInviteLink = () => copy(inviteLink);
 
   const { allReady, readyCount, totalCount, isRoomValid, asciiProgress } = useMemo(() => {
     const ready = participants.filter((p) => p.isReady).length;
@@ -170,82 +188,107 @@ function RoomLobbyPage() {
 
   if (joinError) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4 text-foreground">
-        <AlertTriangle size={42} className="mb-4 text-warning" />
-        <h2 className="text-xl font-bold tracking-wide text-foreground">
-          {t('lobby.unableToJoin')}
-        </h2>
-        <p className="mt-2 max-w-md text-center text-sm text-muted-foreground">{joinError}</p>
+      <div className="mx-auto max-w-7xl px-4 py-8 sm:py-10 lg:py-12">
+        <div className="flex flex-col items-center justify-center py-24 text-center">
+          <AlertTriangle size={42} className="mb-4 text-warning" />
+          <h2 className="text-xl font-bold tracking-wide text-foreground">
+            {t('lobby.unableToJoin')}
+          </h2>
+          <p className="mt-2 max-w-md text-sm text-muted-foreground">{joinError}</p>
+        </div>
       </div>
     );
   }
 
   if (isJoining) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-background text-foreground">
-        <Loader2 size={48} className="mb-6 animate-spin text-primary" />
-        <h2 className="text-xl font-bold uppercase tracking-widest text-muted-foreground">
-          {t('lobby.connecting')}
-        </h2>
-        <p className="mt-2 font-mono text-sm text-muted-foreground">
-          {t('lobby.authenticating', { roomId: roomId.slice(0, 8) })}
-        </p>
+      <div className="mx-auto max-w-7xl px-4 py-8 sm:py-10 lg:py-12">
+        <div className="flex flex-col items-center justify-center py-24">
+          <Loader2 size={48} className="mb-6 animate-spin text-primary" />
+          <h2 className="text-xl font-bold uppercase tracking-widest text-muted-foreground">
+            {t('lobby.connecting')}
+          </h2>
+          <p className="mt-2 font-mono text-sm text-muted-foreground">
+            {t('lobby.authenticating', { roomId: roomId.slice(0, 8) })}
+          </p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-start bg-background px-4 py-12 text-foreground">
-      <div className="animate-in fade-in slide-in-from-bottom-8 w-full max-w-5xl duration-700">
-        <div className="mb-14 space-y-6 text-center">
-          <div className="inline-flex items-center justify-center rounded-full border border-border bg-card/50 p-4">
-            <Terminal size={32} className="text-primary" />
+    <div className="mx-auto max-w-7xl px-4 py-8 sm:py-10 lg:py-12">
+      <motion.div
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+      >
+        <section className="max-w-3xl">
+          <div className="mb-2 inline-flex items-center justify-center rounded-full border border-border bg-card/50 p-3">
+            <Terminal size={24} className="text-primary" />
           </div>
-          <h1 className="text-4xl font-extrabold tracking-tighter text-foreground">
+          <h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
             {t('lobby.heading')}
           </h1>
+          <p className="mt-3 text-sm text-muted-foreground sm:text-base">{t('lobby.sub')}</p>
+        </section>
 
-          <div className="mx-auto flex w-full max-w-3xl flex-col items-center justify-center gap-4 sm:flex-row">
-            <Badge variant="outline" className="gap-2 px-4 py-1.5 text-sm">
-              <Users size={16} className="text-primary" />
-              {readyCount} / {totalCount} {t('lobby.ready')}
-            </Badge>
+        <div className="mt-6 flex flex-col items-start gap-4 sm:flex-row sm:items-center">
+          <Badge variant="outline" className="gap-2 px-4 py-1.5 text-sm">
+            <Users size={16} className="text-primary" />
+            {readyCount} / {totalCount} {t('lobby.ready')}
+          </Badge>
 
-            <div className="flex w-full items-center rounded-xl border border-border bg-background p-1.5 transition-all duration-300 focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50 sm:w-[420px]">
-              <Input
-                type="text"
-                readOnly
-                value={window.location.href}
-                className="flex-1 border-none bg-transparent font-mono shadow-none focus-visible:ring-0"
-              />
-              <button
-                type="button"
-                onClick={copyInviteLink}
-                className="flex shrink-0 items-center justify-center rounded-lg bg-muted p-2.5 text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground"
-                title={t('common:copyLink')}
-              >
-                {copied ? <Check size={16} className="text-primary" /> : <Copy size={16} />}
-              </button>
-            </div>
+          <div className="relative flex w-full items-center rounded-lg border border-border bg-background p-1.5 transition-all duration-300 focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50 sm:max-w-md">
+            <Input
+              type="text"
+              readOnly
+              value={inviteLink}
+              className="flex-1 border-none bg-transparent font-mono text-sm shadow-none focus-visible:ring-0"
+            />
+            <div className="pointer-events-none absolute right-14 top-0 bottom-0 w-8 bg-gradient-to-l from-background to-transparent" />
+            <button
+              type="button"
+              onClick={copyInviteLink}
+              className="flex shrink-0 items-center justify-center rounded-md bg-muted p-2.5 text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground"
+              title={t('common:copyLink')}
+            >
+              {copied ? <Check size={16} className="text-primary" /> : <Copy size={16} />}
+            </button>
           </div>
-
-          {allReady && !isRoomValid && (
-            <div className="animate-in fade-in slide-in-from-top-2 mx-auto mt-6 w-full max-w-2xl duration-500">
-              <div className="flex items-center justify-center gap-3 rounded-xl border border-warning/50 bg-warning/10 p-4 text-warning">
-                <AlertTriangle size={20} className="shrink-0" />
-                <span className="text-sm font-semibold">{t('warning')}</span>
-              </div>
-            </div>
-          )}
         </div>
 
-        <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
-          <div className="lg:col-span-8">
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              {participants.map((participant) => (
+        {allReady && !isRoomValid && (
+          <motion.div
+            className="mt-6 max-w-2xl"
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4 }}
+          >
+            <div className="flex items-center gap-3 rounded-lg border border-warning/50 bg-warning/10 p-4 text-warning">
+              <AlertTriangle size={20} className="shrink-0" />
+              <span className="text-sm font-semibold">{t('warning')}</span>
+            </div>
+          </motion.div>
+        )}
+      </motion.div>
+
+      <div className="mt-10 grid grid-cols-1 gap-8 lg:grid-cols-12">
+        <div className="lg:col-span-8">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {participants.map((participant, index) => (
+              <motion.div
+                key={participant.id}
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{
+                  duration: 0.36,
+                  delay: 0.1 + index * 0.06,
+                  ease: [0.22, 1, 0.36, 1],
+                }}
+              >
                 <Card
-                  key={participant.id}
-                  className={`rounded-2xl p-5 transition-all duration-300 ${
+                  className={`p-5 transition-all duration-300 ${
                     participant.isReady
                       ? 'border-primary/40 bg-card shadow-[0_0_20px_hsl(var(--primary)/0.15)]'
                       : 'border-border/60 bg-card/80'
@@ -273,25 +316,29 @@ function RoomLobbyPage() {
                           }`}
                         >
                           <UserCog size={14} />
-                          {t(ROLE_LABEL_KEYS[participant.role])}
+                          {t(ROLE_LABEL_KEYS[participant.role] ?? participant.role)}
                         </span>
                       </div>
                     </div>
-                    <div className="flex flex-col items-end justify-center">
-                      {participant.isReady ? (
-                        <CheckCircle2 size={24} className="text-primary" />
-                      ) : (
-                        <Circle size={24} className="text-muted-foreground/40" />
-                      )}
-                    </div>
+                    {participant.isReady ? (
+                      <CheckCircle2 size={24} className="shrink-0 text-primary" />
+                    ) : (
+                      <Circle size={24} className="shrink-0 text-muted-foreground/40" />
+                    )}
                   </div>
                 </Card>
-              ))}
-            </div>
+              </motion.div>
+            ))}
           </div>
+        </div>
 
-          <div className="mt-8 lg:col-span-4 lg:mt-0">
-            <Card className="sticky top-6 rounded-2xl p-7">
+        <div className="lg:col-span-4">
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.45, delay: 0.2, ease: [0.22, 1, 0.36, 1] }}
+          >
+            <Card className="sticky top-6 p-7">
               <div className="space-y-7">
                 <div className="pb-4 pt-2 text-center font-mono">
                   <div
@@ -313,35 +360,35 @@ function RoomLobbyPage() {
                   >
                     {t('roleSelect.heading')}
                   </label>
-                  <div className="relative">
-                    <select
-                      id="role-select"
-                      value={myRole}
-                      onChange={handleRoleChange}
-                      disabled={isReady}
-                      className="w-full appearance-none rounded-lg border border-border bg-background p-3 text-sm text-foreground outline-none transition-all duration-300 focus:border-ring focus:ring-3 focus:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      <option value="unassigned">{t('roleSelect.placeholder')}</option>
-                      {myRole === 'host' && <option value="host">{t('roleSelect.host')}</option>}
-                      <option value="candidate">{t('roleSelect.candidate')}</option>
-                      <option value="interviewer">{t('roleSelect.interviewer')}</option>
-                      <option value="spectator">{t('roleSelect.observer')}</option>
-                    </select>
-                    <UserCog
-                      className="pointer-events-none absolute right-3.5 top-3 text-muted-foreground"
-                      size={18}
-                    />
-                  </div>
+                  <Select value={myRole} onValueChange={handleRoleChange} disabled={isReady}>
+                    <SelectTrigger id="role-select">
+                      <div className="flex items-center gap-2.5">
+                        <UserCog size={18} className="text-muted-foreground" />
+                        <SelectValue placeholder={t('roleSelect.placeholder')} />
+                      </div>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="unassigned">{t('roleSelect.placeholder')}</SelectItem>
+                      {myRole === 'host' && (
+                        <SelectItem value="host">{t('roleSelect.host')}</SelectItem>
+                      )}
+                      {ROLE_OPTIONS.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>
+                          {t(opt.labelKey)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 <Button
                   variant={isReady ? 'outline' : 'default'}
                   size="lg"
-                  className="w-full rounded-xl"
+                  className="w-full"
                   onClick={toggleReady}
                 >
                   {isReady ? (
-                    t('readyButton.cancelReady')
+                    <>{t('readyButton.cancelReady')}</>
                   ) : (
                     <>
                       <CheckCircle2 size={20} /> {t('readyButton.ready')}
@@ -350,19 +397,24 @@ function RoomLobbyPage() {
                 </Button>
 
                 {allReady && (
-                  <div className="animate-in fade-in zoom-in border-t border-border/60 pt-5 duration-500">
-                    <Button size="lg" disabled={!isRoomValid} className="w-full rounded-xl">
+                  <motion.div
+                    className="border-t border-border/60 pt-5"
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ duration: 0.4 }}
+                  >
+                    <Button size="lg" disabled={!isRoomValid} className="w-full">
                       <Play
                         size={18}
                         className={isRoomValid ? 'fill-current' : 'fill-current opacity-50'}
                       />
                       {t('readyButton.enterWorkspace')}
                     </Button>
-                  </div>
+                  </motion.div>
                 )}
               </div>
             </Card>
-          </div>
+          </motion.div>
         </div>
       </div>
     </div>

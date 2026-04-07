@@ -5,6 +5,7 @@ import {
   Badge,
   Button,
   Card,
+  Checkbox,
   cn,
   Input,
   Label,
@@ -17,6 +18,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { Check, ChevronDown, Code2, Copy, FileCode2, Globe, Lock } from 'lucide-react';
+import { motion } from 'motion/react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
@@ -81,6 +83,7 @@ function matchesProblemQuery(label: string, query: string) {
 
 function CreateRoomPage() {
   const { t } = useTranslation('rooms');
+  const queryClient = useQueryClient();
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const navigate = useNavigate();
 
@@ -96,10 +99,14 @@ function CreateRoomPage() {
   });
 
   const availableProblems = useMemo(() => {
-    return (problemsQuery.data?.data ?? []).map((p) => ({
-      value: p.id,
-      label: `${p.title} (${i18n.t(DIFFICULTY_KEYS[p.difficulty] ?? p.difficulty)})`,
-    }));
+    return (problemsQuery.data?.data ?? []).map((p) => {
+      const difficultyKey = DIFFICULTY_KEYS[p.difficulty];
+      const difficultyLabel = difficultyKey ? i18n.t(difficultyKey) : p.difficulty;
+      return {
+        value: p.id,
+        label: `${p.title} (${difficultyLabel})`,
+      };
+    });
   }, [problemsQuery.data]);
 
   const comboboxRef = useRef<HTMLDivElement>(null);
@@ -154,8 +161,6 @@ function CreateRoomPage() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [availableProblems, isProblemMenuOpen, selectedProblemId]);
 
-  const queryClient = useQueryClient();
-
   const createRoomMutation = useMutation({
     mutationFn: (data: CreateRoomFormData) =>
       api(CONTROL_API.ROOMS.CREATE, {
@@ -198,17 +203,27 @@ function CreateRoomPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-start justify-center bg-background px-4 py-16 text-foreground">
-      <div className="w-full max-w-lg">
-        <div className="mb-10 text-center">
-          <h1 className="mb-2.5 text-4xl font-extrabold tracking-tighter text-primary">
-            {t('create.heading')}
-          </h1>
-          <p className="text-base text-muted-foreground">{t('create.sub')}</p>
-        </div>
+    <div className="mx-auto max-w-7xl px-4 py-8 sm:py-10 lg:py-12">
+      <motion.section
+        className="max-w-3xl"
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+      >
+        <h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
+          {t('create.heading')}
+        </h1>
+        <p className="mt-3 text-sm text-muted-foreground sm:text-base">{t('create.sub')}</p>
+      </motion.section>
 
-        <Card className="rounded-2xl border-border/60 bg-card/95 p-8 shadow-[0_10px_40px_-10px_rgba(0,0,0,0.7)]">
-          {!inviteLink ? (
+      <motion.div
+        className="mt-8 max-w-2xl"
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.45, delay: 0.08, ease: [0.22, 1, 0.36, 1] }}
+      >
+        {!inviteLink ? (
+          <Card className="border border-border/50 bg-card/80 p-6 backdrop-blur-sm sm:p-8">
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-7">
               <div>
                 <Label className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -238,7 +253,7 @@ function CreateRoomPage() {
                       aria-controls="problem-listbox"
                       aria-autocomplete="list"
                       aria-haspopup="listbox"
-                      className="rounded-xl pl-11"
+                      className="pl-11"
                     />
                     <ChevronDown
                       className="pointer-events-none absolute right-3 top-3.5 text-muted-foreground"
@@ -249,7 +264,7 @@ function CreateRoomPage() {
                       <div
                         id="problem-listbox"
                         role="listbox"
-                        className="absolute z-20 mt-2 max-h-56 w-full overflow-auto rounded-xl border border-border bg-popover p-1.5 shadow-2xl"
+                        className="absolute z-20 mt-2 max-h-56 w-full overflow-auto rounded-lg border border-border bg-popover p-1.5 shadow-2xl"
                       >
                         {filteredProblems.length > 0 ? (
                           filteredProblems.map((problem) => (
@@ -295,10 +310,7 @@ function CreateRoomPage() {
                   render={({ field }) => (
                     <Select value={field.value} onValueChange={field.onChange}>
                       <SelectTrigger
-                        className={cn(
-                          'rounded-xl',
-                          errors.language && 'border-destructive ring-destructive/20',
-                        )}
+                        className={cn(errors.language && 'border-destructive ring-destructive/20')}
                       >
                         <div className="flex items-center gap-2.5">
                           <Code2 size={18} className="text-muted-foreground" />
@@ -324,23 +336,35 @@ function CreateRoomPage() {
                 <Label className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   {t('create.visibilityLabel')}
                 </Label>
-                <div className="flex items-center gap-4 rounded-xl border border-border p-4">
-                  <input
-                    {...register('isPublic')}
-                    type="checkbox"
-                    id="isPublic"
-                    className="size-5 rounded border-input bg-background text-primary focus:ring-ring/50 focus:ring-offset-background"
-                  />
-                  <label htmlFor="isPublic" className="flex flex-1 cursor-pointer flex-col">
-                    <span className="text-sm font-semibold text-foreground">
-                      {t('create.publicRoom')}
-                    </span>
-                    <span className="mt-0.5 text-xs text-muted-foreground">
-                      {t('create.publicRoomDescription')}
-                    </span>
-                  </label>
-                  <Globe className="text-muted-foreground/60" size={20} />
-                </div>
+                <Controller
+                  name="isPublic"
+                  control={control}
+                  render={({ field }) => (
+                    <label
+                      htmlFor="isPublic"
+                      className="flex cursor-pointer items-center gap-4 rounded-lg border border-border p-4 transition-colors hover:bg-muted/30"
+                    >
+                      <Checkbox
+                        id="isPublic"
+                        checked={field.value}
+                        onCheckedChange={(checked) => field.onChange(checked === true)}
+                      />
+                      <div className="flex flex-1 flex-col">
+                        <span className="text-sm font-semibold text-foreground">
+                          {t('create.publicRoom')}
+                        </span>
+                        <span className="mt-0.5 text-xs text-muted-foreground">
+                          {t('create.publicRoomDescription')}
+                        </span>
+                      </div>
+                      {field.value ? (
+                        <Globe className="text-muted-foreground/60" size={20} />
+                      ) : (
+                        <Lock className="text-muted-foreground/60" size={20} />
+                      )}
+                    </label>
+                  )}
+                />
               </div>
 
               <div className="pt-2">
@@ -348,7 +372,7 @@ function CreateRoomPage() {
                   type="submit"
                   size="lg"
                   disabled={isSubmitting || createRoomMutation.isPending}
-                  className="w-full rounded-xl shadow-[0_0_25px_hsl(var(--primary)/0.4)] hover:shadow-[0_0_35px_hsl(var(--primary)/0.6)]"
+                  className="w-full shadow-[0_0_25px_hsl(var(--primary)/0.4)] hover:shadow-[0_0_35px_hsl(var(--primary)/0.6)]"
                 >
                   {isSubmitting || createRoomMutation.isPending
                     ? t('create.provisioning')
@@ -361,9 +385,16 @@ function CreateRoomPage() {
                 )}
               </div>
             </form>
-          ) : (
-            <div className="animate-in fade-in slide-in-from-bottom-5 space-y-7 duration-500">
-              <div className="space-y-3.5 rounded-xl border border-border p-5">
+          </Card>
+        ) : (
+          <Card className="border border-border/50 bg-card/80 p-6 backdrop-blur-sm sm:p-8">
+            <motion.div
+              className="space-y-7"
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+            >
+              <div className="space-y-3.5 rounded-lg border border-border p-5">
                 <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   {t('success.details')}
                 </p>
@@ -400,17 +431,18 @@ function CreateRoomPage() {
                   {t('success.shareLink')}
                 </p>
 
-                <div className="flex items-center rounded-xl border border-border bg-background p-1.5 transition-all duration-300 focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50">
+                <div className="relative flex items-center rounded-lg border border-border bg-background p-1.5 transition-all duration-300 focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50">
                   <Input
                     type="text"
                     readOnly
                     value={inviteLink ?? ''}
-                    className="flex-1 border-none bg-transparent shadow-none focus-visible:ring-0"
+                    className="flex-1 border-none bg-transparent font-mono text-sm shadow-none focus-visible:ring-0"
                   />
+                  <div className="pointer-events-none absolute right-14 top-0 bottom-0 w-8 bg-gradient-to-l from-background to-transparent" />
                   <button
                     type="button"
                     onClick={copyToClipboard}
-                    className="flex shrink-0 items-center justify-center rounded-lg bg-muted p-3 text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground"
+                    className="flex shrink-0 items-center justify-center rounded-md bg-muted p-3 text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground"
                     title={t('common:copyLink')}
                   >
                     {copied ? <Check size={18} className="text-primary" /> : <Copy size={18} />}
@@ -422,7 +454,7 @@ function CreateRoomPage() {
                 <Button
                   variant="outline"
                   size="lg"
-                  className="w-full rounded-xl"
+                  className="w-full"
                   onClick={() => {
                     setInviteLink(null);
                     setCreatedRoomId(null);
@@ -437,7 +469,7 @@ function CreateRoomPage() {
                 </Button>
                 <Button
                   size="lg"
-                  className="w-full rounded-xl"
+                  className="w-full"
                   onClick={() => {
                     if (!createdRoomId) {
                       return;
@@ -458,10 +490,10 @@ function CreateRoomPage() {
                   {t('success.enterWorkspace')}
                 </Button>
               </div>
-            </div>
-          )}
-        </Card>
-      </div>
+            </motion.div>
+          </Card>
+        )}
+      </motion.div>
     </div>
   );
 }

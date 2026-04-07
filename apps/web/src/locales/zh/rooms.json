@@ -78,6 +78,8 @@
     "ready": "就绪",
     "connecting": "正在建立连接...",
     "authenticating": "正在认证并加入工作区 {{roomId}}...",
+    "sub": "等待参与者加入并分配角色后即可进入工作区",
+    "you": "（你）",
     "unableToJoin": "无法加入房间",
     "joinFailed": "加入房间失败，请检查邀请链接或登录状态。"
   },
