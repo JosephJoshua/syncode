@@ -7,6 +7,7 @@ import type {
   registerResponseSchema,
   registerSchema,
 } from './auth.js';
+import type { listBookmarksResponseSchema } from './bookmarks.js';
 import type {
   executionDetailsResponseSchema,
   executionResultResponseSchema,
@@ -118,7 +119,10 @@ export const CONTROL_API = {
     DELETE: defineRoute<void, void>()('problems/:id', 'DELETE'),
   },
   BOOKMARKS: {
-    LIST: defineRoute<void, void>()('users/me/bookmarks', 'GET'),
+    LIST: defineRoute<void, z.infer<typeof listBookmarksResponseSchema>>()(
+      'users/me/bookmarks',
+      'GET',
+    ),
     ADD: defineRoute<void, void>()('users/me/bookmarks/:problemId', 'PUT'),
     REMOVE: defineRoute<void, void>()('users/me/bookmarks/:problemId', 'DELETE'),
   },

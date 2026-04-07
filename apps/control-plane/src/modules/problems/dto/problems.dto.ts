@@ -1,4 +1,6 @@
 import {
+  listBookmarksQuerySchema,
+  listBookmarksResponseSchema,
   problemDetailSchema,
   problemsListQuerySchema,
   problemsListResponseSchema,
@@ -10,3 +12,6 @@ export class ProblemsListQueryDto extends createZodDto(problemsListQuerySchema) 
 export class ProblemsListResponseDto extends createZodDto(problemsListResponseSchema) {}
 export class ProblemDetailDto extends createZodDto(problemDetailSchema) {}
 export class ProblemsTagsResponseDto extends createZodDto(problemsTagsResponseSchema) {}
+
+export class ListBookmarksQueryDto extends createZodDto(listBookmarksQuerySchema) {}
+export class ListBookmarksResponseDto extends createZodDto(listBookmarksResponseSchema) {}
