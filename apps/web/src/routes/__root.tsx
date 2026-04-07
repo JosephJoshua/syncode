@@ -119,7 +119,7 @@ function RootLayout() {
   }, [isAuthenticated, navigate, queryClient]);
 
   const isDashboardPage = pathname === '/dashboard';
-  const isRoomsPage = pathname === '/rooms';
+  const isRoomsPage = pathname.startsWith('/rooms');
   const isProblemsPage = pathname.startsWith('/problems');
   const isProfilePage = pathname === '/profile';
   const showDashboardChrome =
