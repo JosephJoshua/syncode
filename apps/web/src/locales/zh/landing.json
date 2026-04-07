@@ -1,10 +1,10 @@
 {
   "badge": "$ syncode --init",
   "hero": {
-    "heading1": "技术面试，",
-    "heading2": "重新定义。",
-    "sub1": "实时结对编程。沙盒化执行。AI 驱动反馈。",
-    "sub2": "像真正面试一样练习。"
+    "heading1": "技术面试,",
+    "heading2": "重新定义",
+    "sub1": "实时结对编程 · 沙盒化执行 · AI 驱动反馈",
+    "sub2": "像真正面试一样练习"
   },
   "button": {
     "getStarted": "立即开始",
@@ -14,14 +14,14 @@
   "onlineBadge": "{{count}} 位工程师正在线上",
   "features": {
     "comment": "// what's inside",
-    "heading": "由工程师打造，为工程师而生。",
-    "sub": "模拟真实技术面试所需的一切。",
+    "heading": "由工程师打造，为工程师而生",
+    "sub": "模拟真实技术面试所需的一切",
     "pairProgramming": "结对编程",
-    "pairProgrammingDesc": "同时编辑同一文件。双方光标同步运作——无冲突、无延迟。",
+    "pairProgrammingDesc": "同时编辑同一文件，双方光标同步运作，无冲突、无延迟。",
     "liveExecution": "实时执行",
-    "liveExecutionDesc": "点击运行，几秒内即可看到代码在真实测试用例上的执行结果——不是模拟。",
+    "liveExecutionDesc": "点击运行，几秒内就能看到代码在真实测试用例上的执行结果，而非模拟。",
     "aiFeedback": "AI 反馈",
-    "aiFeedbackDesc": "了解你的解法哪里慢、遗漏了哪些边界情况，以及如何改进。"
+    "aiFeedbackDesc": "了解你的解法性能如何、遗漏了哪些边界情况，以及该怎样改进。"
   },
   "stats": {
     "languages": "支持的编程语言",
@@ -31,24 +31,25 @@
   },
   "howItWorks": {
     "comment": "// how it works",
-    "heading": "面试准备只需三步。",
+    "heading": "面试准备只需三步",
     "step1Title": "创建房间",
     "step1Desc": "一键创建独立会话，包含共享编辑器和语音频道。",
     "step2Title": "同步编码",
-    "step2Desc": "并肩编写代码。你们都能即时看到每一次按键——无需复制粘贴、无需屏幕共享。",
+    "step2Desc": "并肩编写代码，你们都能实时看到彼此的改动，无需复制粘贴，无需屏幕共享。",
     "step3Title": "运行与回顾",
     "step3Desc": "执行测试、获取 AI 分析、回放会话以提升技能。"
   },
   "demo": {
     "comment": "// see it in action",
-    "heading": "看看它如何运作。",
-    "sub": "一次完整的面试会话——从出题到通过测试——仅需数秒。"
+    "heading": "看看实际效果",
+    "sub": "一次完整的面试会话，从出题到通过测试，仅需数秒。"
   },
   "cta": {
     "comment": "// ready?",
-    "heading1": "别再独自刷题",
-    "heading2": "开始协作。",
-    "sub": "加入同伴，以面试真正发生的方式进行练习——一起。",
+    "heading1": "告别",
+    "alone": "单打独斗",
+    "heading2": "开始协作",
+    "sub": "加入同伴，以面试真正发生的方式进行练习，一起。",
     "noCreditCard": "无需信用卡"
   }
 }

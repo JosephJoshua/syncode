@@ -6,6 +6,36 @@
 @source "../../../packages/ui/src";
 @plugin "@tailwindcss/typography";
 
+@font-face {
+  font-family: "Alibaba PuHuiTi 3";
+  src: url("/fonts/AlibabaPuHuiTi-3-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Alibaba PuHuiTi 3";
+  src: url("/fonts/AlibabaPuHuiTi-3-Medium.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Alibaba PuHuiTi 3";
+  src: url("/fonts/AlibabaPuHuiTi-3-Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+html[lang^="zh"] {
+  font-family: "Alibaba PuHuiTi 3", "Geist Variable", sans-serif;
+  line-height: 1.75;
+  letter-spacing: 0.02em;
+}
+
 @keyframes marquee {
   from {
     transform: translateX(0);
