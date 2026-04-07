@@ -4,7 +4,7 @@ import type { SupportedLanguage } from '@syncode/shared';
 import type { ExecutionResult, QueueJob } from '@syncode/shared/ports';
 import { QUEUE_SERVICE, SANDBOX_PROVIDER } from '@syncode/shared/ports';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
-import { ExecutionProcessor } from './execution.processor';
+import { ExecutionProcessor } from './execution.processor.js';
 
 function makeJob(
   overrides: Partial<QueueJob<RunCodeRequest>> & { data: RunCodeRequest },
@@ -56,7 +56,7 @@ describe('ExecutionProcessor', () => {
       shutdown: vi.fn().mockResolvedValue(undefined),
     };
 
-    const module: TestingModule = await Test.createTestingModule({
+    const module = await Test.createTestingModule({
       providers: [
         ExecutionProcessor,
         { provide: QUEUE_SERVICE, useValue: queueService },
