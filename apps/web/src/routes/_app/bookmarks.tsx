@@ -23,10 +23,8 @@ import { ProblemCard } from '@/components/problems/problem-card.js';
 import type { ProblemDifficulty, ProblemItem } from '@/components/problems/problems.types.js';
 import { formatTagSlug } from '@/components/problems/problems-tags.js';
 import { api } from '@/lib/api-client.js';
-import { requireAuth } from '@/lib/auth.js';
 
-export const Route = createFileRoute('/bookmarks')({
-  beforeLoad: requireAuth,
+export const Route = createFileRoute('/_app/bookmarks')({
   component: BookmarksPage,
 });
 

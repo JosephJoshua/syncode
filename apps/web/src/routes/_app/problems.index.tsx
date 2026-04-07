@@ -30,7 +30,7 @@ import { ProblemsSearchBar } from '@/components/problems/problems-search-bar.js'
 import { formatTagSlug, type ProblemTagInfo } from '@/components/problems/problems-tags.js';
 import { api } from '@/lib/api-client.js';
 
-export const Route = createFileRoute('/problems/')({
+export const Route = createFileRoute('/_app/problems/')({
   component: ProblemsLibraryPage,
 });
 

@@ -2,12 +2,10 @@ import { Card, CardContent } from '@syncode/ui';
 import { useQuery } from '@tanstack/react-query';
 import { createFileRoute } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
-import { requireAuth } from '@/lib/auth.js';
 import { fetchDashboardSessionHistory } from '@/lib/dashboard-session-history.js';
 import { useAuthStore } from '@/stores/auth.store.js';
 
-export const Route = createFileRoute('/sessions/$sessionId/feedback')({
-  beforeLoad: requireAuth,
+export const Route = createFileRoute('/_app/sessions/$sessionId/feedback')({
   component: SessionFeedbackPage,
 });
 

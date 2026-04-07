@@ -25,12 +25,10 @@ import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
 import { useClipboard } from '@/hooks/use-clipboard.js';
 import { api, readApiError } from '@/lib/api-client.js';
-import { requireAuth } from '@/lib/auth.js';
 import i18n from '@/lib/i18n.js';
 import { useAuthStore } from '@/stores/auth.store.js';
 
-export const Route = createFileRoute('/rooms/create')({
-  beforeLoad: requireAuth,
+export const Route = createFileRoute('/_app/rooms/create')({
   component: CreateRoomPage,
 });
 

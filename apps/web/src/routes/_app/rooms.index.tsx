@@ -26,10 +26,8 @@ import type React from 'react';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '@/lib/api-client.js';
-import { requireAuth } from '@/lib/auth.js';
 
-export const Route = createFileRoute('/rooms/')({
-  beforeLoad: requireAuth,
+export const Route = createFileRoute('/_app/rooms/')({
   component: RoomsPage,
 });
 

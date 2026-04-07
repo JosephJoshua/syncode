@@ -29,11 +29,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useClipboard } from '@/hooks/use-clipboard.js';
 import { api, readApiError } from '@/lib/api-client.js';
-import { requireAuth } from '@/lib/auth.js';
 import { useAuthStore } from '@/stores/auth.store.js';
 
-export const Route = createFileRoute('/rooms/$roomId')({
-  beforeLoad: requireAuth,
+export const Route = createFileRoute('/_app/rooms/$roomId')({
   component: RoomLobbyPage,
 });
 

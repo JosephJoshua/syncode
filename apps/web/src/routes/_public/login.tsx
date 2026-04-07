@@ -3,15 +3,7 @@ import { CONTROL_API } from '@syncode/contracts';
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@syncode/ui';
 import { useMutation } from '@tanstack/react-query';
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
-import {
-  ArrowRight,
-  Check,
-  LoaderCircle,
-  LockKeyhole,
-  Mail,
-  Terminal,
-  UserRound,
-} from 'lucide-react';
+import { ArrowRight, Check, LoaderCircle, LockKeyhole, Mail, Terminal } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { useEffect, useRef, useState } from 'react';
 import type { UseFormSetError } from 'react-hook-form';
@@ -26,79 +18,40 @@ import { CursorSpotlight } from '@/components/spotlight.js';
 import { TiltCard } from '@/components/tilt.js';
 import { api, readApiError } from '@/lib/api-client.js';
 import { requireGuest } from '@/lib/auth.js';
-import { resolveRegisterFormError } from '@/lib/auth-form-errors.js';
-import i18n from '@/lib/i18n.js';
+import { resolveLoginFormError } from '@/lib/auth-form-errors.js';
+import { useAuthStore } from '@/stores/auth.store.js';
 
-export const Route = createFileRoute('/register')({
+const loginFormSchema = z.object({
+  identifier: z.string().trim().min(1, 'Enter your email address or username.'),
+  password: z.string().min(1, 'Enter your password.'),
+});
+
+type LoginFormValues = z.infer<typeof loginFormSchema>;
+
+export const Route = createFileRoute('/_public/login')({
   beforeLoad: requireGuest,
-  component: RegisterPage,
+  component: LoginPage,
 });
 
 const stagger = (i: number) => ({ delay: 0.1 + i * 0.08 });
 
-const registerFormSchema = z
-  .object({
-    username: z
-      .string()
-      .trim()
-      .min(3, i18n.t('register:validation.usernameMinLength'))
-      .max(30, i18n.t('register:validation.usernameMaxLength'))
-      .regex(/^[a-zA-Z0-9_]+$/, i18n.t('register:validation.usernamePattern')),
-    email: z.email(i18n.t('register:validation.emailInvalid')),
-    password: z.string().min(8, i18n.t('register:validation.passwordMinLength')),
-    confirmPassword: z.string().min(1, i18n.t('register:validation.confirmPasswordRequired')),
-  })
-  .superRefine(({ password, confirmPassword }, context) => {
-    if (password !== confirmPassword) {
-      context.addIssue({
-        code: 'custom',
-        path: ['confirmPassword'],
-        message: i18n.t('register:validation.passwordsMismatch'),
-      });
-    }
-  });
-
-type RegisterFormValues = z.infer<typeof registerFormSchema>;
-
-function RegisterPage() {
-  const { t } = useTranslation('register');
+function LoginPage() {
+  const { t } = useTranslation('login');
   const navigate = useNavigate();
+  const setSession = useAuthStore((state) => state.setSession);
   const [submissionError, setSubmissionError] = useState<string | null>(null);
   const successTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const {
     register,
     handleSubmit,
-    clearErrors,
     setError,
-    formState: { errors, isSubmitting },
-  } = useForm<RegisterFormValues>({
-    resolver: zodResolver(registerFormSchema),
+    clearErrors,
+    formState: { errors },
+  } = useForm<LoginFormValues>({
+    resolver: zodResolver(loginFormSchema),
     defaultValues: {
-      username: '',
-      email: '',
+      identifier: '',
       password: '',
-      confirmPassword: '',
-    },
-  });
-
-  const registerMutation = useMutation({
-    mutationFn: (values: RegisterFormValues) =>
-      api(CONTROL_API.AUTH.REGISTER, {
-        body: {
-          username: values.username,
-          email: values.email,
-          password: values.password,
-        },
-      }),
-    // Response body intentionally ignored; user must sign in manually after registration.
-    onSuccess: () => {
-      successTimerRef.current = setTimeout(() => {
-        toast.success(t('toast.accountCreated'));
-        navigate({ to: '/login' }).catch(() => {});
-      }, 600);
-    },
-    onError: (error) => {
-      void handleRegisterError(error, setError, setSubmissionError);
     },
   });
 
@@ -106,16 +59,32 @@ function RegisterPage() {
     return () => clearTimeout(successTimerRef.current);
   }, []);
 
-  const onSubmit = handleSubmit(
-    async (values) => {
-      clearErrors();
-      setSubmissionError(null);
-      await registerMutation.mutateAsync(values).catch(() => {});
+  const loginMutation = useMutation({
+    mutationFn: (values: LoginFormValues) =>
+      api(CONTROL_API.AUTH.LOGIN, {
+        body: {
+          identifier: values.identifier,
+          password: values.password,
+        },
+      }),
+    onSuccess: ({ accessToken, user }) => {
+      // Delay navigation to show the success animation
+      successTimerRef.current = setTimeout(() => {
+        setSession({ accessToken, user });
+        toast.success(t('toast.signedIn'));
+        navigate({ to: '/dashboard' }).catch(() => {});
+      }, 600);
     },
-    () => {
-      setSubmissionError(t('validation.reviewFields'));
+    onError: (error) => {
+      void handleLoginError(error, setError, setSubmissionError);
     },
-  );
+  });
+
+  const onSubmit = handleSubmit((values) => {
+    clearErrors();
+    setSubmissionError(null);
+    loginMutation.mutate(values);
+  });
 
   return (
     <div className="relative flex min-h-[calc(100vh-3.5rem)] items-center justify-center px-4 py-12">
@@ -130,6 +99,7 @@ function RegisterPage() {
       />
 
       <div className="relative z-10 w-full max-w-md">
+        {/* Header */}
         <div className="mb-8 text-center">
           <motion.div
             initial={{ opacity: 0, scale: 0.8 }}
@@ -162,6 +132,7 @@ function RegisterPage() {
           </motion.p>
         </div>
 
+        {/* Login Card */}
         <motion.div
           initial={{ opacity: 0, y: 20, scale: 0.98 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -176,25 +147,14 @@ function RegisterPage() {
               <CardContent>
                 <form className="space-y-5" onSubmit={onSubmit} noValidate>
                   <AnimatedFormField
-                    id="username"
-                    label={t('field.username')}
-                    icon={UserRound}
-                    autoComplete="username"
-                    placeholder={t('field.usernamePlaceholder')}
-                    error={errors.username?.message}
-                    registration={register('username')}
-                    staggerDelay={stagger(4).delay}
-                  />
-
-                  <AnimatedFormField
-                    id="email"
-                    label={t('field.email')}
+                    id="identifier"
+                    label={t('field.emailOrUsername')}
                     icon={Mail}
-                    autoComplete="email"
-                    placeholder={t('field.emailPlaceholder')}
-                    error={errors.email?.message}
-                    registration={register('email')}
-                    staggerDelay={stagger(5).delay}
+                    autoComplete="username"
+                    placeholder={t('field.emailOrUsernamePlaceholder')}
+                    error={errors.identifier?.message}
+                    registration={register('identifier')}
+                    staggerDelay={stagger(4).delay}
                   />
 
                   <AnimatedFormField
@@ -202,23 +162,11 @@ function RegisterPage() {
                     label={t('field.password')}
                     icon={LockKeyhole}
                     type="password"
-                    autoComplete="new-password"
+                    autoComplete="current-password"
                     placeholder={t('field.passwordPlaceholder')}
                     error={errors.password?.message}
                     registration={register('password')}
-                    staggerDelay={stagger(6).delay}
-                  />
-
-                  <AnimatedFormField
-                    id="confirmPassword"
-                    label={t('field.confirmPassword')}
-                    icon={LockKeyhole}
-                    type="password"
-                    autoComplete="new-password"
-                    placeholder={t('field.confirmPasswordPlaceholder')}
-                    error={errors.confirmPassword?.message}
-                    registration={register('confirmPassword')}
-                    staggerDelay={stagger(7).delay}
+                    staggerDelay={stagger(5).delay}
                   />
 
                   <AnimatePresence>
@@ -238,18 +186,16 @@ function RegisterPage() {
                   <motion.div
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.4, ...stagger(8) }}
+                    transition={{ duration: 0.4, ...stagger(6) }}
                   >
                     <Button
                       type="submit"
-                      disabled={
-                        isSubmitting || registerMutation.isPending || registerMutation.isSuccess
-                      }
+                      disabled={loginMutation.isPending || loginMutation.isSuccess}
                       className="shimmer-sweep w-full"
                       size="lg"
                     >
                       <AnimatePresence mode="wait" initial={false}>
-                        {registerMutation.isSuccess ? (
+                        {loginMutation.isSuccess ? (
                           <motion.span
                             key="success"
                             initial={{ opacity: 0, scale: 0.5 }}
@@ -257,9 +203,9 @@ function RegisterPage() {
                             className="inline-flex items-center gap-2"
                           >
                             <Check className="size-4" />
-                            {t('button.accountCreated')}
+                            {t('button.success')}
                           </motion.span>
-                        ) : isSubmitting || registerMutation.isPending ? (
+                        ) : loginMutation.isPending ? (
                           <motion.span
                             key="loading"
                             initial={{ opacity: 0 }}
@@ -268,18 +214,7 @@ function RegisterPage() {
                             className="inline-flex items-center gap-2"
                           >
                             <LoaderCircle className="size-4 animate-spin" />
-                            {t('button.creatingAccount')}
-                          </motion.span>
-                        ) : submissionError ? (
-                          <motion.span
-                            key="retry"
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            className="inline-flex items-center gap-2"
-                          >
-                            {t('button.tryAgain')}
-                            <ArrowRight className="size-4 transition-transform group-hover/button:translate-x-0.5" />
+                            {t('button.signingIn')}
                           </motion.span>
                         ) : (
                           <motion.span
@@ -289,7 +224,7 @@ function RegisterPage() {
                             exit={{ opacity: 0 }}
                             className="inline-flex items-center gap-2"
                           >
-                            {t('button.createAccount')}
+                            {t('button.logIn')}
                             <ArrowRight className="size-4 transition-transform group-hover/button:translate-x-0.5" />
                           </motion.span>
                         )}
@@ -299,12 +234,13 @@ function RegisterPage() {
                 </form>
               </CardContent>
 
+              {/* Terminal status bar */}
               <div className="flex items-center gap-2 border-t border-border/50 px-4 py-2.5 text-xs text-muted-foreground">
                 <span className="relative flex size-2">
                   <span className="absolute inline-flex size-full animate-ping rounded-full bg-primary/60" />
                   <span className="relative inline-flex size-2 rounded-full bg-primary" />
                 </span>
-                <span className="font-mono">{t('statusBar.secure')}</span>
+                <span className="font-mono">{t('statusBar.encrypted')}</span>
                 <span className="ml-auto font-mono text-muted-foreground/50">
                   {t('statusBar.tls')}
                 </span>
@@ -316,15 +252,15 @@ function RegisterPage() {
         <motion.p
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          transition={{ duration: 0.5, ...stagger(9) }}
+          transition={{ duration: 0.5, ...stagger(7) }}
           className="mt-6 text-center text-sm text-muted-foreground"
         >
-          {t('footer.hasAccount')}{' '}
+          {t('footer.needAccount')}{' '}
           <Link
-            to="/login"
+            to="/register"
             className="font-medium text-primary transition-colors hover:text-primary/80"
           >
-            {t('footer.signIn')}
+            {t('footer.registerNow')}
           </Link>
         </motion.p>
       </div>
@@ -332,25 +268,18 @@ function RegisterPage() {
   );
 }
 
-async function handleRegisterError(
+async function handleLoginError(
   error: unknown,
-  setError: UseFormSetError<RegisterFormValues>,
+  setError: UseFormSetError<LoginFormValues>,
   setSubmissionError: (message: string) => void,
 ) {
   const apiError = await readApiError(error);
-  const resolution = resolveRegisterFormError(apiError, error);
+  const resolution = resolveLoginFormError(apiError, error);
 
-  if (resolution.fieldErrors.username) {
-    setError('username', {
+  if (resolution.fieldErrors.identifier) {
+    setError('identifier', {
       type: 'server',
-      message: resolution.fieldErrors.username,
-    });
-  }
-
-  if (resolution.fieldErrors.email) {
-    setError('email', {
-      type: 'server',
-      message: resolution.fieldErrors.email,
+      message: resolution.fieldErrors.identifier,
     });
   }
 

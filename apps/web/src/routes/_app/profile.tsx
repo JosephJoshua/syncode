@@ -13,12 +13,10 @@ import { ProfileFormCard } from '@/components/profile/profile-form-card.js';
 import { ProfileHero } from '@/components/profile/profile-hero.js';
 import { QuotasPanel } from '@/components/profile/quotas-panel.js';
 import { api, getFieldErrorMessage, readApiError } from '@/lib/api-client.js';
-import { requireAuth } from '@/lib/auth.js';
 import i18n from '@/lib/i18n.js';
 import { useAuthStore } from '@/stores/auth.store.js';
 
-export const Route = createFileRoute('/profile')({
-  beforeLoad: requireAuth,
+export const Route = createFileRoute('/_app/profile')({
   component: ProfilePage,
 });
 

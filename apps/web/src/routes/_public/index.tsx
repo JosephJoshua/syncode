@@ -9,7 +9,7 @@ import { GlowOrb, PageBackground } from '@/components/background.js';
 import { CursorSpotlight } from '@/components/spotlight.js';
 import { TerminalDemo } from '@/components/terminal-demo.js';
 
-export const Route = createFileRoute('/')({
+export const Route = createFileRoute('/_public/')({
   component: HomePage,
 });
 
