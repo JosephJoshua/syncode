@@ -1,4 +1,9 @@
-import { CONTROL_API, type ListBookmarksResponse, type ProblemSummary } from '@syncode/contracts';
+import {
+  CONTROL_API,
+  type ListBookmarksQuery,
+  type ListBookmarksResponse,
+  type ProblemSummary,
+} from '@syncode/contracts';
 import {
   Button,
   Card,
@@ -56,9 +61,7 @@ function createInitialPaginationState() {
   };
 }
 
-async function fetchBookmarks(
-  query: Record<string, string | number | undefined>,
-): Promise<ListBookmarksResponse> {
+async function fetchBookmarks(query: ListBookmarksQuery): Promise<ListBookmarksResponse> {
   return api(CONTROL_API.BOOKMARKS.LIST, { searchParams: query });
 }
 
@@ -66,7 +69,7 @@ function BookmarksPage() {
   const navigate = useNavigate();
   const [paginationState, setPaginationState] = useState(createInitialPaginationState);
 
-  const bookmarksQuery = useMemo<Record<string, string | number | undefined>>(
+  const bookmarksQuery = useMemo<ListBookmarksQuery>(
     () => ({
       cursor: paginationState.currentCursor,
       limit: BOOKMARKS_PAGE_SIZE,
@@ -100,7 +103,7 @@ function BookmarksPage() {
         <p className="mt-3 text-sm text-muted-foreground sm:text-base">
           {isPending && !bookmarksResponse
             ? 'Loading bookmarks...'
-            : `${bookmarksResponse?.data.length ?? 0} bookmarked problems`}
+            : `${bookmarksResponse?.data.length ?? 0} bookmarked ${(bookmarksResponse?.data.length ?? 0) === 1 ? 'problem' : 'problems'}`}
         </p>
       </section>
 
