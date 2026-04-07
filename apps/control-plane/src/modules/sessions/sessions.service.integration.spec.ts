@@ -327,10 +327,10 @@ describe('getSession', () => {
 
     const completedRun = await insertRun(db, room.id, user1.id, { status: 'completed' });
     await insertRun(db, room.id, user1.id, { status: 'pending' }); // should be filtered out
-    const completedSub = await insertSubmission(db, room.id, user1.id, problem.id, {
+    const completedSub = await insertSubmission(db, user1.id, room.id, problem.id, {
       status: 'completed',
     });
-    await insertSubmission(db, room.id, user1.id, problem.id, { status: 'running' }); // filtered out
+    await insertSubmission(db, user1.id, room.id, problem.id, { status: 'running' }); // filtered out
 
     const result = await service.getSession(session.id, user1.id, false);
 

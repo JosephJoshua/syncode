@@ -88,7 +88,7 @@ describe('GET /sessions/:id', () => {
     await insertSessionParticipant(db, session.id, user.id, 'host');
     await insertSessionReport(db, session.id);
     await insertRun(db, room.id, user.id, { status: 'completed' });
-    await insertSubmission(db, room.id, user.id, problem.id, { status: 'completed' });
+    await insertSubmission(db, user.id, room.id, problem.id, { status: 'completed' });
 
     const res = await asUser(
       request(app.getHttpServer()).get(`/sessions/${session.id}`),
