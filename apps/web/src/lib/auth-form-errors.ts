@@ -1,5 +1,6 @@
 import { ERROR_CODES, type ErrorResponse } from '@syncode/contracts';
 import { getFieldErrorMessage } from '@/lib/api-client';
+import i18n from '@/lib/i18n';
 
 type LoginField = 'identifier' | 'password';
 type RegisterField = 'username' | 'email' | 'password';
@@ -8,9 +9,6 @@ type FormErrorResolution<TField extends string> = {
   fieldErrors: Partial<Record<TField, string>>;
   submissionError: string | null;
 };
-
-const INVALID_CREDENTIALS_MESSAGE = 'Invalid username, email, or password. Please try again.';
-const BANNED_MESSAGE = 'This account has been suspended. Please contact support.';
 
 export function resolveLoginFormError(
   apiError: ErrorResponse | null,
@@ -31,31 +29,27 @@ export function resolveLoginFormError(
 
     return {
       fieldErrors: {},
-      submissionError: apiError.message || 'Please check your credentials and try again.',
+      submissionError: apiError.message || i18n.t('login:error.checkCredentials'),
     };
   }
 
   if (isInvalidCredentialsError(apiError)) {
     return {
       fieldErrors: {},
-      submissionError: INVALID_CREDENTIALS_MESSAGE,
+      submissionError: i18n.t('login:error.invalidCredentials'),
     };
   }
 
   if (isUserBannedError(apiError)) {
     return {
       fieldErrors: {},
-      submissionError: BANNED_MESSAGE,
+      submissionError: i18n.t('login:error.accountSuspended'),
     };
   }
 
   return {
     fieldErrors: {},
-    submissionError: getFallbackErrorMessage(
-      apiError,
-      error,
-      'We could not sign you in right now.',
-    ),
+    submissionError: getFallbackErrorMessage(apiError, error, i18n.t('login:error.cannotSignIn')),
   };
 }
 
@@ -79,14 +73,14 @@ export function resolveRegisterFormError(
 
     return {
       fieldErrors: {},
-      submissionError: apiError.message || 'Please check your details and try again.',
+      submissionError: apiError.message || i18n.t('register:error.checkDetails'),
     };
   }
 
   if (isEmailTakenError(apiError)) {
     return {
       fieldErrors: {
-        email: apiError?.message || 'This email is already in use.',
+        email: apiError?.message || i18n.t('register:error.emailInUse'),
       },
       submissionError: null,
     };
@@ -95,7 +89,7 @@ export function resolveRegisterFormError(
   if (isUsernameTakenError(apiError)) {
     return {
       fieldErrors: {
-        username: apiError?.message || 'This username is already taken.',
+        username: apiError?.message || i18n.t('register:error.usernameTaken'),
       },
       submissionError: null,
     };
@@ -106,7 +100,7 @@ export function resolveRegisterFormError(
     submissionError: getFallbackErrorMessage(
       apiError,
       error,
-      'We could not create your account right now.',
+      i18n.t('register:error.cannotCreate'),
     ),
   };
 }
