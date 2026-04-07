@@ -28,7 +28,12 @@ const loginFormSchema = z.object({
 
 type LoginFormValues = z.infer<typeof loginFormSchema>;
 
+const loginSearchSchema = z.object({
+  redirect: z.string().optional().catch(undefined),
+});
+
 export const Route = createFileRoute('/_public/login')({
+  validateSearch: loginSearchSchema,
   beforeLoad: requireGuest,
   component: LoginPage,
 });
@@ -38,6 +43,7 @@ const stagger = (i: number) => ({ delay: 0.1 + i * 0.08 });
 function LoginPage() {
   const { t } = useTranslation('login');
   const navigate = useNavigate();
+  const { redirect: redirectTo } = Route.useSearch();
   const setSession = useAuthStore((state) => state.setSession);
   const [submissionError, setSubmissionError] = useState<string | null>(null);
   const successTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -72,7 +78,7 @@ function LoginPage() {
       successTimerRef.current = setTimeout(() => {
         setSession({ accessToken, user });
         toast.success(t('toast.signedIn'));
-        navigate({ to: '/dashboard' }).catch(() => {});
+        navigate({ to: redirectTo ?? '/dashboard' }).catch(() => {});
       }, 600);
     },
     onError: (error) => {
