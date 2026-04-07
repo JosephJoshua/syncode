@@ -80,7 +80,12 @@
     "sub": "等待参与者加入并分配角色后即可进入工作区",
     "you": "（你）",
     "unableToJoin": "无法加入房间",
-    "joinFailed": "加入房间失败，请检查邀请链接或登录状态。"
+    "joinFailed": "加入房间失败，请检查邀请链接或登录状态。",
+    "roomNotFound": "该房间不存在或已被删除。",
+    "roomFull": "该房间已满，无法加入更多参与者。",
+    "roomFinished": "该会话已结束。",
+    "invalidCode": "邀请码无效或已过期。",
+    "accessDenied": "你没有权限加入该房间。"
   },
   "roleSelect": {
     "heading": "你的角色",

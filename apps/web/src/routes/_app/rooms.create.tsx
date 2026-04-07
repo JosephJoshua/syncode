@@ -34,7 +34,7 @@ import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
 import { ConfettiBurst } from '@/components/confetti-burst.js';
 import { useClipboard } from '@/hooks/use-clipboard.js';
-import { api, readApiError } from '@/lib/api-client.js';
+import { api, getFieldErrorMessage, readApiError } from '@/lib/api-client.js';
 import i18n from '@/lib/i18n.js';
 import { useAuthStore } from '@/stores/auth.store.js';
 
@@ -153,7 +153,28 @@ function CreateRoomPage() {
       setInviteLink(`${window.location.origin}/rooms/${room.roomId}?code=${room.roomCode}`);
     } catch (error) {
       const apiError = await readApiError(error);
-      setSubmissionError(apiError?.message ?? t('create.createFailed'));
+
+      if (!apiError) {
+        setSubmissionError(t('create.createFailed'));
+        return;
+      }
+
+      if (apiError.details && typeof apiError.details === 'object') {
+        const details = apiError.details as Record<string, unknown>;
+        const problemError = getFieldErrorMessage(details, 'problemId');
+        const languageError = getFieldErrorMessage(details, 'language');
+
+        if (problemError) {
+          setValue('problemId', '', { shouldValidate: false });
+        }
+
+        if (languageError) {
+          setSubmissionError(languageError);
+          return;
+        }
+      }
+
+      setSubmissionError(apiError.message ?? t('create.createFailed'));
     }
   };
 

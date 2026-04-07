@@ -131,7 +131,7 @@ function RoomLobbyPage() {
           }
         }
 
-        setJoinError(apiError?.message ?? t('lobby.joinFailed'));
+        setJoinError(resolveJoinError(apiError, t));
         setIsJoining(false);
       }
     };
@@ -424,4 +424,26 @@ function RoomLobbyPage() {
       </div>
     </div>
   );
+}
+
+const JOIN_ERROR_KEYS: Partial<Record<string, string>> = {
+  [ERROR_CODES.ROOM_NOT_FOUND]: 'lobby.roomNotFound',
+  [ERROR_CODES.ROOM_FULL]: 'lobby.roomFull',
+  [ERROR_CODES.ROOM_FINISHED]: 'lobby.roomFinished',
+  [ERROR_CODES.ROOM_INVALID_CODE]: 'lobby.invalidCode',
+  [ERROR_CODES.ROOM_ACCESS_DENIED]: 'lobby.accessDenied',
+  [ERROR_CODES.ROOM_PERMISSION_DENIED]: 'lobby.accessDenied',
+  [ERROR_CODES.ROOM_INVITE_CODE_EXHAUSTED]: 'lobby.invalidCode',
+};
+
+function resolveJoinError(
+  apiError: Awaited<ReturnType<typeof readApiError>>,
+  t: (key: string) => string,
+): string {
+  if (!apiError) return t('lobby.joinFailed');
+
+  const i18nKey = apiError.code ? JOIN_ERROR_KEYS[apiError.code] : undefined;
+  if (i18nKey) return t(i18nKey);
+
+  return apiError.message || t('lobby.joinFailed');
 }

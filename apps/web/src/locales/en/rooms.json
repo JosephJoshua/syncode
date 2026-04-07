@@ -80,7 +80,12 @@
     "sub": "Wait for participants and assign roles before entering the workspace.",
     "you": "(You)",
     "unableToJoin": "Unable to join room",
-    "joinFailed": "Failed to join room. Please check invite link or login state."
+    "joinFailed": "Failed to join room. Please check invite link or login state.",
+    "roomNotFound": "This room doesn't exist or has been deleted.",
+    "roomFull": "This room is full — no more participants can join.",
+    "roomFinished": "This session has already ended.",
+    "invalidCode": "The invite code is invalid or has expired.",
+    "accessDenied": "You don't have permission to join this room."
   },
   "roleSelect": {
     "heading": "Your Role",
