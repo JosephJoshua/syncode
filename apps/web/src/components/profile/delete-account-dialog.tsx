@@ -41,7 +41,7 @@ export function DeleteAccountDialog({
 
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-background/70 backdrop-blur-sm" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100vw-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-[28px] bg-card p-6 shadow-[0_28px_80px_-32px_oklch(0.12_0.02_260/0.7)] ring-1 ring-border/60">
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100vw-1.5rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-[28px] bg-card p-5 shadow-[0_28px_80px_-32px_oklch(0.12_0.02_260/0.7)] ring-1 ring-border/60 sm:w-[calc(100vw-2rem)] sm:p-6">
           <Dialog.Title className="text-xl font-semibold tracking-tight text-foreground">
             {t('deleteDialog.title')}
           </Dialog.Title>
@@ -60,15 +60,21 @@ export function DeleteAccountDialog({
               id="delete-confirmation-email"
               autoComplete="off"
               value={confirmationEmail}
+              className="border-border/70 bg-muted/55 focus-visible:border-primary/40 focus-visible:ring-primary/15"
               onChange={(event) => {
                 onConfirmationEmailChange(event.target.value);
               }}
             />
           </div>
 
-          <div className="mt-6 flex items-center justify-end gap-3">
+          <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end sm:gap-3">
             <Dialog.Close asChild>
-              <Button type="button" variant="ghost" disabled={isPending}>
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={isPending}
+                className="w-full sm:w-auto"
+              >
                 {t('deleteDialog.cancel')}
               </Button>
             </Dialog.Close>
@@ -76,6 +82,7 @@ export function DeleteAccountDialog({
               type="button"
               variant="destructive"
               disabled={!isValid || isPending}
+              className="w-full sm:w-auto"
               onClick={onDelete}
             >
               {isPending ? (

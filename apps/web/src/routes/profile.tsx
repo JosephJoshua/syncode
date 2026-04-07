@@ -128,9 +128,9 @@ function ProfilePage() {
   }
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-8 sm:py-10 lg:py-12">
-      <section className="grid gap-8 lg:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.95fr)]">
-        <div className="space-y-6">
+    <div className="mx-auto max-w-7xl px-4 py-5 sm:py-8 lg:py-12">
+      <section className="grid gap-5 lg:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.95fr)] lg:gap-8">
+        <div className="space-y-5 sm:space-y-6">
           <ProfileHero
             profile={profile}
             isEditing={isEditing}
@@ -166,17 +166,17 @@ function ProfilePage() {
           ) : null}
         </div>
 
-        <div className="space-y-6">
+        <div className="space-y-5 sm:space-y-6">
           <QuotasPanel quotas={quotas} isLoading={quotasQuery.isLoading} />
 
           <Card className="bg-[linear-gradient(180deg,oklch(0.18_0.02_22/0.96),oklch(0.15_0.015_18/0.98))] py-0 text-white ring-0">
-            <CardHeader className="border-b border-white/10 pb-5">
+            <CardHeader className="border-b border-white/10 px-5 pt-6 pb-5 sm:px-6 sm:pt-7">
               <CardTitle className="text-white">{t('dangerZone.heading')}</CardTitle>
               <CardDescription className="text-white/70">
                 {t('dangerZone.description')}
               </CardDescription>
             </CardHeader>
-            <CardContent className="px-4 py-5 sm:px-6">
+            <CardContent className="px-5 pt-5 pb-6 sm:px-6 sm:pb-6">
               <DeleteAccountDialog
                 confirmationEmail={deleteConfirmation}
                 isPending={deleteMutation.isPending}
