@@ -3,8 +3,8 @@ import { Test } from '@nestjs/testing';
 import type { Database } from '@syncode/db';
 import { bookmarks, problemTags, rooms, submissions, tags } from '@syncode/db';
 import { and, eq } from 'drizzle-orm';
-import { DB_CLIENT } from '@/modules/db/db.module';
-import { createTestDb, insertProblem, insertUser } from '@/test/integration-setup';
+import { DB_CLIENT } from '@/modules/db/db.module.js';
+import { createTestDb, insertProblem, insertUser } from '@/test/integration-setup.js';
 import { ProblemsService } from './problems.service.js';
 
 let db: Database;

@@ -14,8 +14,8 @@ import { LoaderCircle } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { FieldErrors, UseFormRegister, UseFormReset } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
-import { Skeleton } from '@/components/ui/skeleton';
-import type { ProfileFormValues } from './profile-form';
+import { Skeleton } from '@/components/ui/skeleton.js';
+import type { ProfileFormValues } from './profile-form.js';
 
 interface ProfileFormCardProps {
   errors: FieldErrors<ProfileFormValues>;

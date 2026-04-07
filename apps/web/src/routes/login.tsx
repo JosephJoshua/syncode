@@ -11,15 +11,15 @@ import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { z } from 'zod';
-import { GlowOrb, PageBackground } from '@/components/background';
-import { FloatingSymbols } from '@/components/floating-symbols';
-import { AnimatedFormField } from '@/components/form-field';
-import { CursorSpotlight } from '@/components/spotlight';
-import { TiltCard } from '@/components/tilt';
-import { api, readApiError } from '@/lib/api-client';
-import { requireGuest } from '@/lib/auth';
-import { resolveLoginFormError } from '@/lib/auth-form-errors';
-import { useAuthStore } from '@/stores/auth.store';
+import { GlowOrb, PageBackground } from '@/components/background.js';
+import { FloatingSymbols } from '@/components/floating-symbols.js';
+import { AnimatedFormField } from '@/components/form-field.js';
+import { CursorSpotlight } from '@/components/spotlight.js';
+import { TiltCard } from '@/components/tilt.js';
+import { api, readApiError } from '@/lib/api-client.js';
+import { requireGuest } from '@/lib/auth.js';
+import { resolveLoginFormError } from '@/lib/auth-form-errors.js';
+import { useAuthStore } from '@/stores/auth.store.js';
 
 const loginFormSchema = z.object({
   identifier: z.string().trim().min(1, 'Enter your email address or username.'),

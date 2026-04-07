@@ -7,10 +7,10 @@ import { DropdownMenu } from 'radix-ui';
 import { type ReactNode, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
-import { LanguageSwitcher } from '@/components/language-switcher';
-import { api, readApiError } from '@/lib/api-client';
-import { getUserInitial } from '@/lib/user-utils';
-import { useAuthStore } from '@/stores/auth.store';
+import { LanguageSwitcher } from '@/components/language-switcher.js';
+import { api, readApiError } from '@/lib/api-client.js';
+import { getUserInitial } from '@/lib/user-utils.js';
+import { useAuthStore } from '@/stores/auth.store.js';
 
 export const Route = createRootRoute({
   component: RootLayout,
@@ -258,7 +258,7 @@ function RootLayout() {
                   <DropdownMenu.Trigger asChild>
                     <button
                       type="button"
-                      aria-label="Account menu"
+                      aria-label={t('auth.accountMenu')}
                       className="inline-flex size-9 shrink-0 items-center justify-center rounded-full border border-border/80 bg-card/85 text-sm font-semibold text-foreground ring-1 ring-foreground/5 transition-all hover:border-primary/30 hover:bg-muted/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
                     >
                       <Avatar className="size-9 border-none bg-transparent text-foreground shadow-none ring-0">

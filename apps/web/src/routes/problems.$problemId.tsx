@@ -1,9 +1,9 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
-import { ProblemDetailLayout } from '@/components/problems/problem-detail-layout';
-import { ApiError } from '@/lib/api-client';
-import i18n from '@/lib/i18n';
-import { useProblemDetailQuery } from '@/lib/problems/problem-detail';
+import { ProblemDetailLayout } from '@/components/problems/problem-detail-layout.js';
+import { ApiError } from '@/lib/api-client.js';
+import i18n from '@/lib/i18n.js';
+import { useProblemDetailQuery } from '@/lib/problems/problem-detail.js';
 
 export const Route = createFileRoute('/problems/$problemId')({
   component: ProblemDetailRouteComponent,

@@ -7,15 +7,15 @@ import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
-import { DeleteAccountDialog } from '@/components/profile/delete-account-dialog';
-import { type ProfileFormValues, profileFormSchema } from '@/components/profile/profile-form';
-import { ProfileFormCard } from '@/components/profile/profile-form-card';
-import { ProfileHero } from '@/components/profile/profile-hero';
-import { QuotasPanel } from '@/components/profile/quotas-panel';
-import { api, getFieldErrorMessage, readApiError } from '@/lib/api-client';
-import { requireAuth } from '@/lib/auth';
-import i18n from '@/lib/i18n';
-import { useAuthStore } from '@/stores/auth.store';
+import { DeleteAccountDialog } from '@/components/profile/delete-account-dialog.js';
+import { type ProfileFormValues, profileFormSchema } from '@/components/profile/profile-form.js';
+import { ProfileFormCard } from '@/components/profile/profile-form-card.js';
+import { ProfileHero } from '@/components/profile/profile-hero.js';
+import { QuotasPanel } from '@/components/profile/quotas-panel.js';
+import { api, getFieldErrorMessage, readApiError } from '@/lib/api-client.js';
+import { requireAuth } from '@/lib/auth.js';
+import i18n from '@/lib/i18n.js';
+import { useAuthStore } from '@/stores/auth.store.js';
 
 export const Route = createFileRoute('/profile')({
   beforeLoad: requireAuth,

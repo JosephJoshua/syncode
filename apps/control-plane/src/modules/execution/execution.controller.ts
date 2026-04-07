@@ -9,10 +9,10 @@ import {
   getSchemaPath,
 } from '@nestjs/swagger';
 import { CONTROL_API, EXECUTION_CLIENT, type IExecutionClient } from '@syncode/contracts';
-import { CurrentUser } from '@/common/decorators/current-user.decorator';
-import { ErrorResponseDto } from '@/common/dto/error-response.dto';
-import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard';
-import type { AuthUser } from '@/modules/auth/auth.types';
+import { CurrentUser } from '@/common/decorators/current-user.decorator.js';
+import { ErrorResponseDto } from '@/common/dto/error-response.dto.js';
+import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard.js';
+import type { AuthUser } from '@/modules/auth/auth.types.js';
 import {
   ExecutionDetailsResponseDto,
   ExecutionResultResponseDto,

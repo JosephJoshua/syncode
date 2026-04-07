@@ -2,8 +2,8 @@ import { UnauthorizedException } from '@nestjs/common';
 import type { ConfigService } from '@nestjs/config';
 import type { Response } from 'express';
 import { describe, expect, it, vi } from 'vitest';
-import { AuthController } from './auth.controller';
-import type { AuthService } from './auth.service';
+import { AuthController } from './auth.controller.js';
+import type { AuthService } from './auth.service.js';
 
 describe('AuthController', () => {
   function createController() {

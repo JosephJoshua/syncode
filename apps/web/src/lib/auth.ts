@@ -1,7 +1,7 @@
 import { CONTROL_API } from '@syncode/contracts';
 import { redirect } from '@tanstack/react-router';
-import { useAuthStore } from '@/stores/auth.store';
-import { api } from './api-client';
+import { useAuthStore } from '@/stores/auth.store.js';
+import { api } from './api-client.js';
 
 /**
  * TanStack Router `beforeLoad` guard to redirect unauthenticated users to `/login`.

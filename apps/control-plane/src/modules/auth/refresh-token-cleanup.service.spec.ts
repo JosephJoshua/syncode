@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { AuthService } from './auth.service';
-import { RefreshTokenCleanupService } from './refresh-token-cleanup.service';
+import type { AuthService } from './auth.service.js';
+import { RefreshTokenCleanupService } from './refresh-token-cleanup.service.js';
 
 describe('RefreshTokenCleanupService', () => {
   it('GIVEN scheduled cleanup WHEN triggered THEN delegates to auth service', async () => {

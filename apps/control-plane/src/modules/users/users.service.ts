@@ -26,9 +26,9 @@ import {
 import { ROOM_STATUSES, RoomStatus } from '@syncode/shared';
 import { and, eq, gte, inArray, isNull, ne, type SQL, sql } from 'drizzle-orm';
 import type { AnyPgTable } from 'drizzle-orm/pg-core';
-import { DB_CLIENT } from '@/modules/db/db.module';
-import { AuthService } from '../auth/auth.service';
-import { toPublicUserProfile, toUserProfile } from './user-profile.mapper';
+import { DB_CLIENT } from '@/modules/db/db.module.js';
+import { AuthService } from '../auth/auth.service.js';
+import { toPublicUserProfile, toUserProfile } from './user-profile.mapper.js';
 
 @Injectable()
 export class UsersService {

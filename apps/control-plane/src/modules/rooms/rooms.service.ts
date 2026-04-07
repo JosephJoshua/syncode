@@ -38,8 +38,8 @@ import {
 import { type IMediaService, MEDIA_SERVICE } from '@syncode/shared/ports';
 import { type PaginatedResult, paginate } from '@syncode/shared/server';
 import { and, asc, desc, eq, gt, lt, or, sql } from 'drizzle-orm';
-import type { EnvConfig } from '@/config/env.config';
-import { DB_CLIENT } from '@/modules/db/db.module';
+import type { EnvConfig } from '@/config/env.config.js';
+import { DB_CLIENT } from '@/modules/db/db.module.js';
 import type {
   CreateRoomResult,
   DestroyRoomResult,

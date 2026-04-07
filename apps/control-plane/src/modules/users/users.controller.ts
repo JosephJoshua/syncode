@@ -18,9 +18,9 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { CONTROL_API } from '@syncode/contracts';
-import { CurrentUser } from '@/common/decorators/current-user.decorator';
-import { ErrorResponseDto } from '@/common/dto/error-response.dto';
-import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard';
+import { CurrentUser } from '@/common/decorators/current-user.decorator.js';
+import { ErrorResponseDto } from '@/common/dto/error-response.dto.js';
+import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard.js';
 import {
   PublicUserProfileResponseDto,
   UpdateUserDto,

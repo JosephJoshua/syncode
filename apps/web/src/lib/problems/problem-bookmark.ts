@@ -1,8 +1,8 @@
 import { CONTROL_API, type ProblemDetail } from '@syncode/contracts';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { ApiError, api, readApiError } from '@/lib/api-client';
-import { getProblemDetailQueryKey } from './problem-detail';
+import { ApiError, api, readApiError } from '@/lib/api-client.js';
+import { getProblemDetailQueryKey } from './problem-detail.js';
 
 type ToggleBookmarkVariables = {
   currentIsBookmarked: boolean;

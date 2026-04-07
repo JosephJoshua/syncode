@@ -2,7 +2,7 @@ import type { ExecutionDetailsResponse } from '@syncode/contracts';
 import { ChevronDown, ChevronRight, Cpu, Gauge, MemoryStick, XCircle } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { buildLineDiff } from '@/lib/line-diff';
+import { buildLineDiff } from '@/lib/line-diff.js';
 
 function formatMillis(value: number | null): string {
   if (value === null) {

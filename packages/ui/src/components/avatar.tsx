@@ -1,6 +1,6 @@
 import type * as React from 'react';
 
-import { cn } from '../lib/cn';
+import { cn } from '../lib/cn.js';
 
 function Avatar({ className, ...props }: React.ComponentProps<'div'>) {
   return (

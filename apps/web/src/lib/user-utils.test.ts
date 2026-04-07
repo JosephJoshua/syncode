@@ -1,6 +1,6 @@
 import type { UserProfileResponse } from '@syncode/contracts';
 import { describe, expect, it } from 'vitest';
-import { getUserDisplayName, getUserInitial } from './user-utils';
+import { getUserDisplayName, getUserInitial } from './user-utils.js';
 
 function createUser(overrides: Partial<UserProfileResponse>): UserProfileResponse {
   return {

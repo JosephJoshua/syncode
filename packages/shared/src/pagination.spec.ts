@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { decodeCursor, encodeCursor, paginate } from './pagination';
+import { decodeCursor, encodeCursor, paginate } from './pagination.js';
 
 describe('encodeCursor / decodeCursor', () => {
   it('should return original values when encoding then decoding (round-trip)', () => {

@@ -4,15 +4,15 @@ import { createFileRoute } from '@tanstack/react-router';
 import type { LucideIcon } from 'lucide-react';
 import { Calendar, Clock3, Target, TrendingUp } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { DashboardRecentSessions } from '@/components/dashboard-recent-sessions';
-import { HostControlPanel } from '@/components/host-control-panel';
-import { requireAuth } from '@/lib/auth';
+import { DashboardRecentSessions } from '@/components/dashboard-recent-sessions.js';
+import { HostControlPanel } from '@/components/host-control-panel.js';
+import { requireAuth } from '@/lib/auth.js';
 import {
   EMPTY_DASHBOARD_STATS,
   fetchDashboardSessionHistory,
-} from '@/lib/dashboard-session-history';
-import { getUserDisplayName } from '@/lib/user-utils';
-import { useAuthStore } from '@/stores/auth.store';
+} from '@/lib/dashboard-session-history.js';
+import { getUserDisplayName } from '@/lib/user-utils.js';
+import { useAuthStore } from '@/stores/auth.store.js';
 
 export const Route = createFileRoute('/dashboard')({
   beforeLoad: requireAuth,

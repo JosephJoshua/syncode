@@ -1,6 +1,6 @@
 import { SUPPORTED_LANGUAGES } from '@syncode/shared';
 import { describe, expect, it } from 'vitest';
-import { formatStarterLanguageLabel, resolvePrismLanguage } from './starter-code-language';
+import { formatStarterLanguageLabel, resolvePrismLanguage } from './starter-code-language.js';
 
 describe('starter code language helpers', () => {
   it('formats standard display labels for supported languages', () => {

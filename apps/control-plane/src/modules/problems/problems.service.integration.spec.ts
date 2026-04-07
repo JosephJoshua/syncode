@@ -9,7 +9,7 @@ import {
   insertTag,
   insertTestCase,
   insertUser,
-} from '@/test/integration-setup';
+} from '@/test/integration-setup.js';
 import { ProblemsService } from './problems.service.js';
 
 let db: Database;

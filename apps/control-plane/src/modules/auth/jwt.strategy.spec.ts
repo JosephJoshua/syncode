@@ -2,7 +2,7 @@ import { UnauthorizedException } from '@nestjs/common';
 import type { ConfigService } from '@nestjs/config';
 import type { Database } from '@syncode/db';
 import { describe, expect, it, vi } from 'vitest';
-import { JwtStrategy } from './jwt.strategy';
+import { JwtStrategy } from './jwt.strategy.js';
 
 type JwtStrategyDatabaseMock = {
   query: {

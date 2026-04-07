@@ -19,11 +19,11 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { Bookmark } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ProblemCard } from '@/components/problems/problem-card';
-import type { ProblemDifficulty, ProblemItem } from '@/components/problems/problems.types';
-import { formatTagSlug } from '@/components/problems/problems-tags';
-import { api } from '@/lib/api-client';
-import { requireAuth } from '@/lib/auth';
+import { ProblemCard } from '@/components/problems/problem-card.js';
+import type { ProblemDifficulty, ProblemItem } from '@/components/problems/problems.types.js';
+import { formatTagSlug } from '@/components/problems/problems-tags.js';
+import { api } from '@/lib/api-client.js';
+import { requireAuth } from '@/lib/auth.js';
 
 export const Route = createFileRoute('/bookmarks')({
   beforeLoad: requireAuth,

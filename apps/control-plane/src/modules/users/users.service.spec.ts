@@ -3,8 +3,8 @@ import { ERROR_CODES } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
 import { GLOBAL_LIMIT_KEYS } from '@syncode/db';
 import { describe, expect, it, vi } from 'vitest';
-import type { AuthService } from '../auth/auth.service';
-import { UsersService } from './users.service';
+import type { AuthService } from '../auth/auth.service.js';
+import { UsersService } from './users.service.js';
 
 type UsersServiceDatabaseMock = {
   query: {

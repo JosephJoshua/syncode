@@ -9,10 +9,10 @@ import {
 } from '@nestjs/swagger';
 import { CONTROL_API, SESSIONS_SORT_BY_OPTIONS, SORT_ORDER_OPTIONS } from '@syncode/contracts';
 import { ROOM_MODES } from '@syncode/shared';
-import { CurrentUser } from '@/common/decorators/current-user.decorator';
-import { ErrorResponseDto } from '@/common/dto/error-response.dto';
-import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard';
-import type { AuthUser } from '@/modules/auth/auth.types';
+import { CurrentUser } from '@/common/decorators/current-user.decorator.js';
+import { ErrorResponseDto } from '@/common/dto/error-response.dto.js';
+import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard.js';
+import type { AuthUser } from '@/modules/auth/auth.types.js';
 import {
   ListSessionsQueryDto,
   SessionDetailDto,

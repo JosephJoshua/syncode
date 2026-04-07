@@ -1,7 +1,7 @@
 import type { ErrorResponse, RequestOf, ResponseOf, TypedRoute } from '@syncode/contracts';
 import { buildUrl, CONTROL_API } from '@syncode/contracts';
 import ky, { HTTPError } from 'ky';
-import { useAuthStore } from '@/stores/auth.store';
+import { useAuthStore } from '@/stores/auth.store.js';
 
 const resolveUrl = buildUrl as (template: string, params?: Record<string, string>) => string;
 const importMetaEnv = (import.meta as ImportMeta & { env?: Record<string, string | undefined> })

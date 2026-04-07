@@ -1,6 +1,6 @@
 import { ERROR_CODES, type ErrorResponse } from '@syncode/contracts';
-import { getFieldErrorMessage } from '@/lib/api-client';
-import i18n from '@/lib/i18n';
+import { getFieldErrorMessage } from '@/lib/api-client.js';
+import i18n from '@/lib/i18n.js';
 
 type LoginField = 'identifier' | 'password';
 type RegisterField = 'username' | 'email' | 'password';

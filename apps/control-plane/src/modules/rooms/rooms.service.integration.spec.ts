@@ -8,21 +8,21 @@ import { roomParticipants } from '@syncode/db';
 import { INVITE_CODE_LENGTH } from '@syncode/shared';
 import { MEDIA_SERVICE } from '@syncode/shared/ports';
 import { and, eq } from 'drizzle-orm';
-import { DB_CLIENT } from '@/modules/db/db.module';
+import { DB_CLIENT } from '@/modules/db/db.module.js';
 import {
   createTestDb,
   insertParticipant,
   insertProblem,
   insertRoom,
   insertUser,
-} from '@/test/integration-setup';
+} from '@/test/integration-setup.js';
 import {
   createMockCollabClient,
   createMockConfigService,
   createMockExecutionClient,
   createMockJwtService,
   createMockMediaService,
-} from '@/test/mock-factories';
+} from '@/test/mock-factories.js';
 import { RoomsService } from './rooms.service.js';
 
 let db: Database;

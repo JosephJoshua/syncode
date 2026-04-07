@@ -2,7 +2,7 @@ import type { ExecutionDetailsResponse } from '@syncode/contracts';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, test } from 'vitest';
-import { ExecutionDetailsPanel } from './execution-details-panel';
+import { ExecutionDetailsPanel } from './execution-details-panel.js';
 
 const mockDetails: ExecutionDetailsResponse = {
   submissionId: '550e8400-e29b-41d4-a716-446655440000',

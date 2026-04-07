@@ -2,7 +2,7 @@ import { NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { ERROR_CODES } from '@syncode/contracts';
 import { describe, expect, it, vi } from 'vitest';
-import { DB_CLIENT } from '../db/db.module';
+import { DB_CLIENT } from '../db/db.module.js';
 import { ExecutionService } from './execution.service.js';
 
 type SubmissionRow = {

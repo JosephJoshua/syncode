@@ -1,8 +1,8 @@
 import type { UserProfileResponse } from '@syncode/contracts';
 import { Avatar, AvatarFallback, Button } from '@syncode/ui';
 import { useTranslation } from 'react-i18next';
-import { Skeleton } from '@/components/ui/skeleton';
-import { getUserDisplayName, getUserInitial } from '@/lib/user-utils';
+import { Skeleton } from '@/components/ui/skeleton.js';
+import { getUserDisplayName, getUserInitial } from '@/lib/user-utils.js';
 
 interface ProfileHeroProps {
   profile: UserProfileResponse | null;

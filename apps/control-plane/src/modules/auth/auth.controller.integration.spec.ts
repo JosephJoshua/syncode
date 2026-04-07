@@ -8,10 +8,10 @@ import { CACHE_SERVICE } from '@syncode/shared/ports';
 import cookieParser from 'cookie-parser';
 import { ZodValidationPipe } from 'nestjs-zod';
 import request from 'supertest';
-import { DB_CLIENT } from '@/modules/db/db.module';
-import { InMemoryCacheService } from '@/test/in-memory-cache.service';
-import { createTestDb } from '@/test/integration-setup';
-import { createMockConfigService } from '@/test/mock-factories';
+import { DB_CLIENT } from '@/modules/db/db.module.js';
+import { InMemoryCacheService } from '@/test/in-memory-cache.service.js';
+import { createTestDb } from '@/test/integration-setup.js';
+import { createMockConfigService } from '@/test/mock-factories.js';
 import { AuthController } from './auth.controller.js';
 import { AuthService } from './auth.service.js';
 

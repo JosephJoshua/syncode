@@ -8,9 +8,14 @@ import type { Database } from '@syncode/db';
 import { MEDIA_SERVICE } from '@syncode/shared/ports';
 import { ZodValidationPipe } from 'nestjs-zod';
 import request from 'supertest';
-import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard';
-import { DB_CLIENT } from '@/modules/db/db.module';
-import { createTestDb, insertParticipant, insertRoom, insertUser } from '@/test/integration-setup';
+import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard.js';
+import { DB_CLIENT } from '@/modules/db/db.module.js';
+import {
+  createTestDb,
+  insertParticipant,
+  insertRoom,
+  insertUser,
+} from '@/test/integration-setup.js';
 import {
   asUser,
   createMockCollabClient,
@@ -19,7 +24,7 @@ import {
   createMockJwtService,
   createMockMediaService,
   TestAuthGuard,
-} from '@/test/mock-factories';
+} from '@/test/mock-factories.js';
 import { RoomsController } from './rooms.controller.js';
 import { RoomsService } from './rooms.service.js';
 

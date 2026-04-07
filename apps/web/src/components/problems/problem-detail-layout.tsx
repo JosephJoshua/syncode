@@ -6,11 +6,11 @@ import type { ReactNode } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import Markdown from 'react-markdown';
-import i18n from '@/lib/i18n';
-import { useToggleProblemBookmarkMutation } from '@/lib/problems/problem-bookmark';
-import { useAuthStore } from '@/stores/auth.store';
-import { StarterCodeBlock } from './starter-code-block';
-import { formatStarterLanguageLabel } from './starter-code-language';
+import i18n from '@/lib/i18n.js';
+import { useToggleProblemBookmarkMutation } from '@/lib/problems/problem-bookmark.js';
+import { useAuthStore } from '@/stores/auth.store.js';
+import { StarterCodeBlock } from './starter-code-block.js';
+import { formatStarterLanguageLabel } from './starter-code-language.js';
 
 export function ProblemDetailLayout({ problem }: { problem: ProblemDetail }) {
   const { t } = useTranslation('problems');
