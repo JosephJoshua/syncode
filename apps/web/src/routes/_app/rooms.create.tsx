@@ -33,6 +33,7 @@ import { Controller, useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
 import { ConfettiBurst } from '@/components/confetti-burst.js';
+import { FormErrorAlert } from '@/components/form-error-alert.js';
 import { useClipboard } from '@/hooks/use-clipboard.js';
 import { api, getFieldErrorMessage, readApiError } from '@/lib/api-client.js';
 import i18n from '@/lib/i18n.js';
@@ -364,11 +365,7 @@ function CreateRoomPage() {
                     ? t('create.provisioning')
                     : t('create.button')}
                 </Button>
-                {submissionError && (
-                  <p className="mt-2 text-sm text-destructive" role="alert">
-                    {submissionError}
-                  </p>
-                )}
+                <FormErrorAlert message={submissionError} />
               </motion.div>
             </form>
           </Card>
