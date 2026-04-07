@@ -12,6 +12,8 @@ export const SESSIONS_SORT_BY_OPTIONS = [
 export const sessionHistoryParticipantSchema = z.object({
   userId: z.uuid(),
   username: z.string(),
+  displayName: z.string().nullable(),
+  avatarUrl: z.string().nullable(),
   role: z.string(),
 });
 

@@ -122,6 +122,8 @@ export class SessionsService {
                   sessionId: sessionParticipants.sessionId,
                   userId: sessionParticipants.userId,
                   username: users.username,
+                  displayName: users.displayName,
+                  avatarUrl: users.avatarUrl,
                   role: sessionParticipants.role,
                 })
                 .from(sessionParticipants)
@@ -148,6 +150,8 @@ export class SessionsService {
           participants: (participantsBySession.get(row.sessionId) ?? []).map((p) => ({
             userId: p.userId,
             username: p.username,
+            displayName: p.displayName,
+            avatarUrl: p.avatarUrl,
             role: p.role,
           })),
           overallScore: row.overallScore ?? null,

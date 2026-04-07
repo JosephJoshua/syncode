@@ -21,6 +21,8 @@ export interface SessionSummaryResult {
 export interface SessionHistoryParticipantResult {
   userId: string;
   username: string;
+  displayName: string | null;
+  avatarUrl: string | null;
   role: RoomRole;
 }
 

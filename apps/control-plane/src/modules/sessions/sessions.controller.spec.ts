@@ -55,7 +55,15 @@ const LIST_RESULT = {
       language: 'python' as const,
       duration: 3600,
       durationMs: 3600000,
-      participants: [{ userId: 'user-1', username: 'alice', role: 'candidate' as const }],
+      participants: [
+        {
+          userId: 'user-1',
+          username: 'alice',
+          displayName: 'Alice',
+          avatarUrl: null,
+          role: 'candidate' as const,
+        },
+      ],
       overallScore: 85,
       hasReport: true,
       hasFeedback: false,
