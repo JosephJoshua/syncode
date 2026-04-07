@@ -14,7 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@syncode/ui';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { Check, ChevronDown, Code2, Copy, FileCode2, Globe, Lock } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -154,6 +154,8 @@ function CreateRoomPage() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [availableProblems, isProblemMenuOpen, selectedProblemId]);
 
+  const queryClient = useQueryClient();
+
   const createRoomMutation = useMutation({
     mutationFn: (data: CreateRoomFormData) =>
       api(CONTROL_API.ROOMS.CREATE, {
@@ -169,6 +171,9 @@ function CreateRoomPage() {
           },
         },
       }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['rooms'] });
+    },
   });
 
   const onSubmit = async (data: CreateRoomFormData) => {

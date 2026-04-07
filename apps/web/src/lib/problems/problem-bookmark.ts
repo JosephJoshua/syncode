@@ -70,6 +70,10 @@ export function useToggleProblemBookmarkMutation(problemId: string) {
         previousProblemDetail,
       };
     },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: ['bookmarks'] });
+      void queryClient.invalidateQueries({ queryKey: ['problems', 'list'] });
+    },
     onError: (error, _variables, context) => {
       if (context?.previousProblemDetail) {
         queryClient.setQueryData(
