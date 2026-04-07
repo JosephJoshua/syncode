@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { createFileRoute } from '@tanstack/react-router';
 import type { LucideIcon } from 'lucide-react';
 import { Calendar, Clock3, Target, TrendingUp } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { DashboardRecentSessions } from '@/components/dashboard-recent-sessions';
 import { HostControlPanel } from '@/components/host-control-panel';
 import { requireAuth } from '@/lib/auth';
@@ -19,6 +20,7 @@ export const Route = createFileRoute('/dashboard')({
 });
 
 function DashboardPage() {
+  const { t } = useTranslation('dashboard');
   const user = useAuthStore((state) => state.user);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const dashboardName = getUserDisplayName(user);
@@ -53,22 +55,22 @@ function DashboardPage() {
     icon: LucideIcon;
   }> = [
     {
-      title: 'Total Sessions',
+      title: t('stats.totalSessions'),
       value: getStatValue(stats.totalSessions),
       icon: Calendar,
     },
     {
-      title: 'Pass Rate',
+      title: t('stats.passRate'),
       value: getStatValue(stats.passRate),
       icon: Target,
     },
     {
-      title: 'Average Score',
+      title: t('stats.averageScore'),
       value: getStatValue(stats.averageScore),
       icon: TrendingUp,
     },
     {
-      title: 'Practice Time',
+      title: t('stats.practiceTime'),
       value: getStatValue(stats.practiceTime),
       icon: Clock3,
     },
@@ -78,11 +80,9 @@ function DashboardPage() {
     <div className="mx-auto max-w-7xl px-4 py-8 sm:py-10 lg:py-12">
       <section className="max-w-3xl">
         <h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-          {dashboardName ? `Welcome back, ${dashboardName}` : 'Welcome back'}
+          {dashboardName ? t('heading', { name: dashboardName }) : t('headingNoName')}
         </h1>
-        <p className="mt-3 text-sm text-muted-foreground sm:text-base">
-          Review your recent sessions, track your pass rate, and jump into your next practice.
-        </p>
+        <p className="mt-3 text-sm text-muted-foreground sm:text-base">{t('sub')}</p>
       </section>
 
       <section className="mt-8 sm:mt-10">

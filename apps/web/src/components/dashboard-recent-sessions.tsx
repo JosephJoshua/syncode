@@ -21,6 +21,7 @@ import {
 import { Link } from '@tanstack/react-router';
 import { Search } from 'lucide-react';
 import { useDeferredValue, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type {
   SessionParticipant,
   SessionRole,
@@ -144,6 +145,7 @@ export function DashboardRecentSessions({
   isUnavailable?: boolean;
   onRetry?: () => void;
 }) {
+  const { t } = useTranslation('dashboard');
   const user = useAuthStore((state) => state.user);
   const currentUserInitial = getUserInitial(user) || 'U';
   const [searchQuery, setSearchQuery] = useState('');
@@ -188,7 +190,7 @@ export function DashboardRecentSessions({
     <section className="mt-10 sm:mt-12">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
         <h2 className="shrink-0 text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
-          Recent Sessions
+          {t('recentSessions')}
         </h2>
 
         <div className="flex flex-1 flex-col gap-3 md:flex-row md:items-center xl:justify-end xl:gap-4">
@@ -197,32 +199,32 @@ export function DashboardRecentSessions({
             <Input
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
-              placeholder="Search by problem name"
+              placeholder={t('search.placeholder')}
               className="h-11 pl-9"
             />
           </div>
 
           <Select value={filter} onValueChange={(value) => setFilter(value as SessionFilter)}>
             <SelectTrigger className="w-full md:w-42.5 xl:flex-none" aria-label="Filter sessions">
-              <SelectValue placeholder="All sessions" />
+              <SelectValue placeholder={t('filter.all')} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All sessions</SelectItem>
-              <SelectItem value="passed">Passed only</SelectItem>
-              <SelectItem value="failed">Failed only</SelectItem>
+              <SelectItem value="all">{t('filter.all')}</SelectItem>
+              <SelectItem value="passed">{t('filter.passedOnly')}</SelectItem>
+              <SelectItem value="failed">{t('filter.failedOnly')}</SelectItem>
             </SelectContent>
           </Select>
 
           <Select value={sortBy} onValueChange={(value) => setSortBy(value as SessionSort)}>
             <SelectTrigger className="w-full md:w-57.5 xl:flex-none" aria-label="Sort sessions">
-              <SelectValue placeholder="Date: Newest first" />
+              <SelectValue placeholder={t('sort.dateNewest')} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="date-desc">Date: Newest first</SelectItem>
-              <SelectItem value="date-asc">Date: Oldest first</SelectItem>
-              <SelectItem value="score-desc">Score: High to low</SelectItem>
-              <SelectItem value="score-asc">Score: Low to high</SelectItem>
-              <SelectItem value="duration-desc">Duration</SelectItem>
+              <SelectItem value="date-desc">{t('sort.dateNewest')}</SelectItem>
+              <SelectItem value="date-asc">{t('sort.dateOldest')}</SelectItem>
+              <SelectItem value="score-desc">{t('sort.scoreHigh')}</SelectItem>
+              <SelectItem value="score-asc">{t('sort.scoreLow')}</SelectItem>
+              <SelectItem value="duration-desc">{t('sort.duration')}</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -232,32 +234,32 @@ export function DashboardRecentSessions({
         {isLoading ? (
           <div className="flex min-h-64 flex-col items-center justify-center px-6 py-12 text-center">
             <h3 className="text-lg font-semibold tracking-tight text-foreground">
-              Loading sessions
+              {t('empty.loadingTitle')}
             </h3>
             <p className="mt-2 max-w-md text-sm text-muted-foreground">
-              We&#39;re pulling your recent interview history from the sessions endpoint.
+              {t('empty.loadingDescription')}
             </p>
           </div>
         ) : isUnavailable ? (
           <div className="flex min-h-64 flex-col items-center justify-center px-6 py-12 text-center">
             <h3 className="text-lg font-semibold tracking-tight text-foreground">
-              Session history unavailable
+              {t('empty.unavailableTitle')}
             </h3>
             <p className="mt-2 max-w-md text-sm text-muted-foreground">
-              Session history will appear once your account session is ready.
+              {t('empty.unavailableDescription')}
             </p>
           </div>
         ) : isError ? (
           <div className="flex min-h-64 flex-col items-center justify-center px-6 py-12 text-center">
             <h3 className="text-lg font-semibold tracking-tight text-foreground">
-              Unable to load sessions
+              {t('empty.errorTitle')}
             </h3>
             <p className="mt-2 max-w-md text-sm text-muted-foreground">
-              Session history could not be retrieved right now. Try again in a moment.
+              {t('empty.errorDescription')}
             </p>
             {onRetry ? (
               <Button variant="outline" className="mt-4" onClick={onRetry}>
-                Retry
+                {t('common:retry')}
               </Button>
             ) : null}
           </div>
@@ -265,14 +267,14 @@ export function DashboardRecentSessions({
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
-                <TableHead className="w-35 text-center">Date</TableHead>
-                <TableHead className="min-w-65 text-center">Problem</TableHead>
-                <TableHead className="w-22 text-center">Partner</TableHead>
-                <TableHead className="w-24 text-center">Observer</TableHead>
-                <TableHead className="w-30 text-center">Role</TableHead>
-                <TableHead className="w-30 text-center">Status</TableHead>
-                <TableHead className="w-22.5 text-center">Score</TableHead>
-                <TableHead className="w-25 text-center">Duration</TableHead>
+                <TableHead className="w-35 text-center">{t('table.date')}</TableHead>
+                <TableHead className="min-w-65 text-center">{t('table.problem')}</TableHead>
+                <TableHead className="w-22 text-center">{t('table.partner')}</TableHead>
+                <TableHead className="w-24 text-center">{t('table.observer')}</TableHead>
+                <TableHead className="w-30 text-center">{t('table.role')}</TableHead>
+                <TableHead className="w-30 text-center">{t('table.status')}</TableHead>
+                <TableHead className="w-22.5 text-center">{t('table.score')}</TableHead>
+                <TableHead className="w-25 text-center">{t('table.duration')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -311,7 +313,7 @@ export function DashboardRecentSessions({
                   <TableCell className="text-center">
                     {row.role === 'candidate' && row.status ? (
                       <Badge variant={getStatusBadgeVariant(row.status)}>
-                        {row.status === 'passed' ? 'Pass' : 'Failed'}
+                        {row.status === 'passed' ? t('status.pass') : t('status.failed')}
                       </Badge>
                     ) : (
                       <span className="text-muted-foreground">-</span>
@@ -341,12 +343,10 @@ export function DashboardRecentSessions({
         ) : (
           <div className="flex min-h-64 flex-col items-center justify-center px-6 py-12 text-center">
             <h3 className="text-lg font-semibold tracking-tight text-foreground">
-              {hasBaseRows ? 'No matching sessions' : 'No sessions yet'}
+              {hasBaseRows ? t('empty.noMatchTitle') : t('empty.noSessionsTitle')}
             </h3>
             <p className="mt-2 max-w-md text-sm text-muted-foreground">
-              {hasBaseRows
-                ? 'Try adjusting your search, filter, or sort settings to surface more session history.'
-                : 'Your completed interview practices will appear here once you start training.'}
+              {hasBaseRows ? t('empty.noMatchDescription') : t('empty.noSessionsDescription')}
             </p>
           </div>
         )}
