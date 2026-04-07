@@ -1,7 +1,6 @@
 import { CONTROL_API, ERROR_CODES } from '@syncode/contracts';
 import type { RoomRole } from '@syncode/shared';
 import {
-  Badge,
   Button,
   Card,
   Input,
@@ -20,31 +19,26 @@ import {
   Copy,
   Loader2,
   Play,
-  Terminal,
   UserCog,
-  Users,
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { LobbyBot } from '@/components/lobby-bot.js';
 import { useClipboard } from '@/hooks/use-clipboard.js';
 import { api, readApiError } from '@/lib/api-client.js';
-import { requireAuth } from '@/lib/auth.js';
 import { useAuthStore } from '@/stores/auth.store.js';
 
-export const Route = createFileRoute('/rooms/$roomId')({
-  beforeLoad: requireAuth,
+export const Route = createFileRoute('/_app/rooms/$roomId')({
   component: RoomLobbyPage,
 });
-
-type LobbyRole = RoomRole | 'unassigned';
 
 type Participant = {
   id: string;
   username: string;
   isReady: boolean;
-  isHost?: boolean;
-  role: LobbyRole;
+  isHost: boolean;
+  role: RoomRole;
 };
 
 const ROLE_LABEL_KEYS: Record<string, string> = {
@@ -52,17 +46,13 @@ const ROLE_LABEL_KEYS: Record<string, string> = {
   candidate: 'role.candidate',
   interviewer: 'role.interviewer',
   spectator: 'role.observer',
-  unassigned: 'role.unassigned',
 };
 
-const ROLE_OPTIONS: Array<{ value: LobbyRole; labelKey: string; descriptionKey: string }> = [
-  { value: 'candidate', labelKey: 'roleSelect.candidate', descriptionKey: 'roleSelect.candidate' },
-  {
-    value: 'interviewer',
-    labelKey: 'roleSelect.interviewer',
-    descriptionKey: 'roleSelect.interviewer',
-  },
-  { value: 'spectator', labelKey: 'roleSelect.observer', descriptionKey: 'roleSelect.observer' },
+/** Roles that can be assigned to non-host participants. */
+const ASSIGNABLE_ROLES: Array<{ value: RoomRole; labelKey: string }> = [
+  { value: 'candidate', labelKey: 'roleSelect.candidate' },
+  { value: 'interviewer', labelKey: 'roleSelect.interviewer' },
+  { value: 'spectator', labelKey: 'roleSelect.observer' },
 ];
 
 function RoomLobbyPage() {
@@ -73,7 +63,7 @@ function RoomLobbyPage() {
   const [isJoining, setIsJoining] = useState(true);
   const [joinError, setJoinError] = useState<string | null>(null);
   const [isReady, setIsReady] = useState(false);
-  const [myRole, setMyRole] = useState<LobbyRole>('unassigned');
+  const [myRole, setMyRole] = useState<RoomRole>('candidate');
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [inviteLink] = useState(() => window.location.href);
   const { copied, copy } = useClipboard();
@@ -86,7 +76,7 @@ function RoomLobbyPage() {
 
       const applyDetail = (
         detail: Awaited<ReturnType<typeof api<typeof CONTROL_API.ROOMS.GET>>>,
-        resolvedRole: LobbyRole,
+        resolvedRole: RoomRole,
       ) => {
         setParticipants(
           detail.participants.map((participant) => {
@@ -141,17 +131,18 @@ function RoomLobbyPage() {
           }
         }
 
-        setJoinError(apiError?.message ?? t('lobby.joinFailed'));
+        setJoinError(resolveJoinError(apiError, t));
         setIsJoining(false);
       }
     };
     joinRoom();
   }, [roomId, currentUserId, t]);
 
-  const handleRoleChange = (newRole: string) => {
-    const role = newRole as LobbyRole;
-    setMyRole(role);
-    setParticipants((prev) => prev.map((p) => (p.id === currentUserId ? { ...p, role } : p)));
+  const amHost = myRole === 'host';
+
+  const handleParticipantRoleChange = (participantId: string, newRole: string) => {
+    const role = newRole as RoomRole;
+    setParticipants((prev) => prev.map((p) => (p.id === participantId ? { ...p, role } : p)));
   };
 
   const toggleReady = () => {
@@ -165,26 +156,24 @@ function RoomLobbyPage() {
 
   const copyInviteLink = () => copy(inviteLink);
 
-  const { allReady, readyCount, totalCount, isRoomValid, asciiProgress } = useMemo(() => {
+  const { allReady, readyCount, totalCount, isRoomValid } = useMemo(() => {
     const ready = participants.filter((p) => p.isReady).length;
     const total = participants.length;
     const every = ready === total && total > 0;
 
     const hasCandidate = participants.some((p) => p.role === 'candidate');
-    const hasInterviewer = participants.some((p) => p.role === 'interviewer');
-
-    const boxes = Array.from({ length: total })
-      .map((_, i) => (i < ready ? '\u25a0' : '\u25a1'))
-      .join(' ');
+    // Host has all interviewer capabilities, so they count as an interviewer
+    const hasInterviewer = participants.some((p) => p.role === 'interviewer' || p.role === 'host');
 
     return {
       allReady: every,
       readyCount: ready,
       totalCount: total,
       isRoomValid: hasCandidate && hasInterviewer,
-      asciiProgress: `[ ${boxes} ]`,
     };
   }, [participants]);
+
+  const glowIntensity = totalCount > 0 ? readyCount / totalCount : 0;
 
   if (joinError) {
     return (
@@ -218,62 +207,33 @@ function RoomLobbyPage() {
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:py-10 lg:py-12">
+      {/* Bot + heading section */}
       <motion.div
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
       >
-        <section className="max-w-3xl">
-          <div className="mb-2 inline-flex items-center justify-center rounded-full border border-border bg-card/50 p-3">
-            <Terminal size={24} className="text-primary" />
-          </div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
+        <div className="flex flex-col items-center text-center">
+          <LobbyBot readyCount={readyCount} totalCount={totalCount} className="mb-5" />
+          <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
             {t('lobby.heading')}
           </h1>
-          <p className="mt-3 text-sm text-muted-foreground sm:text-base">{t('lobby.sub')}</p>
-        </section>
-
-        <div className="mt-6 flex flex-col items-start gap-4 sm:flex-row sm:items-center">
-          <Badge variant="outline" className="gap-2 px-4 py-1.5 text-sm">
-            <Users size={16} className="text-primary" />
-            {readyCount} / {totalCount} {t('lobby.ready')}
-          </Badge>
-
-          <div className="relative flex w-full items-center rounded-lg border border-border bg-background p-1.5 transition-all duration-300 focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50 sm:max-w-md">
-            <Input
-              type="text"
-              readOnly
-              value={inviteLink}
-              className="flex-1 border-none bg-transparent font-mono text-sm shadow-none focus-visible:ring-0"
-            />
-            <div className="pointer-events-none absolute right-14 top-0 bottom-0 w-8 bg-gradient-to-l from-background to-transparent" />
-            <button
-              type="button"
-              onClick={copyInviteLink}
-              className="flex shrink-0 items-center justify-center rounded-md bg-muted p-2.5 text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground"
-              title={t('common:copyLink')}
-            >
-              {copied ? <Check size={16} className="text-primary" /> : <Copy size={16} />}
-            </button>
-          </div>
-        </div>
-
-        {allReady && !isRoomValid && (
-          <motion.div
-            className="mt-6 max-w-2xl"
-            initial={{ opacity: 0, y: -8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4 }}
+          <p
+            className={`mt-2 font-mono text-sm tracking-widest ${
+              allReady ? 'text-primary' : 'animate-pulse text-primary/50'
+            }`}
           >
-            <div className="flex items-center gap-3 rounded-lg border border-warning/50 bg-warning/10 p-4 text-warning">
-              <AlertTriangle size={20} className="shrink-0" />
-              <span className="text-sm font-semibold">{t('warning')}</span>
-            </div>
-          </motion.div>
-        )}
+            {totalCount > 0
+              ? `${readyCount} / ${totalCount} ${t('lobby.ready')}`
+              : t('systemStatus.awaitingPeers')}
+          </p>
+          <p className="mt-1.5 text-sm text-muted-foreground">{t('lobby.sub')}</p>
+        </div>
       </motion.div>
 
+      {/* Main grid: participants + sidebar */}
       <div className="mt-10 grid grid-cols-1 gap-8 lg:grid-cols-12">
+        {/* Participant cards */}
         <div className="lg:col-span-8">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             {participants.map((participant, index) => (
@@ -288,7 +248,7 @@ function RoomLobbyPage() {
                 }}
               >
                 <Card
-                  className={`p-5 transition-all duration-300 ${
+                  className={`rounded-xl p-5 transition-all duration-300 ${
                     participant.isReady
                       ? 'border-primary/40 bg-card shadow-[0_0_20px_hsl(var(--primary)/0.15)]'
                       : 'border-border/60 bg-card/80'
@@ -296,8 +256,13 @@ function RoomLobbyPage() {
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4">
-                      <div className="flex size-12 shrink-0 items-center justify-center rounded-full border border-border bg-muted text-lg font-bold text-foreground">
-                        {participant.username.charAt(0).toUpperCase()}
+                      <div className="relative">
+                        {participant.isReady && (
+                          <span className="absolute inset-0 animate-[glowPulse_2s_ease-in-out_infinite] rounded-full border-2 border-primary/60" />
+                        )}
+                        <div className="flex size-12 shrink-0 items-center justify-center rounded-full border border-border bg-muted text-lg font-bold text-foreground">
+                          {participant.username.charAt(0).toUpperCase()}
+                        </div>
                       </div>
                       <div className="flex flex-col">
                         <span className="flex items-center gap-2 text-[15px] font-semibold text-foreground">
@@ -308,16 +273,31 @@ function RoomLobbyPage() {
                             </span>
                           )}
                         </span>
-                        <span
-                          className={`mt-1 flex items-center gap-1.5 font-mono text-sm ${
-                            participant.role === 'unassigned'
-                              ? 'text-muted-foreground'
-                              : 'text-primary'
-                          }`}
-                        >
-                          <UserCog size={14} />
-                          {t(ROLE_LABEL_KEYS[participant.role] ?? participant.role)}
-                        </span>
+
+                        {/* Host can assign roles to non-host participants */}
+                        {amHost && !participant.isHost ? (
+                          <Select
+                            value={participant.role}
+                            onValueChange={(v) => handleParticipantRoleChange(participant.id, v)}
+                          >
+                            <SelectTrigger className="mt-1 h-7 w-auto gap-1.5 border-none bg-transparent px-0 py-0 text-sm font-mono text-primary shadow-none ring-0 focus-visible:ring-0">
+                              <UserCog size={14} />
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {ASSIGNABLE_ROLES.map((opt) => (
+                                <SelectItem key={opt.value} value={opt.value}>
+                                  {t(opt.labelKey)}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <span className="mt-1 flex items-center gap-1.5 font-mono text-sm text-primary">
+                            <UserCog size={14} />
+                            {t(ROLE_LABEL_KEYS[participant.role] ?? participant.role)}
+                          </span>
+                        )}
                       </div>
                     </div>
                     {participant.isReady ? (
@@ -332,55 +312,73 @@ function RoomLobbyPage() {
           </div>
         </div>
 
+        {/* Control panel sidebar */}
         <div className="lg:col-span-4">
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.45, delay: 0.2, ease: [0.22, 1, 0.36, 1] }}
+            transition={{ duration: 0.45, delay: 0.05, ease: [0.22, 1, 0.36, 1] }}
           >
-            <Card className="sticky top-6 p-7">
+            <Card
+              className="sticky top-6 rounded-xl p-7 transition-shadow duration-500"
+              style={{
+                boxShadow:
+                  glowIntensity > 0
+                    ? `0 0 ${16 + glowIntensity * 24}px hsl(var(--primary) / ${0.08 + glowIntensity * 0.22})`
+                    : undefined,
+              }}
+            >
               <div className="space-y-7">
-                <div className="pb-4 pt-2 text-center font-mono">
-                  <div
-                    className={`mb-3 text-2xl transition-colors duration-500 ${allReady ? 'text-primary' : 'text-muted-foreground'}`}
-                  >
-                    {asciiProgress}
-                  </div>
-                  <div
-                    className={`text-xs tracking-widest ${allReady ? 'text-primary' : 'animate-pulse text-primary/50'}`}
-                  >
-                    {allReady ? t('systemStatus.ready') : t('systemStatus.awaitingPeers')}
-                  </div>
-                </div>
-
+                {/* Invite link */}
                 <div className="space-y-2.5">
                   <label
-                    htmlFor="role-select"
+                    htmlFor="invite-link"
                     className="text-xs font-semibold uppercase tracking-widest text-muted-foreground"
                   >
-                    {t('roleSelect.heading')}
+                    {t('common:copyLink')}
                   </label>
-                  <Select value={myRole} onValueChange={handleRoleChange} disabled={isReady}>
-                    <SelectTrigger id="role-select">
-                      <div className="flex items-center gap-2.5">
-                        <UserCog size={18} className="text-muted-foreground" />
-                        <SelectValue placeholder={t('roleSelect.placeholder')} />
-                      </div>
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="unassigned">{t('roleSelect.placeholder')}</SelectItem>
-                      {myRole === 'host' && (
-                        <SelectItem value="host">{t('roleSelect.host')}</SelectItem>
-                      )}
-                      {ROLE_OPTIONS.map((opt) => (
-                        <SelectItem key={opt.value} value={opt.value}>
-                          {t(opt.labelKey)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1">
+                      <Input
+                        id="invite-link"
+                        type="text"
+                        readOnly
+                        value={inviteLink}
+                        className="w-full font-mono text-sm"
+                      />
+                      <div className="pointer-events-none absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-card to-transparent" />
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={copyInviteLink}
+                      title={t('common:copyLink')}
+                    >
+                      {copied ? <Check size={16} className="text-primary" /> : <Copy size={16} />}
+                    </Button>
+                  </div>
                 </div>
 
+                {/* Your role */}
+                <div className="space-y-2.5">
+                  <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                    {t('roleSelect.heading')}
+                  </span>
+                  {amHost ? (
+                    <div className="flex h-11 items-center gap-2 rounded-lg border border-input bg-background px-4 text-sm font-medium">
+                      <UserCog size={16} className="text-primary" />
+                      <span>{t('roleSelect.host')}</span>
+                    </div>
+                  ) : (
+                    <div className="flex h-11 items-center gap-2 rounded-lg border border-input bg-background px-4 text-sm font-medium text-muted-foreground">
+                      <UserCog size={16} />
+                      <span>{t(ROLE_LABEL_KEYS[myRole] ?? myRole)}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Ready / Cancel button */}
                 <Button
                   variant={isReady ? 'outline' : 'default'}
                   size="lg"
@@ -388,7 +386,7 @@ function RoomLobbyPage() {
                   onClick={toggleReady}
                 >
                   {isReady ? (
-                    <>{t('readyButton.cancelReady')}</>
+                    t('readyButton.cancelReady')
                   ) : (
                     <>
                       <CheckCircle2 size={20} /> {t('readyButton.ready')}
@@ -396,13 +394,20 @@ function RoomLobbyPage() {
                   )}
                 </Button>
 
+                {/* Enter workspace button */}
                 {allReady && (
                   <motion.div
-                    className="border-t border-border/60 pt-5"
+                    className="space-y-3 border-t border-border/60 pt-5"
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
                     transition={{ duration: 0.4 }}
                   >
+                    {!isRoomValid && (
+                      <p className="flex items-start gap-2 text-xs text-muted-foreground">
+                        <AlertTriangle size={14} className="mt-0.5 shrink-0 text-warning" />
+                        {t('warning')}
+                      </p>
+                    )}
                     <Button size="lg" disabled={!isRoomValid} className="w-full">
                       <Play
                         size={18}
@@ -419,4 +424,26 @@ function RoomLobbyPage() {
       </div>
     </div>
   );
+}
+
+const JOIN_ERROR_KEYS: Partial<Record<string, string>> = {
+  [ERROR_CODES.ROOM_NOT_FOUND]: 'lobby.roomNotFound',
+  [ERROR_CODES.ROOM_FULL]: 'lobby.roomFull',
+  [ERROR_CODES.ROOM_FINISHED]: 'lobby.roomFinished',
+  [ERROR_CODES.ROOM_INVALID_CODE]: 'lobby.invalidCode',
+  [ERROR_CODES.ROOM_ACCESS_DENIED]: 'lobby.accessDenied',
+  [ERROR_CODES.ROOM_PERMISSION_DENIED]: 'lobby.accessDenied',
+  [ERROR_CODES.ROOM_INVITE_CODE_EXHAUSTED]: 'lobby.invalidCode',
+};
+
+function resolveJoinError(
+  apiError: Awaited<ReturnType<typeof readApiError>>,
+  t: (key: string) => string,
+): string {
+  if (!apiError) return t('lobby.joinFailed');
+
+  const i18nKey = apiError.code ? JOIN_ERROR_KEYS[apiError.code] : undefined;
+  if (i18nKey) return t(i18nKey);
+
+  return apiError.message || t('lobby.joinFailed');
 }

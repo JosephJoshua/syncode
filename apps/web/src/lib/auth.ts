@@ -6,9 +6,12 @@ import { api } from './api-client.js';
 /**
  * TanStack Router `beforeLoad` guard to redirect unauthenticated users to `/login`.
  */
-export function requireAuth() {
+export function requireAuth({ location }: { location: { href: string } }) {
   if (!useAuthStore.getState().isAuthenticated) {
-    throw redirect({ to: '/login' });
+    throw redirect({
+      to: '/login',
+      search: { redirect: location.href },
+    });
   }
 }
 

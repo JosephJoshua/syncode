@@ -43,7 +43,8 @@
   "validation": {
     "usernameMinLength": "Username must be at least 3 characters.",
     "usernameMaxLength": "Username must be 30 characters or fewer.",
-    "usernamePattern": "Username can only contain letters, numbers, and underscores."
+    "usernamePattern": "Username can only contain letters, numbers, and underscores.",
+    "usernameTaken": "This username is already taken."
   },
   "dangerZone": {
     "heading": "Danger zone",

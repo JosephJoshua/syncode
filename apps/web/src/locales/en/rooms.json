@@ -1,10 +1,10 @@
 {
   "heading": "Rooms",
   "subtitle": {
-    "activeCount_one": "{{activeCount}} active room",
-    "activeCount_other": "{{activeCount}} active rooms",
-    "totalCount_one": "{{totalCount}} room",
-    "totalCount_other": "{{totalCount}} rooms",
+    "activeCount_one": "{{count}} active room",
+    "activeCount_other": "{{count}} active rooms",
+    "totalCount_one": "{{count}} room",
+    "totalCount_other": "{{count}} rooms",
     "totalLabel": "{{totalCount}} total",
     "noActive": "No active rooms"
   },
@@ -38,8 +38,7 @@
     "host": "Host",
     "candidate": "Candidate",
     "interviewer": "Interviewer",
-    "observer": "Observer",
-    "unassigned": "Unassigned"
+    "observer": "Observer"
   },
   "status": {
     "waiting": "Waiting",
@@ -81,10 +80,15 @@
     "sub": "Wait for participants and assign roles before entering the workspace.",
     "you": "(You)",
     "unableToJoin": "Unable to join room",
-    "joinFailed": "Failed to join room. Please check invite link or login state."
+    "joinFailed": "Failed to join room. Please check invite link or login state.",
+    "roomNotFound": "This room doesn't exist or has been deleted.",
+    "roomFull": "This room is full — no more participants can join.",
+    "roomFinished": "This session has already ended.",
+    "invalidCode": "The invite code is invalid or has expired.",
+    "accessDenied": "You don't have permission to join this room."
   },
   "roleSelect": {
-    "heading": "Select Your Role",
+    "heading": "Your Role",
     "placeholder": "Pick a role...",
     "host": "Host (Room Owner)",
     "candidate": "Candidate (Writing Code)",
@@ -96,7 +100,7 @@
     "cancelReady": "Cancel Ready",
     "enterWorkspace": "Enter Workspace"
   },
-  "warning": "Action Required: Ensure at least one Candidate and one Interviewer are assigned to start.",
+  "warning": "Needs at least one candidate and one interviewer (or host) to start.",
   "systemStatus": {
     "ready": "> SYSTEM_READY",
     "awaitingPeers": "> AWAITING_PEERS_"

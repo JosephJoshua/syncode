@@ -26,10 +26,8 @@ import type React from 'react';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '@/lib/api-client.js';
-import { requireAuth } from '@/lib/auth.js';
 
-export const Route = createFileRoute('/rooms/')({
-  beforeLoad: requireAuth,
+export const Route = createFileRoute('/_app/rooms/')({
   component: RoomsPage,
 });
 
@@ -141,8 +139,16 @@ function RoomsPage() {
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:py-10 lg:py-12">
-      <div className="mb-10 flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
+      <motion.div
+        className="mb-6 flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between"
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.45, delay: 0.05, ease: [0.22, 1, 0.36, 1] }}
+      >
         <div>
+          <div className="mb-3 inline-flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary ring-1 ring-primary/20">
+            <Radio size={20} />
+          </div>
           <h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
             {t('heading')}
           </h1>
@@ -161,56 +167,64 @@ function RoomsPage() {
             {t('button.createRoom')}
           </Button>
         </Link>
-      </div>
+      </motion.div>
 
-      <Card className="mb-10 rounded-2xl border-border/50 bg-card/60 p-6 backdrop-blur-sm sm:p-8">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:gap-8">
-          <div className="shrink-0">
-            <div className="mb-2 flex items-center gap-2.5">
-              <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/20">
-                <LinkIcon size={18} />
+      <motion.div
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.45, delay: 0.12, ease: [0.22, 1, 0.36, 1] }}
+      >
+        <Card className="mb-6 rounded-xl border-border/50 bg-card/60 p-6 backdrop-blur-sm sm:p-8">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:gap-8">
+            <div className="shrink-0">
+              <div className="mb-2 flex items-center gap-2.5">
+                <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/20">
+                  <LinkIcon size={18} />
+                </div>
+                <h2 className="text-lg font-semibold tracking-tight text-foreground">
+                  {t('join.heading')}
+                </h2>
               </div>
-              <h2 className="text-lg font-semibold tracking-tight text-foreground">
-                {t('join.heading')}
-              </h2>
+              <p className="text-sm text-muted-foreground lg:max-w-xs">{t('join.description')}</p>
             </div>
-            <p className="text-sm text-muted-foreground lg:max-w-xs">{t('join.description')}</p>
-          </div>
 
-          <form
-            onSubmit={handleJoin}
-            className="flex flex-1 flex-col gap-3 sm:flex-row sm:items-start"
-          >
-            <div className="flex-1">
-              <div className="relative flex items-center rounded-lg border border-border/60 bg-background p-1.5 transition-all duration-300 focus-within:border-primary focus-within:ring-3 focus-within:ring-primary/20">
-                <Hash size={18} className="ml-2.5 shrink-0 text-muted-foreground/60" />
-                <Input
-                  type="text"
-                  value={inviteInput}
-                  onChange={(e) => {
-                    setInviteInput(e.target.value);
-                    setJoinError(null);
-                  }}
-                  placeholder={t('join.placeholder')}
-                  className="flex-1 border-none bg-transparent font-mono text-sm shadow-none focus-visible:ring-0"
-                />
-                <div className="pointer-events-none absolute right-1.5 top-0 bottom-0 w-8 bg-gradient-to-l from-background to-transparent" />
-              </div>
-              {joinError && <p className="mt-1.5 pl-1 text-xs text-destructive">{joinError}</p>}
-            </div>
-            <Button
-              type="submit"
-              variant="outline"
-              size="lg"
-              className="shrink-0 gap-2 sm:mt-1.5"
-              disabled={!inviteInput.trim()}
+            <form
+              onSubmit={handleJoin}
+              className="flex flex-1 flex-col gap-3 sm:flex-row sm:items-start"
             >
-              {t('join.button')}
-              <ArrowRight size={16} />
-            </Button>
-          </form>
-        </div>
-      </Card>
+              <div className="flex-1">
+                <div className="relative">
+                  <Hash
+                    size={16}
+                    className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground/60"
+                  />
+                  <Input
+                    type="text"
+                    value={inviteInput}
+                    onChange={(e) => {
+                      setInviteInput(e.target.value);
+                      setJoinError(null);
+                    }}
+                    placeholder={t('join.placeholder')}
+                    className="pl-10 font-mono text-sm"
+                  />
+                </div>
+                {joinError && <p className="mt-1.5 pl-1 text-xs text-destructive">{joinError}</p>}
+              </div>
+              <Button
+                type="submit"
+                variant="outline"
+                size="lg"
+                className="shrink-0 gap-2"
+                disabled={!inviteInput.trim()}
+              >
+                {t('join.button')}
+                <ArrowRight size={16} />
+              </Button>
+            </form>
+          </div>
+        </Card>
+      </motion.div>
 
       <div className="mb-6 flex flex-wrap gap-2">
         {STATUS_FILTER_VALUES.map((value) => (
@@ -279,7 +293,7 @@ function RoomsPage() {
                 }}
               >
                 <Link to="/rooms/$roomId" params={{ roomId: room.roomId }} className="block">
-                  <Card className="group h-full rounded-2xl border border-white/[0.035] bg-card/40 p-5 ring-1 ring-border/30 backdrop-blur-sm transition-all duration-200 hover:border-primary/12 hover:bg-card/60 hover:shadow-[0_10px_30px_-24px_color-mix(in_oklch,var(--primary)_80%,transparent)] hover:ring-primary/20 sm:p-6">
+                  <Card className="group h-full rounded-xl border border-white/[0.035] bg-card/40 p-5 ring-1 ring-border/30 backdrop-blur-sm transition-all duration-200 hover:border-primary/12 hover:bg-card/60 hover:shadow-[0_10px_30px_-24px_color-mix(in_oklch,var(--primary)_80%,transparent)] hover:ring-primary/20 sm:p-6">
                     {/* Top row: status + meta */}
                     <div className="mb-4 flex items-center justify-between">
                       <Badge

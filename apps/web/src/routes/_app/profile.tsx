@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { CONTROL_API } from '@syncode/contracts';
+import { CONTROL_API, ERROR_CODES } from '@syncode/contracts';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@syncode/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
@@ -13,12 +13,10 @@ import { ProfileFormCard } from '@/components/profile/profile-form-card.js';
 import { ProfileHero } from '@/components/profile/profile-hero.js';
 import { QuotasPanel } from '@/components/profile/quotas-panel.js';
 import { api, getFieldErrorMessage, readApiError } from '@/lib/api-client.js';
-import { requireAuth } from '@/lib/auth.js';
 import i18n from '@/lib/i18n.js';
 import { useAuthStore } from '@/stores/auth.store.js';
 
-export const Route = createFileRoute('/profile')({
-  beforeLoad: requireAuth,
+export const Route = createFileRoute('/_app/profile')({
   component: ProfilePage,
 });
 
@@ -213,6 +211,14 @@ async function handleProfileUpdateError(
     return;
   }
 
+  if (
+    apiError.code === ERROR_CODES.USER_USERNAME_TAKEN ||
+    (apiError.statusCode === 409 && apiError.message?.toLowerCase().includes('username'))
+  ) {
+    setError('username', { message: i18n.t('profile:validation.usernameTaken') });
+    return;
+  }
+
   const details = apiError.details && typeof apiError.details === 'object' ? apiError.details : {};
   const usernameError = getFieldErrorMessage(details as Record<string, unknown>, 'username');
   const displayNameError = getFieldErrorMessage(details as Record<string, unknown>, 'displayName');
@@ -231,6 +237,6 @@ async function handleProfileUpdateError(
   }
 
   if (!usernameError && !displayNameError && !bioError) {
-    toast.error(apiError.message);
+    toast.error(apiError.message || i18n.t('profile:toast.updateFailed'));
   }
 }

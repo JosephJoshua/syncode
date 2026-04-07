@@ -5,7 +5,7 @@ import { ApiError } from '@/lib/api-client.js';
 import i18n from '@/lib/i18n.js';
 import { useProblemDetailQuery } from '@/lib/problems/problem-detail.js';
 
-export const Route = createFileRoute('/problems/$problemId')({
+export const Route = createFileRoute('/_app/problems/$problemId')({
   component: ProblemDetailRouteComponent,
 });
 
