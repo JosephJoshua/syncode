@@ -87,7 +87,7 @@ function LanguageSelectorValue({
   mutedBadge?: boolean;
 }) {
   return (
-    <span className="flex min-w-0 items-center gap-3">
+    <span className="flex min-w-0 items-center gap-2">
       <LanguageIcon
         iconSrc={iconSrc}
         fallbackText={badgeText}
@@ -114,7 +114,7 @@ function LanguageIcon({
     <span
       aria-hidden="true"
       className={cn(
-        'inline-flex size-8 shrink-0 items-center justify-center rounded-xl border p-1.5 transition-colors',
+        'inline-flex size-6 shrink-0 items-center justify-center rounded-md border p-1 transition-colors',
         muted
           ? 'border-border/70 bg-white/88 shadow-[inset_0_1px_0_rgb(255_255_255/0.28)]'
           : 'border-primary/20 bg-white/96 shadow-[inset_0_1px_0_rgb(255_255_255/0.36)]',
@@ -125,9 +125,11 @@ function LanguageIcon({
           src={iconSrc}
           alt=""
           className={cn(
-            'block h-4.5 w-4.5 object-contain',
-            language === 'cpp' && 'h-5 w-5',
-            language === 'rust' && 'h-5 w-5',
+            'block h-4 w-4 object-contain',
+            language === 'c' && 'h-3 w-3',
+            language === 'cpp' && 'h-4.5 w-4.5',
+            language === 'rust' && 'h-4.5 w-4.5',
+            language === 'go' && 'h-4.5 w-4.5',
           )}
           loading="lazy"
           decoding="async"
