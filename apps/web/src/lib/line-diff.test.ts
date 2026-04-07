@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildLineDiff } from './line-diff';
+import { buildLineDiff } from './line-diff.js';
 
 describe('buildLineDiff', () => {
   it('GIVEN identical strings WHEN diffing THEN all lines are same', () => {

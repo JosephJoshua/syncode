@@ -8,13 +8,14 @@ import {
   Label,
   Separator,
 } from '@syncode/ui';
+import { useTranslation } from 'react-i18next';
 import {
   DIFFICULTY_OPTIONS,
   type ProblemDifficulty,
   type ProblemStatus,
   STATUS_OPTIONS,
-} from './problems.types';
-import type { ProblemTagInfo } from './problems-tags';
+} from './problems.types.js';
+import type { ProblemTagInfo } from './problems-tags.js';
 
 interface FilterOptionProps {
   id: string;
@@ -68,13 +69,14 @@ export function ProblemsFilterSidebar({
   onToggleTag,
   onClearAll,
 }: ProblemsFilterSidebarProps) {
+  const { t } = useTranslation('problems');
   return (
     <Card className="overflow-hidden border border-white/4 bg-card/35 ring-border/45 backdrop-blur-sm lg:h-188 lg:self-stretch">
       <CardHeader className="border-b border-white/4 pb-1.5">
         <div className="flex items-center justify-between gap-3">
-          <CardTitle className="text-sm tracking-tight">Filters</CardTitle>
+          <CardTitle className="text-sm tracking-tight">{t('filter.heading')}</CardTitle>
           <Button variant="ghost" size="xs" onClick={onClearAll}>
-            Reset all
+            {t('filter.resetAll')}
           </Button>
         </div>
       </CardHeader>
@@ -82,7 +84,7 @@ export function ProblemsFilterSidebar({
         <section className="space-y-2">
           <div className="flex items-center justify-between">
             <h2 className="font-mono text-[11px] font-medium tracking-[0.16em] text-muted-foreground/60 uppercase">
-              Difficulty
+              {t('filter.difficulty')}
             </h2>
           </div>
           <div className="space-y-1">
@@ -90,7 +92,7 @@ export function ProblemsFilterSidebar({
               <FilterOption
                 key={difficulty}
                 id={`difficulty-${difficulty}`}
-                label={difficulty}
+                label={t(`filter.${difficulty.toLowerCase()}`)}
                 checked={selectedDifficulties.includes(difficulty)}
                 count={difficultyCounts[difficulty]}
                 onCheckedChange={() => onToggleDifficulty(difficulty)}
@@ -103,14 +105,16 @@ export function ProblemsFilterSidebar({
 
         <section className="space-y-2">
           <h2 className="font-mono text-[11px] font-medium tracking-[0.16em] text-muted-foreground/60 uppercase">
-            Problem Status
+            {t('filter.problemStatus')}
           </h2>
           <div className="space-y-1">
             {STATUS_OPTIONS.map((status) => (
               <FilterOption
                 key={status}
                 id={`status-${status}`}
-                label={status === 'Todo' ? 'Todo / Not done' : status}
+                label={
+                  status === 'Todo' ? t('filter.todoNotDone') : t(`filter.${status.toLowerCase()}`)
+                }
                 checked={selectedStatuses.includes(status)}
                 count={statusCounts[status]}
                 onCheckedChange={() => onToggleStatus(status)}
@@ -123,7 +127,7 @@ export function ProblemsFilterSidebar({
 
         <section className="space-y-2">
           <h2 className="font-mono text-[11px] font-medium tracking-[0.16em] text-muted-foreground/60 uppercase">
-            Popular Tags
+            {t('filter.popularTags')}
           </h2>
           <div className="space-y-1">
             {popularTags.map((tag) => (

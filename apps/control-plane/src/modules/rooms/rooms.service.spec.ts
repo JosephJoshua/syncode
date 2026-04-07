@@ -10,14 +10,14 @@ import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import { COLLAB_CLIENT, EXECUTION_CLIENT } from '@syncode/contracts';
 import { MEDIA_SERVICE } from '@syncode/shared/ports';
-import { DB_CLIENT } from '@/modules/db/db.module';
+import { DB_CLIENT } from '@/modules/db/db.module.js';
 import {
   createMockCollabClient,
   createMockConfigService,
   createMockExecutionClient,
   createMockJwtService,
   createMockMediaService,
-} from '@/test/mock-factories';
+} from '@/test/mock-factories.js';
 import { RoomsService } from './rooms.service.js';
 
 const ROOM_ROW = {

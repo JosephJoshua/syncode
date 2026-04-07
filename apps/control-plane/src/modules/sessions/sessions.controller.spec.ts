@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { SessionsController } from './sessions.controller';
-import type { SessionsService } from './sessions.service';
+import { SessionsController } from './sessions.controller.js';
+import type { SessionsService } from './sessions.service.js';
 
 const AUTH_USER = { id: 'user-1', email: 'user@example.com' };
 

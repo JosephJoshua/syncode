@@ -12,7 +12,7 @@ import { bookmarks, problems, problemTags, tags, testCases } from '@syncode/db';
 import type { ProblemSortBy } from '@syncode/shared';
 import { type PaginatedResult, paginate } from '@syncode/shared/server';
 import { and, asc, count, desc, eq, gt, ilike, isNull, lt, or, sql } from 'drizzle-orm';
-import { DB_CLIENT } from '@/modules/db/db.module';
+import { DB_CLIENT } from '@/modules/db/db.module.js';
 
 type ProblemSummaryRow = ProblemSummary & { sortValue: string };
 type BookmarkRow = ProblemSummary & { bookmarkedAt: Date };

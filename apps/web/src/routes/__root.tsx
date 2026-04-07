@@ -5,10 +5,12 @@ import { createRootRoute, Link, Outlet, useNavigate, useRouterState } from '@tan
 import { LogOut, User, UserRound } from 'lucide-react';
 import { DropdownMenu } from 'radix-ui';
 import { type ReactNode, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
-import { api, readApiError } from '@/lib/api-client';
-import { getUserInitial } from '@/lib/user-utils';
-import { useAuthStore } from '@/stores/auth.store';
+import { LanguageSwitcher } from '@/components/language-switcher.js';
+import { api, readApiError } from '@/lib/api-client.js';
+import { getUserInitial } from '@/lib/user-utils.js';
+import { useAuthStore } from '@/stores/auth.store.js';
 
 export const Route = createRootRoute({
   component: RootLayout,
@@ -93,6 +95,7 @@ function SynCodeLogo({ className }: { className?: string }) {
 }
 
 function RootLayout() {
+  const { t } = useTranslation('common');
   const navigate = useNavigate();
   const { pathname, isSessionFeedbackPage } = useRouterState({
     select: (state) => ({
@@ -146,10 +149,10 @@ function RootLayout() {
       }
     },
     onSuccess: () => {
-      toast.success('Signed out successfully.');
+      toast.success(t('toast.signedOut'));
     },
     onError: () => {
-      toast.error('Sign-out request failed, but your local session was cleared.');
+      toast.error(t('toast.signOutFailed'));
     },
     onSettled: () => {
       logout();
@@ -169,18 +172,18 @@ function RootLayout() {
       <nav aria-label="Primary" className="flex items-center gap-0.5 sm:gap-1">
         {[
           {
-            label: 'Dashboard',
+            label: t('nav.dashboard'),
             to: '/dashboard',
             isActive: isDashboardPage || isSessionFeedbackPage,
           },
-          { label: 'Rooms', to: '/rooms', isActive: isRoomsPage },
+          { label: t('nav.rooms'), to: '/rooms', isActive: isRoomsPage },
           {
-            label: 'Problems',
+            label: t('nav.problems'),
             to: '/problems',
             isActive: isProblemsPage,
           },
           {
-            label: 'Bookmarks',
+            label: t('nav.bookmarks'),
             to: '/bookmarks',
             isActive: isBookmarksPage,
           },
@@ -203,24 +206,31 @@ function RootLayout() {
     );
   } else if (pathname === '/login') {
     navContent = (
-      <Button asChild size="sm">
-        <Link to="/register">Register</Link>
-      </Button>
+      <>
+        <LanguageSwitcher />
+        <Button asChild size="sm">
+          <Link to="/register">{t('auth.register')}</Link>
+        </Button>
+      </>
     );
   } else if (pathname === '/register') {
     navContent = (
-      <Button asChild variant="outline" size="sm">
-        <Link to="/login">Log in</Link>
-      </Button>
+      <>
+        <LanguageSwitcher />
+        <Button asChild variant="outline" size="sm">
+          <Link to="/login">{t('auth.logIn')}</Link>
+        </Button>
+      </>
     );
   } else {
     navContent = (
       <>
+        <LanguageSwitcher />
         <Button asChild variant="outline" size="sm">
-          <Link to="/login">Log in</Link>
+          <Link to="/login">{t('auth.logIn')}</Link>
         </Button>
         <Button asChild size="sm">
-          <Link to="/register">Register</Link>
+          <Link to="/register">{t('auth.register')}</Link>
         </Button>
       </>
     );
@@ -241,13 +251,14 @@ function RootLayout() {
               </Link>
               {navContent}
             </div>
-            <div className="flex shrink-0 items-center">
+            <div className="flex shrink-0 items-center gap-1">
+              <LanguageSwitcher />
               {isAuthenticated ? (
                 <DropdownMenu.Root>
                   <DropdownMenu.Trigger asChild>
                     <button
                       type="button"
-                      aria-label="Account menu"
+                      aria-label={t('auth.accountMenu')}
                       className="inline-flex size-9 shrink-0 items-center justify-center rounded-full border border-border/80 bg-card/85 text-sm font-semibold text-foreground ring-1 ring-foreground/5 transition-all hover:border-primary/30 hover:bg-muted/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
                     >
                       <Avatar className="size-9 border-none bg-transparent text-foreground shadow-none ring-0">
@@ -269,7 +280,7 @@ function RootLayout() {
                           className="flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm text-foreground outline-none transition-colors data-[highlighted]:bg-muted"
                         >
                           <UserRound className="size-3.5" />
-                          Profile
+                          {t('auth.profile')}
                         </Link>
                       </DropdownMenu.Item>
                       <DropdownMenu.Item
@@ -280,7 +291,7 @@ function RootLayout() {
                         disabled={logoutMutation.isPending}
                       >
                         <LogOut className="size-3.5" />
-                        {logoutMutation.isPending ? 'Logging out...' : 'Log out'}
+                        {logoutMutation.isPending ? t('auth.loggingOut') : t('auth.logOut')}
                       </DropdownMenu.Item>
                     </DropdownMenu.Content>
                   </DropdownMenu.Portal>

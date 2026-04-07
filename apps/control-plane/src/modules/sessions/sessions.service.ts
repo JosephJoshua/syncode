@@ -15,7 +15,7 @@ import {
 } from '@syncode/db';
 import { type PaginatedResult, paginate } from '@syncode/shared/server';
 import { and, asc, type Column, desc, eq, gt, gte, inArray, lt, lte, or, sql } from 'drizzle-orm';
-import { DB_CLIENT } from '@/modules/db/db.module';
+import { DB_CLIENT } from '@/modules/db/db.module.js';
 import type { SessionDetailResult, SessionSummaryResult } from './sessions.types.js';
 
 type SortBy = (typeof SESSIONS_SORT_BY_OPTIONS)[number];

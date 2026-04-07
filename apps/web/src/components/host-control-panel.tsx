@@ -1,11 +1,21 @@
-import { getNextStatuses, ROOM_STATUS_LABELS, ROOM_STATUSES, RoomStatus } from '@syncode/shared';
+import { getNextStatuses, ROOM_STATUSES, RoomStatus } from '@syncode/shared';
 import { Button, Card, CardContent, CardHeader, CardTitle } from '@syncode/ui';
 import { CheckCircle2, Code2, FastForward, Pause, Play, PlayCircle } from 'lucide-react';
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+
+const ROOM_STATUS_KEYS: Record<RoomStatus, string> = {
+  [RoomStatus.WAITING]: 'status.waiting',
+  [RoomStatus.WARMUP]: 'status.warmup',
+  [RoomStatus.CODING]: 'status.coding',
+  [RoomStatus.WRAPUP]: 'status.wrapup',
+  [RoomStatus.FINISHED]: 'status.finished',
+};
 
 const PHASE_COUNT = ROOM_STATUSES.length;
 
 function PhaseProgressBar({ currentStatus }: { currentStatus: RoomStatus }) {
+  const { t } = useTranslation('rooms');
   const currentIndex = ROOM_STATUSES.indexOf(currentStatus);
 
   return (
@@ -34,7 +44,7 @@ function PhaseProgressBar({ currentStatus }: { currentStatus: RoomStatus }) {
         })}
       </div>
       <span className="text-xs text-muted-foreground">
-        {currentIndex + 1}/{PHASE_COUNT} &middot; {ROOM_STATUS_LABELS[currentStatus]}
+        {currentIndex + 1}/{PHASE_COUNT} &middot; {t(ROOM_STATUS_KEYS[currentStatus])}
       </span>
     </div>
   );
@@ -52,6 +62,7 @@ const MOCK_MAX_DURATION_MS = 120 * 60 * 1000;
 const WARNING_THRESHOLD = 0.85;
 
 function PhaseTimer({ running }: { running: boolean }) {
+  const { t } = useTranslation('rooms');
   const [elapsedMs, setElapsedMs] = useState(0);
   const [paused, setPaused] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -86,7 +97,7 @@ function PhaseTimer({ running }: { running: boolean }) {
         </span>
         {warning && (
           <span className="text-xs text-destructive font-medium">
-            {Math.round(ratio * 100)}% of session
+            {t('timer.percent', { percent: Math.round(ratio * 100) })}
           </span>
         )}
       </div>
@@ -96,7 +107,7 @@ function PhaseTimer({ running }: { running: boolean }) {
           variant="ghost"
           size="xs"
           onClick={togglePause}
-          aria-label={paused ? 'Resume timer' : 'Pause timer'}
+          aria-label={paused ? t('timer.resumeTimer') : t('timer.pauseTimer')}
         >
           {paused ? <Play className="h-3.5 w-3.5" /> : <Pause className="h-3.5 w-3.5" />}
         </Button>
@@ -113,6 +124,7 @@ const TRANSITION_ICONS: Partial<Record<RoomStatus, ReactNode>> = {
 };
 
 export function HostControlPanel() {
+  const { t } = useTranslation('rooms');
   const [currentStage, setCurrentStage] = useState<RoomStatus>(RoomStatus.WAITING);
   const nextStages = getNextStatuses(currentStage);
 
@@ -126,7 +138,7 @@ export function HostControlPanel() {
   return (
     <Card className="w-full max-w-sm">
       <CardHeader>
-        <CardTitle className="text-lg">Host Control</CardTitle>
+        <CardTitle className="text-lg">{t('hostControl.heading')}</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <PhaseProgressBar currentStatus={currentStage} />
@@ -135,11 +147,11 @@ export function HostControlPanel() {
         {currentStage === RoomStatus.FINISHED ? (
           <div className="text-center py-4 text-muted-foreground">
             <CheckCircle2 className="h-8 w-8 mx-auto mb-2 opacity-50" />
-            <p>Session has concluded.</p>
+            <p>{t('hostControl.sessionConcluded')}</p>
           </div>
         ) : (
           <div className="flex flex-col gap-2">
-            <p className="text-sm text-muted-foreground">Advance interview stage:</p>
+            <p className="text-sm text-muted-foreground">{t('hostControl.advanceStage')}</p>
             {nextStages.map((stage) => (
               <Button
                 key={stage}
@@ -149,8 +161,8 @@ export function HostControlPanel() {
               >
                 {TRANSITION_ICONS[stage]}
                 {stage === RoomStatus.FINISHED
-                  ? 'End Session'
-                  : `Advance to ${ROOM_STATUS_LABELS[stage]}`}
+                  ? t('hostControl.endSession')
+                  : t('hostControl.advanceTo', { stageName: t(ROOM_STATUS_KEYS[stage]) })}
               </Button>
             ))}
           </div>

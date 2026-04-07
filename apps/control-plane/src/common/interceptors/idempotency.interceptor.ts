@@ -17,7 +17,7 @@ import { eq } from 'drizzle-orm';
 import type { Request, Response } from 'express';
 import { from, type Observable, of } from 'rxjs';
 import { catchError, mergeMap, switchMap } from 'rxjs/operators';
-import { DB_CLIENT } from '@/modules/db/db.module';
+import { DB_CLIENT } from '@/modules/db/db.module.js';
 import { IDEMPOTENT_KEY } from '../decorators/idempotent.decorator.js';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

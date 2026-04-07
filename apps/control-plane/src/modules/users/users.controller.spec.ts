@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { UsersController } from './users.controller';
-import type { UsersService } from './users.service';
+import { UsersController } from './users.controller.js';
+import type { UsersService } from './users.service.js';
 
 describe('UsersController', () => {
   function createUsersControllerFixture() {

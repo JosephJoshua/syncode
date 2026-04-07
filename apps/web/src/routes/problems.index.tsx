@@ -15,19 +15,20 @@ import { useQuery } from '@tanstack/react-query';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { motion } from 'motion/react';
 import { startTransition, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
-import { ProblemCard } from '@/components/problems/problem-card';
+import { useTranslation } from 'react-i18next';
+import { ProblemCard } from '@/components/problems/problem-card.js';
 import type {
   ProblemDifficulty,
   ProblemItem,
   ProblemSortKey,
   ProblemStatus,
-} from '@/components/problems/problems.types';
-import { ProblemsEmptyState } from '@/components/problems/problems-empty-state';
-import { ProblemsFilterSidebar } from '@/components/problems/problems-filter-sidebar';
-import { ProblemsResultsToolbar } from '@/components/problems/problems-results-toolbar';
-import { ProblemsSearchBar } from '@/components/problems/problems-search-bar';
-import { formatTagSlug, type ProblemTagInfo } from '@/components/problems/problems-tags';
-import { api } from '@/lib/api-client';
+} from '@/components/problems/problems.types.js';
+import { ProblemsEmptyState } from '@/components/problems/problems-empty-state.js';
+import { ProblemsFilterSidebar } from '@/components/problems/problems-filter-sidebar.js';
+import { ProblemsResultsToolbar } from '@/components/problems/problems-results-toolbar.js';
+import { ProblemsSearchBar } from '@/components/problems/problems-search-bar.js';
+import { formatTagSlug, type ProblemTagInfo } from '@/components/problems/problems-tags.js';
+import { api } from '@/lib/api-client.js';
 
 export const Route = createFileRoute('/problems/')({
   component: ProblemsLibraryPage,
@@ -107,6 +108,7 @@ function toggleValue<T>(values: T[], value: T) {
 }
 
 function ProblemsLibraryPage() {
+  const { t } = useTranslation('problems');
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDifficulties, setSelectedDifficulties] = useState<ProblemDifficulty[]>([]);
@@ -227,7 +229,7 @@ function ProblemsLibraryPage() {
   const activeFilters = [
     ...selectedDifficulties.map((difficulty) => ({
       id: `difficulty-${difficulty}`,
-      label: difficulty,
+      label: t(`filter.${difficulty.toLowerCase()}`),
       onRemove: () => {
         startTransition(() => {
           setSelectedDifficulties((current) => current.filter((item) => item !== difficulty));
@@ -237,7 +239,7 @@ function ProblemsLibraryPage() {
     })),
     ...selectedStatuses.map((status) => ({
       id: `status-${status}`,
-      label: status === 'Todo' ? 'Todo / Not done' : status,
+      label: status === 'Todo' ? t('filter.todoNotDone') : t(`filter.${status.toLowerCase()}`),
       onRemove: () => {
         startTransition(() => {
           setSelectedStatuses((current) => current.filter((item) => item !== status));
@@ -271,12 +273,12 @@ function ProblemsLibraryPage() {
     <div className="mx-auto max-w-7xl px-4 py-8 sm:py-10 lg:py-12">
       <section className="max-w-3xl">
         <h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-          Problem Library
+          {t('heading')}
         </h1>
         <p className="mt-3 text-sm text-muted-foreground sm:text-base">
           {isProblemsPending && !problemsListResponse
-            ? 'Loading problems...'
-            : `${problemsCount} problems`}
+            ? t('sub.loading')
+            : t('sub.count', { count: problemsCount })}
         </p>
       </section>
 

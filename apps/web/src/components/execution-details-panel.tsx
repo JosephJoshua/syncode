@@ -1,7 +1,8 @@
 import type { ExecutionDetailsResponse } from '@syncode/contracts';
 import { ChevronDown, ChevronRight, Cpu, Gauge, MemoryStick, XCircle } from 'lucide-react';
 import { useState } from 'react';
-import { buildLineDiff } from '@/lib/line-diff';
+import { useTranslation } from 'react-i18next';
+import { buildLineDiff } from '@/lib/line-diff.js';
 
 function formatMillis(value: number | null): string {
   if (value === null) {
@@ -77,6 +78,7 @@ interface ExecutionDetailsPanelProps {
 }
 
 export function ExecutionDetailsPanel({ details, className = '' }: ExecutionDetailsPanelProps) {
+  const { t } = useTranslation('common');
   const [expandedCaseIndex, setExpandedCaseIndex] = useState<number | null>(null);
   const statusDisplay = getSubmissionStatusDisplay(details);
 
@@ -99,12 +101,12 @@ export function ExecutionDetailsPanel({ details, className = '' }: ExecutionDeta
       <header className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-2xl font-bold tracking-tight text-[oklch(0.88_0.22_165)] drop-shadow-[0_0_10px_oklch(0.88_0.22_165/0.5)]">
-            Execution Details
+            {t('execution.details')}
           </h2>
-          <p className="mt-1 text-xs text-[oklch(0.88_0.22_165/0.85)]">
-            Tip: click a case arrow to view that case log viewer.
+          <p className="mt-1 text-xs text-[oklch(0.88_0.22_165/0.85)]">{t('execution.tip')}</p>
+          <p className="mt-1 text-xs text-zinc-400">
+            {t('execution.submission', { submissionId: details.submissionId })}
           </p>
-          <p className="mt-1 text-xs text-zinc-400">Submission {details.submissionId}</p>
         </div>
         <span
           className={`rounded-md border px-2.5 py-1 font-mono text-xs uppercase ${statusDisplay.badgeClass}`}
@@ -115,23 +117,33 @@ export function ExecutionDetailsPanel({ details, className = '' }: ExecutionDeta
 
       <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-5">
         <div className="rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2">
-          <p className="text-[11px] uppercase tracking-wide text-zinc-500">Total</p>
+          <p className="text-[11px] uppercase tracking-wide text-zinc-500">
+            {t('execution.total')}
+          </p>
           <p className="text-lg font-semibold">{details.totalTestCases}</p>
         </div>
         <div className="rounded-lg border border-emerald-700/40 bg-emerald-950/20 px-3 py-2">
-          <p className="text-[11px] uppercase tracking-wide text-emerald-400/70">Passed</p>
+          <p className="text-[11px] uppercase tracking-wide text-emerald-400/70">
+            {t('execution.passed')}
+          </p>
           <p className="text-lg font-semibold text-emerald-300">{details.passedTestCases}</p>
         </div>
         <div className="rounded-lg border border-rose-700/40 bg-rose-950/20 px-3 py-2">
-          <p className="text-[11px] uppercase tracking-wide text-rose-400/70">Failed</p>
+          <p className="text-[11px] uppercase tracking-wide text-rose-400/70">
+            {t('execution.failed')}
+          </p>
           <p className="text-lg font-semibold text-rose-300">{details.failedTestCases}</p>
         </div>
         <div className="rounded-lg border border-amber-700/40 bg-amber-950/20 px-3 py-2">
-          <p className="text-[11px] uppercase tracking-wide text-amber-400/70">Errors</p>
+          <p className="text-[11px] uppercase tracking-wide text-amber-400/70">
+            {t('execution.errors')}
+          </p>
           <p className="text-lg font-semibold text-amber-300">{details.errorTestCases}</p>
         </div>
         <div className="rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2">
-          <p className="text-[11px] uppercase tracking-wide text-zinc-500">Total Time</p>
+          <p className="text-[11px] uppercase tracking-wide text-zinc-500">
+            {t('execution.totalTime')}
+          </p>
           <p className="text-lg font-semibold">{formatMillis(details.totalDurationMs)}</p>
         </div>
       </div>
@@ -168,7 +180,9 @@ export function ExecutionDetailsPanel({ details, className = '' }: ExecutionDeta
                       className="text-[oklch(0.88_0.22_165)] drop-shadow-[0_0_8px_oklch(0.88_0.22_165/0.7)]"
                     />
                   )}
-                  <span className="font-mono text-sm">Case #{testCase.testCaseIndex + 1}</span>
+                  <span className="font-mono text-sm">
+                    {t('execution.caseIndex', { index: testCase.testCaseIndex + 1 })}
+                  </span>
                   <span
                     className={`rounded px-2 py-0.5 text-[11px] font-semibold uppercase ${
                       testCase.passed === true
@@ -179,14 +193,14 @@ export function ExecutionDetailsPanel({ details, className = '' }: ExecutionDeta
                     }`}
                   >
                     {testCase.passed === true
-                      ? 'pass'
+                      ? t('execution.statusPass')
                       : testCase.passed === false
-                        ? 'fail'
-                        : 'pending'}
+                        ? t('execution.statusFail')
+                        : t('execution.statusPending')}
                   </span>
                   {testCase.timedOut && (
                     <span className="rounded bg-amber-500/20 px-2 py-0.5 text-[11px] font-semibold uppercase text-amber-300">
-                      timeout
+                      {t('execution.statusTimeout')}
                     </span>
                   )}
                 </div>
@@ -207,7 +221,7 @@ export function ExecutionDetailsPanel({ details, className = '' }: ExecutionDeta
                 <div className="mb-3 grid gap-2 md:grid-cols-2">
                   <div>
                     <div className="mb-1 inline-flex items-center gap-1 text-[11px] uppercase text-zinc-500">
-                      <Cpu size={13} /> Duration (
+                      <Cpu size={13} /> {t('execution.duration')} (
                       {formatBarLabel(testCase.durationMs, durationLimitMs)} ms)
                     </div>
                     <div className="h-2 overflow-hidden rounded-full bg-zinc-800">
@@ -219,7 +233,7 @@ export function ExecutionDetailsPanel({ details, className = '' }: ExecutionDeta
                   </div>
                   <div>
                     <div className="mb-1 inline-flex items-center gap-1 text-[11px] uppercase text-zinc-500">
-                      <MemoryStick size={13} /> Memory (
+                      <MemoryStick size={13} /> {t('execution.memory')} (
                       {formatBarLabel(testCase.memoryUsageMb, memoryLimitMb)} MB)
                     </div>
                     <div className="h-2 overflow-hidden rounded-full bg-zinc-800">
@@ -236,7 +250,7 @@ export function ExecutionDetailsPanel({ details, className = '' }: ExecutionDeta
                     {isFailed && (
                       <div className="rounded-lg border border-rose-600/30 bg-rose-950/20 p-3">
                         <div className="mb-2 inline-flex items-center gap-1 text-xs font-semibold uppercase text-rose-300">
-                          <XCircle size={14} /> Output Diff
+                          <XCircle size={14} /> {t('execution.outputDiff')}
                         </div>
                         <pre className="max-h-56 overflow-auto rounded bg-zinc-950 p-3 text-xs">
                           {buildLineDiff(testCase.expectedOutput, testCase.actualOutput).map(
@@ -270,21 +284,25 @@ export function ExecutionDetailsPanel({ details, className = '' }: ExecutionDeta
                     )}
 
                     <section className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-4">
-                      <h3 className="mb-2 text-sm font-semibold">Execution Log Viewer</h3>
+                      <h3 className="mb-2 text-sm font-semibold">{t('execution.logViewer')}</h3>
                       <div className="space-y-3 text-xs">
                         <p className="font-mono text-zinc-400">
-                          Case #{testCase.testCaseIndex + 1}
+                          {t('execution.caseIndex', { index: testCase.testCaseIndex + 1 })}
                         </p>
                         <div>
-                          <p className="mb-1 font-semibold text-zinc-300">stdout</p>
+                          <p className="mb-1 font-semibold text-zinc-300">
+                            {t('execution.stdout')}
+                          </p>
                           <pre className="max-h-40 overflow-auto rounded bg-zinc-950 p-3 text-zinc-300">
-                            {testCase.stdout || '(empty)'}
+                            {testCase.stdout || t('execution.empty')}
                           </pre>
                         </div>
                         <div>
-                          <p className="mb-1 font-semibold text-zinc-300">stderr</p>
+                          <p className="mb-1 font-semibold text-zinc-300">
+                            {t('execution.stderr')}
+                          </p>
                           <pre className="max-h-40 overflow-auto rounded bg-zinc-950 p-3 text-rose-300">
-                            {testCase.stderr || testCase.errorMessage || '(empty)'}
+                            {testCase.stderr || testCase.errorMessage || t('execution.empty')}
                           </pre>
                         </div>
                       </div>

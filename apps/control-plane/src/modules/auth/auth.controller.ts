@@ -30,13 +30,13 @@ import {
 @ApiTags('auth')
 @Controller()
 export class AuthController {
-  private readonly secureCookies: boolean;
+  private readonly isProduction: boolean;
 
   constructor(
     private readonly authService: AuthService,
     config: ConfigService<EnvConfig>,
   ) {
-    this.secureCookies = config.get('NODE_ENV', { infer: true }) === 'production';
+    this.isProduction = config.get('NODE_ENV', { infer: true }) === 'production';
   }
 
   private static readonly AUTH_THROTTLE = {
@@ -190,9 +190,9 @@ export class AuthController {
   private get cookieBaseOptions() {
     return {
       httpOnly: true,
-      secure: this.secureCookies,
-      sameSite: 'strict' as const,
-      path: AuthController.REFRESH_TOKEN_COOKIE_PATH,
+      secure: this.isProduction,
+      sameSite: this.isProduction ? ('strict' as const) : ('lax' as const),
+      path: this.isProduction ? AuthController.REFRESH_TOKEN_COOKIE_PATH : '/',
     };
   }
 

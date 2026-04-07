@@ -4,9 +4,10 @@ import { ArrowRight, Braces, ChevronDown, MessageSquare, Terminal, Users, Zap } 
 import { animate, motion, useInView, useMotionValue } from 'motion/react';
 import type { ReactNode } from 'react';
 import { memo, useEffect, useMemo, useRef } from 'react';
-import { GlowOrb, PageBackground } from '@/components/background';
-import { CursorSpotlight } from '@/components/spotlight';
-import { TerminalDemo } from '@/components/terminal-demo';
+import { useTranslation } from 'react-i18next';
+import { GlowOrb, PageBackground } from '@/components/background.js';
+import { CursorSpotlight } from '@/components/spotlight.js';
+import { TerminalDemo } from '@/components/terminal-demo.js';
 
 export const Route = createFileRoute('/')({
   component: HomePage,
@@ -130,6 +131,8 @@ function GradientDivider() {
 const stagger = (i: number) => ({ delay: 0.05 + i * 0.1 });
 
 function HomePage() {
+  const { t } = useTranslation('landing');
+
   return (
     <div className="relative">
       {/* Hero */}
@@ -188,7 +191,7 @@ function HomePage() {
             className="mb-8 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-4 py-1.5"
           >
             <Terminal className="size-3.5 text-primary" />
-            <span className="font-mono text-xs text-primary">$ syncode --init</span>
+            <span className="font-mono text-xs text-primary">{t('badge')}</span>
             <span className="h-3.5 w-px bg-primary/30" />
             <span className="relative flex size-2">
               <span className="absolute inline-flex size-full animate-ping rounded-full bg-primary/60" />
@@ -203,10 +206,10 @@ function HomePage() {
             transition={{ duration: 0.7, ...stagger(1), ease: [0.16, 1, 0.3, 1] }}
             className="text-5xl font-bold tracking-tighter text-foreground sm:text-6xl lg:text-7xl"
           >
-            Code interviews,
+            {t('hero.heading1')}
             <br className="hidden sm:block" />
             <span className="bg-linear-to-r from-primary via-primary/60 to-primary bg-[length:200%_auto] bg-clip-text text-transparent animate-[gradient-x_4s_ease-in-out_infinite]">
-              reimagined.
+              {t('hero.heading2')}
             </span>
           </motion.h1>
 
@@ -217,9 +220,9 @@ function HomePage() {
             transition={{ duration: 0.6, ...stagger(2), ease: [0.16, 1, 0.3, 1] }}
             className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-muted-foreground sm:text-xl"
           >
-            Real-time pair programming. Sandboxed execution. AI&#8209;powered feedback.
+            {t('hero.sub1')}
             <br className="hidden sm:block" />
-            Practice like it&#8217;s the real thing.
+            {t('hero.sub2')}
           </motion.p>
 
           {/* Buttons */}
@@ -231,12 +234,12 @@ function HomePage() {
           >
             <Button asChild size="lg" className="shimmer-sweep">
               <Link to="/register">
-                Get started
+                {t('button.getStarted')}
                 <ArrowRight data-icon="inline-end" className="size-4" />
               </Link>
             </Button>
             <Button asChild variant="outline" size="lg">
-              <Link to="/login">Sign in</Link>
+              <Link to="/login">{t('button.signIn')}</Link>
             </Button>
           </motion.div>
 
@@ -251,7 +254,7 @@ function HomePage() {
               <span className="absolute inline-flex size-full animate-ping rounded-full bg-green-500/50" />
               <span className="relative inline-flex size-2 rounded-full bg-green-500" />
             </span>
-            247 engineers online now
+            {t('onlineBadge', { count: 247 })}
           </motion.div>
 
           {/* Scroll indicator */}
@@ -282,20 +285,18 @@ function HomePage() {
             transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
             className="mb-16 text-center"
           >
-            <span className="font-mono text-xs text-primary/60">{"// what's inside"}</span>
+            <span className="font-mono text-xs text-primary/60">{t('features.comment')}</span>
             <h2 className="mt-4 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-              Built for <span className="text-primary">engineers</span>, by engineers.
+              {t('features.heading')}
             </h2>
-            <p className="mx-auto mt-3 max-w-lg text-muted-foreground">
-              Everything you need to simulate a real technical interview.
-            </p>
+            <p className="mx-auto mt-3 max-w-lg text-muted-foreground">{t('features.sub')}</p>
           </motion.div>
 
           <div className="grid gap-6 sm:grid-cols-3">
             <FeatureCard
               icon={<Users className="size-5" />}
-              title="Pair Programming"
-              description="Edit the same file at the same time. Both cursors work — no conflicts, no lag."
+              title={t('features.pairProgramming')}
+              description={t('features.pairProgrammingDesc')}
               decorator="collab.connect({ crdt: true })"
               index={0}
               accent={
@@ -315,8 +316,8 @@ function HomePage() {
             />
             <FeatureCard
               icon={<Braces className="size-5" />}
-              title="Live Execution"
-              description="Hit run. See your code execute against real test cases in seconds — not a simulation."
+              title={t('features.liveExecution')}
+              description={t('features.liveExecutionDesc')}
               decorator={'sandbox.exec("python", code)'}
               index={1}
               accent={
@@ -336,8 +337,8 @@ function HomePage() {
             />
             <FeatureCard
               icon={<MessageSquare className="size-5" />}
-              title="AI Feedback"
-              description="Get told where your solution is slow, what edge cases you missed, and how to fix it."
+              title={t('features.aiFeedback')}
+              description={t('features.aiFeedbackDesc')}
               decorator={'ai.review({ depth: "senior" })'}
               index={2}
               accent={
@@ -379,7 +380,7 @@ function HomePage() {
                 <AnimatedNumber to={10} />
                 <span className="text-primary">+</span>
               </div>
-              <div className="mt-2 text-sm text-muted-foreground">Languages supported</div>
+              <div className="mt-2 text-sm text-muted-foreground">{t('stats.languages')}</div>
             </motion.div>
 
             <motion.div
@@ -393,7 +394,7 @@ function HomePage() {
                 <AnimatedNumber to={2} />
                 <span className="text-primary">x</span>
               </div>
-              <div className="mt-2 text-sm text-muted-foreground">Faster than solo prep</div>
+              <div className="mt-2 text-sm text-muted-foreground">{t('stats.faster')}</div>
             </motion.div>
 
             <motion.div
@@ -407,7 +408,7 @@ function HomePage() {
                 <AnimatedNumber to={0} />
                 <span className="text-primary"> lag</span>
               </div>
-              <div className="mt-2 text-sm text-muted-foreground">Real-time editing</div>
+              <div className="mt-2 text-sm text-muted-foreground">{t('stats.realTime')}</div>
             </motion.div>
 
             <motion.div
@@ -421,7 +422,7 @@ function HomePage() {
                 <AnimatedNumber to={24} />
                 <span className="text-primary">/7</span>
               </div>
-              <div className="mt-2 text-sm text-muted-foreground">AI feedback available</div>
+              <div className="mt-2 text-sm text-muted-foreground">{t('stats.aiFeedback')}</div>
             </motion.div>
           </div>
         </div>
@@ -439,9 +440,9 @@ function HomePage() {
             transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
             className="mb-16 text-center"
           >
-            <span className="font-mono text-xs text-primary/60">{'// how it works'}</span>
+            <span className="font-mono text-xs text-primary/60">{t('howItWorks.comment')}</span>
             <h2 className="mt-4 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-              Interview prep in <span className="text-primary">three steps</span>.
+              {t('howItWorks.heading')}
             </h2>
           </motion.div>
 
@@ -452,22 +453,22 @@ function HomePage() {
             <StepCard
               num={1}
               icon={<Terminal className="size-4" />}
-              title="Spawn a room"
-              description="One click creates an isolated session with a shared editor and voice channel."
+              title={t('howItWorks.step1Title')}
+              description={t('howItWorks.step1Desc')}
               index={0}
             />
             <StepCard
               num={2}
               icon={<Users className="size-4" />}
-              title="Code in sync"
-              description="Write code side-by-side. You both see every keystroke instantly — no copy-paste, no screen sharing."
+              title={t('howItWorks.step2Title')}
+              description={t('howItWorks.step2Desc')}
               index={1}
             />
             <StepCard
               num={3}
               icon={<Zap className="size-4" />}
-              title="Run & review"
-              description="Execute tests, get AI analysis, and replay sessions to improve."
+              title={t('howItWorks.step3Title')}
+              description={t('howItWorks.step3Desc')}
               index={2}
             />
           </div>
@@ -486,13 +487,11 @@ function HomePage() {
             transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
             className="mb-10 text-center"
           >
-            <span className="font-mono text-xs text-primary/60">{'// see it in action'}</span>
+            <span className="font-mono text-xs text-primary/60">{t('demo.comment')}</span>
             <h2 className="mt-4 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-              Watch it come <span className="text-primary">together</span>.
+              {t('demo.heading')}
             </h2>
-            <p className="mt-3 text-muted-foreground">
-              A complete interview session — from problem to passing tests — in seconds.
-            </p>
+            <p className="mt-3 text-muted-foreground">{t('demo.sub')}</p>
           </motion.div>
 
           <motion.div
@@ -526,26 +525,25 @@ function HomePage() {
             viewport={{ once: true, margin: '-100px' }}
             transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
           >
-            <span className="font-mono text-xs text-primary/60">{'// ready?'}</span>
+            <span className="font-mono text-xs text-primary/60">{t('cta.comment')}</span>
             <h2 className="mt-4 text-4xl font-bold tracking-tighter text-foreground sm:text-5xl">
-              Stop grinding <span className="text-muted-foreground/30 line-through">alone</span>
+              {t('cta.heading1')}{' '}
+              <span className="text-muted-foreground/30 line-through">{t('cta.alone')}</span>
               <br />
               <span className="bg-linear-to-r from-primary via-primary/60 to-primary bg-[length:200%_auto] bg-clip-text text-transparent animate-[gradient-x_4s_ease-in-out_infinite]">
-                Start syncing.
+                {t('cta.heading2')}
               </span>
             </h2>
-            <p className="mt-6 text-lg text-muted-foreground">
-              Join your peers and practice interviews the way they actually happen — together.
-            </p>
+            <p className="mt-6 text-lg text-muted-foreground">{t('cta.sub')}</p>
             <div className="mt-10 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
               <Button asChild size="lg" className="shimmer-sweep">
                 <Link to="/register">
-                  Get started for free
+                  {t('button.getStartedFree')}
                   <ArrowRight data-icon="inline-end" className="size-4" />
                 </Link>
               </Button>
               <span className="font-mono text-xs text-muted-foreground/40">
-                No credit card required
+                {t('cta.noCreditCard')}
               </span>
             </div>
           </motion.div>

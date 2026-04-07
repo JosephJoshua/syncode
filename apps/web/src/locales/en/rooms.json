@@ -1,0 +1,121 @@
+{
+  "heading": "Rooms",
+  "subtitle": {
+    "activeCount_one": "{{activeCount}} active room",
+    "activeCount_other": "{{activeCount}} active rooms",
+    "totalCount_one": "{{totalCount}} room",
+    "totalCount_other": "{{totalCount}} rooms",
+    "totalLabel": "{{totalCount}} total",
+    "noActive": "No active rooms"
+  },
+  "button": {
+    "createRoom": "Create Room"
+  },
+  "join": {
+    "heading": "Join a Room",
+    "description": "Paste an invite link from your partner to join their workspace.",
+    "button": "Join",
+    "placeholder": "https://\u2026/rooms/abc123?code=A3K7M2",
+    "error": "Paste a valid invite link (e.g. https://\u2026/rooms/id?code=XXXXXX)"
+  },
+  "filter": {
+    "all": "All"
+  },
+  "error": {
+    "loadFailed": "Failed to load rooms",
+    "loadFailedDescription": "Something went wrong. Please try again.",
+    "retry": "Retry"
+  },
+  "empty": {
+    "noRooms": "No rooms yet",
+    "noRoomsDescription": "Create a room to start practicing, or join one using an invite link above.",
+    "noRoomsWithStatus": "No rooms with status \"{{status}}\"."
+  },
+  "card": {
+    "untitledRoom": "Untitled Room"
+  },
+  "role": {
+    "host": "Host",
+    "candidate": "Candidate",
+    "interviewer": "Interviewer",
+    "observer": "Observer",
+    "unassigned": "Unassigned"
+  },
+  "status": {
+    "waiting": "Waiting",
+    "warmup": "Warm-up",
+    "coding": "Coding",
+    "wrapup": "Wrap-up",
+    "finished": "Finished"
+  },
+  "create": {
+    "heading": "Create Workspace",
+    "sub": "Setup your shared real-time coding environment",
+    "problemLabel": "Problem to Solve",
+    "languageLabel": "Coding Language",
+    "visibilityLabel": "Visibility",
+    "problemPlaceholder": "Type to search and select a problem",
+    "languagePlaceholder": "Select a language",
+    "publicRoom": "Public Room",
+    "publicRoomDescription": "Anyone with the link can join directly",
+    "button": "Create Collaborative Room",
+    "provisioning": "Provisioning Workspace...",
+    "noMatchingProblems": "No matching problems",
+    "problemRequired": "Please select a problem",
+    "createFailed": "Failed to create room. Please try again."
+  },
+  "success": {
+    "details": "Selected Workspace Details",
+    "provisioned": "Room Provisioned Successfully!",
+    "shareLink": "Share this invite link with collaborators:",
+    "setupNew": "Setup New Room",
+    "enterWorkspace": "Enter Workspace",
+    "publicAccess": "Public Access",
+    "private": "Private"
+  },
+  "lobby": {
+    "heading": "Workspace Lobby",
+    "ready": "Ready",
+    "connecting": "Establishing Connection...",
+    "authenticating": "Authenticating and joining workspace {{roomId}}...",
+    "unableToJoin": "Unable to join room",
+    "joinFailed": "Failed to join room. Please check invite link or login state."
+  },
+  "roleSelect": {
+    "heading": "Select Your Role",
+    "placeholder": "Pick a role...",
+    "host": "Host (Room Owner)",
+    "candidate": "Candidate (Writing Code)",
+    "interviewer": "Interviewer (Reviewing)",
+    "observer": "Observer (Silent Viewer)"
+  },
+  "readyButton": {
+    "ready": "I'm Ready",
+    "cancelReady": "Cancel Ready",
+    "enterWorkspace": "Enter Workspace"
+  },
+  "warning": "Action Required: Ensure at least one Candidate and one Interviewer are assigned to start.",
+  "systemStatus": {
+    "ready": "> SYSTEM_READY",
+    "awaitingPeers": "> AWAITING_PEERS_"
+  },
+  "hostControl": {
+    "heading": "Host Control",
+    "sessionConcluded": "Session has concluded.",
+    "advanceStage": "Advance interview stage:",
+    "endSession": "End Session",
+    "advanceTo": "Advance to {{stageName}}"
+  },
+  "stage": {
+    "awaitingSync": "AWAITING_SYNC",
+    "systemWarmup": "SYSTEM_WARMUP",
+    "activeCoding": "ACTIVE_CODING",
+    "phaseWrapup": "PHASE_WRAPUP",
+    "sessionEnd": "SESSION_END"
+  },
+  "timer": {
+    "percent": "{{percent}}% of session",
+    "resumeTimer": "Resume timer",
+    "pauseTimer": "Pause timer"
+  }
+}

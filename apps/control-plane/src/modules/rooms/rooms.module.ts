@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
-import type { EnvConfig } from '@/config/env.config';
+import type { EnvConfig } from '@/config/env.config.js';
 import { RoomsController } from './rooms.controller.js';
 import { RoomsService } from './rooms.service.js';
 

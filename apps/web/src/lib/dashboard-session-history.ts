@@ -5,7 +5,8 @@ import {
   type SessionSummary,
   sessionHistoryResponseSchema,
 } from '@syncode/contracts';
-import { api } from '@/lib/api-client';
+import { api } from '@/lib/api-client.js';
+import i18n from '@/lib/i18n.js';
 
 export type SessionRole = 'candidate' | 'interviewer' | 'observer';
 export type SessionStatus = 'passed' | 'failed' | null;
@@ -190,7 +191,7 @@ export function normalizeSessionSummary(
     id: session.sessionId,
     roomId: session.roomId,
     mode: session.mode,
-    problemName: session.problemTitle ?? 'Untitled Problem',
+    problemName: session.problemTitle ?? i18n.t('common:untitledProblem'),
     difficulty: session.difficulty,
     language: session.language,
     createdAt: session.createdAt,

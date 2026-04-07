@@ -5,10 +5,10 @@ import { bookmarks } from '@syncode/db';
 import { and, eq } from 'drizzle-orm';
 import { ZodValidationPipe } from 'nestjs-zod';
 import request from 'supertest';
-import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard';
-import { DB_CLIENT } from '@/modules/db/db.module';
-import { createTestDb, insertProblem, insertUser } from '@/test/integration-setup';
-import { asUser, TestAuthGuard } from '@/test/mock-factories';
+import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard.js';
+import { DB_CLIENT } from '@/modules/db/db.module.js';
+import { createTestDb, insertProblem, insertUser } from '@/test/integration-setup.js';
+import { asUser, TestAuthGuard } from '@/test/mock-factories.js';
 import { BookmarksController } from './bookmarks.controller.js';
 import { ProblemsService } from './problems.service.js';
 

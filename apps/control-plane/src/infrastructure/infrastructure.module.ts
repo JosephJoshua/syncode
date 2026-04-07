@@ -26,7 +26,7 @@ import {
   QUEUE_SERVICE,
   STORAGE_SERVICE,
 } from '@syncode/shared/ports';
-import type { EnvConfig } from '@/config/env.config';
+import type { EnvConfig } from '@/config/env.config.js';
 import { HttpCollabClient } from './clients/http-collab.client.js';
 import { QueueAiClient } from './clients/queue-ai.client.js';
 import { QueueExecutionClient } from './clients/queue-execution.client.js';

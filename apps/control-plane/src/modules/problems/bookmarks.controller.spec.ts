@@ -1,8 +1,8 @@
 import { NotFoundException } from '@nestjs/common';
 import { describe, expect, it, vi } from 'vitest';
-import type { AuthUser } from '@/modules/auth/auth.types';
-import { BookmarksController } from './bookmarks.controller';
-import type { ProblemsService } from './problems.service';
+import type { AuthUser } from '@/modules/auth/auth.types.js';
+import { BookmarksController } from './bookmarks.controller.js';
+import type { ProblemsService } from './problems.service.js';
 
 describe('BookmarksController', () => {
   const user: AuthUser = { id: 'user-1', email: 'user@example.com' };

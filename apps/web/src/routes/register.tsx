@@ -16,16 +16,18 @@ import { AnimatePresence, motion } from 'motion/react';
 import { useEffect, useRef, useState } from 'react';
 import type { UseFormSetError } from 'react-hook-form';
 import { useForm } from 'react-hook-form';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { z } from 'zod';
-import { GlowOrb, PageBackground } from '@/components/background';
-import { FloatingSymbols } from '@/components/floating-symbols';
-import { AnimatedFormField } from '@/components/form-field';
-import { CursorSpotlight } from '@/components/spotlight';
-import { TiltCard } from '@/components/tilt';
-import { api, readApiError } from '@/lib/api-client';
-import { requireGuest } from '@/lib/auth';
-import { resolveRegisterFormError } from '@/lib/auth-form-errors';
+import { GlowOrb, PageBackground } from '@/components/background.js';
+import { FloatingSymbols } from '@/components/floating-symbols.js';
+import { AnimatedFormField } from '@/components/form-field.js';
+import { CursorSpotlight } from '@/components/spotlight.js';
+import { TiltCard } from '@/components/tilt.js';
+import { api, readApiError } from '@/lib/api-client.js';
+import { requireGuest } from '@/lib/auth.js';
+import { resolveRegisterFormError } from '@/lib/auth-form-errors.js';
+import i18n from '@/lib/i18n.js';
 
 export const Route = createFileRoute('/register')({
   beforeLoad: requireGuest,
@@ -39,19 +41,19 @@ const registerFormSchema = z
     username: z
       .string()
       .trim()
-      .min(3, 'Username must be at least 3 characters.')
-      .max(30, 'Username must be 30 characters or fewer.')
-      .regex(/^[a-zA-Z0-9_]+$/, 'Username can only contain letters, numbers, and underscores.'),
-    email: z.email('Enter a valid email address.'),
-    password: z.string().min(8, 'Password must be at least 8 characters.'),
-    confirmPassword: z.string().min(1, 'Confirm your password.'),
+      .min(3, i18n.t('register:validation.usernameMinLength'))
+      .max(30, i18n.t('register:validation.usernameMaxLength'))
+      .regex(/^[a-zA-Z0-9_]+$/, i18n.t('register:validation.usernamePattern')),
+    email: z.email(i18n.t('register:validation.emailInvalid')),
+    password: z.string().min(8, i18n.t('register:validation.passwordMinLength')),
+    confirmPassword: z.string().min(1, i18n.t('register:validation.confirmPasswordRequired')),
   })
   .superRefine(({ password, confirmPassword }, context) => {
     if (password !== confirmPassword) {
       context.addIssue({
         code: 'custom',
         path: ['confirmPassword'],
-        message: 'Passwords do not match.',
+        message: i18n.t('register:validation.passwordsMismatch'),
       });
     }
   });
@@ -59,6 +61,7 @@ const registerFormSchema = z
 type RegisterFormValues = z.infer<typeof registerFormSchema>;
 
 function RegisterPage() {
+  const { t } = useTranslation('register');
   const navigate = useNavigate();
   const [submissionError, setSubmissionError] = useState<string | null>(null);
   const successTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -90,7 +93,7 @@ function RegisterPage() {
     // Response body intentionally ignored; user must sign in manually after registration.
     onSuccess: () => {
       successTimerRef.current = setTimeout(() => {
-        toast.success('Account created successfully. Please sign in.');
+        toast.success(t('toast.accountCreated'));
         navigate({ to: '/login' }).catch(() => {});
       }, 600);
     },
@@ -110,7 +113,7 @@ function RegisterPage() {
       await registerMutation.mutateAsync(values).catch(() => {});
     },
     () => {
-      setSubmissionError('Please review the highlighted fields and try again.');
+      setSubmissionError(t('validation.reviewFields'));
     },
   );
 
@@ -136,7 +139,7 @@ function RegisterPage() {
           >
             <Terminal className="size-3 text-primary" />
             <span className="text-xs font-medium tracking-wider text-primary uppercase">
-              Join SynCode
+              {t('badge')}
             </span>
           </motion.div>
 
@@ -146,11 +149,7 @@ function RegisterPage() {
             transition={{ duration: 0.6, ...stagger(1), ease: [0.16, 1, 0.3, 1] }}
             className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl"
           >
-            Create your{' '}
-            <span className="bg-linear-to-r from-primary to-primary/60 bg-clip-text text-transparent">
-              SynCode
-            </span>{' '}
-            account
+            {t('heading')}
           </motion.h1>
 
           <motion.p
@@ -159,7 +158,7 @@ function RegisterPage() {
             transition={{ duration: 0.5, ...stagger(2), ease: [0.16, 1, 0.3, 1] }}
             className="mt-2 text-sm text-muted-foreground"
           >
-            Join your peers and start practicing technical interviews together.
+            {t('sub')}
           </motion.p>
         </div>
 
@@ -171,19 +170,17 @@ function RegisterPage() {
           <TiltCard>
             <Card className="aurora-border border-border/50 bg-card/80 backdrop-blur-sm">
               <CardHeader>
-                <CardTitle>Create account</CardTitle>
-                <CardDescription>
-                  Set up your profile to start practicing with your peers.
-                </CardDescription>
+                <CardTitle>{t('cardTitle')}</CardTitle>
+                <CardDescription>{t('cardDescription')}</CardDescription>
               </CardHeader>
               <CardContent>
                 <form className="space-y-5" onSubmit={onSubmit} noValidate>
                   <AnimatedFormField
                     id="username"
-                    label="Username"
+                    label={t('field.username')}
                     icon={UserRound}
                     autoComplete="username"
-                    placeholder="your_username"
+                    placeholder={t('field.usernamePlaceholder')}
                     error={errors.username?.message}
                     registration={register('username')}
                     staggerDelay={stagger(4).delay}
@@ -191,10 +188,10 @@ function RegisterPage() {
 
                   <AnimatedFormField
                     id="email"
-                    label="Email"
+                    label={t('field.email')}
                     icon={Mail}
                     autoComplete="email"
-                    placeholder="you@example.com"
+                    placeholder={t('field.emailPlaceholder')}
                     error={errors.email?.message}
                     registration={register('email')}
                     staggerDelay={stagger(5).delay}
@@ -202,11 +199,11 @@ function RegisterPage() {
 
                   <AnimatedFormField
                     id="password"
-                    label="Password"
+                    label={t('field.password')}
                     icon={LockKeyhole}
                     type="password"
                     autoComplete="new-password"
-                    placeholder="Create a password"
+                    placeholder={t('field.passwordPlaceholder')}
                     error={errors.password?.message}
                     registration={register('password')}
                     staggerDelay={stagger(6).delay}
@@ -214,11 +211,11 @@ function RegisterPage() {
 
                   <AnimatedFormField
                     id="confirmPassword"
-                    label="Confirm password"
+                    label={t('field.confirmPassword')}
                     icon={LockKeyhole}
                     type="password"
                     autoComplete="new-password"
-                    placeholder="Confirm your password"
+                    placeholder={t('field.confirmPasswordPlaceholder')}
                     error={errors.confirmPassword?.message}
                     registration={register('confirmPassword')}
                     staggerDelay={stagger(7).delay}
@@ -260,7 +257,7 @@ function RegisterPage() {
                             className="inline-flex items-center gap-2"
                           >
                             <Check className="size-4" />
-                            Account created
+                            {t('button.accountCreated')}
                           </motion.span>
                         ) : isSubmitting || registerMutation.isPending ? (
                           <motion.span
@@ -271,7 +268,7 @@ function RegisterPage() {
                             className="inline-flex items-center gap-2"
                           >
                             <LoaderCircle className="size-4 animate-spin" />
-                            Creating account...
+                            {t('button.creatingAccount')}
                           </motion.span>
                         ) : submissionError ? (
                           <motion.span
@@ -281,7 +278,7 @@ function RegisterPage() {
                             exit={{ opacity: 0 }}
                             className="inline-flex items-center gap-2"
                           >
-                            Try again
+                            {t('button.tryAgain')}
                             <ArrowRight className="size-4 transition-transform group-hover/button:translate-x-0.5" />
                           </motion.span>
                         ) : (
@@ -292,7 +289,7 @@ function RegisterPage() {
                             exit={{ opacity: 0 }}
                             className="inline-flex items-center gap-2"
                           >
-                            Create account
+                            {t('button.createAccount')}
                             <ArrowRight className="size-4 transition-transform group-hover/button:translate-x-0.5" />
                           </motion.span>
                         )}
@@ -307,8 +304,10 @@ function RegisterPage() {
                   <span className="absolute inline-flex size-full animate-ping rounded-full bg-primary/60" />
                   <span className="relative inline-flex size-2 rounded-full bg-primary" />
                 </span>
-                <span className="font-mono">Secure registration</span>
-                <span className="ml-auto font-mono text-muted-foreground/50">TLS 1.3</span>
+                <span className="font-mono">{t('statusBar.secure')}</span>
+                <span className="ml-auto font-mono text-muted-foreground/50">
+                  {t('statusBar.tls')}
+                </span>
               </div>
             </Card>
           </TiltCard>
@@ -320,12 +319,12 @@ function RegisterPage() {
           transition={{ duration: 0.5, ...stagger(9) }}
           className="mt-6 text-center text-sm text-muted-foreground"
         >
-          Already have an account?{' '}
+          {t('footer.hasAccount')}{' '}
           <Link
             to="/login"
             className="font-medium text-primary transition-colors hover:text-primary/80"
           >
-            Sign in
+            {t('footer.signIn')}
           </Link>
         </motion.p>
       </div>

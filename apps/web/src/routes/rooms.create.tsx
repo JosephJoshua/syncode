@@ -14,16 +14,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@syncode/ui';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { Check, ChevronDown, Code2, Copy, FileCode2, Globe, Lock } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
+import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
-import { useClipboard } from '@/hooks/use-clipboard';
-import { api, readApiError } from '@/lib/api-client';
-import { requireAuth } from '@/lib/auth';
-import { useAuthStore } from '@/stores/auth.store';
+import { useClipboard } from '@/hooks/use-clipboard.js';
+import { api, readApiError } from '@/lib/api-client.js';
+import { requireAuth } from '@/lib/auth.js';
+import i18n from '@/lib/i18n.js';
+import { useAuthStore } from '@/stores/auth.store.js';
 
 export const Route = createFileRoute('/rooms/create')({
   beforeLoad: requireAuth,
@@ -46,14 +48,14 @@ const LANGUAGE_OPTIONS = SUPPORTED_LANGUAGES.map((lang) => ({
   label: LANGUAGE_LABELS[lang],
 }));
 
-const DIFFICULTY_DISPLAY: Record<string, string> = {
-  easy: 'Easy',
-  medium: 'Medium',
-  hard: 'Hard',
+const DIFFICULTY_KEYS: Record<string, string> = {
+  easy: 'problems:detail.easy',
+  medium: 'problems:detail.medium',
+  hard: 'problems:detail.hard',
 };
 
 const createRoomFormSchema = z.object({
-  problemId: z.string().min(1, 'Please select a problem'),
+  problemId: z.string().min(1),
   language: z.enum(SUPPORTED_LANGUAGES),
   isPublic: z.boolean(),
 });
@@ -78,6 +80,7 @@ function matchesProblemQuery(label: string, query: string) {
 }
 
 function CreateRoomPage() {
+  const { t } = useTranslation('rooms');
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const navigate = useNavigate();
 
@@ -95,7 +98,7 @@ function CreateRoomPage() {
   const availableProblems = useMemo(() => {
     return (problemsQuery.data?.data ?? []).map((p) => ({
       value: p.id,
-      label: `${p.title} (${DIFFICULTY_DISPLAY[p.difficulty] ?? p.difficulty})`,
+      label: `${p.title} (${i18n.t(DIFFICULTY_KEYS[p.difficulty] ?? p.difficulty)})`,
     }));
   }, [problemsQuery.data]);
 
@@ -151,6 +154,8 @@ function CreateRoomPage() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [availableProblems, isProblemMenuOpen, selectedProblemId]);
 
+  const queryClient = useQueryClient();
+
   const createRoomMutation = useMutation({
     mutationFn: (data: CreateRoomFormData) =>
       api(CONTROL_API.ROOMS.CREATE, {
@@ -166,6 +171,9 @@ function CreateRoomPage() {
           },
         },
       }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['rooms'] });
+    },
   });
 
   const onSubmit = async (data: CreateRoomFormData) => {
@@ -179,7 +187,7 @@ function CreateRoomPage() {
       setInviteLink(`${window.location.origin}/rooms/${room.roomId}?code=${room.roomCode}`);
     } catch (error) {
       const apiError = await readApiError(error);
-      setSubmissionError(apiError?.message ?? 'Failed to create room. Please try again.');
+      setSubmissionError(apiError?.message ?? t('create.createFailed'));
     }
   };
 
@@ -194,11 +202,9 @@ function CreateRoomPage() {
       <div className="w-full max-w-lg">
         <div className="mb-10 text-center">
           <h1 className="mb-2.5 text-4xl font-extrabold tracking-tighter text-primary">
-            Create Workspace
+            {t('create.heading')}
           </h1>
-          <p className="text-base text-muted-foreground">
-            Setup your shared real-time coding environment
-          </p>
+          <p className="text-base text-muted-foreground">{t('create.sub')}</p>
         </div>
 
         <Card className="rounded-2xl border-border/60 bg-card/95 p-8 shadow-[0_10px_40px_-10px_rgba(0,0,0,0.7)]">
@@ -206,7 +212,7 @@ function CreateRoomPage() {
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-7">
               <div>
                 <Label className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Problem to Solve
+                  {t('create.problemLabel')}
                 </Label>
                 <input type="hidden" {...register('problemId')} />
 
@@ -226,7 +232,7 @@ function CreateRoomPage() {
                         setIsProblemMenuOpen(true);
                         setValue('problemId', '', { shouldValidate: true });
                       }}
-                      placeholder="Type to search and select a problem"
+                      placeholder={t('create.problemPlaceholder')}
                       role="combobox"
                       aria-expanded={isProblemMenuOpen}
                       aria-controls="problem-listbox"
@@ -264,7 +270,7 @@ function CreateRoomPage() {
                           ))
                         ) : (
                           <p className="px-3 py-2 text-sm text-muted-foreground">
-                            No matching problems
+                            {t('create.noMatchingProblems')}
                           </p>
                         )}
                       </div>
@@ -273,13 +279,15 @@ function CreateRoomPage() {
                 </div>
 
                 {errors.problemId && (
-                  <p className="mt-1.5 pl-1 text-xs text-destructive">{errors.problemId.message}</p>
+                  <p className="mt-1.5 pl-1 text-xs text-destructive">
+                    {t('create.problemRequired')}
+                  </p>
                 )}
               </div>
 
               <div>
                 <Label className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Coding Language
+                  {t('create.languageLabel')}
                 </Label>
                 <Controller
                   name="language"
@@ -294,7 +302,7 @@ function CreateRoomPage() {
                       >
                         <div className="flex items-center gap-2.5">
                           <Code2 size={18} className="text-muted-foreground" />
-                          <SelectValue placeholder="Select a language" />
+                          <SelectValue placeholder={t('create.languagePlaceholder')} />
                         </div>
                       </SelectTrigger>
                       <SelectContent>
@@ -314,7 +322,7 @@ function CreateRoomPage() {
 
               <div>
                 <Label className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Visibility
+                  {t('create.visibilityLabel')}
                 </Label>
                 <div className="flex items-center gap-4 rounded-xl border border-border p-4">
                   <input
@@ -324,9 +332,11 @@ function CreateRoomPage() {
                     className="size-5 rounded border-input bg-background text-primary focus:ring-ring/50 focus:ring-offset-background"
                   />
                   <label htmlFor="isPublic" className="flex flex-1 cursor-pointer flex-col">
-                    <span className="text-sm font-semibold text-foreground">Public Room</span>
+                    <span className="text-sm font-semibold text-foreground">
+                      {t('create.publicRoom')}
+                    </span>
                     <span className="mt-0.5 text-xs text-muted-foreground">
-                      Anyone with the link can join directly
+                      {t('create.publicRoomDescription')}
                     </span>
                   </label>
                   <Globe className="text-muted-foreground/60" size={20} />
@@ -341,8 +351,8 @@ function CreateRoomPage() {
                   className="w-full rounded-xl shadow-[0_0_25px_hsl(var(--primary)/0.4)] hover:shadow-[0_0_35px_hsl(var(--primary)/0.6)]"
                 >
                   {isSubmitting || createRoomMutation.isPending
-                    ? 'Provisioning Workspace...'
-                    : 'Create Collaborative Room'}
+                    ? t('create.provisioning')
+                    : t('create.button')}
                 </Button>
                 {submissionError && (
                   <p className="mt-2 text-sm text-destructive" role="alert">
@@ -355,7 +365,7 @@ function CreateRoomPage() {
             <div className="animate-in fade-in slide-in-from-bottom-5 space-y-7 duration-500">
               <div className="space-y-3.5 rounded-xl border border-border p-5">
                 <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Selected Workspace Details
+                  {t('success.details')}
                 </p>
                 <div className="flex flex-wrap gap-2.5 pt-1">
                   <Badge variant="outline" className="gap-2 px-4 py-1.5 text-sm">
@@ -374,7 +384,7 @@ function CreateRoomPage() {
                     ) : (
                       <Lock size={16} className="text-primary" />
                     )}
-                    {submittedData?.isPublic ? 'Public Access' : 'Private'}
+                    {submittedData?.isPublic ? t('success.publicAccess') : t('success.private')}
                   </Badge>
                 </div>
               </div>
@@ -384,10 +394,10 @@ function CreateRoomPage() {
               <div>
                 <div className="mb-3.5 flex items-center gap-2.5 text-xl font-bold text-primary drop-shadow-[0_0_12px_hsl(var(--primary)/0.6)]">
                   <Check size={24} />
-                  <span>Room Provisioned Successfully!</span>
+                  <span>{t('success.provisioned')}</span>
                 </div>
                 <p className="mb-3.5 pl-1 text-sm text-muted-foreground">
-                  Share this invite link with collaborators:
+                  {t('success.shareLink')}
                 </p>
 
                 <div className="flex items-center rounded-xl border border-border bg-background p-1.5 transition-all duration-300 focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50">
@@ -401,7 +411,7 @@ function CreateRoomPage() {
                     type="button"
                     onClick={copyToClipboard}
                     className="flex shrink-0 items-center justify-center rounded-lg bg-muted p-3 text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground"
-                    title="Copy link"
+                    title={t('common:copyLink')}
                   >
                     {copied ? <Check size={18} className="text-primary" /> : <Copy size={18} />}
                   </button>
@@ -423,7 +433,7 @@ function CreateRoomPage() {
                     setSubmittedData(null);
                   }}
                 >
-                  Setup New Room
+                  {t('success.setupNew')}
                 </Button>
                 <Button
                   size="lg"
@@ -445,7 +455,7 @@ function CreateRoomPage() {
                   }}
                   disabled={!createdRoomId}
                 >
-                  Enter Workspace
+                  {t('success.enterWorkspace')}
                 </Button>
               </div>
             </div>

@@ -8,17 +8,18 @@ import { AnimatePresence, motion } from 'motion/react';
 import { useEffect, useRef, useState } from 'react';
 import type { UseFormSetError } from 'react-hook-form';
 import { useForm } from 'react-hook-form';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { z } from 'zod';
-import { GlowOrb, PageBackground } from '@/components/background';
-import { FloatingSymbols } from '@/components/floating-symbols';
-import { AnimatedFormField } from '@/components/form-field';
-import { CursorSpotlight } from '@/components/spotlight';
-import { TiltCard } from '@/components/tilt';
-import { api, readApiError } from '@/lib/api-client';
-import { requireGuest } from '@/lib/auth';
-import { resolveLoginFormError } from '@/lib/auth-form-errors';
-import { useAuthStore } from '@/stores/auth.store';
+import { GlowOrb, PageBackground } from '@/components/background.js';
+import { FloatingSymbols } from '@/components/floating-symbols.js';
+import { AnimatedFormField } from '@/components/form-field.js';
+import { CursorSpotlight } from '@/components/spotlight.js';
+import { TiltCard } from '@/components/tilt.js';
+import { api, readApiError } from '@/lib/api-client.js';
+import { requireGuest } from '@/lib/auth.js';
+import { resolveLoginFormError } from '@/lib/auth-form-errors.js';
+import { useAuthStore } from '@/stores/auth.store.js';
 
 const loginFormSchema = z.object({
   identifier: z.string().trim().min(1, 'Enter your email address or username.'),
@@ -35,6 +36,7 @@ export const Route = createFileRoute('/login')({
 const stagger = (i: number) => ({ delay: 0.1 + i * 0.08 });
 
 function LoginPage() {
+  const { t } = useTranslation('login');
   const navigate = useNavigate();
   const setSession = useAuthStore((state) => state.setSession);
   const [submissionError, setSubmissionError] = useState<string | null>(null);
@@ -69,7 +71,7 @@ function LoginPage() {
       // Delay navigation to show the success animation
       successTimerRef.current = setTimeout(() => {
         setSession({ accessToken, user });
-        toast.success('Signed in successfully.');
+        toast.success(t('toast.signedIn'));
         navigate({ to: '/dashboard' }).catch(() => {});
       }, 600);
     },
@@ -107,7 +109,7 @@ function LoginPage() {
           >
             <Terminal className="size-3 text-primary" />
             <span className="text-xs font-medium tracking-wider text-primary uppercase">
-              Welcome back
+              {t('badge')}
             </span>
           </motion.div>
 
@@ -117,10 +119,7 @@ function LoginPage() {
             transition={{ duration: 0.6, ...stagger(1), ease: [0.16, 1, 0.3, 1] }}
             className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl"
           >
-            Sign in to{' '}
-            <span className="bg-linear-to-r from-primary to-primary/60 bg-clip-text text-transparent">
-              SynCode
-            </span>
+            {t('heading')}
           </motion.h1>
 
           <motion.p
@@ -129,7 +128,7 @@ function LoginPage() {
             transition={{ duration: 0.5, ...stagger(2), ease: [0.16, 1, 0.3, 1] }}
             className="mt-2 text-sm text-muted-foreground"
           >
-            Pick up where you left off with collaborative practice.
+            {t('sub')}
           </motion.p>
         </div>
 
@@ -142,17 +141,17 @@ function LoginPage() {
           <TiltCard>
             <Card className="aurora-border border-border/50 bg-card/80 backdrop-blur-sm">
               <CardHeader>
-                <CardTitle>Log in</CardTitle>
-                <CardDescription>Use your email or username to continue.</CardDescription>
+                <CardTitle>{t('cardTitle')}</CardTitle>
+                <CardDescription>{t('cardDescription')}</CardDescription>
               </CardHeader>
               <CardContent>
                 <form className="space-y-5" onSubmit={onSubmit} noValidate>
                   <AnimatedFormField
                     id="identifier"
-                    label="Email or username"
+                    label={t('field.emailOrUsername')}
                     icon={Mail}
                     autoComplete="username"
-                    placeholder="you@example.com"
+                    placeholder={t('field.emailOrUsernamePlaceholder')}
                     error={errors.identifier?.message}
                     registration={register('identifier')}
                     staggerDelay={stagger(4).delay}
@@ -160,11 +159,11 @@ function LoginPage() {
 
                   <AnimatedFormField
                     id="password"
-                    label="Password"
+                    label={t('field.password')}
                     icon={LockKeyhole}
                     type="password"
                     autoComplete="current-password"
-                    placeholder="Enter your password"
+                    placeholder={t('field.passwordPlaceholder')}
                     error={errors.password?.message}
                     registration={register('password')}
                     staggerDelay={stagger(5).delay}
@@ -204,7 +203,7 @@ function LoginPage() {
                             className="inline-flex items-center gap-2"
                           >
                             <Check className="size-4" />
-                            Success
+                            {t('button.success')}
                           </motion.span>
                         ) : loginMutation.isPending ? (
                           <motion.span
@@ -215,7 +214,7 @@ function LoginPage() {
                             className="inline-flex items-center gap-2"
                           >
                             <LoaderCircle className="size-4 animate-spin" />
-                            Signing in...
+                            {t('button.signingIn')}
                           </motion.span>
                         ) : (
                           <motion.span
@@ -225,7 +224,7 @@ function LoginPage() {
                             exit={{ opacity: 0 }}
                             className="inline-flex items-center gap-2"
                           >
-                            Log in
+                            {t('button.logIn')}
                             <ArrowRight className="size-4 transition-transform group-hover/button:translate-x-0.5" />
                           </motion.span>
                         )}
@@ -241,8 +240,10 @@ function LoginPage() {
                   <span className="absolute inline-flex size-full animate-ping rounded-full bg-primary/60" />
                   <span className="relative inline-flex size-2 rounded-full bg-primary" />
                 </span>
-                <span className="font-mono">Encrypted connection</span>
-                <span className="ml-auto font-mono text-muted-foreground/50">TLS 1.3</span>
+                <span className="font-mono">{t('statusBar.encrypted')}</span>
+                <span className="ml-auto font-mono text-muted-foreground/50">
+                  {t('statusBar.tls')}
+                </span>
               </div>
             </Card>
           </TiltCard>
@@ -254,12 +255,12 @@ function LoginPage() {
           transition={{ duration: 0.5, ...stagger(7) }}
           className="mt-6 text-center text-sm text-muted-foreground"
         >
-          Need a new account?{' '}
+          {t('footer.needAccount')}{' '}
           <Link
             to="/register"
             className="font-medium text-primary transition-colors hover:text-primary/80"
           >
-            Register now
+            {t('footer.registerNow')}
           </Link>
         </motion.p>
       </div>

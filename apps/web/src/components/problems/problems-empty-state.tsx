@@ -1,5 +1,6 @@
 import { Button, Card, CardContent } from '@syncode/ui';
 import { SearchX } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 export interface ProblemsEmptyStateProps {
   variant: 'library' | 'filtered';
@@ -7,12 +8,10 @@ export interface ProblemsEmptyStateProps {
 }
 
 export function ProblemsEmptyState({ variant, onReset }: ProblemsEmptyStateProps) {
-  const title =
-    variant === 'library' ? 'Problem library is still empty' : 'No problems match your filters';
+  const { t } = useTranslation('problems');
+  const title = variant === 'library' ? t('empty.libraryTitle') : t('empty.filteredTitle');
   const description =
-    variant === 'library'
-      ? 'Add a few mock problems first so the discovery surface has something to render.'
-      : 'Try clearing some filters or broadening the search term to bring more problems back.';
+    variant === 'library' ? t('empty.libraryDescription') : t('empty.filteredDescription');
 
   return (
     <Card className="border-dashed border-border/70 bg-card/30 py-0 backdrop-blur-sm">
@@ -24,7 +23,7 @@ export function ProblemsEmptyState({ variant, onReset }: ProblemsEmptyStateProps
         <p className="mt-3 max-w-md text-sm leading-relaxed text-muted-foreground">{description}</p>
         {onReset ? (
           <Button variant="outline" className="mt-6" onClick={onReset}>
-            Clear filters
+            {t('empty.clearFilters')}
           </Button>
         ) : null}
       </CardContent>

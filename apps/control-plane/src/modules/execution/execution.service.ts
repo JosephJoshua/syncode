@@ -3,7 +3,7 @@ import { ERROR_CODES } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
 import { executionResults, submissions } from '@syncode/db';
 import { and, asc, eq } from 'drizzle-orm';
-import { DB_CLIENT } from '@/modules/db/db.module';
+import { DB_CLIENT } from '@/modules/db/db.module.js';
 import type { ExecutionDetailsResult } from './execution.types.js';
 
 @Injectable()

@@ -8,7 +8,7 @@ import type { Database } from '@syncode/db';
 import { refreshTokens, users } from '@syncode/db';
 import type { ICacheService } from '@syncode/shared/ports';
 import { describe, expect, it, vi } from 'vitest';
-import { AuthService } from './auth.service';
+import { AuthService } from './auth.service.js';
 
 const scryptAsync = promisify(scrypt);
 

@@ -18,11 +18,12 @@ import { useQuery } from '@tanstack/react-query';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { Bookmark } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { ProblemCard } from '@/components/problems/problem-card';
-import type { ProblemDifficulty, ProblemItem } from '@/components/problems/problems.types';
-import { formatTagSlug } from '@/components/problems/problems-tags';
-import { api } from '@/lib/api-client';
-import { requireAuth } from '@/lib/auth';
+import { useTranslation } from 'react-i18next';
+import { ProblemCard } from '@/components/problems/problem-card.js';
+import type { ProblemDifficulty, ProblemItem } from '@/components/problems/problems.types.js';
+import { formatTagSlug } from '@/components/problems/problems-tags.js';
+import { api } from '@/lib/api-client.js';
+import { requireAuth } from '@/lib/auth.js';
 
 export const Route = createFileRoute('/bookmarks')({
   beforeLoad: requireAuth,
@@ -66,6 +67,7 @@ async function fetchBookmarks(query: ListBookmarksQuery): Promise<ListBookmarksR
 }
 
 function BookmarksPage() {
+  const { t } = useTranslation('bookmarks');
   const navigate = useNavigate();
   const [paginationState, setPaginationState] = useState(createInitialPaginationState);
 
@@ -99,11 +101,13 @@ function BookmarksPage() {
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:py-10 lg:py-12">
       <section className="max-w-3xl">
-        <h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">Bookmarks</h1>
+        <h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
+          {t('heading')}
+        </h1>
         <p className="mt-3 text-sm text-muted-foreground sm:text-base">
           {isPending && !bookmarksResponse
-            ? 'Loading bookmarks...'
-            : `${bookmarksResponse?.data.length ?? 0} bookmarked ${(bookmarksResponse?.data.length ?? 0) === 1 ? 'problem' : 'problems'}`}
+            ? t('sub.loading')
+            : t('sub.count', { count: bookmarksResponse?.data.length ?? 0 })}
         </p>
       </section>
 
@@ -117,10 +121,10 @@ function BookmarksPage() {
                     <Bookmark className="size-5" />
                   </div>
                   <h2 className="text-xl font-semibold tracking-tight text-foreground">
-                    No bookmarks yet
+                    {t('empty.title')}
                   </h2>
                   <p className="mt-3 max-w-md text-sm leading-relaxed text-muted-foreground">
-                    Bookmark problems from the problem library to save them here for quick access.
+                    {t('empty.description')}
                   </p>
                   <Button
                     variant="outline"
@@ -129,7 +133,7 @@ function BookmarksPage() {
                       navigate({ to: '/problems' }).catch(() => {});
                     }}
                   >
-                    Browse problems
+                    {t('empty.browseProblems')}
                   </Button>
                 </CardContent>
               </Card>

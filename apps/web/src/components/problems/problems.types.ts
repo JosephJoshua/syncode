@@ -15,8 +15,4 @@ export interface ProblemItem {
 export const DIFFICULTY_OPTIONS: ProblemDifficulty[] = ['Easy', 'Medium', 'Hard'];
 export const STATUS_OPTIONS: ProblemStatus[] = ['Solved', 'Attempted', 'Todo'];
 
-export const SORT_OPTIONS: Array<{ label: string; value: ProblemSortKey }> = [
-  { label: 'Newest', value: 'newest' },
-  { label: 'Acceptance rate', value: 'acceptance' },
-  { label: 'Difficulty', value: 'difficulty' },
-];
+export const SORT_KEYS: ProblemSortKey[] = ['newest', 'acceptance', 'difficulty'];

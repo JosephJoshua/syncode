@@ -1,7 +1,9 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { ProblemDetailLayout } from '@/components/problems/problem-detail-layout';
-import { ApiError } from '@/lib/api-client';
-import { useProblemDetailQuery } from '@/lib/problems/problem-detail';
+import { useTranslation } from 'react-i18next';
+import { ProblemDetailLayout } from '@/components/problems/problem-detail-layout.js';
+import { ApiError } from '@/lib/api-client.js';
+import i18n from '@/lib/i18n.js';
+import { useProblemDetailQuery } from '@/lib/problems/problem-detail.js';
 
 export const Route = createFileRoute('/problems/$problemId')({
   component: ProblemDetailRouteComponent,
@@ -14,13 +16,14 @@ function ProblemDetailRouteComponent() {
 }
 
 export function ProblemDetailPage({ problemId }: { problemId: string }) {
+  const { t } = useTranslation('problems');
   const problemDetailQuery = useProblemDetailQuery(problemId);
 
   if (problemDetailQuery.isPending) {
     return (
       <div className="mx-auto max-w-7xl px-4 py-10">
         <div className="rounded-2xl border border-border/60 bg-card/60 px-6 py-12">
-          <p className="text-sm text-muted-foreground">Loading problem details...</p>
+          <p className="text-sm text-muted-foreground">{t('loading')}</p>
         </div>
       </div>
     );
@@ -48,28 +51,28 @@ export function ProblemDetailPage({ problemId }: { problemId: string }) {
 }
 
 function getProblemDetailErrorCopy(error: unknown) {
+  const t = (key: string, options?: Record<string, unknown>) =>
+    i18n.t(key, { ns: 'problems', ...options });
+
   if (error instanceof ApiError) {
     return {
-      statusLabel: `${error.response.statusCode} Error`,
+      statusLabel: t('error.withStatusCode', { statusCode: error.response.statusCode }),
       title: error.response.message,
-      message:
-        error.response.statusCode === 404
-          ? 'The requested problem could not be found for this URL.'
-          : 'We could not load this problem right now.',
+      message: error.response.statusCode === 404 ? t('error.notFound') : t('error.cannotLoad'),
     };
   }
 
   if (error instanceof Error) {
     return {
-      statusLabel: 'Request Error',
-      title: 'Unable to load problem details',
+      statusLabel: t('error.requestError'),
+      title: t('error.unableToLoad'),
       message: error.message,
     };
   }
 
   return {
-    statusLabel: 'Request Error',
-    title: 'Unable to load problem details',
-    message: 'An unexpected error occurred while loading this problem.',
+    statusLabel: t('error.requestError'),
+    title: t('error.unableToLoad'),
+    message: t('error.unexpected'),
   };
 }

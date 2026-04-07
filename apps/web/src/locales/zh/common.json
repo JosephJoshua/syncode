@@ -1,0 +1,50 @@
+{
+  "brand": "SynCode",
+  "nav": {
+    "dashboard": "仪表盘",
+    "rooms": "房间",
+    "problems": "题库",
+    "bookmarks": "收藏夹"
+  },
+  "auth": {
+    "register": "注册",
+    "logIn": "登录",
+    "logOut": "退出登录",
+    "loggingOut": "正在退出...",
+    "accountMenu": "账户菜单",
+    "profile": "个人资料"
+  },
+  "toast": {
+    "signedOut": "已成功退出登录。",
+    "signOutFailed": "退出请求失败，但本地会话已清除。"
+  },
+  "copyLink": "复制链接",
+  "switchLanguage": "切换语言为{{language}}",
+  "untitledProblem": "未命名题目",
+  "retry": "重试",
+  "cancel": "取消",
+  "loading": "加载中...",
+  "genericError": "出了点问题，请重试。",
+  "execution": {
+    "details": "执行详情",
+    "tip": "提示：点击用例箭头可查看该用例的日志。",
+    "submission": "提交 {{submissionId}}",
+    "total": "总计",
+    "passed": "通过",
+    "failed": "失败",
+    "errors": "错误",
+    "totalTime": "总耗时",
+    "caseIndex": "用例 #{{index}}",
+    "statusPass": "通过",
+    "statusFail": "失败",
+    "statusPending": "等待中",
+    "statusTimeout": "超时",
+    "duration": "耗时",
+    "memory": "内存",
+    "outputDiff": "输出差异",
+    "logViewer": "执行日志查看器",
+    "stdout": "标准输出",
+    "stderr": "标准错误",
+    "empty": "（空）"
+  }
+}

@@ -1,6 +1,6 @@
 import { CONTROL_API, type ProblemDetail } from '@syncode/contracts';
 import { useQuery } from '@tanstack/react-query';
-import { ApiError, api, readApiError } from '@/lib/api-client';
+import { ApiError, api, readApiError } from '@/lib/api-client.js';
 
 export function getProblemDetailQueryKey(problemId: string) {
   return ['problem-detail', problemId] as const;

@@ -4,7 +4,7 @@ import { ERROR_CODES } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
 import { sessionDeletions } from '@syncode/db';
 import { and, eq } from 'drizzle-orm';
-import { DB_CLIENT } from '@/modules/db/db.module';
+import { DB_CLIENT } from '@/modules/db/db.module.js';
 import {
   createTestDb,
   insertPeerFeedbackRow,
@@ -18,7 +18,7 @@ import {
   insertSessionReport,
   insertSubmission,
   insertUser,
-} from '@/test/integration-setup';
+} from '@/test/integration-setup.js';
 import { SessionsService } from './sessions.service.js';
 
 let db: Database;

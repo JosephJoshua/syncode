@@ -1,6 +1,6 @@
 import { ERROR_CODES, type ErrorResponse } from '@syncode/contracts';
 import { describe, expect, test } from 'vitest';
-import { resolveLoginFormError, resolveRegisterFormError } from './auth-form-errors';
+import { resolveLoginFormError, resolveRegisterFormError } from './auth-form-errors.js';
 
 describe('resolveLoginFormError', () => {
   test('maps invalid credentials even when backend omits code', () => {

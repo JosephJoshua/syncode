@@ -16,10 +16,11 @@ import {
 } from 'lucide-react';
 import type { ChangeEvent } from 'react';
 import { useEffect, useMemo, useState } from 'react';
-import { useClipboard } from '@/hooks/use-clipboard';
-import { api, readApiError } from '@/lib/api-client';
-import { requireAuth } from '@/lib/auth';
-import { useAuthStore } from '@/stores/auth.store';
+import { useTranslation } from 'react-i18next';
+import { useClipboard } from '@/hooks/use-clipboard.js';
+import { api, readApiError } from '@/lib/api-client.js';
+import { requireAuth } from '@/lib/auth.js';
+import { useAuthStore } from '@/stores/auth.store.js';
 
 export const Route = createFileRoute('/rooms/$roomId')({
   beforeLoad: requireAuth,
@@ -36,22 +37,16 @@ type Participant = {
   role: LobbyRole;
 };
 
-function formatRoleLabel(role: LobbyRole) {
-  switch (role) {
-    case 'host':
-      return 'Host';
-    case 'candidate':
-      return 'Candidate';
-    case 'interviewer':
-      return 'Interviewer';
-    case 'spectator':
-      return 'Observer';
-    default:
-      return 'Unassigned';
-  }
-}
+const ROLE_LABEL_KEYS: Record<LobbyRole, string> = {
+  host: 'role.host',
+  candidate: 'role.candidate',
+  interviewer: 'role.interviewer',
+  spectator: 'role.observer',
+  unassigned: 'role.unassigned',
+};
 
 function RoomLobbyPage() {
+  const { t } = useTranslation('rooms');
   const { roomId } = Route.useParams();
   const currentUserId = useAuthStore((state) => state.user?.id);
 
@@ -126,14 +121,12 @@ function RoomLobbyPage() {
           }
         }
 
-        setJoinError(
-          apiError?.message ?? 'Failed to join room. Please check invite link or login state.',
-        );
+        setJoinError(apiError?.message ?? t('lobby.joinFailed'));
         setIsJoining(false);
       }
     };
     joinRoom();
-  }, [roomId, currentUserId]);
+  }, [roomId, currentUserId, t]);
 
   const handleRoleChange = (e: ChangeEvent<HTMLSelectElement>) => {
     const newRole = e.target.value as LobbyRole;
@@ -179,7 +172,9 @@ function RoomLobbyPage() {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4 text-foreground">
         <AlertTriangle size={42} className="mb-4 text-warning" />
-        <h2 className="text-xl font-bold tracking-wide text-foreground">Unable to join room</h2>
+        <h2 className="text-xl font-bold tracking-wide text-foreground">
+          {t('lobby.unableToJoin')}
+        </h2>
         <p className="mt-2 max-w-md text-center text-sm text-muted-foreground">{joinError}</p>
       </div>
     );
@@ -190,10 +185,10 @@ function RoomLobbyPage() {
       <div className="flex min-h-screen flex-col items-center justify-center bg-background text-foreground">
         <Loader2 size={48} className="mb-6 animate-spin text-primary" />
         <h2 className="text-xl font-bold uppercase tracking-widest text-muted-foreground">
-          Establishing Connection...
+          {t('lobby.connecting')}
         </h2>
         <p className="mt-2 font-mono text-sm text-muted-foreground">
-          Authenticating and joining workspace {roomId.slice(0, 8)}...
+          {t('lobby.authenticating', { roomId: roomId.slice(0, 8) })}
         </p>
       </div>
     );
@@ -207,13 +202,13 @@ function RoomLobbyPage() {
             <Terminal size={32} className="text-primary" />
           </div>
           <h1 className="text-4xl font-extrabold tracking-tighter text-foreground">
-            Workspace Lobby
+            {t('lobby.heading')}
           </h1>
 
           <div className="mx-auto flex w-full max-w-3xl flex-col items-center justify-center gap-4 sm:flex-row">
             <Badge variant="outline" className="gap-2 px-4 py-1.5 text-sm">
               <Users size={16} className="text-primary" />
-              {readyCount} / {totalCount} Ready
+              {readyCount} / {totalCount} {t('lobby.ready')}
             </Badge>
 
             <div className="flex w-full items-center rounded-xl border border-border bg-background p-1.5 transition-all duration-300 focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50 sm:w-[420px]">
@@ -227,7 +222,7 @@ function RoomLobbyPage() {
                 type="button"
                 onClick={copyInviteLink}
                 className="flex shrink-0 items-center justify-center rounded-lg bg-muted p-2.5 text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground"
-                title="Copy link"
+                title={t('common:copyLink')}
               >
                 {copied ? <Check size={16} className="text-primary" /> : <Copy size={16} />}
               </button>
@@ -238,10 +233,7 @@ function RoomLobbyPage() {
             <div className="animate-in fade-in slide-in-from-top-2 mx-auto mt-6 w-full max-w-2xl duration-500">
               <div className="flex items-center justify-center gap-3 rounded-xl border border-warning/50 bg-warning/10 p-4 text-warning">
                 <AlertTriangle size={20} className="shrink-0" />
-                <span className="text-sm font-semibold">
-                  Action Required: Ensure at least one Candidate and one Interviewer are assigned to
-                  start.
-                </span>
+                <span className="text-sm font-semibold">{t('warning')}</span>
               </div>
             </div>
           )}
@@ -269,7 +261,7 @@ function RoomLobbyPage() {
                           {participant.username}
                           {participant.isHost && (
                             <span className="rounded bg-foreground px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-background">
-                              Host
+                              {t('role.host')}
                             </span>
                           )}
                         </span>
@@ -281,7 +273,7 @@ function RoomLobbyPage() {
                           }`}
                         >
                           <UserCog size={14} />
-                          {formatRoleLabel(participant.role)}
+                          {t(ROLE_LABEL_KEYS[participant.role])}
                         </span>
                       </div>
                     </div>
@@ -310,7 +302,7 @@ function RoomLobbyPage() {
                   <div
                     className={`text-xs tracking-widest ${allReady ? 'text-primary' : 'animate-pulse text-primary/50'}`}
                   >
-                    {allReady ? '> SYSTEM_READY' : '> AWAITING_PEERS_'}
+                    {allReady ? t('systemStatus.ready') : t('systemStatus.awaitingPeers')}
                   </div>
                 </div>
 
@@ -319,7 +311,7 @@ function RoomLobbyPage() {
                     htmlFor="role-select"
                     className="text-xs font-semibold uppercase tracking-widest text-muted-foreground"
                   >
-                    Select Your Role
+                    {t('roleSelect.heading')}
                   </label>
                   <div className="relative">
                     <select
@@ -329,11 +321,11 @@ function RoomLobbyPage() {
                       disabled={isReady}
                       className="w-full appearance-none rounded-lg border border-border bg-background p-3 text-sm text-foreground outline-none transition-all duration-300 focus:border-ring focus:ring-3 focus:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      <option value="unassigned">Pick a role...</option>
-                      {myRole === 'host' && <option value="host">Host (Room Owner)</option>}
-                      <option value="candidate">Candidate (Writing Code)</option>
-                      <option value="interviewer">Interviewer (Reviewing)</option>
-                      <option value="spectator">Observer (Silent Viewer)</option>
+                      <option value="unassigned">{t('roleSelect.placeholder')}</option>
+                      {myRole === 'host' && <option value="host">{t('roleSelect.host')}</option>}
+                      <option value="candidate">{t('roleSelect.candidate')}</option>
+                      <option value="interviewer">{t('roleSelect.interviewer')}</option>
+                      <option value="spectator">{t('roleSelect.observer')}</option>
                     </select>
                     <UserCog
                       className="pointer-events-none absolute right-3.5 top-3 text-muted-foreground"
@@ -349,10 +341,10 @@ function RoomLobbyPage() {
                   onClick={toggleReady}
                 >
                   {isReady ? (
-                    <>Cancel Ready</>
+                    t('readyButton.cancelReady')
                   ) : (
                     <>
-                      <CheckCircle2 size={20} /> I'm Ready
+                      <CheckCircle2 size={20} /> {t('readyButton.ready')}
                     </>
                   )}
                 </Button>
@@ -364,7 +356,7 @@ function RoomLobbyPage() {
                         size={18}
                         className={isRoomValid ? 'fill-current' : 'fill-current opacity-50'}
                       />
-                      Enter Workspace
+                      {t('readyButton.enterWorkspace')}
                     </Button>
                   </div>
                 )}

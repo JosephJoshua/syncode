@@ -3,8 +3,8 @@ import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
 import type { Database } from '@syncode/db';
 import { ExtractJwt, Strategy } from 'passport-jwt';
-import type { EnvConfig } from '@/config/env.config';
-import { DB_CLIENT } from '@/modules/db/db.module';
+import type { EnvConfig } from '@/config/env.config.js';
+import { DB_CLIENT } from '@/modules/db/db.module.js';
 
 /**
  * JWT payload structure

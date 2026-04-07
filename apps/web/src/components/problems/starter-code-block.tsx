@@ -8,7 +8,7 @@ import 'prismjs/components/prism-python';
 import 'prismjs/components/prism-rust';
 import 'prismjs/components/prism-typescript';
 import { type ReactNode, useMemo } from 'react';
-import { resolvePrismLanguage } from './starter-code-language';
+import { resolvePrismLanguage } from './starter-code-language.js';
 
 export function StarterCodeBlock({ code, language }: { code: string; language: string }) {
   const prismLanguage = resolvePrismLanguage(language);
