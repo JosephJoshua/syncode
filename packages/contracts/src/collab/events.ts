@@ -7,10 +7,14 @@ export const snapshotReadyPayloadSchema = z
     roomId: z.string().min(1).describe('Room identifier'),
     snapshot: z.array(z.number()).describe('Binary snapshot as JSON array of bytes'),
     timestamp: z.number().positive().describe('Epoch timestamp'),
+    trigger: z
+      .enum(['periodic', 'phase_change', 'submission', 'session_end'])
+      .describe('What triggered the snapshot'),
   })
   .strict();
 
 export type SnapshotReadyPayload = z.infer<typeof snapshotReadyPayloadSchema>;
+export type SnapshotTrigger = SnapshotReadyPayload['trigger'];
 
 export const userDisconnectedPayloadSchema = z
   .object({
