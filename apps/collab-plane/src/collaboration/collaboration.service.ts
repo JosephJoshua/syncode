@@ -18,7 +18,10 @@ import { YjsSyncHandler } from './yjs-sync.handler.js';
 
 @Injectable()
 export class CollaborationService {
+  private static readonly ROOM_TTL_MS = 5 * 60 * 1000;
+
   private readonly logger = new Logger(CollaborationService.name);
+  private readonly roomTtls = new Map<string, NodeJS.Timeout>();
 
   constructor(
     private readonly roomRegistry: RoomRegistry,
@@ -88,5 +91,44 @@ export class CollaborationService {
    */
   notifyUserDisconnected(payload: UserDisconnectedPayload): void {
     void this.callbackClient.notifyUserDisconnected(payload);
+  }
+
+  checkRoomEmpty(roomId: string): void {
+    const room = this.roomRegistry.getRoom(roomId);
+    if (room && room.clients.size === 0) {
+      this.scheduleRoomCleanup(roomId);
+    }
+  }
+
+  cancelRoomCleanup(roomId: string): void {
+    const timer = this.roomTtls.get(roomId);
+    if (timer) {
+      clearTimeout(timer);
+      this.roomTtls.delete(roomId);
+      this.logger.debug(`Room TTL cancelled for ${roomId} (client reconnected)`);
+    }
+  }
+
+  private scheduleRoomCleanup(roomId: string): void {
+    if (this.roomTtls.has(roomId)) return;
+
+    const timer = setTimeout(() => {
+      this.roomTtls.delete(roomId);
+      this.cleanupRoom(roomId);
+    }, CollaborationService.ROOM_TTL_MS);
+
+    this.roomTtls.set(roomId, timer);
+    this.logger.debug(`Room TTL scheduled for ${roomId} (5 minutes)`);
+  }
+
+  private cleanupRoom(roomId: string): void {
+    if (!this.roomRegistry.hasRoom(roomId)) return;
+
+    this.snapshotScheduler.destroyRoom(roomId);
+    this.awarenessHandler.destroyRoom(roomId);
+    this.docStore.destroyDoc(roomId);
+    this.roomRegistry.deleteRoom(roomId);
+
+    this.logger.log(`Room ${roomId} cleaned up after TTL expiry`);
   }
 }

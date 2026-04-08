@@ -30,6 +30,8 @@ function createFixture() {
 
   const collaborationService = {
     notifyUserDisconnected: vi.fn(),
+    checkRoomEmpty: vi.fn(),
+    cancelRoomCleanup: vi.fn(),
   };
 
   const syncHandler = {

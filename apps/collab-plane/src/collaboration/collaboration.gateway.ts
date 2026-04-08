@@ -72,6 +72,7 @@ export class CollaborationGateway implements OnGatewayConnection, OnGatewayDisco
         userId,
         timestamp: Date.now(),
       });
+      this.collaborationService.checkRoomEmpty(roomId);
     }
   }
 
@@ -109,6 +110,7 @@ export class CollaborationGateway implements OnGatewayConnection, OnGatewayDisco
     }
 
     this.roomRegistry.addClient(roomId, userId, authenticated);
+    this.collaborationService.cancelRoomCleanup(roomId);
     this.logger.log(`User ${userId} joined room ${roomId}`);
 
     const roomState: WsMessage = {

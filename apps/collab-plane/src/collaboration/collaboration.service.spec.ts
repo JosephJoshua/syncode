@@ -142,4 +142,56 @@ describe('CollaborationService', () => {
       expect(result.kicked).toBe(false);
     });
   });
+
+  describe('room TTL', () => {
+    it('GIVEN room with no clients WHEN 5 minutes elapse THEN room is cleaned up', async () => {
+      vi.useFakeTimers();
+      const { service, roomRegistry } = createFixture();
+      await service.createDocument({ roomId: 'room-1' });
+
+      service.checkRoomEmpty('room-1');
+
+      expect(roomRegistry.hasRoom('room-1')).toBe(true);
+
+      vi.advanceTimersByTime(5 * 60 * 1000);
+
+      expect(roomRegistry.hasRoom('room-1')).toBe(false);
+      vi.useRealTimers();
+    });
+
+    it('GIVEN scheduled TTL WHEN client reconnects THEN cleanup is cancelled', async () => {
+      vi.useFakeTimers();
+      const { service, roomRegistry } = createFixture();
+      await service.createDocument({ roomId: 'room-1' });
+
+      service.checkRoomEmpty('room-1');
+
+      service.cancelRoomCleanup('room-1');
+
+      vi.advanceTimersByTime(5 * 60 * 1000);
+
+      expect(roomRegistry.hasRoom('room-1')).toBe(true);
+      vi.useRealTimers();
+    });
+
+    it('GIVEN room with clients WHEN checkRoomEmpty THEN no TTL scheduled', async () => {
+      vi.useFakeTimers();
+      const { service, roomRegistry } = createFixture();
+      await service.createDocument({ roomId: 'room-1' });
+
+      const client = {
+        close: vi.fn(),
+        send: vi.fn(),
+        user: { sub: 'u1', roomId: 'room-1', role: 'candidate', type: 'collab', iat: 0, exp: 0 },
+      } as unknown as AuthenticatedClient;
+      roomRegistry.addClient('room-1', 'u1', client);
+
+      service.checkRoomEmpty('room-1');
+
+      vi.advanceTimersByTime(5 * 60 * 1000);
+
+      expect(roomRegistry.hasRoom('room-1')).toBe(true);
+      vi.useRealTimers();
+    });
+  });
 });
