@@ -4,6 +4,7 @@ import { Camera, X } from 'lucide-react';
 import { useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Skeleton } from '@/components/ui/skeleton.js';
+import { useImageDominantColor } from '@/lib/use-image-color.js';
 import { getUserDisplayName, getUserInitial } from '@/lib/user-utils.js';
 
 interface ProfileHeroProps {
@@ -27,6 +28,7 @@ export function ProfileHero({
 }: ProfileHeroProps) {
   const { t } = useTranslation('profile');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const avatarGlow = useImageDominantColor(profile?.avatarUrl);
 
   const handleAvatarClick = () => {
     fileInputRef.current?.click();
@@ -69,11 +71,16 @@ export function ProfileHero({
           >
             <Avatar
               className={cn(
-                'size-full text-2xl transition-opacity group-hover/avatar:opacity-80 sm:text-3xl',
+                'size-full text-2xl transition-all group-hover/avatar:opacity-80 sm:text-3xl',
                 profile?.avatarUrl
-                  ? 'border-0 bg-transparent shadow-none ring-0'
+                  ? 'border-0 bg-transparent ring-0'
                   : 'bg-primary/10 text-primary shadow-[0_22px_50px_-28px_oklch(0.68_0.16_254/0.8)] ring-1 ring-primary/15',
               )}
+              style={
+                profile?.avatarUrl && avatarGlow
+                  ? { boxShadow: `0 20px 50px -20px ${avatarGlow}` }
+                  : undefined
+              }
             >
               {profile?.avatarUrl ? (
                 <AvatarImage src={profile.avatarUrl} alt={getUserDisplayName(profile) ?? ''} />
