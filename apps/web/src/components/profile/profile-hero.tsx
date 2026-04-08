@@ -43,15 +43,6 @@ export function ProfileHero({
     e.target.value = '';
   };
 
-  const glowStyle =
-    hasAvatar && glowColor
-      ? ({
-          '--glow-r': glowColor.r,
-          '--glow-g': glowColor.g,
-          '--glow-b': glowColor.b,
-        } as React.CSSProperties)
-      : undefined;
-
   const avatarShadow =
     hasAvatar && glowColor
       ? {
@@ -80,10 +71,7 @@ export function ProfileHero({
   }
 
   return (
-    <div
-      className="profile-fade-up rounded-[28px] bg-card/75 p-5 shadow-[0_24px_60px_-38px_oklch(0.2_0.02_260/0.55)] ring-0 sm:p-7"
-      style={glowStyle}
-    >
+    <div className="profile-fade-up rounded-[28px] bg-card/75 p-5 shadow-[0_24px_60px_-38px_oklch(0.2_0.02_260/0.55)] ring-0 sm:p-7">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-6">
         {/* Avatar */}
         <div className="group/avatar relative size-20 shrink-0 sm:size-24">

@@ -139,7 +139,7 @@ describe('UsersService', () => {
       id: '497f6eca-6276-4993-bfeb-53cbbbba6f08',
       username: 'alice',
       displayName: 'Alice',
-      avatarUrl: 'https://s3.example.com/presigned-get',
+      avatarUrl: 'https://cdn.example.com/avatar.png',
       bio: 'hello',
       createdAt: '2026-01-01T00:00:00.000Z',
     });

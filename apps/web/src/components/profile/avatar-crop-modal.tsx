@@ -32,8 +32,12 @@ export function AvatarCropModal({
 
   const handleConfirm = async () => {
     if (!imageSrc || !croppedAreaPixels) return;
-    const blob = await cropImage(imageSrc, croppedAreaPixels);
-    onConfirm(blob);
+    try {
+      const blob = await cropImage(imageSrc, croppedAreaPixels);
+      onConfirm(blob);
+    } catch {
+      onClose();
+    }
   };
 
   const handleOpenChange = (isOpen: boolean) => {
@@ -41,6 +45,7 @@ export function AvatarCropModal({
       onClose();
       setCrop({ x: 0, y: 0 });
       setZoom(1);
+      setCroppedAreaPixels(null);
     }
   };
 

@@ -22,10 +22,12 @@ export function useImageDominantColor(src: string | null | undefined): ImageColo
       return;
     }
 
+    let cancelled = false;
     const img = new Image();
     img.crossOrigin = 'anonymous';
 
     img.onload = () => {
+      if (cancelled) return;
       try {
         const canvas = document.createElement('canvas');
         canvas.width = SAMPLE_SIZE;
@@ -79,8 +81,18 @@ export function useImageDominantColor(src: string | null | undefined): ImageColo
       }
     };
 
-    img.onerror = () => setColor(null);
+    img.onerror = () => {
+      if (!cancelled) setColor(null);
+    };
+
     img.src = src;
+
+    return () => {
+      cancelled = true;
+      img.onload = null;
+      img.onerror = null;
+      img.src = '';
+    };
   }, [src]);
 
   return color;

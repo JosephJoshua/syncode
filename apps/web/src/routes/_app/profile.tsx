@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@sync
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import ky from 'ky';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
@@ -39,6 +39,14 @@ function ProfilePage() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
   const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
+  const cropImageSrcRef = useRef(cropImageSrc);
+  cropImageSrcRef.current = cropImageSrc;
+
+  useEffect(() => {
+    return () => {
+      if (cropImageSrcRef.current) URL.revokeObjectURL(cropImageSrcRef.current);
+    };
+  }, []);
   const {
     register,
     handleSubmit,
@@ -162,6 +170,7 @@ function ProfilePage() {
       toast.error(t('avatar.invalidFile'));
       return;
     }
+    if (cropImageSrc) URL.revokeObjectURL(cropImageSrc);
     const url = URL.createObjectURL(file);
     setCropImageSrc(url);
   };

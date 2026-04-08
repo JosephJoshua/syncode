@@ -15,7 +15,13 @@ function Avatar({ className, ...props }: React.ComponentProps<'div'>) {
   );
 }
 
-function AvatarImageInner({ className, alt = '', ...props }: React.ComponentProps<'img'>) {
+function AvatarImageInner({
+  className,
+  alt = '',
+  onLoad,
+  onError,
+  ...props
+}: React.ComponentProps<'img'>) {
   const [status, setStatus] = React.useState<'loading' | 'loaded' | 'error'>('loading');
 
   return status === 'error' ? null : (
@@ -23,8 +29,14 @@ function AvatarImageInner({ className, alt = '', ...props }: React.ComponentProp
       data-slot="avatar-image"
       alt={alt}
       className={cn('absolute inset-0 size-full object-cover', className)}
-      onLoad={() => setStatus('loaded')}
-      onError={() => setStatus('error')}
+      onLoad={(e) => {
+        setStatus('loaded');
+        onLoad?.(e);
+      }}
+      onError={(e) => {
+        setStatus('error');
+        onError?.(e);
+      }}
       {...props}
     />
   );
