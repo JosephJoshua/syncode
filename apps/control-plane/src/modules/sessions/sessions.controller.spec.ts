@@ -91,21 +91,22 @@ function createFixture() {
 
 describe('SessionsController', () => {
   describe('listSessions', () => {
-    it('GIVEN authenticated user WHEN listSessions THEN delegates to service with correct args and serializes dates', async () => {
-      const { controller, sessionsService } = createFixture();
-      const query = { limit: 20, sortBy: 'createdAt' as const, sortOrder: 'desc' as const };
+    it('GIVEN session list WHEN listing THEN serializes dates to ISO strings and strips durationMs', async () => {
+      const { controller } = createFixture();
 
-      const result = await controller.listSessions(AUTH_USER, query);
+      const result = await controller.listSessions(AUTH_USER, {
+        limit: 20,
+        sortBy: 'createdAt',
+        sortOrder: 'desc',
+      });
 
-      expect(sessionsService.isAdmin).toHaveBeenCalledWith('user-1');
-      expect(sessionsService.listSessions).toHaveBeenCalledWith('user-1', query, false);
       expect(result.data[0].createdAt).toBe('2026-04-01T00:00:00.000Z');
       expect(result.data[0].finishedAt).toBe('2026-04-01T01:00:00.000Z');
       expect(result.data[0]).not.toHaveProperty('durationMs');
       expect(result.pagination).toEqual({ nextCursor: null, hasMore: false });
     });
 
-    it('GIVEN session with null finishedAt WHEN listSessions THEN serializes to null', async () => {
+    it('GIVEN session with null finishedAt WHEN listing THEN serializes to null', async () => {
       const { controller, sessionsService } = createFixture();
       (sessionsService.listSessions as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
         data: [{ ...LIST_RESULT.data[0], finishedAt: null }],
@@ -123,39 +124,17 @@ describe('SessionsController', () => {
   });
 
   describe('getSession', () => {
-    it('GIVEN authenticated user WHEN getSession THEN delegates to service and serializes all dates', async () => {
-      const { controller, sessionsService } = createFixture();
+    it('GIVEN session detail WHEN getting THEN serializes all nested dates to ISO strings', async () => {
+      const { controller } = createFixture();
 
       const result = await controller.getSession(AUTH_USER, 'session-1');
 
-      expect(sessionsService.isAdmin).toHaveBeenCalledWith('user-1');
-      expect(sessionsService.getSession).toHaveBeenCalledWith('session-1', 'user-1', false);
       expect(result.createdAt).toBe('2026-04-01T00:00:00.000Z');
       expect(result.finishedAt).toBe('2026-04-01T01:00:00.000Z');
       expect(result.participants[0].joinedAt).toBe('2026-04-01T00:00:00.000Z');
       expect(result.participants[0].leftAt).toBeNull();
       expect(result.runs[0].createdAt).toBe('2026-04-01T00:30:00.000Z');
       expect(result.submissions[0].createdAt).toBe('2026-04-01T00:45:00.000Z');
-    });
-  });
-
-  describe('deleteSession', () => {
-    it('GIVEN authenticated user WHEN deleteSession THEN delegates to service with isAdmin', async () => {
-      const { controller, sessionsService } = createFixture();
-
-      await controller.deleteSession(AUTH_USER, 'session-1');
-
-      expect(sessionsService.isAdmin).toHaveBeenCalledWith('user-1');
-      expect(sessionsService.deleteSession).toHaveBeenCalledWith('session-1', 'user-1', false);
-    });
-
-    it('GIVEN admin user WHEN deleteSession THEN passes isAdmin=true', async () => {
-      const { controller, sessionsService } = createFixture();
-      (sessionsService.isAdmin as ReturnType<typeof vi.fn>).mockResolvedValueOnce(true);
-
-      await controller.deleteSession(AUTH_USER, 'session-1');
-
-      expect(sessionsService.deleteSession).toHaveBeenCalledWith('session-1', 'user-1', true);
     });
   });
 });

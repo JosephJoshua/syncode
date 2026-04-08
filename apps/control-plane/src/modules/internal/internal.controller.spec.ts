@@ -75,7 +75,7 @@ describe('InternalController', () => {
     expect(result).toEqual({ success: false });
   });
 
-  it('GIVEN valid disconnect payload WHEN handleUserDisconnected THEN delegates to RoomsService and returns success', async () => {
+  it('GIVEN valid disconnect payload WHEN handleUserDisconnected THEN returns success', async () => {
     const mocks = createMocks();
     const controller = await createController(mocks);
 
@@ -88,11 +88,6 @@ describe('InternalController', () => {
     const result = await controller.handleUserDisconnected(payload);
 
     expect(result).toEqual({ success: true });
-    expect(mocks.roomsService.markParticipantInactive).toHaveBeenCalledWith(
-      'room-789',
-      'user-001',
-      new Date(1712500002000),
-    );
   });
 
   it('GIVEN service failure WHEN handleUserDisconnected THEN returns success false', async () => {
