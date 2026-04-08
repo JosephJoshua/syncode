@@ -49,6 +49,9 @@ export class RoomRegistry {
     if (!room) {
       throw new NotFoundException(`Room ${roomId} not found`);
     }
+    if (room.clients.has(userId)) {
+      throw new ConflictException(`Client ${userId} already exists in room ${roomId}`);
+    }
     room.clients.set(userId, client);
   }
 

@@ -58,6 +58,7 @@ export class CollaborationService {
     this.logger.log(
       `Kicking user ${request.userId} from room ${roomId}: ${request.reason ?? 'no reason'}`,
     );
+    this.roomRegistry.removeClient(roomId, request.userId);
     client.close(WsCloseCode.KICKED, request.reason ?? 'Kicked');
 
     return { kicked: true };

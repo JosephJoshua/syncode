@@ -43,6 +43,16 @@ describe('RoomRegistry', () => {
       expect(registry.getClient('room-1', 'user-1')).toBe(client);
     });
 
+    it('GIVEN duplicate userId WHEN adding client THEN throws ConflictException', () => {
+      const registry = new RoomRegistry();
+      registry.createRoom('room-1');
+      registry.addClient('room-1', 'user-1', fakeClient('user-1'));
+
+      expect(() => registry.addClient('room-1', 'user-1', fakeClient('user-1'))).toThrow(
+        ConflictException,
+      );
+    });
+
     it('GIVEN non-existent room WHEN adding client THEN throws NotFoundException', () => {
       const registry = new RoomRegistry();
       const client = fakeClient('user-1');

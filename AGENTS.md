@@ -176,9 +176,26 @@ Issues are typed as **story** (user-facing feature from [user stories](docs/user
 
 - **Framework:** Vitest everywhere + unplugin-swc for NestJS decorator support
 - **Coverage:** ≥ 80% for backend apps (SonarCloud default quality gate)
-- **Files:** `*.spec.ts` or `*.test.ts` next to source or in `__tests__/`
+- **Files:** `*.spec.ts` or `*.test.ts` next to source or in `__tests__/`; integration tests use `*.integration.spec.ts`
 - **Naming:** GIVEN-WHEN-THEN convention
-- **Principle:** Test behavior, not implementation
+- **Principle:** Test behavior, not implementation — every test must assert on **public behavior** (return values, thrown exceptions, response shapes, observable state changes). Each test case must add unique value.
+
+### What to test where
+
+| Layer | Test with | Assert on |
+|---|---|---|
+| Pure logic (mappers, validators, utils) | Unit test, no mocks | Return values |
+| Controllers (thin orchestration) | Unit test, mock services | Return values, HTTP status, response shape, date serialization |
+| Services with DB queries | **Integration test** (`*.integration.spec.ts`) with real DB via testcontainers | DB state after operation, return values, thrown exceptions |
+| Services with external calls | Unit test, mock external clients | Return values, thrown exceptions |
+| Interceptors, guards, filters | Unit test, mock context | Return values, thrown exceptions, pass-through behavior |
+
+### Anti-patterns — do NOT
+
+- **Assert on mock call chains** — `expect(mockDb.update).toHaveBeenCalled()` or `expect(mockSet).toHaveBeenCalledWith(...)` tests HOW, not WHAT. If the same behavior is achievable with a different query shape, the test breaks for no reason.
+- **Sequence-dependent mock setup** — `mockFn.mockResolvedValueOnce(x).mockResolvedValueOnce(y)...` breaks if internal query order changes. Use integration tests for complex DB interactions.
+- **Duplicate integration coverage** — If an integration test covers the same scenario with a real DB, don't also write a unit test with mocked DB chains for the same case. The integration test is the source of truth.
+- **Test delegation only** — `expect(service.method).toHaveBeenCalledWith(...)` in a controller test is low-value if the same flow is covered by an integration test. Only assert on delegation when the controller transforms the data (e.g., `new Date(timestamp)` conversion).
 
 ```bash
 # Run all tests
@@ -187,8 +204,11 @@ pnpm test
 # Run specific workspace
 pnpm --filter @syncode/control-plane test
 
-# Run with coverage
+# Run with coverage (unit + integration, merged)
 pnpm test:cov
+
+# Run integration tests only (requires Docker)
+pnpm --filter @syncode/control-plane test:integration
 ```
 
 ## OpenAPI / Swagger
