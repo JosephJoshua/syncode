@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, type OnModuleDestroy } from '@nestjs/common';
 import * as decoding from 'lib0/decoding';
 import * as encoding from 'lib0/encoding';
 import * as awarenessProtocol from 'y-protocols/awareness';
@@ -14,7 +14,7 @@ interface RoomAwareness {
 }
 
 @Injectable()
-export class AwarenessHandler {
+export class AwarenessHandler implements OnModuleDestroy {
   private readonly logger = new Logger(AwarenessHandler.name);
   private readonly rooms = new Map<string, RoomAwareness>();
 
@@ -147,5 +147,13 @@ export class AwarenessHandler {
     roomAwareness.awareness.destroy();
     this.rooms.delete(roomId);
     this.logger.log(`Awareness destroyed for room ${roomId}`);
+  }
+
+  onModuleDestroy(): void {
+    for (const [roomId, roomAwareness] of this.rooms) {
+      roomAwareness.awareness.destroy();
+      this.logger.debug(`Awareness destroyed for room ${roomId} (shutdown)`);
+    }
+    this.rooms.clear();
   }
 }

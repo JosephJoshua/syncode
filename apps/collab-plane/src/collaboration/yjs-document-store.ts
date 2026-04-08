@@ -1,8 +1,8 @@
-import { ConflictException, Injectable, Logger } from '@nestjs/common';
+import { ConflictException, Injectable, Logger, type OnModuleDestroy } from '@nestjs/common';
 import * as Y from 'yjs';
 
 @Injectable()
-export class YjsDocumentStore {
+export class YjsDocumentStore implements OnModuleDestroy {
   private readonly logger = new Logger(YjsDocumentStore.name);
   private readonly docs = new Map<string, Y.Doc>();
 
@@ -47,5 +47,13 @@ export class YjsDocumentStore {
     }
 
     return Y.encodeStateAsUpdate(doc);
+  }
+
+  onModuleDestroy(): void {
+    for (const [roomId, doc] of this.docs) {
+      doc.destroy();
+      this.logger.debug(`Y.Doc destroyed for room ${roomId} (shutdown)`);
+    }
+    this.docs.clear();
   }
 }
