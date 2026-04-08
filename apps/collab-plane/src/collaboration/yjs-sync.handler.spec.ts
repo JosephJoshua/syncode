@@ -1,4 +1,3 @@
-import * as decoding from 'lib0/decoding';
 import * as encoding from 'lib0/encoding';
 import { describe, expect, it, vi } from 'vitest';
 import * as syncProtocol from 'y-protocols/sync';
@@ -59,7 +58,7 @@ describe('YjsSyncHandler', () => {
   describe('handleSyncMessage', () => {
     it('GIVEN client sends SyncStep1 WHEN handleSyncMessage THEN server responds with SyncStep2 (first two bytes 0,1)', () => {
       const { docStore, roomRegistry, handler } = setup();
-      const doc = docStore.createDoc('room-1', 'existing content');
+      docStore.createDoc('room-1', 'existing content');
       roomRegistry.createRoom('room-1');
 
       const client = fakeClient('user-1');

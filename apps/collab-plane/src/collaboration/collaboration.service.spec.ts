@@ -2,9 +2,13 @@ import { ConflictException, NotFoundException } from '@nestjs/common';
 import type { IControlPlaneCallbackClient } from '@syncode/contracts';
 import { describe, expect, it, vi } from 'vitest';
 import type { AuthenticatedClient } from '../auth/index.js';
+import type { AwarenessHandler } from './awareness.handler.js';
 import { CollaborationService } from './collaboration.service.js';
 import { RoomRegistry } from './room-registry.js';
+import type { SnapshotScheduler } from './snapshot.scheduler.js';
 import { WsCloseCode } from './ws-close-codes.js';
+import type { YjsDocumentStore } from './yjs-document-store.js';
+import type { YjsSyncHandler } from './yjs-sync.handler.js';
 
 function fakeClient(): AuthenticatedClient {
   return {
@@ -39,10 +43,10 @@ function createFixture() {
   const service = new CollaborationService(
     roomRegistry,
     callbackClient,
-    docStore as any,
-    syncHandler as any,
-    awarenessHandler as any,
-    snapshotScheduler as any,
+    docStore as unknown as YjsDocumentStore,
+    syncHandler as unknown as YjsSyncHandler,
+    awarenessHandler as unknown as AwarenessHandler,
+    snapshotScheduler as unknown as SnapshotScheduler,
   );
 
   return {
