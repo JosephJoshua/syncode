@@ -1,6 +1,6 @@
 import type { UserProfileResponse } from '@syncode/contracts';
-import { Avatar, AvatarFallback, AvatarImage, Button } from '@syncode/ui';
-import { Camera } from 'lucide-react';
+import { Avatar, AvatarFallback, AvatarImage, Button, cn } from '@syncode/ui';
+import { Camera, X } from 'lucide-react';
 import { useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Skeleton } from '@/components/ui/skeleton.js';
@@ -59,24 +59,45 @@ export function ProfileHero({
   return (
     <div className="rounded-[28px] bg-card/75 p-5 shadow-[0_24px_60px_-38px_oklch(0.2_0.02_260/0.55)] ring-0 sm:p-7">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-5">
-        <div className="group relative">
+        <div className="group/avatar relative size-20 shrink-0 sm:size-24">
           <button
             type="button"
             onClick={handleAvatarClick}
             disabled={isUploadPending}
-            className="relative cursor-pointer disabled:cursor-wait"
+            className="size-full cursor-pointer disabled:cursor-wait"
             aria-label={t('avatar.changePhoto')}
           >
-            <Avatar className="size-20 bg-primary/10 text-2xl text-primary shadow-[0_22px_50px_-28px_oklch(0.68_0.16_254/0.8)] ring-1 ring-primary/15 transition-opacity group-hover:opacity-75 sm:size-24 sm:text-3xl">
+            <Avatar
+              className={cn(
+                'size-full text-2xl transition-opacity group-hover/avatar:opacity-80 sm:text-3xl',
+                profile?.avatarUrl
+                  ? 'border-0 bg-transparent shadow-none ring-0'
+                  : 'bg-primary/10 text-primary shadow-[0_22px_50px_-28px_oklch(0.68_0.16_254/0.8)] ring-1 ring-primary/15',
+              )}
+            >
               {profile?.avatarUrl ? (
                 <AvatarImage src={profile.avatarUrl} alt={getUserDisplayName(profile) ?? ''} />
               ) : null}
               <AvatarFallback>{getUserInitial(profile)}</AvatarFallback>
             </Avatar>
-            <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/0 transition-colors group-hover:bg-black/40">
-              <Camera className="size-5 text-white opacity-0 transition-opacity group-hover:opacity-100" />
+            <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/0 transition-colors group-hover/avatar:bg-black/40">
+              <Camera className="size-5 text-white opacity-0 transition-opacity group-hover/avatar:opacity-100" />
             </div>
           </button>
+          {profile?.avatarUrl ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onAvatarRemove();
+              }}
+              disabled={isUploadPending}
+              className="absolute -right-1 -top-1 z-10 flex size-5 items-center justify-center rounded-full bg-card text-muted-foreground opacity-0 shadow-sm ring-1 ring-border/60 transition-opacity hover:text-destructive group-hover/avatar:opacity-100 sm:size-6"
+              aria-label={t('avatar.removePhoto')}
+            >
+              <X className="size-2.5 sm:size-3" />
+            </button>
+          ) : null}
           <input
             ref={fileInputRef}
             type="file"
@@ -84,16 +105,6 @@ export function ProfileHero({
             className="hidden"
             onChange={handleFileChange}
           />
-          {profile?.avatarUrl ? (
-            <button
-              type="button"
-              onClick={onAvatarRemove}
-              disabled={isUploadPending}
-              className="mt-1 w-full text-center text-xs text-muted-foreground hover:text-destructive"
-            >
-              {t('avatar.removePhoto')}
-            </button>
-          ) : null}
         </div>
 
         <div className="min-w-0 space-y-3">
