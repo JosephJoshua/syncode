@@ -174,7 +174,11 @@ services:
         printf '{"identities":[{"name":"syncode","credentials":[{"accessKey":"%s","secretKey":"%s"}],"actions":["Admin","Read","Write","List","Tagging"]}]}'
         "$$S3_ACCESS_KEY" "$$S3_SECRET_KEY"
         > /tmp/s3.json &&
-        exec weed server -s3 -s3.config=/tmp/s3.json
+        weed server -s3 -s3.config=/tmp/s3.json -s3.port=8333 &
+        PID=$$! &&
+        until wget -q --spider http://localhost:8333/ 2>/dev/null; do sleep 0.5; done &&
+        wget --method=PUT -q -O /dev/null http://localhost:8333/$${S3_BUCKET:-syncode} 2>/dev/null || true &&
+        wait $$PID
     volumes:
       - seaweedfs_data:/data
     networks:
