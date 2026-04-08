@@ -93,14 +93,20 @@ describe('AwarenessHandler', () => {
       clientAwareness.setLocalState({ cursor: { x: 1, y: 1 } });
       const message = encodeAwarenessMessage(clientAwareness, [clientDoc.clientID]);
 
+      // Pin Date.now to make the 50ms throttle deterministic
+      const now = 1000;
+      vi.spyOn(Date, 'now').mockImplementation(() => now);
+
       handler.handleAwarenessMessage('room-1', 'user-1', message);
       const firstCount = (client2.send as ReturnType<typeof vi.fn>).mock.calls.length;
 
+      // Second call at same timestamp — within 50ms window
       handler.handleAwarenessMessage('room-1', 'user-1', message);
       const secondCount = (client2.send as ReturnType<typeof vi.fn>).mock.calls.length;
 
       expect(secondCount).toBe(firstCount);
 
+      vi.restoreAllMocks();
       clientAwareness.destroy();
       clientDoc.destroy();
     });

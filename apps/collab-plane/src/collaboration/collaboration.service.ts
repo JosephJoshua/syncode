@@ -118,7 +118,11 @@ export class CollaborationService implements OnModuleDestroy {
 
     const timer = setTimeout(() => {
       this.roomTtls.delete(roomId);
-      this.cleanupRoom(roomId);
+      void this.cleanupRoom(roomId).catch((error: unknown) => {
+        this.logger.error(
+          `Failed to clean up room ${roomId} after TTL expiry: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      });
     }, CollaborationService.ROOM_TTL_MS);
 
     this.roomTtls.set(roomId, timer);
