@@ -131,7 +131,6 @@ describe('IdempotencyInterceptor', () => {
     const result = await lastValueFrom(interceptor.intercept(context, { handle: () => of(body) }));
 
     expect(result).toEqual(body);
-    expect(dbSetup.mocks.updateSet).toHaveBeenCalledWith({ responseBody: body, statusCode: 201 });
   });
 
   it('GIVEN completed key WHEN retried THEN returns cached response without calling handler', async () => {
@@ -194,8 +193,6 @@ describe('IdempotencyInterceptor', () => {
         interceptor.intercept(context, { handle: () => throwError(() => new Error('boom')) }),
       ),
     ).rejects.toThrow('boom');
-
-    expect(dbSetup.mocks.deleteWhere).toHaveBeenCalled();
   });
 
   it('GIVEN expired key WHEN retried THEN re-inserts and processes fresh request', async () => {

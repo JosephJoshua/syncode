@@ -296,3 +296,23 @@ describe('joinRoom', () => {
     ).rejects.toThrow(NotFoundException);
   });
 });
+
+describe('markParticipantInactive', () => {
+  it('GIVEN active participant WHEN marking inactive THEN sets isActive=false and leftAt', async () => {
+    const host = await insertUser(db);
+    const room = await insertRoom(db, host.id);
+    const joiner = await insertUser(db);
+    await insertParticipant(db, room.id, joiner.id, 'candidate');
+
+    const leftAt = new Date('2026-04-08T12:00:00Z');
+    await service.markParticipantInactive(room.id, joiner.id, leftAt);
+
+    const [row] = await db
+      .select()
+      .from(roomParticipants)
+      .where(and(eq(roomParticipants.roomId, room.id), eq(roomParticipants.userId, joiner.id)));
+
+    expect(row!.isActive).toBe(false);
+    expect(row!.leftAt).toEqual(leftAt);
+  });
+});

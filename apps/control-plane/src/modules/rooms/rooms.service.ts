@@ -436,6 +436,13 @@ export class RoomsService {
     return code;
   }
 
+  async markParticipantInactive(roomId: string, userId: string, leftAt: Date): Promise<void> {
+    await this.db
+      .update(roomParticipants)
+      .set({ isActive: false, leftAt })
+      .where(and(eq(roomParticipants.roomId, roomId), eq(roomParticipants.userId, userId)));
+  }
+
   private async createCollabDocument(roomId: string): Promise<boolean> {
     try {
       await this.collabClient.createDocument({ roomId });

@@ -1,3 +1,7 @@
+export {
+  CONTROL_PLANE_CALLBACK,
+  type IControlPlaneCallbackClient,
+} from './callback-client.js';
 export { COLLAB_CLIENT, type ICollabClient } from './client.js';
 export {
   CONTROL_INTERNAL,

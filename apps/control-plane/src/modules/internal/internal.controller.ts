@@ -3,6 +3,7 @@ import { ApiExcludeEndpoint } from '@nestjs/swagger';
 import { SkipThrottle } from '@nestjs/throttler';
 import { CONTROL_INTERNAL } from '@syncode/contracts';
 import { type IStorageService, STORAGE_SERVICE } from '@syncode/shared/ports';
+import { RoomsService } from '@/modules/rooms/rooms.service.js';
 import { SnapshotReadyDto, UserDisconnectedDto } from './dto/internal.dto.js';
 
 /**
@@ -17,6 +18,7 @@ export class InternalController {
   private readonly logger = new Logger(InternalController.name);
 
   constructor(
+    private readonly roomsService: RoomsService,
     @Inject(STORAGE_SERVICE)
     private readonly storageService: IStorageService,
   ) {}
@@ -63,7 +65,7 @@ export class InternalController {
     try {
       const { roomId, userId, timestamp } = payload;
 
-      // TODO: Update room state in database
+      await this.roomsService.markParticipantInactive(roomId, userId, new Date(timestamp));
 
       this.logger.log(`User ${userId} disconnected from room ${roomId} at ${timestamp}`);
       return { success: true };
