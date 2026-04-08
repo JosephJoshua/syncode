@@ -26,7 +26,11 @@ export class WsAuthService {
     }
 
     try {
-      return await this.jwtService.verifyAsync<CollabTokenPayload>(token);
+      const payload = await this.jwtService.verifyAsync<CollabTokenPayload>(token);
+      if (payload.type !== 'collab') {
+        throw new UnauthorizedException('Invalid token type');
+      }
+      return payload;
     } catch (error) {
       this.logger.debug(`JWT verification failed: ${(error as Error).message}`);
       throw new UnauthorizedException('Invalid or expired token');

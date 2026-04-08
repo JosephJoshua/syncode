@@ -9,6 +9,7 @@ const VALID_PAYLOAD: CollabTokenPayload = {
   sub: 'user-1',
   roomId: 'room-1',
   role: 'candidate',
+  type: 'collab',
   iat: Math.floor(Date.now() / 1000),
   exp: Math.floor(Date.now() / 1000) + 86400,
 };
@@ -77,6 +78,15 @@ describe('WsAuthService', () => {
 
     await expect(
       service.authenticate(fakeRequest({ url: '/?token=expired-jwt' })),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
+  it('GIVEN non-collab token type WHEN authenticating THEN throws UnauthorizedException', async () => {
+    const { service, jwtService } = createFixture();
+    jwtService.verifyAsync.mockResolvedValueOnce({ ...VALID_PAYLOAD, type: 'access' });
+
+    await expect(
+      service.authenticate(fakeRequest({ url: '/?token=auth-jwt' })),
     ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 });

@@ -11,6 +11,8 @@ export interface CollabTokenPayload {
   roomId: string;
   /** Participant role in the room */
   role: RoomRole;
+  /** Token type discriminator (must be 'collab') */
+  type: 'collab';
   /** Issued-at (epoch seconds, added by JWT library) */
   iat: number;
   /** Expiration (epoch seconds, added by JWT library) */

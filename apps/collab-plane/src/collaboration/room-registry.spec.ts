@@ -5,7 +5,7 @@ import { RoomRegistry } from './room-registry.js';
 
 function fakeClient(userId: string): AuthenticatedClient {
   return {
-    user: { sub: userId, roomId: 'room-1', role: 'candidate', iat: 0, exp: 0 },
+    user: { sub: userId, roomId: 'room-1', role: 'candidate', type: 'collab', iat: 0, exp: 0 },
     close: () => {},
     send: () => {},
   } as unknown as AuthenticatedClient;

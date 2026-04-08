@@ -10,7 +10,7 @@ function fakeClient(): AuthenticatedClient {
   return {
     close: vi.fn(),
     send: vi.fn(),
-    user: { sub: 'user-1', roomId: 'room-1', role: 'candidate', iat: 0, exp: 0 },
+    user: { sub: 'user-1', roomId: 'room-1', role: 'candidate', type: 'collab', iat: 0, exp: 0 },
   } as unknown as AuthenticatedClient;
 }
 

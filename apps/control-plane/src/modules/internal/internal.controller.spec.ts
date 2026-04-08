@@ -2,10 +2,14 @@ import { Test } from '@nestjs/testing';
 import type { SnapshotReadyPayload, UserDisconnectedPayload } from '@syncode/contracts';
 import { STORAGE_SERVICE } from '@syncode/shared/ports';
 import { describe, expect, it, vi } from 'vitest';
+import { RoomsService } from '@/modules/rooms/rooms.service.js';
 import { InternalController } from './internal.controller.js';
 
 function createMocks() {
   return {
+    roomsService: {
+      markParticipantInactive: vi.fn().mockResolvedValue(undefined),
+    },
     storageService: {
       upload: vi.fn().mockResolvedValue(undefined),
       download: vi.fn(),
@@ -18,7 +22,10 @@ function createMocks() {
 async function createController(mocks: ReturnType<typeof createMocks>) {
   const module = await Test.createTestingModule({
     controllers: [InternalController],
-    providers: [{ provide: STORAGE_SERVICE, useValue: mocks.storageService }],
+    providers: [
+      { provide: RoomsService, useValue: mocks.roomsService },
+      { provide: STORAGE_SERVICE, useValue: mocks.storageService },
+    ],
   }).compile();
 
   return module.get(InternalController);
@@ -68,7 +75,7 @@ describe('InternalController', () => {
     expect(result).toEqual({ success: false });
   });
 
-  it('GIVEN valid disconnect payload WHEN handleUserDisconnected THEN returns success true', async () => {
+  it('GIVEN valid disconnect payload WHEN handleUserDisconnected THEN delegates to RoomsService and returns success', async () => {
     const mocks = createMocks();
     const controller = await createController(mocks);
 
@@ -81,5 +88,26 @@ describe('InternalController', () => {
     const result = await controller.handleUserDisconnected(payload);
 
     expect(result).toEqual({ success: true });
+    expect(mocks.roomsService.markParticipantInactive).toHaveBeenCalledWith(
+      'room-789',
+      'user-001',
+      new Date(1712500002000),
+    );
+  });
+
+  it('GIVEN service failure WHEN handleUserDisconnected THEN returns success false', async () => {
+    const mocks = createMocks();
+    mocks.roomsService.markParticipantInactive.mockRejectedValueOnce(new Error('DB down'));
+    const controller = await createController(mocks);
+
+    const payload: UserDisconnectedPayload = {
+      roomId: 'room-789',
+      userId: 'user-001',
+      timestamp: 1712500002000,
+    };
+
+    const result = await controller.handleUserDisconnected(payload);
+
+    expect(result).toEqual({ success: false });
   });
 });

@@ -65,7 +65,12 @@ afterEach(async () => {
 
 describe('WebSocket Authentication', () => {
   it('GIVEN valid collab token WHEN connecting THEN connection is accepted', async () => {
-    const token = jwtService.sign({ sub: 'user-1', roomId: 'room-1', role: 'candidate' });
+    const token = jwtService.sign({
+      sub: 'user-1',
+      roomId: 'room-1',
+      role: 'candidate',
+      type: 'collab',
+    });
     const ws = new WebSocket(`${wsUrl}?token=${token}`);
 
     await new Promise<void>((resolve) => ws.on('open', resolve));

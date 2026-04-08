@@ -13,6 +13,7 @@ const VALID_PAYLOAD: CollabTokenPayload = {
   sub: 'user-1',
   roomId: 'room-1',
   role: 'candidate',
+  type: 'collab',
   iat: Math.floor(Date.now() / 1000),
   exp: Math.floor(Date.now() / 1000) + 86400,
 };
