@@ -1,18 +1,22 @@
 import { zodResolver } from '@hookform/resolvers/zod';
+import type { UserProfileResponse } from '@syncode/contracts';
 import { CONTROL_API, ERROR_CODES } from '@syncode/contracts';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@syncode/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
+import ky from 'ky';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
+import { AvatarCropModal } from '@/components/profile/avatar-crop-modal.js';
 import { DeleteAccountDialog } from '@/components/profile/delete-account-dialog.js';
 import { type ProfileFormValues, profileFormSchema } from '@/components/profile/profile-form.js';
 import { ProfileFormCard } from '@/components/profile/profile-form-card.js';
 import { ProfileHero } from '@/components/profile/profile-hero.js';
 import { QuotasPanel } from '@/components/profile/quotas-panel.js';
 import { api, getFieldErrorMessage, readApiError } from '@/lib/api-client.js';
+import { validateImageFile } from '@/lib/crop-image.js';
 import i18n from '@/lib/i18n.js';
 import { useAuthStore } from '@/stores/auth.store.js';
 
@@ -34,6 +38,8 @@ function ProfilePage() {
   const [isEditing, setIsEditing] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
+  const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
+  const [isCropModalOpen, setIsCropModalOpen] = useState(false);
   const {
     register,
     handleSubmit,
@@ -113,6 +119,67 @@ function ProfilePage() {
     },
   });
 
+  const avatarUploadMutation = useMutation({
+    mutationFn: async (blob: Blob) => {
+      const { uploadUrl } = await api(CONTROL_API.USERS.AVATAR_UPLOAD_URL);
+      await ky.put(uploadUrl, {
+        body: blob,
+        headers: { 'Content-Type': 'image/webp' },
+      });
+      return api(CONTROL_API.USERS.AVATAR_CONFIRM);
+    },
+    onSuccess: (user) => {
+      queryClient.setQueryData(profileQueryKey, user);
+      setUser(user);
+      setIsCropModalOpen(false);
+      setCropImageSrc(null);
+      toast.success(t('avatar.uploadSuccess'));
+    },
+    onError: () => {
+      toast.error(t('avatar.uploadFailed'));
+    },
+  });
+
+  const avatarDeleteMutation = useMutation({
+    mutationFn: () => api(CONTROL_API.USERS.AVATAR_DELETE),
+    onSuccess: () => {
+      queryClient.setQueryData(profileQueryKey, (old: UserProfileResponse | undefined) =>
+        old ? { ...old, avatarUrl: null } : old,
+      );
+      const currentUser = useAuthStore.getState().user;
+      if (currentUser) {
+        setUser({ ...currentUser, avatarUrl: null });
+      }
+      toast.success(t('avatar.deleteSuccess'));
+    },
+    onError: () => {
+      toast.error(t('avatar.deleteFailed'));
+    },
+  });
+
+  const handleAvatarFileSelect = (file: File) => {
+    const error = validateImageFile(file);
+    if (error) {
+      toast.error(t('avatar.invalidFile'));
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    setCropImageSrc(url);
+    setIsCropModalOpen(true);
+  };
+
+  const handleCropConfirm = (blob: Blob) => {
+    avatarUploadMutation.mutate(blob);
+  };
+
+  const handleCropClose = () => {
+    setIsCropModalOpen(false);
+    if (cropImageSrc) {
+      URL.revokeObjectURL(cropImageSrc);
+      setCropImageSrc(null);
+    }
+  };
+
   const profile = profileQuery.data ?? fallbackUser;
   const quotas = quotasQuery.data;
   const isLoading = profileQuery.isLoading && !profile;
@@ -133,9 +200,20 @@ function ProfilePage() {
             profile={profile}
             isEditing={isEditing}
             isLoading={isLoading}
+            isUploadPending={avatarUploadMutation.isPending}
             onEditToggle={() => {
               setIsEditing((current) => !current);
             }}
+            onAvatarFileSelect={handleAvatarFileSelect}
+            onAvatarRemove={() => avatarDeleteMutation.mutate()}
+          />
+
+          <AvatarCropModal
+            imageSrc={cropImageSrc}
+            open={isCropModalOpen}
+            isPending={avatarUploadMutation.isPending}
+            onClose={handleCropClose}
+            onConfirm={handleCropConfirm}
           />
 
           {isEditing ? (
