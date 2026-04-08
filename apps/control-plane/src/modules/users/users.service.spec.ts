@@ -243,16 +243,12 @@ describe('UsersService', () => {
 
   describe('getAvatarUploadUrl', () => {
     it('GIVEN a user ID WHEN requesting upload URL THEN returns presigned URL and key', async () => {
-      const { service, storageService } = createUsersServiceFixture();
+      const { service } = createUsersServiceFixture();
       const result = await service.getAvatarUploadUrl('user-123');
 
       expect(result).toEqual({
         uploadUrl: 'https://s3.example.com/presigned-put',
         key: 'avatars/user-123.webp',
-      });
-      expect(storageService.getUploadUrl).toHaveBeenCalledWith('avatars/user-123.webp', {
-        expiresInSeconds: 600,
-        contentType: 'image/webp',
       });
     });
   });

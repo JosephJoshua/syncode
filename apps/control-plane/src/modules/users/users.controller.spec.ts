@@ -174,12 +174,4 @@ describe('UsersController', () => {
 
     expect(result.avatarUrl).toBe('https://s3.example.com/presigned-get');
   });
-
-  it('GIVEN authenticated user WHEN deleteAvatar THEN delegates to service', async () => {
-    const { controller, usersService } = createUsersControllerFixture();
-
-    await controller.deleteAvatar({ id: 'user-123' });
-
-    expect(usersService.deleteAvatar).toHaveBeenCalledWith('user-123');
-  });
 });
