@@ -15,7 +15,7 @@ function Avatar({ className, ...props }: React.ComponentProps<'div'>) {
   );
 }
 
-function AvatarImage({ className, alt = '', ...props }: React.ComponentProps<'img'>) {
+function AvatarImageInner({ className, alt = '', ...props }: React.ComponentProps<'img'>) {
   const [status, setStatus] = React.useState<'loading' | 'loaded' | 'error'>('loading');
 
   return status === 'error' ? null : (
@@ -28,6 +28,11 @@ function AvatarImage({ className, alt = '', ...props }: React.ComponentProps<'im
       {...props}
     />
   );
+}
+
+function AvatarImage({ src, ...props }: React.ComponentProps<'img'>) {
+  // Key on src to reset load/error state when the image URL changes
+  return <AvatarImageInner key={src} src={src} {...props} />;
 }
 
 function AvatarFallback({ className, ...props }: React.ComponentProps<'span'>) {

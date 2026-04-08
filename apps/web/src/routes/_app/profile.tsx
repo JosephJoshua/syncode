@@ -39,7 +39,6 @@ function ProfilePage() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
   const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
-  const [isCropModalOpen, setIsCropModalOpen] = useState(false);
   const {
     register,
     handleSubmit,
@@ -131,7 +130,7 @@ function ProfilePage() {
     onSuccess: (user) => {
       queryClient.setQueryData(profileQueryKey, user);
       setUser(user);
-      setIsCropModalOpen(false);
+      if (cropImageSrc) URL.revokeObjectURL(cropImageSrc);
       setCropImageSrc(null);
       toast.success(t('avatar.uploadSuccess'));
     },
@@ -165,7 +164,6 @@ function ProfilePage() {
     }
     const url = URL.createObjectURL(file);
     setCropImageSrc(url);
-    setIsCropModalOpen(true);
   };
 
   const handleCropConfirm = (blob: Blob) => {
@@ -173,11 +171,8 @@ function ProfilePage() {
   };
 
   const handleCropClose = () => {
-    setIsCropModalOpen(false);
-    if (cropImageSrc) {
-      URL.revokeObjectURL(cropImageSrc);
-      setCropImageSrc(null);
-    }
+    if (cropImageSrc) URL.revokeObjectURL(cropImageSrc);
+    setCropImageSrc(null);
   };
 
   const profile = profileQuery.data ?? fallbackUser;
@@ -210,7 +205,7 @@ function ProfilePage() {
 
           <AvatarCropModal
             imageSrc={cropImageSrc}
-            open={isCropModalOpen}
+            open={cropImageSrc !== null}
             isPending={avatarUploadMutation.isPending}
             onClose={handleCropClose}
             onConfirm={handleCropConfirm}
