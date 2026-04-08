@@ -41,6 +41,7 @@ import type {
   sessionHistoryResponseSchema,
 } from './sessions.js';
 import type {
+  avatarUploadUrlResponseSchema,
   publicUserProfileResponseSchema,
   updateUserSchema,
   userProfileResponseSchema,
@@ -72,6 +73,15 @@ export const CONTROL_API = {
       z.infer<typeof userProfileResponseSchema>
     >()('users/me', 'PATCH'),
     DELETE: defineRoute<void, void>()('users/me', 'DELETE'),
+    AVATAR_UPLOAD_URL: defineRoute<void, z.infer<typeof avatarUploadUrlResponseSchema>>()(
+      'users/me/avatar/upload-url',
+      'POST',
+    ),
+    AVATAR_CONFIRM: defineRoute<void, z.infer<typeof userProfileResponseSchema>>()(
+      'users/me/avatar/confirm',
+      'POST',
+    ),
+    AVATAR_DELETE: defineRoute<void, void>()('users/me/avatar', 'DELETE'),
   },
   ROOMS: {
     CREATE: defineRoute<
