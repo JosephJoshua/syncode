@@ -22,8 +22,13 @@ async function bootstrap() {
   app.useWebSocketAdapter(
     new WsAdapter(app, {
       messageParser: (data: { toString(): string }) => {
-        const message = JSON.parse(data.toString());
-        return { event: message.type, data: message.data };
+        try {
+          const message = JSON.parse(data.toString());
+          return { event: message.type, data: message.data };
+        } catch {
+          // Binary message — handled by raw listener in gateway
+          return { event: '', data: null };
+        }
       },
     }),
   );
