@@ -14,6 +14,7 @@ import { CollaborationService } from './collaboration.service.js';
 import { RoomRegistry } from './room-registry.js';
 import { WsCloseCode } from './ws-close-codes.js';
 import type { JoinMessageData, WsMessage } from './ws-message.types.js';
+import { WsMessageType } from './ws-message-types.js';
 import { YjsSyncHandler } from './yjs-sync.handler.js';
 
 @WebSocketGateway()
@@ -34,20 +35,18 @@ export class CollaborationGateway implements OnGatewayConnection, OnGatewayDisco
       (client as AuthenticatedClient).user = payload;
       this.logger.log(`Client connected: userId=${payload.sub}, roomId=${payload.roomId}`);
 
-      // Attach raw binary message listener for y-protocols
       client.on('message', (raw: Buffer, isBinary: boolean) => {
-        if (!isBinary) return; // Text messages handled by @SubscribeMessage
+        if (!isBinary) return;
 
         const authenticated = client as AuthenticatedClient;
         if (!authenticated.user) return;
 
-        const message = new Uint8Array(raw);
+        const message = new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength);
         const { roomId, sub: userId } = authenticated.user;
-        const messageType = message[0]; // 0=sync, 1=awareness
 
-        if (messageType === 0) {
+        if (message[0] === WsMessageType.SYNC) {
           this.syncHandler.handleSyncMessage(roomId, userId, message);
-        } else if (messageType === 1) {
+        } else if (message[0] === WsMessageType.AWARENESS) {
           this.awarenessHandler.handleAwarenessMessage(roomId, userId, message);
         }
       });
@@ -112,7 +111,6 @@ export class CollaborationGateway implements OnGatewayConnection, OnGatewayDisco
     this.roomRegistry.addClient(roomId, userId, authenticated);
     this.logger.log(`User ${userId} joined room ${roomId}`);
 
-    // Send room state (JSON control message)
     const roomState: WsMessage = {
       type: 'room-state',
       data: { phase: 'waiting', editorLocked: false },
@@ -120,10 +118,7 @@ export class CollaborationGateway implements OnGatewayConnection, OnGatewayDisco
     };
     client.send(JSON.stringify(roomState));
 
-    // Initiate Yjs sync protocol (binary)
     this.syncHandler.sendInitialSync(roomId, authenticated);
-
-    // Send current awareness states (binary)
     this.awarenessHandler.sendFullAwareness(roomId, authenticated);
   }
 }

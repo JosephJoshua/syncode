@@ -112,7 +112,6 @@ describe('AwarenessHandler', () => {
       clientAwareness.setLocalState({ cursor: { x: 1, y: 1 } });
       const message = encodeAwarenessMessage(clientAwareness, [clientDoc.clientID]);
 
-      // This will apply the state and the update event will track the clientId for user-1
       handler.handleAwarenessMessage('room-1', 'user-1', message);
 
       // Reset send counts so we only count removal broadcasts

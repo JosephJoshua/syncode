@@ -4,6 +4,7 @@ import * as encoding from 'lib0/encoding';
 import * as awarenessProtocol from 'y-protocols/awareness';
 import type { AuthenticatedClient } from '../auth/index.js';
 import { RoomRegistry } from './room-registry.js';
+import { WsMessageType } from './ws-message-types.js';
 import { YjsDocumentStore } from './yjs-document-store.js';
 
 interface RoomAwareness {
@@ -55,14 +56,8 @@ export class AwarenessHandler {
           }
         }
 
-        const changedClients = [...added, ...updated, ...removed];
-        const encoder = encoding.createEncoder();
-        encoding.writeVarUint(encoder, 1); // messageAwareness
-        encoding.writeVarUint8Array(
-          encoder,
-          awarenessProtocol.encodeAwarenessUpdate(awareness, changedClients),
-        );
-        const message = encoding.toUint8Array(encoder);
+        const changedClients = added.concat(updated, removed);
+        const message = this.encodeAwarenessUpdate(awareness, changedClients);
 
         const room = this.roomRegistry.getRoom(roomId);
         if (!room) {
@@ -112,27 +107,20 @@ export class AwarenessHandler {
       return;
     }
 
-    const encoder = encoding.createEncoder();
-    encoding.writeVarUint(encoder, 1); // messageAwareness
-    encoding.writeVarUint8Array(
-      encoder,
-      awarenessProtocol.encodeAwarenessUpdate(roomAwareness.awareness, Array.from(states.keys())),
-    );
-    client.send(encoding.toUint8Array(encoder));
+    client.send(this.encodeAwarenessUpdate(roomAwareness.awareness, Array.from(states.keys())));
   }
 
-  trackClientId(roomId: string, userId: string, clientId: number): void {
-    const roomAwareness = this.rooms.get(roomId);
-    if (!roomAwareness) {
-      return;
-    }
-
-    let ids = roomAwareness.userClientIds.get(userId);
-    if (!ids) {
-      ids = new Set();
-      roomAwareness.userClientIds.set(userId, ids);
-    }
-    ids.add(clientId);
+  private encodeAwarenessUpdate(
+    awareness: awarenessProtocol.Awareness,
+    clientIds: number[],
+  ): Uint8Array {
+    const encoder = encoding.createEncoder();
+    encoding.writeVarUint(encoder, WsMessageType.AWARENESS);
+    encoding.writeVarUint8Array(
+      encoder,
+      awarenessProtocol.encodeAwarenessUpdate(awareness, clientIds),
+    );
+    return encoding.toUint8Array(encoder);
   }
 
   removeClient(roomId: string, userId: string): void {

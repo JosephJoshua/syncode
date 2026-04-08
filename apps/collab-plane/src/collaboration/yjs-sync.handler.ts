@@ -4,6 +4,7 @@ import * as encoding from 'lib0/encoding';
 import * as syncProtocol from 'y-protocols/sync';
 import type { AuthenticatedClient } from '../auth/index.js';
 import { RoomRegistry } from './room-registry.js';
+import { WsMessageType } from './ws-message-types.js';
 import { YjsDocumentStore } from './yjs-document-store.js';
 
 @Injectable()
@@ -34,7 +35,7 @@ export class YjsSyncHandler {
       }
 
       const encoder = encoding.createEncoder();
-      encoding.writeVarUint(encoder, 0); // messageSync
+      encoding.writeVarUint(encoder, WsMessageType.SYNC);
       syncProtocol.writeUpdate(encoder, update);
       const message = encoding.toUint8Array(encoder);
 
@@ -61,14 +62,14 @@ export class YjsSyncHandler {
     }
 
     const decoder = decoding.createDecoder(message);
-    decoding.readVarUint(decoder); // discard messageSync (0)
+    decoding.readVarUint(decoder); // skip application-level message type byte
 
     const encoder = encoding.createEncoder();
-    encoding.writeVarUint(encoder, 0); // messageSync prefix for response
+    encoding.writeVarUint(encoder, WsMessageType.SYNC);
 
     syncProtocol.readSyncMessage(decoder, encoder, doc, senderUserId);
 
-    // If the encoder contains more than just the messageSync prefix, send it back
+    // If readSyncMessage wrote a response (SyncStep2), send it back to the sender
     if (encoding.length(encoder) > 1) {
       const client = this.roomRegistry.getClient(roomId, senderUserId);
       if (client) {

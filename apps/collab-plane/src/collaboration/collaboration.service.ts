@@ -47,17 +47,14 @@ export class CollaborationService {
       throw new NotFoundException(`Document not found for room ${roomId}`);
     }
 
-    // Take final snapshot before destroying
     await this.snapshotScheduler.takeSnapshot(roomId, 'session_end');
     this.snapshotScheduler.destroyRoom(roomId);
 
-    // Close all connected clients
     for (const [userId, client] of room.clients) {
       this.logger.debug(`Closing connection for user ${userId} in room ${roomId} (room destroyed)`);
       client.close(WsCloseCode.ROOM_CLOSED, 'Room closed');
     }
 
-    // Cleanup
     this.awarenessHandler.destroyRoom(roomId);
     const finalSnapshot = this.docStore.destroyDoc(roomId);
     this.roomRegistry.deleteRoom(roomId);
