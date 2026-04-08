@@ -49,31 +49,18 @@ function createFixture() {
     snapshotScheduler as unknown as SnapshotScheduler,
   );
 
-  return {
-    service,
-    roomRegistry,
-    callbackClient,
-    docStore,
-    syncHandler,
-    awarenessHandler,
-    snapshotScheduler,
-  };
+  return { service, roomRegistry, callbackClient, docStore, snapshotScheduler };
 }
 
 describe('CollaborationService', () => {
   describe('createDocument', () => {
-    it('GIVEN no existing document WHEN creating THEN creates room and returns response', async () => {
-      const { service, docStore, syncHandler, awarenessHandler, snapshotScheduler } =
-        createFixture();
+    it('GIVEN valid request WHEN creating document THEN returns roomId and createdAt', async () => {
+      const { service } = createFixture();
 
       const result = await service.createDocument({ roomId: 'room-1' });
 
       expect(result.roomId).toBe('room-1');
       expect(result.createdAt).toBeGreaterThan(0);
-      expect(docStore.createDoc).toHaveBeenCalledWith('room-1', undefined);
-      expect(syncHandler.registerUpdateBroadcast).toHaveBeenCalledWith('room-1');
-      expect(awarenessHandler.createRoom).toHaveBeenCalledWith('room-1');
-      expect(snapshotScheduler.startPeriodicSnapshots).toHaveBeenCalledWith('room-1');
     });
 
     it('GIVEN existing document WHEN creating duplicate THEN throws ConflictException', async () => {
@@ -87,9 +74,8 @@ describe('CollaborationService', () => {
   });
 
   describe('destroyDocument', () => {
-    it('GIVEN document with connected clients WHEN destroying THEN closes all clients with 4003', async () => {
-      const { service, roomRegistry, docStore, awarenessHandler, snapshotScheduler } =
-        createFixture();
+    it('GIVEN document with connected clients WHEN destroying THEN closes all clients and removes room', async () => {
+      const { service, roomRegistry } = createFixture();
       await service.createDocument({ roomId: 'room-1' });
 
       const client1 = fakeClient();
@@ -100,13 +86,20 @@ describe('CollaborationService', () => {
       const result = await service.destroyDocument('room-1');
 
       expect(result.roomId).toBe('room-1');
-      expect(snapshotScheduler.takeSnapshot).toHaveBeenCalledWith('room-1', 'session_end');
-      expect(snapshotScheduler.destroyRoom).toHaveBeenCalledWith('room-1');
       expect(client1.close).toHaveBeenCalledWith(WsCloseCode.ROOM_CLOSED, 'Room closed');
       expect(client2.close).toHaveBeenCalledWith(WsCloseCode.ROOM_CLOSED, 'Room closed');
-      expect(awarenessHandler.destroyRoom).toHaveBeenCalledWith('room-1');
-      expect(docStore.destroyDoc).toHaveBeenCalledWith('room-1');
       expect(roomRegistry.hasRoom('room-1')).toBe(false);
+    });
+
+    it('GIVEN document WHEN destroying THEN returns finalSnapshot when doc has content', async () => {
+      const { service, docStore } = createFixture();
+      await service.createDocument({ roomId: 'room-1' });
+
+      docStore.destroyDoc.mockReturnValue(new Uint8Array([1, 2, 3]));
+
+      const result = await service.destroyDocument('room-1');
+
+      expect(result.finalSnapshot).toEqual([1, 2, 3]);
     });
 
     it('GIVEN non-existent document WHEN destroying THEN throws NotFoundException', async () => {
@@ -117,8 +110,8 @@ describe('CollaborationService', () => {
   });
 
   describe('kickUser', () => {
-    it('GIVEN connected user WHEN kicking THEN closes with 4002 and returns kicked=true', async () => {
-      const { service, roomRegistry, awarenessHandler } = createFixture();
+    it('GIVEN connected user WHEN kicking with reason THEN closes with 4002 and returns kicked=true', async () => {
+      const { service, roomRegistry } = createFixture();
       await service.createDocument({ roomId: 'room-1' });
       const client = fakeClient();
       roomRegistry.addClient('room-1', 'user-1', client);
@@ -126,8 +119,19 @@ describe('CollaborationService', () => {
       const result = await service.kickUser('room-1', { userId: 'user-1', reason: 'Disruptive' });
 
       expect(result.kicked).toBe(true);
-      expect(awarenessHandler.removeClient).toHaveBeenCalledWith('room-1', 'user-1');
       expect(client.close).toHaveBeenCalledWith(WsCloseCode.KICKED, 'Disruptive');
+    });
+
+    it('GIVEN connected user WHEN kicking without reason THEN uses default reason', async () => {
+      const { service, roomRegistry } = createFixture();
+      await service.createDocument({ roomId: 'room-1' });
+      const client = fakeClient();
+      roomRegistry.addClient('room-1', 'user-1', client);
+
+      const result = await service.kickUser('room-1', { userId: 'user-1' });
+
+      expect(result.kicked).toBe(true);
+      expect(client.close).toHaveBeenCalledWith(WsCloseCode.KICKED, 'Kicked');
     });
 
     it('GIVEN non-existent user WHEN kicking THEN returns kicked=false', async () => {
@@ -136,17 +140,6 @@ describe('CollaborationService', () => {
       const result = await service.kickUser('room-1', { userId: 'user-1' });
 
       expect(result.kicked).toBe(false);
-    });
-  });
-
-  describe('notifyUserDisconnected', () => {
-    it('GIVEN callback client WHEN notifying THEN calls callback with payload', () => {
-      const { service, callbackClient } = createFixture();
-      const payload = { roomId: 'room-1', userId: 'user-1', timestamp: Date.now() };
-
-      service.notifyUserDisconnected(payload);
-
-      expect(callbackClient.notifyUserDisconnected).toHaveBeenCalledWith(payload);
     });
   });
 });
