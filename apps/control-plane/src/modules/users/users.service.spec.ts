@@ -3,6 +3,7 @@ import { ERROR_CODES } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
 import type { IStorageService } from '@syncode/shared/ports';
 import { describe, expect, it, vi } from 'vitest';
+import { createMockStorageService } from '@/test/mock-factories.js';
 import type { AuthService } from '../auth/auth.service.js';
 import { UsersService } from './users.service.js';
 
@@ -44,12 +45,7 @@ describe('UsersService', () => {
       revokeAllRefreshTokensForUser: vi.fn(async () => undefined),
     };
 
-    const storageService = {
-      getUploadUrl: vi.fn(async () => 'https://s3.example.com/presigned-put'),
-      getDownloadUrl: vi.fn(async () => 'https://s3.example.com/presigned-get'),
-      exists: vi.fn(async () => true),
-      delete: vi.fn(async () => undefined),
-    };
+    const storageService = createMockStorageService();
 
     const db = {
       query: {

@@ -1,6 +1,6 @@
 import type { IStorageService } from '@syncode/shared/ports';
 
-const AVATAR_PRESIGNED_URL_EXPIRY = 3600; // 1 hour
+export const AVATAR_PRESIGNED_URL_EXPIRY = 3600; // 1 hour
 
 /**
  * Resolves S3 avatar keys to presigned download URLs for a list of items.

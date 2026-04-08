@@ -28,6 +28,7 @@ import { ROOM_STATUSES, RoomStatus } from '@syncode/shared';
 import { type IStorageService, STORAGE_SERVICE } from '@syncode/shared/ports';
 import { and, eq, gte, inArray, isNull, ne, type SQL, sql } from 'drizzle-orm';
 import type { AnyPgTable } from 'drizzle-orm/pg-core';
+import { resolveAvatarUrls } from '@/common/resolve-avatar-urls.js';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
 import { AuthService } from '../auth/auth.service.js';
 import { toPublicUserProfile, toUserProfile } from './user-profile.mapper.js';
@@ -56,7 +57,6 @@ export class UsersService {
   } as const;
 
   private static readonly AVATAR_KEY_PREFIX = 'avatars';
-  private static readonly AVATAR_PRESIGNED_URL_EXPIRY = 3600; // 1 hour
   private static readonly AVATAR_UPLOAD_URL_EXPIRY = 600; // 10 minutes
 
   constructor(
@@ -330,14 +330,8 @@ export class UsersService {
   private async withResolvedAvatarUrl<T extends { avatarUrl: string | null }>(
     profile: T,
   ): Promise<T> {
-    if (!profile.avatarUrl) return profile;
-    return {
-      ...profile,
-      avatarUrl: await this.storageService.getDownloadUrl(
-        profile.avatarUrl,
-        UsersService.AVATAR_PRESIGNED_URL_EXPIRY,
-      ),
-    };
+    const [resolved] = (await resolveAvatarUrls([profile], this.storageService)) as [T];
+    return resolved;
   }
 
   private normalizeOptionalProfileText(value: string): string | null {
