@@ -1,12 +1,26 @@
 import type { INestApplication } from '@nestjs/common';
+import { Global, Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { WsAdapter } from '@nestjs/platform-ws';
 import { Test } from '@nestjs/testing';
+import { CONTROL_PLANE_CALLBACK } from '@syncode/contracts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import WebSocket from 'ws';
 import { CollaborationGateway } from '../collaboration/collaboration.gateway.js';
 import { CollaborationModule } from '../collaboration/collaboration.module.js';
+
+@Global()
+@Module({
+  providers: [
+    {
+      provide: CONTROL_PLANE_CALLBACK,
+      useValue: { notifyUserDisconnected: vi.fn().mockResolvedValue(undefined) },
+    },
+  ],
+  exports: [CONTROL_PLANE_CALLBACK],
+})
+class MockInfrastructureModule {}
 
 const JWT_SECRET = 'integration-test-secret-at-least-32-characters-long';
 
@@ -28,6 +42,7 @@ beforeEach(async () => {
         ignoreEnvFile: true,
         load: [() => ({ COLLAB_JWT_SECRET: JWT_SECRET })],
       }),
+      MockInfrastructureModule,
       CollaborationModule,
     ],
   }).compile();
