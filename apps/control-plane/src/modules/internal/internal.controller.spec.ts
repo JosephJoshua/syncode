@@ -44,9 +44,7 @@ async function createController(mocks: ReturnType<typeof createMocks>) {
 describe('InternalController', () => {
   it('GIVEN valid snapshot payload WHEN handleSnapshotReady THEN uploads to correct S3 key with proper metadata and returns success true', async () => {
     const mocks = createMocks();
-    mocks.db.limit
-      .mockResolvedValueOnce([{ id: 'session-1' }])
-      .mockResolvedValueOnce([{ language: 'typescript' }]);
+    mocks.db.limit.mockResolvedValueOnce([{ id: 'session-1', language: 'typescript' }]);
     const controller = await createController(mocks);
 
     const payload: SnapshotReadyPayload = {
@@ -125,9 +123,7 @@ describe('InternalController', () => {
 
   it('GIVEN valid snapshot with session WHEN handleSnapshotReady THEN inserts into DB and returns success', async () => {
     const mocks = createMocks();
-    mocks.db.limit
-      .mockResolvedValueOnce([{ id: 'session-1' }])
-      .mockResolvedValueOnce([{ language: 'typescript' }]);
+    mocks.db.limit.mockResolvedValueOnce([{ id: 'session-1', language: 'typescript' }]);
     const controller = await createController(mocks);
 
     const payload: SnapshotReadyPayload = {
@@ -155,7 +151,7 @@ describe('InternalController', () => {
 
   it('GIVEN snapshot for room without session WHEN handleSnapshotReady THEN skips DB insert and still returns success', async () => {
     const mocks = createMocks();
-    mocks.db.limit.mockResolvedValueOnce([]).mockResolvedValueOnce([{ language: 'typescript' }]);
+    mocks.db.limit.mockResolvedValueOnce([]);
     const controller = await createController(mocks);
 
     const payload: SnapshotReadyPayload = {

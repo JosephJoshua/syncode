@@ -3,6 +3,8 @@ import * as Y from 'yjs';
 
 @Injectable()
 export class YjsDocumentStore implements OnModuleDestroy {
+  private static readonly CODE_KEY = 'code';
+
   private readonly logger = new Logger(YjsDocumentStore.name);
   private readonly docs = new Map<string, Y.Doc>();
 
@@ -14,7 +16,7 @@ export class YjsDocumentStore implements OnModuleDestroy {
     const doc = new Y.Doc();
 
     if (initialContent) {
-      doc.getText('code').insert(0, initialContent);
+      doc.getText(YjsDocumentStore.CODE_KEY).insert(0, initialContent);
     }
 
     this.docs.set(roomId, doc);
@@ -38,6 +40,10 @@ export class YjsDocumentStore implements OnModuleDestroy {
 
     this.logger.log(`Y.Doc destroyed for room ${roomId}`);
     return snapshot;
+  }
+
+  getCodeText(roomId: string): string {
+    return this.docs.get(roomId)?.getText(YjsDocumentStore.CODE_KEY).toString() ?? '';
   }
 
   encodeSnapshot(roomId: string): Uint8Array | undefined {

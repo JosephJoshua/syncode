@@ -153,7 +153,7 @@ describe('CollaborationService', () => {
 
       expect(roomRegistry.hasRoom('room-1')).toBe(true);
 
-      vi.advanceTimersByTime(5 * 60 * 1000);
+      await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
 
       expect(roomRegistry.hasRoom('room-1')).toBe(false);
       vi.useRealTimers();
@@ -168,7 +168,7 @@ describe('CollaborationService', () => {
 
       service.cancelRoomCleanup('room-1');
 
-      vi.advanceTimersByTime(5 * 60 * 1000);
+      await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
 
       expect(roomRegistry.hasRoom('room-1')).toBe(true);
       vi.useRealTimers();
@@ -188,7 +188,7 @@ describe('CollaborationService', () => {
 
       service.checkRoomEmpty('room-1');
 
-      vi.advanceTimersByTime(5 * 60 * 1000);
+      await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
 
       expect(roomRegistry.hasRoom('room-1')).toBe(true);
       vi.useRealTimers();

@@ -40,8 +40,7 @@ export class SnapshotScheduler implements OnModuleDestroy {
     const snapshot = this.docStore.encodeSnapshot(roomId);
     if (!snapshot) return;
 
-    const doc = this.docStore.getDoc(roomId);
-    const code = doc?.getText('code').toString() ?? '';
+    const code = this.docStore.getCodeText(roomId);
 
     try {
       await this.callbackClient.notifySnapshotReady({

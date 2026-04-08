@@ -1,4 +1,10 @@
-import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+  type OnModuleDestroy,
+} from '@nestjs/common';
 import type {
   CreateDocumentRequest,
   CreateDocumentResponse,
@@ -17,7 +23,7 @@ import { YjsDocumentStore } from './yjs-document-store.js';
 import { YjsSyncHandler } from './yjs-sync.handler.js';
 
 @Injectable()
-export class CollaborationService {
+export class CollaborationService implements OnModuleDestroy {
   private static readonly ROOM_TTL_MS = 5 * 60 * 1000;
 
   private readonly logger = new Logger(CollaborationService.name);
@@ -51,17 +57,13 @@ export class CollaborationService {
     }
 
     await this.snapshotScheduler.takeSnapshot(roomId, 'session_end');
-    this.snapshotScheduler.destroyRoom(roomId);
 
     for (const [userId, client] of room.clients) {
       this.logger.debug(`Closing connection for user ${userId} in room ${roomId} (room destroyed)`);
       client.close(WsCloseCode.ROOM_CLOSED, 'Room closed');
     }
 
-    this.awarenessHandler.destroyRoom(roomId);
-    const finalSnapshot = this.docStore.destroyDoc(roomId);
-    this.roomRegistry.deleteRoom(roomId);
-
+    const finalSnapshot = this.teardownRoom(roomId);
     this.logger.log(`Document destroyed for room ${roomId}`);
     return {
       roomId,
@@ -121,14 +123,27 @@ export class CollaborationService {
     this.logger.debug(`Room TTL scheduled for ${roomId} (5 minutes)`);
   }
 
-  private cleanupRoom(roomId: string): void {
+  private async cleanupRoom(roomId: string): Promise<void> {
     if (!this.roomRegistry.hasRoom(roomId)) return;
 
+    await this.snapshotScheduler.takeSnapshot(roomId, 'session_end');
+    this.teardownRoom(roomId);
+    this.logger.log(`Room ${roomId} cleaned up after TTL expiry`);
+  }
+
+  private teardownRoom(roomId: string): Uint8Array | undefined {
     this.snapshotScheduler.destroyRoom(roomId);
     this.awarenessHandler.destroyRoom(roomId);
-    this.docStore.destroyDoc(roomId);
+    const snapshot = this.docStore.destroyDoc(roomId);
     this.roomRegistry.deleteRoom(roomId);
+    return snapshot;
+  }
 
-    this.logger.log(`Room ${roomId} cleaned up after TTL expiry`);
+  onModuleDestroy(): void {
+    for (const [roomId, timer] of this.roomTtls) {
+      clearTimeout(timer);
+      this.logger.debug(`Room TTL cancelled for ${roomId} (shutdown)`);
+    }
+    this.roomTtls.clear();
   }
 }

@@ -3,7 +3,7 @@ import { ApiExcludeEndpoint } from '@nestjs/swagger';
 import { SkipThrottle } from '@nestjs/throttler';
 import { CONTROL_INTERNAL } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
-import { codeSnapshots, rooms, sessions } from '@syncode/db';
+import { codeSnapshots, sessions } from '@syncode/db';
 import { type IStorageService, STORAGE_SERVICE } from '@syncode/shared/ports';
 import { eq } from 'drizzle-orm';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
@@ -51,27 +51,20 @@ export class InternalController {
         },
       });
 
-      // DB persistence (decoded text for queries/diffs)
       const [session] = await this.db
-        .select({ id: sessions.id })
+        .select({ id: sessions.id, language: sessions.language })
         .from(sessions)
         .where(eq(sessions.roomId, roomId))
         .limit(1);
 
-      const [room] = await this.db
-        .select({ language: rooms.language })
-        .from(rooms)
-        .where(eq(rooms.id, roomId))
-        .limit(1);
-
-      if (session && room?.language) {
+      if (session?.language) {
         await this.db.insert(codeSnapshots).values({
           sessionId: session.id,
           roomId,
           code,
-          language: room.language,
+          language: session.language,
           trigger,
-          linesOfCode: code.split('\n').length,
+          linesOfCode: code ? code.split('\n').length : 0,
           createdAt: new Date(timestamp),
         });
       } else {
