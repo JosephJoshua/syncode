@@ -12,7 +12,7 @@ import {
   runs,
   submissions,
 } from '@syncode/db';
-import { CACHE_SERVICE } from '@syncode/shared/ports';
+import { CACHE_SERVICE, STORAGE_SERVICE } from '@syncode/shared/ports';
 import { eq } from 'drizzle-orm';
 import { ZodValidationPipe } from 'nestjs-zod';
 import request from 'supertest';
@@ -22,7 +22,7 @@ import { AuthService } from '@/modules/auth/auth.service.js';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
 import { InMemoryCacheService } from '@/test/in-memory-cache.service.js';
 import { createTestDb, insertProblem, insertUser } from '@/test/integration-setup.js';
-import { createMockConfigService } from '@/test/mock-factories.js';
+import { createMockConfigService, createMockStorageService } from '@/test/mock-factories.js';
 import { JwtStrategy } from '../auth/jwt.strategy.js';
 import { UsersController } from './users.controller.js';
 import { UsersService } from './users.service.js';
@@ -53,6 +53,7 @@ beforeEach(async () => {
       JwtStrategy,
       { provide: DB_CLIENT, useValue: db },
       { provide: CACHE_SERVICE, useValue: new InMemoryCacheService() },
+      { provide: STORAGE_SERVICE, useValue: createMockStorageService() },
       { provide: JwtService, useValue: jwtService },
       {
         provide: ConfigService,
