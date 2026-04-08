@@ -81,6 +81,17 @@ COLLAB_JWT_SECRET=change-me-in-production-min-32-chars
 openssl rand -hex 32
 ```
 
+### S3 存储（默认值即可）
+
+```env
+S3_ENDPOINT=http://localhost:8333
+S3_ACCESS_KEY=syncode
+S3_SECRET_KEY=syncode-secret
+S3_BUCKET=syncode
+```
+
+SeaweedFS 随 `pnpm infra:up` 一起启动，使用硬编码的开发凭证，无需修改。
+
 ### 外部服务（本地开发可选）
 
 ```env
@@ -88,15 +99,10 @@ LIVEKIT_API_KEY=
 LIVEKIT_API_SECRET=
 LIVEKIT_URL=ws://localhost:7880
 
-S3_ENDPOINT=http://localhost:9000
-S3_ACCESS_KEY=
-S3_SECRET_KEY=
-S3_BUCKET=syncode
-
 E2B_API_KEY=
 ```
 
-如果本地没有运行 LiveKit、SeaweedFS 或 E2B，可以留空，改用 Stub 模式（见下文）。
+如果本地没有运行 LiveKit 或 E2B，可以留空，改用 Stub 模式（见下文）。
 
 ### Stub 配置（推荐新手使用）
 

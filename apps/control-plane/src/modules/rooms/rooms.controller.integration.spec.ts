@@ -5,7 +5,7 @@ import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import { COLLAB_CLIENT, EXECUTION_CLIENT } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
-import { MEDIA_SERVICE } from '@syncode/shared/ports';
+import { MEDIA_SERVICE, STORAGE_SERVICE } from '@syncode/shared/ports';
 import { ZodValidationPipe } from 'nestjs-zod';
 import request from 'supertest';
 import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard.js';
@@ -23,6 +23,7 @@ import {
   createMockExecutionClient,
   createMockJwtService,
   createMockMediaService,
+  createMockStorageService,
   TestAuthGuard,
 } from '@/test/mock-factories.js';
 import { RoomsController } from './rooms.controller.js';
@@ -47,6 +48,7 @@ beforeEach(async () => {
       { provide: EXECUTION_CLIENT, useValue: createMockExecutionClient() },
       { provide: COLLAB_CLIENT, useValue: createMockCollabClient() },
       { provide: MEDIA_SERVICE, useValue: createMockMediaService() },
+      { provide: STORAGE_SERVICE, useValue: createMockStorageService() },
       { provide: JwtService, useValue: createMockJwtService() },
       { provide: ConfigService, useValue: createMockConfigService() },
       Reflector,

@@ -6,8 +6,9 @@ import type { JwtService } from '@nestjs/jwt';
 import { ERROR_CODES } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
 import { refreshTokens, users } from '@syncode/db';
-import type { ICacheService } from '@syncode/shared/ports';
+import type { ICacheService, IStorageService } from '@syncode/shared/ports';
 import { describe, expect, it, vi } from 'vitest';
+import { createMockStorageService } from '@/test/mock-factories.js';
 import { AuthService } from './auth.service.js';
 
 const scryptAsync = promisify(scrypt);
@@ -138,6 +139,7 @@ function createAuthServiceFixture() {
   const service = new AuthService(
     db as unknown as Database,
     cacheService as ICacheService,
+    createMockStorageService() as unknown as IStorageService,
     jwtService as unknown as JwtService,
     configService as unknown as ConfigService,
   );

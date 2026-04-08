@@ -63,5 +63,18 @@
   "deleteToast": {
     "accountDeleted": "账号已删除。",
     "deleteFailed": "当前无法删除你的账号。"
+  },
+  "avatar": {
+    "cropTitle": "裁剪照片",
+    "zoom": "缩放",
+    "save": "保存头像",
+    "uploading": "上传中...",
+    "changePhoto": "更换头像",
+    "removePhoto": "移除头像",
+    "uploadFailed": "头像上传失败。",
+    "uploadSuccess": "头像已更新。",
+    "deleteFailed": "移除头像失败。",
+    "deleteSuccess": "头像已移除。",
+    "invalidFile": "仅支持 5MB 以下的 JPEG、PNG 和 WebP 图片。"
   }
 }

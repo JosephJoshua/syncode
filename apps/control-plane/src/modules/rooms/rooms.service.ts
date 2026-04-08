@@ -35,9 +35,15 @@ import {
   RoomRole,
   RoomStatus,
 } from '@syncode/shared';
-import { type IMediaService, MEDIA_SERVICE } from '@syncode/shared/ports';
+import {
+  type IMediaService,
+  type IStorageService,
+  MEDIA_SERVICE,
+  STORAGE_SERVICE,
+} from '@syncode/shared/ports';
 import { type PaginatedResult, paginate } from '@syncode/shared/server';
 import { and, asc, desc, eq, gt, lt, or, sql } from 'drizzle-orm';
+import { resolveAvatarUrls } from '@/common/resolve-avatar-urls.js';
 import type { EnvConfig } from '@/config/env.config.js';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
 import type {
@@ -60,6 +66,8 @@ export class RoomsService {
     private readonly collabClient: ICollabClient,
     @Inject(MEDIA_SERVICE)
     private readonly mediaService: IMediaService,
+    @Inject(STORAGE_SERVICE)
+    private readonly storageService: IStorageService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService<EnvConfig>,
   ) {}
@@ -345,11 +353,12 @@ export class RoomsService {
       .where(eq(roomParticipants.roomId, roomId));
   }
 
-  private assembleRoomDetail(
+  private async assembleRoomDetail(
     room: typeof rooms.$inferSelect,
     participantRows: Awaited<ReturnType<typeof this.fetchParticipants>>,
     userId: string,
-  ): RoomDetailResult {
+  ): Promise<RoomDetailResult> {
+    participantRows = await resolveAvatarUrls(participantRows, this.storageService);
     const myParticipation = participantRows.find((p) => p.userId === userId);
     if (!myParticipation) {
       throw new ForbiddenException({

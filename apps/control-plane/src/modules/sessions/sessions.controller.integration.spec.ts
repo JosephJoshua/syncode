@@ -2,6 +2,7 @@ import type { INestApplication } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { Test } from '@nestjs/testing';
 import type { Database } from '@syncode/db';
+import { STORAGE_SERVICE } from '@syncode/shared/ports';
 import { ZodValidationPipe } from 'nestjs-zod';
 import request from 'supertest';
 import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard.js';
@@ -17,7 +18,7 @@ import {
   insertSubmission,
   insertUser,
 } from '@/test/integration-setup.js';
-import { asUser, TestAuthGuard } from '@/test/mock-factories.js';
+import { asUser, createMockStorageService, TestAuthGuard } from '@/test/mock-factories.js';
 import { SessionsController } from './sessions.controller.js';
 import { SessionsService } from './sessions.service.js';
 
@@ -32,7 +33,12 @@ beforeEach(async () => {
 
   const module = await Test.createTestingModule({
     controllers: [SessionsController],
-    providers: [SessionsService, { provide: DB_CLIENT, useValue: db }, Reflector],
+    providers: [
+      SessionsService,
+      { provide: DB_CLIENT, useValue: db },
+      { provide: STORAGE_SERVICE, useValue: createMockStorageService() },
+      Reflector,
+    ],
   })
     .overrideGuard(JwtAuthGuard)
     .useClass(TestAuthGuard)

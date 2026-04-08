@@ -6,7 +6,7 @@ import { COLLAB_CLIENT, EXECUTION_CLIENT } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
 import { roomParticipants } from '@syncode/db';
 import { INVITE_CODE_LENGTH } from '@syncode/shared';
-import { MEDIA_SERVICE } from '@syncode/shared/ports';
+import { MEDIA_SERVICE, STORAGE_SERVICE } from '@syncode/shared/ports';
 import { and, eq } from 'drizzle-orm';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
 import {
@@ -22,6 +22,7 @@ import {
   createMockExecutionClient,
   createMockJwtService,
   createMockMediaService,
+  createMockStorageService,
 } from '@/test/mock-factories.js';
 import { RoomsService } from './rooms.service.js';
 
@@ -43,6 +44,7 @@ beforeEach(async () => {
       { provide: EXECUTION_CLIENT, useValue: createMockExecutionClient() },
       { provide: COLLAB_CLIENT, useValue: createMockCollabClient() },
       { provide: MEDIA_SERVICE, useValue: createMockMediaService() },
+      { provide: STORAGE_SERVICE, useValue: createMockStorageService() },
       { provide: JwtService, useValue: createMockJwtService() },
       { provide: ConfigService, useValue: createMockConfigService() },
     ],

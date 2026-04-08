@@ -6,7 +6,14 @@ describe('UsersController', () => {
   function createUsersControllerFixture() {
     const usersService: Pick<
       UsersService,
-      'delete' | 'findById' | 'findPublicById' | 'getQuotas' | 'update'
+      | 'confirmAvatarUpload'
+      | 'delete'
+      | 'deleteAvatar'
+      | 'findById'
+      | 'findPublicById'
+      | 'getAvatarUploadUrl'
+      | 'getQuotas'
+      | 'update'
     > = {
       findById: vi.fn(async (id: string) => ({
         id,
@@ -67,6 +74,23 @@ describe('UsersController', () => {
         }),
       ),
       delete: vi.fn(async () => undefined),
+      getAvatarUploadUrl: vi.fn(async () => ({
+        uploadUrl: 'https://s3.example.com/presigned-put',
+        key: 'avatars/user-123.webp',
+      })),
+      confirmAvatarUpload: vi.fn(async (id: string) => ({
+        id,
+        email: 'user@example.com',
+        username: 'alice',
+        displayName: null,
+        role: 'user' as const,
+        avatarUrl: 'https://s3.example.com/presigned-get',
+        bio: null,
+        stats: { totalSessions: 0, totalProblems: 0, streakDays: 0 },
+        createdAt: new Date('2026-01-01T00:00:00.000Z').toISOString(),
+        updatedAt: new Date('2026-01-01T00:00:00.000Z').toISOString(),
+      })),
+      deleteAvatar: vi.fn(async () => undefined),
     };
 
     const controller = new UsersController(usersService as UsersService);
@@ -130,5 +154,24 @@ describe('UsersController', () => {
     await controller.deleteCurrentUser({ id: 'user-4' });
 
     expect(usersService.delete).toHaveBeenCalledWith('user-4');
+  });
+
+  it('GIVEN authenticated user WHEN getAvatarUploadUrl THEN returns presigned URL and key', async () => {
+    const { controller } = createUsersControllerFixture();
+
+    const result = await controller.getAvatarUploadUrl({ id: 'user-123' });
+
+    expect(result).toEqual({
+      uploadUrl: 'https://s3.example.com/presigned-put',
+      key: 'avatars/user-123.webp',
+    });
+  });
+
+  it('GIVEN authenticated user WHEN confirmAvatarUpload THEN returns updated profile with avatar URL', async () => {
+    const { controller } = createUsersControllerFixture();
+
+    const result = await controller.confirmAvatarUpload({ id: 'user-123' });
+
+    expect(result.avatarUrl).toBe('https://s3.example.com/presigned-get');
   });
 });

@@ -132,3 +132,10 @@ export const userQuotasResponseSchema = z.object({
 });
 
 export type UserQuotasResponse = z.infer<typeof userQuotasResponseSchema>;
+
+export const avatarUploadUrlResponseSchema = z.object({
+  uploadUrl: z.string().describe('Presigned PUT URL for direct S3 upload'),
+  key: z.string().describe('S3 object key for the avatar'),
+});
+
+export type AvatarUploadUrlResponse = z.infer<typeof avatarUploadUrlResponseSchema>;

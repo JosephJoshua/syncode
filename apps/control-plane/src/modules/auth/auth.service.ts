@@ -12,8 +12,14 @@ import { JwtService } from '@nestjs/jwt';
 import { ERROR_CODES, type UserProfileResponse } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
 import { refreshTokens, users } from '@syncode/db';
-import { CACHE_SERVICE, type ICacheService } from '@syncode/shared/ports';
+import {
+  CACHE_SERVICE,
+  type ICacheService,
+  type IStorageService,
+  STORAGE_SERVICE,
+} from '@syncode/shared/ports';
 import { and, eq, isNull, lt } from 'drizzle-orm';
+import { resolveAvatarUrls } from '@/common/resolve-avatar-urls.js';
 import type { EnvConfig } from '@/config/env.config.js';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
 import { toUserProfile } from '@/modules/users/user-profile.mapper.js';
@@ -39,6 +45,7 @@ export class AuthService {
   constructor(
     @Inject(DB_CLIENT) private readonly db: Database,
     @Inject(CACHE_SERVICE) private readonly cacheService: ICacheService,
+    @Inject(STORAGE_SERVICE) private readonly storageService: IStorageService,
     private readonly jwtService: JwtService,
     private readonly config: ConfigService<EnvConfig>,
   ) {}
@@ -98,7 +105,7 @@ export class AuthService {
 
       return {
         ...tokenPair,
-        user: toUserProfile(createdUser),
+        user: (await resolveAvatarUrls([toUserProfile(createdUser)], this.storageService))[0]!,
       };
     } catch (error) {
       if (this.isUniqueConstraintViolation(error)) {
@@ -165,7 +172,7 @@ export class AuthService {
 
     return {
       ...tokenPair,
-      user: toUserProfile(user),
+      user: (await resolveAvatarUrls([toUserProfile(user)], this.storageService))[0]!,
     };
   }
 

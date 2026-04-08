@@ -63,5 +63,18 @@
   "deleteToast": {
     "accountDeleted": "Account deleted.",
     "deleteFailed": "Unable to delete your account right now."
+  },
+  "avatar": {
+    "cropTitle": "Crop your photo",
+    "zoom": "Zoom",
+    "save": "Save avatar",
+    "uploading": "Uploading...",
+    "changePhoto": "Change photo",
+    "removePhoto": "Remove photo",
+    "uploadFailed": "Failed to upload avatar.",
+    "uploadSuccess": "Avatar updated.",
+    "deleteFailed": "Failed to remove avatar.",
+    "deleteSuccess": "Avatar removed.",
+    "invalidFile": "Only JPEG, PNG, and WebP images under 5MB are allowed."
   }
 }

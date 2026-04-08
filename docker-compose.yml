@@ -32,6 +32,40 @@ services:
       timeout: 5s
       retries: 5
 
+  seaweedfs:
+    image: chrislusf/seaweedfs:4.13
+    container_name: syncode-seaweedfs
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8333:8333"
+      - "127.0.0.1:9333:9333"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        printf '{"identities":[{"name":"syncode","credentials":[{"accessKey":"syncode","secretKey":"syncode-secret"}],"actions":["Admin","Read","Write","List","Tagging"]}]}'
+        > /tmp/s3.json &&
+        weed server -s3 -s3.config=/tmp/s3.json -s3.port=8333 &
+        PID=$$! &&
+        until wget -q --spider http://localhost:8333/ 2>/dev/null; do sleep 0.5; done &&
+        wget --method=PUT -q -O /dev/null http://localhost:8333/syncode 2>/dev/null || true &&
+        wait $$PID
+    volumes:
+      - seaweedfs_data:/data
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--spider",
+          "-q",
+          "http://localhost:9333/cluster/status",
+        ]
+      interval: 10s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
 volumes:
   pg_data:
   redis_data:
+  seaweedfs_data:

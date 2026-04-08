@@ -1,4 +1,4 @@
-import type * as React from 'react';
+import * as React from 'react';
 
 import { cn } from '../lib/cn.js';
 
@@ -7,12 +7,44 @@ function Avatar({ className, ...props }: React.ComponentProps<'div'>) {
     <div
       data-slot="avatar"
       className={cn(
-        'inline-flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-full border border-primary/25 bg-card/90 text-[11px] font-semibold text-primary ring-1 ring-primary/20 shadow-[0_0_18px_-7px_oklch(0.82_0.18_165/0.65)]',
+        'relative inline-flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-full border border-primary/25 bg-card/90 text-[11px] font-semibold text-primary ring-1 ring-primary/20 shadow-[0_0_18px_-7px_oklch(0.82_0.18_165/0.65)]',
         className,
       )}
       {...props}
     />
   );
+}
+
+function AvatarImageInner({
+  className,
+  alt = '',
+  onLoad,
+  onError,
+  ...props
+}: React.ComponentProps<'img'>) {
+  const [status, setStatus] = React.useState<'loading' | 'loaded' | 'error'>('loading');
+
+  return status === 'error' ? null : (
+    <img
+      data-slot="avatar-image"
+      alt={alt}
+      className={cn('absolute inset-0 size-full object-cover', className)}
+      onLoad={(e) => {
+        setStatus('loaded');
+        onLoad?.(e);
+      }}
+      onError={(e) => {
+        setStatus('error');
+        onError?.(e);
+      }}
+      {...props}
+    />
+  );
+}
+
+function AvatarImage({ src, ...props }: React.ComponentProps<'img'>) {
+  // Key on src to reset load/error state when the image URL changes
+  return <AvatarImageInner key={src} src={src} {...props} />;
 }
 
 function AvatarFallback({ className, ...props }: React.ComponentProps<'span'>) {
@@ -28,4 +60,4 @@ function AvatarFallback({ className, ...props }: React.ComponentProps<'span'>) {
   );
 }
 
-export { Avatar, AvatarFallback };
+export { Avatar, AvatarImage, AvatarFallback };

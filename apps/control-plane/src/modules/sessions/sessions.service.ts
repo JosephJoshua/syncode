@@ -13,8 +13,10 @@ import {
   submissions,
   users,
 } from '@syncode/db';
+import { type IStorageService, STORAGE_SERVICE } from '@syncode/shared/ports';
 import { type PaginatedResult, paginate } from '@syncode/shared/server';
 import { and, asc, type Column, desc, eq, gt, gte, inArray, lt, lte, or, sql } from 'drizzle-orm';
+import { resolveAvatarUrls } from '@/common/resolve-avatar-urls.js';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
 import type { SessionDetailResult, SessionSummaryResult } from './sessions.types.js';
 
@@ -28,7 +30,10 @@ const TERMINAL_STATUSES = ['completed', 'failed'] as const;
 export class SessionsService {
   private readonly logger = new Logger(SessionsService.name);
 
-  constructor(@Inject(DB_CLIENT) private readonly db: Database) {}
+  constructor(
+    @Inject(DB_CLIENT) private readonly db: Database,
+    @Inject(STORAGE_SERVICE) private readonly storageService: IStorageService,
+  ) {}
 
   async listSessions(
     userId: string,
@@ -131,8 +136,10 @@ export class SessionsService {
                 .where(inArray(sessionParticipants.sessionId, sessionIds))
             : [];
 
+        const resolvedParticipants = await resolveAvatarUrls(participantRows, this.storageService);
+
         const participantsBySession = new Map<string, typeof participantRows>();
-        for (const p of participantRows) {
+        for (const p of resolvedParticipants) {
           const existing = participantsBySession.get(p.sessionId) ?? [];
           existing.push(p);
           participantsBySession.set(p.sessionId, existing);

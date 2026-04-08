@@ -4,14 +4,14 @@ import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import { ERROR_CODES } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
-import { CACHE_SERVICE } from '@syncode/shared/ports';
+import { CACHE_SERVICE, STORAGE_SERVICE } from '@syncode/shared/ports';
 import cookieParser from 'cookie-parser';
 import { ZodValidationPipe } from 'nestjs-zod';
 import request from 'supertest';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
 import { InMemoryCacheService } from '@/test/in-memory-cache.service.js';
 import { createTestDb } from '@/test/integration-setup.js';
-import { createMockConfigService } from '@/test/mock-factories.js';
+import { createMockConfigService, createMockStorageService } from '@/test/mock-factories.js';
 import { AuthController } from './auth.controller.js';
 import { AuthService } from './auth.service.js';
 
@@ -47,6 +47,7 @@ beforeEach(async () => {
       AuthService,
       { provide: DB_CLIENT, useValue: db },
       { provide: CACHE_SERVICE, useValue: new InMemoryCacheService() },
+      { provide: STORAGE_SERVICE, useValue: createMockStorageService() },
       {
         provide: JwtService,
         useValue: new JwtService({
