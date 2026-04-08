@@ -2,13 +2,19 @@ import { useEffect, useState } from 'react';
 
 const SAMPLE_SIZE = 8;
 
+export interface ImageColor {
+  r: number;
+  g: number;
+  b: number;
+}
+
 /**
  * Extracts a dominant color from an image URL by downscaling to a tiny
- * canvas and averaging pixel values. Returns an rgba string for use as
- * a glow/shadow color, or null if extraction fails (CORS, load error).
+ * canvas and averaging pixel values. Returns RGB components for flexible
+ * use in shadows/glows, or null if extraction fails (CORS, load error).
  */
-export function useImageDominantColor(src: string | null | undefined): string | null {
-  const [color, setColor] = useState<string | null>(null);
+export function useImageDominantColor(src: string | null | undefined): ImageColor | null {
+  const [color, setColor] = useState<ImageColor | null>(null);
 
   useEffect(() => {
     if (!src) {
@@ -36,11 +42,11 @@ export function useImageDominantColor(src: string | null | undefined): string | 
         let count = 0;
 
         for (let i = 0; i < data.length; i += 4) {
-          // Skip near-black and near-white pixels to get a more vivid result
           const pr = data[i] ?? 0;
           const pg = data[i + 1] ?? 0;
           const pb = data[i + 2] ?? 0;
           const brightness = (pr + pg + pb) / 3;
+          // Skip near-black and near-white pixels for a more vivid result
           if (brightness > 30 && brightness < 225) {
             r += pr;
             g += pg;
@@ -58,16 +64,16 @@ export function useImageDominantColor(src: string | null | undefined): string | 
         g = Math.round(g / count);
         b = Math.round(b / count);
 
-        // Boost saturation slightly for a more vivid glow
+        // Boost saturation for a vivid glow
         const max = Math.max(r, g, b);
         const min = Math.min(r, g, b);
         const mid = (max + min) / 2;
-        const boost = 1.3;
+        const boost = 1.4;
         r = Math.min(255, Math.round(mid + (r - mid) * boost));
         g = Math.min(255, Math.round(mid + (g - mid) * boost));
         b = Math.min(255, Math.round(mid + (b - mid) * boost));
 
-        setColor(`rgba(${r}, ${g}, ${b}, 0.55)`);
+        setColor({ r, g, b });
       } catch {
         setColor(null);
       }
