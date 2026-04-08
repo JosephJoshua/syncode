@@ -1,6 +1,7 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { ERROR_CODES } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
+import type { IStorageService } from '@syncode/shared/ports';
 import { describe, expect, it, vi } from 'vitest';
 import type { AuthService } from '../auth/auth.service.js';
 import { UsersService } from './users.service.js';
@@ -43,6 +44,13 @@ describe('UsersService', () => {
       revokeAllRefreshTokensForUser: vi.fn(async () => undefined),
     };
 
+    const storageService = {
+      getUploadUrl: vi.fn(async () => 'https://s3.example.com/presigned-put'),
+      getDownloadUrl: vi.fn(async () => 'https://s3.example.com/presigned-get'),
+      exists: vi.fn(async () => true),
+      delete: vi.fn(async () => undefined),
+    };
+
     const db = {
       query: {
         users: {
@@ -56,7 +64,11 @@ describe('UsersService', () => {
       select,
     } satisfies UsersServiceDatabaseMock;
 
-    const service = new UsersService(db as unknown as Database, authService as AuthService);
+    const service = new UsersService(
+      db as unknown as Database,
+      authService as AuthService,
+      storageService as unknown as IStorageService,
+    );
     return {
       service,
       findFirst,
@@ -69,6 +81,7 @@ describe('UsersService', () => {
       where,
       returning,
       authService,
+      storageService,
     };
   }
 
@@ -130,7 +143,7 @@ describe('UsersService', () => {
       id: '497f6eca-6276-4993-bfeb-53cbbbba6f08',
       username: 'alice',
       displayName: 'Alice',
-      avatarUrl: 'https://cdn.example.com/avatar.png',
+      avatarUrl: 'https://s3.example.com/presigned-get',
       bio: 'hello',
       createdAt: '2026-01-01T00:00:00.000Z',
     });
@@ -230,5 +243,69 @@ describe('UsersService', () => {
     const { service } = createUsersServiceFixture();
 
     await expect(service.delete('497f6eca-6276-4993-bfeb-53cbbbba6f08')).resolves.toBeUndefined();
+  });
+
+  describe('getAvatarUploadUrl', () => {
+    it('GIVEN a user ID WHEN requesting upload URL THEN returns presigned URL and key', async () => {
+      const { service, storageService } = createUsersServiceFixture();
+      const result = await service.getAvatarUploadUrl('user-123');
+
+      expect(result).toEqual({
+        uploadUrl: 'https://s3.example.com/presigned-put',
+        key: 'avatars/user-123.webp',
+      });
+      expect(storageService.getUploadUrl).toHaveBeenCalledWith('avatars/user-123.webp', {
+        expiresInSeconds: 600,
+        contentType: 'image/webp',
+      });
+    });
+  });
+
+  describe('confirmAvatarUpload', () => {
+    it('GIVEN avatar exists in S3 WHEN confirming THEN updates DB and returns profile', async () => {
+      const { service, storageService, returning } = createUsersServiceFixture();
+      storageService.exists.mockResolvedValue(true);
+      returning.mockResolvedValue([
+        {
+          id: 'user-123',
+          email: 'user@example.com',
+          username: 'alice',
+          displayName: null,
+          role: 'user',
+          avatarUrl: 'avatars/user-123.webp',
+          bio: null,
+          createdAt: new Date('2026-01-01'),
+          updatedAt: new Date('2026-01-01'),
+        },
+      ]);
+
+      const result = await service.confirmAvatarUpload('user-123');
+      expect(result.avatarUrl).toBe('https://s3.example.com/presigned-get');
+    });
+
+    it('GIVEN avatar NOT in S3 WHEN confirming THEN throws NotFoundException', async () => {
+      const { service, storageService } = createUsersServiceFixture();
+      storageService.exists.mockResolvedValue(false);
+
+      await expect(service.confirmAvatarUpload('user-123')).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('deleteAvatar', () => {
+    it('GIVEN user has avatar WHEN deleting THEN removes from S3 and clears DB', async () => {
+      const { service, storageService, findFirst } = createUsersServiceFixture();
+      findFirst.mockResolvedValue({ avatarUrl: 'avatars/user-123.webp' });
+
+      await service.deleteAvatar('user-123');
+      expect(storageService.delete).toHaveBeenCalledWith('avatars/user-123.webp');
+    });
+
+    it('GIVEN user has no avatar WHEN deleting THEN skips S3 delete', async () => {
+      const { service, storageService, findFirst } = createUsersServiceFixture();
+      findFirst.mockResolvedValue({ avatarUrl: null });
+
+      await service.deleteAvatar('user-123');
+      expect(storageService.delete).not.toHaveBeenCalled();
+    });
   });
 });

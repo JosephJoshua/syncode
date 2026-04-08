@@ -6,6 +6,7 @@ import {
   NotImplementedException,
 } from '@nestjs/common';
 import {
+  type AvatarUploadUrlResponse,
   ERROR_CODES,
   type PublicUserProfileResponse,
   type UpdateUserInput,
@@ -24,6 +25,7 @@ import {
   users,
 } from '@syncode/db';
 import { ROOM_STATUSES, RoomStatus } from '@syncode/shared';
+import { type IStorageService, STORAGE_SERVICE } from '@syncode/shared/ports';
 import { and, eq, gte, inArray, isNull, ne, type SQL, sql } from 'drizzle-orm';
 import type { AnyPgTable } from 'drizzle-orm/pg-core';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
@@ -53,9 +55,14 @@ export class UsersService {
     createdAt: true,
   } as const;
 
+  private static readonly AVATAR_KEY_PREFIX = 'avatars';
+  private static readonly AVATAR_PRESIGNED_URL_EXPIRY = 3600; // 1 hour
+  private static readonly AVATAR_UPLOAD_URL_EXPIRY = 600; // 10 minutes
+
   constructor(
     @Inject(DB_CLIENT) private readonly db: Database,
     private readonly authService: AuthService,
+    @Inject(STORAGE_SERVICE) private readonly storageService: IStorageService,
   ) {}
 
   async findById(id: string): Promise<UserProfileResponse> {
@@ -71,7 +78,7 @@ export class UsersService {
       });
     }
 
-    return toUserProfile(user);
+    return this.withResolvedAvatarUrl(toUserProfile(user));
   }
 
   async findPublicById(id: string): Promise<PublicUserProfileResponse> {
@@ -87,7 +94,7 @@ export class UsersService {
       });
     }
 
-    return toPublicUserProfile(user);
+    return this.withResolvedAvatarUrl(toPublicUserProfile(user));
   }
 
   async findByEmail(email: string): Promise<UserProfileResponse | null> {
@@ -102,7 +109,7 @@ export class UsersService {
       return null;
     }
 
-    return toUserProfile(user);
+    return this.withResolvedAvatarUrl(toUserProfile(user));
   }
 
   async getQuotas(userId: string): Promise<UserQuotasResponse> {
@@ -236,7 +243,7 @@ export class UsersService {
         throw new NotFoundException('User not found');
       }
 
-      return toUserProfile(user);
+      return this.withResolvedAvatarUrl(toUserProfile(user));
     } catch (error) {
       if (this.isUniqueConstraintViolation(error)) {
         throw new ConflictException({
@@ -261,6 +268,76 @@ export class UsersService {
         updatedAt: now,
       })
       .where(and(eq(users.id, id), isNull(users.deletedAt)));
+  }
+
+  async getAvatarUploadUrl(userId: string): Promise<AvatarUploadUrlResponse> {
+    const key = `${UsersService.AVATAR_KEY_PREFIX}/${userId}.webp`;
+    const uploadUrl = await this.storageService.getUploadUrl(key, {
+      expiresInSeconds: UsersService.AVATAR_UPLOAD_URL_EXPIRY,
+      contentType: 'image/webp',
+    });
+
+    return { uploadUrl, key };
+  }
+
+  async confirmAvatarUpload(userId: string): Promise<UserProfileResponse> {
+    const key = `${UsersService.AVATAR_KEY_PREFIX}/${userId}.webp`;
+    const objectExists = await this.storageService.exists(key);
+
+    if (!objectExists) {
+      throw new NotFoundException('Avatar not found in storage. Upload the file first.');
+    }
+
+    const [user] = await this.db
+      .update(users)
+      .set({ avatarUrl: key, updatedAt: new Date() })
+      .where(and(eq(users.id, userId), isNull(users.deletedAt)))
+      .returning({
+        id: users.id,
+        email: users.email,
+        username: users.username,
+        displayName: users.displayName,
+        role: users.role,
+        avatarUrl: users.avatarUrl,
+        bio: users.bio,
+        createdAt: users.createdAt,
+        updatedAt: users.updatedAt,
+      });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    return this.withResolvedAvatarUrl(toUserProfile(user));
+  }
+
+  async deleteAvatar(userId: string): Promise<void> {
+    const user = await this.db.query.users.findFirst({
+      columns: { avatarUrl: true },
+      where: (table) => and(eq(table.id, userId), isNull(table.deletedAt)),
+    });
+
+    if (user?.avatarUrl) {
+      await this.storageService.delete(user.avatarUrl);
+    }
+
+    await this.db
+      .update(users)
+      .set({ avatarUrl: null, updatedAt: new Date() })
+      .where(and(eq(users.id, userId), isNull(users.deletedAt)));
+  }
+
+  private async withResolvedAvatarUrl<T extends { avatarUrl: string | null }>(
+    profile: T,
+  ): Promise<T> {
+    if (!profile.avatarUrl) return profile;
+    return {
+      ...profile,
+      avatarUrl: await this.storageService.getDownloadUrl(
+        profile.avatarUrl,
+        UsersService.AVATAR_PRESIGNED_URL_EXPIRY,
+      ),
+    };
   }
 
   private normalizeOptionalProfileText(value: string): string | null {
