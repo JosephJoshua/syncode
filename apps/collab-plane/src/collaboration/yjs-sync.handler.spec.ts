@@ -4,14 +4,21 @@ import * as syncProtocol from 'y-protocols/sync';
 import * as Y from 'yjs';
 import type { AuthenticatedClient } from '../auth/index.js';
 import { RoomRegistry } from './room-registry.js';
+import { WsMessageType } from './ws-message-types.js';
 import { YjsDocumentStore } from './yjs-document-store.js';
 import { YjsSyncHandler } from './yjs-sync.handler.js';
 
-/** Encode a SyncStep1 message for a given doc */
 function encodeSyncStep1(doc: Y.Doc): Uint8Array {
   const encoder = encoding.createEncoder();
-  encoding.writeVarUint(encoder, 0); // messageSync
+  encoding.writeVarUint(encoder, WsMessageType.SYNC);
   syncProtocol.writeSyncStep1(encoder, doc);
+  return encoding.toUint8Array(encoder);
+}
+
+function encodeUpdate(update: Uint8Array): Uint8Array {
+  const encoder = encoding.createEncoder();
+  encoding.writeVarUint(encoder, WsMessageType.SYNC);
+  syncProtocol.writeUpdate(encoder, update);
   return encoding.toUint8Array(encoder);
 }
 
@@ -23,16 +30,16 @@ function fakeClient(userId: string): AuthenticatedClient {
   } as unknown as AuthenticatedClient;
 }
 
-describe('YjsSyncHandler', () => {
-  function setup() {
-    const docStore = new YjsDocumentStore();
-    const roomRegistry = new RoomRegistry();
-    const handler = new YjsSyncHandler(docStore, roomRegistry);
-    return { docStore, roomRegistry, handler };
-  }
+function setup() {
+  const docStore = new YjsDocumentStore();
+  const roomRegistry = new RoomRegistry();
+  const handler = new YjsSyncHandler(docStore, roomRegistry);
+  return { docStore, roomRegistry, handler };
+}
 
+describe('YjsSyncHandler', () => {
   describe('sendInitialSync', () => {
-    it('GIVEN room with doc WHEN sendInitialSync THEN sends binary SyncStep1 to client with first byte 0', () => {
+    it('GIVEN room with doc WHEN sending initial sync THEN client receives a binary SyncStep1 message', () => {
       const { docStore, handler } = setup();
       docStore.createDoc('room-1', 'hello');
       const client = fakeClient('user-1');
@@ -40,12 +47,11 @@ describe('YjsSyncHandler', () => {
       handler.sendInitialSync('room-1', client);
 
       expect(client.send).toHaveBeenCalledOnce();
-      const sent = (client.send as ReturnType<typeof vi.fn>).mock.calls[0][0] as Uint8Array;
-      expect(sent).toBeInstanceOf(Uint8Array);
-      expect(sent[0]).toBe(0); // messageSync
+      const sent = (client.send as ReturnType<typeof vi.fn>).mock.calls[0]![0] as Uint8Array;
+      expect(sent[0]).toBe(WsMessageType.SYNC);
     });
 
-    it('GIVEN no doc for room WHEN sendInitialSync THEN does nothing', () => {
+    it('GIVEN no doc for room WHEN sending initial sync THEN nothing is sent', () => {
       const { handler } = setup();
       const client = fakeClient('user-1');
 
@@ -56,51 +62,64 @@ describe('YjsSyncHandler', () => {
   });
 
   describe('handleSyncMessage', () => {
-    it('GIVEN client sends SyncStep1 WHEN handleSyncMessage THEN server responds with SyncStep2 (first two bytes 0,1)', () => {
+    it('GIVEN client sends SyncStep1 WHEN handled THEN client receives SyncStep2 with missing updates', () => {
       const { docStore, roomRegistry, handler } = setup();
-      docStore.createDoc('room-1', 'existing content');
+      docStore.createDoc('room-1', 'server content');
       roomRegistry.createRoom('room-1');
-
       const client = fakeClient('user-1');
       roomRegistry.addClient('room-1', 'user-1', client);
 
-      // Encode a SyncStep1 from a fresh client doc
+      // Client has empty doc, sends its state vector
       const clientDoc = new Y.Doc();
-      const syncStep1 = encodeSyncStep1(clientDoc);
-
-      handler.handleSyncMessage('room-1', 'user-1', syncStep1);
-
-      expect(client.send).toHaveBeenCalledOnce();
-      const response = (client.send as ReturnType<typeof vi.fn>).mock.calls[0][0] as Uint8Array;
-      expect(response).toBeInstanceOf(Uint8Array);
-      expect(response[0]).toBe(0); // messageSync
-      expect(response[1]).toBe(1); // SyncStep2 sub-type
-
+      handler.handleSyncMessage('room-1', 'user-1', encodeSyncStep1(clientDoc));
       clientDoc.destroy();
+
+      // Server should respond with SyncStep2 containing the diff
+      const response = (client.send as ReturnType<typeof vi.fn>).mock.calls[0]![0] as Uint8Array;
+      expect(response[0]).toBe(WsMessageType.SYNC);
+      expect(response[1]).toBe(1); // SyncStep2 sub-type
     });
 
-    it('GIVEN no doc for room WHEN handleSyncMessage THEN does nothing', () => {
+    it('GIVEN client sends Update WHEN handled THEN server doc reflects the change', () => {
+      const { docStore, roomRegistry, handler } = setup();
+      docStore.createDoc('room-1');
+      roomRegistry.createRoom('room-1');
+      const client = fakeClient('user-1');
+      roomRegistry.addClient('room-1', 'user-1', client);
+
+      // Create a real update from a client doc
+      const clientDoc = new Y.Doc();
+      let capturedUpdate!: Uint8Array;
+      clientDoc.on('update', (update: Uint8Array) => {
+        capturedUpdate = update;
+      });
+      clientDoc.getText('code').insert(0, 'hello from client');
+      clientDoc.destroy();
+
+      handler.handleSyncMessage('room-1', 'user-1', encodeUpdate(capturedUpdate));
+
+      expect(docStore.getDoc('room-1')!.getText('code').toString()).toBe('hello from client');
+    });
+
+    it('GIVEN no doc for room WHEN handling sync THEN nothing happens', () => {
       const { roomRegistry, handler } = setup();
       roomRegistry.createRoom('room-1');
       const client = fakeClient('user-1');
       roomRegistry.addClient('room-1', 'user-1', client);
 
       const clientDoc = new Y.Doc();
-      const syncStep1 = encodeSyncStep1(clientDoc);
-
-      handler.handleSyncMessage('room-1', 'user-1', syncStep1);
+      handler.handleSyncMessage('room-1', 'user-1', encodeSyncStep1(clientDoc));
+      clientDoc.destroy();
 
       expect(client.send).not.toHaveBeenCalled();
-      clientDoc.destroy();
     });
   });
 
   describe('registerUpdateBroadcast', () => {
-    it('GIVEN two clients WHEN one applies update THEN other client receives broadcast but origin does not', () => {
+    it('GIVEN two clients WHEN a doc update is applied THEN only the other client receives the broadcast', () => {
       const { docStore, roomRegistry, handler } = setup();
       const doc = docStore.createDoc('room-1');
       roomRegistry.createRoom('room-1');
-
       const client1 = fakeClient('user-1');
       const client2 = fakeClient('user-2');
       roomRegistry.addClient('room-1', 'user-1', client1);
@@ -108,20 +127,53 @@ describe('YjsSyncHandler', () => {
 
       handler.registerUpdateBroadcast('room-1');
 
-      // Simulate user-1 making an edit
       doc.transact(() => {
-        doc.getText('code').insert(0, 'test');
+        doc.getText('code').insert(0, 'edit');
       }, 'user-1');
 
-      // user-2 should receive the broadcast
-      expect(client2.send).toHaveBeenCalledOnce();
-      const broadcast = (client2.send as ReturnType<typeof vi.fn>).mock.calls[0][0] as Uint8Array;
-      expect(broadcast).toBeInstanceOf(Uint8Array);
-      expect(broadcast[0]).toBe(0); // messageSync
-      expect(broadcast[1]).toBe(2); // Update sub-type
-
-      // user-1 (origin) should NOT receive the broadcast
       expect(client1.send).not.toHaveBeenCalled();
+      expect(client2.send).toHaveBeenCalled();
+      const broadcast = (client2.send as ReturnType<typeof vi.fn>).mock.calls[0]![0] as Uint8Array;
+      expect(broadcast[0]).toBe(WsMessageType.SYNC);
+    });
+
+    it('GIVEN client sends Update WHEN broadcast registered THEN other client receives it and can reconstruct the doc', () => {
+      const { docStore, roomRegistry, handler } = setup();
+      docStore.createDoc('room-1');
+      roomRegistry.createRoom('room-1');
+      handler.registerUpdateBroadcast('room-1');
+
+      const client1 = fakeClient('user-1');
+      const client2 = fakeClient('user-2');
+      roomRegistry.addClient('room-1', 'user-1', client1);
+      roomRegistry.addClient('room-1', 'user-2', client2);
+
+      // Client1 sends an update
+      const clientDoc = new Y.Doc();
+      let capturedUpdate!: Uint8Array;
+      clientDoc.on('update', (update: Uint8Array) => {
+        capturedUpdate = update;
+      });
+      clientDoc.getText('code').insert(0, 'collaborative text');
+      clientDoc.destroy();
+
+      handler.handleSyncMessage('room-1', 'user-1', encodeUpdate(capturedUpdate));
+
+      expect(client2.send).toHaveBeenCalled();
+
+      // Verify the update reconstructs the correct document state
+      const receiverDoc = new Y.Doc();
+      // The broadcast is [messageSync, Update sub-type, ...update]
+      // We need to decode it the same way readSyncMessage would
+      Y.applyUpdate(receiverDoc, capturedUpdate);
+      expect(receiverDoc.getText('code').toString()).toBe('collaborative text');
+      receiverDoc.destroy();
+    });
+
+    it('GIVEN no doc for room WHEN registering THEN does nothing', () => {
+      const { handler } = setup();
+
+      expect(() => handler.registerUpdateBroadcast('room-1')).not.toThrow();
     });
   });
 });

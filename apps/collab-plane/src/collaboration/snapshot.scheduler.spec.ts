@@ -1,5 +1,6 @@
 import type { IControlPlaneCallbackClient } from '@syncode/contracts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as Y from 'yjs';
 import { SnapshotScheduler } from './snapshot.scheduler.js';
 import { YjsDocumentStore } from './yjs-document-store.js';
 
@@ -24,18 +25,26 @@ describe('SnapshotScheduler', () => {
   });
 
   describe('takeSnapshot', () => {
-    it('GIVEN doc with content WHEN taking snapshot THEN calls notifySnapshotReady with correct payload', async () => {
+    it('GIVEN doc with content WHEN taking snapshot THEN delivers reconstructable snapshot to control-plane', async () => {
       docStore.createDoc('room-1', 'const x = 1;');
 
       await scheduler.takeSnapshot('room-1', 'periodic');
 
-      expect(callbackClient.notifySnapshotReady).toHaveBeenCalledOnce();
-      const payload = vi.mocked(callbackClient.notifySnapshotReady).mock.calls[0][0];
-      expect(payload.roomId).toBe('room-1');
-      expect(payload.trigger).toBe('periodic');
-      expect(payload.snapshot).toBeInstanceOf(Array);
-      expect(payload.snapshot.length).toBeGreaterThan(0);
-      expect(payload.timestamp).toBeTypeOf('number');
+      expect(callbackClient.notifySnapshotReady).toHaveBeenCalledWith(
+        expect.objectContaining({
+          roomId: 'room-1',
+          trigger: 'periodic',
+          snapshot: expect.any(Array),
+          timestamp: expect.any(Number),
+        }),
+      );
+
+      // Verify the snapshot bytes actually reconstruct the document
+      const payload = vi.mocked(callbackClient.notifySnapshotReady).mock.calls[0]![0];
+      const restored = new Y.Doc();
+      Y.applyUpdate(restored, new Uint8Array(payload.snapshot));
+      expect(restored.getText('code').toString()).toBe('const x = 1;');
+      restored.destroy();
     });
 
     it('GIVEN non-existent doc WHEN taking snapshot THEN does nothing', async () => {
@@ -44,7 +53,7 @@ describe('SnapshotScheduler', () => {
       expect(callbackClient.notifySnapshotReady).not.toHaveBeenCalled();
     });
 
-    it('GIVEN callbackClient throws WHEN taking snapshot THEN catches error and does not rethrow', async () => {
+    it('GIVEN callbackClient throws WHEN taking snapshot THEN does not rethrow', async () => {
       docStore.createDoc('room-1', 'const x = 1;');
       vi.mocked(callbackClient.notifySnapshotReady).mockRejectedValueOnce(
         new Error('Network error'),
@@ -61,9 +70,9 @@ describe('SnapshotScheduler', () => {
 
       await vi.advanceTimersByTimeAsync(30_000);
 
-      expect(callbackClient.notifySnapshotReady).toHaveBeenCalledOnce();
-      const payload = vi.mocked(callbackClient.notifySnapshotReady).mock.calls[0][0];
-      expect(payload.trigger).toBe('periodic');
+      expect(callbackClient.notifySnapshotReady).toHaveBeenCalledWith(
+        expect.objectContaining({ trigger: 'periodic' }),
+      );
     });
 
     it('GIVEN startPeriodicSnapshots called twice WHEN 30s elapses THEN only one snapshot fires', async () => {
