@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { InternalController } from './internal.controller';
+import { InternalController } from './internal.controller.js';
 
 /**
  * Handles internal HTTP callbacks from other planes.

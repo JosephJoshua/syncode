@@ -1,7 +1,7 @@
 import { Global, Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createDb } from '@syncode/db';
-import type { EnvConfig } from '@/config/env.config';
+import type { EnvConfig } from '@/config/env.config.js';
 
 /**
  * DI token for Drizzle database client

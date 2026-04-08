@@ -5,7 +5,7 @@ import {
   CircuitState,
 } from '@syncode/shared';
 import { beforeEach, describe, expect, test } from 'vitest';
-import { CircuitBreakerAdapter } from '../circuit-breaker.adapter';
+import { CircuitBreakerAdapter } from '../circuit-breaker.adapter.js';
 
 describe('Circuit Breaker Adapter', () => {
   let circuitBreaker: CircuitBreakerAdapter;
@@ -387,7 +387,7 @@ describe('Circuit Breaker Adapter', () => {
 
   describe('Concurrent Access', () => {
     test('GIVEN circuit is OPEN and reset timeout elapsed WHEN multiple requests dispatched concurrently THEN all are allowed through (no probe guard)', async () => {
-      // NOTE: This tests current behavior — canExecute() has no probeInFlight guard,
+      // NOTE: This tests current behavior. canExecute() has no probeInFlight guard,
       // so all concurrent calls pass through in HALF_OPEN. In JS single-threaded execution,
       // all canExecute() calls resolve synchronously before any await point, so this test
       // cannot expose a true race condition. If a probeInFlight guard is added later,
@@ -411,7 +411,7 @@ describe('Circuit Breaker Adapter', () => {
       // Wait for reset timeout
       await new Promise((resolve) => setTimeout(resolve, 150));
 
-      // All 10 calls pass through — no probe guard limits concurrency in HALF_OPEN
+      // All 10 calls pass through; no probe guard limits concurrency in HALF_OPEN
       const promises = Array.from({ length: 10 }, () => circuitBreaker.execute(successFn, config));
 
       const results = await Promise.allSettled(promises);

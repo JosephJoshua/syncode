@@ -1,4 +1,4 @@
-import type { ExecutionRequest, ExecutionResult, SupportedLanguage } from '../types/execution';
+import type { ExecutionRequest, ExecutionResult, SupportedLanguage } from '../types/execution.js';
 
 export const SANDBOX_PROVIDER = Symbol.for('SANDBOX_PROVIDER');
 

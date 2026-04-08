@@ -1,5 +1,5 @@
 import { bigint, index, integer, pgTable, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
-import { sessions } from './sessions';
+import { sessions } from './sessions.js';
 
 export const sessionRecordings = pgTable(
   'session_recordings',

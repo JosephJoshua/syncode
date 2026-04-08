@@ -1,24 +1,30 @@
-import { createRootRoute, Link, Outlet } from '@tanstack/react-router';
-import { Code2 } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
+import { createRootRoute, Outlet, useNavigate } from '@tanstack/react-router';
+import { useEffect, useRef } from 'react';
+import { useAuthStore } from '@/stores/auth.store.js';
 
 export const Route = createRootRoute({
   component: RootLayout,
 });
 
 function RootLayout() {
+  const navigate = useNavigate();
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const wasAuthenticated = useRef(isAuthenticated);
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (wasAuthenticated.current && !isAuthenticated) {
+      queryClient.clear();
+      navigate({ to: '/login' }).catch(() => {});
+    }
+
+    wasAuthenticated.current = isAuthenticated;
+  }, [isAuthenticated, navigate, queryClient]);
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      <nav className="border-b border-gray-200 bg-white">
-        <div className="mx-auto flex h-14 max-w-7xl items-center gap-6 px-4">
-          <Link to="/" className="flex items-center gap-2 font-semibold text-gray-900">
-            <Code2 className="h-5 w-5" />
-            SynCode
-          </Link>
-        </div>
-      </nav>
-      <main>
-        <Outlet />
-      </main>
+    <div className="min-h-screen bg-background text-foreground">
+      <Outlet />
     </div>
   );
 }

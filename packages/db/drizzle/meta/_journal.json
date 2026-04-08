@@ -15,6 +15,13 @@
       "when": 1773660096845,
       "tag": "0001_check_constraints",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1775576400000,
+      "tag": "0002_global_limits",
+      "breakpoints": true
     }
   ]
 }

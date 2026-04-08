@@ -4,7 +4,7 @@ import {
   type CreateDocumentRequest,
   type KickUserRequest,
 } from '@syncode/contracts';
-import { CollaborationService } from '../collaboration/collaboration.service';
+import { CollaborationService } from '../collaboration/collaboration.service.js';
 
 @Controller()
 export class InternalController {

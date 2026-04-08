@@ -1,11 +1,11 @@
-import type { ICollabClient } from './client';
+import type { ICollabClient } from './client.js';
 import type {
   CreateDocumentRequest,
   CreateDocumentResponse,
   DestroyDocumentResponse,
   KickUserRequest,
   KickUserResponse,
-} from './internal';
+} from './internal.js';
 
 interface StubCollabClientOptions {
   /** Delay in ms before operations complete (default: 200) */

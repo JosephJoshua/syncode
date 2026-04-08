@@ -2,10 +2,11 @@ import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
-import type { EnvConfig } from '@/config/env.config';
-import { AuthController } from './auth.controller';
-import { AuthService } from './auth.service';
-import { JwtStrategy } from './jwt.strategy';
+import type { EnvConfig } from '@/config/env.config.js';
+import { AuthController } from './auth.controller.js';
+import { AuthService } from './auth.service.js';
+import { JwtStrategy } from './jwt.strategy.js';
+import { RefreshTokenCleanupService } from './refresh-token-cleanup.service.js';
 
 /**
  * Provides JWT-based authentication.
@@ -15,7 +16,7 @@ import { JwtStrategy } from './jwt.strategy';
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
       useFactory: (config: ConfigService<EnvConfig>) => ({
-        secret: config.get('JWT_SECRET', { infer: true }),
+        secret: config.get('AUTH_JWT_SECRET', { infer: true }),
         signOptions: {
           expiresIn: config.get('JWT_EXPIRATION', { infer: true }),
         },
@@ -24,7 +25,7 @@ import { JwtStrategy } from './jwt.strategy';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy],
+  providers: [AuthService, JwtStrategy, RefreshTokenCleanupService],
   exports: [AuthService, JwtStrategy],
 })
 export class AuthModule {}

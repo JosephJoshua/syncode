@@ -1,19 +1,21 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
+import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { LoggerModule } from 'nestjs-pino';
-import { AppController } from './app.controller';
-import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
-import { type EnvConfig, validateEnv } from './config/env.config';
-import { InfrastructureModule } from './infrastructure/infrastructure.module';
-import { AuthModule } from './modules/auth/auth.module';
-import { DbModule } from './modules/db/db.module';
-import { ExecutionModule } from './modules/execution/execution.module';
-import { InternalModule } from './modules/internal/internal.module';
-import { ProblemsModule } from './modules/problems/problems.module';
-import { RoomsModule } from './modules/rooms/rooms.module';
-import { UsersModule } from './modules/users/users.module';
+import { AppController } from './app.controller.js';
+import { GlobalExceptionFilter } from './common/filters/global-exception.filter.js';
+import { type EnvConfig, validateEnv } from './config/env.config.js';
+import { InfrastructureModule } from './infrastructure/infrastructure.module.js';
+import { AuthModule } from './modules/auth/auth.module.js';
+import { DbModule } from './modules/db/db.module.js';
+import { ExecutionModule } from './modules/execution/execution.module.js';
+import { InternalModule } from './modules/internal/internal.module.js';
+import { ProblemsModule } from './modules/problems/problems.module.js';
+import { RoomsModule } from './modules/rooms/rooms.module.js';
+import { SessionsModule } from './modules/sessions/sessions.module.js';
+import { UsersModule } from './modules/users/users.module.js';
 
 const isProd = process.env.NODE_ENV === 'production';
 let hasPinoPretty = false;
@@ -105,6 +107,7 @@ if (!isProd) {
     }),
 
     // Global modules
+    ScheduleModule.forRoot(),
     DbModule,
     InfrastructureModule,
 
@@ -112,6 +115,7 @@ if (!isProd) {
     AuthModule,
     UsersModule,
     RoomsModule,
+    SessionsModule,
     ProblemsModule,
     ExecutionModule,
     InternalModule,

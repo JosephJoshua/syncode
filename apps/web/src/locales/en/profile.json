@@ -1,0 +1,67 @@
+{
+  "hero": {
+    "label": "Profile",
+    "heading": "Your profile",
+    "noEmail": "No email available",
+    "noBio": "No bio yet. Add a short intro below.",
+    "editProfile": "Edit profile",
+    "hideEditor": "Hide editor"
+  },
+  "form": {
+    "title": "Edit profile",
+    "description": "Keep your public profile current. Username changes affect how others find you.",
+    "usernameHelp": "3-30 characters, letters, numbers, and underscores only.",
+    "displayNameHelp": "Optional. Shown on your profile and in shared spaces.",
+    "bioHelp": "Optional. Up to 500 characters."
+  },
+  "field": {
+    "username": "Username",
+    "displayName": "Display name",
+    "bio": "Bio"
+  },
+  "button": {
+    "reset": "Reset",
+    "cancel": "Cancel",
+    "saveChanges": "Save changes",
+    "saving": "Saving..."
+  },
+  "toast": {
+    "profileUpdated": "Profile updated.",
+    "updateFailed": "Unable to update your profile right now."
+  },
+  "quotas": {
+    "heading": "Usage quotas",
+    "description": "Current daily counters and active room cap.",
+    "ai": "AI",
+    "execution": "Execution",
+    "rooms": "Rooms",
+    "dailyLimit": "Daily limit",
+    "activeRooms": "Active rooms",
+    "resetsAt": "Resets {{time}}",
+    "soon": "soon"
+  },
+  "validation": {
+    "usernameMinLength": "Username must be at least 3 characters.",
+    "usernameMaxLength": "Username must be 30 characters or fewer.",
+    "usernamePattern": "Username can only contain letters, numbers, and underscores.",
+    "usernameTaken": "This username is already taken."
+  },
+  "dangerZone": {
+    "heading": "Danger zone",
+    "description": "Soft-deleting your account will sign you out and disable future access."
+  },
+  "deleteDialog": {
+    "title": "Delete account",
+    "description": "This will soft-delete your account, sign you out immediately, and prevent future access. Your historical records may still remain on the platform.",
+    "confirmationRequired": "Confirmation required",
+    "typeEmail": "Type {{email}} exactly to confirm deletion.",
+    "emailConfirmation": "Email confirmation",
+    "cancel": "Cancel",
+    "deletePermanently": "Delete permanently",
+    "deleting": "Deleting..."
+  },
+  "deleteToast": {
+    "accountDeleted": "Account deleted.",
+    "deleteFailed": "Unable to delete your account right now."
+  }
+}

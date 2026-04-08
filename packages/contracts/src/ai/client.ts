@@ -1,4 +1,4 @@
-import type { JobId, JobStatus, SubmitResult } from '../queues';
+import type { JobId, JobStatus, SubmitResult } from '../queues.js';
 import type {
   GenerateHintRequest,
   GenerateHintResult,
@@ -6,7 +6,7 @@ import type {
   InterviewResponseResult,
   ReviewCodeRequest,
   ReviewCodeResult,
-} from './types';
+} from './types.js';
 
 export interface IAiClient {
   submitHintRequest(request: GenerateHintRequest): Promise<SubmitResult<'ai:hint'>>;

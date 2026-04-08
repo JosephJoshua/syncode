@@ -1,0 +1,50 @@
+{
+  "badge": "Join SynCode",
+  "heading": "Create your SynCode account",
+  "sub": "Join your peers and start practicing technical interviews together.",
+  "cardTitle": "Create account",
+  "cardDescription": "Set up your profile to start practicing with your peers.",
+  "field": {
+    "username": "Username",
+    "usernamePlaceholder": "your_username",
+    "email": "Email",
+    "emailPlaceholder": "you@example.com",
+    "password": "Password",
+    "passwordPlaceholder": "Create a password",
+    "confirmPassword": "Confirm password",
+    "confirmPasswordPlaceholder": "Confirm your password"
+  },
+  "validation": {
+    "usernameMinLength": "Username must be at least 3 characters.",
+    "usernameMaxLength": "Username must be 30 characters or fewer.",
+    "usernamePattern": "Username can only contain letters, numbers, and underscores.",
+    "emailInvalid": "Enter a valid email address.",
+    "passwordMinLength": "Password must be at least 8 characters.",
+    "confirmPasswordRequired": "Confirm your password.",
+    "passwordsMismatch": "Passwords do not match.",
+    "reviewFields": "Please review the highlighted fields and try again."
+  },
+  "button": {
+    "createAccount": "Create account",
+    "creatingAccount": "Creating account...",
+    "accountCreated": "Account created",
+    "tryAgain": "Try again"
+  },
+  "statusBar": {
+    "secure": "Secure registration",
+    "tls": "TLS 1.3"
+  },
+  "footer": {
+    "hasAccount": "Already have an account?",
+    "signIn": "Sign in"
+  },
+  "toast": {
+    "accountCreated": "Account created successfully. Please sign in."
+  },
+  "error": {
+    "checkDetails": "Please check your details and try again.",
+    "emailInUse": "This email is already in use.",
+    "usernameTaken": "This username is already taken.",
+    "cannotCreate": "We could not create your account right now."
+  }
+}

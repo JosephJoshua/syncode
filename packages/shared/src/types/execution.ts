@@ -1,4 +1,4 @@
-import type { SUPPORTED_LANGUAGES } from '../constants';
+import type { SUPPORTED_LANGUAGES } from '../constants.js';
 
 export type SupportedLanguage = (typeof SUPPORTED_LANGUAGES)[number];
 

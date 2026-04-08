@@ -6,8 +6,10 @@ import {
   HttpStatus,
   Logger,
 } from '@nestjs/common';
+import { ERROR_CODES } from '@syncode/contracts';
 import { CircuitBreakerOpenError, CircuitBreakerTimeoutError } from '@syncode/shared/ports';
 import type { Response } from 'express';
+import { ZodValidationException } from 'nestjs-zod';
 
 /**
  * Handles all uncaught exceptions and transforms them into proper HTTP responses.
@@ -22,9 +24,18 @@ export class GlobalExceptionFilter implements ExceptionFilter {
 
     let status = HttpStatus.INTERNAL_SERVER_ERROR;
     let message = 'Internal server error';
+    let code: string | undefined;
     let details: unknown;
 
     (() => {
+      if (exception instanceof ZodValidationException) {
+        status = HttpStatus.BAD_REQUEST;
+        message = 'Validation failed';
+        code = ERROR_CODES.VALIDATION_FAILED;
+        details = this.mapValidationDetails(exception.getZodError());
+        return;
+      }
+
       if (exception instanceof CircuitBreakerOpenError) {
         status = HttpStatus.SERVICE_UNAVAILABLE;
         message = 'Service temporarily unavailable';
@@ -56,11 +67,21 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       if (exception instanceof HttpException) {
         status = exception.getStatus();
         const exceptionResponse = exception.getResponse();
-        message =
-          typeof exceptionResponse === 'string'
-            ? exceptionResponse
-            : (exceptionResponse as { message?: string }).message || exception.message;
-        details = typeof exceptionResponse === 'object' ? exceptionResponse : undefined;
+
+        if (typeof exceptionResponse === 'string') {
+          message = exceptionResponse;
+        } else {
+          const res = exceptionResponse as Record<string, unknown>;
+          message =
+            typeof res.message === 'string'
+              ? res.message
+              : Array.isArray(res.message)
+                ? res.message.join(', ')
+                : exception.message;
+          code = typeof res.code === 'string' ? res.code : undefined;
+          details = res;
+        }
+
         if (status >= 500) {
           this.logger.error(`HTTP ${status}: ${message}`, exception.stack);
         }
@@ -80,9 +101,40 @@ export class GlobalExceptionFilter implements ExceptionFilter {
 
     response.status(status).json({
       statusCode: status,
+      ...(code ? { code } : {}),
       message,
       timestamp: new Date().toISOString(),
       ...(details ? { details } : {}),
     });
+  }
+
+  private mapValidationDetails(error: unknown): Record<string, string> {
+    if (
+      !error ||
+      typeof error !== 'object' ||
+      !('issues' in error) ||
+      !Array.isArray(error.issues)
+    ) {
+      return {};
+    }
+
+    const details: Record<string, string> = {};
+
+    for (const issue of error.issues) {
+      if (!issue || typeof issue !== 'object') {
+        continue;
+      }
+
+      const path = 'path' in issue && Array.isArray(issue.path) ? issue.path : [];
+      const field = path.find((segment: unknown): segment is string => typeof segment === 'string');
+      const message =
+        'message' in issue && typeof issue.message === 'string' ? issue.message : null;
+
+      if (field && message && !details[field]) {
+        details[field] = message;
+      }
+    }
+
+    return details;
   }
 }

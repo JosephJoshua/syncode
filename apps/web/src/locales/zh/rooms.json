@@ -1,0 +1,127 @@
+{
+  "heading": "房间",
+  "subtitle": {
+    "activeCount_one": "{{count}} 个活跃房间",
+    "activeCount_other": "{{count}} 个活跃房间",
+    "totalCount_one": "{{count}} 个房间",
+    "totalCount_other": "{{count}} 个房间",
+    "totalLabel": "共 {{totalCount}} 个",
+    "noActive": "无活跃房间"
+  },
+  "button": {
+    "createRoom": "创建房间"
+  },
+  "join": {
+    "heading": "加入房间",
+    "description": "将搭档分享的邀请链接粘贴到下方即可加入。",
+    "button": "加入",
+    "placeholder": "https://\u2026/rooms/abc123?code=A3K7M2",
+    "error": "请粘贴有效的邀请链接（如 https://\u2026/rooms/id?code=XXXXXX）"
+  },
+  "filter": {
+    "all": "全部"
+  },
+  "error": {
+    "loadFailed": "房间加载失败",
+    "loadFailedDescription": "出了点问题，请重试。",
+    "retry": "重试"
+  },
+  "empty": {
+    "noRooms": "暂无房间",
+    "noRoomsDescription": "创建一个房间开始练习，或使用上方的邀请链接加入。",
+    "noRoomsWithStatus": "没有状态为「{{status}}」的房间。"
+  },
+  "card": {
+    "untitledRoom": "未命名房间"
+  },
+  "role": {
+    "host": "主持人",
+    "candidate": "候选人",
+    "interviewer": "面试官",
+    "observer": "观察者"
+  },
+  "status": {
+    "waiting": "等待中",
+    "warmup": "热身",
+    "coding": "编码中",
+    "wrapup": "收尾",
+    "finished": "已结束"
+  },
+  "create": {
+    "heading": "创建工作区",
+    "sub": "创建实时协作编码空间",
+    "problemLabel": "待解题目",
+    "languageLabel": "编程语言",
+    "visibilityLabel": "可见性",
+    "problemPlaceholder": "输入以搜索并选择题目",
+    "languagePlaceholder": "选择语言",
+    "publicRoom": "公开房间",
+    "publicRoomDescription": "任何拥有链接的人都可以直接加入",
+    "button": "创建协作房间",
+    "provisioning": "正在配置工作区...",
+    "noMatchingProblems": "没有匹配的题目",
+    "problemRequired": "请选择一道题目",
+    "createFailed": "创建房间失败，请重试。"
+  },
+  "success": {
+    "details": "工作区详情",
+    "provisioned": "房间创建成功！",
+    "shareLink": "将此邀请链接分享给协作者：",
+    "setupNew": "创建新房间",
+    "enterWorkspace": "进入工作区",
+    "publicAccess": "公开访问",
+    "private": "私密"
+  },
+  "lobby": {
+    "heading": "工作区大厅",
+    "ready": "就绪",
+    "connecting": "正在建立连接...",
+    "authenticating": "正在认证并加入工作区 {{roomId}}...",
+    "sub": "等待参与者加入并分配角色后即可进入工作区",
+    "you": "（你）",
+    "unableToJoin": "无法加入房间",
+    "joinFailed": "加入房间失败，请检查邀请链接或登录状态。",
+    "roomNotFound": "该房间不存在或已被删除。",
+    "roomFull": "该房间已满，无法加入更多参与者。",
+    "roomFinished": "该会话已结束。",
+    "invalidCode": "邀请码无效或已过期。",
+    "accessDenied": "你没有权限加入该房间。"
+  },
+  "roleSelect": {
+    "heading": "你的角色",
+    "placeholder": "选择角色...",
+    "host": "主持人（房间所有者）",
+    "candidate": "候选人（编写代码）",
+    "interviewer": "面试官（审查代码）",
+    "observer": "观察者（静默观看）"
+  },
+  "readyButton": {
+    "ready": "我已准备好",
+    "cancelReady": "取消准备",
+    "enterWorkspace": "进入工作区"
+  },
+  "warning": "至少需要一名候选人和一名面试官（或主持人）才能开始。",
+  "systemStatus": {
+    "ready": "> SYSTEM_READY",
+    "awaitingPeers": "> AWAITING_PEERS_"
+  },
+  "hostControl": {
+    "heading": "主持人控制",
+    "sessionConcluded": "会话已结束。",
+    "advanceStage": "推进面试阶段：",
+    "endSession": "结束会话",
+    "advanceTo": "推进至 {{stageName}}"
+  },
+  "stage": {
+    "awaitingSync": "AWAITING_SYNC",
+    "systemWarmup": "SYSTEM_WARMUP",
+    "activeCoding": "ACTIVE_CODING",
+    "phaseWrapup": "PHASE_WRAPUP",
+    "sessionEnd": "SESSION_END"
+  },
+  "timer": {
+    "percent": "会话进度 {{percent}}%",
+    "resumeTimer": "继续计时",
+    "pauseTimer": "暂停计时"
+  }
+}

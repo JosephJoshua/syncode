@@ -12,7 +12,7 @@
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && node ../../scripts/write-cjs-package-json.js",
+    "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "generate": "./load-env.sh drizzle-kit generate",
     "migrate": "./load-env.sh node --import tsx src/migrate.ts",

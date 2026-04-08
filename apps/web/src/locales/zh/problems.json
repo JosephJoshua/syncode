@@ -1,0 +1,89 @@
+{
+  "heading": "题库",
+  "sub": {
+    "loading": "加载题目中...",
+    "count": "{{count}} 道题目"
+  },
+  "error": {
+    "withStatusCode": "{{statusCode}} 错误",
+    "requestError": "请求错误",
+    "unableToLoad": "无法加载题目详情",
+    "notFound": "该 URL 对应的题目未找到。",
+    "cannotLoad": "当前无法加载此题目。",
+    "unexpected": "加载题目时发生意外错误。"
+  },
+  "loading": "加载题目详情...",
+  "search": {
+    "placeholder": "按题目标题搜索",
+    "ariaLabel": "搜索题目"
+  },
+  "empty": {
+    "libraryTitle": "题库暂无内容",
+    "libraryDescription": "请先添加一些模拟题目，以便发现页面有内容可展示。",
+    "filteredTitle": "没有匹配的题目",
+    "filteredDescription": "尝试清除部分筛选条件或扩大搜索范围以找到更多题目。",
+    "clearFilters": "清除筛选"
+  },
+  "filter": {
+    "heading": "筛选",
+    "resetAll": "重置全部",
+    "difficulty": "难度",
+    "easy": "简单",
+    "medium": "中等",
+    "hard": "困难",
+    "problemStatus": "题目状态",
+    "solved": "已解决",
+    "attempted": "已尝试",
+    "todoNotDone": "待完成 / 未做",
+    "popularTags": "热门标签"
+  },
+  "toolbar": {
+    "activeFilters": "已启用筛选",
+    "clearAll": "清除全部",
+    "noFilters": "暂未应用任何筛选。",
+    "sortBy": "排序方式",
+    "selectSort": "选择排序",
+    "removeFilter": "移除 {{label}}"
+  },
+  "detail": {
+    "breadcrumb": "题库 / {{title}}",
+    "practiceButton": "练习此题",
+    "description": "题目描述",
+    "constraints": "约束条件",
+    "noConstraints": "暂未提供约束条件。",
+    "examples": "示例（{{count}}）",
+    "exampleTitle": "示例 {{index}}",
+    "input": "输入",
+    "output": "输出",
+    "explanation": "解释",
+    "starterCode": "初始代码",
+    "noStarterCode": "该题目暂无初始代码。",
+    "publicTestCases": "公开测试用例",
+    "noPublicTestCases": "暂无公开测试用例。",
+    "testCaseTitle": "测试用例 {{index}}",
+    "expectedOutput": "预期输出",
+    "timeLimit": "时间限制",
+    "memoryLimit": "内存限制",
+    "default": "默认",
+    "acceptanceRate": "通过率",
+    "notAvailable": "不可用",
+    "totalSubmissions": "总提交数",
+    "yourAttempts": "你的尝试",
+    "currentStatus": "当前状态",
+    "signInBookmarks": "登录以管理收藏",
+    "removeBookmark": "取消收藏",
+    "addBookmark": "添加收藏",
+    "easy": "简单",
+    "medium": "中等",
+    "hard": "困难",
+    "solved": "已解决",
+    "attempted": "已尝试",
+    "noAttemptsYet": "尚未尝试",
+    "lastUpdated": "最后更新：{{date}}"
+  },
+  "sort": {
+    "newest": "最新",
+    "acceptance": "通过率",
+    "difficulty": "难度"
+  }
+}

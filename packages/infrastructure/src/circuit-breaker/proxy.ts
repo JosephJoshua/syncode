@@ -1,5 +1,5 @@
 import type { CircuitBreakerConfig } from '@syncode/shared/ports';
-import type { CircuitBreakerAdapter } from './circuit-breaker.adapter';
+import type { CircuitBreakerAdapter } from './circuit-breaker.adapter.js';
 
 /**
  * Configuration for a single method's circuit breaker protection

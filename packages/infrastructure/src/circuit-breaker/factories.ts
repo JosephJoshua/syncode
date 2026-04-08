@@ -4,9 +4,9 @@ import {
   LIVEKIT_ADAPTER_CIRCUIT_CONFIG,
   REDIS_ADAPTER_CIRCUIT_CONFIG,
   S3_ADAPTER_CIRCUIT_CONFIG,
-} from './adapter-configs';
-import type { CircuitBreakerAdapter } from './circuit-breaker.adapter';
-import { createCircuitBreakerProxy } from './proxy';
+} from './adapter-configs.js';
+import type { CircuitBreakerAdapter } from './circuit-breaker.adapter.js';
+import { createCircuitBreakerProxy } from './proxy.js';
 
 /**
  * Creates an S3 storage adapter with circuit breaker protection.

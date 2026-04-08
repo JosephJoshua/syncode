@@ -1,9 +1,9 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { LoggerModule } from 'nestjs-pino';
-import { AiModule } from './ai/ai.module';
-import { validateEnv } from './config/env.config';
-import { InfrastructureModule } from './infrastructure/infrastructure.module';
+import { AiModule } from './ai/ai.module.js';
+import { validateEnv } from './config/env.config.js';
+import { InfrastructureModule } from './infrastructure/infrastructure.module.js';
 
 const isProd = process.env.NODE_ENV === 'production';
 let hasPinoPretty = false;

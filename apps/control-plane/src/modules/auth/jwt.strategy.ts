@@ -1,10 +1,10 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
 import type { Database } from '@syncode/db';
 import { ExtractJwt, Strategy } from 'passport-jwt';
-import type { EnvConfig } from '@/config/env.config';
-import { DB_CLIENT } from '@/modules/db/db.module';
+import type { EnvConfig } from '@/config/env.config.js';
+import { DB_CLIENT } from '@/modules/db/db.module.js';
 
 /**
  * JWT payload structure
@@ -14,6 +14,7 @@ interface JwtPayload {
   email: string;
   iat: number;
   exp: number;
+  tokenType?: 'access' | 'refresh';
 }
 
 /**
@@ -25,13 +26,12 @@ interface JwtPayload {
 export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
   constructor(
     config: ConfigService<EnvConfig>,
-    // biome-ignore lint/correctness/noUnusedPrivateClassMembers: used when user table is implemented
     @Inject(DB_CLIENT) private readonly db: Database,
   ) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: config.get('JWT_SECRET', { infer: true })!,
+      secretOrKey: config.get('AUTH_JWT_SECRET', { infer: true })!,
     });
   }
 
@@ -44,11 +44,27 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
    * @returns User object or throws UnauthorizedException
    */
   async validate(payload: JwtPayload) {
-    // TODO: Fetch user from database using payload.sub (user ID)
+    if (payload.tokenType && payload.tokenType !== 'access') {
+      throw new UnauthorizedException('Invalid access token');
+    }
+
+    const user = await this.db.query.users.findFirst({
+      columns: {
+        id: true,
+        email: true,
+        bannedAt: true,
+      },
+      where: (table, { and, eq, isNull }) =>
+        and(eq(table.id, payload.sub), isNull(table.deletedAt)),
+    });
+
+    if (!user || user.bannedAt) {
+      throw new UnauthorizedException('Unauthorized');
+    }
 
     return {
-      id: payload.sub,
-      email: payload.email,
+      id: user.id,
+      email: user.email,
     };
   }
 }

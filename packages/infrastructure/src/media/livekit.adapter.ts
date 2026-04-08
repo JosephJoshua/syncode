@@ -9,7 +9,7 @@ import type {
   ParticipantPermissions,
 } from '@syncode/shared';
 import { AccessToken, RoomServiceClient, TrackSource } from 'livekit-server-sdk';
-import { type LiveKitConfig, LiveKitConfigSchema } from '../config';
+import { type LiveKitConfig, LiveKitConfigSchema } from '../config.js';
 
 @Injectable()
 export class LiveKitAdapter implements IMediaService, OnModuleDestroy {

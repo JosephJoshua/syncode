@@ -1,0 +1,67 @@
+{
+  "hero": {
+    "label": "个人资料",
+    "heading": "你的个人资料",
+    "noEmail": "暂无邮箱",
+    "noBio": "还没有简介。在下方添加一段自我介绍吧。",
+    "editProfile": "编辑资料",
+    "hideEditor": "隐藏编辑器"
+  },
+  "form": {
+    "title": "编辑资料",
+    "description": "确保你的公开资料是最新的。更改用户名会影响他人如何找到你。",
+    "usernameHelp": "3-30 个字符，仅限字母、数字和下划线。",
+    "displayNameHelp": "可选。显示在你的个人资料和共享空间中。",
+    "bioHelp": "可选。最多 500 个字符。"
+  },
+  "field": {
+    "username": "用户名",
+    "displayName": "显示名称",
+    "bio": "个人简介"
+  },
+  "button": {
+    "reset": "重置",
+    "cancel": "取消",
+    "saveChanges": "保存更改",
+    "saving": "保存中..."
+  },
+  "toast": {
+    "profileUpdated": "个人资料已更新。",
+    "updateFailed": "当前无法更新你的个人资料。"
+  },
+  "quotas": {
+    "heading": "使用配额",
+    "description": "当前每日计数器和活跃房间上限。",
+    "ai": "AI",
+    "execution": "执行",
+    "rooms": "房间",
+    "dailyLimit": "每日限额",
+    "activeRooms": "活跃房间",
+    "resetsAt": "{{time}} 重置",
+    "soon": "即将"
+  },
+  "validation": {
+    "usernameMinLength": "用户名至少需要 3 个字符。",
+    "usernameMaxLength": "用户名不能超过 30 个字符。",
+    "usernamePattern": "用户名只能包含字母、数字和下划线。",
+    "usernameTaken": "该用户名已被使用。"
+  },
+  "dangerZone": {
+    "heading": "危险操作",
+    "description": "软删除你的账号将会退出登录并禁止后续访问。"
+  },
+  "deleteDialog": {
+    "title": "删除账号",
+    "description": "此操作将软删除你的账号、立即退出登录并阻止后续访问。你的历史记录可能仍会保留在平台上。",
+    "confirmationRequired": "需要确认",
+    "typeEmail": "请准确输入 {{email}} 以确认删除。",
+    "emailConfirmation": "邮箱确认",
+    "cancel": "取消",
+    "deletePermanently": "永久删除",
+    "deleting": "删除中..."
+  },
+  "deleteToast": {
+    "accountDeleted": "账号已删除。",
+    "deleteFailed": "当前无法删除你的账号。"
+  }
+}

@@ -1,5 +1,5 @@
 import { boolean, integer, pgTable, real, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
-import { submissions } from './submissions';
+import { submissions } from './submissions.js';
 
 export const executionResults = pgTable(
   'execution_results',

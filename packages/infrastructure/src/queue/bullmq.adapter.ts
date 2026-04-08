@@ -10,7 +10,7 @@ import type {
 } from '@syncode/shared';
 import type { Job as BullMQJob, JobsOptions } from 'bullmq';
 import { Queue, QueueEvents, Worker } from 'bullmq';
-import type { RedisConfig } from '../config';
+import type { RedisConfig } from '../config.js';
 
 @Injectable()
 export class BullMqAdapter implements IQueueService, OnModuleDestroy {

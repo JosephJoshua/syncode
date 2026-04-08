@@ -9,9 +9,9 @@ import {
   uuid,
   varchar,
 } from 'drizzle-orm/pg-core';
-import { submissionStatusEnum, supportedLanguageEnum } from './enums';
-import { rooms } from './rooms';
-import { users } from './users';
+import { submissionStatusEnum, supportedLanguageEnum } from './enums.js';
+import { rooms } from './rooms.js';
+import { users } from './users.js';
 
 export const runs = pgTable(
   'runs',

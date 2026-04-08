@@ -9,10 +9,14 @@
     ".": {
       "types": "./src/index.ts",
       "default": "./dist/index.js"
+    },
+    "./stubs": {
+      "types": "./src/stubs.ts",
+      "default": "./dist/stubs.js"
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && node ../../scripts/write-cjs-package-json.js",
+    "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "lint": "biome check ."
   },

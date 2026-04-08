@@ -1,4 +1,4 @@
-import { runMigrations } from './run-migrations';
+import { runMigrations } from './run-migrations.js';
 
 const databaseUrl = process.env.DATABASE_URL;
 
