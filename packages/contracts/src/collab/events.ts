@@ -6,6 +6,7 @@ export const snapshotReadyPayloadSchema = z
   .object({
     roomId: z.string().min(1).describe('Room identifier'),
     snapshot: z.array(z.number()).describe('Binary snapshot as JSON array of bytes'),
+    code: z.string().describe('Decoded document text content'),
     timestamp: z.number().positive().describe('Epoch timestamp'),
     trigger: z
       .enum(['periodic', 'phase_change', 'submission', 'session_end'])
