@@ -62,6 +62,12 @@ export class CollaborationGateway implements OnGatewayConnection, OnGatewayDisco
     }
 
     const { sub: userId, roomId: tokenRoomId } = authenticated.user;
+
+    if (!data || typeof data.roomId !== 'string') {
+      client.close(WsCloseCode.UNAUTHORIZED, 'Invalid join payload');
+      return;
+    }
+
     const { roomId } = data;
 
     if (roomId !== tokenRoomId) {

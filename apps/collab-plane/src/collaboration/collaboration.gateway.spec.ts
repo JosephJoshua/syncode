@@ -138,6 +138,15 @@ describe('CollaborationGateway', () => {
 
       expect(client.close).toHaveBeenCalledWith(WsCloseCode.UNAUTHORIZED, 'Unauthorized');
     });
+
+    it('GIVEN invalid payload WHEN joining THEN closes with UNAUTHORIZED', () => {
+      const { gateway } = createFixture();
+      const client = fakeClient(VALID_PAYLOAD);
+
+      gateway.handleJoin(client as unknown as WebSocket, null as never);
+
+      expect(client.close).toHaveBeenCalledWith(WsCloseCode.UNAUTHORIZED, 'Invalid join payload');
+    });
   });
 
   describe('handleDisconnect', () => {

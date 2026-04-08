@@ -68,6 +68,6 @@ export class CollaborationService {
    * The callback client catches errors internally per its port contract.
    */
   notifyUserDisconnected(payload: UserDisconnectedPayload): void {
-    this.callbackClient.notifyUserDisconnected(payload);
+    void this.callbackClient.notifyUserDisconnected(payload);
   }
 }
