@@ -1,4 +1,5 @@
 import {
+  avatarUploadUrlResponseSchema,
   publicUserProfileResponseSchema,
   updateUserSchema,
   userProfileResponseSchema,
@@ -10,3 +11,4 @@ export class UpdateUserDto extends createZodDto(updateUserSchema) {}
 export class UserProfileResponseDto extends createZodDto(userProfileResponseSchema) {}
 export class PublicUserProfileResponseDto extends createZodDto(publicUserProfileResponseSchema) {}
 export class UserQuotasResponseDto extends createZodDto(userQuotasResponseSchema) {}
+export class AvatarUploadUrlResponseDto extends createZodDto(avatarUploadUrlResponseSchema) {}
