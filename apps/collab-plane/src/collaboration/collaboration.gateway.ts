@@ -41,13 +41,23 @@ export class CollaborationGateway implements OnGatewayConnection, OnGatewayDisco
         const authenticated = client as AuthenticatedClient;
         if (!authenticated.user) return;
 
-        const message = new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength);
         const { roomId, sub: userId } = authenticated.user;
 
-        if (message[0] === WsMessageType.SYNC) {
-          this.syncHandler.handleSyncMessage(roomId, userId, message);
-        } else if (message[0] === WsMessageType.AWARENESS) {
-          this.awarenessHandler.handleAwarenessMessage(roomId, userId, message);
+        // Only process binary messages from clients that completed the join handshake
+        if (!this.roomRegistry.hasClient(roomId, userId)) return;
+
+        try {
+          const message = new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength);
+
+          if (message[0] === WsMessageType.SYNC) {
+            this.syncHandler.handleSyncMessage(roomId, userId, message);
+          } else if (message[0] === WsMessageType.AWARENESS) {
+            this.awarenessHandler.handleAwarenessMessage(roomId, userId, message);
+          }
+        } catch (error) {
+          this.logger.warn(
+            `Failed to process binary message from userId=${userId}: ${error instanceof Error ? error.message : String(error)}`,
+          );
         }
       });
     } catch {

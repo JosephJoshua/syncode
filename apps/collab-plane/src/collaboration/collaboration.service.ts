@@ -56,6 +56,7 @@ export class CollaborationService implements OnModuleDestroy {
       throw new NotFoundException(`Document not found for room ${roomId}`);
     }
 
+    this.cancelRoomCleanup(roomId);
     await this.snapshotScheduler.takeSnapshot(roomId, 'session_end');
 
     for (const [userId, client] of room.clients) {
@@ -83,6 +84,7 @@ export class CollaborationService implements OnModuleDestroy {
     this.awarenessHandler.removeClient(roomId, request.userId);
     this.roomRegistry.removeClient(roomId, request.userId);
     client.close(WsCloseCode.KICKED, request.reason ?? 'Kicked');
+    this.checkRoomEmpty(roomId);
 
     return { kicked: true };
   }

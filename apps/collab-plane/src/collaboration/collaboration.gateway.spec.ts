@@ -108,8 +108,8 @@ describe('CollaborationGateway', () => {
   });
 
   describe('binary message routing', () => {
-    it('GIVEN connected client WHEN binary sync message arrives THEN routes to syncHandler', async () => {
-      const { gateway, wsAuthService, syncHandler } = createFixture();
+    it('GIVEN joined client WHEN binary sync message arrives THEN routes to syncHandler', async () => {
+      const { gateway, wsAuthService, roomRegistry, syncHandler } = createFixture();
       wsAuthService.authenticate.mockResolvedValueOnce(VALID_PAYLOAD);
       const client = fakeClient() as ReturnType<typeof fakeClient> & {
         _emit: (event: string, ...args: unknown[]) => void;
@@ -117,7 +117,10 @@ describe('CollaborationGateway', () => {
 
       await gateway.handleConnection(client as unknown as WebSocket, {} as IncomingMessage);
 
-      // Simulate a binary sync message (first byte = 0)
+      // Client must be registered in the room for binary messages to be processed
+      roomRegistry.createRoom('room-1');
+      roomRegistry.addClient('room-1', 'user-1', client as unknown as AuthenticatedClient);
+
       const syncMessage = Buffer.from([WsMessageType.SYNC, 0, 1, 2]);
       client._emit('message', syncMessage, true);
 
@@ -128,8 +131,8 @@ describe('CollaborationGateway', () => {
       );
     });
 
-    it('GIVEN connected client WHEN binary awareness message arrives THEN routes to awarenessHandler', async () => {
-      const { gateway, wsAuthService, awarenessHandler } = createFixture();
+    it('GIVEN joined client WHEN binary awareness message arrives THEN routes to awarenessHandler', async () => {
+      const { gateway, wsAuthService, roomRegistry, awarenessHandler } = createFixture();
       wsAuthService.authenticate.mockResolvedValueOnce(VALID_PAYLOAD);
       const client = fakeClient() as ReturnType<typeof fakeClient> & {
         _emit: (event: string, ...args: unknown[]) => void;
@@ -137,7 +140,9 @@ describe('CollaborationGateway', () => {
 
       await gateway.handleConnection(client as unknown as WebSocket, {} as IncomingMessage);
 
-      // Simulate a binary awareness message (first byte = 1)
+      roomRegistry.createRoom('room-1');
+      roomRegistry.addClient('room-1', 'user-1', client as unknown as AuthenticatedClient);
+
       const awarenessMessage = Buffer.from([WsMessageType.AWARENESS, 0, 1, 2]);
       client._emit('message', awarenessMessage, true);
 
@@ -146,6 +151,22 @@ describe('CollaborationGateway', () => {
         'user-1',
         expect.any(Uint8Array),
       );
+    });
+
+    it('GIVEN connected but not joined client WHEN binary message arrives THEN is ignored', async () => {
+      const { gateway, wsAuthService, syncHandler, awarenessHandler } = createFixture();
+      wsAuthService.authenticate.mockResolvedValueOnce(VALID_PAYLOAD);
+      const client = fakeClient() as ReturnType<typeof fakeClient> & {
+        _emit: (event: string, ...args: unknown[]) => void;
+      };
+
+      await gateway.handleConnection(client as unknown as WebSocket, {} as IncomingMessage);
+
+      // Client authenticated but never joined — not in room registry
+      client._emit('message', Buffer.from([WsMessageType.SYNC, 0, 1, 2]), true);
+
+      expect(syncHandler.handleSyncMessage).not.toHaveBeenCalled();
+      expect(awarenessHandler.handleAwarenessMessage).not.toHaveBeenCalled();
     });
 
     it('GIVEN connected client WHEN text message arrives THEN binary listener ignores it', async () => {
