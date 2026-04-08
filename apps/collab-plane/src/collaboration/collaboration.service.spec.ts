@@ -2,9 +2,13 @@ import { ConflictException, NotFoundException } from '@nestjs/common';
 import type { IControlPlaneCallbackClient } from '@syncode/contracts';
 import { describe, expect, it, vi } from 'vitest';
 import type { AuthenticatedClient } from '../auth/index.js';
+import type { AwarenessHandler } from './awareness.handler.js';
 import { CollaborationService } from './collaboration.service.js';
 import { RoomRegistry } from './room-registry.js';
+import type { SnapshotScheduler } from './snapshot.scheduler.js';
 import { WsCloseCode } from './ws-close-codes.js';
+import type { YjsDocumentStore } from './yjs-document-store.js';
+import type { YjsSyncHandler } from './yjs-sync.handler.js';
 
 function fakeClient(): AuthenticatedClient {
   return {
@@ -18,16 +22,39 @@ function createFixture() {
   const roomRegistry = new RoomRegistry();
   const callbackClient: IControlPlaneCallbackClient = {
     notifyUserDisconnected: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+    notifySnapshotReady: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
   };
 
-  const service = new CollaborationService(roomRegistry, callbackClient);
+  const docStore = {
+    createDoc: vi.fn(),
+    destroyDoc: vi.fn(),
+    getDoc: vi.fn(),
+    encodeSnapshot: vi.fn(),
+  };
+  const syncHandler = { registerUpdateBroadcast: vi.fn() };
+  const awarenessHandler = { createRoom: vi.fn(), destroyRoom: vi.fn(), removeClient: vi.fn() };
+  const snapshotScheduler = {
+    startPeriodicSnapshots: vi.fn(),
+    stopPeriodicSnapshots: vi.fn(),
+    takeSnapshot: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+    destroyRoom: vi.fn(),
+  };
 
-  return { service, roomRegistry, callbackClient };
+  const service = new CollaborationService(
+    roomRegistry,
+    callbackClient,
+    docStore as unknown as YjsDocumentStore,
+    syncHandler as unknown as YjsSyncHandler,
+    awarenessHandler as unknown as AwarenessHandler,
+    snapshotScheduler as unknown as SnapshotScheduler,
+  );
+
+  return { service, roomRegistry, callbackClient, docStore, snapshotScheduler };
 }
 
 describe('CollaborationService', () => {
   describe('createDocument', () => {
-    it('GIVEN no existing document WHEN creating THEN creates room and returns response', async () => {
+    it('GIVEN valid request WHEN creating document THEN returns roomId and createdAt', async () => {
       const { service } = createFixture();
 
       const result = await service.createDocument({ roomId: 'room-1' });
@@ -47,7 +74,7 @@ describe('CollaborationService', () => {
   });
 
   describe('destroyDocument', () => {
-    it('GIVEN document with connected clients WHEN destroying THEN closes all clients with 4003', async () => {
+    it('GIVEN document with connected clients WHEN destroying THEN closes all clients and removes room', async () => {
       const { service, roomRegistry } = createFixture();
       await service.createDocument({ roomId: 'room-1' });
 
@@ -64,6 +91,17 @@ describe('CollaborationService', () => {
       expect(roomRegistry.hasRoom('room-1')).toBe(false);
     });
 
+    it('GIVEN document WHEN destroying THEN returns finalSnapshot when doc has content', async () => {
+      const { service, docStore } = createFixture();
+      await service.createDocument({ roomId: 'room-1' });
+
+      docStore.destroyDoc.mockReturnValue(new Uint8Array([1, 2, 3]));
+
+      const result = await service.destroyDocument('room-1');
+
+      expect(result.finalSnapshot).toEqual([1, 2, 3]);
+    });
+
     it('GIVEN non-existent document WHEN destroying THEN throws NotFoundException', async () => {
       const { service } = createFixture();
 
@@ -72,7 +110,7 @@ describe('CollaborationService', () => {
   });
 
   describe('kickUser', () => {
-    it('GIVEN connected user WHEN kicking THEN closes with 4002 and returns kicked=true', async () => {
+    it('GIVEN connected user WHEN kicking with reason THEN closes with 4002 and returns kicked=true', async () => {
       const { service, roomRegistry } = createFixture();
       await service.createDocument({ roomId: 'room-1' });
       const client = fakeClient();
@@ -84,6 +122,18 @@ describe('CollaborationService', () => {
       expect(client.close).toHaveBeenCalledWith(WsCloseCode.KICKED, 'Disruptive');
     });
 
+    it('GIVEN connected user WHEN kicking without reason THEN uses default reason', async () => {
+      const { service, roomRegistry } = createFixture();
+      await service.createDocument({ roomId: 'room-1' });
+      const client = fakeClient();
+      roomRegistry.addClient('room-1', 'user-1', client);
+
+      const result = await service.kickUser('room-1', { userId: 'user-1' });
+
+      expect(result.kicked).toBe(true);
+      expect(client.close).toHaveBeenCalledWith(WsCloseCode.KICKED, 'Kicked');
+    });
+
     it('GIVEN non-existent user WHEN kicking THEN returns kicked=false', async () => {
       const { service } = createFixture();
 
@@ -93,14 +143,55 @@ describe('CollaborationService', () => {
     });
   });
 
-  describe('notifyUserDisconnected', () => {
-    it('GIVEN callback client WHEN notifying THEN calls callback with payload', () => {
-      const { service, callbackClient } = createFixture();
-      const payload = { roomId: 'room-1', userId: 'user-1', timestamp: Date.now() };
+  describe('room TTL', () => {
+    it('GIVEN room with no clients WHEN 5 minutes elapse THEN room is cleaned up', async () => {
+      vi.useFakeTimers();
+      const { service, roomRegistry } = createFixture();
+      await service.createDocument({ roomId: 'room-1' });
 
-      service.notifyUserDisconnected(payload);
+      service.checkRoomEmpty('room-1');
 
-      expect(callbackClient.notifyUserDisconnected).toHaveBeenCalledWith(payload);
+      expect(roomRegistry.hasRoom('room-1')).toBe(true);
+
+      await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
+
+      expect(roomRegistry.hasRoom('room-1')).toBe(false);
+      vi.useRealTimers();
+    });
+
+    it('GIVEN scheduled TTL WHEN client reconnects THEN cleanup is cancelled', async () => {
+      vi.useFakeTimers();
+      const { service, roomRegistry } = createFixture();
+      await service.createDocument({ roomId: 'room-1' });
+
+      service.checkRoomEmpty('room-1');
+
+      service.cancelRoomCleanup('room-1');
+
+      await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
+
+      expect(roomRegistry.hasRoom('room-1')).toBe(true);
+      vi.useRealTimers();
+    });
+
+    it('GIVEN room with clients WHEN checkRoomEmpty THEN no TTL scheduled', async () => {
+      vi.useFakeTimers();
+      const { service, roomRegistry } = createFixture();
+      await service.createDocument({ roomId: 'room-1' });
+
+      const client = {
+        close: vi.fn(),
+        send: vi.fn(),
+        user: { sub: 'u1', roomId: 'room-1', role: 'candidate', type: 'collab', iat: 0, exp: 0 },
+      } as unknown as AuthenticatedClient;
+      roomRegistry.addClient('room-1', 'u1', client);
+
+      service.checkRoomEmpty('room-1');
+
+      await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
+
+      expect(roomRegistry.hasRoom('room-1')).toBe(true);
+      vi.useRealTimers();
     });
   });
 });

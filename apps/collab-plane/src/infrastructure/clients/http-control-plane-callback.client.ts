@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import {
   CONTROL_INTERNAL,
   type IControlPlaneCallbackClient,
+  type SnapshotReadyPayload,
   type UserDisconnectedPayload,
 } from '@syncode/contracts';
 import ky, { type KyInstance } from 'ky';
@@ -21,6 +22,19 @@ export class HttpControlPlaneCallbackClient implements IControlPlaneCallbackClie
         backoffLimit: 4_000,
       },
     });
+  }
+
+  async notifySnapshotReady(payload: SnapshotReadyPayload): Promise<void> {
+    try {
+      await this.client.post(CONTROL_INTERNAL.SNAPSHOT_READY.route, { json: payload });
+      this.logger.debug(
+        `Snapshot delivered for room ${payload.roomId} (trigger=${payload.trigger})`,
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Failed to deliver snapshot (roomId=${payload.roomId}): ${(error as Error).message}`,
+      );
+    }
   }
 
   async notifyUserDisconnected(payload: UserDisconnectedPayload): Promise<void> {

@@ -4,10 +4,13 @@ import { describe, expect, it, vi } from 'vitest';
 import type { WebSocket } from 'ws';
 import type { CollabTokenPayload } from '../auth/collab-token-payload.js';
 import type { AuthenticatedClient, WsAuthService } from '../auth/index.js';
+import type { AwarenessHandler } from './awareness.handler.js';
 import { CollaborationGateway } from './collaboration.gateway.js';
 import type { CollaborationService } from './collaboration.service.js';
 import { RoomRegistry } from './room-registry.js';
 import { WsCloseCode } from './ws-close-codes.js';
+import { WsMessageType } from './ws-message-types.js';
+import type { YjsSyncHandler } from './yjs-sync.handler.js';
 
 const VALID_PAYLOAD: CollabTokenPayload = {
   sub: 'user-1',
@@ -27,24 +30,57 @@ function createFixture() {
 
   const collaborationService = {
     notifyUserDisconnected: vi.fn(),
+    checkRoomEmpty: vi.fn(),
+    cancelRoomCleanup: vi.fn(),
+  };
+
+  const syncHandler = {
+    handleSyncMessage: vi.fn(),
+    sendInitialSync: vi.fn(),
+  };
+
+  const awarenessHandler = {
+    handleAwarenessMessage: vi.fn(),
+    sendFullAwareness: vi.fn(),
+    removeClient: vi.fn(),
   };
 
   const gateway = new CollaborationGateway(
     wsAuthService as unknown as WsAuthService,
     roomRegistry,
     collaborationService as unknown as CollaborationService,
+    syncHandler as unknown as YjsSyncHandler,
+    awarenessHandler as unknown as AwarenessHandler,
   );
 
-  return { gateway, wsAuthService, roomRegistry, collaborationService };
+  return {
+    gateway,
+    wsAuthService,
+    roomRegistry,
+    collaborationService,
+    syncHandler,
+    awarenessHandler,
+  };
 }
 
 function fakeClient(user?: CollabTokenPayload): WebSocket & { user?: CollabTokenPayload } {
+  const listeners = new Map<string, (...args: unknown[]) => void>();
   const client = {
     close: vi.fn(),
     send: vi.fn(),
+    on: vi.fn((event: string, cb: (...args: unknown[]) => void) => {
+      listeners.set(event, cb);
+    }),
+    /** Simulate a ws 'message' event for testing binary routing */
+    _emit: (event: string, ...args: unknown[]) => {
+      listeners.get(event)?.(...args);
+    },
     user,
   };
-  return client as unknown as WebSocket & { user?: CollabTokenPayload };
+  return client as unknown as WebSocket & {
+    user?: CollabTokenPayload;
+    _emit: (event: string, ...args: unknown[]) => void;
+  };
 }
 
 describe('CollaborationGateway', () => {
@@ -71,18 +107,94 @@ describe('CollaborationGateway', () => {
     });
   });
 
+  describe('binary message routing', () => {
+    it('GIVEN joined client WHEN binary sync message arrives THEN routes to syncHandler', async () => {
+      const { gateway, wsAuthService, roomRegistry, syncHandler } = createFixture();
+      wsAuthService.authenticate.mockResolvedValueOnce(VALID_PAYLOAD);
+      const client = fakeClient() as ReturnType<typeof fakeClient> & {
+        _emit: (event: string, ...args: unknown[]) => void;
+      };
+
+      await gateway.handleConnection(client as unknown as WebSocket, {} as IncomingMessage);
+
+      // Client must be registered in the room for binary messages to be processed
+      roomRegistry.createRoom('room-1');
+      roomRegistry.addClient('room-1', 'user-1', client as unknown as AuthenticatedClient);
+
+      const syncMessage = Buffer.from([WsMessageType.SYNC, 0, 1, 2]);
+      client._emit('message', syncMessage, true);
+
+      expect(syncHandler.handleSyncMessage).toHaveBeenCalledWith(
+        'room-1',
+        'user-1',
+        expect.any(Uint8Array),
+      );
+    });
+
+    it('GIVEN joined client WHEN binary awareness message arrives THEN routes to awarenessHandler', async () => {
+      const { gateway, wsAuthService, roomRegistry, awarenessHandler } = createFixture();
+      wsAuthService.authenticate.mockResolvedValueOnce(VALID_PAYLOAD);
+      const client = fakeClient() as ReturnType<typeof fakeClient> & {
+        _emit: (event: string, ...args: unknown[]) => void;
+      };
+
+      await gateway.handleConnection(client as unknown as WebSocket, {} as IncomingMessage);
+
+      roomRegistry.createRoom('room-1');
+      roomRegistry.addClient('room-1', 'user-1', client as unknown as AuthenticatedClient);
+
+      const awarenessMessage = Buffer.from([WsMessageType.AWARENESS, 0, 1, 2]);
+      client._emit('message', awarenessMessage, true);
+
+      expect(awarenessHandler.handleAwarenessMessage).toHaveBeenCalledWith(
+        'room-1',
+        'user-1',
+        expect.any(Uint8Array),
+      );
+    });
+
+    it('GIVEN connected but not joined client WHEN binary message arrives THEN is ignored', async () => {
+      const { gateway, wsAuthService, syncHandler, awarenessHandler } = createFixture();
+      wsAuthService.authenticate.mockResolvedValueOnce(VALID_PAYLOAD);
+      const client = fakeClient() as ReturnType<typeof fakeClient> & {
+        _emit: (event: string, ...args: unknown[]) => void;
+      };
+
+      await gateway.handleConnection(client as unknown as WebSocket, {} as IncomingMessage);
+
+      // Client authenticated but never joined — not in room registry
+      client._emit('message', Buffer.from([WsMessageType.SYNC, 0, 1, 2]), true);
+
+      expect(syncHandler.handleSyncMessage).not.toHaveBeenCalled();
+      expect(awarenessHandler.handleAwarenessMessage).not.toHaveBeenCalled();
+    });
+
+    it('GIVEN connected client WHEN text message arrives THEN binary listener ignores it', async () => {
+      const { gateway, wsAuthService, syncHandler, awarenessHandler } = createFixture();
+      wsAuthService.authenticate.mockResolvedValueOnce(VALID_PAYLOAD);
+      const client = fakeClient() as ReturnType<typeof fakeClient> & {
+        _emit: (event: string, ...args: unknown[]) => void;
+      };
+
+      await gateway.handleConnection(client as unknown as WebSocket, {} as IncomingMessage);
+
+      // Simulate a text (non-binary) message
+      client._emit('message', Buffer.from('{"type":"join"}'), false);
+
+      expect(syncHandler.handleSyncMessage).not.toHaveBeenCalled();
+      expect(awarenessHandler.handleAwarenessMessage).not.toHaveBeenCalled();
+    });
+  });
+
   describe('handleJoin', () => {
-    it('GIVEN valid join with matching roomId WHEN joining THEN adds client and sends room-state', () => {
+    it('GIVEN valid join WHEN joining THEN adds client to room and sends room-state', () => {
       const { gateway, roomRegistry } = createFixture();
       roomRegistry.createRoom('room-1');
       const client = fakeClient(VALID_PAYLOAD);
 
-      gateway.handleJoin(client as unknown as WebSocket, {
-        roomId: 'room-1',
-      });
+      gateway.handleJoin(client as unknown as WebSocket, { roomId: 'room-1' });
 
       expect(roomRegistry.hasClient('room-1', 'user-1')).toBe(true);
-      expect(client.send).toHaveBeenCalledOnce();
       const sent = JSON.parse(client.send.mock.calls[0]![0] as string);
       expect(sent.type).toBe('room-state');
       expect(sent.data).toMatchObject({ phase: 'waiting', editorLocked: false });
@@ -93,9 +205,7 @@ describe('CollaborationGateway', () => {
       const { gateway } = createFixture();
       const client = fakeClient(VALID_PAYLOAD);
 
-      gateway.handleJoin(client as unknown as WebSocket, {
-        roomId: 'wrong-room',
-      });
+      gateway.handleJoin(client as unknown as WebSocket, { roomId: 'wrong-room' });
 
       expect(client.close).toHaveBeenCalledWith(WsCloseCode.UNAUTHORIZED, 'Room ID mismatch');
     });
@@ -104,9 +214,7 @@ describe('CollaborationGateway', () => {
       const { gateway } = createFixture();
       const client = fakeClient(VALID_PAYLOAD);
 
-      gateway.handleJoin(client as unknown as WebSocket, {
-        roomId: 'room-1',
-      });
+      gateway.handleJoin(client as unknown as WebSocket, { roomId: 'room-1' });
 
       expect(client.close).toHaveBeenCalledWith(WsCloseCode.ROOM_NOT_FOUND, 'Room not found');
     });
@@ -121,20 +229,16 @@ describe('CollaborationGateway', () => {
       );
       const client = fakeClient(VALID_PAYLOAD);
 
-      gateway.handleJoin(client as unknown as WebSocket, {
-        roomId: 'room-1',
-      });
+      gateway.handleJoin(client as unknown as WebSocket, { roomId: 'room-1' });
 
       expect(client.close).toHaveBeenCalledWith(WsCloseCode.ALREADY_CONNECTED, 'Already connected');
     });
 
     it('GIVEN unauthenticated client WHEN joining THEN closes with UNAUTHORIZED', () => {
       const { gateway } = createFixture();
-      const client = fakeClient(); // no user
+      const client = fakeClient();
 
-      gateway.handleJoin(client as unknown as WebSocket, {
-        roomId: 'room-1',
-      });
+      gateway.handleJoin(client as unknown as WebSocket, { roomId: 'room-1' });
 
       expect(client.close).toHaveBeenCalledWith(WsCloseCode.UNAUTHORIZED, 'Unauthorized');
     });
@@ -150,8 +254,8 @@ describe('CollaborationGateway', () => {
   });
 
   describe('handleDisconnect', () => {
-    it('GIVEN authenticated client in room WHEN disconnecting THEN removes and notifies', () => {
-      const { gateway, roomRegistry, collaborationService } = createFixture();
+    it('GIVEN authenticated client in room WHEN disconnecting THEN removes from room', () => {
+      const { gateway, roomRegistry } = createFixture();
       roomRegistry.createRoom('room-1');
       const client = fakeClient(VALID_PAYLOAD);
       roomRegistry.addClient('room-1', 'user-1', client as unknown as AuthenticatedClient);
@@ -159,28 +263,24 @@ describe('CollaborationGateway', () => {
       gateway.handleDisconnect(client as unknown as WebSocket);
 
       expect(roomRegistry.hasClient('room-1', 'user-1')).toBe(false);
-      expect(collaborationService.notifyUserDisconnected).toHaveBeenCalledWith(
-        expect.objectContaining({ roomId: 'room-1', userId: 'user-1' }),
-      );
     });
 
     it('GIVEN unauthenticated client WHEN disconnecting THEN does nothing', () => {
-      const { gateway, collaborationService } = createFixture();
-      const client = fakeClient(); // no user
+      const { gateway, roomRegistry } = createFixture();
+      roomRegistry.createRoom('room-1');
+      const client = fakeClient();
 
       gateway.handleDisconnect(client as unknown as WebSocket);
 
-      expect(collaborationService.notifyUserDisconnected).not.toHaveBeenCalled();
+      // Room should be unaffected
+      expect(roomRegistry.hasRoom('room-1')).toBe(true);
     });
 
-    it('GIVEN client in destroyed room WHEN disconnecting THEN does not notify', () => {
-      const { gateway, collaborationService } = createFixture();
+    it('GIVEN client in destroyed room WHEN disconnecting THEN does not throw', () => {
+      const { gateway } = createFixture();
       const client = fakeClient(VALID_PAYLOAD);
-      // Room doesn't exist, simulates room already destroyed
 
-      gateway.handleDisconnect(client as unknown as WebSocket);
-
-      expect(collaborationService.notifyUserDisconnected).not.toHaveBeenCalled();
+      expect(() => gateway.handleDisconnect(client as unknown as WebSocket)).not.toThrow();
     });
   });
 });

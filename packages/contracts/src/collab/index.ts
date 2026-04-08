@@ -6,6 +6,7 @@ export { COLLAB_CLIENT, type ICollabClient } from './client.js';
 export {
   CONTROL_INTERNAL,
   type SnapshotReadyPayload,
+  type SnapshotTrigger,
   snapshotReadyPayloadSchema,
   type UserDisconnectedPayload,
   userDisconnectedPayloadSchema,

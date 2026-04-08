@@ -1,5 +1,5 @@
 import type { IncomingMessage } from 'node:http';
-import { Logger, NotImplementedException } from '@nestjs/common';
+import { Logger } from '@nestjs/common';
 import {
   type OnGatewayConnection,
   type OnGatewayDisconnect,
@@ -9,10 +9,13 @@ import {
 import type { WebSocket } from 'ws';
 import type { AuthenticatedClient } from '../auth/index.js';
 import { WsAuthService } from '../auth/index.js';
+import { AwarenessHandler } from './awareness.handler.js';
 import { CollaborationService } from './collaboration.service.js';
 import { RoomRegistry } from './room-registry.js';
 import { WsCloseCode } from './ws-close-codes.js';
 import type { JoinMessageData, WsMessage } from './ws-message.types.js';
+import { WsMessageType } from './ws-message-types.js';
+import { YjsSyncHandler } from './yjs-sync.handler.js';
 
 @WebSocketGateway()
 export class CollaborationGateway implements OnGatewayConnection, OnGatewayDisconnect {
@@ -22,6 +25,8 @@ export class CollaborationGateway implements OnGatewayConnection, OnGatewayDisco
     private readonly wsAuthService: WsAuthService,
     private readonly roomRegistry: RoomRegistry,
     private readonly collaborationService: CollaborationService,
+    private readonly syncHandler: YjsSyncHandler,
+    private readonly awarenessHandler: AwarenessHandler,
   ) {}
 
   async handleConnection(client: WebSocket, request: IncomingMessage): Promise<void> {
@@ -29,6 +34,32 @@ export class CollaborationGateway implements OnGatewayConnection, OnGatewayDisco
       const payload = await this.wsAuthService.authenticate(request);
       (client as AuthenticatedClient).user = payload;
       this.logger.log(`Client connected: userId=${payload.sub}, roomId=${payload.roomId}`);
+
+      client.on('message', (raw: Buffer, isBinary: boolean) => {
+        if (!isBinary) return;
+
+        const authenticated = client as AuthenticatedClient;
+        if (!authenticated.user) return;
+
+        const { roomId, sub: userId } = authenticated.user;
+
+        // Only process binary messages from clients that completed the join handshake
+        if (!this.roomRegistry.hasClient(roomId, userId)) return;
+
+        try {
+          const message = new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength);
+
+          if (message[0] === WsMessageType.SYNC) {
+            this.syncHandler.handleSyncMessage(roomId, userId, message);
+          } else if (message[0] === WsMessageType.AWARENESS) {
+            this.awarenessHandler.handleAwarenessMessage(roomId, userId, message);
+          }
+        } catch (error) {
+          this.logger.warn(
+            `Failed to process binary message from userId=${userId}: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+      });
     } catch {
       client.close(WsCloseCode.UNAUTHORIZED, 'Unauthorized');
     }
@@ -44,12 +75,14 @@ export class CollaborationGateway implements OnGatewayConnection, OnGatewayDisco
     const removed = this.roomRegistry.removeClient(roomId, userId);
 
     if (removed) {
+      this.awarenessHandler.removeClient(roomId, userId);
       this.logger.log(`Client disconnected: userId=${userId}, roomId=${roomId}`);
       this.collaborationService.notifyUserDisconnected({
         roomId,
         userId,
         timestamp: Date.now(),
       });
+      this.collaborationService.checkRoomEmpty(roomId);
     }
   }
 
@@ -87,26 +120,17 @@ export class CollaborationGateway implements OnGatewayConnection, OnGatewayDisco
     }
 
     this.roomRegistry.addClient(roomId, userId, authenticated);
+    this.collaborationService.cancelRoomCleanup(roomId);
     this.logger.log(`User ${userId} joined room ${roomId}`);
 
     const roomState: WsMessage = {
       type: 'room-state',
-      data: {
-        phase: 'waiting',
-        editorLocked: false,
-      },
+      data: { phase: 'waiting', editorLocked: false },
       timestamp: Date.now(),
     };
     client.send(JSON.stringify(roomState));
-  }
 
-  @SubscribeMessage('sync')
-  handleSync(_client: WebSocket, _data: unknown): void {
-    throw new NotImplementedException();
-  }
-
-  @SubscribeMessage('awareness')
-  handleAwareness(_client: WebSocket, _data: unknown): void {
-    throw new NotImplementedException();
+    this.syncHandler.sendInitialSync(roomId, authenticated);
+    this.awarenessHandler.sendFullAwareness(roomId, authenticated);
   }
 }
