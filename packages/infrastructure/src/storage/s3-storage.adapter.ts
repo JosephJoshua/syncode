@@ -26,6 +26,7 @@ import { type S3Config, S3ConfigSchema } from '../config.js';
 export class S3StorageAdapter implements IStorageService, OnModuleDestroy {
   private readonly logger = new Logger(S3StorageAdapter.name);
   private readonly client: S3Client;
+  private readonly presignClient: S3Client;
   private readonly bucket: string;
 
   constructor(config: S3Config) {
@@ -44,6 +45,19 @@ export class S3StorageAdapter implements IStorageService, OnModuleDestroy {
     };
 
     this.client = new S3Client(clientConfig);
+
+    // Presigned URLs need a browser-reachable endpoint (e.g. nginx proxy in prod)
+    if (
+      validatedConfig.publicEndpoint &&
+      validatedConfig.publicEndpoint !== validatedConfig.endpoint
+    ) {
+      this.presignClient = new S3Client({
+        ...clientConfig,
+        endpoint: validatedConfig.publicEndpoint,
+      });
+    } else {
+      this.presignClient = this.client;
+    }
   }
 
   async upload(
@@ -230,7 +244,7 @@ export class S3StorageAdapter implements IStorageService, OnModuleDestroy {
       ContentType: options.contentType,
     });
 
-    return getSignedUrl(this.client, command, {
+    return getSignedUrl(this.presignClient, command, {
       expiresIn: options.expiresInSeconds,
     });
   }
@@ -241,7 +255,7 @@ export class S3StorageAdapter implements IStorageService, OnModuleDestroy {
       Key: key,
     });
 
-    return getSignedUrl(this.client, command, {
+    return getSignedUrl(this.presignClient, command, {
       expiresIn: expiresInSeconds,
     });
   }
@@ -249,6 +263,9 @@ export class S3StorageAdapter implements IStorageService, OnModuleDestroy {
   async shutdown(): Promise<void> {
     this.logger.log('Shutting down S3 storage adapter...');
     this.client.destroy();
+    if (this.presignClient !== this.client) {
+      this.presignClient.destroy();
+    }
   }
 
   async onModuleDestroy(): Promise<void> {

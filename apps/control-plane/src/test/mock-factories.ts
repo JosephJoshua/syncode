@@ -63,3 +63,19 @@ export function createMockExecutionClient() {
     submit: vi.fn().mockResolvedValue({ jobId: 'stub-job' }),
   };
 }
+
+export function createMockStorageService() {
+  return {
+    upload: vi.fn().mockResolvedValue(undefined),
+    download: vi.fn().mockResolvedValue(Buffer.from('')),
+    delete: vi.fn().mockResolvedValue(undefined),
+    deleteMany: vi.fn().mockResolvedValue({ deleted: [], failed: [] }),
+    exists: vi.fn().mockResolvedValue(false),
+    getMetadata: vi.fn().mockResolvedValue(null),
+    list: vi.fn().mockResolvedValue({ keys: [], isTruncated: false }),
+    copy: vi.fn().mockResolvedValue(undefined),
+    getUploadUrl: vi.fn().mockResolvedValue('https://s3.example.com/presigned-put'),
+    getDownloadUrl: vi.fn().mockResolvedValue('https://s3.example.com/presigned-get'),
+    shutdown: vi.fn().mockResolvedValue(undefined),
+  };
+}

@@ -3,6 +3,7 @@ import { Test } from '@nestjs/testing';
 import { ERROR_CODES } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
 import { sessionDeletions } from '@syncode/db';
+import { STORAGE_SERVICE } from '@syncode/shared/ports';
 import { and, eq } from 'drizzle-orm';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
 import {
@@ -19,6 +20,7 @@ import {
   insertSubmission,
   insertUser,
 } from '@/test/integration-setup.js';
+import { createMockStorageService } from '@/test/mock-factories.js';
 import { SessionsService } from './sessions.service.js';
 
 let db: Database;
@@ -31,7 +33,11 @@ beforeEach(async () => {
   cleanup = testDb.cleanup;
 
   const module = await Test.createTestingModule({
-    providers: [SessionsService, { provide: DB_CLIENT, useValue: db }],
+    providers: [
+      SessionsService,
+      { provide: DB_CLIENT, useValue: db },
+      { provide: STORAGE_SERVICE, useValue: createMockStorageService() },
+    ],
   }).compile();
 
   service = module.get(SessionsService);

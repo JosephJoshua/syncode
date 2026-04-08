@@ -9,7 +9,7 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import { COLLAB_CLIENT, EXECUTION_CLIENT } from '@syncode/contracts';
-import { MEDIA_SERVICE } from '@syncode/shared/ports';
+import { MEDIA_SERVICE, STORAGE_SERVICE } from '@syncode/shared/ports';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
 import {
   createMockCollabClient,
@@ -17,6 +17,7 @@ import {
   createMockExecutionClient,
   createMockJwtService,
   createMockMediaService,
+  createMockStorageService,
 } from '@/test/mock-factories.js';
 import { RoomsService } from './rooms.service.js';
 
@@ -99,6 +100,7 @@ describe('RoomsService', () => {
         { provide: EXECUTION_CLIENT, useValue: createMockExecutionClient() },
         { provide: COLLAB_CLIENT, useValue: mockCollabClient },
         { provide: MEDIA_SERVICE, useValue: mockMediaService },
+        { provide: STORAGE_SERVICE, useValue: createMockStorageService() },
         { provide: JwtService, useValue: createMockJwtService('mock-collab-token') },
         { provide: ConfigService, useValue: createMockConfigService() },
       ],

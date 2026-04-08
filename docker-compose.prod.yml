@@ -15,11 +15,14 @@ services:
         condition: service_healthy
       collab-plane:
         condition: service_healthy
+      seaweedfs:
+        condition: service_healthy
       grafana:
         condition: service_started
     networks:
       - frontend
       - proxy
+      - backend
       - observability
 
   web:
