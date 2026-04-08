@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, type OnModuleDestroy } from '@nestjs/common';
 import {
   CONTROL_PLANE_CALLBACK,
   type IControlPlaneCallbackClient,
@@ -7,7 +7,7 @@ import {
 import { YjsDocumentStore } from './yjs-document-store.js';
 
 @Injectable()
-export class SnapshotScheduler {
+export class SnapshotScheduler implements OnModuleDestroy {
   private readonly logger = new Logger(SnapshotScheduler.name);
   private readonly timers = new Map<string, NodeJS.Timeout>();
 
@@ -38,14 +38,16 @@ export class SnapshotScheduler {
 
   async takeSnapshot(roomId: string, trigger: SnapshotTrigger): Promise<void> {
     const snapshot = this.docStore.encodeSnapshot(roomId);
-    if (!snapshot) {
-      return;
-    }
+    if (!snapshot) return;
+
+    const doc = this.docStore.getDoc(roomId);
+    const code = doc?.getText('code').toString() ?? '';
 
     try {
       await this.callbackClient.notifySnapshotReady({
         roomId,
         snapshot: Array.from(snapshot),
+        code,
         timestamp: Date.now(),
         trigger,
       });
@@ -58,5 +60,13 @@ export class SnapshotScheduler {
 
   destroyRoom(roomId: string): void {
     this.stopPeriodicSnapshots(roomId);
+  }
+
+  onModuleDestroy(): void {
+    for (const [roomId, timer] of this.timers) {
+      clearInterval(timer);
+      this.logger.debug(`Snapshot timer cleared for room ${roomId} (shutdown)`);
+    }
+    this.timers.clear();
   }
 }

@@ -35,6 +35,7 @@ describe('SnapshotScheduler', () => {
           roomId: 'room-1',
           trigger: 'periodic',
           snapshot: expect.any(Array),
+          code: 'const x = 1;',
           timestamp: expect.any(Number),
         }),
       );
