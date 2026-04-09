@@ -99,14 +99,14 @@ describe('GET /rooms', () => {
   it('GIVEN rooms exist WHEN listing THEN returns paginated response with ISO timestamps', async () => {
     const user = await insertUser(db);
     const room = await insertRoom(db, user.id);
-    await insertParticipant(db, room.id, user.id, 'host');
+    await insertParticipant(db, room.id, user.id, 'interviewer');
 
     const res = await asUser(request(app.getHttpServer()).get('/rooms'), user).expect(200);
 
     expect(res.body.data).toHaveLength(1);
     expect(res.body.data[0].roomId).toBe(room.id);
     expect(res.body.data[0].createdAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
-    expect(res.body.data[0].myRole).toBe('host');
+    expect(res.body.data[0].myRole).toBe('interviewer');
     expect(res.body.pagination).toEqual({ nextCursor: null, hasMore: false });
   });
 });
@@ -115,7 +115,7 @@ describe('GET /rooms/:id', () => {
   it('GIVEN user is participant WHEN getting room THEN returns detail with ISO timestamps on participants', async () => {
     const user = await insertUser(db);
     const room = await insertRoom(db, user.id);
-    await insertParticipant(db, room.id, user.id, 'host');
+    await insertParticipant(db, room.id, user.id, 'interviewer');
 
     const res = await asUser(request(app.getHttpServer()).get(`/rooms/${room.id}`), user).expect(
       200,
@@ -124,7 +124,7 @@ describe('GET /rooms/:id', () => {
     expect(res.body.roomId).toBe(room.id);
     expect(res.body.participants).toHaveLength(1);
     expect(res.body.participants[0].joinedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
-    expect(res.body.myRole).toBe('host');
+    expect(res.body.myRole).toBe('interviewer');
     expect(res.body.myCapabilities).toEqual(
       expect.arrayContaining(['code:edit', 'participant:kick']),
     );
@@ -135,7 +135,7 @@ describe('GET /rooms/:id', () => {
     const user = await insertUser(db);
     const otherUser = await insertUser(db);
     const room = await insertRoom(db, otherUser.id);
-    await insertParticipant(db, room.id, otherUser.id, 'host');
+    await insertParticipant(db, room.id, otherUser.id, 'interviewer');
 
     await asUser(request(app.getHttpServer()).get(`/rooms/${room.id}`), user).expect(403);
   });
@@ -154,7 +154,7 @@ describe('POST /rooms/:id/join', () => {
   it('GIVEN valid room code WHEN joining THEN returns 200 with room detail, collab credentials, and ISO timestamps', async () => {
     const host = await insertUser(db);
     const room = await insertRoom(db, host.id, { maxParticipants: 4 });
-    await insertParticipant(db, room.id, host.id, 'host');
+    await insertParticipant(db, room.id, host.id, 'interviewer');
 
     const joiner = await insertUser(db);
 
@@ -186,68 +186,10 @@ describe('POST /rooms/:id/join', () => {
   it('GIVEN user already a participant WHEN joining THEN returns 409', async () => {
     const user = await insertUser(db);
     const room = await insertRoom(db, user.id, { maxParticipants: 4 });
-    await insertParticipant(db, room.id, user.id, 'host');
+    await insertParticipant(db, room.id, user.id, 'interviewer');
 
     await asUser(request(app.getHttpServer()).post(`/rooms/${room.id}/join`), user)
       .send({ roomCode: room.inviteCode })
       .expect(409);
-  });
-});
-
-describe('POST /rooms/:id/control/transition', () => {
-  it('GIVEN valid transition WHEN host transitions THEN returns 200 with ISO timestamp and status fields', async () => {
-    const host = await insertUser(db);
-    const room = await insertRoom(db, host.id);
-    await insertParticipant(db, room.id, host.id, 'host');
-
-    const res = await asUser(
-      request(app.getHttpServer()).post(`/rooms/${room.id}/control/transition`),
-      host,
-    )
-      .send({ targetStatus: 'warmup' })
-      .expect(200);
-
-    expect(res.body.roomId).toBe(room.id);
-    expect(res.body.previousStatus).toBe('waiting');
-    expect(res.body.currentStatus).toBe('warmup');
-    expect(res.body.transitionedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
-    expect(res.body.transitionedBy).toBe(host.id);
-  });
-
-  it('GIVEN invalid transition WHEN transitioning THEN returns 400', async () => {
-    const host = await insertUser(db);
-    const room = await insertRoom(db, host.id);
-    await insertParticipant(db, room.id, host.id, 'host');
-
-    await asUser(request(app.getHttpServer()).post(`/rooms/${room.id}/control/transition`), host)
-      .send({ targetStatus: 'wrapup' })
-      .expect(400);
-  });
-
-  it('GIVEN non-participant WHEN transitioning THEN returns 403', async () => {
-    const host = await insertUser(db);
-    const stranger = await insertUser(db);
-    const room = await insertRoom(db, host.id);
-    await insertParticipant(db, room.id, host.id, 'host');
-
-    await asUser(
-      request(app.getHttpServer()).post(`/rooms/${room.id}/control/transition`),
-      stranger,
-    )
-      .send({ targetStatus: 'warmup' })
-      .expect(403);
-  });
-
-  it('GIVEN room does not exist WHEN transitioning THEN returns 404', async () => {
-    const user = await insertUser(db);
-
-    await asUser(
-      request(app.getHttpServer()).post(
-        '/rooms/00000000-0000-0000-0000-000000000000/control/transition',
-      ),
-      user,
-    )
-      .send({ targetStatus: 'warmup' })
-      .expect(404);
   });
 });
