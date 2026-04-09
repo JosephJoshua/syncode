@@ -4,12 +4,15 @@ import type {
   DestroyDocumentResponse,
   KickUserRequest,
   KickUserResponse,
+  NotifyPhaseChangeRequest,
+  NotifyPhaseChangeResponse,
 } from './internal.js';
 
 export interface ICollabClient {
   createDocument(request: CreateDocumentRequest): Promise<CreateDocumentResponse>;
   destroyDocument(roomId: string): Promise<DestroyDocumentResponse>;
   kickUser(roomId: string, request: KickUserRequest): Promise<KickUserResponse>;
+  notifyPhaseChange(request: NotifyPhaseChangeRequest): Promise<NotifyPhaseChangeResponse>;
   healthCheck(): Promise<boolean>;
 }
 

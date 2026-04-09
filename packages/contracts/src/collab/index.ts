@@ -18,4 +18,6 @@ export {
   type DestroyDocumentResponse,
   type KickUserRequest,
   type KickUserResponse,
+  type NotifyPhaseChangeRequest,
+  type NotifyPhaseChangeResponse,
 } from './internal.js';

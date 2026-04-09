@@ -22,6 +22,15 @@ export interface KickUserResponse {
   kicked: boolean;
 }
 
+export interface NotifyPhaseChangeRequest {
+  roomId: string;
+  newPhase: string;
+}
+
+export interface NotifyPhaseChangeResponse {
+  success: boolean;
+}
+
 export const COLLAB_INTERNAL = {
   CREATE_DOCUMENT: defineRoute<CreateDocumentRequest, CreateDocumentResponse>()(
     'internal/documents',
@@ -33,6 +42,10 @@ export const COLLAB_INTERNAL = {
   ),
   KICK_USER: defineRoute<KickUserRequest, KickUserResponse>()(
     'internal/documents/:roomId/kick',
+    'POST',
+  ),
+  NOTIFY_PHASE_CHANGE: defineRoute<NotifyPhaseChangeRequest, NotifyPhaseChangeResponse>()(
+    'internal/documents/:roomId/phase',
     'POST',
   ),
   HEALTH: defineRoute<void, { status: 'ok' }>()('internal/health', 'GET'),

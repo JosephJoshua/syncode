@@ -5,6 +5,8 @@ import type {
   DestroyDocumentResponse,
   KickUserRequest,
   KickUserResponse,
+  NotifyPhaseChangeRequest,
+  NotifyPhaseChangeResponse,
 } from './internal.js';
 
 interface StubCollabClientOptions {
@@ -46,6 +48,13 @@ export class StubCollabClient implements ICollabClient {
     this.maybeThrow('kickUser');
 
     return { kicked: true };
+  }
+
+  async notifyPhaseChange(_request: NotifyPhaseChangeRequest): Promise<NotifyPhaseChangeResponse> {
+    await this.delay();
+    this.maybeThrow('notifyPhaseChange');
+
+    return { success: true };
   }
 
   async healthCheck(): Promise<boolean> {
