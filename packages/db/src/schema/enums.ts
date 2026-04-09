@@ -25,7 +25,7 @@ export const supportedLanguageEnum = pgEnum('supported_language', [
 
 export const roomModeEnum = pgEnum('room_mode', ['ai', 'peer']);
 
-export const roomRoleEnum = pgEnum('room_role', ['host', 'interviewer', 'candidate', 'spectator']);
+export const roomRoleEnum = pgEnum('room_role', ['interviewer', 'candidate', 'observer']);
 
 export const sessionStatusEnum = pgEnum('session_status', ['ongoing', 'finished']);
 
