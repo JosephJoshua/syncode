@@ -1,4 +1,4 @@
-import type { DestroyDocumentResponse, RoomConfig } from '@syncode/contracts';
+import type { DestroyDocumentResponse, RoleAssignmentReason, RoomConfig } from '@syncode/contracts';
 import type {
   RoomCapability,
   RoomMode,
@@ -61,9 +61,28 @@ export interface DestroyRoomResult {
 export interface JoinRoomResult {
   room: RoomDetailResult;
   assignedRole: RoomRole;
+  requestedRole: RoomRole | null;
+  assignmentReason: RoleAssignmentReason;
   myCapabilities: RoomCapability[];
   collabToken: string;
   collabUrl: string;
+}
+
+export interface TransferOwnershipResult {
+  roomId: string;
+  previousHostId: string;
+  currentHostId: string;
+  transferredAt: Date;
+  transferredBy: string;
+}
+
+export interface UpdateParticipantRoleResult {
+  room: RoomDetailResult;
+  updatedUserId: string;
+  previousRole: RoomRole;
+  currentRole: RoomRole;
+  updatedAt: Date;
+  updatedBy: string;
 }
 
 export interface TransitionPhaseResult {

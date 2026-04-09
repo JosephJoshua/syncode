@@ -5,6 +5,7 @@ import {
   Get,
   HttpCode,
   Param,
+  Patch,
   Post,
   Query,
   UseGuards,
@@ -41,14 +42,15 @@ import {
   RunCodeResponseDto,
   SubmitProblemDto,
   SubmitResultItemDto,
+  TransferRoomOwnershipDto,
+  TransferRoomOwnershipResponseDto,
   TransitionRoomPhaseDto,
   TransitionRoomPhaseResponseDto,
+  UpdateRoomParticipantDto,
+  UpdateRoomParticipantResponseDto,
 } from './dto/rooms.dto.js';
 import { RoomsService } from './rooms.service.js';
 
-/**
- * Manages room lifecycle and code execution operations.
- */
 @ApiTags('rooms')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
@@ -70,17 +72,8 @@ export class RoomsController {
     status: 201,
     type: CreateRoomResponseDto,
     description:
-      'Room created (best-effort). Check `collabCreated` and `mediaCreated` ' +
-      'to see which subsystems succeeded.',
+      'Room created (best-effort). Check `collabCreated` and `mediaCreated` to see which subsystems succeeded.',
   })
-  @ApiResponse({ status: 400, type: ErrorResponseDto, description: 'Validation error' })
-  @ApiResponse({ status: 401, type: ErrorResponseDto, description: 'Unauthorized' })
-  @ApiResponse({
-    status: 409,
-    type: ErrorResponseDto,
-    description: 'Idempotency conflict. Duplicate request is being processed',
-  })
-  @ApiResponse({ status: 500, type: ErrorResponseDto, description: 'Internal server error' })
   async createRoom(
     @CurrentUser() user: AuthUser,
     @Body() body: CreateRoomDto,
@@ -97,8 +90,7 @@ export class RoomsController {
   @ApiQuery({ name: 'mode', required: false, enum: [...ROOM_MODES] })
   @ApiQuery({ name: 'sortBy', required: false, enum: [...ROOMS_SORT_BY_OPTIONS] })
   @ApiQuery({ name: 'sortOrder', required: false, enum: [...SORT_ORDER_OPTIONS] })
-  @ApiResponse({ status: 200, type: ListRoomsResponseDto, description: 'Paginated list of rooms' })
-  @ApiResponse({ status: 401, type: ErrorResponseDto, description: 'Unauthorized' })
+  @ApiResponse({ status: 200, type: ListRoomsResponseDto })
   async listRooms(
     @CurrentUser() user: AuthUser,
     @Query() query: ListRoomsQueryDto,
@@ -116,14 +108,7 @@ export class RoomsController {
   @Get(CONTROL_API.ROOMS.GET.route)
   @ApiOperation({ summary: 'Get room details' })
   @ApiParam({ name: 'id', description: 'Room ID (UUID)' })
-  @ApiResponse({ status: 200, type: RoomDetailDto, description: 'Room details' })
-  @ApiResponse({ status: 401, type: ErrorResponseDto, description: 'Unauthorized' })
-  @ApiResponse({
-    status: 403,
-    type: ErrorResponseDto,
-    description: 'Not a participant of this room',
-  })
-  @ApiResponse({ status: 404, type: ErrorResponseDto, description: 'Room not found' })
+  @ApiResponse({ status: 200, type: RoomDetailDto })
   async getRoom(@CurrentUser() user: AuthUser, @Param('id') id: string): Promise<RoomDetailDto> {
     const result = await this.roomsService.getRoom(id, user.id);
     return this.serializeRoomDetail(result);
@@ -134,19 +119,7 @@ export class RoomsController {
   @ApiOperation({ summary: 'Join a room via room code' })
   @ApiParam({ name: 'id', description: 'Room ID (UUID)' })
   @ApiBody({ type: JoinRoomDto })
-  @ApiResponse({
-    status: 200,
-    type: JoinRoomResponseDto,
-    description: 'Successfully joined the room',
-  })
-  @ApiResponse({ status: 400, type: ErrorResponseDto, description: 'Invalid room code' })
-  @ApiResponse({ status: 401, type: ErrorResponseDto, description: 'Unauthorized' })
-  @ApiResponse({ status: 404, type: ErrorResponseDto, description: 'Room not found' })
-  @ApiResponse({
-    status: 409,
-    type: ErrorResponseDto,
-    description: 'Room full, already joined, or finished',
-  })
+  @ApiResponse({ status: 200, type: JoinRoomResponseDto })
   async joinRoom(
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
@@ -156,26 +129,65 @@ export class RoomsController {
     return {
       room: this.serializeRoomDetail(result.room),
       assignedRole: result.assignedRole,
+      requestedRole: result.requestedRole,
+      assignmentReason: result.assignmentReason,
       myCapabilities: result.myCapabilities,
       collabToken: result.collabToken,
       collabUrl: result.collabUrl,
     };
   }
 
+  @Post(CONTROL_API.ROOMS.TRANSFER_OWNERSHIP.route)
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Transfer room ownership to another active participant' })
+  @ApiParam({ name: 'id', description: 'Room ID (UUID)' })
+  @ApiBody({ type: TransferRoomOwnershipDto })
+  @ApiResponse({ status: 200, type: TransferRoomOwnershipResponseDto })
+  async transferOwnership(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() body: TransferRoomOwnershipDto,
+  ): Promise<TransferRoomOwnershipResponseDto> {
+    const result = await this.roomsService.transferOwnership(id, user.id, body.targetUserId);
+    return { ...result, transferredAt: result.transferredAt.toISOString() };
+  }
+
+  @Patch(CONTROL_API.ROOMS.UPDATE_PARTICIPANT.route)
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Update an active participant role' })
+  @ApiParam({ name: 'id', description: 'Room ID (UUID)' })
+  @ApiParam({ name: 'participantUserId', description: 'Participant user ID (UUID)' })
+  @ApiBody({ type: UpdateRoomParticipantDto })
+  @ApiResponse({ status: 200, type: UpdateRoomParticipantResponseDto })
+  async updateParticipantRole(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Param('participantUserId') participantUserId: string,
+    @Body() body: UpdateRoomParticipantDto,
+  ): Promise<UpdateRoomParticipantResponseDto> {
+    const result = await this.roomsService.updateParticipantRole(
+      id,
+      user.id,
+      participantUserId,
+      body.role,
+    );
+
+    return {
+      ...result,
+      room: this.serializeRoomDetail(result.room),
+      updatedAt: result.updatedAt.toISOString(),
+    };
+  }
+
   @Delete(CONTROL_API.ROOMS.DESTROY.route)
   @ApiOperation({ summary: 'Destroy a room' })
-  @ApiParam({ name: 'id', description: 'Room ID', example: 'room-abc-123' })
-  @ApiResponse({
-    status: 200,
-    type: DestroyRoomResponseDto,
-    description:
-      'Room destroyed (best-effort). Check `collabDeleted` and `mediaDeleted` ' +
-      'to see which subsystems succeeded. May include final CRDT snapshot.',
-  })
-  @ApiResponse({ status: 401, type: ErrorResponseDto, description: 'Unauthorized' })
-  @ApiResponse({ status: 500, type: ErrorResponseDto, description: 'Internal server error' })
-  async destroyRoom(@Param('id') id: string): Promise<DestroyRoomResponseDto> {
-    const result = await this.roomsService.destroyRoom(id);
+  @ApiParam({ name: 'id', description: 'Room ID (UUID)' })
+  @ApiResponse({ status: 200, type: DestroyRoomResponseDto })
+  async destroyRoom(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+  ): Promise<DestroyRoomResponseDto> {
+    const result = await this.roomsService.destroyRoom(id, user.id);
     return {
       roomId: id,
       finalSnapshot: result.collab?.finalSnapshot,
@@ -186,60 +198,37 @@ export class RoomsController {
 
   @Post(CONTROL_API.ROOMS.RUN.route)
   @ApiOperation({ summary: 'Execute code once (interactive run)' })
-  @ApiParam({ name: 'id', description: 'Room ID', example: 'room-abc-123' })
+  @ApiParam({ name: 'id', description: 'Room ID (UUID)' })
   @ApiBody({ type: RunCodeDto })
-  @ApiResponse({ status: 201, type: RunCodeResponseDto, description: 'Code execution submitted' })
-  @ApiResponse({ status: 400, type: ErrorResponseDto, description: 'Validation error' })
-  @ApiResponse({ status: 401, type: ErrorResponseDto, description: 'Unauthorized' })
-  @ApiResponse({
-    status: 503,
-    type: ErrorResponseDto,
-    description: 'Execution service unavailable (circuit breaker open)',
-  })
-  @ApiResponse({
-    status: 504,
-    type: ErrorResponseDto,
-    description: 'Execution service timeout',
-  })
-  @ApiResponse({ status: 500, type: ErrorResponseDto, description: 'Internal server error' })
-  async runCode(@Param('id') id: string, @Body() body: RunCodeDto): Promise<RunCodeResponseDto> {
-    return this.roomsService.runCode(id, body);
+  @ApiResponse({ status: 201, type: RunCodeResponseDto })
+  async runCode(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() body: RunCodeDto,
+  ): Promise<RunCodeResponseDto> {
+    return this.roomsService.runCode(id, user.id, body);
   }
 
   @Post(CONTROL_API.ROOMS.SUBMIT.route)
-  @ApiOperation({ summary: 'Execute code against multiple test cases (problem submission)' })
-  @ApiParam({ name: 'id', description: 'Room ID', example: 'room-abc-123' })
+  @ApiOperation({ summary: 'Execute code against multiple test cases' })
+  @ApiParam({ name: 'id', description: 'Room ID (UUID)' })
   @ApiBody({ type: SubmitProblemDto })
-  @ApiResponse({ status: 201, type: [SubmitResultItemDto], description: 'Test cases submitted' })
-  @ApiResponse({ status: 400, type: ErrorResponseDto, description: 'Validation error' })
-  @ApiResponse({ status: 401, type: ErrorResponseDto, description: 'Unauthorized' })
-  @ApiResponse({ status: 500, type: ErrorResponseDto, description: 'Internal server error' })
+  @ApiResponse({ status: 201, type: [SubmitResultItemDto] })
   async submitProblem(
+    @CurrentUser() user: AuthUser,
     @Param('id') id: string,
     @Body() body: SubmitProblemDto,
   ): Promise<SubmitResultItemDto[]> {
     const { testCases, ...request } = body;
-    return this.roomsService.submitProblem(id, request, testCases);
+    return this.roomsService.submitProblem(id, user.id, request, testCases);
   }
 
   @Post(CONTROL_API.ROOMS.TRANSITION_PHASE.route)
   @HttpCode(200)
-  @ApiOperation({ summary: 'Transition room phase (stage)' })
+  @ApiOperation({ summary: 'Transition the room stage' })
   @ApiParam({ name: 'id', description: 'Room ID (UUID)' })
   @ApiBody({ type: TransitionRoomPhaseDto })
-  @ApiResponse({
-    status: 200,
-    type: TransitionRoomPhaseResponseDto,
-    description: 'Phase transitioned successfully',
-  })
-  @ApiResponse({ status: 400, type: ErrorResponseDto, description: 'Invalid transition' })
-  @ApiResponse({ status: 401, type: ErrorResponseDto, description: 'Unauthorized' })
-  @ApiResponse({
-    status: 403,
-    type: ErrorResponseDto,
-    description: 'Not a participant or missing permission',
-  })
-  @ApiResponse({ status: 404, type: ErrorResponseDto, description: 'Room not found' })
+  @ApiResponse({ status: 200, type: TransitionRoomPhaseResponseDto })
   async transitionPhase(
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
@@ -252,9 +241,9 @@ export class RoomsController {
   private serializeRoomDetail(detail: Awaited<ReturnType<RoomsService['getRoom']>>): RoomDetailDto {
     return {
       ...detail,
-      participants: detail.participants.map((p) => ({
-        ...p,
-        joinedAt: p.joinedAt.toISOString(),
+      participants: detail.participants.map((participant) => ({
+        ...participant,
+        joinedAt: participant.joinedAt.toISOString(),
       })),
       currentPhaseStartedAt: detail.currentPhaseStartedAt?.toISOString() ?? null,
       createdAt: detail.createdAt.toISOString(),
