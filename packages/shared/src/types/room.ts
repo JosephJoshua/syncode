@@ -44,7 +44,7 @@ export interface RoomParticipant {
  * including "waiting".
  */
 export const VALID_STATUS_TRANSITIONS: Record<RoomStatus, readonly RoomStatus[]> = {
-  [RoomStatus.WAITING]: [RoomStatus.WARMUP, RoomStatus.FINISHED],
+  [RoomStatus.WAITING]: [RoomStatus.WARMUP, RoomStatus.CODING, RoomStatus.FINISHED],
   [RoomStatus.WARMUP]: [RoomStatus.CODING, RoomStatus.FINISHED],
   [RoomStatus.CODING]: [RoomStatus.WRAPUP, RoomStatus.FINISHED],
   [RoomStatus.WRAPUP]: [RoomStatus.FINISHED],
