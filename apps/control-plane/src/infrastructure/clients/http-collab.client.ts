@@ -6,8 +6,8 @@ import type {
   ICollabClient,
   KickUserRequest,
   KickUserResponse,
-  NotifyPhaseChangeRequest,
-  NotifyPhaseChangeResponse,
+  UpdateRoomStateRequest,
+  UpdateRoomStateResponse,
 } from '@syncode/contracts';
 import { buildUrl, COLLAB_INTERNAL } from '@syncode/contracts';
 import ky, { type KyInstance } from 'ky';
@@ -42,12 +42,12 @@ export class HttpCollabClient implements ICollabClient {
       .json<KickUserResponse>();
   }
 
-  async notifyPhaseChange(request: NotifyPhaseChangeRequest): Promise<NotifyPhaseChangeResponse> {
+  async updateRoomState(request: UpdateRoomStateRequest): Promise<UpdateRoomStateResponse> {
     return this.client
-      .post(buildUrl(COLLAB_INTERNAL.NOTIFY_PHASE_CHANGE.route, { roomId: request.roomId }), {
+      .post(buildUrl(COLLAB_INTERNAL.UPDATE_ROOM_STATE.route, { roomId: request.roomId }), {
         json: request,
       })
-      .json<NotifyPhaseChangeResponse>();
+      .json<UpdateRoomStateResponse>();
   }
 
   async healthCheck(): Promise<boolean> {

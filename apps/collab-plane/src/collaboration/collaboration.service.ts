@@ -12,6 +12,8 @@ import type {
   IControlPlaneCallbackClient,
   KickUserRequest,
   KickUserResponse,
+  UpdateRoomStateRequest,
+  UpdateRoomStateResponse,
   UserDisconnectedPayload,
 } from '@syncode/contracts';
 import { CONTROL_PLANE_CALLBACK } from '@syncode/contracts';
@@ -19,7 +21,7 @@ import { AwarenessHandler } from './awareness.handler.js';
 import { RoomRegistry } from './room-registry.js';
 import { SnapshotScheduler } from './snapshot.scheduler.js';
 import { WsCloseCode } from './ws-close-codes.js';
-import type { RoomStateData, WsMessage } from './ws-message.types.js';
+import type { WsMessage } from './ws-message.types.js';
 import { YjsDocumentStore } from './yjs-document-store.js';
 import { YjsSyncHandler } from './yjs-sync.handler.js';
 
@@ -41,7 +43,10 @@ export class CollaborationService implements OnModuleDestroy {
   ) {}
 
   async createDocument(request: CreateDocumentRequest): Promise<CreateDocumentResponse> {
-    const room = this.roomRegistry.createRoom(request.roomId);
+    const room = this.roomRegistry.createRoom(request.roomId, {
+      phase: request.initialPhase,
+      editorLocked: request.editorLocked,
+    });
     this.docStore.createDoc(request.roomId, request.initialContent);
     this.syncHandler.registerUpdateBroadcast(request.roomId);
     this.awarenessHandler.createRoom(request.roomId);
@@ -90,34 +95,30 @@ export class CollaborationService implements OnModuleDestroy {
     return { kicked: true };
   }
 
-  /**
-   * Called by control-plane when the room stage transitions. Saves a phase_change
-   * snapshot and broadcasts the new room state to all connected WebSocket clients.
-   */
-  async notifyPhaseChange(roomId: string, newPhase: string): Promise<void> {
-    await this.snapshotScheduler.takeSnapshot(roomId, 'phase_change');
+  async updateRoomState(request: UpdateRoomStateRequest): Promise<UpdateRoomStateResponse> {
+    const room = this.roomRegistry.updateRoomState(request.roomId, {
+      phase: request.phase,
+      editorLocked: request.editorLocked,
+    });
 
-    const room = this.roomRegistry.getRoom(roomId);
-    if (!room || room.clients.size === 0) return;
-
-    const payload: WsMessage<RoomStateData> = {
+    const roomStateMessage: WsMessage = {
       type: 'room-state',
-      data: { phase: newPhase, editorLocked: false },
+      data: {
+        phase: room.phase,
+        editorLocked: room.editorLocked,
+      },
       timestamp: Date.now(),
     };
-    const message = JSON.stringify(payload);
 
     for (const client of room.clients.values()) {
-      try {
-        client.send(message);
-      } catch (error) {
-        this.logger.warn(
-          `Failed to send phase change to client in room ${roomId}: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
+      client.send(JSON.stringify(roomStateMessage));
     }
 
-    this.logger.log(`Phase change broadcast complete: room=${roomId}, newPhase=${newPhase}`);
+    this.logger.debug(
+      `Room state updated for ${request.roomId}: phase=${request.phase}, editorLocked=${request.editorLocked}`,
+    );
+
+    return { success: true };
   }
 
   /**

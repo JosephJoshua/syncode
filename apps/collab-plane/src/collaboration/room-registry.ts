@@ -4,6 +4,8 @@ import type { AuthenticatedClient } from '../auth/index.js';
 export interface RoomEntry {
   roomId: string;
   createdAt: number;
+  phase: string;
+  editorLocked: boolean;
   clients: Map<string, AuthenticatedClient>;
 }
 
@@ -12,7 +14,13 @@ export class RoomRegistry {
   private readonly logger = new Logger(RoomRegistry.name);
   private readonly rooms = new Map<string, RoomEntry>();
 
-  createRoom(roomId: string): RoomEntry {
+  createRoom(
+    roomId: string,
+    options?: {
+      phase?: string;
+      editorLocked?: boolean;
+    },
+  ): RoomEntry {
     if (this.rooms.has(roomId)) {
       throw new ConflictException(`Room ${roomId} already exists`);
     }
@@ -20,6 +28,8 @@ export class RoomRegistry {
     const entry: RoomEntry = {
       roomId,
       createdAt: Date.now(),
+      phase: options?.phase ?? 'waiting',
+      editorLocked: options?.editorLocked ?? false,
       clients: new Map(),
     };
 
@@ -34,6 +44,23 @@ export class RoomRegistry {
 
   getRoom(roomId: string): RoomEntry | undefined {
     return this.rooms.get(roomId);
+  }
+
+  updateRoomState(
+    roomId: string,
+    state: {
+      phase: string;
+      editorLocked: boolean;
+    },
+  ): RoomEntry {
+    const room = this.rooms.get(roomId);
+    if (!room) {
+      throw new NotFoundException(`Room ${roomId} not found`);
+    }
+
+    room.phase = state.phase;
+    room.editorLocked = state.editorLocked;
+    return room;
   }
 
   deleteRoom(roomId: string): boolean {

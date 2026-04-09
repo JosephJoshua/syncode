@@ -5,8 +5,8 @@ import type {
   DestroyDocumentResponse,
   KickUserRequest,
   KickUserResponse,
-  NotifyPhaseChangeRequest,
-  NotifyPhaseChangeResponse,
+  UpdateRoomStateRequest,
+  UpdateRoomStateResponse,
 } from './internal.js';
 
 interface StubCollabClientOptions {
@@ -17,7 +17,10 @@ interface StubCollabClientOptions {
 }
 
 export class StubCollabClient implements ICollabClient {
-  private readonly documents = new Map<string, { createdAt: number }>();
+  private readonly documents = new Map<
+    string,
+    { createdAt: number; phase?: string; editorLocked?: boolean }
+  >();
   private readonly delayMs: number;
   private readonly failRate: number;
 
@@ -31,7 +34,11 @@ export class StubCollabClient implements ICollabClient {
     this.maybeThrow('createDocument');
 
     const createdAt = Date.now();
-    this.documents.set(request.roomId, { createdAt });
+    this.documents.set(request.roomId, {
+      createdAt,
+      phase: request.initialPhase,
+      editorLocked: request.editorLocked,
+    });
     return { roomId: request.roomId, createdAt };
   }
 
@@ -50,9 +57,18 @@ export class StubCollabClient implements ICollabClient {
     return { kicked: true };
   }
 
-  async notifyPhaseChange(_request: NotifyPhaseChangeRequest): Promise<NotifyPhaseChangeResponse> {
+  async updateRoomState(request: UpdateRoomStateRequest): Promise<UpdateRoomStateResponse> {
     await this.delay();
-    this.maybeThrow('notifyPhaseChange');
+    this.maybeThrow('updateRoomState');
+
+    const existing = this.documents.get(request.roomId);
+    if (existing) {
+      this.documents.set(request.roomId, {
+        ...existing,
+        phase: request.phase,
+        editorLocked: request.editorLocked,
+      });
+    }
 
     return { success: true };
   }

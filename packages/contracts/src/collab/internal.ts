@@ -3,6 +3,8 @@ import { defineRoute } from '../route-utils.js';
 export interface CreateDocumentRequest {
   roomId: string;
   initialContent?: string;
+  initialPhase?: string;
+  editorLocked?: boolean;
 }
 export interface CreateDocumentResponse {
   roomId: string;
@@ -22,12 +24,13 @@ export interface KickUserResponse {
   kicked: boolean;
 }
 
-export interface NotifyPhaseChangeRequest {
+export interface UpdateRoomStateRequest {
   roomId: string;
-  newPhase: string;
+  phase: string;
+  editorLocked: boolean;
 }
 
-export interface NotifyPhaseChangeResponse {
+export interface UpdateRoomStateResponse {
   success: boolean;
 }
 
@@ -44,8 +47,8 @@ export const COLLAB_INTERNAL = {
     'internal/documents/:roomId/kick',
     'POST',
   ),
-  NOTIFY_PHASE_CHANGE: defineRoute<NotifyPhaseChangeRequest, NotifyPhaseChangeResponse>()(
-    'internal/documents/:roomId/phase',
+  UPDATE_ROOM_STATE: defineRoute<UpdateRoomStateRequest, UpdateRoomStateResponse>()(
+    'internal/documents/:roomId/state',
     'POST',
   ),
   HEALTH: defineRoute<void, { status: 'ok' }>()('internal/health', 'GET'),
