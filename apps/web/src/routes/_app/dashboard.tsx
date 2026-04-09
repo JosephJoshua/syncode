@@ -5,7 +5,6 @@ import type { LucideIcon } from 'lucide-react';
 import { Calendar, Clock3, Target, TrendingUp } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { DashboardRecentSessions } from '@/components/dashboard-recent-sessions.js';
-import { HostControlPanel } from '@/components/host-control-panel.js';
 import {
   EMPTY_DASHBOARD_STATS,
   fetchDashboardSessionHistory,
@@ -100,11 +99,6 @@ function DashboardPage() {
           void sessionHistoryQuery.refetch();
         }}
       />
-
-      {/* Render mock host controls only during local development/UI testing. */}
-      {import.meta.env.DEV ? (
-        <HostControlPanel roomId="dev-preview" initialStatus="waiting" />
-      ) : null}
     </div>
   );
 }
