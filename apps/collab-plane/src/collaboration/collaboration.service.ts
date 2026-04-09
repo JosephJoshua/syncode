@@ -19,6 +19,7 @@ import { AwarenessHandler } from './awareness.handler.js';
 import { RoomRegistry } from './room-registry.js';
 import { SnapshotScheduler } from './snapshot.scheduler.js';
 import { WsCloseCode } from './ws-close-codes.js';
+import type { RoomStateData, WsMessage } from './ws-message.types.js';
 import { YjsDocumentStore } from './yjs-document-store.js';
 import { YjsSyncHandler } from './yjs-sync.handler.js';
 
@@ -87,6 +88,36 @@ export class CollaborationService implements OnModuleDestroy {
     this.checkRoomEmpty(roomId);
 
     return { kicked: true };
+  }
+
+  /**
+   * Called by control-plane when the room stage transitions. Saves a phase_change
+   * snapshot and broadcasts the new room state to all connected WebSocket clients.
+   */
+  async notifyPhaseChange(roomId: string, newPhase: string): Promise<void> {
+    await this.snapshotScheduler.takeSnapshot(roomId, 'phase_change');
+
+    const room = this.roomRegistry.getRoom(roomId);
+    if (!room || room.clients.size === 0) return;
+
+    const payload: WsMessage<RoomStateData> = {
+      type: 'room-state',
+      data: { phase: newPhase, editorLocked: false },
+      timestamp: Date.now(),
+    };
+    const message = JSON.stringify(payload);
+
+    for (const client of room.clients.values()) {
+      try {
+        client.send(message);
+      } catch (error) {
+        this.logger.warn(
+          `Failed to send phase change to client in room ${roomId}: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
+
+    this.logger.log(`Phase change broadcast complete: room=${roomId}, newPhase=${newPhase}`);
   }
 
   /**

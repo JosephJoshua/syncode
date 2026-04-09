@@ -3,6 +3,7 @@ import {
   COLLAB_INTERNAL,
   type CreateDocumentRequest,
   type KickUserRequest,
+  type NotifyPhaseChangeRequest,
 } from '@syncode/contracts';
 import { CollaborationService } from '../collaboration/collaboration.service.js';
 
@@ -23,6 +24,12 @@ export class InternalController {
   @Post(COLLAB_INTERNAL.KICK_USER.route)
   kickUser(@Param('roomId') roomId: string, @Body() body: KickUserRequest) {
     return this.collaborationService.kickUser(roomId, body);
+  }
+
+  @Post(COLLAB_INTERNAL.NOTIFY_PHASE_CHANGE.route)
+  async notifyPhaseChange(@Param('roomId') roomId: string, @Body() body: NotifyPhaseChangeRequest) {
+    await this.collaborationService.notifyPhaseChange(roomId, body.newPhase);
+    return { success: true };
   }
 
   @Get(COLLAB_INTERNAL.HEALTH.route)

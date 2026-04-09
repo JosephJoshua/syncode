@@ -10,6 +10,7 @@ function createMocks() {
       createDocument: vi.fn(),
       destroyDocument: vi.fn(),
       kickUser: vi.fn(),
+      notifyPhaseChange: vi.fn(),
     },
   };
 }
@@ -78,6 +79,21 @@ describe('InternalController', () => {
       const result = await controller.kickUser('room-1', { userId: 'user-1' });
 
       expect(result).toEqual({ kicked: true });
+    });
+  });
+
+  describe('notifyPhaseChange', () => {
+    it('GIVEN valid request WHEN notifying phase change THEN delegates to service and returns success', async () => {
+      const mocks = createMocks();
+      mocks.collaborationService.notifyPhaseChange.mockResolvedValue(undefined);
+      const controller = await createController(mocks);
+
+      const result = await controller.notifyPhaseChange('room-1', {
+        roomId: 'room-1',
+        newPhase: 'coding',
+      });
+
+      expect(result).toEqual({ success: true });
     });
   });
 

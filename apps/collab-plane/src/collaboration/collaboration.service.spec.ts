@@ -143,6 +143,45 @@ describe('CollaborationService', () => {
     });
   });
 
+  describe('notifyPhaseChange', () => {
+    it('GIVEN room with connected clients WHEN notifying phase change THEN takes snapshot and broadcasts room-state to all clients', async () => {
+      const { service, roomRegistry, snapshotScheduler } = createFixture();
+      await service.createDocument({ roomId: 'room-1' });
+
+      const client1 = fakeClient();
+      const client2 = fakeClient();
+      roomRegistry.addClient('room-1', 'user-1', client1);
+      roomRegistry.addClient('room-1', 'user-2', client2);
+
+      await service.notifyPhaseChange('room-1', 'coding');
+
+      expect(snapshotScheduler.takeSnapshot).toHaveBeenCalledWith('room-1', 'phase_change');
+
+      const sentMessage = JSON.parse((client1.send as ReturnType<typeof vi.fn>).mock.calls[0][0]);
+      expect(sentMessage.type).toBe('room-state');
+      expect(sentMessage.data.phase).toBe('coding');
+
+      expect((client2.send as ReturnType<typeof vi.fn>).mock.calls[0]).toBeDefined();
+    });
+
+    it('GIVEN room with no connected clients WHEN notifying phase change THEN still takes snapshot', async () => {
+      const { service, snapshotScheduler } = createFixture();
+      await service.createDocument({ roomId: 'room-1' });
+
+      await service.notifyPhaseChange('room-1', 'warmup');
+
+      expect(snapshotScheduler.takeSnapshot).toHaveBeenCalledWith('room-1', 'phase_change');
+    });
+
+    it('GIVEN non-existent room WHEN notifying phase change THEN completes without error', async () => {
+      const { service, snapshotScheduler } = createFixture();
+
+      // Room doesn't exist — snapshot will silently no-op, broadcast skipped
+      await expect(service.notifyPhaseChange('no-room', 'coding')).resolves.toBeUndefined();
+      expect(snapshotScheduler.takeSnapshot).toHaveBeenCalledWith('no-room', 'phase_change');
+    });
+  });
+
   describe('room TTL', () => {
     it('GIVEN room with no clients WHEN 5 minutes elapse THEN room is cleaned up', async () => {
       vi.useFakeTimers();
