@@ -552,19 +552,27 @@ export class RoomsService {
     return { collab, mediaDeleted };
   }
 
-  async runCode(_roomId: string, request: RunCodeRequest): Promise<{ jobId: string }> {
+  async runCode(
+    roomId: string,
+    userId: string,
+    request: RunCodeRequest,
+  ): Promise<{ jobId: string }> {
+    await this.assertRoomCapability(roomId, userId, 'code:run');
     const { jobId } = await this.executionClient.submit(request);
     this.logger.debug(`Code execution submitted: ${jobId}`);
     return { jobId };
   }
 
   async submitProblem(
-    _roomId: string,
+    roomId: string,
+    userId: string,
     request: RunCodeRequest,
     testCases: TestCaseInput[],
   ): Promise<
     Array<{ jobId: string | null; testCaseIndex: number; description?: string; error?: string }>
   > {
+    await this.assertRoomCapability(roomId, userId, 'code:submit');
+
     const submissions = testCases.map((testCase, i) => {
       const testRequest: RunCodeRequest = {
         ...request,
@@ -628,6 +636,9 @@ export class RoomsService {
     }
 
     const myRole = myParticipation.role as RoomRole;
+    const myCapabilities = resolveRoomPermissions(myRole, {
+      isHost: room.hostId === userId,
+    });
 
     return {
       roomId: room.id,
@@ -641,13 +652,324 @@ export class RoomsService {
       config: this.buildRoomConfig(room),
       participants: participantRows,
       myRole,
-      myCapabilities: [...getRoomPermissions(myRole)],
+      myCapabilities: [...myCapabilities],
       currentPhaseStartedAt: room.phaseStartedAt,
       timerPaused: room.timerPaused,
       elapsedMs: room.elapsedMs,
       editorLocked: room.editorLocked,
       createdAt: room.createdAt,
     };
+  }
+
+  async transitionPhase(
+    roomId: string,
+    userId: string,
+    targetStatus: RoomStatus,
+  ): Promise<TransitionPhaseResult> {
+    const [room, participant] = await this.getRoomContext(roomId, userId);
+
+    if (!participant) {
+      throw new ForbiddenException({
+        message: 'Not a participant of this room',
+        code: ERROR_CODES.ROOM_ACCESS_DENIED,
+      });
+    }
+
+    if (room.hostId !== userId && participant.role !== RoomRole.INTERVIEWER) {
+      throw new ForbiddenException({
+        message: 'You do not have permission to change the room phase',
+        code: ERROR_CODES.ROOM_PERMISSION_DENIED,
+      });
+    }
+
+    const previousStatus = room.status;
+
+    if (!isValidStatusTransition(previousStatus, targetStatus)) {
+      throw new BadRequestException({
+        message: `Cannot transition from '${previousStatus}' to '${targetStatus}'`,
+        code: ERROR_CODES.ROOM_INVALID_TRANSITION,
+      });
+    }
+
+    const now = new Date();
+    const elapsedMs =
+      previousStatus === RoomStatus.CODING && room.phaseStartedAt && !room.timerPaused
+        ? room.elapsedMs + Math.max(0, now.getTime() - room.phaseStartedAt.getTime())
+        : room.elapsedMs;
+
+    await this.db.transaction(async (tx) => {
+      if (previousStatus === RoomStatus.WAITING && targetStatus === RoomStatus.WARMUP) {
+        const activeParticipants = await this.fetchActiveParticipants(tx, roomId);
+        this.assertActiveRoleConfiguration(room.mode, RoomStatus.WARMUP, activeParticipants);
+      }
+
+      const roomUpdate: Partial<typeof rooms.$inferInsert> = {
+        status: targetStatus,
+        phaseStartedAt: now,
+        elapsedMs,
+      };
+
+      if (previousStatus === RoomStatus.CODING || targetStatus === RoomStatus.CODING) {
+        roomUpdate.timerPaused = false;
+      }
+
+      if (targetStatus === RoomStatus.FINISHED) {
+        roomUpdate.endedAt = now;
+      }
+
+      await tx.update(rooms).set(roomUpdate).where(eq(rooms.id, roomId));
+
+      if (previousStatus === RoomStatus.WAITING && targetStatus === RoomStatus.WARMUP) {
+        const [session] = await tx
+          .insert(sessions)
+          .values({
+            roomId,
+            problemId: room.problemId,
+            mode: room.mode,
+            language: room.language,
+            status: 'ongoing',
+            startedAt: now,
+          })
+          .returning();
+
+        const participantRows = await tx
+          .select({
+            userId: roomParticipants.userId,
+            role: roomParticipants.role,
+            joinedAt: roomParticipants.joinedAt,
+          })
+          .from(roomParticipants)
+          .where(and(eq(roomParticipants.roomId, roomId), eq(roomParticipants.isActive, true)));
+
+        if (participantRows.length > 0) {
+          await tx.insert(sessionParticipants).values(
+            participantRows.map((participantRow) => ({
+              sessionId: session!.id,
+              userId: participantRow.userId,
+              role: participantRow.role,
+              joinedAt: participantRow.joinedAt,
+            })),
+          );
+        }
+      }
+
+      if (targetStatus === RoomStatus.FINISHED && previousStatus !== RoomStatus.WAITING) {
+        await tx
+          .update(sessions)
+          .set({
+            status: 'finished',
+            finishedAt: now,
+            durationMs: elapsedMs,
+          })
+          .where(eq(sessions.roomId, roomId));
+      }
+    });
+
+    this.logger.log(
+      `Room ${roomId} transitioned from '${previousStatus}' to '${targetStatus}' by user ${userId}`,
+    );
+
+    void this.updateCollabRoomState(roomId, targetStatus, room.editorLocked);
+
+    return {
+      roomId,
+      previousStatus,
+      currentStatus: targetStatus,
+      transitionedAt: now,
+      transitionedBy: userId,
+    };
+  }
+
+  private getInitialHostRole(mode: RoomMode): RoomRole {
+    return mode === 'peer' ? RoomRole.INTERVIEWER : RoomRole.CANDIDATE;
+  }
+
+  private assertRoleAllowedForMode(mode: RoomMode, role: RoomRole): void {
+    if (mode === 'ai' && role === RoomRole.INTERVIEWER) {
+      throw new ConflictException({
+        message: 'AI rooms do not support interviewer participants',
+        code: ERROR_CODES.ROOM_NOT_PEER_MODE,
+      });
+    }
+  }
+
+  private selectJoinRole(
+    mode: RoomMode,
+    activeParticipants: Array<{ userId: string; role: RoomRole }>,
+    requestedRole: RoomRole | null,
+  ): { assignedRole: RoomRole; assignmentReason: RoleAssignmentReason } {
+    const activeInterviewer = activeParticipants.some(
+      (participant) => participant.role === RoomRole.INTERVIEWER,
+    );
+    const activeCandidate = activeParticipants.some(
+      (participant) => participant.role === RoomRole.CANDIDATE,
+    );
+
+    if (requestedRole) {
+      this.assertRoleAllowedForMode(mode, requestedRole);
+
+      if (requestedRole === RoomRole.OBSERVER) {
+        return { assignedRole: requestedRole, assignmentReason: 'requested' };
+      }
+
+      if (requestedRole === RoomRole.INTERVIEWER && !activeInterviewer) {
+        return { assignedRole: requestedRole, assignmentReason: 'requested' };
+      }
+
+      if (requestedRole === RoomRole.CANDIDATE && !activeCandidate) {
+        return { assignedRole: requestedRole, assignmentReason: 'requested' };
+      }
+
+      throw new ConflictException({
+        message: 'Requested room role is not currently available',
+        code: ERROR_CODES.ROOM_ROLE_UNAVAILABLE,
+      });
+    }
+
+    if (mode === 'peer') {
+      if (!activeInterviewer) {
+        return { assignedRole: RoomRole.INTERVIEWER, assignmentReason: 'auto-assigned' };
+      }
+
+      if (!activeCandidate) {
+        return { assignedRole: RoomRole.CANDIDATE, assignmentReason: 'auto-assigned' };
+      }
+    } else if (!activeCandidate) {
+      return { assignedRole: RoomRole.CANDIDATE, assignmentReason: 'auto-assigned' };
+    }
+
+    return { assignedRole: RoomRole.OBSERVER, assignmentReason: 'fallback-observer' };
+  }
+
+  private assertActiveRoleConfiguration(
+    mode: RoomMode,
+    status: RoomStatus,
+    activeParticipants: Array<{ userId: string; role: RoomRole }>,
+  ): void {
+    const interviewerCount = activeParticipants.filter(
+      (participant) => participant.role === RoomRole.INTERVIEWER,
+    ).length;
+    const candidateCount = activeParticipants.filter(
+      (participant) => participant.role === RoomRole.CANDIDATE,
+    ).length;
+
+    if (mode === 'peer') {
+      if (interviewerCount > 1 || candidateCount > 1) {
+        throw new ConflictException({
+          message: 'Peer rooms can only have one active interviewer and one active candidate',
+          code: ERROR_CODES.ROOM_ROLE_CONSTRAINT_VIOLATION,
+        });
+      }
+
+      if (status !== RoomStatus.WAITING && (interviewerCount !== 1 || candidateCount !== 1)) {
+        throw new ConflictException({
+          message: 'Peer rooms require exactly one active interviewer and one active candidate',
+          code: ERROR_CODES.ROOM_ROLE_CONSTRAINT_VIOLATION,
+        });
+      }
+
+      return;
+    }
+
+    if (interviewerCount > 0 || candidateCount > 1) {
+      throw new ConflictException({
+        message: 'AI rooms support at most one active candidate and no interviewer participants',
+        code: ERROR_CODES.ROOM_ROLE_CONSTRAINT_VIOLATION,
+      });
+    }
+
+    if (status !== RoomStatus.WAITING && candidateCount !== 1) {
+      throw new ConflictException({
+        message: 'AI rooms require exactly one active candidate after the room starts',
+        code: ERROR_CODES.ROOM_ROLE_CONSTRAINT_VIOLATION,
+      });
+    }
+  }
+
+  private async getRoomContext(roomId: string, userId: string) {
+    const [[room], [participant]] = await Promise.all([
+      this.db.select().from(rooms).where(eq(rooms.id, roomId)),
+      this.db
+        .select({
+          userId: roomParticipants.userId,
+          role: roomParticipants.role,
+          isActive: roomParticipants.isActive,
+        })
+        .from(roomParticipants)
+        .where(and(eq(roomParticipants.roomId, roomId), eq(roomParticipants.userId, userId))),
+    ]);
+
+    if (!room) {
+      throw new NotFoundException({ message: 'Room not found', code: ERROR_CODES.ROOM_NOT_FOUND });
+    }
+
+    return [
+      room,
+      participant?.isActive ? { ...participant, role: participant.role as RoomRole } : null,
+    ] as const;
+  }
+
+  private async fetchActiveParticipants(
+    db: Pick<Database, 'select'>,
+    roomId: string,
+  ): Promise<Array<{ userId: string; role: RoomRole }>> {
+    const participants = await db
+      .select({
+        userId: roomParticipants.userId,
+        role: roomParticipants.role,
+      })
+      .from(roomParticipants)
+      .where(and(eq(roomParticipants.roomId, roomId), eq(roomParticipants.isActive, true)));
+
+    return participants.map((participant) => ({
+      userId: participant.userId,
+      role: participant.role as RoomRole,
+    }));
+  }
+
+  private async assertRoomCapability(
+    roomId: string,
+    userId: string,
+    capability: 'code:run' | 'code:submit',
+  ): Promise<void> {
+    const [room, participant] = await this.getRoomContext(roomId, userId);
+
+    if (!participant) {
+      throw new ForbiddenException({
+        message: 'Not a participant of this room',
+        code: ERROR_CODES.ROOM_ACCESS_DENIED,
+      });
+    }
+
+    if (room.editorLocked) {
+      throw new ConflictException({
+        message: 'The editor is locked for this room',
+        code: ERROR_CODES.ROOM_EDITOR_LOCKED,
+      });
+    }
+
+    const capabilities = resolveRoomPermissions(participant.role, {
+      isHost: room.hostId === userId,
+    });
+
+    if (!capabilities.has(capability)) {
+      throw new ForbiddenException({
+        message: `You do not have permission to ${capability === 'code:run' ? 'run' : 'submit'} code in this room`,
+        code: ERROR_CODES.ROOM_PERMISSION_DENIED,
+      });
+    }
+  }
+
+  private async updateCollabRoomState(
+    roomId: string,
+    phase: RoomStatus,
+    editorLocked: boolean,
+  ): Promise<void> {
+    try {
+      await this.collabClient.updateRoomState({ roomId, phase, editorLocked });
+    } catch (error) {
+      this.logger.warn(`Failed to update collab room state for room ${roomId}`, error);
+    }
   }
 
   private buildRoomConfig(room: {
@@ -705,138 +1027,6 @@ export class RoomsService {
     return code;
   }
 
-  async transitionPhase(
-    roomId: string,
-    userId: string,
-    targetStatus: RoomStatus,
-  ): Promise<TransitionPhaseResult> {
-    const [[room], [participant]] = await Promise.all([
-      this.db.select().from(rooms).where(eq(rooms.id, roomId)),
-      this.db
-        .select({ role: roomParticipants.role })
-        .from(roomParticipants)
-        .where(and(eq(roomParticipants.roomId, roomId), eq(roomParticipants.userId, userId))),
-    ]);
-
-    if (!room) {
-      throw new NotFoundException({ message: 'Room not found', code: ERROR_CODES.ROOM_NOT_FOUND });
-    }
-
-    if (!participant) {
-      throw new ForbiddenException({
-        message: 'Not a participant of this room',
-        code: ERROR_CODES.ROOM_ACCESS_DENIED,
-      });
-    }
-
-    const capabilities = getRoomPermissions(participant.role as RoomRole);
-    if (!capabilities.has('room:change-phase')) {
-      throw new ForbiddenException({
-        message: 'You do not have permission to change the room phase',
-        code: ERROR_CODES.ROOM_PERMISSION_DENIED,
-      });
-    }
-
-    const previousStatus = room.status;
-
-    if (!isValidStatusTransition(previousStatus, targetStatus)) {
-      throw new BadRequestException({
-        message: `Cannot transition from '${previousStatus}' to '${targetStatus}'`,
-        code: ERROR_CODES.ROOM_INVALID_TRANSITION,
-      });
-    }
-
-    const now = new Date();
-
-    await this.db.transaction(async (tx) => {
-      const roomUpdate: Partial<typeof rooms.$inferInsert> = {
-        status: targetStatus,
-        phaseStartedAt: now,
-      };
-
-      if (targetStatus === RoomStatus.FINISHED) {
-        roomUpdate.endedAt = now;
-      }
-
-      await tx.update(rooms).set(roomUpdate).where(eq(rooms.id, roomId));
-
-      // Create session when leaving 'waiting' (except waiting → finished)
-      if (previousStatus === RoomStatus.WAITING && targetStatus !== RoomStatus.FINISHED) {
-        const [session] = await tx
-          .insert(sessions)
-          .values({
-            roomId,
-            problemId: room.problemId,
-            mode: room.mode,
-            language: room.language,
-            status: 'ongoing',
-            startedAt: now,
-          })
-          .returning();
-
-        const participantRows = await tx
-          .select({
-            userId: roomParticipants.userId,
-            role: roomParticipants.role,
-            joinedAt: roomParticipants.joinedAt,
-          })
-          .from(roomParticipants)
-          .where(and(eq(roomParticipants.roomId, roomId), eq(roomParticipants.isActive, true)));
-
-        if (participantRows.length > 0) {
-          await tx.insert(sessionParticipants).values(
-            participantRows.map((p) => ({
-              sessionId: session!.id,
-              userId: p.userId,
-              role: p.role,
-              joinedAt: p.joinedAt,
-            })),
-          );
-        }
-      }
-
-      // Finalize session when entering 'finished' (only if session exists)
-      if (targetStatus === RoomStatus.FINISHED && previousStatus !== RoomStatus.WAITING) {
-        await tx
-          .update(sessions)
-          .set({
-            status: 'finished',
-            finishedAt: now,
-            durationMs: room.elapsedMs,
-          })
-          .where(eq(sessions.roomId, roomId));
-      }
-    });
-
-    this.logger.log(
-      `Room ${roomId} transitioned from '${previousStatus}' to '${targetStatus}' by user ${userId}`,
-    );
-
-    void this.notifyCollabPhaseChange(roomId, targetStatus);
-
-    // TODO: Queue a session report generation job when the room finishes.
-    // This requires a dedicated AI-plane queue job type (e.g. 'ai.generate-session-report')
-    // that doesn't exist yet. The report should be triggered once the final code snapshot
-    // is available (i.e., after the collab-plane snapshot callback arrives), not here.
-    // Tracking issue: implement IAiClient.submitSessionReportRequest() in ai-plane.
-
-    return {
-      roomId,
-      previousStatus,
-      currentStatus: targetStatus,
-      transitionedAt: now,
-      transitionedBy: userId,
-    };
-  }
-
-  private async notifyCollabPhaseChange(roomId: string, newPhase: RoomStatus): Promise<void> {
-    try {
-      await this.collabClient.notifyPhaseChange({ roomId, newPhase });
-    } catch (error) {
-      this.logger.warn(`Failed to notify collab-plane of phase change for room ${roomId}`, error);
-    }
-  }
-
   async markParticipantInactive(roomId: string, userId: string, leftAt: Date): Promise<void> {
     await this.db
       .update(roomParticipants)
@@ -844,9 +1034,13 @@ export class RoomsService {
       .where(and(eq(roomParticipants.roomId, roomId), eq(roomParticipants.userId, userId)));
   }
 
-  private async createCollabDocument(roomId: string): Promise<boolean> {
+  private async createCollabDocument(
+    roomId: string,
+    initialPhase: RoomStatus,
+    editorLocked: boolean,
+  ): Promise<boolean> {
     try {
-      await this.collabClient.createDocument({ roomId });
+      await this.collabClient.createDocument({ roomId, initialPhase, editorLocked });
       return true;
     } catch (error) {
       this.logger.warn(`Collab document creation failed for ${roomId}`, error);
