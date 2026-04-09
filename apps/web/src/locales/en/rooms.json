@@ -110,7 +110,9 @@
     "sessionConcluded": "Session has concluded.",
     "advanceStage": "Advance interview stage:",
     "endSession": "End Session",
-    "advanceTo": "Advance to {{stageName}}"
+    "advanceTo": "Advance to {{stageName}}",
+    "transitionFailed": "Failed to transition stage",
+    "transitioning": "Transitioning..."
   },
   "stage": {
     "awaitingSync": "AWAITING_SYNC",

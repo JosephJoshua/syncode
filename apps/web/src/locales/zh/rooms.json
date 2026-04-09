@@ -110,7 +110,9 @@
     "sessionConcluded": "会话已结束。",
     "advanceStage": "推进面试阶段：",
     "endSession": "结束会话",
-    "advanceTo": "推进至 {{stageName}}"
+    "advanceTo": "推进至 {{stageName}}",
+    "transitionFailed": "阶段转换失败",
+    "transitioning": "正在转换..."
   },
   "stage": {
     "awaitingSync": "AWAITING_SYNC",

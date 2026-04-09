@@ -102,7 +102,9 @@ function DashboardPage() {
       />
 
       {/* Render mock host controls only during local development/UI testing. */}
-      {import.meta.env.DEV ? <HostControlPanel /> : null}
+      {import.meta.env.DEV ? (
+        <HostControlPanel roomId="dev-preview" initialStatus="waiting" />
+      ) : null}
     </div>
   );
 }

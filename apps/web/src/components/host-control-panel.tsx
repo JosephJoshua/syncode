@@ -1,15 +1,19 @@
-import { getNextStatuses, ROOM_STATUSES, RoomStatus } from '@syncode/shared';
+import { CONTROL_API } from '@syncode/contracts';
+import { getNextStatuses, ROOM_STATUSES, type RoomStatus, RoomStatus as RS } from '@syncode/shared';
 import { Button, Card, CardContent, CardHeader, CardTitle } from '@syncode/ui';
-import { CheckCircle2, Code2, FastForward, Pause, Play, PlayCircle } from 'lucide-react';
+import { useMutation } from '@tanstack/react-query';
+import { CheckCircle2, Code2, FastForward, Loader2, Pause, Play, PlayCircle } from 'lucide-react';
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { toast } from 'sonner';
+import { api, readApiError } from '@/lib/api-client.js';
 
 const ROOM_STATUS_KEYS: Record<RoomStatus, string> = {
-  [RoomStatus.WAITING]: 'status.waiting',
-  [RoomStatus.WARMUP]: 'status.warmup',
-  [RoomStatus.CODING]: 'status.coding',
-  [RoomStatus.WRAPUP]: 'status.wrapup',
-  [RoomStatus.FINISHED]: 'status.finished',
+  [RS.WAITING]: 'status.waiting',
+  [RS.WARMUP]: 'status.warmup',
+  [RS.CODING]: 'status.coding',
+  [RS.WRAPUP]: 'status.wrapup',
+  [RS.FINISHED]: 'status.finished',
 };
 
 const PHASE_COUNT = ROOM_STATUSES.length;
@@ -31,11 +35,8 @@ function PhaseProgressBar({ currentStatus }: { currentStatus: RoomStatus }) {
               className="h-1.5 rounded-full transition-all duration-300"
               style={{
                 width: `${100 / PHASE_COUNT}%`,
-                backgroundColor: isCompleted
-                  ? 'var(--color-primary)'
-                  : isActive
-                    ? 'var(--color-primary)'
-                    : 'var(--color-muted)',
+                backgroundColor:
+                  isCompleted || isActive ? 'var(--color-primary)' : 'var(--color-muted)',
                 opacity: isCompleted ? 0.5 : isActive ? 1 : 0.3,
                 animation: isActive ? 'var(--animate-glow-pulse)' : 'none',
               }}
@@ -117,23 +118,42 @@ function PhaseTimer({ running }: { running: boolean }) {
 }
 
 const TRANSITION_ICONS: Partial<Record<RoomStatus, ReactNode>> = {
-  [RoomStatus.WARMUP]: <PlayCircle className="mr-2 h-4 w-4" />,
-  [RoomStatus.CODING]: <Code2 className="mr-2 h-4 w-4" />,
-  [RoomStatus.WRAPUP]: <FastForward className="mr-2 h-4 w-4" />,
-  [RoomStatus.FINISHED]: <CheckCircle2 className="mr-2 h-4 w-4" />,
+  [RS.WARMUP]: <PlayCircle className="mr-2 h-4 w-4" />,
+  [RS.CODING]: <Code2 className="mr-2 h-4 w-4" />,
+  [RS.WRAPUP]: <FastForward className="mr-2 h-4 w-4" />,
+  [RS.FINISHED]: <CheckCircle2 className="mr-2 h-4 w-4" />,
 };
 
-export function HostControlPanel() {
+interface HostControlPanelProps {
+  roomId: string;
+  initialStatus: RoomStatus;
+}
+
+export function HostControlPanel({ roomId, initialStatus }: HostControlPanelProps) {
   const { t } = useTranslation('rooms');
-  const [currentStage, setCurrentStage] = useState<RoomStatus>(RoomStatus.WAITING);
+  const [currentStage, setCurrentStage] = useState<RoomStatus>(initialStatus);
   const nextStages = getNextStatuses(currentStage);
 
+  const transitionMutation = useMutation({
+    mutationFn: (targetStatus: RoomStatus) =>
+      api(CONTROL_API.ROOMS.TRANSITION_PHASE, {
+        params: { id: roomId },
+        body: { targetStatus },
+      }),
+    onSuccess: (data) => {
+      setCurrentStage(data.currentStatus);
+    },
+    onError: async (error) => {
+      const apiError = await readApiError(error);
+      toast.error(apiError?.message ?? t('hostControl.transitionFailed'));
+    },
+  });
+
   const handleTransition = (target: RoomStatus) => {
-    // TODO: Replace with react-query mutation (POST /rooms/{roomId}/control/transition) once Issue #114 is merged.
-    setCurrentStage(target);
+    transitionMutation.mutate(target);
   };
 
-  const timerRunning = currentStage !== RoomStatus.WAITING && currentStage !== RoomStatus.FINISHED;
+  const timerRunning = currentStage !== RS.WAITING && currentStage !== RS.FINISHED;
 
   return (
     <Card className="w-full max-w-sm">
@@ -144,7 +164,7 @@ export function HostControlPanel() {
         <PhaseProgressBar currentStatus={currentStage} />
         <PhaseTimer key={currentStage} running={timerRunning} />
 
-        {currentStage === RoomStatus.FINISHED ? (
+        {currentStage === RS.FINISHED ? (
           <div className="text-center py-4 text-muted-foreground">
             <CheckCircle2 className="h-8 w-8 mx-auto mb-2 opacity-50" />
             <p>{t('hostControl.sessionConcluded')}</p>
@@ -155,12 +175,17 @@ export function HostControlPanel() {
             {nextStages.map((stage) => (
               <Button
                 key={stage}
-                variant={stage === RoomStatus.FINISHED ? 'destructive' : 'default'}
+                variant={stage === RS.FINISHED ? 'destructive' : 'default'}
                 className="w-full justify-start"
+                disabled={transitionMutation.isPending}
                 onClick={() => handleTransition(stage)}
               >
-                {TRANSITION_ICONS[stage]}
-                {stage === RoomStatus.FINISHED
+                {transitionMutation.isPending ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  TRANSITION_ICONS[stage]
+                )}
+                {stage === RS.FINISHED
                   ? t('hostControl.endSession')
                   : t('hostControl.advanceTo', { stageName: t(ROOM_STATUS_KEYS[stage]) })}
               </Button>
