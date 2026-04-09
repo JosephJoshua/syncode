@@ -26,7 +26,13 @@ function DashboardPage() {
   const sessionHistoryQuery = useQuery({
     queryKey: ['dashboard', 'session-history', viewerId],
     enabled: isQueryEnabled,
-    queryFn: () => fetchDashboardSessionHistory(viewerId!),
+    queryFn: () => {
+      if (!viewerId) {
+        throw new Error('Viewer ID is required to fetch dashboard session history');
+      }
+
+      return fetchDashboardSessionHistory(viewerId);
+    },
   });
   const sessionHistory = sessionHistoryQuery.data;
   const isUnavailable = !isQueryEnabled;
