@@ -1,10 +1,15 @@
-import { ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import { COLLAB_CLIENT, EXECUTION_CLIENT } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
-import { roomParticipants } from '@syncode/db';
+import { roomParticipants, rooms, sessionParticipants, sessions } from '@syncode/db';
 import { INVITE_CODE_LENGTH } from '@syncode/shared';
 import { MEDIA_SERVICE, STORAGE_SERVICE } from '@syncode/shared/ports';
 import { and, eq } from 'drizzle-orm';
@@ -316,5 +321,176 @@ describe('markParticipantInactive', () => {
 
     expect(row!.isActive).toBe(false);
     expect(row!.leftAt).toEqual(leftAt);
+  });
+});
+
+describe('transitionPhase', () => {
+  it('GIVEN room in waiting WHEN host transitions to warmup THEN updates status and creates ongoing session with participants', async () => {
+    const host = await insertUser(db);
+    const candidate = await insertUser(db);
+    const problem = await insertProblem(db);
+    const room = await insertRoom(db, host.id, { problemId: problem.id, language: 'python' });
+    await insertParticipant(db, room.id, host.id, 'host');
+    await insertParticipant(db, room.id, candidate.id, 'candidate');
+
+    const result = await service.transitionPhase(room.id, host.id, 'warmup');
+
+    expect(result.previousStatus).toBe('waiting');
+    expect(result.currentStatus).toBe('warmup');
+    expect(result.transitionedBy).toBe(host.id);
+    expect(result.transitionedAt).toBeInstanceOf(Date);
+
+    // Room status updated
+    const [updatedRoom] = await db.select().from(rooms).where(eq(rooms.id, room.id));
+    expect(updatedRoom!.status).toBe('warmup');
+    expect(updatedRoom!.phaseStartedAt).toBeInstanceOf(Date);
+    expect(updatedRoom!.endedAt).toBeNull();
+
+    // Session created with ongoing status
+    const [session] = await db.select().from(sessions).where(eq(sessions.roomId, room.id));
+    expect(session).toBeDefined();
+    expect(session!.status).toBe('ongoing');
+    expect(session!.problemId).toBe(problem.id);
+    expect(session!.mode).toBe('peer');
+    expect(session!.language).toBe('python');
+    expect(session!.finishedAt).toBeNull();
+
+    // Session participants snapshotted
+    const sessionParts = await db
+      .select()
+      .from(sessionParticipants)
+      .where(eq(sessionParticipants.sessionId, session!.id));
+    expect(sessionParts).toHaveLength(2);
+    expect(sessionParts.map((p) => p.userId).sort()).toEqual([host.id, candidate.id].sort());
+  });
+
+  it('GIVEN room in warmup WHEN host transitions to coding THEN updates status without creating duplicate session', async () => {
+    const host = await insertUser(db);
+    const room = await insertRoom(db, host.id, { status: 'warmup' });
+    await insertParticipant(db, room.id, host.id, 'host');
+
+    const result = await service.transitionPhase(room.id, host.id, 'coding');
+
+    expect(result.previousStatus).toBe('warmup');
+    expect(result.currentStatus).toBe('coding');
+
+    // No session created (session was created on waiting→warmup)
+    const sessionRows = await db.select().from(sessions).where(eq(sessions.roomId, room.id));
+    expect(sessionRows).toHaveLength(0);
+  });
+
+  it('GIVEN room in coding with ongoing session WHEN transitioning to finished THEN finalizes session and sets endedAt', async () => {
+    const host = await insertUser(db);
+    const room = await insertRoom(db, host.id, { status: 'coding', elapsedMs: 3600000 });
+    await insertParticipant(db, room.id, host.id, 'host');
+
+    // Simulate session created during waiting→warmup
+    await db.insert(sessions).values({
+      roomId: room.id,
+      mode: 'peer',
+      status: 'ongoing',
+    });
+
+    const result = await service.transitionPhase(room.id, host.id, 'finished');
+
+    expect(result.previousStatus).toBe('coding');
+    expect(result.currentStatus).toBe('finished');
+
+    // Room ended
+    const [updatedRoom] = await db.select().from(rooms).where(eq(rooms.id, room.id));
+    expect(updatedRoom!.status).toBe('finished');
+    expect(updatedRoom!.endedAt).toBeInstanceOf(Date);
+
+    // Session finalized
+    const [session] = await db.select().from(sessions).where(eq(sessions.roomId, room.id));
+    expect(session!.status).toBe('finished');
+    expect(session!.finishedAt).toBeInstanceOf(Date);
+    expect(session!.durationMs).toBe(3600000);
+  });
+
+  it('GIVEN room in waiting WHEN transitioning directly to finished THEN no session is created', async () => {
+    const host = await insertUser(db);
+    const room = await insertRoom(db, host.id);
+    await insertParticipant(db, room.id, host.id, 'host');
+
+    await service.transitionPhase(room.id, host.id, 'finished');
+
+    const [updatedRoom] = await db.select().from(rooms).where(eq(rooms.id, room.id));
+    expect(updatedRoom!.status).toBe('finished');
+    expect(updatedRoom!.endedAt).toBeInstanceOf(Date);
+
+    const sessionRows = await db.select().from(sessions).where(eq(sessions.roomId, room.id));
+    expect(sessionRows).toHaveLength(0);
+  });
+
+  it('GIVEN room in finished WHEN transitioning THEN throws BadRequestException', async () => {
+    const host = await insertUser(db);
+    const room = await insertRoom(db, host.id, { status: 'finished' });
+    await insertParticipant(db, room.id, host.id, 'host');
+
+    await expect(service.transitionPhase(room.id, host.id, 'coding')).rejects.toThrow(
+      BadRequestException,
+    );
+  });
+
+  it('GIVEN room exists WHEN non-participant transitions THEN throws ForbiddenException', async () => {
+    const host = await insertUser(db);
+    const stranger = await insertUser(db);
+    const room = await insertRoom(db, host.id);
+    await insertParticipant(db, room.id, host.id, 'host');
+
+    await expect(service.transitionPhase(room.id, stranger.id, 'warmup')).rejects.toThrow(
+      ForbiddenException,
+    );
+  });
+
+  it('GIVEN room exists WHEN candidate transitions THEN throws ForbiddenException for missing capability', async () => {
+    const host = await insertUser(db);
+    const candidate = await insertUser(db);
+    const room = await insertRoom(db, host.id);
+    await insertParticipant(db, room.id, host.id, 'host');
+    await insertParticipant(db, room.id, candidate.id, 'candidate');
+
+    await expect(service.transitionPhase(room.id, candidate.id, 'warmup')).rejects.toThrow(
+      ForbiddenException,
+    );
+  });
+
+  it('GIVEN room in waiting WHEN transitioning to wrapup (invalid skip) THEN throws BadRequestException', async () => {
+    const host = await insertUser(db);
+    const room = await insertRoom(db, host.id);
+    await insertParticipant(db, room.id, host.id, 'host');
+
+    await expect(service.transitionPhase(room.id, host.id, 'wrapup')).rejects.toThrow(
+      BadRequestException,
+    );
+  });
+
+  it('GIVEN room in waiting WHEN host transitions directly to coding THEN skips warmup and creates session', async () => {
+    const host = await insertUser(db);
+    const room = await insertRoom(db, host.id);
+    await insertParticipant(db, room.id, host.id, 'host');
+
+    const result = await service.transitionPhase(room.id, host.id, 'coding');
+
+    expect(result.previousStatus).toBe('waiting');
+    expect(result.currentStatus).toBe('coding');
+
+    const [session] = await db.select().from(sessions).where(eq(sessions.roomId, room.id));
+    expect(session).toBeDefined();
+    expect(session!.status).toBe('ongoing');
+  });
+
+  it('GIVEN interviewer role WHEN transitioning THEN succeeds (has room:change-phase capability)', async () => {
+    const host = await insertUser(db);
+    const interviewer = await insertUser(db);
+    const room = await insertRoom(db, host.id);
+    await insertParticipant(db, room.id, host.id, 'host');
+    await insertParticipant(db, room.id, interviewer.id, 'interviewer');
+
+    const result = await service.transitionPhase(room.id, interviewer.id, 'warmup');
+
+    expect(result.currentStatus).toBe('warmup');
+    expect(result.transitionedBy).toBe(interviewer.id);
   });
 });

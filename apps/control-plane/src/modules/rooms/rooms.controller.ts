@@ -41,6 +41,8 @@ import {
   RunCodeResponseDto,
   SubmitProblemDto,
   SubmitResultItemDto,
+  TransitionRoomPhaseDto,
+  TransitionRoomPhaseResponseDto,
 } from './dto/rooms.dto.js';
 import { RoomsService } from './rooms.service.js';
 
@@ -218,6 +220,33 @@ export class RoomsController {
   ): Promise<SubmitResultItemDto[]> {
     const { testCases, ...request } = body;
     return this.roomsService.submitProblem(id, request, testCases);
+  }
+
+  @Post(CONTROL_API.ROOMS.TRANSITION_PHASE.route)
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Transition room phase (stage)' })
+  @ApiParam({ name: 'id', description: 'Room ID (UUID)' })
+  @ApiBody({ type: TransitionRoomPhaseDto })
+  @ApiResponse({
+    status: 200,
+    type: TransitionRoomPhaseResponseDto,
+    description: 'Phase transitioned successfully',
+  })
+  @ApiResponse({ status: 400, type: ErrorResponseDto, description: 'Invalid transition' })
+  @ApiResponse({ status: 401, type: ErrorResponseDto, description: 'Unauthorized' })
+  @ApiResponse({
+    status: 403,
+    type: ErrorResponseDto,
+    description: 'Not a participant or missing permission',
+  })
+  @ApiResponse({ status: 404, type: ErrorResponseDto, description: 'Room not found' })
+  async transitionPhase(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() body: TransitionRoomPhaseDto,
+  ): Promise<TransitionRoomPhaseResponseDto> {
+    const result = await this.roomsService.transitionPhase(id, user.id, body.targetStatus);
+    return { ...result, transitionedAt: result.transitionedAt.toISOString() };
   }
 
   private serializeRoomDetail(detail: Awaited<ReturnType<RoomsService['getRoom']>>): RoomDetailDto {

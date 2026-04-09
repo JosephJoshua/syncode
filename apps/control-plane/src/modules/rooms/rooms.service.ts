@@ -26,12 +26,20 @@ import {
   type TestCaseInput,
 } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
-import { problems, roomParticipants, rooms, users } from '@syncode/db';
+import {
+  problems,
+  roomParticipants,
+  rooms,
+  sessionParticipants,
+  sessions,
+  users,
+} from '@syncode/db';
 import {
   getRoomPermissions,
   INVITE_CODE_CHARSET,
   INVITE_CODE_LENGTH,
   INVITE_CODE_MAX_RETRIES,
+  isValidStatusTransition,
   RoomRole,
   RoomStatus,
 } from '@syncode/shared';
@@ -52,6 +60,7 @@ import type {
   JoinRoomResult,
   RoomDetailResult,
   RoomSummaryResult,
+  TransitionPhaseResult,
 } from './rooms.types.js';
 
 @Injectable()
@@ -443,6 +452,138 @@ export class RoomsService {
       code += INVITE_CODE_CHARSET[bytes[i]! % INVITE_CODE_CHARSET.length];
     }
     return code;
+  }
+
+  async transitionPhase(
+    roomId: string,
+    userId: string,
+    targetStatus: RoomStatus,
+  ): Promise<TransitionPhaseResult> {
+    const [[room], [participant]] = await Promise.all([
+      this.db.select().from(rooms).where(eq(rooms.id, roomId)),
+      this.db
+        .select({ role: roomParticipants.role })
+        .from(roomParticipants)
+        .where(and(eq(roomParticipants.roomId, roomId), eq(roomParticipants.userId, userId))),
+    ]);
+
+    if (!room) {
+      throw new NotFoundException({ message: 'Room not found', code: ERROR_CODES.ROOM_NOT_FOUND });
+    }
+
+    if (!participant) {
+      throw new ForbiddenException({
+        message: 'Not a participant of this room',
+        code: ERROR_CODES.ROOM_ACCESS_DENIED,
+      });
+    }
+
+    const capabilities = getRoomPermissions(participant.role as RoomRole);
+    if (!capabilities.has('room:change-phase')) {
+      throw new ForbiddenException({
+        message: 'You do not have permission to change the room phase',
+        code: ERROR_CODES.ROOM_PERMISSION_DENIED,
+      });
+    }
+
+    const previousStatus = room.status;
+
+    if (!isValidStatusTransition(previousStatus, targetStatus)) {
+      throw new BadRequestException({
+        message: `Cannot transition from '${previousStatus}' to '${targetStatus}'`,
+        code: ERROR_CODES.ROOM_INVALID_TRANSITION,
+      });
+    }
+
+    const now = new Date();
+
+    await this.db.transaction(async (tx) => {
+      const roomUpdate: Partial<typeof rooms.$inferInsert> = {
+        status: targetStatus,
+        phaseStartedAt: now,
+      };
+
+      if (targetStatus === RoomStatus.FINISHED) {
+        roomUpdate.endedAt = now;
+      }
+
+      await tx.update(rooms).set(roomUpdate).where(eq(rooms.id, roomId));
+
+      // Create session when leaving 'waiting' (except waiting → finished)
+      if (previousStatus === RoomStatus.WAITING && targetStatus !== RoomStatus.FINISHED) {
+        const [session] = await tx
+          .insert(sessions)
+          .values({
+            roomId,
+            problemId: room.problemId,
+            mode: room.mode,
+            language: room.language,
+            status: 'ongoing',
+            startedAt: now,
+          })
+          .returning();
+
+        const participantRows = await tx
+          .select({
+            userId: roomParticipants.userId,
+            role: roomParticipants.role,
+            joinedAt: roomParticipants.joinedAt,
+          })
+          .from(roomParticipants)
+          .where(and(eq(roomParticipants.roomId, roomId), eq(roomParticipants.isActive, true)));
+
+        if (participantRows.length > 0) {
+          await tx.insert(sessionParticipants).values(
+            participantRows.map((p) => ({
+              sessionId: session!.id,
+              userId: p.userId,
+              role: p.role,
+              joinedAt: p.joinedAt,
+            })),
+          );
+        }
+      }
+
+      // Finalize session when entering 'finished' (only if session exists)
+      if (targetStatus === RoomStatus.FINISHED && previousStatus !== RoomStatus.WAITING) {
+        await tx
+          .update(sessions)
+          .set({
+            status: 'finished',
+            finishedAt: now,
+            durationMs: room.elapsedMs,
+          })
+          .where(eq(sessions.roomId, roomId));
+      }
+    });
+
+    this.logger.log(
+      `Room ${roomId} transitioned from '${previousStatus}' to '${targetStatus}' by user ${userId}`,
+    );
+
+    void this.notifyCollabPhaseChange(roomId, targetStatus);
+
+    // TODO: Queue a session report generation job when the room finishes.
+    // This requires a dedicated AI-plane queue job type (e.g. 'ai.generate-session-report')
+    // that doesn't exist yet. The report should be triggered once the final code snapshot
+    // is available (i.e., after the collab-plane snapshot callback arrives), not here.
+    // Tracking issue: implement IAiClient.submitSessionReportRequest() in ai-plane.
+
+    return {
+      roomId,
+      previousStatus,
+      currentStatus: targetStatus,
+      transitionedAt: now,
+      transitionedBy: userId,
+    };
+  }
+
+  private async notifyCollabPhaseChange(roomId: string, newPhase: RoomStatus): Promise<void> {
+    try {
+      await this.collabClient.notifyPhaseChange({ roomId, newPhase });
+    } catch (error) {
+      this.logger.warn(`Failed to notify collab-plane of phase change for room ${roomId}`, error);
+    }
   }
 
   async markParticipantInactive(roomId: string, userId: string, leftAt: Date): Promise<void> {

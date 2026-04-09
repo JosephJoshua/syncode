@@ -65,3 +65,11 @@ export interface JoinRoomResult {
   collabToken: string;
   collabUrl: string;
 }
+
+export interface TransitionPhaseResult {
+  roomId: string;
+  previousStatus: RoomStatus;
+  currentStatus: RoomStatus;
+  transitionedAt: Date;
+  transitionedBy: string;
+}

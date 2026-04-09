@@ -193,3 +193,61 @@ describe('POST /rooms/:id/join', () => {
       .expect(409);
   });
 });
+
+describe('POST /rooms/:id/control/transition', () => {
+  it('GIVEN valid transition WHEN host transitions THEN returns 200 with ISO timestamp and status fields', async () => {
+    const host = await insertUser(db);
+    const room = await insertRoom(db, host.id);
+    await insertParticipant(db, room.id, host.id, 'host');
+
+    const res = await asUser(
+      request(app.getHttpServer()).post(`/rooms/${room.id}/control/transition`),
+      host,
+    )
+      .send({ targetStatus: 'warmup' })
+      .expect(200);
+
+    expect(res.body.roomId).toBe(room.id);
+    expect(res.body.previousStatus).toBe('waiting');
+    expect(res.body.currentStatus).toBe('warmup');
+    expect(res.body.transitionedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(res.body.transitionedBy).toBe(host.id);
+  });
+
+  it('GIVEN invalid transition WHEN transitioning THEN returns 400', async () => {
+    const host = await insertUser(db);
+    const room = await insertRoom(db, host.id);
+    await insertParticipant(db, room.id, host.id, 'host');
+
+    await asUser(request(app.getHttpServer()).post(`/rooms/${room.id}/control/transition`), host)
+      .send({ targetStatus: 'wrapup' })
+      .expect(400);
+  });
+
+  it('GIVEN non-participant WHEN transitioning THEN returns 403', async () => {
+    const host = await insertUser(db);
+    const stranger = await insertUser(db);
+    const room = await insertRoom(db, host.id);
+    await insertParticipant(db, room.id, host.id, 'host');
+
+    await asUser(
+      request(app.getHttpServer()).post(`/rooms/${room.id}/control/transition`),
+      stranger,
+    )
+      .send({ targetStatus: 'warmup' })
+      .expect(403);
+  });
+
+  it('GIVEN room does not exist WHEN transitioning THEN returns 404', async () => {
+    const user = await insertUser(db);
+
+    await asUser(
+      request(app.getHttpServer()).post(
+        '/rooms/00000000-0000-0000-0000-000000000000/control/transition',
+      ),
+      user,
+    )
+      .send({ targetStatus: 'warmup' })
+      .expect(404);
+  });
+});
