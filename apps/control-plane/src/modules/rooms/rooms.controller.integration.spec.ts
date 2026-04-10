@@ -193,3 +193,73 @@ describe('POST /rooms/:id/join', () => {
       .expect(409);
   });
 });
+
+describe('POST /rooms/:id/ownership/transfer', () => {
+  it('GIVEN host transfers ownership WHEN request succeeds THEN returns ISO timestamp and new host ids', async () => {
+    const host = await insertUser(db);
+    const target = await insertUser(db);
+    const room = await insertRoom(db, host.id);
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+    await insertParticipant(db, room.id, target.id, 'candidate');
+
+    const res = await asUser(
+      request(app.getHttpServer()).post(`/rooms/${room.id}/ownership/transfer`),
+      host,
+    )
+      .send({ targetUserId: target.id })
+      .expect(200);
+
+    expect(res.body.roomId).toBe(room.id);
+    expect(res.body.previousHostId).toBe(host.id);
+    expect(res.body.currentHostId).toBe(target.id);
+    expect(res.body.transferredAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  });
+});
+
+describe('PATCH /rooms/:id/participants/:participantUserId', () => {
+  it('GIVEN host updates participant role WHEN request succeeds THEN returns ISO timestamp and updated room detail', async () => {
+    const host = await insertUser(db);
+    const participant = await insertUser(db);
+    const room = await insertRoom(db, host.id);
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+    await insertParticipant(db, room.id, participant.id, 'observer');
+
+    const res = await asUser(
+      request(app.getHttpServer()).patch(`/rooms/${room.id}/participants/${participant.id}`),
+      host,
+    )
+      .send({ role: 'candidate' })
+      .expect(200);
+
+    expect(res.body.updatedUserId).toBe(participant.id);
+    expect(res.body.previousRole).toBe('observer');
+    expect(res.body.currentRole).toBe('candidate');
+    expect(res.body.updatedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(
+      res.body.room.participants.find((item: { userId: string }) => item.userId === participant.id)
+        ?.role,
+    ).toBe('candidate');
+  });
+});
+
+describe('POST /rooms/:id/control/transition', () => {
+  it('GIVEN valid next phase WHEN transitioning THEN returns ISO timestamp with updated statuses', async () => {
+    const host = await insertUser(db);
+    const candidate = await insertUser(db);
+    const room = await insertRoom(db, host.id);
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+    await insertParticipant(db, room.id, candidate.id, 'candidate');
+
+    const res = await asUser(
+      request(app.getHttpServer()).post(`/rooms/${room.id}/control/transition`),
+      host,
+    )
+      .send({ targetStatus: 'warmup' })
+      .expect(200);
+
+    expect(res.body.roomId).toBe(room.id);
+    expect(res.body.previousStatus).toBe('waiting');
+    expect(res.body.currentStatus).toBe('warmup');
+    expect(res.body.transitionedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  });
+});

@@ -1,8 +1,4 @@
-import {
-  BadRequestException,
-  ConflictException,
-  InternalServerErrorException,
-} from '@nestjs/common';
+import { InternalServerErrorException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
@@ -158,59 +154,6 @@ describe('RoomsService', () => {
       dbSetup.mocks.mockReturning.mockRejectedValue(new Error('connection lost'));
 
       await expect(service.createRoom(HOST_ID, CREATE_INPUT)).rejects.toThrow('connection lost');
-    });
-  });
-
-  describe('joinRoom', () => {
-    const JOINING_USER_ID = '22222222-3333-4444-5555-666666666666';
-    const JOIN_INPUT = { roomCode: 'A3K7M2' };
-
-    it('GIVEN wrong invite code WHEN joining THEN throws BadRequestException', async () => {
-      dbSetup.mocks.mockSelect.mockReturnValueOnce({
-        from: vi.fn().mockReturnValue({
-          where: vi.fn().mockResolvedValue([ROOM_ROW]),
-        }),
-      });
-
-      await expect(
-        service.joinRoom(ROOM_ROW.id, JOINING_USER_ID, { roomCode: 'WRONG1' }),
-      ).rejects.toThrow(BadRequestException);
-    });
-
-    it('GIVEN finished room WHEN joining THEN throws ConflictException', async () => {
-      dbSetup.mocks.mockSelect.mockReturnValueOnce({
-        from: vi.fn().mockReturnValue({
-          where: vi.fn().mockResolvedValue([{ ...ROOM_ROW, status: 'finished' }]),
-        }),
-      });
-
-      await expect(service.joinRoom(ROOM_ROW.id, JOINING_USER_ID, JOIN_INPUT)).rejects.toThrow(
-        ConflictException,
-      );
-    });
-
-    it('GIVEN user already active in room WHEN joining THEN throws ConflictException', async () => {
-      dbSetup.mocks.mockSelect.mockReturnValueOnce({
-        from: vi.fn().mockReturnValue({
-          where: vi.fn().mockResolvedValue([ROOM_ROW]),
-        }),
-      });
-
-      const txSelectWhere = vi
-        .fn()
-        .mockResolvedValue([{ id: 'p-1', userId: JOINING_USER_ID, isActive: true }]);
-
-      dbSetup.db.transaction = vi.fn().mockImplementation(async (cb) =>
-        cb({
-          select: vi.fn().mockReturnValue({
-            from: vi.fn().mockReturnValue({ where: txSelectWhere }),
-          }),
-        }),
-      );
-
-      await expect(service.joinRoom(ROOM_ROW.id, JOINING_USER_ID, JOIN_INPUT)).rejects.toThrow(
-        ConflictException,
-      );
     });
   });
 
