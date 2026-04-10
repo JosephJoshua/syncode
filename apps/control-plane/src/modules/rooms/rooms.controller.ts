@@ -25,7 +25,6 @@ import { CONTROL_API, ROOMS_SORT_BY_OPTIONS, SORT_ORDER_OPTIONS } from '@syncode
 import { ROOM_MODES, ROOM_STATUSES } from '@syncode/shared';
 import { CurrentUser } from '@/common/decorators/current-user.decorator.js';
 import { Idempotent } from '@/common/decorators/idempotent.decorator.js';
-import { ErrorResponseDto } from '@/common/dto/error-response.dto.js';
 import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard.js';
 import { IdempotencyInterceptor } from '@/common/interceptors/idempotency.interceptor.js';
 import type { AuthUser } from '@/modules/auth/auth.types.js';

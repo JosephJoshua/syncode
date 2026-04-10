@@ -354,7 +354,7 @@ function RoomLobbyPage() {
 
                 <div className="space-y-3 rounded-lg border border-border/60 bg-muted/20 p-4">
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">{t('status.' + room.status)}</span>
+                    <span className="text-muted-foreground">{t(`status.${room.status}`)}</span>
                     <span className="font-mono text-foreground">{formatTime(elapsedMs)}</span>
                   </div>
                   <div className="flex items-center justify-between text-xs text-muted-foreground">
