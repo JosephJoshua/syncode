@@ -85,7 +85,16 @@
     "roomFull": "该房间已满，无法加入更多参与者。",
     "roomFinished": "该会话已结束。",
     "invalidCode": "邀请码无效或已过期。",
-    "accessDenied": "你没有权限加入该房间。"
+    "accessDenied": "你没有权限加入该房间。",
+    "roleUnavailable": "你请求的角色已被该房间占用。",
+    "requestedRoleAssigned": "已加入为 {{role}}。",
+    "fallbackObserver": "所请求角色不可用，你已作为观察者加入。",
+    "autoAssigned": "系统根据当前房间角色分布将你加入为 {{role}}。",
+    "roleUpdateFailed": "更新参与者角色失败。",
+    "transitionFailed": "更新房间阶段失败。",
+    "roleBalance": "{{interviewers}} 名面试官 · {{candidates}} 名候选人",
+    "editorLocked": "编辑器已锁定",
+    "editorUnlocked": "编辑器未锁定"
   },
   "roleSelect": {
     "heading": "你的角色",
@@ -100,7 +109,7 @@
     "cancelReady": "取消准备",
     "enterWorkspace": "进入工作区"
   },
-  "warning": "至少需要一名候选人和一名面试官（或主持人）才能开始。",
+  "warning": "开始前需要且只能有一名候选人和一名面试官。",
   "systemStatus": {
     "ready": "> SYSTEM_READY",
     "awaitingPeers": "> AWAITING_PEERS_"
@@ -110,9 +119,7 @@
     "sessionConcluded": "会话已结束。",
     "advanceStage": "推进面试阶段：",
     "endSession": "结束会话",
-    "advanceTo": "推进至 {{stageName}}",
-    "transitionFailed": "阶段转换失败",
-    "transitioning": "正在转换..."
+    "advanceTo": "推进至 {{stageName}}"
   },
   "stage": {
     "awaitingSync": "AWAITING_SYNC",

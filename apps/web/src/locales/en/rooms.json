@@ -85,7 +85,16 @@
     "roomFull": "This room is full — no more participants can join.",
     "roomFinished": "This session has already ended.",
     "invalidCode": "The invite code is invalid or has expired.",
-    "accessDenied": "You don't have permission to join this room."
+    "accessDenied": "You don't have permission to join this room.",
+    "roleUnavailable": "That requested role is already taken in this room.",
+    "requestedRoleAssigned": "Joined as {{role}}.",
+    "fallbackObserver": "Requested role was unavailable, so you were added as Observer.",
+    "autoAssigned": "Joined as {{role}} based on the current room balance.",
+    "roleUpdateFailed": "Failed to update participant role.",
+    "transitionFailed": "Failed to update the room stage.",
+    "roleBalance": "{{interviewers}} interviewer · {{candidates}} candidate",
+    "editorLocked": "Editor locked",
+    "editorUnlocked": "Editor unlocked"
   },
   "roleSelect": {
     "heading": "Your Role",
@@ -100,7 +109,7 @@
     "cancelReady": "Cancel Ready",
     "enterWorkspace": "Enter Workspace"
   },
-  "warning": "Needs at least one candidate and one interviewer (or host) to start.",
+  "warning": "Needs exactly one candidate and one interviewer to start.",
   "systemStatus": {
     "ready": "> SYSTEM_READY",
     "awaitingPeers": "> AWAITING_PEERS_"
@@ -110,9 +119,7 @@
     "sessionConcluded": "Session has concluded.",
     "advanceStage": "Advance interview stage:",
     "endSession": "End Session",
-    "advanceTo": "Advance to {{stageName}}",
-    "transitionFailed": "Failed to transition stage",
-    "transitioning": "Transitioning..."
+    "advanceTo": "Advance to {{stageName}}"
   },
   "stage": {
     "awaitingSync": "AWAITING_SYNC",

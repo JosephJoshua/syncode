@@ -1,15 +1,6 @@
 import { CONTROL_API, ERROR_CODES } from '@syncode/contracts';
 import type { RoomRole } from '@syncode/shared';
-import {
-  Button,
-  Card,
-  Input,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@syncode/ui';
+import { Button, Card, Input, Select, SelectContent, SelectItem, SelectTrigger } from '@syncode/ui';
 import { createFileRoute } from '@tanstack/react-router';
 import {
   AlertTriangle,
@@ -33,66 +24,39 @@ export const Route = createFileRoute('/_app/rooms/$roomId')({
   component: RoomLobbyPage,
 });
 
-type Participant = {
-  id: string;
-  username: string;
-  isReady: boolean;
-  isHost: boolean;
-  role: RoomRole;
-};
+type RoomDetail = Awaited<ReturnType<typeof api<typeof CONTROL_API.ROOMS.GET>>>;
+type JoinResponse = Awaited<ReturnType<typeof api<typeof CONTROL_API.ROOMS.JOIN>>>;
 
-const ROLE_LABEL_KEYS: Record<string, string> = {
-  host: 'role.host',
+const ROLE_LABEL_KEYS: Record<RoomRole, string> = {
   candidate: 'role.candidate',
   interviewer: 'role.interviewer',
-  spectator: 'role.observer',
+  observer: 'role.observer',
 };
 
-/** Roles that can be assigned to non-host participants. */
 const ASSIGNABLE_ROLES: Array<{ value: RoomRole; labelKey: string }> = [
   { value: 'candidate', labelKey: 'roleSelect.candidate' },
   { value: 'interviewer', labelKey: 'roleSelect.interviewer' },
-  { value: 'spectator', labelKey: 'roleSelect.observer' },
+  { value: 'observer', labelKey: 'roleSelect.observer' },
 ];
 
 function RoomLobbyPage() {
   const { t } = useTranslation('rooms');
   const { roomId } = Route.useParams();
-  const currentUserId = useAuthStore((state) => state.user?.id);
-
+  const currentUserId = useAuthStore((state) => state.user?.id ?? null);
+  const [room, setRoom] = useState<RoomDetail | null>(null);
   const [isJoining, setIsJoining] = useState(true);
   const [joinError, setJoinError] = useState<string | null>(null);
-  const [isReady, setIsReady] = useState(false);
-  const [myRole, setMyRole] = useState<RoomRole>('candidate');
-  const [participants, setParticipants] = useState<Participant[]>([]);
+  const [joinNotice, setJoinNotice] = useState<string | null>(null);
+  const [readyMap, setReadyMap] = useState<Record<string, boolean>>({});
+  const [isUpdatingRole, setIsUpdatingRole] = useState<string | null>(null);
   const [inviteLink] = useState(() => window.location.href);
   const { copied, copy } = useClipboard();
 
   useEffect(() => {
-    const joinRoom = async () => {
+    const loadRoom = async () => {
       setIsJoining(true);
       setJoinError(null);
-      setParticipants([]);
-
-      const applyDetail = (
-        detail: Awaited<ReturnType<typeof api<typeof CONTROL_API.ROOMS.GET>>>,
-        resolvedRole: RoomRole,
-      ) => {
-        setParticipants(
-          detail.participants.map((participant) => {
-            const baseName = participant.displayName ?? participant.username;
-            const isMe = participant.userId === currentUserId;
-            return {
-              id: participant.userId,
-              username: isMe ? `${baseName} ${t('lobby.you')}` : baseName,
-              isReady: false,
-              isHost: participant.role === 'host',
-              role: participant.role,
-            };
-          }),
-        );
-        setMyRole(resolvedRole);
-      };
+      setJoinNotice(null);
 
       try {
         const url = new URL(window.location.href);
@@ -103,79 +67,75 @@ function RoomLobbyPage() {
             params: { id: roomId },
             body: { roomCode },
           });
-
-          applyDetail(joined.room, joined.assignedRole);
+          setRoom(joined.room);
+          setJoinNotice(buildJoinNotice(joined, t));
         } else {
-          const detail = await api(CONTROL_API.ROOMS.GET, {
-            params: { id: roomId },
-          });
-          applyDetail(detail, detail.myRole);
+          const detail = await api(CONTROL_API.ROOMS.GET, { params: { id: roomId } });
+          setRoom(detail);
         }
-
-        setIsJoining(false);
       } catch (error) {
         const apiError = await readApiError(error);
-
-        if (apiError?.code === ERROR_CODES.ROOM_ALREADY_JOINED) {
-          try {
-            const detail = await api(CONTROL_API.ROOMS.GET, {
-              params: { id: roomId },
-            });
-
-            applyDetail(detail, detail.myRole);
-            setJoinError(null);
-            setIsJoining(false);
-            return;
-          } catch {
-            // Fall through to error state below.
-          }
-        }
-
         setJoinError(resolveJoinError(apiError, t));
+      } finally {
         setIsJoining(false);
       }
     };
-    joinRoom();
-  }, [roomId, currentUserId, t]);
 
-  const amHost = myRole === 'host';
+    void loadRoom();
+  }, [roomId, t]);
 
-  const handleParticipantRoleChange = (participantId: string, newRole: string) => {
-    const role = newRole as RoomRole;
-    setParticipants((prev) => prev.map((p) => (p.id === participantId ? { ...p, role } : p)));
-  };
+  const myRole = room?.myRole ?? 'candidate';
+  const amHost = Boolean(room && currentUserId && room.hostId === currentUserId);
+  const participants = room?.participants ?? [];
+
+  const { allReady, readyCount, totalCount, isRoomValid } = useMemo(() => {
+    const readyCountValue = participants.filter(
+      (participant) => readyMap[participant.userId],
+    ).length;
+    const interviewerCountValue = participants.filter(
+      (participant) => participant.isActive && participant.role === 'interviewer',
+    ).length;
+    const candidateCountValue = participants.filter(
+      (participant) => participant.isActive && participant.role === 'candidate',
+    ).length;
+
+    return {
+      allReady: readyCountValue === participants.length && participants.length > 0,
+      readyCount: readyCountValue,
+      totalCount: participants.length,
+      isRoomValid: interviewerCountValue === 1 && candidateCountValue === 1,
+    };
+  }, [participants, readyMap]);
 
   const toggleReady = () => {
-    const newReadyState = !isReady;
-    setIsReady(newReadyState);
-
-    setParticipants((prev) =>
-      prev.map((p) => (p.id === currentUserId ? { ...p, isReady: newReadyState } : p)),
-    );
+    if (!currentUserId) return;
+    setReadyMap((current) => ({
+      ...current,
+      [currentUserId]: !current[currentUserId],
+    }));
   };
 
   const copyInviteLink = () => copy(inviteLink);
 
-  const { allReady, readyCount, totalCount, isRoomValid } = useMemo(() => {
-    const ready = participants.filter((p) => p.isReady).length;
-    const total = participants.length;
-    const every = ready === total && total > 0;
+  const handleParticipantRoleChange = async (participantUserId: string, role: RoomRole) => {
+    setIsUpdatingRole(participantUserId);
 
-    const hasCandidate = participants.some((p) => p.role === 'candidate');
-    // Host has all interviewer capabilities, so they count as an interviewer
-    const hasInterviewer = participants.some((p) => p.role === 'interviewer' || p.role === 'host');
+    try {
+      const response = await api(CONTROL_API.ROOMS.UPDATE_PARTICIPANT, {
+        params: { id: roomId, participantUserId },
+        body: { role },
+      });
 
-    return {
-      allReady: every,
-      readyCount: ready,
-      totalCount: total,
-      isRoomValid: hasCandidate && hasInterviewer,
-    };
-  }, [participants]);
+      setRoom(response.room);
+    } catch (error) {
+      const apiError = await readApiError(error);
+      setJoinError(apiError?.message ?? t('lobby.roleUpdateFailed'));
+    } finally {
+      setIsUpdatingRole(null);
+    }
+  };
 
-  const glowIntensity = totalCount > 0 ? readyCount / totalCount : 0;
-
-  if (joinError) {
+  if (joinError && !room) {
     return (
       <div className="mx-auto max-w-7xl px-4 py-8 sm:py-10 lg:py-12">
         <div className="flex flex-col items-center justify-center py-24 text-center">
@@ -189,7 +149,7 @@ function RoomLobbyPage() {
     );
   }
 
-  if (isJoining) {
+  if (isJoining || !room) {
     return (
       <div className="mx-auto max-w-7xl px-4 py-8 sm:py-10 lg:py-12">
         <div className="flex flex-col items-center justify-center py-24">
@@ -207,7 +167,6 @@ function RoomLobbyPage() {
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:py-10 lg:py-12">
-      {/* Bot + heading section */}
       <motion.div
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
@@ -218,118 +177,106 @@ function RoomLobbyPage() {
           <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
             {t('lobby.heading')}
           </h1>
-          <p
-            className={`mt-2 font-mono text-sm tracking-widest ${
-              allReady ? 'text-primary' : 'animate-pulse text-primary/50'
-            }`}
-          >
+          <p className="mt-2 font-mono text-sm tracking-widest text-primary">
             {totalCount > 0
               ? `${readyCount} / ${totalCount} ${t('lobby.ready')}`
               : t('systemStatus.awaitingPeers')}
           </p>
           <p className="mt-1.5 text-sm text-muted-foreground">{t('lobby.sub')}</p>
+          {joinNotice ? <p className="mt-3 text-sm text-primary">{joinNotice}</p> : null}
+          {joinError ? <p className="mt-2 text-sm text-warning">{joinError}</p> : null}
         </div>
       </motion.div>
 
-      {/* Main grid: participants + sidebar */}
       <div className="mt-10 grid grid-cols-1 gap-8 lg:grid-cols-12">
-        {/* Participant cards */}
         <div className="lg:col-span-8">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {participants.map((participant, index) => (
-              <motion.div
-                key={participant.id}
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{
-                  duration: 0.36,
-                  delay: 0.1 + index * 0.06,
-                  ease: [0.22, 1, 0.36, 1],
-                }}
-              >
-                <Card
-                  className={`rounded-xl p-5 transition-all duration-300 ${
-                    participant.isReady
-                      ? 'border-primary/40 bg-card shadow-[0_0_20px_hsl(var(--primary)/0.15)]'
-                      : 'border-border/60 bg-card/80'
-                  }`}
+            {participants.map((participant, index) => {
+              const displayName = participant.displayName ?? participant.username;
+              const isMe = participant.userId === currentUserId;
+              const isParticipantHost = participant.userId === room.hostId;
+
+              return (
+                <motion.div
+                  key={participant.userId}
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{
+                    duration: 0.36,
+                    delay: 0.1 + index * 0.06,
+                    ease: [0.22, 1, 0.36, 1],
+                  }}
                 >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className="relative">
-                        {participant.isReady && (
-                          <span className="absolute inset-0 animate-[glowPulse_2s_ease-in-out_infinite] rounded-full border-2 border-primary/60" />
-                        )}
+                  <Card className="rounded-xl border-border/60 bg-card/80 p-5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-4">
                         <div className="flex size-12 shrink-0 items-center justify-center rounded-full border border-border bg-muted text-lg font-bold text-foreground">
-                          {participant.username.charAt(0).toUpperCase()}
+                          {displayName.charAt(0).toUpperCase()}
                         </div>
-                      </div>
-                      <div className="flex flex-col">
-                        <span className="flex items-center gap-2 text-[15px] font-semibold text-foreground">
-                          {participant.username}
-                          {participant.isHost && (
-                            <span className="rounded bg-foreground px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-background">
-                              {t('role.host')}
+                        <div className="flex flex-col">
+                          <span className="flex items-center gap-2 text-[15px] font-semibold text-foreground">
+                            {isMe ? `${displayName} ${t('lobby.you')}` : displayName}
+                            {isParticipantHost ? (
+                              <span className="rounded bg-foreground px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-background">
+                                {t('role.host')}
+                              </span>
+                            ) : null}
+                          </span>
+
+                          {amHost && participant.userId !== room.hostId ? (
+                            <Select
+                              value={participant.role}
+                              onValueChange={(value) =>
+                                void handleParticipantRoleChange(
+                                  participant.userId,
+                                  value as RoomRole,
+                                )
+                              }
+                            >
+                              <SelectTrigger className="mt-1 h-7 w-auto gap-1.5 border-none bg-transparent px-0 py-0 text-sm font-mono text-primary shadow-none ring-0 focus-visible:ring-0">
+                                <UserCog size={14} />
+                                {t(ROLE_LABEL_KEYS[participant.role])}
+                              </SelectTrigger>
+                              <SelectContent>
+                                {ASSIGNABLE_ROLES.map((option) => (
+                                  <SelectItem key={option.value} value={option.value}>
+                                    {t(option.labelKey)}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            <span className="mt-1 flex items-center gap-1.5 font-mono text-sm text-primary">
+                              <UserCog size={14} />
+                              {t(ROLE_LABEL_KEYS[participant.role])}
                             </span>
                           )}
-                        </span>
-
-                        {/* Host can assign roles to non-host participants */}
-                        {amHost && !participant.isHost ? (
-                          <Select
-                            value={participant.role}
-                            onValueChange={(v) => handleParticipantRoleChange(participant.id, v)}
-                          >
-                            <SelectTrigger className="mt-1 h-7 w-auto gap-1.5 border-none bg-transparent px-0 py-0 text-sm font-mono text-primary shadow-none ring-0 focus-visible:ring-0">
-                              <UserCog size={14} />
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {ASSIGNABLE_ROLES.map((opt) => (
-                                <SelectItem key={opt.value} value={opt.value}>
-                                  {t(opt.labelKey)}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        ) : (
-                          <span className="mt-1 flex items-center gap-1.5 font-mono text-sm text-primary">
-                            <UserCog size={14} />
-                            {t(ROLE_LABEL_KEYS[participant.role] ?? participant.role)}
-                          </span>
-                        )}
+                        </div>
                       </div>
+
+                      {readyMap[participant.userId] ? (
+                        <CheckCircle2 size={24} className="shrink-0 text-primary" />
+                      ) : isUpdatingRole === participant.userId ? (
+                        <Loader2 size={24} className="shrink-0 animate-spin text-primary" />
+                      ) : (
+                        <Circle size={24} className="shrink-0 text-muted-foreground/40" />
+                      )}
                     </div>
-                    {participant.isReady ? (
-                      <CheckCircle2 size={24} className="shrink-0 text-primary" />
-                    ) : (
-                      <Circle size={24} className="shrink-0 text-muted-foreground/40" />
-                    )}
-                  </div>
-                </Card>
-              </motion.div>
-            ))}
+                  </Card>
+                </motion.div>
+              );
+            })}
           </div>
         </div>
 
-        {/* Control panel sidebar */}
         <div className="lg:col-span-4">
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.45, delay: 0.05, ease: [0.22, 1, 0.36, 1] }}
           >
-            <Card
-              className="sticky top-6 rounded-xl p-7 transition-shadow duration-500"
-              style={{
-                boxShadow:
-                  glowIntensity > 0
-                    ? `0 0 ${16 + glowIntensity * 24}px hsl(var(--primary) / ${0.08 + glowIntensity * 0.22})`
-                    : undefined,
-              }}
-            >
+            <Card className="sticky top-6 rounded-xl p-7">
               <div className="space-y-7">
-                {/* Invite link */}
                 <div className="space-y-2.5">
                   <label
                     htmlFor="invite-link"
@@ -338,76 +285,48 @@ function RoomLobbyPage() {
                     {t('common:copyLink')}
                   </label>
                   <div className="flex items-center gap-2">
-                    <div className="relative flex-1">
-                      <Input
-                        id="invite-link"
-                        type="text"
-                        readOnly
-                        value={inviteLink}
-                        className="w-full font-mono text-sm"
-                      />
-                      <div className="pointer-events-none absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-card to-transparent" />
-                    </div>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      onClick={copyInviteLink}
-                      title={t('common:copyLink')}
-                    >
+                    <Input
+                      id="invite-link"
+                      type="text"
+                      readOnly
+                      value={inviteLink}
+                      className="font-mono text-sm"
+                    />
+                    <Button type="button" variant="outline" size="icon" onClick={copyInviteLink}>
                       {copied ? <Check size={16} className="text-primary" /> : <Copy size={16} />}
                     </Button>
                   </div>
                 </div>
 
-                {/* Your role */}
                 <div className="space-y-2.5">
                   <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
                     {t('roleSelect.heading')}
                   </span>
-                  {amHost ? (
-                    <div className="flex h-11 items-center gap-2 rounded-lg border border-input bg-background px-4 text-sm font-medium">
-                      <UserCog size={16} className="text-primary" />
-                      <span>{t('roleSelect.host')}</span>
-                    </div>
-                  ) : (
-                    <div className="flex h-11 items-center gap-2 rounded-lg border border-input bg-background px-4 text-sm font-medium text-muted-foreground">
-                      <UserCog size={16} />
-                      <span>{t(ROLE_LABEL_KEYS[myRole] ?? myRole)}</span>
-                    </div>
-                  )}
+                  <div className="flex h-11 items-center gap-2 rounded-lg border border-input bg-background px-4 text-sm font-medium text-muted-foreground">
+                    <UserCog size={16} />
+                    <span>{t(ROLE_LABEL_KEYS[myRole])}</span>
+                  </div>
                 </div>
 
-                {/* Ready / Cancel button */}
                 <Button
-                  variant={isReady ? 'outline' : 'default'}
+                  variant={readyMap[currentUserId ?? ''] ? 'outline' : 'default'}
                   size="lg"
                   className="w-full"
                   onClick={toggleReady}
                 >
-                  {isReady ? (
-                    t('readyButton.cancelReady')
-                  ) : (
-                    <>
-                      <CheckCircle2 size={20} /> {t('readyButton.ready')}
-                    </>
-                  )}
+                  {readyMap[currentUserId ?? '']
+                    ? t('readyButton.cancelReady')
+                    : t('readyButton.ready')}
                 </Button>
 
-                {/* Enter workspace button */}
-                {allReady && (
-                  <motion.div
-                    className="space-y-3 border-t border-border/60 pt-5"
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ duration: 0.4 }}
-                  >
-                    {!isRoomValid && (
+                {allReady ? (
+                  <div className="space-y-3 border-t border-border/60 pt-5">
+                    {!isRoomValid ? (
                       <p className="flex items-start gap-2 text-xs text-muted-foreground">
                         <AlertTriangle size={14} className="mt-0.5 shrink-0 text-warning" />
                         {t('warning')}
                       </p>
-                    )}
+                    ) : null}
                     <Button size="lg" disabled={!isRoomValid} className="w-full">
                       <Play
                         size={18}
@@ -415,8 +334,8 @@ function RoomLobbyPage() {
                       />
                       {t('readyButton.enterWorkspace')}
                     </Button>
-                  </motion.div>
-                )}
+                  </div>
+                ) : null}
               </div>
             </Card>
           </motion.div>
@@ -424,6 +343,23 @@ function RoomLobbyPage() {
       </div>
     </div>
   );
+}
+
+function buildJoinNotice(
+  joined: JoinResponse,
+  t: (key: string, options?: Record<string, unknown>) => string,
+) {
+  const roleLabel = t(ROLE_LABEL_KEYS[joined.assignedRole]);
+
+  if (joined.assignmentReason === 'requested') {
+    return t('lobby.requestedRoleAssigned', { role: roleLabel });
+  }
+
+  if (joined.assignmentReason === 'fallback-observer') {
+    return t('lobby.fallbackObserver');
+  }
+
+  return t('lobby.autoAssigned', { role: roleLabel });
 }
 
 const JOIN_ERROR_KEYS: Partial<Record<string, string>> = {
@@ -434,6 +370,7 @@ const JOIN_ERROR_KEYS: Partial<Record<string, string>> = {
   [ERROR_CODES.ROOM_ACCESS_DENIED]: 'lobby.accessDenied',
   [ERROR_CODES.ROOM_PERMISSION_DENIED]: 'lobby.accessDenied',
   [ERROR_CODES.ROOM_INVITE_CODE_EXHAUSTED]: 'lobby.invalidCode',
+  [ERROR_CODES.ROOM_ROLE_UNAVAILABLE]: 'lobby.roleUnavailable',
 };
 
 function resolveJoinError(
