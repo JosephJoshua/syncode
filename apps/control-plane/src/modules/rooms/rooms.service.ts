@@ -627,7 +627,7 @@ export class RoomsService {
     userId: string,
   ): Promise<RoomDetailResult> {
     participantRows = await resolveAvatarUrls(participantRows, this.storageService);
-    const myParticipation = participantRows.find((p) => p.userId === userId);
+    const myParticipation = participantRows.find((p) => p.userId === userId && p.isActive);
     if (!myParticipation) {
       throw new ForbiddenException({
         message: 'Not a participant of this room',

@@ -1,9 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
-  ForbiddenException,
   InternalServerErrorException,
-  NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
@@ -218,9 +216,27 @@ describe('RoomsService', () => {
 
   describe('destroyRoom', () => {
     it('GIVEN subsystem failures WHEN destroying THEN succeeds with degraded status', async () => {
+      dbSetup.mocks.mockSelect.mockReturnValueOnce({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockResolvedValue([ROOM_ROW]),
+        }),
+      });
+      const txWhere = vi.fn().mockResolvedValue([]);
+      const txDeleteWhere = vi.fn().mockResolvedValue(undefined);
+
+      dbSetup.db.transaction = vi.fn().mockImplementation(async (cb) =>
+        cb({
+          select: vi.fn().mockReturnValue({
+            from: vi.fn().mockReturnValue({ where: txWhere }),
+          }),
+          delete: vi.fn().mockReturnValue({
+            where: txDeleteWhere,
+          }),
+        }),
+      );
       mockCollabClient.destroyDocument.mockRejectedValue(new Error('down'));
 
-      const result = await service.destroyRoom('room-1');
+      const result = await service.destroyRoom(ROOM_ROW.id, HOST_ID);
 
       expect(result.collab).toBeNull();
       expect(result.mediaDeleted).toBe(true);

@@ -70,12 +70,24 @@ function RoomLobbyPage() {
         const roomCode = url.searchParams.get('code')?.toUpperCase();
 
         if (roomCode) {
-          const joined = await api(CONTROL_API.ROOMS.JOIN, {
-            params: { id: roomId },
-            body: { roomCode },
-          });
-          setRoom(joined.room);
-          setJoinNotice(buildJoinNotice(joined, t));
+          try {
+            const joined = await api(CONTROL_API.ROOMS.JOIN, {
+              params: { id: roomId },
+              body: { roomCode },
+            });
+            setRoom(joined.room);
+            setJoinNotice(buildJoinNotice(joined, t));
+          } catch (error) {
+            const apiError = await readApiError(error);
+
+            if (apiError?.code === ERROR_CODES.ROOM_ALREADY_JOINED) {
+              const detail = await api(CONTROL_API.ROOMS.GET, { params: { id: roomId } });
+              setRoom(detail);
+              return;
+            }
+
+            throw error;
+          }
         } else {
           const detail = await api(CONTROL_API.ROOMS.GET, { params: { id: roomId } });
           setRoom(detail);
@@ -94,7 +106,10 @@ function RoomLobbyPage() {
   const myRole = room?.myRole ?? 'candidate';
   const amHost = Boolean(room && currentUserId && room.hostId === currentUserId);
   const canChangePhase = room?.myCapabilities.includes('room:change-phase') ?? false;
-  const participants = room?.participants ?? [];
+  const participants = useMemo(
+    () => room?.participants.filter((participant) => participant.isActive) ?? [],
+    [room],
+  );
   const nextStages = room ? getNextStatuses(room.status as RoomStatus) : [];
 
   const {

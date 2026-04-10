@@ -219,6 +219,23 @@ describe('getRoom', () => {
 
     await expect(service.getRoom(room.id, stranger.id)).rejects.toThrow(ForbiddenException);
   });
+
+  it('GIVEN participant row is inactive WHEN requesting detail THEN throws ForbiddenException', async () => {
+    const host = await insertUser(db);
+    const inactiveParticipant = await insertUser(db);
+    const room = await insertRoom(db, host.id);
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+    await db.insert(roomParticipants).values({
+      roomId: room.id,
+      userId: inactiveParticipant.id,
+      role: 'candidate',
+      isActive: false,
+    });
+
+    await expect(service.getRoom(room.id, inactiveParticipant.id)).rejects.toThrow(
+      ForbiddenException,
+    );
+  });
 });
 
 describe('joinRoom', () => {
