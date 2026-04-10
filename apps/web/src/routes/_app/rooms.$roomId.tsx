@@ -1,5 +1,5 @@
 import { CONTROL_API, ERROR_CODES } from '@syncode/contracts';
-import type { RoomRole } from '@syncode/shared';
+import { getNextStatuses, type RoomRole, type RoomStatus } from '@syncode/shared';
 import { Button, Card, Input, Select, SelectContent, SelectItem, SelectTrigger } from '@syncode/ui';
 import { createFileRoute } from '@tanstack/react-router';
 import {
@@ -48,9 +48,16 @@ function RoomLobbyPage() {
   const [joinError, setJoinError] = useState<string | null>(null);
   const [joinNotice, setJoinNotice] = useState<string | null>(null);
   const [readyMap, setReadyMap] = useState<Record<string, boolean>>({});
+  const [isTransitioning, setIsTransitioning] = useState(false);
   const [isUpdatingRole, setIsUpdatingRole] = useState<string | null>(null);
+  const [now, setNow] = useState(Date.now());
   const [inviteLink] = useState(() => window.location.href);
   const { copied, copy } = useClipboard();
+
+  useEffect(() => {
+    const interval = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     const loadRoom = async () => {
@@ -86,9 +93,19 @@ function RoomLobbyPage() {
 
   const myRole = room?.myRole ?? 'candidate';
   const amHost = Boolean(room && currentUserId && room.hostId === currentUserId);
+  const canChangePhase = room?.myCapabilities.includes('room:change-phase') ?? false;
   const participants = room?.participants ?? [];
+  const nextStages = room ? getNextStatuses(room.status as RoomStatus) : [];
 
-  const { allReady, readyCount, totalCount, isRoomValid } = useMemo(() => {
+  const {
+    allReady,
+    readyCount,
+    totalCount,
+    isRoomValid,
+    interviewerCount,
+    candidateCount,
+    elapsedMs,
+  } = useMemo(() => {
     const readyCountValue = participants.filter(
       (participant) => readyMap[participant.userId],
     ).length;
@@ -99,13 +116,21 @@ function RoomLobbyPage() {
       (participant) => participant.isActive && participant.role === 'candidate',
     ).length;
 
+    const dynamicElapsedMs =
+      room?.status === 'coding' && room.currentPhaseStartedAt && !room.timerPaused
+        ? room.elapsedMs + Math.max(0, now - new Date(room.currentPhaseStartedAt).getTime())
+        : (room?.elapsedMs ?? 0);
+
     return {
       allReady: readyCountValue === participants.length && participants.length > 0,
       readyCount: readyCountValue,
       totalCount: participants.length,
       isRoomValid: interviewerCountValue === 1 && candidateCountValue === 1,
+      interviewerCount: interviewerCountValue,
+      candidateCount: candidateCountValue,
+      elapsedMs: dynamicElapsedMs,
     };
-  }, [participants, readyMap]);
+  }, [participants, readyMap, room, now]);
 
   const toggleReady = () => {
     if (!currentUserId) return;
@@ -132,6 +157,25 @@ function RoomLobbyPage() {
       setJoinError(apiError?.message ?? t('lobby.roleUpdateFailed'));
     } finally {
       setIsUpdatingRole(null);
+    }
+  };
+
+  const handleTransition = async (targetStatus: RoomStatus) => {
+    setIsTransitioning(true);
+
+    try {
+      await api(CONTROL_API.ROOMS.TRANSITION_PHASE, {
+        params: { id: roomId },
+        body: { targetStatus },
+      });
+
+      const detail = await api(CONTROL_API.ROOMS.GET, { params: { id: roomId } });
+      setRoom(detail);
+    } catch (error) {
+      const apiError = await readApiError(error);
+      setJoinError(apiError?.message ?? t('lobby.transitionFailed'));
+    } finally {
+      setIsTransitioning(false);
     }
   };
 
@@ -308,6 +352,40 @@ function RoomLobbyPage() {
                   </div>
                 </div>
 
+                <div className="space-y-3 rounded-lg border border-border/60 bg-muted/20 p-4">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">{t('status.' + room.status)}</span>
+                    <span className="font-mono text-foreground">{formatTime(elapsedMs)}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span>
+                      {t('lobby.roleBalance', {
+                        interviewers: interviewerCount,
+                        candidates: candidateCount,
+                      })}
+                    </span>
+                    <span>
+                      {room.editorLocked ? t('lobby.editorLocked') : t('lobby.editorUnlocked')}
+                    </span>
+                  </div>
+                  {canChangePhase ? (
+                    <div className="flex flex-col gap-2">
+                      {nextStages.map((stage) => (
+                        <Button
+                          key={stage}
+                          type="button"
+                          variant={stage === 'finished' ? 'destructive' : 'default'}
+                          disabled={isTransitioning || (stage === 'warmup' && !isRoomValid)}
+                          onClick={() => void handleTransition(stage as RoomStatus)}
+                        >
+                          {isTransitioning ? <Loader2 size={16} className="animate-spin" /> : null}
+                          {t('hostControl.advanceTo', { stageName: t(`status.${stage}`) })}
+                        </Button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+
                 <Button
                   variant={readyMap[currentUserId ?? ''] ? 'outline' : 'default'}
                   size="lg"
@@ -383,4 +461,11 @@ function resolveJoinError(
   if (i18nKey) return t(i18nKey);
 
   return apiError.message || t('lobby.joinFailed');
+}
+
+function formatTime(ms: number): string {
+  const totalSeconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 }
