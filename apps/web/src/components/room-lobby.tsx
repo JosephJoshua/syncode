@@ -209,7 +209,7 @@ export function RoomLobby({
                   {!isRoomValid ? (
                     <p className="flex items-start gap-1.5 text-[11px] leading-tight text-muted-foreground">
                       <AlertTriangle size={13} className="mt-0.5 shrink-0 text-warning" />
-                      {t('warning')}
+                      {t(mode === 'ai' ? 'warningAi' : 'warning')}
                     </p>
                   ) : !myReady && canChangePhase ? (
                     <p className="text-[11px] text-muted-foreground">

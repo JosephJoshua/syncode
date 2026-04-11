@@ -112,6 +112,7 @@
     "readyFirst": "请先点击「我已准备好」再进入工作区。"
   },
   "warning": "开始前需要且只能有一名候选人和一名面试官。",
+  "warningAi": "开始前需要且只能有一名候选人（无需面试官）。",
   "systemStatus": {
     "ready": "> SYSTEM_READY",
     "awaitingPeers": "> AWAITING_PEERS_"

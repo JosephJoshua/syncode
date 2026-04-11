@@ -3,6 +3,7 @@ import {
   computeRoomElapsedMs,
   countActiveRoleConfiguration,
   isPeerRoleConfigurationValid,
+  isRoomConfigurationValid,
 } from './room-stage.js';
 
 describe('computeRoomElapsedMs', () => {
@@ -62,6 +63,30 @@ describe('isPeerRoleConfigurationValid', () => {
     expect(
       isPeerRoleConfigurationValid([
         { role: 'interviewer', isActive: true },
+        { role: 'interviewer', isActive: true },
+        { role: 'candidate', isActive: true },
+      ]),
+    ).toBe(false);
+  });
+});
+
+describe('isRoomConfigurationValid', () => {
+  it('peer mode requires one interviewer and one candidate', () => {
+    expect(
+      isRoomConfigurationValid('peer', [
+        { role: 'interviewer', isActive: true },
+        { role: 'candidate', isActive: true },
+      ]),
+    ).toBe(true);
+
+    expect(isRoomConfigurationValid('peer', [{ role: 'candidate', isActive: true }])).toBe(false);
+  });
+
+  it('ai mode requires one candidate and no interviewer', () => {
+    expect(isRoomConfigurationValid('ai', [{ role: 'candidate', isActive: true }])).toBe(true);
+
+    expect(
+      isRoomConfigurationValid('ai', [
         { role: 'interviewer', isActive: true },
         { role: 'candidate', isActive: true },
       ]),

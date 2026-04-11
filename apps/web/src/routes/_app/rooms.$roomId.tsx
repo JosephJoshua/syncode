@@ -130,6 +130,7 @@ function RoomPage() {
 
     return () => {
       cancelled = true;
+      joinPromiseRef.current = null;
     };
   }, [refreshRoomDetail, roomId, t]);
 

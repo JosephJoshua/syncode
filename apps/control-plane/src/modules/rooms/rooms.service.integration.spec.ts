@@ -531,7 +531,7 @@ describe('transitionPhase (multi-step)', () => {
 
     const [updated] = await db.select().from(rooms).where(eq(rooms.id, room.id));
     expect(updated!.status).toBe('coding');
-    expect(updated!.currentPhaseStartedAt).not.toBeNull();
+    expect(updated!.phaseStartedAt).not.toBeNull();
     expect(updated!.editorLocked).toBe(false);
   });
 

@@ -112,6 +112,7 @@
     "readyFirst": "Click \"I'm Ready\" before entering the workspace."
   },
   "warning": "Needs exactly one candidate and one interviewer to start.",
+  "warningAi": "Needs exactly one candidate to start (no interviewer needed).",
   "systemStatus": {
     "ready": "> SYSTEM_READY",
     "awaitingPeers": "> AWAITING_PEERS_"
