@@ -28,7 +28,13 @@ export function InviteLinkInline({ inviteLink, className = '' }: InviteLinkInlin
           value={inviteLink}
           className="font-mono text-xs"
         />
-        <Button type="button" variant="outline" size="icon" onClick={() => copy(inviteLink)}>
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          aria-label={t('copyLink')}
+          onClick={() => copy(inviteLink)}
+        >
           {copied ? <Check size={16} className="text-primary" /> : <Copy size={16} />}
         </Button>
       </div>

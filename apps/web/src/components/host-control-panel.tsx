@@ -63,7 +63,6 @@ interface HostControlPanelProps {
   timerPaused: boolean;
   editorLocked: boolean;
   canChangePhase: boolean;
-  isRoomValid: boolean;
   isPending: boolean;
   onTransition: (targetStatus: RoomStatus) => void;
 }
@@ -74,7 +73,6 @@ export function HostControlPanel({
   timerPaused,
   editorLocked,
   canChangePhase,
-  isRoomValid,
   isPending,
   onTransition,
 }: HostControlPanelProps) {
@@ -130,7 +128,7 @@ export function HostControlPanel({
               className={`w-full justify-start gap-1.5 ${
                 stage !== 'finished' && !isPending ? 'shimmer-sweep' : ''
               }`}
-              disabled={isPending || (stage === 'warmup' && !isRoomValid)}
+              disabled={isPending}
               onClick={() => onTransition(stage)}
             >
               {isPending ? (
@@ -143,9 +141,6 @@ export function HostControlPanel({
                 : t('hostControl.advanceTo', { stageName: t(ROOM_STATUS_KEYS[stage]) })}
             </Button>
           ))}
-          {!isRoomValid && currentStatus === 'waiting' ? (
-            <p className="text-[10px] text-warning">{t('warning')}</p>
-          ) : null}
         </div>
       ) : (
         <p className="text-[10px] text-muted-foreground">{t('hostControl.awaitingController')}</p>

@@ -351,6 +351,13 @@ export class RoomsService {
     currentUserId: string,
     targetUserId: string,
   ): Promise<TransferOwnershipResult> {
+    if (currentUserId === targetUserId) {
+      throw new BadRequestException({
+        message: 'Cannot transfer ownership to yourself',
+        code: ERROR_CODES.PARTICIPANT_CANNOT_TRANSFER_OWNERSHIP,
+      });
+    }
+
     const transferredAt = new Date();
 
     const previousHostId = await this.db.transaction(async (tx) => {

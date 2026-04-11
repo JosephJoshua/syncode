@@ -157,6 +157,7 @@ export function RoomLobby({
                     </span>
                     <button
                       type="button"
+                      aria-label={t('success.shareLink')}
                       onClick={() => copy(inviteLink)}
                       className="shrink-0 text-muted-foreground transition-colors hover:text-primary"
                     >

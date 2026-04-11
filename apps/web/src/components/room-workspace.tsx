@@ -24,7 +24,7 @@ import {
 } from 'react-resizable-panels';
 import { toast } from 'sonner';
 import { api, readApiError } from '@/lib/api-client.js';
-import { buildInviteLink, isRoomConfigurationValid } from '@/lib/room-stage.js';
+import { buildInviteLink } from '@/lib/room-stage.js';
 import { HostControlPanel } from './host-control-panel.js';
 import { InviteLinkInline } from './invite-link-inline.js';
 import { RoomHeaderBar } from './room-header-bar.js';
@@ -135,11 +135,6 @@ export function RoomWorkspace({
     () => room.participants.filter((p: Participant) => p.isActive),
     [room.participants],
   );
-  const isRoomValid = useMemo(
-    () => isRoomConfigurationValid(room.mode, participants),
-    [room.mode, participants],
-  );
-
   const inviteLink = room.roomCode ? buildInviteLink(roomId, room.roomCode) : window.location.href;
 
   const isRunBusy =
@@ -435,7 +430,6 @@ export function RoomWorkspace({
                   timerPaused={room.timerPaused}
                   editorLocked={room.editorLocked}
                   canChangePhase={room.myCapabilities.includes('room:change-phase')}
-                  isRoomValid={isRoomValid}
                   isPending={isTransitioning}
                   onTransition={(targetStatus) => {
                     void onTransition(targetStatus);
