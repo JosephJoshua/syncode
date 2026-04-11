@@ -483,6 +483,152 @@ describe('runCode', () => {
   });
 });
 
+describe('destroyRoom', () => {
+  it('GIVEN room owned by user WHEN destroying THEN deletes room and associated data', async () => {
+    const host = await insertUser(db);
+    const room = await insertRoom(db, host.id);
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+
+    const result = await service.destroyRoom(room.id, host.id);
+
+    expect(result.mediaDeleted).toBe(true);
+
+    const [deletedRoom] = await db.select().from(rooms).where(eq(rooms.id, room.id));
+    expect(deletedRoom).toBeUndefined();
+  });
+
+  it('GIVEN non-host user WHEN destroying THEN throws ForbiddenException', async () => {
+    const host = await insertUser(db);
+    const other = await insertUser(db);
+    const room = await insertRoom(db, host.id);
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+    await insertParticipant(db, room.id, other.id, 'candidate');
+
+    await expect(service.destroyRoom(room.id, other.id)).rejects.toThrow(ForbiddenException);
+  });
+
+  it('GIVEN finished room WHEN destroying THEN throws ConflictException', async () => {
+    const host = await insertUser(db);
+    const room = await insertRoom(db, host.id, { status: 'finished' });
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+
+    await expect(service.destroyRoom(room.id, host.id)).rejects.toThrow(ConflictException);
+  });
+});
+
+describe('transitionPhase (multi-step)', () => {
+  it('GIVEN warmup room WHEN transitioning to coding THEN sets currentPhaseStartedAt and editorLocked=false', async () => {
+    const host = await insertUser(db);
+    const candidate = await insertUser(db);
+    const room = await insertRoom(db, host.id, { status: 'warmup' });
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+    await insertParticipant(db, room.id, candidate.id, 'candidate');
+
+    const result = await service.transitionPhase(room.id, host.id, 'coding');
+
+    expect(result.previousStatus).toBe('warmup');
+    expect(result.currentStatus).toBe('coding');
+
+    const [updated] = await db.select().from(rooms).where(eq(rooms.id, room.id));
+    expect(updated!.status).toBe('coding');
+    expect(updated!.currentPhaseStartedAt).not.toBeNull();
+    expect(updated!.editorLocked).toBe(false);
+  });
+
+  it('GIVEN coding room WHEN transitioning to wrapup THEN updates status and accumulates elapsed time', async () => {
+    const host = await insertUser(db);
+    const candidate = await insertUser(db);
+    const room = await insertRoom(db, host.id, { status: 'coding' });
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+    await insertParticipant(db, room.id, candidate.id, 'candidate');
+
+    const result = await service.transitionPhase(room.id, host.id, 'wrapup');
+
+    expect(result.currentStatus).toBe('wrapup');
+    expect(result.previousStatus).toBe('coding');
+
+    const [updated] = await db.select().from(rooms).where(eq(rooms.id, room.id));
+    expect(updated!.status).toBe('wrapup');
+  });
+
+  it('GIVEN wrapup room WHEN transitioning to finished THEN finalizes session', async () => {
+    const host = await insertUser(db);
+    const candidate = await insertUser(db);
+    const room = await insertRoom(db, host.id, { status: 'wrapup' });
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+    await insertParticipant(db, room.id, candidate.id, 'candidate');
+
+    const result = await service.transitionPhase(room.id, host.id, 'finished');
+
+    expect(result.currentStatus).toBe('finished');
+
+    const [updated] = await db.select().from(rooms).where(eq(rooms.id, room.id));
+    expect(updated!.status).toBe('finished');
+  });
+});
+
+describe('joinRoom (role assignment)', () => {
+  it('GIVEN user requests candidate role WHEN joining THEN assigns requested role', async () => {
+    const host = await insertUser(db);
+    const room = await insertRoom(db, host.id);
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+    const joiner = await insertUser(db);
+
+    const result = await service.joinRoom(room.id, joiner.id, {
+      roomCode: room.inviteCode,
+      requestedRole: 'candidate',
+    });
+
+    expect(result.assignedRole).toBe('candidate');
+    expect(result.assignmentReason).toBe('requested');
+  });
+
+  it('GIVEN candidate slot taken WHEN requesting candidate THEN throws role unavailable', async () => {
+    const host = await insertUser(db);
+    const room = await insertRoom(db, host.id, { maxParticipants: 4 });
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+    const existing = await insertUser(db);
+    await insertParticipant(db, room.id, existing.id, 'candidate');
+    const joiner = await insertUser(db);
+
+    await expect(
+      service.joinRoom(room.id, joiner.id, {
+        roomCode: room.inviteCode,
+        requestedRole: 'candidate',
+      }),
+    ).rejects.toThrow(ConflictException);
+  });
+});
+
+describe('submitProblem', () => {
+  it('GIVEN problem with test cases WHEN submitting code THEN enqueues one job per test case', async () => {
+    const host = await insertUser(db);
+    const candidate = await insertUser(db);
+    const problem = await insertProblem(db);
+    const room = await insertRoom(db, host.id, {
+      status: 'coding',
+      problemId: problem.id,
+    });
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+    await insertParticipant(db, room.id, candidate.id, 'candidate');
+
+    const result = await service.submitProblem(
+      room.id,
+      candidate.id,
+      { language: 'python', code: 'print(input())' },
+      [
+        { input: '5', expectedOutput: '5' },
+        { input: '10', expectedOutput: '10' },
+      ],
+    );
+
+    expect(result).toHaveLength(2);
+    expect(result[0].testCaseIndex).toBe(0);
+    expect(result[0].jobId).toBe('stub-job');
+    expect(result[1].testCaseIndex).toBe(1);
+  });
+});
+
 describe('markParticipantInactive', () => {
   it('GIVEN active participant WHEN marking inactive THEN sets isActive=false and leftAt', async () => {
     const host = await insertUser(db);

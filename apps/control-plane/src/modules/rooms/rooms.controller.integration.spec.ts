@@ -13,6 +13,7 @@ import { DB_CLIENT } from '@/modules/db/db.module.js';
 import {
   createTestDb,
   insertParticipant,
+  insertProblem,
   insertRoom,
   insertUser,
 } from '@/test/integration-setup.js';
@@ -261,5 +262,88 @@ describe('POST /rooms/:id/control/transition', () => {
     expect(res.body.previousStatus).toBe('waiting');
     expect(res.body.currentStatus).toBe('warmup');
     expect(res.body.transitionedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  });
+});
+
+describe('DELETE /rooms/:id', () => {
+  it('GIVEN host WHEN destroying room THEN returns 200 with cleanup result', async () => {
+    const host = await insertUser(db);
+    const room = await insertRoom(db, host.id);
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+
+    const res = await asUser(request(app.getHttpServer()).delete(`/rooms/${room.id}`), host).expect(
+      200,
+    );
+
+    expect(res.body.roomId).toBe(room.id);
+    expect(res.body).toHaveProperty('collabDeleted');
+    expect(res.body).toHaveProperty('mediaDeleted');
+  });
+
+  it('GIVEN non-host WHEN destroying room THEN returns 403', async () => {
+    const host = await insertUser(db);
+    const other = await insertUser(db);
+    const room = await insertRoom(db, host.id);
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+    await insertParticipant(db, room.id, other.id, 'candidate');
+
+    await asUser(request(app.getHttpServer()).delete(`/rooms/${room.id}`), other).expect(403);
+  });
+});
+
+describe('POST /rooms/:id/run', () => {
+  it('GIVEN coding room WHEN participant runs code THEN returns jobId', async () => {
+    const host = await insertUser(db);
+    const candidate = await insertUser(db);
+    const room = await insertRoom(db, host.id, { status: 'coding' });
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+    await insertParticipant(db, room.id, candidate.id, 'candidate');
+
+    const res = await asUser(request(app.getHttpServer()).post(`/rooms/${room.id}/run`), candidate)
+      .send({ language: 'python', code: 'print("hi")' })
+      .expect(201);
+
+    expect(res.body.jobId).toBe('stub-job');
+  });
+
+  it('GIVEN observer WHEN running code THEN returns 403', async () => {
+    const host = await insertUser(db);
+    const observer = await insertUser(db);
+    const room = await insertRoom(db, host.id, { status: 'coding' });
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+    await insertParticipant(db, room.id, observer.id, 'observer');
+
+    await asUser(request(app.getHttpServer()).post(`/rooms/${room.id}/run`), observer)
+      .send({ language: 'python', code: 'print("hi")' })
+      .expect(403);
+  });
+});
+
+describe('POST /rooms/:id/submit', () => {
+  it('GIVEN coding room with problem WHEN submitting THEN returns per-test-case results', async () => {
+    const host = await insertUser(db);
+    const candidate = await insertUser(db);
+    const problem = await insertProblem(db);
+    const room = await insertRoom(db, host.id, {
+      status: 'coding',
+      problemId: problem.id,
+    });
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+    await insertParticipant(db, room.id, candidate.id, 'candidate');
+
+    const res = await asUser(
+      request(app.getHttpServer()).post(`/rooms/${room.id}/submit`),
+      candidate,
+    )
+      .send({
+        language: 'python',
+        code: 'print(input())',
+        testCases: [{ input: '5', expectedOutput: '5' }],
+      })
+      .expect(201);
+
+    expect(res.body).toHaveLength(1);
+    expect(res.body[0].testCaseIndex).toBe(0);
+    expect(res.body[0].jobId).toBe('stub-job');
   });
 });
