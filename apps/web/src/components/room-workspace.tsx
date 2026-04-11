@@ -10,6 +10,7 @@ import {
   Loader2,
   Minus,
   Play,
+  TerminalSquare,
   X,
   XCircle,
 } from 'lucide-react';
