@@ -61,7 +61,7 @@ export function RoomParticipantCard({
 
   if (compact) {
     return (
-      <div className="flex items-center gap-2.5 py-2">
+      <div className="group flex items-center gap-2.5 py-2">
         <Avatar className="size-6 text-[9px]">
           {participant.avatarUrl ? <AvatarImage src={participant.avatarUrl} /> : null}
           <AvatarFallback>{initial}</AvatarFallback>
@@ -77,6 +77,22 @@ export function RoomParticipantCard({
           {t(ROLE_LABEL_KEYS[participant.role])}
         </Badge>
         {isUpdatingRole ? <Loader2 className="size-3 animate-spin text-muted-foreground" /> : null}
+        {canManageParticipants && !isHost && onTransferOwnership ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="xs"
+            className="hidden shrink-0 text-muted-foreground group-hover:inline-flex"
+            disabled={isTransferringOwnership}
+            onClick={() => onTransferOwnership(participant.userId, displayName)}
+          >
+            {isTransferringOwnership ? (
+              <Loader2 className="size-3 animate-spin" />
+            ) : (
+              <Crown className="size-3" />
+            )}
+          </Button>
+        ) : null}
       </div>
     );
   }
