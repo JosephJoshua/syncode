@@ -1,3 +1,4 @@
+export * from './components/alert-dialog.js';
 export * from './components/avatar.js';
 export * from './components/badge.js';
 export * from './components/button.js';

@@ -57,7 +57,7 @@ interface RoomWorkspaceProps {
   isTransitioning: boolean;
   onTransition: (targetStatus: RoomStatus) => Promise<void>;
   onParticipantRoleChange: (userId: string, role: RoomRole) => Promise<void>;
-  onTransferOwnership: (userId: string, displayName: string) => Promise<void>;
+  onTransferOwnership: (userId: string, displayName: string) => void;
   isUpdatingRole: string | null;
   isTransferringOwnership: string | null;
 }
@@ -469,9 +469,7 @@ export function RoomWorkspace({
                     onRoleChange={(uid, role) => {
                       void onParticipantRoleChange(uid, role);
                     }}
-                    onTransferOwnership={(uid, name) => {
-                      void onTransferOwnership(uid, name);
-                    }}
+                    onTransferOwnership={onTransferOwnership}
                     compact
                   />
                 ))}

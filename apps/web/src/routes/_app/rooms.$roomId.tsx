@@ -1,5 +1,15 @@
 import { CONTROL_API, ERROR_CODES } from '@syncode/contracts';
 import type { RoomRole, RoomStatus } from '@syncode/shared';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@syncode/ui';
 import { createFileRoute } from '@tanstack/react-router';
 import { AlertTriangle, Loader2 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -31,6 +41,10 @@ function RoomPage() {
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [isUpdatingRole, setIsUpdatingRole] = useState<string | null>(null);
   const [isTransferringOwnership, setIsTransferringOwnership] = useState<string | null>(null);
+  const [pendingTransfer, setPendingTransfer] = useState<{
+    userId: string;
+    displayName: string;
+  } | null>(null);
   const [now, setNow] = useState(Date.now());
   const joinPromiseRef = useRef<Promise<void> | null>(null);
 
@@ -179,17 +193,20 @@ function RoomPage() {
     }
   };
 
-  const handleTransferOwnership = async (participantUserId: string, displayName: string) => {
-    const confirmed = window.confirm(
-      t('workspace.transferOwnershipConfirm', { name: displayName }),
-    );
-    if (!confirmed) return;
+  const handleTransferOwnership = (participantUserId: string, displayName: string) => {
+    setPendingTransfer({ userId: participantUserId, displayName });
+  };
 
-    setIsTransferringOwnership(participantUserId);
+  const confirmTransferOwnership = async () => {
+    if (!pendingTransfer) return;
+    const { userId, displayName } = pendingTransfer;
+    setPendingTransfer(null);
+
+    setIsTransferringOwnership(userId);
     try {
       await api(CONTROL_API.ROOMS.TRANSFER_OWNERSHIP, {
         params: { id: roomId },
-        body: { targetUserId: participantUserId },
+        body: { targetUserId: userId },
       });
       await refreshRoomDetail();
       toast.success(t('workspace.transferOwnershipSuccess', { name: displayName }));
@@ -231,42 +248,72 @@ function RoomPage() {
     );
   }
 
+  const transferDialog = (
+    <AlertDialog
+      open={!!pendingTransfer}
+      onOpenChange={(open) => {
+        if (!open) setPendingTransfer(null);
+      }}
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{t('workspace.transferOwnershipTitle')}</AlertDialogTitle>
+          <AlertDialogDescription>
+            {t('workspace.transferOwnershipConfirm', { name: pendingTransfer?.displayName })}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>{t('workspace.cancel')}</AlertDialogCancel>
+          <AlertDialogAction variant="destructive" onClick={() => void confirmTransferOwnership()}>
+            {t('workspace.transferOwnershipAction')}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+
   if (isWorkspace) {
     return (
-      <RoomWorkspace
-        room={room}
-        currentUserId={currentUserId}
-        roomId={roomId}
-        elapsedMs={elapsedMs}
-        isTransitioning={isTransitioning}
-        onTransition={handleTransition}
-        onParticipantRoleChange={handleParticipantRoleChange}
-        onTransferOwnership={handleTransferOwnership}
-        isUpdatingRole={isUpdatingRole}
-        isTransferringOwnership={isTransferringOwnership}
-      />
+      <>
+        {transferDialog}
+        <RoomWorkspace
+          room={room}
+          currentUserId={currentUserId}
+          roomId={roomId}
+          elapsedMs={elapsedMs}
+          isTransitioning={isTransitioning}
+          onTransition={handleTransition}
+          onParticipantRoleChange={handleParticipantRoleChange}
+          onTransferOwnership={handleTransferOwnership}
+          isUpdatingRole={isUpdatingRole}
+          isTransferringOwnership={isTransferringOwnership}
+        />
+      </>
     );
   }
 
   return (
-    <RoomLobby
-      roomName={room.name}
-      roomCode={room.roomCode}
-      roomId={roomId}
-      status={room.status}
-      hostId={room.hostId}
-      currentUserId={currentUserId}
-      participants={room.participants}
-      canChangePhase={canChangePhase}
-      canManageParticipants={canManageParticipants}
-      isTransitioning={isTransitioning}
-      isUpdatingRole={isUpdatingRole}
-      isTransferringOwnership={isTransferringOwnership}
-      joinNotice={joinNotice}
-      onParticipantRoleChange={handleParticipantRoleChange}
-      onTransferOwnership={handleTransferOwnership}
-      onTransition={handleTransition}
-    />
+    <>
+      {transferDialog}
+      <RoomLobby
+        roomName={room.name}
+        roomCode={room.roomCode}
+        roomId={roomId}
+        status={room.status}
+        hostId={room.hostId}
+        currentUserId={currentUserId}
+        participants={room.participants}
+        canChangePhase={canChangePhase}
+        canManageParticipants={canManageParticipants}
+        isTransitioning={isTransitioning}
+        isUpdatingRole={isUpdatingRole}
+        isTransferringOwnership={isTransferringOwnership}
+        joinNotice={joinNotice}
+        onParticipantRoleChange={handleParticipantRoleChange}
+        onTransferOwnership={handleTransferOwnership}
+        onTransition={handleTransition}
+      />
+    </>
   );
 }
 
