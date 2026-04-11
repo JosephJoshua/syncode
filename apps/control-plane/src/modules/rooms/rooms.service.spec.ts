@@ -159,19 +159,22 @@ describe('RoomsService', () => {
 
   describe('destroyRoom', () => {
     it('GIVEN subsystem failures WHEN destroying THEN succeeds with degraded status', async () => {
-      dbSetup.mocks.mockSelect.mockReturnValueOnce({
-        from: vi.fn().mockReturnValue({
-          where: vi.fn().mockResolvedValue([ROOM_ROW]),
-        }),
+      const txSelectWhere = vi.fn().mockReturnValue({
+        for: vi.fn().mockResolvedValue([ROOM_ROW]),
       });
-      const txWhere = vi.fn().mockResolvedValue([]);
+      const txSessionWhere = vi.fn().mockResolvedValue([]);
       const txDeleteWhere = vi.fn().mockResolvedValue(undefined);
 
       dbSetup.db.transaction = vi.fn().mockImplementation(async (cb) =>
         cb({
-          select: vi.fn().mockReturnValue({
-            from: vi.fn().mockReturnValue({ where: txWhere }),
-          }),
+          select: vi
+            .fn()
+            .mockReturnValueOnce({
+              from: vi.fn().mockReturnValue({ where: txSelectWhere }),
+            })
+            .mockReturnValue({
+              from: vi.fn().mockReturnValue({ where: txSessionWhere }),
+            }),
           delete: vi.fn().mockReturnValue({
             where: txDeleteWhere,
           }),

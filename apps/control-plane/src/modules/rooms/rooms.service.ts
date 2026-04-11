@@ -351,52 +351,62 @@ export class RoomsService {
     currentUserId: string,
     targetUserId: string,
   ): Promise<TransferOwnershipResult> {
-    const [[room], [targetParticipant]] = await Promise.all([
-      this.db.select().from(rooms).where(eq(rooms.id, roomId)),
-      this.db
-        .select({
-          userId: roomParticipants.userId,
-          isActive: roomParticipants.isActive,
-        })
-        .from(roomParticipants)
-        .where(and(eq(roomParticipants.roomId, roomId), eq(roomParticipants.userId, targetUserId))),
-    ]);
-
-    if (!room) {
-      throw new NotFoundException({ message: 'Room not found', code: ERROR_CODES.ROOM_NOT_FOUND });
-    }
-
-    if (room.hostId !== currentUserId) {
-      throw new ForbiddenException({
-        message: 'Only the host can transfer room ownership',
-        code: ERROR_CODES.ROOM_PERMISSION_DENIED,
-      });
-    }
-
-    if (room.status === RoomStatus.FINISHED) {
-      throw new ConflictException({
-        message: 'Cannot transfer ownership after the room has finished',
-        code: ERROR_CODES.ROOM_FINISHED,
-      });
-    }
-
-    if (!targetParticipant?.isActive) {
-      throw new BadRequestException({
-        message: 'Ownership can only be transferred to an active participant',
-        code: ERROR_CODES.PARTICIPANT_CANNOT_TRANSFER_OWNERSHIP,
-      });
-    }
-
     const transferredAt = new Date();
 
-    await this.db
-      .update(rooms)
-      .set({ hostId: targetUserId, updatedAt: transferredAt })
-      .where(eq(rooms.id, roomId));
+    const previousHostId = await this.db.transaction(async (tx) => {
+      const [room] = await tx.select().from(rooms).where(eq(rooms.id, roomId)).for('update');
+
+      if (!room) {
+        throw new NotFoundException({
+          message: 'Room not found',
+          code: ERROR_CODES.ROOM_NOT_FOUND,
+        });
+      }
+
+      if (room.hostId !== currentUserId) {
+        throw new ForbiddenException({
+          message: 'Only the host can transfer room ownership',
+          code: ERROR_CODES.ROOM_PERMISSION_DENIED,
+        });
+      }
+
+      if (room.status === RoomStatus.FINISHED) {
+        throw new ConflictException({
+          message: 'Cannot transfer ownership after the room has finished',
+          code: ERROR_CODES.ROOM_FINISHED,
+        });
+      }
+
+      const [targetParticipant] = await tx
+        .select({ isActive: roomParticipants.isActive })
+        .from(roomParticipants)
+        .where(and(eq(roomParticipants.roomId, roomId), eq(roomParticipants.userId, targetUserId)));
+
+      if (!targetParticipant) {
+        throw new NotFoundException({
+          message: 'Participant not found in this room',
+          code: ERROR_CODES.PARTICIPANT_NOT_FOUND,
+        });
+      }
+
+      if (!targetParticipant.isActive) {
+        throw new BadRequestException({
+          message: 'Ownership can only be transferred to an active participant',
+          code: ERROR_CODES.PARTICIPANT_CANNOT_TRANSFER_OWNERSHIP,
+        });
+      }
+
+      await tx
+        .update(rooms)
+        .set({ hostId: targetUserId, updatedAt: transferredAt })
+        .where(eq(rooms.id, roomId));
+
+      return room.hostId;
+    });
 
     return {
       roomId,
-      previousHostId: room.hostId,
+      previousHostId,
       currentHostId: targetUserId,
       transferredAt,
       transferredBy: currentUserId,
@@ -409,32 +419,35 @@ export class RoomsService {
     targetUserId: string,
     nextRole: RoomRole,
   ): Promise<UpdateParticipantRoleResult> {
-    const [room] = await this.db.select().from(rooms).where(eq(rooms.id, roomId));
-
-    if (!room) {
-      throw new NotFoundException({ message: 'Room not found', code: ERROR_CODES.ROOM_NOT_FOUND });
-    }
-
-    if (room.hostId !== actorUserId) {
-      throw new ForbiddenException({
-        message: 'Only the host can change participant roles',
-        code: ERROR_CODES.ROOM_PERMISSION_DENIED,
-      });
-    }
-
-    if (room.status === RoomStatus.FINISHED) {
-      throw new ConflictException({
-        message: 'Cannot change roles after the room has finished',
-        code: ERROR_CODES.ROOM_FINISHED,
-      });
-    }
-
-    this.assertRoleAllowedForMode(room.mode, nextRole);
-
     const updatedAt = new Date();
     let previousRole!: RoomRole;
 
-    await this.db.transaction(async (tx) => {
+    const room = await this.db.transaction(async (tx) => {
+      const [lockedRoom] = await tx.select().from(rooms).where(eq(rooms.id, roomId)).for('update');
+
+      if (!lockedRoom) {
+        throw new NotFoundException({
+          message: 'Room not found',
+          code: ERROR_CODES.ROOM_NOT_FOUND,
+        });
+      }
+
+      if (lockedRoom.hostId !== actorUserId) {
+        throw new ForbiddenException({
+          message: 'Only the host can change participant roles',
+          code: ERROR_CODES.ROOM_PERMISSION_DENIED,
+        });
+      }
+
+      if (lockedRoom.status === RoomStatus.FINISHED) {
+        throw new ConflictException({
+          message: 'Cannot change roles after the room has finished',
+          code: ERROR_CODES.ROOM_FINISHED,
+        });
+      }
+
+      this.assertRoleAllowedForMode(lockedRoom.mode, nextRole);
+
       const participants = await tx
         .select({
           userId: roomParticipants.userId,
@@ -456,9 +469,9 @@ export class RoomsService {
       }
 
       previousRole = this.normalizeParticipantRole(
-        room.mode,
+        lockedRoom.mode,
         targetParticipant.role,
-        room.hostId,
+        lockedRoom.hostId,
         targetParticipant.userId,
       );
 
@@ -470,14 +483,18 @@ export class RoomsService {
             participant.userId === targetUserId
               ? nextRole
               : this.normalizeParticipantRole(
-                  room.mode,
+                  lockedRoom.mode,
                   participant.role,
-                  room.hostId,
+                  lockedRoom.hostId,
                   participant.userId,
                 ),
         }));
 
-      this.assertActiveRoleConfiguration(room.mode, room.status, nextActiveParticipants);
+      this.assertActiveRoleConfiguration(
+        lockedRoom.mode,
+        lockedRoom.status,
+        nextActiveParticipants,
+      );
 
       await tx
         .update(roomParticipants)
@@ -500,6 +517,8 @@ export class RoomsService {
             ),
           );
       }
+
+      return lockedRoom;
     });
 
     const [updatedRoom, participantRows] = await Promise.all([
@@ -509,7 +528,7 @@ export class RoomsService {
       this.fetchParticipants(roomId),
     ]);
 
-    if (!updatedRoom || !previousRole) {
+    if (!updatedRoom) {
       throw new NotFoundException({ message: 'Room not found', code: ERROR_CODES.ROOM_NOT_FOUND });
     }
 
@@ -524,32 +543,35 @@ export class RoomsService {
   }
 
   async destroyRoom(roomId: string, userId: string): Promise<DestroyRoomResult> {
-    const [room] = await this.db.select().from(rooms).where(eq(rooms.id, roomId));
-
-    if (!room) {
-      throw new NotFoundException({ message: 'Room not found', code: ERROR_CODES.ROOM_NOT_FOUND });
-    }
-
-    if (room.hostId !== userId) {
-      throw new ForbiddenException({
-        message: 'Only the host can destroy this room',
-        code: ERROR_CODES.ROOM_PERMISSION_DENIED,
-      });
-    }
-
-    if (room.status === RoomStatus.FINISHED) {
-      throw new ConflictException({
-        message: 'Finished rooms cannot be destroyed',
-        code: ERROR_CODES.ROOM_FINISHED,
-      });
-    }
-
     const [collab, mediaDeleted] = await Promise.all([
       this.destroyCollabDocument(roomId),
       this.deleteMediaRoom(roomId),
     ]);
 
     await this.db.transaction(async (tx) => {
+      const [room] = await tx.select().from(rooms).where(eq(rooms.id, roomId)).for('update');
+
+      if (!room) {
+        throw new NotFoundException({
+          message: 'Room not found',
+          code: ERROR_CODES.ROOM_NOT_FOUND,
+        });
+      }
+
+      if (room.hostId !== userId) {
+        throw new ForbiddenException({
+          message: 'Only the host can destroy this room',
+          code: ERROR_CODES.ROOM_PERMISSION_DENIED,
+        });
+      }
+
+      if (room.status === RoomStatus.FINISHED) {
+        throw new ConflictException({
+          message: 'Finished rooms cannot be destroyed',
+          code: ERROR_CODES.ROOM_FINISHED,
+        });
+      }
+
       const roomSessionIds = await tx
         .select({ id: sessions.id })
         .from(sessions)
@@ -706,48 +728,35 @@ export class RoomsService {
     userId: string,
     targetStatus: RoomStatus,
   ): Promise<TransitionPhaseResult> {
-    // Read participant info outside the transaction for permission checks.
-    const [room, participant] = await this.getRoomContext(roomId, userId);
-
-    if (!participant) {
-      throw new ForbiddenException({
-        message: 'Not a participant of this room',
-        code: ERROR_CODES.ROOM_ACCESS_DENIED,
-      });
-    }
-
-    if (room.hostId !== userId && participant.role !== RoomRole.INTERVIEWER) {
-      throw new ForbiddenException({
-        message: 'You do not have permission to change the room phase',
-        code: ERROR_CODES.ROOM_PERMISSION_DENIED,
-      });
-    }
-
     const now = new Date();
 
-    // Re-read the room row inside the transaction with FOR UPDATE to prevent
-    // concurrent transitions from both seeing the same status.
     const { previousStatus, editorLocked } = await this.db.transaction(async (tx) => {
-      const [lockedRoom] = await tx
-        .select({
-          status: rooms.status,
-          editorLocked: rooms.editorLocked,
-          phaseStartedAt: rooms.phaseStartedAt,
-          timerPaused: rooms.timerPaused,
-          elapsedMs: rooms.elapsedMs,
-          mode: rooms.mode,
-          hostId: rooms.hostId,
-          problemId: rooms.problemId,
-          language: rooms.language,
-        })
-        .from(rooms)
-        .where(eq(rooms.id, roomId))
-        .for('update');
+      const [lockedRoom] = await tx.select().from(rooms).where(eq(rooms.id, roomId)).for('update');
 
       if (!lockedRoom) {
         throw new NotFoundException({
           message: 'Room not found',
           code: ERROR_CODES.ROOM_NOT_FOUND,
+        });
+      }
+
+      // Auth check against the locked row to prevent TOCTOU race with ownership transfer
+      const [participant] = await tx
+        .select({ role: roomParticipants.role, isActive: roomParticipants.isActive })
+        .from(roomParticipants)
+        .where(and(eq(roomParticipants.roomId, roomId), eq(roomParticipants.userId, userId)));
+
+      if (!participant?.isActive) {
+        throw new ForbiddenException({
+          message: 'Not a participant of this room',
+          code: ERROR_CODES.ROOM_ACCESS_DENIED,
+        });
+      }
+
+      if (lockedRoom.hostId !== userId && participant.role !== RoomRole.INTERVIEWER) {
+        throw new ForbiddenException({
+          message: 'You do not have permission to change the room phase',
+          code: ERROR_CODES.ROOM_PERMISSION_DENIED,
         });
       }
 
@@ -766,10 +775,7 @@ export class RoomsService {
           : lockedRoom.elapsedMs;
 
       if (lockedStatus === RoomStatus.WAITING && targetStatus === RoomStatus.WARMUP) {
-        const activeParticipants = await this.fetchActiveParticipants(tx, {
-          ...room,
-          ...lockedRoom,
-        });
+        const activeParticipants = await this.fetchActiveParticipants(tx, lockedRoom);
         this.assertActiveRoleConfiguration(
           lockedRoom.mode as RoomMode,
           RoomStatus.WARMUP,
