@@ -27,8 +27,8 @@ export class InternalController {
   }
 
   @Post(COLLAB_INTERNAL.UPDATE_ROOM_STATE.route)
-  updateRoomState(@Body() body: UpdateRoomStateRequest) {
-    return this.collaborationService.updateRoomState(body);
+  updateRoomState(@Param('roomId') roomId: string, @Body() body: UpdateRoomStateRequest) {
+    return this.collaborationService.updateRoomState({ ...body, roomId });
   }
 
   @Get(COLLAB_INTERNAL.HEALTH.route)

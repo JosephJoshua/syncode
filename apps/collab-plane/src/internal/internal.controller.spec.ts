@@ -10,7 +10,7 @@ function createMocks() {
       createDocument: vi.fn(),
       destroyDocument: vi.fn(),
       kickUser: vi.fn(),
-      notifyPhaseChange: vi.fn(),
+      updateRoomState: vi.fn(),
     },
   };
 }
@@ -82,18 +82,24 @@ describe('InternalController', () => {
     });
   });
 
-  describe('notifyPhaseChange', () => {
-    it('GIVEN valid request WHEN notifying phase change THEN delegates to service and returns success', async () => {
+  describe('updateRoomState', () => {
+    it('GIVEN valid request WHEN updating room state THEN delegates to service and returns success', async () => {
       const mocks = createMocks();
-      mocks.collaborationService.notifyPhaseChange.mockResolvedValue(undefined);
+      mocks.collaborationService.updateRoomState.mockResolvedValue({ success: true });
       const controller = await createController(mocks);
 
-      const result = await controller.notifyPhaseChange('room-1', {
+      const result = await controller.updateRoomState('room-1', {
         roomId: 'room-1',
-        newPhase: 'coding',
+        phase: 'coding',
+        editorLocked: false,
       });
 
       expect(result).toEqual({ success: true });
+      expect(mocks.collaborationService.updateRoomState).toHaveBeenCalledWith({
+        roomId: 'room-1',
+        phase: 'coding',
+        editorLocked: false,
+      });
     });
   });
 

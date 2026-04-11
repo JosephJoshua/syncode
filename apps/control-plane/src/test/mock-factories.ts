@@ -39,7 +39,7 @@ export function createMockCollabClient() {
     createDocument: vi.fn().mockResolvedValue({ roomId: 'stub', createdAt: Date.now() }),
     destroyDocument: vi.fn().mockResolvedValue({ roomId: 'stub', finalSnapshot: undefined }),
     kickUser: vi.fn(),
-    notifyPhaseChange: vi.fn().mockResolvedValue({ success: true }),
+    updateRoomState: vi.fn().mockResolvedValue({ success: true }),
     healthCheck: vi.fn(),
   };
 }
