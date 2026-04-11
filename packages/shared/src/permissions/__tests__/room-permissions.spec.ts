@@ -63,6 +63,14 @@ describe('Room Permissions', () => {
         hasResolvedRoomPermission(RoomRole.CANDIDATE, 'room:select-problem', { isHost: true }),
       ).toBe(true);
     });
+
+    test('GIVEN observer role without host WHEN resolving permissions THEN base observer permissions are used', () => {
+      const permissions = resolveRoomPermissions(RoomRole.OBSERVER, { isHost: false });
+
+      expect(permissions).toBe(getRoomPermissions(RoomRole.OBSERVER));
+      expect(permissions.has('code:view')).toBe(true);
+      expect(permissions.has('code:edit')).toBe(false);
+    });
   });
 
   describe('Role hierarchy sanity', () => {

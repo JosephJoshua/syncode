@@ -24,6 +24,7 @@ export {
 export type { RoomMode, RoomParticipant } from './room.js';
 export {
   getNextStatuses,
+  isRoomRole,
   isValidStatusTransition,
   JOINABLE_ROOM_ROLES as JOINABLE_ROLES,
   ROOM_MODES,

@@ -24,6 +24,10 @@ export const RoomRole = {
 
 export type RoomRole = (typeof RoomRole)[keyof typeof RoomRole];
 
+export function isRoomRole(value: string): value is RoomRole {
+  return (ROOM_ROLES as readonly string[]).includes(value);
+}
+
 export interface RoomParticipant {
   userId: string;
   username: string;

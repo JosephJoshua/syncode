@@ -47,6 +47,7 @@ import {
   INVITE_CODE_CHARSET,
   INVITE_CODE_LENGTH,
   INVITE_CODE_MAX_RETRIES,
+  isRoomRole,
   isValidStatusTransition,
   type RoomMode,
   RoomRole,
@@ -201,6 +202,7 @@ export class RoomsService {
 
         return rows.map((row) => ({
           ...row,
+          myRole: this.normalizeParticipantRole(row.mode, row.myRole, row.hostId, userId),
           problemTitle: row.problemTitle ?? null,
         }));
       },
@@ -273,7 +275,12 @@ export class RoomsService {
           .filter((participant) => participant.isActive)
           .map((participant) => ({
             userId: participant.userId,
-            role: participant.role as RoomRole,
+            role: this.normalizeParticipantRole(
+              room.mode,
+              participant.role,
+              room.hostId,
+              participant.userId,
+            ),
           })),
         input.requestedRole ?? null,
       );
@@ -285,7 +292,12 @@ export class RoomsService {
         .filter((participant) => participant.isActive && participant.userId !== userId)
         .map((participant) => ({
           userId: participant.userId,
-          role: participant.role as RoomRole,
+          role: this.normalizeParticipantRole(
+            room.mode,
+            participant.role,
+            room.hostId,
+            participant.userId,
+          ),
         }))
         .concat({ userId, role: assignedRole });
 
@@ -297,11 +309,17 @@ export class RoomsService {
           .set({ role: assignedRole, isActive: true, leftAt: null, joinedAt: new Date() })
           .where(eq(roomParticipants.id, existing.id));
       } else {
-        await tx.insert(roomParticipants).values({
-          roomId,
-          userId,
-          role: assignedRole,
-        });
+        await tx
+          .insert(roomParticipants)
+          .values({
+            roomId,
+            userId,
+            role: assignedRole,
+          })
+          .onConflictDoUpdate({
+            target: [roomParticipants.roomId, roomParticipants.userId],
+            set: { role: assignedRole, isActive: true, leftAt: null, joinedAt: new Date() },
+          });
       }
     });
 
@@ -437,13 +455,26 @@ export class RoomsService {
         });
       }
 
-      previousRole = targetParticipant.role as RoomRole;
+      previousRole = this.normalizeParticipantRole(
+        room.mode,
+        targetParticipant.role,
+        room.hostId,
+        targetParticipant.userId,
+      );
 
       const nextActiveParticipants = participants
         .filter((participant) => participant.isActive)
         .map((participant) => ({
           userId: participant.userId,
-          role: participant.userId === targetUserId ? nextRole : (participant.role as RoomRole),
+          role:
+            participant.userId === targetUserId
+              ? nextRole
+              : this.normalizeParticipantRole(
+                  room.mode,
+                  participant.role,
+                  room.hostId,
+                  participant.userId,
+                ),
         }));
 
       this.assertActiveRoleConfiguration(room.mode, room.status, nextActiveParticipants);
@@ -627,7 +658,16 @@ export class RoomsService {
     userId: string,
   ): Promise<RoomDetailResult> {
     participantRows = await resolveAvatarUrls(participantRows, this.storageService);
-    const myParticipation = participantRows.find((p) => p.userId === userId && p.isActive);
+    const normalizedParticipants = participantRows.map((participant) => ({
+      ...participant,
+      role: this.normalizeParticipantRole(
+        room.mode,
+        participant.role,
+        room.hostId,
+        participant.userId,
+      ),
+    }));
+    const myParticipation = normalizedParticipants.find((p) => p.userId === userId && p.isActive);
     if (!myParticipation) {
       throw new ForbiddenException({
         message: 'Not a participant of this room',
@@ -650,7 +690,7 @@ export class RoomsService {
       problemId: room.problemId,
       language: room.language,
       config: this.buildRoomConfig(room),
-      participants: participantRows,
+      participants: normalizedParticipants,
       myRole,
       myCapabilities: [...myCapabilities],
       currentPhaseStartedAt: room.phaseStartedAt,
@@ -666,6 +706,7 @@ export class RoomsService {
     userId: string,
     targetStatus: RoomStatus,
   ): Promise<TransitionPhaseResult> {
+    // Read participant info outside the transaction for permission checks.
     const [room, participant] = await this.getRoomContext(roomId, userId);
 
     if (!participant) {
@@ -682,34 +723,67 @@ export class RoomsService {
       });
     }
 
-    const previousStatus = room.status;
-
-    if (!isValidStatusTransition(previousStatus, targetStatus)) {
-      throw new BadRequestException({
-        message: `Cannot transition from '${previousStatus}' to '${targetStatus}'`,
-        code: ERROR_CODES.ROOM_INVALID_TRANSITION,
-      });
-    }
-
     const now = new Date();
-    const elapsedMs =
-      previousStatus === RoomStatus.CODING && room.phaseStartedAt && !room.timerPaused
-        ? room.elapsedMs + Math.max(0, now.getTime() - room.phaseStartedAt.getTime())
-        : room.elapsedMs;
 
-    await this.db.transaction(async (tx) => {
-      if (previousStatus === RoomStatus.WAITING && targetStatus === RoomStatus.WARMUP) {
-        const activeParticipants = await this.fetchActiveParticipants(tx, roomId);
-        this.assertActiveRoleConfiguration(room.mode, RoomStatus.WARMUP, activeParticipants);
+    // Re-read the room row inside the transaction with FOR UPDATE to prevent
+    // concurrent transitions from both seeing the same status.
+    const { previousStatus, editorLocked } = await this.db.transaction(async (tx) => {
+      const [lockedRoom] = await tx
+        .select({
+          status: rooms.status,
+          editorLocked: rooms.editorLocked,
+          phaseStartedAt: rooms.phaseStartedAt,
+          timerPaused: rooms.timerPaused,
+          elapsedMs: rooms.elapsedMs,
+          mode: rooms.mode,
+          hostId: rooms.hostId,
+          problemId: rooms.problemId,
+          language: rooms.language,
+        })
+        .from(rooms)
+        .where(eq(rooms.id, roomId))
+        .for('update');
+
+      if (!lockedRoom) {
+        throw new NotFoundException({
+          message: 'Room not found',
+          code: ERROR_CODES.ROOM_NOT_FOUND,
+        });
+      }
+
+      const lockedStatus = lockedRoom.status as RoomStatus;
+
+      if (!isValidStatusTransition(lockedStatus, targetStatus)) {
+        throw new BadRequestException({
+          message: `Cannot transition from '${lockedStatus}' to '${targetStatus}'`,
+          code: ERROR_CODES.ROOM_INVALID_TRANSITION,
+        });
+      }
+
+      const computedElapsedMs =
+        lockedStatus === RoomStatus.CODING && lockedRoom.phaseStartedAt && !lockedRoom.timerPaused
+          ? lockedRoom.elapsedMs + Math.max(0, now.getTime() - lockedRoom.phaseStartedAt.getTime())
+          : lockedRoom.elapsedMs;
+
+      if (lockedStatus === RoomStatus.WAITING && targetStatus === RoomStatus.WARMUP) {
+        const activeParticipants = await this.fetchActiveParticipants(tx, {
+          ...room,
+          ...lockedRoom,
+        });
+        this.assertActiveRoleConfiguration(
+          lockedRoom.mode as RoomMode,
+          RoomStatus.WARMUP,
+          activeParticipants,
+        );
       }
 
       const roomUpdate: Partial<typeof rooms.$inferInsert> = {
         status: targetStatus,
         phaseStartedAt: now,
-        elapsedMs,
+        elapsedMs: computedElapsedMs,
       };
 
-      if (previousStatus === RoomStatus.CODING || targetStatus === RoomStatus.CODING) {
+      if (lockedStatus === RoomStatus.CODING || targetStatus === RoomStatus.CODING) {
         roomUpdate.timerPaused = false;
       }
 
@@ -719,14 +793,14 @@ export class RoomsService {
 
       await tx.update(rooms).set(roomUpdate).where(eq(rooms.id, roomId));
 
-      if (previousStatus === RoomStatus.WAITING && targetStatus === RoomStatus.WARMUP) {
+      if (lockedStatus === RoomStatus.WAITING && targetStatus === RoomStatus.WARMUP) {
         const [session] = await tx
           .insert(sessions)
           .values({
             roomId,
-            problemId: room.problemId,
-            mode: room.mode,
-            language: room.language,
+            problemId: lockedRoom.problemId,
+            mode: lockedRoom.mode,
+            language: lockedRoom.language,
             status: 'ongoing',
             startedAt: now,
           })
@@ -746,30 +820,41 @@ export class RoomsService {
             participantRows.map((participantRow) => ({
               sessionId: session!.id,
               userId: participantRow.userId,
-              role: participantRow.role,
+              role: this.normalizeParticipantRole(
+                lockedRoom.mode as RoomMode,
+                participantRow.role,
+                lockedRoom.hostId,
+                participantRow.userId,
+              ),
               joinedAt: participantRow.joinedAt,
             })),
           );
         }
       }
 
-      if (targetStatus === RoomStatus.FINISHED && previousStatus !== RoomStatus.WAITING) {
+      if (targetStatus === RoomStatus.FINISHED && lockedStatus !== RoomStatus.WAITING) {
         await tx
           .update(sessions)
           .set({
             status: 'finished',
             finishedAt: now,
-            durationMs: elapsedMs,
+            durationMs: computedElapsedMs,
           })
           .where(eq(sessions.roomId, roomId));
       }
+
+      return {
+        previousStatus: lockedStatus,
+        editorLocked: lockedRoom.editorLocked,
+      };
     });
 
     this.logger.log(
       `Room ${roomId} transitioned from '${previousStatus}' to '${targetStatus}' by user ${userId}`,
     );
 
-    void this.updateCollabRoomState(roomId, targetStatus, room.editorLocked);
+    // Fire-and-forget collab notification stays outside the transaction.
+    void this.updateCollabRoomState(roomId, targetStatus, editorLocked);
 
     return {
       roomId,
@@ -905,13 +990,18 @@ export class RoomsService {
 
     return [
       room,
-      participant?.isActive ? { ...participant, role: participant.role as RoomRole } : null,
+      participant?.isActive
+        ? {
+            ...participant,
+            role: this.normalizeParticipantRole(room.mode, participant.role, room.hostId, userId),
+          }
+        : null,
     ] as const;
   }
 
   private async fetchActiveParticipants(
     db: Pick<Database, 'select'>,
-    roomId: string,
+    room: typeof rooms.$inferSelect,
   ): Promise<Array<{ userId: string; role: RoomRole }>> {
     const participants = await db
       .select({
@@ -919,12 +1009,41 @@ export class RoomsService {
         role: roomParticipants.role,
       })
       .from(roomParticipants)
-      .where(and(eq(roomParticipants.roomId, roomId), eq(roomParticipants.isActive, true)));
+      .where(and(eq(roomParticipants.roomId, room.id), eq(roomParticipants.isActive, true)));
 
     return participants.map((participant) => ({
       userId: participant.userId,
-      role: participant.role as RoomRole,
+      role: this.normalizeParticipantRole(
+        room.mode,
+        participant.role,
+        room.hostId,
+        participant.userId,
+      ),
     }));
+  }
+
+  private normalizeParticipantRole(
+    mode: RoomMode,
+    role: string,
+    hostId: string,
+    userId: string,
+  ): RoomRole {
+    if (isRoomRole(role)) {
+      return role;
+    }
+
+    if (role === 'spectator') {
+      return RoomRole.OBSERVER;
+    }
+
+    if (role === 'host') {
+      return mode === 'ai' ? RoomRole.CANDIDATE : RoomRole.INTERVIEWER;
+    }
+
+    this.logger.warn(
+      `Unknown room role "${role}" for user ${userId} in room hosted by ${hostId}; falling back to observer`,
+    );
+    return RoomRole.OBSERVER;
   }
 
   private async assertRoomCapability(

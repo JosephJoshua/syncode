@@ -86,12 +86,16 @@ export const ROOM_ROLE_PERMISSIONS: Record<RoomRole, ReadonlySet<RoomCapability>
   [RoomRoleValues.OBSERVER]: OBSERVER_CAPABILITIES,
 };
 
+function resolveBasePermissions(role: RoomRole): ReadonlySet<RoomCapability> {
+  return ROOM_ROLE_PERMISSIONS[role];
+}
+
 export function hasRoomPermission(role: RoomRole, capability: RoomCapability): boolean {
-  return ROOM_ROLE_PERMISSIONS[role].has(capability);
+  return resolveBasePermissions(role).has(capability);
 }
 
 export function getRoomPermissions(role: RoomRole): ReadonlySet<RoomCapability> {
-  return ROOM_ROLE_PERMISSIONS[role];
+  return resolveBasePermissions(role);
 }
 
 export function resolveRoomPermissions(
@@ -100,11 +104,13 @@ export function resolveRoomPermissions(
     isHost?: boolean;
   },
 ): ReadonlySet<RoomCapability> {
+  const basePermissions = resolveBasePermissions(role);
+
   if (!options?.isHost) {
-    return ROOM_ROLE_PERMISSIONS[role];
+    return basePermissions;
   }
 
-  return new Set([...ROOM_ROLE_PERMISSIONS[role], ...HOST_OVERRIDE_CAPABILITIES]);
+  return new Set([...basePermissions, ...HOST_OVERRIDE_CAPABILITIES]);
 }
 
 export function hasResolvedRoomPermission(

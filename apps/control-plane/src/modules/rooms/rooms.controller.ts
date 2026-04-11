@@ -21,6 +21,7 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { SkipThrottle } from '@nestjs/throttler';
 import { CONTROL_API, ROOMS_SORT_BY_OPTIONS, SORT_ORDER_OPTIONS } from '@syncode/contracts';
 import { ROOM_MODES, ROOM_STATUSES } from '@syncode/shared';
 import { CurrentUser } from '@/common/decorators/current-user.decorator.js';
@@ -105,6 +106,7 @@ export class RoomsController {
   }
 
   @Get(CONTROL_API.ROOMS.GET.route)
+  @SkipThrottle()
   @ApiOperation({ summary: 'Get room details' })
   @ApiParam({ name: 'id', description: 'Room ID (UUID)' })
   @ApiResponse({ status: 200, type: RoomDetailDto })
