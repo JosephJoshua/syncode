@@ -1,4 +1,4 @@
-import type { RoomRole, RoomStatus } from '@syncode/shared';
+import type { RoomMode, RoomRole, RoomStatus } from '@syncode/shared';
 import { Badge, Button, Card } from '@syncode/ui';
 import { AlertTriangle, Check, Copy, Crown, Loader2, Play } from 'lucide-react';
 import { motion } from 'motion/react';
@@ -8,7 +8,7 @@ import { useClipboard } from '@/hooks/use-clipboard.js';
 import {
   buildInviteLink,
   countActiveRoleConfiguration,
-  isPeerRoleConfigurationValid,
+  isRoomConfigurationValid,
 } from '@/lib/room-stage.js';
 import { LobbyBot } from './lobby-bot.js';
 import { type Participant, RoomParticipantCard } from './room-participant-card.js';
@@ -17,6 +17,7 @@ interface RoomLobbyProps {
   roomName: string | null;
   roomCode: string;
   roomId: string;
+  mode: RoomMode;
   status: RoomStatus;
   hostId: string;
   currentUserId: string | null;
@@ -36,6 +37,7 @@ export function RoomLobby({
   roomName,
   roomCode,
   roomId,
+  mode,
   status,
   hostId,
   currentUserId,
@@ -60,8 +62,8 @@ export function RoomLobby({
     [activeParticipants],
   );
   const isRoomValid = useMemo(
-    () => isPeerRoleConfigurationValid(activeParticipants),
-    [activeParticipants],
+    () => isRoomConfigurationValid(mode, activeParticipants),
+    [mode, activeParticipants],
   );
 
   const myRole = currentUserId

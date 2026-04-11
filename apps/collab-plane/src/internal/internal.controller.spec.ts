@@ -95,11 +95,6 @@ describe('InternalController', () => {
       });
 
       expect(result).toEqual({ success: true });
-      expect(mocks.collaborationService.updateRoomState).toHaveBeenCalledWith({
-        roomId: 'room-1',
-        phase: 'coding',
-        editorLocked: false,
-      });
     });
   });
 

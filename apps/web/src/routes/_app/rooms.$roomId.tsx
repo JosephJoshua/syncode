@@ -299,6 +299,7 @@ function RoomPage() {
         roomName={room.name}
         roomCode={room.roomCode}
         roomId={roomId}
+        mode={room.mode}
         status={room.status}
         hostId={room.hostId}
         currentUserId={currentUserId}

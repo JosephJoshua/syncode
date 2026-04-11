@@ -543,11 +543,6 @@ export class RoomsService {
   }
 
   async destroyRoom(roomId: string, userId: string): Promise<DestroyRoomResult> {
-    const [collab, mediaDeleted] = await Promise.all([
-      this.destroyCollabDocument(roomId),
-      this.deleteMediaRoom(roomId),
-    ]);
-
     await this.db.transaction(async (tx) => {
       const [room] = await tx.select().from(rooms).where(eq(rooms.id, roomId)).for('update');
 
@@ -597,6 +592,12 @@ export class RoomsService {
       await tx.delete(sessions).where(eq(sessions.roomId, roomId));
       await tx.delete(rooms).where(eq(rooms.id, roomId));
     });
+
+    // Clean up external resources after authorization + DB delete succeed
+    const [collab, mediaDeleted] = await Promise.all([
+      this.destroyCollabDocument(roomId),
+      this.deleteMediaRoom(roomId),
+    ]);
 
     this.logger.log(
       `Room ${roomId} destroyed. Collab: ${collab ? 'ok' : 'failed'}, media: ${mediaDeleted ? 'ok' : 'failed'}`,

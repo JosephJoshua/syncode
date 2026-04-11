@@ -1,4 +1,4 @@
-import type { RoomParticipant, RoomRole, RoomStatus } from '@syncode/shared';
+import type { RoomMode, RoomParticipant, RoomRole, RoomStatus } from '@syncode/shared';
 
 export const ROLE_LABEL_KEYS: Record<RoomRole, string> = {
   candidate: 'role.candidate',
@@ -95,5 +95,16 @@ export function isPeerRoleConfigurationValid(
   participants: Array<Pick<RoomParticipant, 'isActive' | 'role'>>,
 ): boolean {
   const counts = countActiveRoleConfiguration(participants);
+  return counts.interviewerCount === 1 && counts.candidateCount === 1;
+}
+
+export function isRoomConfigurationValid(
+  mode: RoomMode,
+  participants: Array<Pick<RoomParticipant, 'isActive' | 'role'>>,
+): boolean {
+  const counts = countActiveRoleConfiguration(participants);
+  if (mode === 'ai') {
+    return counts.candidateCount === 1 && counts.interviewerCount === 0;
+  }
   return counts.interviewerCount === 1 && counts.candidateCount === 1;
 }
