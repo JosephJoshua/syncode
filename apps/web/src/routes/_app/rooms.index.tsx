@@ -42,10 +42,9 @@ const ROOM_STATUS_KEYS: Record<RoomStatusType, string> = {
 };
 
 const ROLE_LABEL_KEYS: Record<string, string> = {
-  [RoomRole.HOST]: 'role.host',
   [RoomRole.CANDIDATE]: 'role.candidate',
   [RoomRole.INTERVIEWER]: 'role.interviewer',
-  [RoomRole.SPECTATOR]: 'role.observer',
+  [RoomRole.OBSERVER]: 'role.observer',
 };
 
 const STATUS_STYLES: Record<string, { dot: string; badge: string }> = {

@@ -298,3 +298,81 @@
 .input-glow:focus-within input {
   border-color: oklch(0.82 0.18 165);
 }
+
+/* Stage-colored ambient border */
+.stage-accent-coding {
+  border-image: linear-gradient(90deg, transparent, oklch(0.82 0.18 165 / 0.6), transparent) 1;
+}
+
+.stage-accent-warmup {
+  border-image: linear-gradient(90deg, transparent, oklch(0.76 0.16 75 / 0.5), transparent) 1;
+}
+
+.stage-accent-wrapup {
+  border-image: linear-gradient(90deg, transparent, oklch(0.7 0.15 320 / 0.5), transparent) 1;
+}
+
+.stage-accent-finished {
+  border-image: linear-gradient(90deg, transparent, oklch(0.75 0.12 200 / 0.5), transparent) 1;
+}
+
+/* Terminal blinking block cursor */
+@keyframes terminal-cursor {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
+.terminal-cursor::after {
+  content: "▋";
+  animation: terminal-cursor 1s step-end infinite;
+  color: oklch(0.82 0.18 165);
+}
+
+/* Subtle pulse for live indicators */
+@keyframes live-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.live-pulse {
+  animation: live-pulse 2s ease-in-out infinite;
+}
+
+/* Scan lines overlay for terminal authenticity */
+.scan-lines {
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    oklch(0 0 0 / 0.03) 2px,
+    oklch(0 0 0 / 0.03) 4px
+  );
+  pointer-events: none;
+}
+
+/* Run button glow animation */
+@keyframes run-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 8px oklch(0.82 0.18 165 / 0.3);
+  }
+  50% {
+    box-shadow:
+      0 0 20px oklch(0.82 0.18 165 / 0.5),
+      0 0 40px oklch(0.82 0.18 165 / 0.15);
+  }
+}
+
+.run-glow {
+  animation: run-glow 2s ease-in-out infinite;
+}

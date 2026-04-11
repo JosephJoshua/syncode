@@ -175,6 +175,24 @@ export const destroyRoomResponseSchema = z.object({
 
 export type DestroyRoomResponse = z.infer<typeof destroyRoomResponseSchema>;
 
+export const transferRoomOwnershipSchema = z
+  .object({
+    targetUserId: z.uuid().describe('Participant user ID to become the new host'),
+  })
+  .strict();
+
+export type TransferRoomOwnershipInput = z.infer<typeof transferRoomOwnershipSchema>;
+
+export const transferRoomOwnershipResponseSchema = z.object({
+  roomId: z.uuid().describe('Room identifier'),
+  previousHostId: z.uuid().describe('Previous host user ID'),
+  currentHostId: z.uuid().describe('Current host user ID'),
+  transferredAt: z.iso.datetime().describe('ISO 8601 ownership transfer timestamp'),
+  transferredBy: z.uuid().describe('User ID that initiated the transfer'),
+});
+
+export type TransferRoomOwnershipResponse = z.infer<typeof transferRoomOwnershipResponseSchema>;
+
 export const runCodeResponseSchema = z.object({
   jobId: z
     .string()
@@ -242,7 +260,7 @@ export const roomParticipantSummarySchema = z.object({
   displayName: z.string().nullable().describe('Display name'),
   avatarUrl: z.string().nullable().describe('Avatar URL'),
   role: z.enum(ROOM_ROLES).describe('Participant role'),
-  isActive: z.boolean().describe('Whether the participant is currently connected'),
+  isActive: z.boolean().describe('Whether the participant is currently active in the room'),
   joinedAt: z.iso.datetime().describe('ISO 8601 join timestamp'),
 });
 
@@ -270,21 +288,51 @@ export const joinRoomSchema = z
       .length(6)
       .describe('6-char invite code')
       .meta({ examples: ['A3K7M2'] }),
-    preferredRole: z.enum(JOINABLE_ROLES).optional().describe('Preferred role in the room'),
+    requestedRole: z.enum(JOINABLE_ROLES).optional().describe('Requested role in the room'),
   })
   .strict();
 
 export type JoinRoomInput = z.infer<typeof joinRoomSchema>;
 
+export const ROLE_ASSIGNMENT_REASONS = ['requested', 'auto-assigned', 'fallback-observer'] as const;
+
+export type RoleAssignmentReason = (typeof ROLE_ASSIGNMENT_REASONS)[number];
+
 export const joinRoomResponseSchema = z.object({
   room: roomDetailSchema.describe('Full room detail after joining'),
   assignedRole: z.enum(ROOM_ROLES).describe('The role assigned to the joining user'),
+  requestedRole: z
+    .enum(JOINABLE_ROLES)
+    .nullable()
+    .describe('The role requested by the joining user, if any'),
+  assignmentReason: z
+    .enum(ROLE_ASSIGNMENT_REASONS)
+    .describe('How the final assigned role was chosen'),
   myCapabilities: z.array(z.string()).describe('Resolved room capabilities for assigned role'),
   collabToken: z.string().describe('Yjs auth token for collab-plane WebSocket'),
   collabUrl: z.string().describe('Collab-plane WebSocket URL'),
 });
 
 export type JoinRoomResponse = z.infer<typeof joinRoomResponseSchema>;
+
+export const updateRoomParticipantSchema = z
+  .object({
+    role: z.enum(ROOM_ROLES).describe('Updated participant role'),
+  })
+  .strict();
+
+export type UpdateRoomParticipantInput = z.infer<typeof updateRoomParticipantSchema>;
+
+export const updateRoomParticipantResponseSchema = z.object({
+  room: roomDetailSchema.describe('Full room detail after reassignment'),
+  updatedUserId: z.uuid().describe('Participant whose role was updated'),
+  previousRole: z.enum(ROOM_ROLES).describe('Participant role before the update'),
+  currentRole: z.enum(ROOM_ROLES).describe('Participant role after the update'),
+  updatedAt: z.iso.datetime().describe('ISO 8601 update timestamp'),
+  updatedBy: z.uuid().describe('User ID that performed the update'),
+});
+
+export type UpdateRoomParticipantResponse = z.infer<typeof updateRoomParticipantResponseSchema>;
 
 export const transitionRoomPhaseSchema = z
   .object({

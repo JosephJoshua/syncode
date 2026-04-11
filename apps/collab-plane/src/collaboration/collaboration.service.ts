@@ -12,6 +12,8 @@ import type {
   IControlPlaneCallbackClient,
   KickUserRequest,
   KickUserResponse,
+  UpdateRoomStateRequest,
+  UpdateRoomStateResponse,
   UserDisconnectedPayload,
 } from '@syncode/contracts';
 import { CONTROL_PLANE_CALLBACK } from '@syncode/contracts';
@@ -19,6 +21,7 @@ import { AwarenessHandler } from './awareness.handler.js';
 import { RoomRegistry } from './room-registry.js';
 import { SnapshotScheduler } from './snapshot.scheduler.js';
 import { WsCloseCode } from './ws-close-codes.js';
+import type { WsMessage } from './ws-message.types.js';
 import { YjsDocumentStore } from './yjs-document-store.js';
 import { YjsSyncHandler } from './yjs-sync.handler.js';
 
@@ -40,7 +43,10 @@ export class CollaborationService implements OnModuleDestroy {
   ) {}
 
   async createDocument(request: CreateDocumentRequest): Promise<CreateDocumentResponse> {
-    const room = this.roomRegistry.createRoom(request.roomId);
+    const room = this.roomRegistry.createRoom(request.roomId, {
+      phase: request.initialPhase,
+      editorLocked: request.editorLocked,
+    });
     this.docStore.createDoc(request.roomId, request.initialContent);
     this.syncHandler.registerUpdateBroadcast(request.roomId);
     this.awarenessHandler.createRoom(request.roomId);
@@ -87,6 +93,32 @@ export class CollaborationService implements OnModuleDestroy {
     this.checkRoomEmpty(roomId);
 
     return { kicked: true };
+  }
+
+  async updateRoomState(request: UpdateRoomStateRequest): Promise<UpdateRoomStateResponse> {
+    const room = this.roomRegistry.updateRoomState(request.roomId, {
+      phase: request.phase,
+      editorLocked: request.editorLocked,
+    });
+
+    const roomStateMessage: WsMessage = {
+      type: 'room-state',
+      data: {
+        phase: room.phase,
+        editorLocked: room.editorLocked,
+      },
+      timestamp: Date.now(),
+    };
+
+    for (const client of room.clients.values()) {
+      client.send(JSON.stringify(roomStateMessage));
+    }
+
+    this.logger.debug(
+      `Room state updated for ${request.roomId}: phase=${request.phase}, editorLocked=${request.editorLocked}`,
+    );
+
+    return { success: true };
   }
 
   /**

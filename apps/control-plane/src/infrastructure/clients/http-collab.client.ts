@@ -6,6 +6,8 @@ import type {
   ICollabClient,
   KickUserRequest,
   KickUserResponse,
+  UpdateRoomStateRequest,
+  UpdateRoomStateResponse,
 } from '@syncode/contracts';
 import { buildUrl, COLLAB_INTERNAL } from '@syncode/contracts';
 import ky, { type KyInstance } from 'ky';
@@ -38,6 +40,14 @@ export class HttpCollabClient implements ICollabClient {
     return this.client
       .post(buildUrl(COLLAB_INTERNAL.KICK_USER.route, { roomId }), { json: request })
       .json<KickUserResponse>();
+  }
+
+  async updateRoomState(request: UpdateRoomStateRequest): Promise<UpdateRoomStateResponse> {
+    return this.client
+      .post(buildUrl(COLLAB_INTERNAL.UPDATE_ROOM_STATE.route, { roomId: request.roomId }), {
+        json: request,
+      })
+      .json<UpdateRoomStateResponse>();
   }
 
   async healthCheck(): Promise<boolean> {

@@ -123,9 +123,13 @@ export class CollaborationGateway implements OnGatewayConnection, OnGatewayDisco
     this.collaborationService.cancelRoomCleanup(roomId);
     this.logger.log(`User ${userId} joined room ${roomId}`);
 
+    const room = this.roomRegistry.getRoom(roomId);
     const roomState: WsMessage = {
       type: 'room-state',
-      data: { phase: 'waiting', editorLocked: false },
+      data: {
+        phase: room?.phase ?? 'waiting',
+        editorLocked: room?.editorLocked ?? false,
+      },
       timestamp: Date.now(),
     };
     client.send(JSON.stringify(roomState));

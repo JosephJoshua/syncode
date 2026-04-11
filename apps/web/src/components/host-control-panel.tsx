@@ -1,173 +1,150 @@
-import { getNextStatuses, ROOM_STATUSES, RoomStatus } from '@syncode/shared';
-import { Button, Card, CardContent, CardHeader, CardTitle } from '@syncode/ui';
-import { CheckCircle2, Code2, FastForward, Pause, Play, PlayCircle } from 'lucide-react';
-import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
+import { getNextStatuses, ROOM_STATUSES, type RoomStatus } from '@syncode/shared';
+import { Button } from '@syncode/ui';
+import {
+  CheckCircle2,
+  CirclePause,
+  CirclePlay,
+  Code2,
+  FastForward,
+  Loader2,
+  Lock,
+  LockOpen,
+  PlayCircle,
+} from 'lucide-react';
+import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+import { formatTimer, ROOM_STATUS_KEYS } from '@/lib/room-stage.js';
 
-const ROOM_STATUS_KEYS: Record<RoomStatus, string> = {
-  [RoomStatus.WAITING]: 'status.waiting',
-  [RoomStatus.WARMUP]: 'status.warmup',
-  [RoomStatus.CODING]: 'status.coding',
-  [RoomStatus.WRAPUP]: 'status.wrapup',
-  [RoomStatus.FINISHED]: 'status.finished',
-};
-
-const PHASE_COUNT = ROOM_STATUSES.length;
+const TRANSITION_ICONS = {
+  warmup: <PlayCircle className="size-3.5" />,
+  coding: <Code2 className="size-3.5" />,
+  wrapup: <FastForward className="size-3.5" />,
+  finished: <CheckCircle2 className="size-3.5" />,
+} as const satisfies Partial<Record<RoomStatus, ReactNode>>;
 
 function PhaseProgressBar({ currentStatus }: { currentStatus: RoomStatus }) {
   const { t } = useTranslation('rooms');
   const currentIndex = ROOM_STATUSES.indexOf(currentStatus);
 
   return (
-    <div className="flex flex-col gap-1.5">
-      <div className="flex gap-1">
-        {ROOM_STATUSES.map((status, i) => {
-          const isCompleted = i < currentIndex;
-          const isActive = i === currentIndex;
+    <div className="flex items-center gap-0.5">
+      {ROOM_STATUSES.map((status, index) => {
+        const completed = index < currentIndex;
+        const active = index === currentIndex;
 
-          return (
+        return (
+          <div key={status} className="flex flex-1 flex-col items-center gap-1">
             <div
-              key={status}
-              className="h-1.5 rounded-full transition-all duration-300"
-              style={{
-                width: `${100 / PHASE_COUNT}%`,
-                backgroundColor: isCompleted
-                  ? 'var(--color-primary)'
-                  : isActive
-                    ? 'var(--color-primary)'
-                    : 'var(--color-muted)',
-                opacity: isCompleted ? 0.5 : isActive ? 1 : 0.3,
-                animation: isActive ? 'var(--animate-glow-pulse)' : 'none',
-              }}
+              className={`h-1.5 w-full rounded-full transition-all duration-500 ${
+                active
+                  ? 'bg-primary shadow-[0_0_10px_oklch(0.82_0.18_165/0.4)] animate-glow-pulse'
+                  : completed
+                    ? 'bg-primary/50'
+                    : 'bg-border'
+              }`}
             />
-          );
-        })}
-      </div>
-      <span className="text-xs text-muted-foreground">
-        {currentIndex + 1}/{PHASE_COUNT} &middot; {t(ROOM_STATUS_KEYS[currentStatus])}
-      </span>
+            <span
+              className={`font-mono text-[8px] ${
+                active ? 'text-primary' : completed ? 'text-primary/50' : 'text-muted-foreground/40'
+              }`}
+            >
+              {t(ROOM_STATUS_KEYS[status])}
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }
 
-function formatTime(ms: number): string {
-  const totalSeconds = Math.floor(ms / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+interface HostControlPanelProps {
+  currentStatus: RoomStatus;
+  elapsedMs: number;
+  timerPaused: boolean;
+  editorLocked: boolean;
+  canChangePhase: boolean;
+  isPending: boolean;
+  onTransition: (targetStatus: RoomStatus) => void;
 }
 
-/** Mock max duration in ms (120 minutes). */
-const MOCK_MAX_DURATION_MS = 120 * 60 * 1000;
-const WARNING_THRESHOLD = 0.85;
-
-function PhaseTimer({ running }: { running: boolean }) {
+export function HostControlPanel({
+  currentStatus,
+  elapsedMs,
+  timerPaused,
+  editorLocked,
+  canChangePhase,
+  isPending,
+  onTransition,
+}: HostControlPanelProps) {
   const { t } = useTranslation('rooms');
-  const [elapsedMs, setElapsedMs] = useState(0);
-  const [paused, setPaused] = useState(false);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const ticking = running && !paused;
-
-  useEffect(() => {
-    if (ticking) {
-      intervalRef.current = setInterval(() => {
-        setElapsedMs((prev) => prev + 1000);
-      }, 1000);
-    }
-
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
-  }, [ticking]);
-
-  const togglePause = useCallback(() => setPaused((p) => !p), []);
-
-  const ratio = elapsedMs / MOCK_MAX_DURATION_MS;
-  const warning = ratio >= WARNING_THRESHOLD;
+  const nextStages = getNextStatuses(currentStatus);
 
   return (
-    <div className="flex items-center justify-between">
-      <div className="flex items-center gap-2">
-        <span
-          className={`font-mono text-lg tabular-nums ${warning ? 'text-destructive' : 'text-foreground'}`}
-          style={warning ? { animation: 'var(--animate-glow-pulse)' } : undefined}
-        >
-          {formatTime(elapsedMs)}
-        </span>
-        {warning && (
-          <span className="text-xs text-destructive font-medium">
-            {t('timer.percent', { percent: Math.round(ratio * 100) })}
+    <div className="space-y-3">
+      {/* Phase progress */}
+      <PhaseProgressBar currentStatus={currentStatus} />
+
+      {/* Timer + Status row */}
+      <div className="flex items-center justify-between rounded-md border border-border/60 bg-background/50 px-3 py-2">
+        <div className="flex items-center gap-2">
+          <span className="font-mono text-lg font-semibold tabular-nums text-foreground">
+            {formatTimer(elapsedMs)}
           </span>
-        )}
+          {timerPaused ? (
+            <CirclePause className="size-3.5 text-warning" />
+          ) : (
+            <CirclePlay className="size-3.5 text-primary live-pulse" />
+          )}
+        </div>
+        <div className="flex items-center gap-1.5 text-[10px]">
+          {editorLocked ? (
+            <span className="flex items-center gap-1 font-mono text-warning">
+              <Lock size={10} />
+              {t('lobby.editorLocked')}
+            </span>
+          ) : (
+            <span className="flex items-center gap-1 font-mono text-muted-foreground/60">
+              <LockOpen size={10} />
+              {t('lobby.editorUnlocked')}
+            </span>
+          )}
+        </div>
       </div>
 
-      {running && (
-        <Button
-          variant="ghost"
-          size="xs"
-          onClick={togglePause}
-          aria-label={paused ? t('timer.resumeTimer') : t('timer.pauseTimer')}
-        >
-          {paused ? <Play className="h-3.5 w-3.5" /> : <Pause className="h-3.5 w-3.5" />}
-        </Button>
+      {/* Stage transition buttons */}
+      {currentStatus === 'finished' ? (
+        <div className="rounded-md border border-border/60 bg-background/50 px-3 py-2.5 text-center text-xs text-muted-foreground">
+          <CheckCircle2 className="mx-auto mb-1.5 size-5 text-primary" />
+          {t('hostControl.sessionConcluded')}
+        </div>
+      ) : canChangePhase ? (
+        <div className="space-y-1.5">
+          {nextStages.map((stage) => (
+            <Button
+              key={stage}
+              type="button"
+              variant={stage === 'finished' ? 'destructive' : 'default'}
+              size="sm"
+              className={`w-full justify-start gap-1.5 ${
+                stage !== 'finished' && !isPending ? 'shimmer-sweep' : ''
+              }`}
+              disabled={isPending}
+              onClick={() => onTransition(stage)}
+            >
+              {isPending ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                TRANSITION_ICONS[stage as keyof typeof TRANSITION_ICONS]
+              )}
+              {stage === 'finished'
+                ? t('hostControl.endSession')
+                : t('hostControl.advanceTo', { stageName: t(ROOM_STATUS_KEYS[stage]) })}
+            </Button>
+          ))}
+        </div>
+      ) : (
+        <p className="text-[10px] text-muted-foreground">{t('hostControl.awaitingController')}</p>
       )}
     </div>
-  );
-}
-
-const TRANSITION_ICONS: Partial<Record<RoomStatus, ReactNode>> = {
-  [RoomStatus.WARMUP]: <PlayCircle className="mr-2 h-4 w-4" />,
-  [RoomStatus.CODING]: <Code2 className="mr-2 h-4 w-4" />,
-  [RoomStatus.WRAPUP]: <FastForward className="mr-2 h-4 w-4" />,
-  [RoomStatus.FINISHED]: <CheckCircle2 className="mr-2 h-4 w-4" />,
-};
-
-export function HostControlPanel() {
-  const { t } = useTranslation('rooms');
-  const [currentStage, setCurrentStage] = useState<RoomStatus>(RoomStatus.WAITING);
-  const nextStages = getNextStatuses(currentStage);
-
-  const handleTransition = (target: RoomStatus) => {
-    // TODO: Replace with react-query mutation (POST /rooms/{roomId}/control/transition) once Issue #114 is merged.
-    setCurrentStage(target);
-  };
-
-  const timerRunning = currentStage !== RoomStatus.WAITING && currentStage !== RoomStatus.FINISHED;
-
-  return (
-    <Card className="w-full max-w-sm">
-      <CardHeader>
-        <CardTitle className="text-lg">{t('hostControl.heading')}</CardTitle>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">
-        <PhaseProgressBar currentStatus={currentStage} />
-        <PhaseTimer key={currentStage} running={timerRunning} />
-
-        {currentStage === RoomStatus.FINISHED ? (
-          <div className="text-center py-4 text-muted-foreground">
-            <CheckCircle2 className="h-8 w-8 mx-auto mb-2 opacity-50" />
-            <p>{t('hostControl.sessionConcluded')}</p>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-2">
-            <p className="text-sm text-muted-foreground">{t('hostControl.advanceStage')}</p>
-            {nextStages.map((stage) => (
-              <Button
-                key={stage}
-                variant={stage === RoomStatus.FINISHED ? 'destructive' : 'default'}
-                className="w-full justify-start"
-                onClick={() => handleTransition(stage)}
-              >
-                {TRANSITION_ICONS[stage]}
-                {stage === RoomStatus.FINISHED
-                  ? t('hostControl.endSession')
-                  : t('hostControl.advanceTo', { stageName: t(ROOM_STATUS_KEYS[stage]) })}
-              </Button>
-            ))}
-          </div>
-        )}
-      </CardContent>
-    </Card>
   );
 }

@@ -85,7 +85,17 @@
     "roomFull": "该房间已满，无法加入更多参与者。",
     "roomFinished": "该会话已结束。",
     "invalidCode": "邀请码无效或已过期。",
-    "accessDenied": "你没有权限加入该房间。"
+    "accessDenied": "你没有权限加入该房间。",
+    "roleUnavailable": "你请求的角色已被该房间占用。",
+    "requestedRoleAssigned": "已加入为 {{role}}。",
+    "fallbackObserver": "所请求角色不可用，你已作为观察者加入。",
+    "autoAssigned": "系统根据当前房间角色分布将你加入为 {{role}}。",
+    "roleUpdateFailed": "更新参与者角色失败。",
+    "transitionFailed": "更新房间阶段失败。",
+    "roleBalance": "{{interviewers}} 名面试官 · {{candidates}} 名候选人",
+    "editorLocked": "编辑器已锁定",
+    "editorUnlocked": "编辑器未锁定",
+    "awaitingController": "等待主持人或当前面试官打开工作区。"
   },
   "roleSelect": {
     "heading": "你的角色",
@@ -98,9 +108,11 @@
   "readyButton": {
     "ready": "我已准备好",
     "cancelReady": "取消准备",
-    "enterWorkspace": "进入工作区"
+    "enterWorkspace": "进入工作区",
+    "readyFirst": "请先点击「我已准备好」再进入工作区。"
   },
-  "warning": "至少需要一名候选人和一名面试官（或主持人）才能开始。",
+  "warning": "开始前需要且只能有一名候选人和一名面试官。",
+  "warningAi": "开始前需要且只能有一名候选人（无需面试官）。",
   "systemStatus": {
     "ready": "> SYSTEM_READY",
     "awaitingPeers": "> AWAITING_PEERS_"
@@ -110,18 +122,71 @@
     "sessionConcluded": "会话已结束。",
     "advanceStage": "推进面试阶段：",
     "endSession": "结束会话",
-    "advanceTo": "推进至 {{stageName}}"
+    "advanceTo": "推进至 {{stageName}}",
+    "viewOnly": "只有主持人或当前面试官可以推进阶段。",
+    "awaitingController": "你可以查看当前阶段，但只有主持人或当前面试官可以推进。"
   },
   "stage": {
-    "awaitingSync": "AWAITING_SYNC",
-    "systemWarmup": "SYSTEM_WARMUP",
-    "activeCoding": "ACTIVE_CODING",
-    "phaseWrapup": "PHASE_WRAPUP",
-    "sessionEnd": "SESSION_END"
+    "waiting": "等待同步",
+    "warmup": "会话初始化",
+    "coding": "实时编码中",
+    "wrapup": "审查进行中",
+    "finished": "会话结束"
   },
   "timer": {
     "percent": "会话进度 {{percent}}%",
     "resumeTimer": "继续计时",
     "pauseTimer": "暂停计时"
+  },
+  "statusBar": {
+    "connected": "已连接",
+    "participants": "名参与者",
+    "elapsed": "已过"
+  },
+  "problem": {
+    "heading": "题目",
+    "expand": "显示题目",
+    "noProblem": "该房间未选择题目。",
+    "loadFailed": "加载题目详情失败。",
+    "examples": "示例",
+    "constraints": "约束条件",
+    "input": "输入",
+    "output": "输出"
+  },
+  "workspace": {
+    "sub": "这里是实时面试工作区。阶段控制放在这里，编辑器保持共享。",
+    "language": "语言：{{language}}",
+    "problem": "题目：{{problemId}}",
+    "noProblem": "尚未选择",
+    "editorHeading": "共享编辑器",
+    "editorSub": "在这里编写代码，然后发送到沙箱执行。",
+    "readOnly": "当前角色或房间状态下该编辑器为只读。",
+    "stdinHeading": "标准输入",
+    "stdinPlaceholder": "可选 stdin，用于单次运行",
+    "outputHeading": "运行输出",
+    "runCode": "运行代码",
+    "runFailed": "启动代码执行失败。",
+    "noOutput": "运行当前代码后，这里会显示 stdout 和 stderr。",
+    "executionQueued": "执行已入队，正在等待沙箱处理……",
+    "executionRunning": "代码正在执行。",
+    "executionComplete": "执行完成",
+    "executionFailed": "执行失败",
+    "stdoutHeading": "标准输出",
+    "stderrHeading": "标准错误",
+    "emptyStdout": "（无 stdout）",
+    "emptyStderr": "（无 stderr）",
+    "participantsHeading": "参与者",
+    "transferOwnership": "转移主持人",
+    "transferOwnershipTitle": "转移所有权",
+    "transferOwnershipConfirm": "确定将房间所有权转移给 {{name}} 吗？转移后你将失去主持人权限。",
+    "transferOwnershipAction": "确认转移",
+    "transferOwnershipSuccess": "{{name}} 现在是房间主持人。",
+    "transferOwnershipFailed": "转移房间所有权失败。",
+    "cancel": "取消",
+    "roleUpdated": "参与者角色已更新。",
+    "timerHeading": "编码计时",
+    "timerRunning": "计时进行中",
+    "timerPaused": "计时已暂停",
+    "sessionState": "会话状态"
   }
 }

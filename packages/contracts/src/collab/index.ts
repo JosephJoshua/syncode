@@ -18,4 +18,6 @@ export {
   type DestroyDocumentResponse,
   type KickUserRequest,
   type KickUserResponse,
+  type UpdateRoomStateRequest,
+  type UpdateRoomStateResponse,
 } from './internal.js';

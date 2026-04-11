@@ -50,7 +50,7 @@ afterEach(async () => {
 const BASE_QUERY = { limit: 20, sortBy: 'createdAt' as const, sortOrder: 'desc' as const };
 
 /**
- * Creates a finished session with a room, host participant, and session participant.
+ * Creates a finished session with a room owner and session participant.
  * Returns the user, room, and session rows.
  */
 async function seedFinishedSession(
@@ -83,7 +83,7 @@ describe('listSessions', () => {
       problemId: problem.id,
       durationMs: 3600000,
     });
-    await insertSessionParticipant(db, session.id, user.id, 'host');
+    await insertSessionParticipant(db, session.id, user.id, 'interviewer');
     await insertSessionParticipant(db, session.id, otherUser.id, 'candidate');
     await insertSessionReport(db, session.id, { overallScore: 85 });
 
@@ -320,7 +320,7 @@ describe('getSession', () => {
       durationMs: 5400000,
       language: 'python',
     });
-    await insertSessionParticipant(db, session.id, user1.id, 'host');
+    await insertSessionParticipant(db, session.id, user1.id, 'interviewer');
     await insertSessionParticipant(db, session.id, user2.id, 'candidate');
     await insertSessionReport(db, session.id);
     await insertSessionRecording(db, session.id);

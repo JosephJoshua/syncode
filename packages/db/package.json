@@ -14,11 +14,11 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
-    "generate": "./load-env.sh drizzle-kit generate",
+    "generate": "pnpm build && ./load-env.sh drizzle-kit generate",
     "migrate": "./load-env.sh node --import tsx src/migrate.ts",
-    "push": "./load-env.sh drizzle-kit push",
+    "push": "pnpm build && ./load-env.sh drizzle-kit push",
     "seed": "./load-env.sh node --import tsx src/seed.ts",
-    "studio": "./load-env.sh drizzle-kit studio",
+    "studio": "pnpm build && ./load-env.sh drizzle-kit studio",
     "lint": "biome check ."
   },
   "dependencies": {

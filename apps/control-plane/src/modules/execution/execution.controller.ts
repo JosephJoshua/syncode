@@ -8,6 +8,7 @@ import {
   ApiTags,
   getSchemaPath,
 } from '@nestjs/swagger';
+import { SkipThrottle } from '@nestjs/throttler';
 import { CONTROL_API, EXECUTION_CLIENT, type IExecutionClient } from '@syncode/contracts';
 import { CurrentUser } from '@/common/decorators/current-user.decorator.js';
 import { ErrorResponseDto } from '@/common/dto/error-response.dto.js';
@@ -67,6 +68,7 @@ export class ExecutionController {
   }
 
   @Get(CONTROL_API.EXECUTION.GET_RESULT.route)
+  @SkipThrottle()
   @ApiOperation({
     summary: 'Get execution result by job ID',
     description:

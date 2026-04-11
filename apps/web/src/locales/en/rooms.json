@@ -85,7 +85,17 @@
     "roomFull": "This room is full — no more participants can join.",
     "roomFinished": "This session has already ended.",
     "invalidCode": "The invite code is invalid or has expired.",
-    "accessDenied": "You don't have permission to join this room."
+    "accessDenied": "You don't have permission to join this room.",
+    "roleUnavailable": "That requested role is already taken in this room.",
+    "requestedRoleAssigned": "Joined as {{role}}.",
+    "fallbackObserver": "Requested role was unavailable, so you were added as Observer.",
+    "autoAssigned": "Joined as {{role}} based on the current room balance.",
+    "roleUpdateFailed": "Failed to update participant role.",
+    "transitionFailed": "Failed to update the room stage.",
+    "roleBalance": "{{interviewers}} interviewer · {{candidates}} candidate",
+    "editorLocked": "Editor locked",
+    "editorUnlocked": "Editor unlocked",
+    "awaitingController": "Waiting for the host or current interviewer to open the workspace."
   },
   "roleSelect": {
     "heading": "Your Role",
@@ -98,9 +108,11 @@
   "readyButton": {
     "ready": "I'm Ready",
     "cancelReady": "Cancel Ready",
-    "enterWorkspace": "Enter Workspace"
+    "enterWorkspace": "Enter Workspace",
+    "readyFirst": "Click \"I'm Ready\" before entering the workspace."
   },
-  "warning": "Needs at least one candidate and one interviewer (or host) to start.",
+  "warning": "Needs exactly one candidate and one interviewer to start.",
+  "warningAi": "Needs exactly one candidate to start (no interviewer needed).",
   "systemStatus": {
     "ready": "> SYSTEM_READY",
     "awaitingPeers": "> AWAITING_PEERS_"
@@ -110,18 +122,71 @@
     "sessionConcluded": "Session has concluded.",
     "advanceStage": "Advance interview stage:",
     "endSession": "End Session",
-    "advanceTo": "Advance to {{stageName}}"
+    "advanceTo": "Advance to {{stageName}}",
+    "viewOnly": "Stage ownership belongs to the host or current interviewer.",
+    "awaitingController": "You can watch the stage here, but only the host or current interviewer can move it."
   },
   "stage": {
-    "awaitingSync": "AWAITING_SYNC",
-    "systemWarmup": "SYSTEM_WARMUP",
-    "activeCoding": "ACTIVE_CODING",
-    "phaseWrapup": "PHASE_WRAPUP",
-    "sessionEnd": "SESSION_END"
+    "waiting": "AWAITING_PEERS",
+    "warmup": "INITIALIZING_SESSION",
+    "coding": "LIVE_CODING_ACTIVE",
+    "wrapup": "REVIEW_IN_PROGRESS",
+    "finished": "SESSION_COMPLETE"
   },
   "timer": {
     "percent": "{{percent}}% of session",
     "resumeTimer": "Resume timer",
     "pauseTimer": "Pause timer"
+  },
+  "statusBar": {
+    "connected": "Connected",
+    "participants": "participants",
+    "elapsed": "elapsed"
+  },
+  "problem": {
+    "heading": "Problem",
+    "expand": "Show problem",
+    "noProblem": "No problem selected for this room.",
+    "loadFailed": "Failed to load problem details.",
+    "examples": "Examples",
+    "constraints": "Constraints",
+    "input": "Input",
+    "output": "Output"
+  },
+  "workspace": {
+    "sub": "This is the live interview workspace. Stage controls live here while the editor stays shared.",
+    "language": "Language: {{language}}",
+    "problem": "Problem: {{problemId}}",
+    "noProblem": "Not selected yet",
+    "editorHeading": "Shared Editor",
+    "editorSub": "Edit code here, then run it against the sandboxed runner.",
+    "readOnly": "This editor is read-only for your current role or room state.",
+    "stdinHeading": "Standard Input",
+    "stdinPlaceholder": "Optional stdin for an interactive run",
+    "outputHeading": "Run Output",
+    "runCode": "Run Code",
+    "runFailed": "Code execution failed to start.",
+    "noOutput": "Run the current code to see stdout and stderr here.",
+    "executionQueued": "Execution queued. Waiting for the sandbox runner...",
+    "executionRunning": "Execution is running now.",
+    "executionComplete": "Execution completed",
+    "executionFailed": "Execution failed",
+    "stdoutHeading": "Stdout",
+    "stderrHeading": "Stderr",
+    "emptyStdout": "(no stdout)",
+    "emptyStderr": "(no stderr)",
+    "participantsHeading": "Participants",
+    "transferOwnership": "Make host",
+    "transferOwnershipTitle": "Transfer Ownership",
+    "transferOwnershipConfirm": "Are you sure you want to transfer room ownership to {{name}}? You will lose host privileges.",
+    "transferOwnershipAction": "Transfer",
+    "transferOwnershipSuccess": "{{name}} is now the room host.",
+    "transferOwnershipFailed": "Failed to transfer room ownership.",
+    "cancel": "Cancel",
+    "roleUpdated": "Participant role updated.",
+    "timerHeading": "Coding Time",
+    "timerRunning": "Timer is live",
+    "timerPaused": "Timer is paused",
+    "sessionState": "Session State"
   }
 }

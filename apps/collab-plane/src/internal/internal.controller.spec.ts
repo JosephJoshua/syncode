@@ -10,6 +10,7 @@ function createMocks() {
       createDocument: vi.fn(),
       destroyDocument: vi.fn(),
       kickUser: vi.fn(),
+      updateRoomState: vi.fn(),
     },
   };
 }
@@ -78,6 +79,22 @@ describe('InternalController', () => {
       const result = await controller.kickUser('room-1', { userId: 'user-1' });
 
       expect(result).toEqual({ kicked: true });
+    });
+  });
+
+  describe('updateRoomState', () => {
+    it('GIVEN valid request WHEN updating room state THEN delegates to service and returns success', async () => {
+      const mocks = createMocks();
+      mocks.collaborationService.updateRoomState.mockResolvedValue({ success: true });
+      const controller = await createController(mocks);
+
+      const result = await controller.updateRoomState('room-1', {
+        roomId: 'room-1',
+        phase: 'coding',
+        editorLocked: false,
+      });
+
+      expect(result).toEqual({ success: true });
     });
   });
 

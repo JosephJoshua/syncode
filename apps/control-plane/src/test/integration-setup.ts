@@ -120,7 +120,7 @@ export async function insertParticipant(
   db: Database,
   roomId: string,
   userId: string,
-  role: RoomRole = 'host',
+  role: RoomRole = 'interviewer',
 ) {
   const [row] = await db.insert(roomParticipants).values({ roomId, userId, role }).returning();
   return row;

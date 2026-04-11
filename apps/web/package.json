@@ -16,6 +16,7 @@
   "dependencies": {
     "@fontsource-variable/geist": "^5.2.8",
     "@hookform/resolvers": "^5.2.2",
+    "@monaco-editor/react": "^4.7.0",
     "@syncode/contracts": "workspace:^",
     "@syncode/shared": "workspace:^",
     "@syncode/ui": "workspace:^",
@@ -39,6 +40,7 @@
     "react-hook-form": "^7.71.2",
     "react-i18next": "^17.0.2",
     "react-markdown": "^10.1.0",
+    "react-resizable-panels": "^4.9.0",
     "shadcn": "^4.1.1",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.5.0",

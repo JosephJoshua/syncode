@@ -23,11 +23,12 @@ export {
 } from './problem.js';
 export type { RoomMode, RoomParticipant } from './room.js';
 export {
-  ALL_ROOM_ROLES as ROOM_ROLES,
   getNextStatuses,
+  isRoomRole,
   isValidStatusTransition,
   JOINABLE_ROOM_ROLES as JOINABLE_ROLES,
   ROOM_MODES,
+  ROOM_ROLES,
   ROOM_STATUS_LABELS,
   ROOM_STATUSES,
   RoomRole,

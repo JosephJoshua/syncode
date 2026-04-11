@@ -1,4 +1,4 @@
-import { ROOM_MODES } from '@syncode/shared';
+import { ROOM_MODES, ROOM_ROLES } from '@syncode/shared';
 import { z } from 'zod';
 import { paginationQuerySchema, paginationSchema } from './pagination.js';
 
@@ -14,7 +14,7 @@ export const sessionHistoryParticipantSchema = z.object({
   username: z.string(),
   displayName: z.string().nullable(),
   avatarUrl: z.string().nullable(),
-  role: z.string(),
+  role: z.enum(ROOM_ROLES),
 });
 
 export const listSessionsQuerySchema = paginationQuerySchema.extend({
@@ -55,7 +55,7 @@ export const sessionParticipantSchema = z.object({
   userId: z.uuid(),
   username: z.string(),
   displayName: z.string().nullable(),
-  role: z.string(),
+  role: z.enum(ROOM_ROLES),
   joinedAt: z.iso.datetime(),
   leftAt: z.iso.datetime().nullable(),
 });

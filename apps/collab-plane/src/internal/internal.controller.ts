@@ -3,6 +3,7 @@ import {
   COLLAB_INTERNAL,
   type CreateDocumentRequest,
   type KickUserRequest,
+  type UpdateRoomStateRequest,
 } from '@syncode/contracts';
 import { CollaborationService } from '../collaboration/collaboration.service.js';
 
@@ -23,6 +24,11 @@ export class InternalController {
   @Post(COLLAB_INTERNAL.KICK_USER.route)
   kickUser(@Param('roomId') roomId: string, @Body() body: KickUserRequest) {
     return this.collaborationService.kickUser(roomId, body);
+  }
+
+  @Post(COLLAB_INTERNAL.UPDATE_ROOM_STATE.route)
+  updateRoomState(@Param('roomId') roomId: string, @Body() body: UpdateRoomStateRequest) {
+    return this.collaborationService.updateRoomState({ ...body, roomId });
   }
 
   @Get(COLLAB_INTERNAL.HEALTH.route)

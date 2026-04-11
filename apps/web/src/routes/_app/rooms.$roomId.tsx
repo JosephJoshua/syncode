@@ -1,183 +1,227 @@
 import { CONTROL_API, ERROR_CODES } from '@syncode/contracts';
-import type { RoomRole } from '@syncode/shared';
+import type { RoomRole, RoomStatus } from '@syncode/shared';
 import {
-  Button,
-  Card,
-  Input,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
 } from '@syncode/ui';
 import { createFileRoute } from '@tanstack/react-router';
-import {
-  AlertTriangle,
-  Check,
-  CheckCircle2,
-  Circle,
-  Copy,
-  Loader2,
-  Play,
-  UserCog,
-} from 'lucide-react';
-import { motion } from 'motion/react';
-import { useEffect, useMemo, useState } from 'react';
+import { AlertTriangle, Loader2 } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { LobbyBot } from '@/components/lobby-bot.js';
-import { useClipboard } from '@/hooks/use-clipboard.js';
+import { toast } from 'sonner';
+import { RoomLobby } from '@/components/room-lobby.js';
+import { RoomWorkspace } from '@/components/room-workspace.js';
 import { api, readApiError } from '@/lib/api-client.js';
+import { computeRoomElapsedMs, isWorkspaceStage, ROLE_LABEL_KEYS } from '@/lib/room-stage.js';
 import { useAuthStore } from '@/stores/auth.store.js';
 
 export const Route = createFileRoute('/_app/rooms/$roomId')({
-  component: RoomLobbyPage,
+  component: RoomPage,
 });
 
-type Participant = {
-  id: string;
-  username: string;
-  isReady: boolean;
-  isHost: boolean;
-  role: RoomRole;
-};
+type RoomDetail = Awaited<ReturnType<typeof api<typeof CONTROL_API.ROOMS.GET>>>;
+type JoinResponse = Awaited<ReturnType<typeof api<typeof CONTROL_API.ROOMS.JOIN>>>;
 
-const ROLE_LABEL_KEYS: Record<string, string> = {
-  host: 'role.host',
-  candidate: 'role.candidate',
-  interviewer: 'role.interviewer',
-  spectator: 'role.observer',
-};
+const ROOM_REFRESH_INTERVAL_MS = 15_000;
 
-/** Roles that can be assigned to non-host participants. */
-const ASSIGNABLE_ROLES: Array<{ value: RoomRole; labelKey: string }> = [
-  { value: 'candidate', labelKey: 'roleSelect.candidate' },
-  { value: 'interviewer', labelKey: 'roleSelect.interviewer' },
-  { value: 'spectator', labelKey: 'roleSelect.observer' },
-];
-
-function RoomLobbyPage() {
+function RoomPage() {
   const { t } = useTranslation('rooms');
   const { roomId } = Route.useParams();
-  const currentUserId = useAuthStore((state) => state.user?.id);
-
+  const currentUserId = useAuthStore((state) => state.user?.id ?? null);
+  const [room, setRoom] = useState<RoomDetail | null>(null);
   const [isJoining, setIsJoining] = useState(true);
   const [joinError, setJoinError] = useState<string | null>(null);
-  const [isReady, setIsReady] = useState(false);
-  const [myRole, setMyRole] = useState<RoomRole>('candidate');
-  const [participants, setParticipants] = useState<Participant[]>([]);
-  const [inviteLink] = useState(() => window.location.href);
-  const { copied, copy } = useClipboard();
+  const [joinNotice, setJoinNotice] = useState<string | null>(null);
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  const [isUpdatingRole, setIsUpdatingRole] = useState<string | null>(null);
+  const [isTransferringOwnership, setIsTransferringOwnership] = useState<string | null>(null);
+  const [pendingTransfer, setPendingTransfer] = useState<{
+    userId: string;
+    displayName: string;
+  } | null>(null);
+  const [now, setNow] = useState(Date.now());
+  const joinPromiseRef = useRef<Promise<void> | null>(null);
+
+  // Tick clock only when the timer is actively running (coding + not paused)
+  const timerActive =
+    room?.status === 'coding' && !room?.timerPaused && !!room?.currentPhaseStartedAt;
+  useEffect(() => {
+    if (!timerActive) return;
+    const interval = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(interval);
+  }, [timerActive]);
+
+  const refreshRoomDetail = useCallback(async () => {
+    const detail = await api(CONTROL_API.ROOMS.GET, { params: { id: roomId } });
+    setRoom(detail);
+    return detail;
+  }, [roomId]);
 
   useEffect(() => {
-    const joinRoom = async () => {
+    let cancelled = false;
+
+    const loadRoom = async () => {
       setIsJoining(true);
       setJoinError(null);
-      setParticipants([]);
-
-      const applyDetail = (
-        detail: Awaited<ReturnType<typeof api<typeof CONTROL_API.ROOMS.GET>>>,
-        resolvedRole: RoomRole,
-      ) => {
-        setParticipants(
-          detail.participants.map((participant) => {
-            const baseName = participant.displayName ?? participant.username;
-            const isMe = participant.userId === currentUserId;
-            return {
-              id: participant.userId,
-              username: isMe ? `${baseName} ${t('lobby.you')}` : baseName,
-              isReady: false,
-              isHost: participant.role === 'host',
-              role: participant.role,
-            };
-          }),
-        );
-        setMyRole(resolvedRole);
-      };
+      setJoinNotice(null);
 
       try {
         const url = new URL(window.location.href);
         const roomCode = url.searchParams.get('code')?.toUpperCase();
 
         if (roomCode) {
-          const joined = await api(CONTROL_API.ROOMS.JOIN, {
-            params: { id: roomId },
-            body: { roomCode },
-          });
+          // StrictMode guard: if a prior mount already started the JOIN,
+          // await that promise instead of calling refreshRoomDetail() too early.
+          if (joinPromiseRef.current) {
+            await joinPromiseRef.current.catch(() => {});
+            if (!cancelled) await refreshRoomDetail();
+            return;
+          }
 
-          applyDetail(joined.room, joined.assignedRole);
-        } else {
-          const detail = await api(CONTROL_API.ROOMS.GET, {
-            params: { id: roomId },
-          });
-          applyDetail(detail, detail.myRole);
-        }
-
-        setIsJoining(false);
-      } catch (error) {
-        const apiError = await readApiError(error);
-
-        if (apiError?.code === ERROR_CODES.ROOM_ALREADY_JOINED) {
-          try {
-            const detail = await api(CONTROL_API.ROOMS.GET, {
+          const joinPromise = (async () => {
+            const joined = await api(CONTROL_API.ROOMS.JOIN, {
               params: { id: roomId },
+              body: { roomCode },
             });
 
-            applyDetail(detail, detail.myRole);
-            setJoinError(null);
-            setIsJoining(false);
-            return;
-          } catch {
-            // Fall through to error state below.
-          }
-        }
+            if (cancelled) return;
 
-        setJoinError(resolveJoinError(apiError, t));
-        setIsJoining(false);
+            setRoom(joined.room);
+            const notice = buildJoinNotice(joined, t);
+            setJoinNotice(notice);
+            toast.success(notice);
+          })();
+
+          joinPromiseRef.current = joinPromise;
+
+          try {
+            await joinPromise;
+          } catch (error) {
+            const apiError = await readApiError(error);
+
+            if (apiError?.code === ERROR_CODES.ROOM_ALREADY_JOINED) {
+              if (!cancelled) await refreshRoomDetail();
+              return;
+            }
+
+            throw error;
+          }
+        } else if (!cancelled) {
+          await refreshRoomDetail();
+        }
+      } catch (error) {
+        if (!cancelled) {
+          const apiError = await readApiError(error);
+          const errorMsg = resolveJoinError(apiError, t);
+          setJoinError(errorMsg);
+        }
+      } finally {
+        if (!cancelled) setIsJoining(false);
       }
     };
-    joinRoom();
-  }, [roomId, currentUserId, t]);
 
-  const amHost = myRole === 'host';
+    void loadRoom();
 
-  const handleParticipantRoleChange = (participantId: string, newRole: string) => {
-    const role = newRole as RoomRole;
-    setParticipants((prev) => prev.map((p) => (p.id === participantId ? { ...p, role } : p)));
-  };
-
-  const toggleReady = () => {
-    const newReadyState = !isReady;
-    setIsReady(newReadyState);
-
-    setParticipants((prev) =>
-      prev.map((p) => (p.id === currentUserId ? { ...p, isReady: newReadyState } : p)),
-    );
-  };
-
-  const copyInviteLink = () => copy(inviteLink);
-
-  const { allReady, readyCount, totalCount, isRoomValid } = useMemo(() => {
-    const ready = participants.filter((p) => p.isReady).length;
-    const total = participants.length;
-    const every = ready === total && total > 0;
-
-    const hasCandidate = participants.some((p) => p.role === 'candidate');
-    // Host has all interviewer capabilities, so they count as an interviewer
-    const hasInterviewer = participants.some((p) => p.role === 'interviewer' || p.role === 'host');
-
-    return {
-      allReady: every,
-      readyCount: ready,
-      totalCount: total,
-      isRoomValid: hasCandidate && hasInterviewer,
+    return () => {
+      cancelled = true;
+      joinPromiseRef.current = null;
     };
-  }, [participants]);
+  }, [refreshRoomDetail, roomId, t]);
 
-  const glowIntensity = totalCount > 0 ? readyCount / totalCount : 0;
+  const roomStatus = room?.status;
+  useEffect(() => {
+    if (!roomStatus || roomStatus === 'finished') return;
 
-  if (joinError) {
+    const interval = window.setInterval(() => {
+      if (document.hidden) return;
+      void refreshRoomDetail().catch(() => undefined);
+    }, ROOM_REFRESH_INTERVAL_MS);
+
+    return () => window.clearInterval(interval);
+  }, [refreshRoomDetail, roomStatus]);
+
+  const canChangePhase = room?.myCapabilities.includes('room:change-phase') ?? false;
+  const canManageParticipants = room?.myCapabilities.includes('participant:assign-role') ?? false;
+  const isWorkspace = room ? isWorkspaceStage(room.status) : false;
+  const elapsedMs = useMemo(
+    () =>
+      computeRoomElapsedMs({
+        status: room?.status ?? 'waiting',
+        elapsedMs: room?.elapsedMs ?? 0,
+        currentPhaseStartedAt: room?.currentPhaseStartedAt ?? null,
+        timerPaused: room?.timerPaused ?? false,
+        now,
+      }),
+    [now, room?.status, room?.elapsedMs, room?.currentPhaseStartedAt, room?.timerPaused],
+  );
+
+  const handleTransition = async (targetStatus: RoomStatus) => {
+    setIsTransitioning(true);
+    try {
+      await api(CONTROL_API.ROOMS.TRANSITION_PHASE, {
+        params: { id: roomId },
+        body: { targetStatus },
+      });
+      await refreshRoomDetail();
+    } catch (error) {
+      const apiError = await readApiError(error);
+      toast.error(apiError?.message ?? t('lobby.transitionFailed'));
+    } finally {
+      setIsTransitioning(false);
+    }
+  };
+
+  const handleParticipantRoleChange = async (participantUserId: string, role: RoomRole) => {
+    setIsUpdatingRole(participantUserId);
+    try {
+      const response = await api(CONTROL_API.ROOMS.UPDATE_PARTICIPANT, {
+        params: { id: roomId, participantUserId },
+        body: { role },
+      });
+      setRoom(response.room);
+      toast.success(t('workspace.roleUpdated'));
+    } catch (error) {
+      const apiError = await readApiError(error);
+      toast.error(apiError?.message ?? t('lobby.roleUpdateFailed'));
+    } finally {
+      setIsUpdatingRole(null);
+    }
+  };
+
+  const handleTransferOwnership = (participantUserId: string, displayName: string) => {
+    setPendingTransfer({ userId: participantUserId, displayName });
+  };
+
+  const confirmTransferOwnership = async () => {
+    if (!pendingTransfer) return;
+    const { userId, displayName } = pendingTransfer;
+    setPendingTransfer(null);
+
+    setIsTransferringOwnership(userId);
+    try {
+      await api(CONTROL_API.ROOMS.TRANSFER_OWNERSHIP, {
+        params: { id: roomId },
+        body: { targetUserId: userId },
+      });
+      await refreshRoomDetail();
+      toast.success(t('workspace.transferOwnershipSuccess', { name: displayName }));
+    } catch (error) {
+      const apiError = await readApiError(error);
+      toast.error(apiError?.message ?? t('workspace.transferOwnershipFailed'));
+    } finally {
+      setIsTransferringOwnership(null);
+    }
+  };
+
+  if (joinError && !room) {
     return (
-      <div className="mx-auto max-w-7xl px-4 py-8 sm:py-10 lg:py-12">
+      <div className="mx-auto max-w-5xl px-4 py-6">
         <div className="flex flex-col items-center justify-center py-24 text-center">
           <AlertTriangle size={42} className="mb-4 text-warning" />
           <h2 className="text-xl font-bold tracking-wide text-foreground">
@@ -189,9 +233,9 @@ function RoomLobbyPage() {
     );
   }
 
-  if (isJoining) {
+  if (isJoining || !room) {
     return (
-      <div className="mx-auto max-w-7xl px-4 py-8 sm:py-10 lg:py-12">
+      <div className="mx-auto max-w-5xl px-4 py-6">
         <div className="flex flex-col items-center justify-center py-24">
           <Loader2 size={48} className="mb-6 animate-spin text-primary" />
           <h2 className="text-xl font-bold uppercase tracking-widest text-muted-foreground">
@@ -205,225 +249,91 @@ function RoomLobbyPage() {
     );
   }
 
-  return (
-    <div className="mx-auto max-w-7xl px-4 py-8 sm:py-10 lg:py-12">
-      {/* Bot + heading section */}
-      <motion.div
-        initial={{ opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-      >
-        <div className="flex flex-col items-center text-center">
-          <LobbyBot readyCount={readyCount} totalCount={totalCount} className="mb-5" />
-          <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
-            {t('lobby.heading')}
-          </h1>
-          <p
-            className={`mt-2 font-mono text-sm tracking-widest ${
-              allReady ? 'text-primary' : 'animate-pulse text-primary/50'
-            }`}
-          >
-            {totalCount > 0
-              ? `${readyCount} / ${totalCount} ${t('lobby.ready')}`
-              : t('systemStatus.awaitingPeers')}
-          </p>
-          <p className="mt-1.5 text-sm text-muted-foreground">{t('lobby.sub')}</p>
-        </div>
-      </motion.div>
-
-      {/* Main grid: participants + sidebar */}
-      <div className="mt-10 grid grid-cols-1 gap-8 lg:grid-cols-12">
-        {/* Participant cards */}
-        <div className="lg:col-span-8">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {participants.map((participant, index) => (
-              <motion.div
-                key={participant.id}
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{
-                  duration: 0.36,
-                  delay: 0.1 + index * 0.06,
-                  ease: [0.22, 1, 0.36, 1],
-                }}
-              >
-                <Card
-                  className={`rounded-xl p-5 transition-all duration-300 ${
-                    participant.isReady
-                      ? 'border-primary/40 bg-card shadow-[0_0_20px_hsl(var(--primary)/0.15)]'
-                      : 'border-border/60 bg-card/80'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className="relative">
-                        {participant.isReady && (
-                          <span className="absolute inset-0 animate-[glowPulse_2s_ease-in-out_infinite] rounded-full border-2 border-primary/60" />
-                        )}
-                        <div className="flex size-12 shrink-0 items-center justify-center rounded-full border border-border bg-muted text-lg font-bold text-foreground">
-                          {participant.username.charAt(0).toUpperCase()}
-                        </div>
-                      </div>
-                      <div className="flex flex-col">
-                        <span className="flex items-center gap-2 text-[15px] font-semibold text-foreground">
-                          {participant.username}
-                          {participant.isHost && (
-                            <span className="rounded bg-foreground px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-background">
-                              {t('role.host')}
-                            </span>
-                          )}
-                        </span>
-
-                        {/* Host can assign roles to non-host participants */}
-                        {amHost && !participant.isHost ? (
-                          <Select
-                            value={participant.role}
-                            onValueChange={(v) => handleParticipantRoleChange(participant.id, v)}
-                          >
-                            <SelectTrigger className="mt-1 h-7 w-auto gap-1.5 border-none bg-transparent px-0 py-0 text-sm font-mono text-primary shadow-none ring-0 focus-visible:ring-0">
-                              <UserCog size={14} />
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {ASSIGNABLE_ROLES.map((opt) => (
-                                <SelectItem key={opt.value} value={opt.value}>
-                                  {t(opt.labelKey)}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        ) : (
-                          <span className="mt-1 flex items-center gap-1.5 font-mono text-sm text-primary">
-                            <UserCog size={14} />
-                            {t(ROLE_LABEL_KEYS[participant.role] ?? participant.role)}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    {participant.isReady ? (
-                      <CheckCircle2 size={24} className="shrink-0 text-primary" />
-                    ) : (
-                      <Circle size={24} className="shrink-0 text-muted-foreground/40" />
-                    )}
-                  </div>
-                </Card>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-
-        {/* Control panel sidebar */}
-        <div className="lg:col-span-4">
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.45, delay: 0.05, ease: [0.22, 1, 0.36, 1] }}
-          >
-            <Card
-              className="sticky top-6 rounded-xl p-7 transition-shadow duration-500"
-              style={{
-                boxShadow:
-                  glowIntensity > 0
-                    ? `0 0 ${16 + glowIntensity * 24}px hsl(var(--primary) / ${0.08 + glowIntensity * 0.22})`
-                    : undefined,
-              }}
-            >
-              <div className="space-y-7">
-                {/* Invite link */}
-                <div className="space-y-2.5">
-                  <label
-                    htmlFor="invite-link"
-                    className="text-xs font-semibold uppercase tracking-widest text-muted-foreground"
-                  >
-                    {t('common:copyLink')}
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <div className="relative flex-1">
-                      <Input
-                        id="invite-link"
-                        type="text"
-                        readOnly
-                        value={inviteLink}
-                        className="w-full font-mono text-sm"
-                      />
-                      <div className="pointer-events-none absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-card to-transparent" />
-                    </div>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      onClick={copyInviteLink}
-                      title={t('common:copyLink')}
-                    >
-                      {copied ? <Check size={16} className="text-primary" /> : <Copy size={16} />}
-                    </Button>
-                  </div>
-                </div>
-
-                {/* Your role */}
-                <div className="space-y-2.5">
-                  <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-                    {t('roleSelect.heading')}
-                  </span>
-                  {amHost ? (
-                    <div className="flex h-11 items-center gap-2 rounded-lg border border-input bg-background px-4 text-sm font-medium">
-                      <UserCog size={16} className="text-primary" />
-                      <span>{t('roleSelect.host')}</span>
-                    </div>
-                  ) : (
-                    <div className="flex h-11 items-center gap-2 rounded-lg border border-input bg-background px-4 text-sm font-medium text-muted-foreground">
-                      <UserCog size={16} />
-                      <span>{t(ROLE_LABEL_KEYS[myRole] ?? myRole)}</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Ready / Cancel button */}
-                <Button
-                  variant={isReady ? 'outline' : 'default'}
-                  size="lg"
-                  className="w-full"
-                  onClick={toggleReady}
-                >
-                  {isReady ? (
-                    t('readyButton.cancelReady')
-                  ) : (
-                    <>
-                      <CheckCircle2 size={20} /> {t('readyButton.ready')}
-                    </>
-                  )}
-                </Button>
-
-                {/* Enter workspace button */}
-                {allReady && (
-                  <motion.div
-                    className="space-y-3 border-t border-border/60 pt-5"
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ duration: 0.4 }}
-                  >
-                    {!isRoomValid && (
-                      <p className="flex items-start gap-2 text-xs text-muted-foreground">
-                        <AlertTriangle size={14} className="mt-0.5 shrink-0 text-warning" />
-                        {t('warning')}
-                      </p>
-                    )}
-                    <Button size="lg" disabled={!isRoomValid} className="w-full">
-                      <Play
-                        size={18}
-                        className={isRoomValid ? 'fill-current' : 'fill-current opacity-50'}
-                      />
-                      {t('readyButton.enterWorkspace')}
-                    </Button>
-                  </motion.div>
-                )}
-              </div>
-            </Card>
-          </motion.div>
-        </div>
-      </div>
-    </div>
+  const transferDialog = (
+    <AlertDialog
+      open={!!pendingTransfer}
+      onOpenChange={(open) => {
+        if (!open) setPendingTransfer(null);
+      }}
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{t('workspace.transferOwnershipTitle')}</AlertDialogTitle>
+          <AlertDialogDescription>
+            {t('workspace.transferOwnershipConfirm', { name: pendingTransfer?.displayName })}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>{t('workspace.cancel')}</AlertDialogCancel>
+          <AlertDialogAction variant="destructive" onClick={() => void confirmTransferOwnership()}>
+            {t('workspace.transferOwnershipAction')}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
+
+  if (isWorkspace) {
+    return (
+      <>
+        {transferDialog}
+        <RoomWorkspace
+          room={room}
+          currentUserId={currentUserId}
+          roomId={roomId}
+          elapsedMs={elapsedMs}
+          isTransitioning={isTransitioning}
+          onTransition={handleTransition}
+          onParticipantRoleChange={handleParticipantRoleChange}
+          onTransferOwnership={handleTransferOwnership}
+          isUpdatingRole={isUpdatingRole}
+          isTransferringOwnership={isTransferringOwnership}
+        />
+      </>
+    );
+  }
+
+  return (
+    <>
+      {transferDialog}
+      <RoomLobby
+        roomName={room.name}
+        roomCode={room.roomCode}
+        roomId={roomId}
+        mode={room.mode}
+        status={room.status}
+        hostId={room.hostId}
+        currentUserId={currentUserId}
+        participants={room.participants}
+        canChangePhase={canChangePhase}
+        canManageParticipants={canManageParticipants}
+        isTransitioning={isTransitioning}
+        isUpdatingRole={isUpdatingRole}
+        isTransferringOwnership={isTransferringOwnership}
+        joinNotice={joinNotice}
+        onParticipantRoleChange={handleParticipantRoleChange}
+        onTransferOwnership={handleTransferOwnership}
+        onTransition={handleTransition}
+      />
+    </>
+  );
+}
+
+function buildJoinNotice(
+  joined: JoinResponse,
+  t: (key: string, options?: Record<string, unknown>) => string,
+): string {
+  const roleLabel = t(ROLE_LABEL_KEYS[joined.assignedRole]);
+
+  if (joined.assignmentReason === 'requested') {
+    return t('lobby.requestedRoleAssigned', { role: roleLabel });
+  }
+
+  if (joined.assignmentReason === 'fallback-observer') {
+    return t('lobby.fallbackObserver');
+  }
+
+  return t('lobby.autoAssigned', { role: roleLabel });
 }
 
 const JOIN_ERROR_KEYS: Partial<Record<string, string>> = {
@@ -434,6 +344,7 @@ const JOIN_ERROR_KEYS: Partial<Record<string, string>> = {
   [ERROR_CODES.ROOM_ACCESS_DENIED]: 'lobby.accessDenied',
   [ERROR_CODES.ROOM_PERMISSION_DENIED]: 'lobby.accessDenied',
   [ERROR_CODES.ROOM_INVITE_CODE_EXHAUSTED]: 'lobby.invalidCode',
+  [ERROR_CODES.ROOM_ROLE_UNAVAILABLE]: 'lobby.roleUnavailable',
 };
 
 function resolveJoinError(

@@ -81,7 +81,7 @@ function AppLayout() {
           </div>
         </div>
       </nav>
-      <main>
+      <main className="flex-1 overflow-hidden">
         <Outlet />
       </main>
     </>

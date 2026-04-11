@@ -1,10 +1,4 @@
-import {
-  BadRequestException,
-  ConflictException,
-  ForbiddenException,
-  InternalServerErrorException,
-  NotFoundException,
-} from '@nestjs/common';
+import { InternalServerErrorException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
@@ -163,64 +157,32 @@ describe('RoomsService', () => {
     });
   });
 
-  describe('joinRoom', () => {
-    const JOINING_USER_ID = '22222222-3333-4444-5555-666666666666';
-    const JOIN_INPUT = { roomCode: 'A3K7M2' };
-
-    it('GIVEN wrong invite code WHEN joining THEN throws BadRequestException', async () => {
-      dbSetup.mocks.mockSelect.mockReturnValueOnce({
-        from: vi.fn().mockReturnValue({
-          where: vi.fn().mockResolvedValue([ROOM_ROW]),
-        }),
+  describe('destroyRoom', () => {
+    it('GIVEN subsystem failures WHEN destroying THEN succeeds with degraded status', async () => {
+      const txSelectWhere = vi.fn().mockReturnValue({
+        for: vi.fn().mockResolvedValue([ROOM_ROW]),
       });
-
-      await expect(
-        service.joinRoom(ROOM_ROW.id, JOINING_USER_ID, { roomCode: 'WRONG1' }),
-      ).rejects.toThrow(BadRequestException);
-    });
-
-    it('GIVEN finished room WHEN joining THEN throws ConflictException', async () => {
-      dbSetup.mocks.mockSelect.mockReturnValueOnce({
-        from: vi.fn().mockReturnValue({
-          where: vi.fn().mockResolvedValue([{ ...ROOM_ROW, status: 'finished' }]),
-        }),
-      });
-
-      await expect(service.joinRoom(ROOM_ROW.id, JOINING_USER_ID, JOIN_INPUT)).rejects.toThrow(
-        ConflictException,
-      );
-    });
-
-    it('GIVEN user already active in room WHEN joining THEN throws ConflictException', async () => {
-      dbSetup.mocks.mockSelect.mockReturnValueOnce({
-        from: vi.fn().mockReturnValue({
-          where: vi.fn().mockResolvedValue([ROOM_ROW]),
-        }),
-      });
-
-      const txSelectWhere = vi
-        .fn()
-        .mockResolvedValue([{ id: 'p-1', userId: JOINING_USER_ID, isActive: true }]);
+      const txSessionWhere = vi.fn().mockResolvedValue([]);
+      const txDeleteWhere = vi.fn().mockResolvedValue(undefined);
 
       dbSetup.db.transaction = vi.fn().mockImplementation(async (cb) =>
         cb({
-          select: vi.fn().mockReturnValue({
-            from: vi.fn().mockReturnValue({ where: txSelectWhere }),
+          select: vi
+            .fn()
+            .mockReturnValueOnce({
+              from: vi.fn().mockReturnValue({ where: txSelectWhere }),
+            })
+            .mockReturnValue({
+              from: vi.fn().mockReturnValue({ where: txSessionWhere }),
+            }),
+          delete: vi.fn().mockReturnValue({
+            where: txDeleteWhere,
           }),
         }),
       );
-
-      await expect(service.joinRoom(ROOM_ROW.id, JOINING_USER_ID, JOIN_INPUT)).rejects.toThrow(
-        ConflictException,
-      );
-    });
-  });
-
-  describe('destroyRoom', () => {
-    it('GIVEN subsystem failures WHEN destroying THEN succeeds with degraded status', async () => {
       mockCollabClient.destroyDocument.mockRejectedValue(new Error('down'));
 
-      const result = await service.destroyRoom('room-1');
+      const result = await service.destroyRoom(ROOM_ROW.id, HOST_ID);
 
       expect(result.collab).toBeNull();
       expect(result.mediaDeleted).toBe(true);

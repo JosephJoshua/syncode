@@ -91,7 +91,7 @@ describe('GET /sessions/:id', () => {
       durationMs: 3600000,
       language: 'python',
     });
-    await insertSessionParticipant(db, session.id, user.id, 'host');
+    await insertSessionParticipant(db, session.id, user.id, 'interviewer');
     await insertSessionReport(db, session.id);
     await insertRun(db, room.id, user.id, { status: 'completed' });
     await insertSubmission(db, user.id, room.id, problem.id, { status: 'completed' });

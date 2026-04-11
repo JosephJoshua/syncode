@@ -1,3 +1,4 @@
+export * from './components/alert-dialog.js';
 export * from './components/avatar.js';
 export * from './components/badge.js';
 export * from './components/button.js';
@@ -9,6 +10,7 @@ export * from './components/label.js';
 export * from './components/pagination.js';
 export * from './components/popover.js';
 export * from './components/progress.js';
+export * from './components/resizable.js';
 export * from './components/select.js';
 export * from './components/separator.js';
 export * from './components/table.js';
