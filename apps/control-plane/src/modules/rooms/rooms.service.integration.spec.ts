@@ -4,7 +4,7 @@ import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import { COLLAB_CLIENT, ERROR_CODES, EXECUTION_CLIENT } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
-import { roomParticipants, sessionParticipants, sessions } from '@syncode/db';
+import { roomParticipants, rooms, sessionParticipants, sessions } from '@syncode/db';
 import { INVITE_CODE_LENGTH } from '@syncode/shared';
 import { MEDIA_SERVICE, STORAGE_SERVICE } from '@syncode/shared/ports';
 import { and, eq } from 'drizzle-orm';
