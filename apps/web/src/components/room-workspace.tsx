@@ -58,8 +58,10 @@ interface RoomWorkspaceProps {
   onTransition: (targetStatus: RoomStatus) => Promise<void>;
   onParticipantRoleChange: (userId: string, role: RoomRole) => Promise<void>;
   onTransferOwnership: (userId: string, displayName: string) => void;
+  onRemoveParticipant: (userId: string, displayName: string) => void;
   isUpdatingRole: string | null;
   isTransferringOwnership: string | null;
+  isRemovingParticipant: string | null;
 }
 
 export function RoomWorkspace({
@@ -71,8 +73,10 @@ export function RoomWorkspace({
   onTransition,
   onParticipantRoleChange,
   onTransferOwnership,
+  onRemoveParticipant,
   isUpdatingRole,
   isTransferringOwnership,
+  isRemovingParticipant,
 }: RoomWorkspaceProps) {
   const { t } = useTranslation('rooms');
 
@@ -463,10 +467,12 @@ export function RoomWorkspace({
                     canManageParticipants={canManageParticipants}
                     isUpdatingRole={isUpdatingRole === participant.userId}
                     isTransferringOwnership={isTransferringOwnership === participant.userId}
+                    isRemovingParticipant={isRemovingParticipant === participant.userId}
                     onRoleChange={(uid, role) => {
                       void onParticipantRoleChange(uid, role);
                     }}
                     onTransferOwnership={onTransferOwnership}
+                    onRemoveParticipant={onRemoveParticipant}
                     compact
                   />
                 ))}

@@ -1,4 +1,4 @@
-import { CONTROL_API, ERROR_CODES } from '@syncode/contracts';
+import { CONTROL_API, defineRoute, ERROR_CODES } from '@syncode/contracts';
 import type { RoomRole, RoomStatus } from '@syncode/shared';
 import {
   AlertDialog,
@@ -10,6 +10,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@syncode/ui';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { createFileRoute } from '@tanstack/react-router';
 import { AlertTriangle, Loader2 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -29,10 +30,15 @@ type RoomDetail = Awaited<ReturnType<typeof api<typeof CONTROL_API.ROOMS.GET>>>;
 type JoinResponse = Awaited<ReturnType<typeof api<typeof CONTROL_API.ROOMS.JOIN>>>;
 
 const ROOM_REFRESH_INTERVAL_MS = 15_000;
+const REMOVE_PARTICIPANT_ROUTE = defineRoute<void, void>()(
+  'rooms/:id/participants/:userId',
+  'DELETE',
+);
 
 function RoomPage() {
   const { t } = useTranslation('rooms');
   const { roomId } = Route.useParams();
+  const queryClient = useQueryClient();
   const currentUserId = useAuthStore((state) => state.user?.id ?? null);
   const [room, setRoom] = useState<RoomDetail | null>(null);
   const [isJoining, setIsJoining] = useState(true);
@@ -42,6 +48,10 @@ function RoomPage() {
   const [isUpdatingRole, setIsUpdatingRole] = useState<string | null>(null);
   const [isTransferringOwnership, setIsTransferringOwnership] = useState<string | null>(null);
   const [pendingTransfer, setPendingTransfer] = useState<{
+    userId: string;
+    displayName: string;
+  } | null>(null);
+  const [pendingRemoval, setPendingRemoval] = useState<{
     userId: string;
     displayName: string;
   } | null>(null);
@@ -198,6 +208,10 @@ function RoomPage() {
     setPendingTransfer({ userId: participantUserId, displayName });
   };
 
+  const handleRemoveParticipant = (participantUserId: string, displayName: string) => {
+    setPendingRemoval({ userId: participantUserId, displayName });
+  };
+
   const confirmTransferOwnership = async () => {
     if (!pendingTransfer) return;
     const { userId, displayName } = pendingTransfer;
@@ -217,6 +231,28 @@ function RoomPage() {
     } finally {
       setIsTransferringOwnership(null);
     }
+  };
+
+  const removeParticipantMutation = useMutation({
+    mutationFn: async ({ userId }: { userId: string; displayName: string }) =>
+      api(REMOVE_PARTICIPANT_ROUTE, {
+        params: { id: roomId, userId },
+      }),
+    onSuccess: async (_, variables) => {
+      setPendingRemoval(null);
+      await refreshRoomDetail();
+      void queryClient.invalidateQueries({ queryKey: ['rooms'] });
+      toast.success(t('workspace.removeParticipantSuccess', { name: variables.displayName }));
+    },
+    onError: async (error) => {
+      const apiError = await readApiError(error);
+      toast.error(apiError?.message ?? t('workspace.removeParticipantFailed'));
+    },
+  });
+
+  const confirmRemoveParticipant = () => {
+    if (!pendingRemoval || removeParticipantMutation.isPending) return;
+    removeParticipantMutation.mutate(pendingRemoval);
   };
 
   if (joinError && !room) {
@@ -273,10 +309,50 @@ function RoomPage() {
     </AlertDialog>
   );
 
+  const removeParticipantDialog = (
+    <AlertDialog
+      open={!!pendingRemoval}
+      onOpenChange={(open) => {
+        if (!open && !removeParticipantMutation.isPending) {
+          setPendingRemoval(null);
+        }
+      }}
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{t('workspace.removeParticipantTitle')}</AlertDialogTitle>
+          <AlertDialogDescription>
+            {t('workspace.removeParticipantConfirm', { name: pendingRemoval?.displayName })}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={removeParticipantMutation.isPending}>
+            {t('workspace.cancel')}
+          </AlertDialogCancel>
+          <AlertDialogAction
+            variant="destructive"
+            disabled={removeParticipantMutation.isPending}
+            onClick={() => confirmRemoveParticipant()}
+          >
+            {removeParticipantMutation.isPending ? (
+              <span className="inline-flex items-center gap-2">
+                <Loader2 className="size-4 animate-spin" />
+                {t('workspace.removeParticipantAction')}
+              </span>
+            ) : (
+              t('workspace.removeParticipantAction')
+            )}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+
   if (isWorkspace) {
     return (
       <>
         {transferDialog}
+        {removeParticipantDialog}
         <RoomWorkspace
           room={room}
           currentUserId={currentUserId}
@@ -286,8 +362,14 @@ function RoomPage() {
           onTransition={handleTransition}
           onParticipantRoleChange={handleParticipantRoleChange}
           onTransferOwnership={handleTransferOwnership}
+          onRemoveParticipant={handleRemoveParticipant}
           isUpdatingRole={isUpdatingRole}
           isTransferringOwnership={isTransferringOwnership}
+          isRemovingParticipant={
+            removeParticipantMutation.isPending
+              ? (removeParticipantMutation.variables?.userId ?? null)
+              : null
+          }
         />
       </>
     );
@@ -296,6 +378,7 @@ function RoomPage() {
   return (
     <>
       {transferDialog}
+      {removeParticipantDialog}
       <RoomLobby
         roomName={room.name}
         roomCode={room.roomCode}
