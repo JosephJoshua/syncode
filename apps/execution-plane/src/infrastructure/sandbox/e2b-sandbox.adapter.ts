@@ -52,19 +52,13 @@ export class E2bSandboxAdapter implements ISandboxProvider, OnModuleDestroy {
     this.activeSandboxes.add(sandbox);
 
     try {
-      // Set up workspace directory.
-      await sandbox.commands.run(`mkdir -p ${CODE_DIR}`);
-
-      // Write source code to file.
       const sourcePath = `${CODE_DIR}/${SOURCE_NAME}${config.extension}`;
-      await sandbox.files.write(sourcePath, code);
-
-      // Write stdin to file if provided.
+      const writes: Promise<unknown>[] = [sandbox.files.write(sourcePath, code)];
       if (stdin != null) {
-        await sandbox.files.write(STDIN_PATH, stdin);
+        writes.push(sandbox.files.write(STDIN_PATH, stdin));
       }
+      await Promise.all(writes);
 
-      // Compile if needed (compiled languages).
       if (config.compile) {
         const compileCmd = config.compile(sourcePath, BINARY_PATH);
         const compileResult = await sandbox.commands.run(compileCmd, { timeoutMs });
@@ -84,14 +78,12 @@ export class E2bSandboxAdapter implements ISandboxProvider, OnModuleDestroy {
         }
       }
 
-      // Build run command.
       const runTarget = config.compile ? BINARY_PATH : sourcePath;
       let runCmd = config.run(runTarget);
       if (stdin != null) {
         runCmd += ` < ${STDIN_PATH}`;
       }
 
-      // Calculate remaining timeout after compilation.
       const elapsed = Date.now() - startTime;
       const remainingMs = Math.max(1, timeoutMs - elapsed);
 
