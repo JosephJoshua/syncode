@@ -1,4 +1,4 @@
-import { Sandbox } from '@e2b/code-interpreter';
+import { CommandExitError, Sandbox } from '@e2b/code-interpreter';
 import { Logger, type OnModuleDestroy } from '@nestjs/common';
 import type { ExecutionRequest, ExecutionResult, SupportedLanguage } from '@syncode/shared';
 import type { ISandboxProvider } from '@syncode/shared/ports';
@@ -61,20 +61,23 @@ export class E2bSandboxAdapter implements ISandboxProvider, OnModuleDestroy {
 
       if (config.compile) {
         const compileCmd = config.compile(sourcePath, BINARY_PATH);
-        const compileResult = await sandbox.commands.run(compileCmd, { timeoutMs });
-
-        if (compileResult.exitCode !== 0) {
+        try {
+          await sandbox.commands.run(compileCmd, { timeoutMs });
+        } catch (e) {
           const durationMs = Date.now() - startTime;
-          return {
-            requestId,
-            status: 'failed',
-            stdout: compileResult.stdout,
-            stderr: compileResult.stderr,
-            exitCode: compileResult.exitCode,
-            durationMs,
-            timedOut: false,
-            error: compileResult.stderr || 'Compilation failed',
-          };
+          if (e instanceof CommandExitError) {
+            return {
+              requestId,
+              status: 'failed',
+              stdout: e.stdout,
+              stderr: e.stderr,
+              exitCode: e.exitCode,
+              durationMs,
+              timedOut: false,
+              error: e.stderr || 'Compilation failed',
+            };
+          }
+          throw e; // Infra error — propagate to outer catch.
         }
       }
 
@@ -92,18 +95,31 @@ export class E2bSandboxAdapter implements ISandboxProvider, OnModuleDestroy {
 
       return {
         requestId,
-        status: result.exitCode === 0 ? 'completed' : 'failed',
+        status: 'completed',
         stdout: result.stdout,
         stderr: result.stderr,
         exitCode: result.exitCode,
         durationMs,
-        timedOut: durationMs >= timeoutMs,
+        timedOut: false,
       };
     } catch (error) {
-      // Handles infra-level errors (network, E2B outage, timeout).
       const durationMs = Date.now() - startTime;
       const timedOut = durationMs >= timeoutMs; // Best-effort heuristic.
 
+      // CommandExitError carries the actual stdout/stderr from a non-zero exit.
+      if (error instanceof CommandExitError) {
+        return {
+          requestId,
+          status: 'failed',
+          stdout: error.stdout,
+          stderr: error.stderr,
+          exitCode: error.exitCode,
+          durationMs,
+          timedOut,
+        };
+      }
+
+      // Infra-level errors (network, E2B outage, timeout).
       return {
         requestId,
         status: 'failed',
