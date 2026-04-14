@@ -18,11 +18,6 @@ import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
 } from '@syncode/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
@@ -34,6 +29,7 @@ import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
 import { ConfettiBurst } from '@/components/confetti-burst.js';
 import { FormErrorAlert } from '@/components/form-error-alert.js';
+import { LanguageSelector } from '@/components/language-selector.js';
 import { useClipboard } from '@/hooks/use-clipboard.js';
 import { api, getFieldErrorMessage, readApiError } from '@/lib/api-client.js';
 import i18n from '@/lib/i18n.js';
@@ -286,23 +282,13 @@ function CreateRoomPage() {
                   name="language"
                   control={control}
                   render={({ field }) => (
-                    <Select value={field.value} onValueChange={field.onChange}>
-                      <SelectTrigger
-                        className={cn(errors.language && 'border-destructive ring-destructive/20')}
-                      >
-                        <div className="flex items-center gap-2">
-                          <Code2 size={16} className="text-muted-foreground" />
-                          <SelectValue placeholder={t('create.languagePlaceholder')} />
-                        </div>
-                      </SelectTrigger>
-                      <SelectContent>
-                        {LANGUAGE_OPTIONS.map((opt) => (
-                          <SelectItem key={opt.value} value={opt.value}>
-                            {opt.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <LanguageSelector
+                      value={field.value}
+                      onValueChange={field.onChange}
+                      labelOverrides={LANGUAGE_LABELS}
+                      placeholder={t('create.languagePlaceholder')}
+                      className={cn(errors.language && 'border-destructive ring-destructive/20')}
+                    />
                   )}
                 />
                 {errors.language && (

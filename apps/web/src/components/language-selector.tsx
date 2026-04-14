@@ -9,6 +9,7 @@ export interface LanguageSelectorProps {
   value?: SupportedLanguage;
   onValueChange: (value: SupportedLanguage) => void;
   languages?: readonly SupportedLanguage[];
+  labelOverrides?: Partial<Record<SupportedLanguage, string>>;
   disabled?: boolean;
   placeholder?: string;
   className?: string;
@@ -18,11 +19,15 @@ export function LanguageSelector({
   value,
   onValueChange,
   languages,
+  labelOverrides,
   disabled = false,
   placeholder = DEFAULT_PLACEHOLDER,
   className,
 }: LanguageSelectorProps) {
-  const options = getLanguageSelectorOptions(languages);
+  const options = getLanguageSelectorOptions(languages).map((option) => ({
+    ...option,
+    label: labelOverrides?.[option.value] ?? option.label,
+  }));
   const selectedOption = value ? (options.find((option) => option.value === value) ?? null) : null;
   const isEmpty = options.length === 0;
   const isDisabled = disabled || isEmpty;

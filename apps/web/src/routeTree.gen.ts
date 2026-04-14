@@ -9,16 +9,20 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as RoomsRouteImport } from './routes/rooms'
-import { Route as RegisterRouteImport } from './routes/register'
-import { Route as ProblemsRouteImport } from './routes/problems'
-import { Route as LoginRouteImport } from './routes/login'
-import { Route as DashboardRouteImport } from './routes/dashboard'
-import { Route as IndexRouteImport } from './routes/index'
-import { Route as ProblemsIndexRouteImport } from './routes/problems.index'
-import { Route as ProblemsProblemIdRouteImport } from './routes/problems.$problemId'
-import { Route as DevLanguageSelectorRouteImport } from './routes/dev.language-selector'
-import { Route as SessionsSessionIdFeedbackRouteImport } from './routes/sessions.$sessionId.feedback'
+import { Route as PublicRouteRouteImport } from './routes/_public/route'
+import { Route as AppRouteRouteImport } from './routes/_app/route'
+import { Route as PublicIndexRouteImport } from './routes/_public/index'
+import { Route as PublicRegisterRouteImport } from './routes/_public/register'
+import { Route as PublicLoginRouteImport } from './routes/_public/login'
+import { Route as AppProfileRouteImport } from './routes/_app/profile'
+import { Route as AppDashboardRouteImport } from './routes/_app/dashboard'
+import { Route as AppBookmarksRouteImport } from './routes/_app/bookmarks'
+import { Route as AppRoomsIndexRouteImport } from './routes/_app/rooms.index'
+import { Route as AppProblemsIndexRouteImport } from './routes/_app/problems.index'
+import { Route as AppRoomsCreateRouteImport } from './routes/_app/rooms.create'
+import { Route as AppRoomsRoomIdRouteImport } from './routes/_app/rooms.$roomId'
+import { Route as AppProblemsProblemIdRouteImport } from './routes/_app/problems.$problemId'
+import { Route as AppSessionsSessionIdFeedbackRouteImport } from './routes/_app/sessions.$sessionId.feedback'
 
 const PublicRouteRoute = PublicRouteRouteImport.update({
   id: '/_public',
@@ -68,53 +72,72 @@ const AppProblemsIndexRoute = AppProblemsIndexRouteImport.update({
   path: '/problems/',
   getParentRoute: () => AppRouteRoute,
 } as any)
-const DevLanguageSelectorRoute = DevLanguageSelectorRouteImport.update({
-  id: '/dev/language-selector',
-  path: '/dev/language-selector',
-  getParentRoute: () => rootRouteImport,
+const AppRoomsCreateRoute = AppRoomsCreateRouteImport.update({
+  id: '/rooms/create',
+  path: '/rooms/create',
+  getParentRoute: () => AppRouteRoute,
 } as any)
-const SessionsSessionIdFeedbackRoute =
-  SessionsSessionIdFeedbackRouteImport.update({
+const AppRoomsRoomIdRoute = AppRoomsRoomIdRouteImport.update({
+  id: '/rooms/$roomId',
+  path: '/rooms/$roomId',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppProblemsProblemIdRoute = AppProblemsProblemIdRouteImport.update({
+  id: '/problems/$problemId',
+  path: '/problems/$problemId',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppSessionsSessionIdFeedbackRoute =
+  AppSessionsSessionIdFeedbackRouteImport.update({
     id: '/sessions/$sessionId/feedback',
     path: '/sessions/$sessionId/feedback',
     getParentRoute: () => AppRouteRoute,
   } as any)
 
 export interface FileRoutesByFullPath {
-  '/': typeof IndexRoute
-  '/dashboard': typeof DashboardRoute
-  '/login': typeof LoginRoute
-  '/problems': typeof ProblemsRouteWithChildren
-  '/register': typeof RegisterRoute
-  '/rooms': typeof RoomsRoute
-  '/dev/language-selector': typeof DevLanguageSelectorRoute
-  '/problems/$problemId': typeof ProblemsProblemIdRoute
-  '/problems/': typeof ProblemsIndexRoute
-  '/sessions/$sessionId/feedback': typeof SessionsSessionIdFeedbackRoute
+  '/': typeof PublicIndexRoute
+  '/bookmarks': typeof AppBookmarksRoute
+  '/dashboard': typeof AppDashboardRoute
+  '/profile': typeof AppProfileRoute
+  '/login': typeof PublicLoginRoute
+  '/register': typeof PublicRegisterRoute
+  '/problems/$problemId': typeof AppProblemsProblemIdRoute
+  '/rooms/$roomId': typeof AppRoomsRoomIdRoute
+  '/rooms/create': typeof AppRoomsCreateRoute
+  '/problems/': typeof AppProblemsIndexRoute
+  '/rooms/': typeof AppRoomsIndexRoute
+  '/sessions/$sessionId/feedback': typeof AppSessionsSessionIdFeedbackRoute
 }
 export interface FileRoutesByTo {
-  '/': typeof IndexRoute
-  '/dashboard': typeof DashboardRoute
-  '/login': typeof LoginRoute
-  '/register': typeof RegisterRoute
-  '/rooms': typeof RoomsRoute
-  '/dev/language-selector': typeof DevLanguageSelectorRoute
-  '/problems/$problemId': typeof ProblemsProblemIdRoute
-  '/problems': typeof ProblemsIndexRoute
-  '/sessions/$sessionId/feedback': typeof SessionsSessionIdFeedbackRoute
+  '/': typeof PublicIndexRoute
+  '/bookmarks': typeof AppBookmarksRoute
+  '/dashboard': typeof AppDashboardRoute
+  '/profile': typeof AppProfileRoute
+  '/login': typeof PublicLoginRoute
+  '/register': typeof PublicRegisterRoute
+  '/problems/$problemId': typeof AppProblemsProblemIdRoute
+  '/rooms/$roomId': typeof AppRoomsRoomIdRoute
+  '/rooms/create': typeof AppRoomsCreateRoute
+  '/problems': typeof AppProblemsIndexRoute
+  '/rooms': typeof AppRoomsIndexRoute
+  '/sessions/$sessionId/feedback': typeof AppSessionsSessionIdFeedbackRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
-  '/': typeof IndexRoute
-  '/dashboard': typeof DashboardRoute
-  '/login': typeof LoginRoute
-  '/problems': typeof ProblemsRouteWithChildren
-  '/register': typeof RegisterRoute
-  '/rooms': typeof RoomsRoute
-  '/dev/language-selector': typeof DevLanguageSelectorRoute
-  '/problems/$problemId': typeof ProblemsProblemIdRoute
-  '/problems/': typeof ProblemsIndexRoute
-  '/sessions/$sessionId/feedback': typeof SessionsSessionIdFeedbackRoute
+  '/_app': typeof AppRouteRouteWithChildren
+  '/_public': typeof PublicRouteRouteWithChildren
+  '/_app/bookmarks': typeof AppBookmarksRoute
+  '/_app/dashboard': typeof AppDashboardRoute
+  '/_app/profile': typeof AppProfileRoute
+  '/_public/login': typeof PublicLoginRoute
+  '/_public/register': typeof PublicRegisterRoute
+  '/_public/': typeof PublicIndexRoute
+  '/_app/problems/$problemId': typeof AppProblemsProblemIdRoute
+  '/_app/rooms/$roomId': typeof AppRoomsRoomIdRoute
+  '/_app/rooms/create': typeof AppRoomsCreateRoute
+  '/_app/problems/': typeof AppProblemsIndexRoute
+  '/_app/rooms/': typeof AppRoomsIndexRoute
+  '/_app/sessions/$sessionId/feedback': typeof AppSessionsSessionIdFeedbackRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -125,8 +148,6 @@ export interface FileRouteTypes {
     | '/profile'
     | '/login'
     | '/register'
-    | '/rooms'
-    | '/dev/language-selector'
     | '/problems/$problemId'
     | '/rooms/$roomId'
     | '/rooms/create'
@@ -141,8 +162,6 @@ export interface FileRouteTypes {
     | '/profile'
     | '/login'
     | '/register'
-    | '/rooms'
-    | '/dev/language-selector'
     | '/problems/$problemId'
     | '/rooms/$roomId'
     | '/rooms/create'
@@ -151,27 +170,25 @@ export interface FileRouteTypes {
     | '/sessions/$sessionId/feedback'
   id:
     | '__root__'
-    | '/'
-    | '/dashboard'
-    | '/login'
-    | '/problems'
-    | '/register'
-    | '/rooms'
-    | '/dev/language-selector'
-    | '/problems/$problemId'
-    | '/problems/'
-    | '/sessions/$sessionId/feedback'
+    | '/_app'
+    | '/_public'
+    | '/_app/bookmarks'
+    | '/_app/dashboard'
+    | '/_app/profile'
+    | '/_public/login'
+    | '/_public/register'
+    | '/_public/'
+    | '/_app/problems/$problemId'
+    | '/_app/rooms/$roomId'
+    | '/_app/rooms/create'
+    | '/_app/problems/'
+    | '/_app/rooms/'
+    | '/_app/sessions/$sessionId/feedback'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
-  IndexRoute: typeof IndexRoute
-  DashboardRoute: typeof DashboardRoute
-  LoginRoute: typeof LoginRoute
-  ProblemsRoute: typeof ProblemsRouteWithChildren
-  RegisterRoute: typeof RegisterRoute
-  RoomsRoute: typeof RoomsRoute
-  DevLanguageSelectorRoute: typeof DevLanguageSelectorRoute
-  SessionsSessionIdFeedbackRoute: typeof SessionsSessionIdFeedbackRoute
+  AppRouteRoute: typeof AppRouteRouteWithChildren
+  PublicRouteRoute: typeof PublicRouteRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
@@ -267,15 +284,8 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppProblemsProblemIdRouteImport
       parentRoute: typeof AppRouteRoute
     }
-    '/dev/language-selector': {
-      id: '/dev/language-selector'
-      path: '/dev/language-selector'
-      fullPath: '/dev/language-selector'
-      preLoaderRoute: typeof DevLanguageSelectorRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/sessions/$sessionId/feedback': {
-      id: '/sessions/$sessionId/feedback'
+    '/_app/sessions/$sessionId/feedback': {
+      id: '/_app/sessions/$sessionId/feedback'
       path: '/sessions/$sessionId/feedback'
       fullPath: '/sessions/$sessionId/feedback'
       preLoaderRoute: typeof AppSessionsSessionIdFeedbackRouteImport
@@ -329,14 +339,8 @@ const PublicRouteRouteWithChildren = PublicRouteRoute._addFileChildren(
 )
 
 const rootRouteChildren: RootRouteChildren = {
-  IndexRoute: IndexRoute,
-  DashboardRoute: DashboardRoute,
-  LoginRoute: LoginRoute,
-  ProblemsRoute: ProblemsRouteWithChildren,
-  RegisterRoute: RegisterRoute,
-  RoomsRoute: RoomsRoute,
-  DevLanguageSelectorRoute: DevLanguageSelectorRoute,
-  SessionsSessionIdFeedbackRoute: SessionsSessionIdFeedbackRoute,
+  AppRouteRoute: AppRouteRouteWithChildren,
+  PublicRouteRoute: PublicRouteRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
