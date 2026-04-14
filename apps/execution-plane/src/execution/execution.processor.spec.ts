@@ -21,7 +21,8 @@ function makeJob(
 
 function makeExecutionResult(overrides: Partial<ExecutionResult> = {}): ExecutionResult {
   return {
-    status: 'success',
+    requestId: 'test-request',
+    status: 'completed',
     stdout: 'hello',
     stderr: '',
     exitCode: 0,
@@ -100,7 +101,7 @@ describe('ExecutionProcessor', () => {
         EXECUTION_RESULT_QUEUE,
         'execution-result',
         expect.objectContaining({
-          status: 'success',
+          status: 'completed',
           stdout: 'hello',
           stderr: '',
           exitCode: 0,
