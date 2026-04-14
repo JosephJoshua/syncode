@@ -1,3 +1,4 @@
+import type { TagInfo } from '@syncode/contracts';
 import {
   Button,
   Card,
@@ -15,7 +16,6 @@ import {
   type ProblemStatus,
   STATUS_OPTIONS,
 } from './problems.types.js';
-import type { ProblemTagInfo } from './problems-tags.js';
 
 interface FilterOptionProps {
   id: string;
@@ -50,7 +50,7 @@ export interface ProblemsFilterSidebarProps {
   selectedTags: string[];
   difficultyCounts: Record<ProblemDifficulty, number>;
   statusCounts: Record<ProblemStatus, number>;
-  popularTags: ProblemTagInfo[];
+  popularTags: TagInfo[];
   onToggleDifficulty: (value: ProblemDifficulty) => void;
   onToggleStatus: (value: ProblemStatus) => void;
   onToggleTag: (value: string) => void;

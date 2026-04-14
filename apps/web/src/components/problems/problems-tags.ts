@@ -1,5 +1,3 @@
-export type { TagInfo as ProblemTagInfo } from '@syncode/contracts';
-
 /**
  * Converts a tag slug like "hash-table" into a display name like "Hash Table".
  * Used as a fallback when the full tag catalog isn't available.

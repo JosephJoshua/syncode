@@ -25,8 +25,7 @@ export const Route = createFileRoute('/_app/rooms/$roomId')({
   component: RoomPage,
 });
 
-type RoomDetail = Awaited<ReturnType<typeof api<typeof CONTROL_API.ROOMS.GET>>>;
-type JoinResponse = Awaited<ReturnType<typeof api<typeof CONTROL_API.ROOMS.JOIN>>>;
+import type { JoinRoomResponse, RoomDetail } from '@syncode/contracts';
 
 const ROOM_REFRESH_INTERVAL_MS = 15_000;
 
@@ -326,7 +325,7 @@ function RoomPage() {
 }
 
 function buildJoinNotice(
-  joined: JoinResponse,
+  joined: JoinRoomResponse,
   t: (key: string, options?: Record<string, unknown>) => string,
 ): string {
   const roleLabel = t(ROLE_LABEL_KEYS[joined.assignedRole]);

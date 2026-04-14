@@ -27,7 +27,7 @@ import { ProblemsEmptyState } from '@/components/problems/problems-empty-state.j
 import { ProblemsFilterSidebar } from '@/components/problems/problems-filter-sidebar.js';
 import { ProblemsResultsToolbar } from '@/components/problems/problems-results-toolbar.js';
 import { ProblemsSearchBar } from '@/components/problems/problems-search-bar.js';
-import { formatTagSlug, type ProblemTagInfo } from '@/components/problems/problems-tags.js';
+import { formatTagSlug } from '@/components/problems/problems-tags.js';
 import { api } from '@/lib/api-client.js';
 
 export const Route = createFileRoute('/_app/problems/')({

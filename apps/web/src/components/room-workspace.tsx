@@ -1,4 +1,10 @@
 import Editor from '@monaco-editor/react';
+import type {
+  ExecutionResultResponse,
+  JobStatusResponse,
+  ProblemDetail,
+  RoomDetail,
+} from '@syncode/contracts';
 import { CONTROL_API, ERROR_CODES } from '@syncode/contracts';
 import type { RoomRole, RoomStatus } from '@syncode/shared';
 import { Badge, Button } from '@syncode/ui';
@@ -40,14 +46,9 @@ import {
   handleEditorWillMount,
   languageExtension,
   type RunState,
+  toMonacoLanguage,
 } from './room-workspace-utils.js';
 import { StageTransitionOverlay } from './stage-transition-overlay.js';
-
-type RoomDetail = Awaited<ReturnType<typeof api<typeof CONTROL_API.ROOMS.GET>>>;
-type ProblemDetail = Awaited<ReturnType<typeof api<typeof CONTROL_API.PROBLEMS.GET_BY_ID>>>;
-type ExecutionPollResponse = Awaited<
-  ReturnType<typeof api<typeof CONTROL_API.EXECUTION.GET_RESULT>>
->;
 
 interface RoomWorkspaceProps {
   room: RoomDetail;
@@ -104,6 +105,7 @@ export function RoomWorkspace({
   }, [room.problemId, t]);
 
   const language = room.language ?? 'python';
+  const monacoLanguage = toMonacoLanguage(language);
   const [workspaceCode, setWorkspaceCode] = useState(() => getDefaultCode(language));
   const [workspaceInput, setWorkspaceInput] = useState('');
   const [runState, setRunState] = useState<RunState>({ status: 'idle' });
@@ -318,7 +320,7 @@ export function RoomWorkspace({
                 <div className="flex-1 overflow-hidden">
                   <Editor
                     height="100%"
-                    language={language}
+                    language={monacoLanguage}
                     value={workspaceCode}
                     onChange={handleEditorChange}
                     theme="syncode-dark"
@@ -495,9 +497,11 @@ export function RoomWorkspace({
   );
 }
 
+type ExecutionPollResponse = ExecutionResultResponse | JobStatusResponse;
+
 function isExecutionResultPayload(
   response: ExecutionPollResponse,
-): response is Extract<ExecutionPollResponse, { stdout: string }> {
+): response is ExecutionResultResponse {
   return 'stdout' in response;
 }
 

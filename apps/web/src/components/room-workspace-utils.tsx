@@ -1,6 +1,22 @@
 import type { BeforeMount } from '@monaco-editor/react';
+import type { SupportedLanguage } from '@syncode/shared';
 import { Loader2, TerminalSquare } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+
+const MONACO_LANGUAGE_MAP: Record<SupportedLanguage, string> = {
+  python: 'python',
+  javascript: 'javascript',
+  typescript: 'typescript',
+  java: 'java',
+  cpp: 'cpp',
+  c: 'c',
+  go: 'go',
+  rust: 'rust',
+};
+
+export function toMonacoLanguage(language: SupportedLanguage): string {
+  return MONACO_LANGUAGE_MAP[language];
+}
 
 export type RunState =
   | { status: 'idle' }
