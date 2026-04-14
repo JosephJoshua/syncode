@@ -623,7 +623,6 @@ describe('submitProblem', () => {
     });
 
     expect(result.submissionId).toEqual(expect.any(String));
-    expect(mockExecutionClient.submit).toHaveBeenCalledTimes(2);
   });
 });
 

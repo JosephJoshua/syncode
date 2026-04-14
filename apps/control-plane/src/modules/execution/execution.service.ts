@@ -1,4 +1,10 @@
-import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import type {
   RunCodeRequest,
   RunCodeResponse,
@@ -64,7 +70,7 @@ export class ExecutionService {
       });
     }
 
-    const [submission] = (await this.db
+    const [submission] = await this.db
       .insert(submissions)
       .values({
         userId,
@@ -75,7 +81,11 @@ export class ExecutionService {
         status: 'pending',
         totalTestCases: cases.length,
       })
-      .returning({ id: submissions.id })) as [{ id: string }];
+      .returning({ id: submissions.id });
+
+    if (!submission) {
+      throw new InternalServerErrorException('Submission insert returned no rows');
+    }
 
     const results = await Promise.allSettled(
       cases.map((tc, i) => {

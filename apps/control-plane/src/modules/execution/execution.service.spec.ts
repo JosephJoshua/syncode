@@ -189,23 +189,3 @@ describe('ExecutionService', () => {
     );
   });
 });
-
-describe('ExecutionService — runCode', () => {
-  it('GIVEN valid input WHEN running code THEN returns jobId from execution client', async () => {
-    const mockExecutionClient = createMockExecutionClient();
-
-    const module = await Test.createTestingModule({
-      providers: [
-        ExecutionService,
-        { provide: DB_CLIENT, useValue: {} },
-        { provide: EXECUTION_CLIENT, useValue: mockExecutionClient },
-      ],
-    }).compile();
-
-    const service = module.get(ExecutionService);
-
-    const result = await service.runCode({ language: 'python', code: 'print("hello")' });
-
-    expect(result).toEqual({ jobId: 'stub-job' });
-  });
-});

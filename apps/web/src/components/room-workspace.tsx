@@ -505,8 +505,4 @@ const RUN_ERROR_KEYS: Partial<Record<string, string>> = {
   [ERROR_CODES.ROOM_EDITOR_LOCKED]: 'workspace.editorLockedError',
   [ERROR_CODES.ROOM_PERMISSION_DENIED]: 'workspace.permissionDenied',
   [ERROR_CODES.ROOM_ACCESS_DENIED]: 'workspace.permissionDenied',
-  [ERROR_CODES.PROBLEM_NOT_FOUND]: 'workspace.problemNotFound',
-  [ERROR_CODES.PROBLEM_NO_TEST_CASES]: 'workspace.noProblemTestCases',
-  [ERROR_CODES.EXECUTION_SERVICE_UNAVAILABLE]: 'workspace.executionUnavailable',
-  [ERROR_CODES.EXECUTION_SERVICE_TIMEOUT]: 'workspace.executionTimeout',
 };
