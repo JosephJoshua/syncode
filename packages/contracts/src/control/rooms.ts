@@ -86,7 +86,9 @@ export const runCodeSchema = z
 
 export type RunCodeInput = z.infer<typeof runCodeSchema>;
 
-export const submitProblemSchema = runCodeSchema.omit({ stdin: true }).strict();
+export const submitProblemSchema = runCodeSchema
+  .omit({ stdin: true, timeoutMs: true, memoryMb: true })
+  .strict();
 
 export type SubmitProblemInput = z.infer<typeof submitProblemSchema>;
 
