@@ -10,11 +10,13 @@ import { ZodValidationPipe } from 'nestjs-zod';
 import request from 'supertest';
 import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard.js';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
+import { ExecutionService } from '@/modules/execution/execution.service.js';
 import {
   createTestDb,
   insertParticipant,
   insertProblem,
   insertRoom,
+  insertTestCase,
   insertUser,
 } from '@/test/integration-setup.js';
 import {
@@ -45,6 +47,7 @@ beforeEach(async () => {
     controllers: [RoomsController],
     providers: [
       RoomsService,
+      ExecutionService,
       { provide: DB_CLIENT, useValue: db },
       { provide: EXECUTION_CLIENT, useValue: createMockExecutionClient() },
       { provide: COLLAB_CLIENT, useValue: createMockCollabClient() },
@@ -301,7 +304,7 @@ describe('POST /rooms/:id/run', () => {
 
     const res = await asUser(request(app.getHttpServer()).post(`/rooms/${room.id}/run`), candidate)
       .send({ language: 'python', code: 'print("hi")' })
-      .expect(201);
+      .expect(202);
 
     expect(res.body.jobId).toBe('stub-job');
   });
@@ -320,10 +323,11 @@ describe('POST /rooms/:id/run', () => {
 });
 
 describe('POST /rooms/:id/submit', () => {
-  it('GIVEN coding room with problem WHEN submitting THEN returns per-test-case results', async () => {
+  it('GIVEN coding room with problem and test cases WHEN submitting THEN returns submissionId', async () => {
     const host = await insertUser(db);
     const candidate = await insertUser(db);
     const problem = await insertProblem(db);
+    await insertTestCase(db, problem.id);
     const room = await insertRoom(db, host.id, {
       status: 'coding',
       problemId: problem.id,
@@ -335,15 +339,9 @@ describe('POST /rooms/:id/submit', () => {
       request(app.getHttpServer()).post(`/rooms/${room.id}/submit`),
       candidate,
     )
-      .send({
-        language: 'python',
-        code: 'print(input())',
-        testCases: [{ input: '5', expectedOutput: '5' }],
-      })
-      .expect(201);
+      .send({ language: 'python', code: 'print(input())' })
+      .expect(202);
 
-    expect(res.body).toHaveLength(1);
-    expect(res.body[0].testCaseIndex).toBe(0);
-    expect(res.body[0].jobId).toBe('stub-job');
+    expect(res.body.submissionId).toEqual(expect.any(String));
   });
 });

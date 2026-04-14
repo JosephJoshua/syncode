@@ -31,7 +31,7 @@ import type {
   runCodeResponseSchema,
   runCodeSchema,
   submitProblemSchema,
-  submitResultItemSchema,
+  submitResponseSchema,
   transferRoomOwnershipResponseSchema,
   transferRoomOwnershipSchema,
   transitionRoomPhaseResponseSchema,
@@ -116,7 +116,7 @@ export const CONTROL_API = {
     ),
     SUBMIT: defineRoute<
       z.infer<typeof submitProblemSchema>,
-      z.infer<typeof submitResultItemSchema>[]
+      z.infer<typeof submitResponseSchema>
     >()('rooms/:id/submit', 'POST'),
     TRANSITION_PHASE: defineRoute<
       z.infer<typeof transitionRoomPhaseSchema>,

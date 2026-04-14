@@ -10,7 +10,7 @@ import {
   runCodeResponseSchema,
   runCodeSchema,
   submitProblemSchema,
-  submitResultItemSchema,
+  submitResponseSchema,
   transferRoomOwnershipResponseSchema,
   transferRoomOwnershipSchema,
   transitionRoomPhaseResponseSchema,
@@ -33,7 +33,7 @@ export class ListRoomsResponseDto extends createZodDto(listRoomsResponseSchema) 
 export class RoomDetailDto extends createZodDto(roomDetailSchema) {}
 export class DestroyRoomResponseDto extends createZodDto(destroyRoomResponseSchema) {}
 export class RunCodeResponseDto extends createZodDto(runCodeResponseSchema) {}
-export class SubmitResultItemDto extends createZodDto(submitResultItemSchema) {}
+export class SubmitCodeResponseDto extends createZodDto(submitResponseSchema) {}
 export class JoinRoomResponseDto extends createZodDto(joinRoomResponseSchema) {}
 export class TransferRoomOwnershipResponseDto extends createZodDto(
   transferRoomOwnershipResponseSchema,

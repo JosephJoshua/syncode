@@ -9,11 +9,13 @@ import { INVITE_CODE_LENGTH } from '@syncode/shared';
 import { MEDIA_SERVICE, STORAGE_SERVICE } from '@syncode/shared/ports';
 import { and, eq } from 'drizzle-orm';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
+import { ExecutionService } from '@/modules/execution/execution.service.js';
 import {
   createTestDb,
   insertParticipant,
   insertProblem,
   insertRoom,
+  insertTestCase,
   insertUser,
 } from '@/test/integration-setup.js';
 import {
@@ -42,6 +44,7 @@ beforeEach(async () => {
   const module = await Test.createTestingModule({
     providers: [
       RoomsService,
+      ExecutionService,
       { provide: DB_CLIENT, useValue: db },
       { provide: EXECUTION_CLIENT, useValue: mockExecutionClient },
       { provide: COLLAB_CLIENT, useValue: createMockCollabClient() },
@@ -601,10 +604,12 @@ describe('joinRoom (role assignment)', () => {
 });
 
 describe('submitProblem', () => {
-  it('GIVEN problem with test cases WHEN submitting code THEN enqueues one job per test case', async () => {
+  it('GIVEN room with problem and test cases WHEN submitting code THEN returns submissionId and enqueues jobs', async () => {
     const host = await insertUser(db);
     const candidate = await insertUser(db);
     const problem = await insertProblem(db);
+    await insertTestCase(db, problem.id);
+    await insertTestCase(db, problem.id);
     const room = await insertRoom(db, host.id, {
       status: 'coding',
       problemId: problem.id,
@@ -612,20 +617,13 @@ describe('submitProblem', () => {
     await insertParticipant(db, room.id, host.id, 'interviewer');
     await insertParticipant(db, room.id, candidate.id, 'candidate');
 
-    const result = await service.submitProblem(
-      room.id,
-      candidate.id,
-      { language: 'python', code: 'print(input())' },
-      [
-        { input: '5', expectedOutput: '5' },
-        { input: '10', expectedOutput: '10' },
-      ],
-    );
+    const result = await service.submitProblem(room.id, candidate.id, {
+      language: 'python',
+      code: 'print(input())',
+    });
 
-    expect(result).toHaveLength(2);
-    expect(result[0].testCaseIndex).toBe(0);
-    expect(result[0].jobId).toBe('stub-job');
-    expect(result[1].testCaseIndex).toBe(1);
+    expect(result.submissionId).toEqual(expect.any(String));
+    expect(mockExecutionClient.submit).toHaveBeenCalledTimes(2);
   });
 });
 

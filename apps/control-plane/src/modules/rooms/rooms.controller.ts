@@ -26,6 +26,7 @@ import { CONTROL_API, ROOMS_SORT_BY_OPTIONS, SORT_ORDER_OPTIONS } from '@syncode
 import { ROOM_MODES, ROOM_STATUSES } from '@syncode/shared';
 import { CurrentUser } from '@/common/decorators/current-user.decorator.js';
 import { Idempotent } from '@/common/decorators/idempotent.decorator.js';
+import { ErrorResponseDto } from '@/common/dto/error-response.dto.js';
 import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard.js';
 import { IdempotencyInterceptor } from '@/common/interceptors/idempotency.interceptor.js';
 import type { AuthUser } from '@/modules/auth/auth.types.js';
@@ -40,8 +41,8 @@ import {
   RoomDetailDto,
   RunCodeDto,
   RunCodeResponseDto,
+  SubmitCodeResponseDto,
   SubmitProblemDto,
-  SubmitResultItemDto,
   TransferRoomOwnershipDto,
   TransferRoomOwnershipResponseDto,
   TransitionRoomPhaseDto,
@@ -198,10 +199,20 @@ export class RoomsController {
   }
 
   @Post(CONTROL_API.ROOMS.RUN.route)
+  @HttpCode(202)
   @ApiOperation({ summary: 'Execute code once (interactive run)' })
   @ApiParam({ name: 'id', description: 'Room ID (UUID)' })
   @ApiBody({ type: RunCodeDto })
-  @ApiResponse({ status: 201, type: RunCodeResponseDto })
+  @ApiResponse({ status: 202, type: RunCodeResponseDto, description: 'Code execution accepted' })
+  @ApiResponse({ status: 403, type: ErrorResponseDto, description: 'Permission denied' })
+  @ApiResponse({ status: 404, type: ErrorResponseDto, description: 'Room not found' })
+  @ApiResponse({ status: 409, type: ErrorResponseDto, description: 'Editor is locked' })
+  @ApiResponse({
+    status: 503,
+    type: ErrorResponseDto,
+    description: 'Execution service unavailable',
+  })
+  @ApiResponse({ status: 504, type: ErrorResponseDto, description: 'Execution service timeout' })
   async runCode(
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
@@ -211,17 +222,20 @@ export class RoomsController {
   }
 
   @Post(CONTROL_API.ROOMS.SUBMIT.route)
-  @ApiOperation({ summary: 'Execute code against multiple test cases' })
+  @HttpCode(202)
+  @ApiOperation({ summary: 'Submit code against problem test cases' })
   @ApiParam({ name: 'id', description: 'Room ID (UUID)' })
   @ApiBody({ type: SubmitProblemDto })
-  @ApiResponse({ status: 201, type: [SubmitResultItemDto] })
+  @ApiResponse({ status: 202, type: SubmitCodeResponseDto, description: 'Submission accepted' })
+  @ApiResponse({ status: 403, type: ErrorResponseDto, description: 'Permission denied' })
+  @ApiResponse({ status: 404, type: ErrorResponseDto, description: 'Room or problem not found' })
+  @ApiResponse({ status: 409, type: ErrorResponseDto, description: 'Editor is locked' })
   async submitProblem(
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
     @Body() body: SubmitProblemDto,
-  ): Promise<SubmitResultItemDto[]> {
-    const { testCases, ...request } = body;
-    return this.roomsService.submitProblem(id, user.id, request, testCases);
+  ): Promise<SubmitCodeResponseDto> {
+    return this.roomsService.submitProblem(id, user.id, body);
   }
 
   @Post(CONTROL_API.ROOMS.TRANSITION_PHASE.route)

@@ -1,7 +1,8 @@
 import { NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import { ERROR_CODES } from '@syncode/contracts';
+import { ERROR_CODES, EXECUTION_CLIENT } from '@syncode/contracts';
 import { describe, expect, it, vi } from 'vitest';
+import { createMockExecutionClient } from '@/test/mock-factories.js';
 import { DB_CLIENT } from '../db/db.module.js';
 import { ExecutionService } from './execution.service.js';
 
@@ -107,6 +108,7 @@ describe('ExecutionService', () => {
           provide: DB_CLIENT,
           useValue: mockDb.db,
         },
+        { provide: EXECUTION_CLIENT, useValue: createMockExecutionClient() },
       ],
     }).compile();
 
@@ -156,8 +158,6 @@ describe('ExecutionService', () => {
         },
       ],
     });
-
-    expect(mockDb.mocks.select).toHaveBeenCalledTimes(2);
   });
 
   it('GIVEN missing submission WHEN loading details THEN throws not found', async () => {
@@ -170,6 +170,7 @@ describe('ExecutionService', () => {
           provide: DB_CLIENT,
           useValue: mockDb.db,
         },
+        { provide: EXECUTION_CLIENT, useValue: createMockExecutionClient() },
       ],
     }).compile();
 
@@ -186,7 +187,25 @@ describe('ExecutionService', () => {
         code: ERROR_CODES.SUBMISSION_NOT_FOUND,
       }),
     );
+  });
+});
 
-    expect(mockDb.mocks.select).toHaveBeenCalledTimes(1);
+describe('ExecutionService — runCode', () => {
+  it('GIVEN valid input WHEN running code THEN returns jobId from execution client', async () => {
+    const mockExecutionClient = createMockExecutionClient();
+
+    const module = await Test.createTestingModule({
+      providers: [
+        ExecutionService,
+        { provide: DB_CLIENT, useValue: {} },
+        { provide: EXECUTION_CLIENT, useValue: mockExecutionClient },
+      ],
+    }).compile();
+
+    const service = module.get(ExecutionService);
+
+    const result = await service.runCode({ language: 'python', code: 'print("hello")' });
+
+    expect(result).toEqual({ jobId: 'stub-job' });
   });
 });

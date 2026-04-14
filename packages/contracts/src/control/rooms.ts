@@ -86,48 +86,18 @@ export const runCodeSchema = z
 
 export type RunCodeInput = z.infer<typeof runCodeSchema>;
 
-export const testCaseSchema = z
-  .object({
-    input: z
-      .string()
-      .min(1)
-      .describe('Input provided via stdin')
-      .meta({ examples: ['5\n3 1 4 1 5'] }),
-    expectedOutput: z
-      .string()
-      .min(1)
-      .describe('Expected stdout output')
-      .meta({ examples: ['1 1 3 4 5'] }),
-    description: z
-      .string()
-      .optional()
-      .describe('Test case description')
-      .meta({ examples: ['Basic sorting test'] }),
-    timeoutMs: z
-      .number()
-      .positive()
-      .optional()
-      .describe('Per-test timeout override (ms)')
-      .meta({ examples: [5000] }),
-    memoryMb: z
-      .number()
-      .positive()
-      .optional()
-      .describe('Per-test memory limit override (MB)')
-      .meta({ examples: [128] }),
-  })
-  .strict();
-
-export type TestCaseInput = z.infer<typeof testCaseSchema>;
-
-export const submitProblemSchema = runCodeSchema
-  .omit({ stdin: true })
-  .extend({
-    testCases: z.array(testCaseSchema).nonempty().describe('Test cases to run the code against'),
-  })
-  .strict();
+export const submitProblemSchema = runCodeSchema.omit({ stdin: true }).strict();
 
 export type SubmitProblemInput = z.infer<typeof submitProblemSchema>;
+
+export const submitResponseSchema = z.object({
+  submissionId: z
+    .uuid()
+    .describe('Submission ID for polling results via GET /submissions/:submissionId')
+    .meta({ examples: ['550e8400-e29b-41d4-a716-446655440000'] }),
+});
+
+export type SubmitResponse = z.infer<typeof submitResponseSchema>;
 
 const roomBaseFields = {
   roomId: z.uuid().describe('Room identifier'),
@@ -201,30 +171,6 @@ export const runCodeResponseSchema = z.object({
 });
 
 export type RunCodeResponse = z.infer<typeof runCodeResponseSchema>;
-
-export const submitResultItemSchema = z.object({
-  jobId: z
-    .string()
-    .nullable()
-    .describe('Job ID for this test case. null if the submission failed to enqueue.')
-    .meta({ examples: ['exec-job-abc-123'] }),
-  testCaseIndex: z
-    .number()
-    .describe('Index of the test case in the submitted array')
-    .meta({ examples: [0] }),
-  description: z
-    .string()
-    .optional()
-    .describe('Test case description (echoed from input)')
-    .meta({ examples: ['Basic sorting test'] }),
-  error: z
-    .string()
-    .optional()
-    .describe('Present when the test case failed to enqueue. jobId will be null.')
-    .meta({ examples: ['submission_failed'] }),
-});
-
-export type SubmitResultItem = z.infer<typeof submitResultItemSchema>;
 
 // ── List rooms ─────────────────────────────────────────────────────
 
