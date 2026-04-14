@@ -179,6 +179,24 @@ export async function readApiError(error: unknown): Promise<ErrorResponse | null
   }
 }
 
+export type ApiErrorResult = Awaited<ReturnType<typeof readApiError>>;
+
+export type ErrorKeyMap = Partial<Record<string, string>>;
+
+export function resolveErrorMessage(
+  apiError: ApiErrorResult,
+  errorKeys: ErrorKeyMap,
+  fallbackKey: string,
+  t: (key: string) => string,
+): string {
+  if (!apiError) return t(fallbackKey);
+
+  const i18nKey = apiError.code ? errorKeys[apiError.code] : undefined;
+  if (i18nKey) return t(i18nKey);
+
+  return apiError.message || t(fallbackKey);
+}
+
 export function getFieldErrorMessage(details: Record<string, unknown>, field: string) {
   const value = details[field];
 

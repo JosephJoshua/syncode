@@ -1,6 +1,6 @@
 import { randomBytes, scrypt } from 'node:crypto';
 import { promisify } from 'node:util';
-import { ConflictException, UnauthorizedException } from '@nestjs/common';
+import { UnauthorizedException } from '@nestjs/common';
 import type { ConfigService } from '@nestjs/config';
 import type { JwtService } from '@nestjs/jwt';
 import { ERROR_CODES } from '@syncode/contracts';
@@ -206,23 +206,56 @@ describe('AuthService', () => {
     expect(insertedUserValues.passwordHash).not.toBe('secret123');
   });
 
-  it('GIVEN existing username/email WHEN registering THEN throws conflict', async () => {
+  it('GIVEN existing email WHEN registering THEN throws conflict with AUTH_EMAIL_TAKEN', async () => {
     const { service, mocks } = createAuthServiceFixture();
-    mocks.findFirst.mockResolvedValueOnce({ id: 'existing' });
+    mocks.findFirst.mockResolvedValueOnce({
+      id: 'existing',
+      email: 'alice@example.com',
+      username: 'other',
+    });
 
-    await expect(
-      service.register('alice', 'alice@example.com', 'secret123'),
-    ).rejects.toBeInstanceOf(ConflictException);
+    await expect(service.register('alice', 'alice@example.com', 'secret123')).rejects.toMatchObject(
+      { response: { code: 'AUTH_EMAIL_TAKEN' } },
+    );
   });
 
-  it('GIVEN unique constraint race WHEN registering THEN throws conflict', async () => {
+  it('GIVEN existing username WHEN registering THEN throws conflict with AUTH_USERNAME_TAKEN', async () => {
+    const { service, mocks } = createAuthServiceFixture();
+    mocks.findFirst.mockResolvedValueOnce({
+      id: 'existing',
+      email: 'other@example.com',
+      username: 'alice',
+    });
+
+    await expect(service.register('alice', 'alice@example.com', 'secret123')).rejects.toMatchObject(
+      { response: { code: 'AUTH_USERNAME_TAKEN' } },
+    );
+  });
+
+  it('GIVEN email constraint race WHEN registering THEN throws conflict with AUTH_EMAIL_TAKEN', async () => {
     const { service, mocks } = createAuthServiceFixture();
     mocks.findFirst.mockResolvedValueOnce(null);
-    mocks.usersReturning.mockRejectedValueOnce({ code: '23505' });
+    mocks.usersReturning.mockRejectedValueOnce({
+      code: '23505',
+      constraint: 'users_email_unique',
+    });
 
-    await expect(
-      service.register('alice', 'alice@example.com', 'secret123'),
-    ).rejects.toBeInstanceOf(ConflictException);
+    await expect(service.register('alice', 'alice@example.com', 'secret123')).rejects.toMatchObject(
+      { response: { code: 'AUTH_EMAIL_TAKEN' } },
+    );
+  });
+
+  it('GIVEN username constraint race WHEN registering THEN throws conflict with AUTH_USERNAME_TAKEN', async () => {
+    const { service, mocks } = createAuthServiceFixture();
+    mocks.findFirst.mockResolvedValueOnce(null);
+    mocks.usersReturning.mockRejectedValueOnce({
+      code: '23505',
+      constraint: 'users_username_unique',
+    });
+
+    await expect(service.register('alice', 'alice@example.com', 'secret123')).rejects.toMatchObject(
+      { response: { code: 'AUTH_USERNAME_TAKEN' } },
+    );
   });
 
   it('GIVEN missing user WHEN logging in THEN throws unauthorized with AUTH_INVALID_CREDENTIALS code', async () => {

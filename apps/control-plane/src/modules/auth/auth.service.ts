@@ -63,7 +63,7 @@ export class AuthService {
     const normalizedUsername = username.trim();
 
     const existingUser = await this.db.query.users.findFirst({
-      columns: { id: true },
+      columns: { id: true, email: true, username: true },
       where: (table, { and, eq, isNull, or }) =>
         and(
           isNull(table.deletedAt),
@@ -72,7 +72,16 @@ export class AuthService {
     });
 
     if (existingUser) {
-      throw new ConflictException('Email or username already registered');
+      if (existingUser.email === normalizedEmail) {
+        throw new ConflictException({
+          message: 'Email already registered',
+          code: ERROR_CODES.AUTH_EMAIL_TAKEN,
+        });
+      }
+      throw new ConflictException({
+        message: 'Username already taken',
+        code: ERROR_CODES.AUTH_USERNAME_TAKEN,
+      });
     }
 
     const passwordHash = await this.hashPassword(password);
@@ -109,7 +118,17 @@ export class AuthService {
       };
     } catch (error) {
       if (this.isUniqueConstraintViolation(error)) {
-        throw new ConflictException('Email or username already registered');
+        const constraint = (error as { constraint?: string }).constraint;
+        if (constraint === 'users_email_unique') {
+          throw new ConflictException({
+            message: 'Email already registered',
+            code: ERROR_CODES.AUTH_EMAIL_TAKEN,
+          });
+        }
+        throw new ConflictException({
+          message: 'Username already taken',
+          code: ERROR_CODES.AUTH_USERNAME_TAKEN,
+        });
       }
       throw error;
     }

@@ -1,5 +1,5 @@
 import Editor from '@monaco-editor/react';
-import { CONTROL_API } from '@syncode/contracts';
+import { CONTROL_API, ERROR_CODES } from '@syncode/contracts';
 import type { RoomRole, RoomStatus } from '@syncode/shared';
 import { Badge, Button } from '@syncode/ui';
 import {
@@ -23,7 +23,7 @@ import {
   Group as ResizablePanelGroup,
 } from 'react-resizable-panels';
 import { toast } from 'sonner';
-import { api, readApiError } from '@/lib/api-client.js';
+import { api, readApiError, resolveErrorMessage } from '@/lib/api-client.js';
 import { buildInviteLink } from '@/lib/room-stage.js';
 import { HostControlPanel } from './host-control-panel.js';
 import { InviteLinkInline } from './invite-link-inline.js';
@@ -170,11 +170,9 @@ export function RoomWorkspace({
       cancelPollRef.current = pollExecution(response.jobId);
     } catch (error) {
       const apiError = await readApiError(error);
-      setRunState({
-        status: 'request-error',
-        message: apiError?.message ?? t('workspace.runFailed'),
-      });
-      toast.error(apiError?.message ?? t('workspace.runFailed'));
+      const message = resolveErrorMessage(apiError, RUN_ERROR_KEYS, 'workspace.runFailed', t);
+      setRunState({ status: 'request-error', message });
+      toast.error(message);
     }
   };
 
@@ -502,3 +500,13 @@ function isExecutionResultPayload(
 ): response is Extract<ExecutionPollResponse, { stdout: string }> {
   return 'stdout' in response;
 }
+
+const RUN_ERROR_KEYS: Partial<Record<string, string>> = {
+  [ERROR_CODES.ROOM_EDITOR_LOCKED]: 'workspace.editorLockedError',
+  [ERROR_CODES.ROOM_PERMISSION_DENIED]: 'workspace.permissionDenied',
+  [ERROR_CODES.ROOM_ACCESS_DENIED]: 'workspace.permissionDenied',
+  [ERROR_CODES.PROBLEM_NOT_FOUND]: 'workspace.problemNotFound',
+  [ERROR_CODES.PROBLEM_NO_TEST_CASES]: 'workspace.noProblemTestCases',
+  [ERROR_CODES.EXECUTION_SERVICE_UNAVAILABLE]: 'workspace.executionUnavailable',
+  [ERROR_CODES.EXECUTION_SERVICE_TIMEOUT]: 'workspace.executionTimeout',
+};

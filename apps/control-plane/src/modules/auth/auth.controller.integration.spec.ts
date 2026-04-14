@@ -100,7 +100,7 @@ describe('POST /auth/register', () => {
     );
   });
 
-  it('GIVEN duplicate email WHEN registering THEN returns 409', async () => {
+  it('GIVEN duplicate email WHEN registering THEN returns 409 with AUTH_EMAIL_TAKEN code', async () => {
     const agent = request(app.getHttpServer());
 
     await agent.post('/auth/register').send({
@@ -116,6 +116,26 @@ describe('POST /auth/register', () => {
     });
 
     expect(res.status).toBe(409);
+    expect(res.body.code).toBe('AUTH_EMAIL_TAKEN');
+  });
+
+  it('GIVEN duplicate username WHEN registering THEN returns 409 with AUTH_USERNAME_TAKEN code', async () => {
+    const agent = request(app.getHttpServer());
+
+    await agent.post('/auth/register').send({
+      username: 'alice_sync',
+      email: 'alice@example.com',
+      password: 'secret123',
+    });
+
+    const res = await agent.post('/auth/register').send({
+      username: 'alice_sync',
+      email: 'different@example.com',
+      password: 'secret123',
+    });
+
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe('AUTH_USERNAME_TAKEN');
   });
 });
 

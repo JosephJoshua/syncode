@@ -17,7 +17,7 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { RoomLobby } from '@/components/room-lobby.js';
 import { RoomWorkspace } from '@/components/room-workspace.js';
-import { api, readApiError } from '@/lib/api-client.js';
+import { type ApiErrorResult, api, readApiError, resolveErrorMessage } from '@/lib/api-client.js';
 import { computeRoomElapsedMs, isWorkspaceStage, ROLE_LABEL_KEYS } from '@/lib/room-stage.js';
 import { useAuthStore } from '@/stores/auth.store.js';
 
@@ -171,7 +171,9 @@ function RoomPage() {
       await refreshRoomDetail();
     } catch (error) {
       const apiError = await readApiError(error);
-      toast.error(apiError?.message ?? t('lobby.transitionFailed'));
+      toast.error(
+        resolveErrorMessage(apiError, TRANSITION_ERROR_KEYS, 'lobby.transitionFailed', t),
+      );
     } finally {
       setIsTransitioning(false);
     }
@@ -188,7 +190,9 @@ function RoomPage() {
       toast.success(t('workspace.roleUpdated'));
     } catch (error) {
       const apiError = await readApiError(error);
-      toast.error(apiError?.message ?? t('lobby.roleUpdateFailed'));
+      toast.error(
+        resolveErrorMessage(apiError, ROLE_UPDATE_ERROR_KEYS, 'lobby.roleUpdateFailed', t),
+      );
     } finally {
       setIsUpdatingRole(null);
     }
@@ -213,7 +217,9 @@ function RoomPage() {
       toast.success(t('workspace.transferOwnershipSuccess', { name: displayName }));
     } catch (error) {
       const apiError = await readApiError(error);
-      toast.error(apiError?.message ?? t('workspace.transferOwnershipFailed'));
+      toast.error(
+        resolveErrorMessage(apiError, TRANSFER_ERROR_KEYS, 'workspace.transferOwnershipFailed', t),
+      );
     } finally {
       setIsTransferringOwnership(null);
     }
@@ -347,14 +353,25 @@ const JOIN_ERROR_KEYS: Partial<Record<string, string>> = {
   [ERROR_CODES.ROOM_ROLE_UNAVAILABLE]: 'lobby.roleUnavailable',
 };
 
-function resolveJoinError(
-  apiError: Awaited<ReturnType<typeof readApiError>>,
-  t: (key: string) => string,
-): string {
-  if (!apiError) return t('lobby.joinFailed');
+const TRANSITION_ERROR_KEYS: Partial<Record<string, string>> = {
+  [ERROR_CODES.ROOM_INVALID_TRANSITION]: 'lobby.invalidTransition',
+  [ERROR_CODES.ROOM_NOT_PEER_MODE]: 'lobby.notPeerMode',
+  [ERROR_CODES.ROOM_PERMISSION_DENIED]: 'lobby.accessDenied',
+};
 
-  const i18nKey = apiError.code ? JOIN_ERROR_KEYS[apiError.code] : undefined;
-  if (i18nKey) return t(i18nKey);
+const ROLE_UPDATE_ERROR_KEYS: Partial<Record<string, string>> = {
+  [ERROR_CODES.ROOM_ROLE_CONSTRAINT_VIOLATION]: 'lobby.roleConstraintViolation',
+  [ERROR_CODES.PARTICIPANT_NOT_FOUND]: 'lobby.participantNotFound',
+  [ERROR_CODES.ROOM_PERMISSION_DENIED]: 'lobby.accessDenied',
+  [ERROR_CODES.ROOM_NOT_PEER_MODE]: 'lobby.notPeerMode',
+};
 
-  return apiError.message || t('lobby.joinFailed');
+const TRANSFER_ERROR_KEYS: Partial<Record<string, string>> = {
+  [ERROR_CODES.PARTICIPANT_CANNOT_TRANSFER_OWNERSHIP]: 'workspace.cannotTransferOwnership',
+  [ERROR_CODES.PARTICIPANT_NOT_FOUND]: 'lobby.participantNotFound',
+  [ERROR_CODES.ROOM_PERMISSION_DENIED]: 'lobby.accessDenied',
+};
+
+function resolveJoinError(apiError: ApiErrorResult, t: (key: string) => string): string {
+  return resolveErrorMessage(apiError, JOIN_ERROR_KEYS, 'lobby.joinFailed', t);
 }
