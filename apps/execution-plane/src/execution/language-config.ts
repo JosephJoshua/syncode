@@ -1,5 +1,10 @@
 import type { SupportedLanguage } from '@syncode/shared';
 
+/**
+ * Per-language execution config.
+ * Callers must ensure paths passed to run/compile are built from trusted constants,
+ * not user input — the lambdas use shell interpolation without quoting.
+ */
 export interface LanguageConfig {
   /** File extension including dot, e.g. '.py'. */
   extension: string;
@@ -24,6 +29,7 @@ const CONFIGS: Record<SupportedLanguage, LanguageConfig> = {
   },
   java: {
     extension: '.java',
+    // Java 11+ single-file source-code launcher; no package declarations.
     run: (f) => `java ${f}`,
   },
   cpp: {
