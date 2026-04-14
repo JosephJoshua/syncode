@@ -7,6 +7,7 @@ export interface IExecutionClient {
   getJobStatus(jobId: JobId): Promise<JobStatus>;
   cancel(jobId: JobId): Promise<void>;
   healthCheck(): Promise<boolean>;
+  onResult?(callback: (jobId: string, result: RunCodeResult) => Promise<void>): void;
 }
 
 export const EXECUTION_CLIENT = Symbol.for('EXECUTION_CLIENT');

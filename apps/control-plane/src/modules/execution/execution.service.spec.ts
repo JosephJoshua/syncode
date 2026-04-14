@@ -1,7 +1,9 @@
 import { NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { ERROR_CODES, EXECUTION_CLIENT } from '@syncode/contracts';
+import { CACHE_SERVICE } from '@syncode/shared/ports';
 import { describe, expect, it, vi } from 'vitest';
+import { InMemoryCacheService } from '@/test/in-memory-cache.service.js';
 import { createMockExecutionClient } from '@/test/mock-factories.js';
 import { DB_CLIENT } from '../db/db.module.js';
 import { ExecutionService } from './execution.service.js';
@@ -109,6 +111,7 @@ describe('ExecutionService', () => {
           useValue: mockDb.db,
         },
         { provide: EXECUTION_CLIENT, useValue: createMockExecutionClient() },
+        { provide: CACHE_SERVICE, useValue: new InMemoryCacheService() },
       ],
     }).compile();
 
@@ -171,6 +174,7 @@ describe('ExecutionService', () => {
           useValue: mockDb.db,
         },
         { provide: EXECUTION_CLIENT, useValue: createMockExecutionClient() },
+        { provide: CACHE_SERVICE, useValue: new InMemoryCacheService() },
       ],
     }).compile();
 

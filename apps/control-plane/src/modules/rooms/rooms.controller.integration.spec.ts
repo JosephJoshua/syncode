@@ -5,12 +5,13 @@ import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import { COLLAB_CLIENT, EXECUTION_CLIENT } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
-import { MEDIA_SERVICE, STORAGE_SERVICE } from '@syncode/shared/ports';
+import { CACHE_SERVICE, MEDIA_SERVICE, STORAGE_SERVICE } from '@syncode/shared/ports';
 import { ZodValidationPipe } from 'nestjs-zod';
 import request from 'supertest';
 import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard.js';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
 import { ExecutionService } from '@/modules/execution/execution.service.js';
+import { InMemoryCacheService } from '@/test/in-memory-cache.service.js';
 import {
   createTestDb,
   insertParticipant,
@@ -50,6 +51,7 @@ beforeEach(async () => {
       ExecutionService,
       { provide: DB_CLIENT, useValue: db },
       { provide: EXECUTION_CLIENT, useValue: createMockExecutionClient() },
+      { provide: CACHE_SERVICE, useValue: new InMemoryCacheService() },
       { provide: COLLAB_CLIENT, useValue: createMockCollabClient() },
       { provide: MEDIA_SERVICE, useValue: createMockMediaService() },
       { provide: STORAGE_SERVICE, useValue: createMockStorageService() },

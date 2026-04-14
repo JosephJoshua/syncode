@@ -4,6 +4,7 @@ import {
   InternalServerErrorException,
   Logger,
   NotFoundException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import type {
   RunCodeRequest,
@@ -14,9 +15,15 @@ import type {
 import { ERROR_CODES, EXECUTION_CLIENT, type IExecutionClient } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
 import { executionResults, problems, submissions, testCases } from '@syncode/db';
+import { CACHE_SERVICE, type ICacheService } from '@syncode/shared/ports';
 import { and, asc, eq, isNull } from 'drizzle-orm';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
-import type { ExecutionDetailsResult } from './execution.types.js';
+import {
+  EXEC_META_KEY_PREFIX,
+  EXEC_META_TTL_SECONDS,
+  type ExecutionDetailsResult,
+  type JobMeta,
+} from './execution.types.js';
 
 @Injectable()
 export class ExecutionService {
@@ -25,6 +32,7 @@ export class ExecutionService {
   constructor(
     @Inject(DB_CLIENT) private readonly db: Database,
     @Inject(EXECUTION_CLIENT) private readonly executionClient: IExecutionClient,
+    @Inject(CACHE_SERVICE) private readonly cacheService: ICacheService,
   ) {}
 
   async runCode(input: RunCodeRequest): Promise<RunCodeResponse> {
@@ -64,7 +72,7 @@ export class ExecutionService {
     }
 
     if (cases.length === 0) {
-      throw new NotFoundException({
+      throw new UnprocessableEntityException({
         message: 'Problem has no test cases',
         code: ERROR_CODES.PROBLEM_NO_TEST_CASES,
       });
@@ -97,7 +105,17 @@ export class ExecutionService {
           ...(tc.memoryMb != null && { memoryMb: tc.memoryMb }),
         };
 
-        return this.executionClient.submit(request).then(({ jobId }) => {
+        return this.executionClient.submit(request).then(async ({ jobId }) => {
+          const meta: JobMeta = {
+            submissionId: submission.id,
+            testCaseIndex: i,
+            expectedOutput: tc.expectedOutput,
+          };
+          await this.cacheService.set(
+            `${EXEC_META_KEY_PREFIX}${jobId}`,
+            meta,
+            EXEC_META_TTL_SECONDS,
+          );
           this.logger.debug(`Test case ${i} submitted: ${jobId}`);
         });
       }),

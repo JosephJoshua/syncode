@@ -61,6 +61,10 @@ export class QueueExecutionClient implements IExecutionClient, OnModuleInit {
     return this.helper.getJobStatus(EXECUTION_QUEUE, jobId);
   }
 
+  onResult(callback: (jobId: string, result: RunCodeResult) => Promise<void>): void {
+    this.helper.setResultCallback(callback as (jobId: string, data: unknown) => Promise<void>);
+  }
+
   async cancel(_jobId: JobId): Promise<void> {
     throw new NotImplementedException();
   }

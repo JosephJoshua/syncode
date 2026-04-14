@@ -4,12 +4,13 @@ import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import { COLLAB_CLIENT, ERROR_CODES, EXECUTION_CLIENT } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
-import { roomParticipants, rooms, sessionParticipants, sessions } from '@syncode/db';
+import { roomParticipants, rooms, sessionParticipants, sessions, submissions } from '@syncode/db';
 import { INVITE_CODE_LENGTH } from '@syncode/shared';
-import { MEDIA_SERVICE, STORAGE_SERVICE } from '@syncode/shared/ports';
+import { CACHE_SERVICE, MEDIA_SERVICE, STORAGE_SERVICE } from '@syncode/shared/ports';
 import { and, eq } from 'drizzle-orm';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
 import { ExecutionService } from '@/modules/execution/execution.service.js';
+import { InMemoryCacheService } from '@/test/in-memory-cache.service.js';
 import {
   createTestDb,
   insertParticipant,
@@ -47,6 +48,7 @@ beforeEach(async () => {
       ExecutionService,
       { provide: DB_CLIENT, useValue: db },
       { provide: EXECUTION_CLIENT, useValue: mockExecutionClient },
+      { provide: CACHE_SERVICE, useValue: new InMemoryCacheService() },
       { provide: COLLAB_CLIENT, useValue: createMockCollabClient() },
       { provide: MEDIA_SERVICE, useValue: createMockMediaService() },
       { provide: STORAGE_SERVICE, useValue: createMockStorageService() },
@@ -623,6 +625,14 @@ describe('submitProblem', () => {
     });
 
     expect(result.submissionId).toEqual(expect.any(String));
+
+    const [sub] = await db
+      .select()
+      .from(submissions)
+      .where(eq(submissions.id, result.submissionId));
+    expect(sub.totalTestCases).toBe(2);
+    expect(sub.status).toBe('pending');
+    expect(sub.roomId).toBe(room.id);
   });
 });
 

@@ -65,6 +65,10 @@ export class StubExecutionClient implements IExecutionClient {
     return true;
   }
 
+  onResult(_callback: (jobId: string, result: RunCodeResult) => Promise<void>): void {
+    // No-op in stub mode
+  }
+
   private scheduleCompletion(jobId: string, request: RunCodeRequest): void {
     const job = this.jobs.get(jobId);
     if (!job) return;

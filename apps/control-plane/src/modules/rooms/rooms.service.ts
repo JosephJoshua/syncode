@@ -639,8 +639,7 @@ export class RoomsService {
     }
 
     return this.executionService.submitProblem(userId, {
-      code: body.code,
-      language: body.language,
+      ...body,
       problemId: room.problemId,
       roomId,
     });

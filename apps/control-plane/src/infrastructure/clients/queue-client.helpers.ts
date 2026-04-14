@@ -12,6 +12,8 @@ export const RESULT_TTL_SECONDS = 24 * 60 * 60;
  * duplicated result-caching and job-status logic.
  */
 export class QueueClientHelper {
+  private resultCallback?: (jobId: string, data: unknown) => Promise<void>;
+
   constructor(
     private readonly queueService: IQueueService,
     private readonly cacheService: ICacheService,
@@ -36,9 +38,21 @@ export class QueueClientHelper {
           RESULT_TTL_SECONDS,
         );
         this.logger.debug(`Cached ${label} result for job ${job.data.jobId}`);
+
+        if (this.resultCallback) {
+          try {
+            await this.resultCallback(job.data.jobId, job.data);
+          } catch (error) {
+            this.logger.error(`Result callback error for job ${job.data.jobId}`, error);
+          }
+        }
       },
       { concurrency: 10 },
     );
+  }
+
+  setResultCallback(callback: (jobId: string, data: unknown) => Promise<void>): void {
+    this.resultCallback = callback;
   }
 
   /**

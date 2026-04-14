@@ -1,3 +1,12 @@
+export const EXEC_META_TTL_SECONDS = 24 * 60 * 60;
+export const EXEC_META_KEY_PREFIX = 'exec-meta:';
+
+export interface JobMeta {
+  submissionId: string;
+  testCaseIndex: number;
+  expectedOutput: string;
+}
+
 export interface ExecutionTestCaseDetailResult {
   testCaseIndex: number;
   passed: boolean | null;
