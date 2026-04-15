@@ -21,3 +21,10 @@ export {
   type UpdateRoomStateRequest,
   type UpdateRoomStateResponse,
 } from './internal.js';
+export {
+  COLLAB_WS_EVENTS,
+  type CollabWsMessage,
+  type EditorLockEventData,
+  type PhaseChangeEventData,
+  type RoomStateEventData,
+} from './ws-events.js';

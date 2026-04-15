@@ -28,6 +28,7 @@ export interface UpdateRoomStateRequest {
   roomId: string;
   phase: string;
   editorLocked: boolean;
+  changedBy?: string;
 }
 
 export interface UpdateRoomStateResponse {
