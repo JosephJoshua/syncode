@@ -225,6 +225,13 @@ export const roomDetailSchema = z.object({
   timerPaused: z.boolean().describe('Whether the timer is paused'),
   elapsedMs: z.number().int().describe('Total elapsed coding time in ms'),
   editorLocked: z.boolean().describe('Whether the editor is locked'),
+  collabToken: z
+    .string()
+    .optional()
+    .describe(
+      'Collab-plane WebSocket auth token (present for active participants in non-finished rooms)',
+    ),
+  collabUrl: z.string().optional().describe('Collab-plane WebSocket URL'),
 });
 
 export type RoomDetail = z.infer<typeof roomDetailSchema>;

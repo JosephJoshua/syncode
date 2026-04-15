@@ -51,6 +51,8 @@ export interface RoomDetailResult extends RoomBaseResult {
   timerPaused: boolean;
   elapsedMs: number;
   editorLocked: boolean;
+  collabToken?: string;
+  collabUrl?: string;
 }
 
 export interface DestroyRoomResult {

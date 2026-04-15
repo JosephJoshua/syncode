@@ -219,7 +219,24 @@ export class RoomsService {
       throw new NotFoundException({ message: 'Room not found', code: ERROR_CODES.ROOM_NOT_FOUND });
     }
 
-    return this.assembleRoomDetail(room, participantRows, userId);
+    const detail = await this.assembleRoomDetail(room, participantRows, userId);
+
+    if (room.status !== RoomStatus.FINISHED) {
+      const collabToken = await this.jwtService.signAsync({
+        sub: userId,
+        roomId,
+        role: detail.myRole,
+        type: 'collab',
+      });
+
+      return {
+        ...detail,
+        collabToken,
+        collabUrl: this.configService.get('COLLAB_PLANE_URL', { infer: true })!,
+      };
+    }
+
+    return detail;
   }
 
   async joinRoom(roomId: string, userId: string, input: JoinRoomInput): Promise<JoinRoomResult> {
