@@ -178,10 +178,11 @@ function RoomPage() {
   const handleParticipantReady = useCallback((userId: string, isReady: boolean) => {
     setRoom((prev) => {
       if (!prev) return prev;
-      const updated = prev.participants.map((p) => (p.userId === userId ? { ...p, isReady } : p));
-      // Skip re-render if nothing changed
-      if (updated === prev.participants) return prev;
-      return { ...prev, participants: updated };
+      if (!prev.participants.some((p) => p.userId === userId && p.isReady !== isReady)) return prev;
+      return {
+        ...prev,
+        participants: prev.participants.map((p) => (p.userId === userId ? { ...p, isReady } : p)),
+      };
     });
   }, []);
 

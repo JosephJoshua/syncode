@@ -36,7 +36,6 @@ export interface UpdateRoomStateResponse {
 }
 
 export interface BroadcastParticipantReadyRequest {
-  roomId: string;
   userId: string;
   isReady: boolean;
 }
