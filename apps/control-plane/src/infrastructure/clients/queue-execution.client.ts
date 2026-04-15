@@ -29,13 +29,18 @@ import { QueueClientHelper } from './queue-client.helpers.js';
 @Injectable()
 export class QueueExecutionClient implements IExecutionClient, OnModuleInit {
   private readonly logger = new Logger(QueueExecutionClient.name);
-  private readonly helper: QueueClientHelper;
+  private readonly helper: QueueClientHelper<RunCodeResult>;
 
   constructor(
     @Inject(QUEUE_SERVICE) private readonly queueService: IQueueService,
     @Inject(CACHE_SERVICE) readonly cacheService: ICacheService,
   ) {
-    this.helper = new QueueClientHelper(queueService, cacheService, this.logger, 'exec-result:');
+    this.helper = new QueueClientHelper<RunCodeResult>(
+      queueService,
+      cacheService,
+      this.logger,
+      'exec-result:',
+    );
   }
 
   async onModuleInit(): Promise<void> {
@@ -59,6 +64,10 @@ export class QueueExecutionClient implements IExecutionClient, OnModuleInit {
 
   async getJobStatus(jobId: JobId): Promise<JobStatus> {
     return this.helper.getJobStatus(EXECUTION_QUEUE, jobId);
+  }
+
+  onResult(callback: (jobId: string, result: RunCodeResult) => Promise<void>): void {
+    this.helper.setResultCallback(callback);
   }
 
   async cancel(_jobId: JobId): Promise<void> {

@@ -59,6 +59,31 @@ describe('QueueClientHelper', () => {
 
       expect(set).not.toHaveBeenCalled();
     });
+
+    test('GIVEN callback registered WHEN result arrives THEN callback is invoked with jobId and data', async () => {
+      const callback = vi.fn().mockResolvedValue(undefined);
+      helper.setResultCallback(callback);
+
+      await handler({ data: { jobId: 'job-2', stdout: 'world' } } as any);
+
+      expect(callback).toHaveBeenCalledWith('job-2', {
+        jobId: 'job-2',
+        stdout: 'world',
+      });
+    });
+
+    test('GIVEN callback throws WHEN result arrives THEN result is still cached', async () => {
+      const callback = vi.fn().mockRejectedValue(new Error('boom'));
+      helper.setResultCallback(callback);
+
+      await handler({ data: { jobId: 'job-3', stdout: 'ok' } } as any);
+
+      expect(set).toHaveBeenCalledWith(
+        'exec:result:job-3',
+        { jobId: 'job-3', stdout: 'ok' },
+        RESULT_TTL_SECONDS,
+      );
+    });
   });
 
   describe('getResult', () => {

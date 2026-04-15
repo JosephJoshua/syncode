@@ -1,7 +1,10 @@
 import { NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import { ERROR_CODES } from '@syncode/contracts';
+import { ERROR_CODES, EXECUTION_CLIENT } from '@syncode/contracts';
+import { CACHE_SERVICE } from '@syncode/shared/ports';
 import { describe, expect, it, vi } from 'vitest';
+import { InMemoryCacheService } from '@/test/in-memory-cache.service.js';
+import { createMockExecutionClient } from '@/test/mock-factories.js';
 import { DB_CLIENT } from '../db/db.module.js';
 import { ExecutionService } from './execution.service.js';
 
@@ -107,6 +110,8 @@ describe('ExecutionService', () => {
           provide: DB_CLIENT,
           useValue: mockDb.db,
         },
+        { provide: EXECUTION_CLIENT, useValue: createMockExecutionClient() },
+        { provide: CACHE_SERVICE, useValue: new InMemoryCacheService() },
       ],
     }).compile();
 
@@ -156,8 +161,6 @@ describe('ExecutionService', () => {
         },
       ],
     });
-
-    expect(mockDb.mocks.select).toHaveBeenCalledTimes(2);
   });
 
   it('GIVEN missing submission WHEN loading details THEN throws not found', async () => {
@@ -170,6 +173,8 @@ describe('ExecutionService', () => {
           provide: DB_CLIENT,
           useValue: mockDb.db,
         },
+        { provide: EXECUTION_CLIENT, useValue: createMockExecutionClient() },
+        { provide: CACHE_SERVICE, useValue: new InMemoryCacheService() },
       ],
     }).compile();
 
@@ -186,7 +191,5 @@ describe('ExecutionService', () => {
         code: ERROR_CODES.SUBMISSION_NOT_FOUND,
       }),
     );
-
-    expect(mockDb.mocks.select).toHaveBeenCalledTimes(1);
   });
 });

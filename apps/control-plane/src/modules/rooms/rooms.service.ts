@@ -16,15 +16,15 @@ import {
   type CreateRoomInput,
   type DestroyDocumentResponse,
   ERROR_CODES,
-  EXECUTION_CLIENT,
   type ICollabClient,
-  type IExecutionClient,
   type JoinRoomInput,
   type ListRoomsQuery,
   type RoleAssignmentReason,
   type RoomConfig,
   type RunCodeRequest,
-  type TestCaseInput,
+  type RunCodeResponse,
+  type SubmitProblemInput,
+  type SubmitResponse,
 } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
 import {
@@ -65,6 +65,7 @@ import { and, asc, desc, eq, gt, inArray, lt, or, sql } from 'drizzle-orm';
 import { resolveAvatarUrls } from '@/common/resolve-avatar-urls.js';
 import type { EnvConfig } from '@/config/env.config.js';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
+import { ExecutionService } from '@/modules/execution/execution.service.js';
 import type {
   CreateRoomResult,
   DestroyRoomResult,
@@ -82,8 +83,7 @@ export class RoomsService {
 
   constructor(
     @Inject(DB_CLIENT) private readonly db: Database,
-    @Inject(EXECUTION_CLIENT)
-    private readonly executionClient: IExecutionClient,
+    private readonly executionService: ExecutionService,
     @Inject(COLLAB_CLIENT)
     private readonly collabClient: ICollabClient,
     @Inject(MEDIA_SERVICE)
@@ -613,57 +613,36 @@ export class RoomsService {
     return { collab, mediaDeleted };
   }
 
-  async runCode(
-    roomId: string,
-    userId: string,
-    request: RunCodeRequest,
-  ): Promise<{ jobId: string }> {
+  async runCode(roomId: string, userId: string, request: RunCodeRequest): Promise<RunCodeResponse> {
     await this.assertRoomCapability(roomId, userId, 'code:run');
-    const { jobId } = await this.executionClient.submit(request);
-    this.logger.debug(`Code execution submitted: ${jobId}`);
-    return { jobId };
+    return this.executionService.runCode(request);
   }
 
   async submitProblem(
     roomId: string,
     userId: string,
-    request: RunCodeRequest,
-    testCases: TestCaseInput[],
-  ): Promise<
-    Array<{ jobId: string | null; testCaseIndex: number; description?: string; error?: string }>
-  > {
+    body: SubmitProblemInput,
+  ): Promise<SubmitResponse> {
     await this.assertRoomCapability(roomId, userId, 'code:submit');
 
-    const submissions = testCases.map((testCase, i) => {
-      const testRequest: RunCodeRequest = {
-        ...request,
-        stdin: testCase.input,
-        timeoutMs: testCase.timeoutMs ?? request.timeoutMs,
-        memoryMb: testCase.memoryMb ?? request.memoryMb,
-      };
+    const [room] = await this.db
+      .select({ problemId: rooms.problemId })
+      .from(rooms)
+      .where(eq(rooms.id, roomId))
+      .limit(1);
 
-      return this.executionClient
-        .submit(testRequest)
-        .then(({ jobId }) => {
-          this.logger.debug(`Test case ${i} submitted: ${jobId}`);
-          return {
-            jobId,
-            testCaseIndex: i,
-            description: testCase.description,
-          };
-        })
-        .catch((error) => {
-          this.logger.error(`Failed to submit test case ${i}`, error);
-          return {
-            jobId: null as string | null,
-            testCaseIndex: i,
-            description: testCase.description,
-            error: 'submission_failed',
-          };
-        });
+    if (!room?.problemId) {
+      throw new NotFoundException({
+        message: 'No problem selected for this room',
+        code: ERROR_CODES.PROBLEM_NOT_FOUND,
+      });
+    }
+
+    return this.executionService.submitProblem(userId, {
+      ...body,
+      problemId: room.problemId,
+      roomId,
     });
-
-    return Promise.all(submissions);
   }
 
   private fetchParticipants(roomId: string) {

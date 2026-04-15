@@ -1,5 +1,11 @@
 import Editor from '@monaco-editor/react';
-import { CONTROL_API } from '@syncode/contracts';
+import type {
+  ExecutionResultResponse,
+  JobStatusResponse,
+  ProblemDetail,
+  RoomDetail,
+} from '@syncode/contracts';
+import { CONTROL_API, ERROR_CODES } from '@syncode/contracts';
 import type { RoomRole, RoomStatus } from '@syncode/shared';
 import { Badge, Button } from '@syncode/ui';
 import {
@@ -23,7 +29,7 @@ import {
   Group as ResizablePanelGroup,
 } from 'react-resizable-panels';
 import { toast } from 'sonner';
-import { api, readApiError } from '@/lib/api-client.js';
+import { api, readApiError, resolveErrorMessage } from '@/lib/api-client.js';
 import { buildInviteLink } from '@/lib/room-stage.js';
 import { HostControlPanel } from './host-control-panel.js';
 import { InviteLinkInline } from './invite-link-inline.js';
@@ -40,14 +46,9 @@ import {
   handleEditorWillMount,
   languageExtension,
   type RunState,
+  toMonacoLanguage,
 } from './room-workspace-utils.js';
 import { StageTransitionOverlay } from './stage-transition-overlay.js';
-
-type RoomDetail = Awaited<ReturnType<typeof api<typeof CONTROL_API.ROOMS.GET>>>;
-type ProblemDetail = Awaited<ReturnType<typeof api<typeof CONTROL_API.PROBLEMS.GET_BY_ID>>>;
-type ExecutionPollResponse = Awaited<
-  ReturnType<typeof api<typeof CONTROL_API.EXECUTION.GET_RESULT>>
->;
 
 interface RoomWorkspaceProps {
   room: RoomDetail;
@@ -104,6 +105,7 @@ export function RoomWorkspace({
   }, [room.problemId, t]);
 
   const language = room.language ?? 'python';
+  const monacoLanguage = toMonacoLanguage(language);
   const [workspaceCode, setWorkspaceCode] = useState(() => getDefaultCode(language));
   const [workspaceInput, setWorkspaceInput] = useState('');
   const [runState, setRunState] = useState<RunState>({ status: 'idle' });
@@ -170,11 +172,9 @@ export function RoomWorkspace({
       cancelPollRef.current = pollExecution(response.jobId);
     } catch (error) {
       const apiError = await readApiError(error);
-      setRunState({
-        status: 'request-error',
-        message: apiError?.message ?? t('workspace.runFailed'),
-      });
-      toast.error(apiError?.message ?? t('workspace.runFailed'));
+      const message = resolveErrorMessage(apiError, RUN_ERROR_KEYS, 'workspace.runFailed', t);
+      setRunState({ status: 'request-error', message });
+      toast.error(message);
     }
   };
 
@@ -320,7 +320,7 @@ export function RoomWorkspace({
                 <div className="flex-1 overflow-hidden">
                   <Editor
                     height="100%"
-                    language={language}
+                    language={monacoLanguage}
                     value={workspaceCode}
                     onChange={handleEditorChange}
                     theme="syncode-dark"
@@ -497,8 +497,16 @@ export function RoomWorkspace({
   );
 }
 
+type ExecutionPollResponse = ExecutionResultResponse | JobStatusResponse;
+
 function isExecutionResultPayload(
   response: ExecutionPollResponse,
-): response is Extract<ExecutionPollResponse, { stdout: string }> {
+): response is ExecutionResultResponse {
   return 'stdout' in response;
 }
+
+const RUN_ERROR_KEYS: Partial<Record<string, string>> = {
+  [ERROR_CODES.ROOM_EDITOR_LOCKED]: 'workspace.editorLockedError',
+  [ERROR_CODES.ROOM_PERMISSION_DENIED]: 'workspace.permissionDenied',
+  [ERROR_CODES.ROOM_ACCESS_DENIED]: 'workspace.permissionDenied',
+};

@@ -26,7 +26,7 @@ import { ExecutionService } from './execution.service.js';
  */
 @ApiTags('execution')
 @ApiBearerAuth()
-@ApiExtraModels(ExecutionResultResponseDto, JobStatusResponseDto, ExecutionDetailsResponseDto)
+@ApiExtraModels(ExecutionResultResponseDto, JobStatusResponseDto)
 @UseGuards(JwtAuthGuard)
 @Controller()
 export class ExecutionController {
