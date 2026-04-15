@@ -1,7 +1,8 @@
 import type { BeforeMount } from '@monaco-editor/react';
+import type { ExecutionDetailsResponse } from '@syncode/contracts';
 import type { SupportedLanguage } from '@syncode/shared';
-import { Loader2, TerminalSquare } from 'lucide-react';
-import { useTranslation } from 'react-i18next';
+import { Loader2 } from 'lucide-react';
+import { buildLineDiff } from '@/lib/line-diff.js';
 
 const MONACO_LANGUAGE_MAP: Record<SupportedLanguage, string> = {
   python: 'python',
@@ -18,10 +19,27 @@ export function toMonacoLanguage(language: SupportedLanguage): string {
   return MONACO_LANGUAGE_MAP[language];
 }
 
-export type RunState =
+export type SubmitState =
   | { status: 'idle' }
   | { status: 'submitting' }
-  | { status: 'queued' | 'running'; jobId: string }
+  | { status: 'polling'; submissionId: string }
+  | { status: 'completed'; submissionId: string; details: ExecutionDetailsResponse }
+  | { status: 'request-error'; message: string };
+
+export const EXECUTION_POLL_INTERVAL_MS = 1_200;
+export const SUBMISSION_POLL_INTERVAL_MS = 1_500;
+
+export interface TestCaseEntry {
+  id: string;
+  input: string;
+  expectedOutput: string | null;
+  label: string;
+  fromProblem: boolean;
+}
+
+export type CaseRunState =
+  | { status: 'queued' }
+  | { status: 'running'; jobId: string }
   | {
       status: 'completed' | 'failed';
       jobId: string;
@@ -29,11 +47,80 @@ export type RunState =
       stderr: string;
       exitCode: number;
       durationMs: number;
+      memoryUsageMb?: number;
+      timedOut: boolean;
       error?: string;
+      passed: boolean | null;
     }
   | { status: 'request-error'; message: string };
 
-export const EXECUTION_POLL_INTERVAL_MS = 1_200;
+export type MultiRunState =
+  | { status: 'idle' }
+  | { status: 'running'; results: Map<string, CaseRunState> }
+  | { status: 'completed'; results: Map<string, CaseRunState> }
+  | { status: 'request-error'; message: string };
+
+export function countPassed(results: Map<string, CaseRunState>): {
+  passed: number;
+  total: number;
+} {
+  let passed = 0;
+  let total = 0;
+  for (const state of results.values()) {
+    if (state.status === 'completed' || state.status === 'failed') {
+      total++;
+      if (state.passed === true) passed++;
+    }
+  }
+  return { passed, total };
+}
+
+export function formatMs(value: number | null): string {
+  return value === null ? '--' : `${value}ms`;
+}
+
+export function formatMb(value: number | null): string {
+  return value === null ? '--' : `${value.toFixed(1)}MB`;
+}
+
+export function tabClassName(active: boolean): string {
+  return `flex items-center gap-1.5 border-b-2 px-3 py-1 font-mono text-[10px] transition-colors ${
+    active
+      ? 'border-primary text-foreground/80'
+      : 'border-transparent text-muted-foreground/50 hover:text-muted-foreground/70'
+  }`;
+}
+
+export function LineDiffBlock({
+  expected,
+  actual,
+}: {
+  expected: string | null;
+  actual: string | null;
+}) {
+  const lines = buildLineDiff(expected, actual);
+
+  return (
+    <pre className="max-h-40 overflow-auto rounded border border-border bg-background p-2 font-mono text-[11px] leading-relaxed">
+      {lines.map((line, i) => {
+        const prefix = line.kind === 'same' ? '  ' : line.kind === 'expected' ? '- ' : '+ ';
+        const color =
+          line.kind === 'same'
+            ? 'text-muted-foreground'
+            : line.kind === 'expected'
+              ? 'text-success'
+              : 'text-destructive';
+
+        return (
+          <div key={`${line.kind}-${i}`} className={color}>
+            {prefix}
+            {line.text}
+          </div>
+        );
+      })}
+    </pre>
+  );
+}
 
 export const handleEditorWillMount: BeforeMount = (monaco) => {
   monaco.editor.defineTheme('syncode-dark', {
@@ -132,67 +219,4 @@ export function languageExtension(language: string): string {
     default:
       return 'txt';
   }
-}
-
-export function ExecutionOutput({ runState }: { runState: RunState }) {
-  const { t } = useTranslation('rooms');
-
-  if (runState.status === 'idle') {
-    return (
-      <div className="relative flex flex-col items-center justify-center py-8 text-center">
-        <div className="pointer-events-none dot-grid absolute inset-0 opacity-[0.03]" />
-        <TerminalSquare className="relative mb-2 size-5 text-muted-foreground/20" />
-        <p className="relative font-mono text-xs text-muted-foreground/40">
-          {t('workspace.noOutput')}
-        </p>
-      </div>
-    );
-  }
-
-  if (runState.status === 'submitting' || runState.status === 'queued') {
-    return (
-      <div className="flex items-center gap-2">
-        <span className="font-mono text-xs text-muted-foreground">
-          {t('workspace.executionQueued')}
-        </span>
-        <span className="terminal-cursor" />
-      </div>
-    );
-  }
-
-  if (runState.status === 'running') {
-    return (
-      <div className="flex items-center gap-2">
-        <Loader2 className="size-3 animate-spin text-primary" />
-        <span className="font-mono text-xs text-primary/80">{t('workspace.executionRunning')}</span>
-        <span className="terminal-cursor" />
-      </div>
-    );
-  }
-
-  if (runState.status === 'request-error') {
-    return <p className="font-mono text-xs text-destructive">{runState.message}</p>;
-  }
-
-  if (runState.status !== 'completed' && runState.status !== 'failed') {
-    return <p className="font-mono text-xs text-muted-foreground/60">{t('workspace.noOutput')}</p>;
-  }
-
-  return (
-    <div className="space-y-2">
-      {runState.stdout ? (
-        <pre className="max-h-32 overflow-auto rounded border border-border bg-card p-2.5 font-mono text-xs text-foreground/90">
-          {runState.stdout}
-        </pre>
-      ) : null}
-      {runState.stderr || runState.error ? (
-        <pre className="max-h-24 overflow-auto rounded border border-destructive/20 bg-destructive/5 p-2.5 font-mono text-xs text-destructive">
-          {runState.stderr || runState.error}
-        </pre>
-      ) : null}
-      {!runState.stdout && !runState.stderr && !runState.error ? (
-        <p className="font-mono text-xs text-muted-foreground/60">{t('workspace.emptyStdout')}</p>
-      ) : null}
-    </div>
-  );
 }
