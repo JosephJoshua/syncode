@@ -55,6 +55,7 @@
     "visibilityLabel": "可见性",
     "problemPlaceholder": "输入以搜索并选择题目",
     "languagePlaceholder": "选择语言",
+    "noLanguagesAvailable": "无可用语言",
     "publicRoom": "公开房间",
     "publicRoomDescription": "任何拥有链接的人都可以直接加入",
     "button": "创建协作房间",

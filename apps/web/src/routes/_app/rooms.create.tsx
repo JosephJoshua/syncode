@@ -287,6 +287,7 @@ function CreateRoomPage() {
                       onValueChange={field.onChange}
                       labelOverrides={LANGUAGE_LABELS}
                       placeholder={t('create.languagePlaceholder')}
+                      emptyPlaceholder={t('create.noLanguagesAvailable')}
                       className={cn(errors.language && 'border-destructive ring-destructive/20')}
                     />
                   )}

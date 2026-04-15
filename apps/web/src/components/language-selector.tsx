@@ -2,9 +2,6 @@ import type { SupportedLanguage } from '@syncode/shared';
 import { cn, Select, SelectContent, SelectItem, SelectTrigger } from '@syncode/ui';
 import { getLanguageSelectorOptions } from './language-selector.data.js';
 
-const DEFAULT_PLACEHOLDER = 'Select language';
-const EMPTY_PLACEHOLDER = 'No languages available';
-
 export interface LanguageSelectorProps {
   value?: SupportedLanguage;
   onValueChange: (value: SupportedLanguage) => void;
@@ -12,6 +9,7 @@ export interface LanguageSelectorProps {
   labelOverrides?: Partial<Record<SupportedLanguage, string>>;
   disabled?: boolean;
   placeholder?: string;
+  emptyPlaceholder?: string;
   className?: string;
 }
 
@@ -21,7 +19,8 @@ export function LanguageSelector({
   languages,
   labelOverrides,
   disabled = false,
-  placeholder = DEFAULT_PLACEHOLDER,
+  placeholder,
+  emptyPlaceholder,
   className,
 }: LanguageSelectorProps) {
   const options = getLanguageSelectorOptions(languages).map((option) => ({
@@ -31,7 +30,7 @@ export function LanguageSelector({
   const selectedOption = value ? (options.find((option) => option.value === value) ?? null) : null;
   const isEmpty = options.length === 0;
   const isDisabled = disabled || isEmpty;
-  const triggerLabel = isEmpty ? EMPTY_PLACEHOLDER : placeholder;
+  const triggerLabel = isEmpty ? emptyPlaceholder : placeholder;
 
   return (
     <Select
