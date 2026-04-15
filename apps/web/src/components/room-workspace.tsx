@@ -542,8 +542,8 @@ export function RoomWorkspace({
               defaultSize={25}
               minSize={10}
               collapsible
-              collapsedSize={5}
-              onResize={(size) => setLeftCollapsed(size.asPercentage <= 5)}
+              collapsedSize="3rem"
+              onResize={(size) => setLeftCollapsed(size.asPercentage < 5)}
             >
               {leftCollapsed ? (
                 <button
@@ -765,8 +765,8 @@ export function RoomWorkspace({
           defaultSize={25}
           minSize={15}
           collapsible
-          collapsedSize={5}
-          onResize={(size) => setRightCollapsed(size.asPercentage <= 5)}
+          collapsedSize="3rem"
+          onResize={(size) => setRightCollapsed(size.asPercentage < 5)}
         >
           {rightCollapsed ? (
             <button
