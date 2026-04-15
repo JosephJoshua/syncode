@@ -417,6 +417,86 @@ export function RoomWorkspace({
     };
   };
 
+  const runCase = async (tc: TestCaseEntry) => {
+    cancelMultiRunRef.current.get(tc.id)?.();
+    const token = { cancelled: false };
+    cancelMultiRunRef.current.set(tc.id, () => {
+      token.cancelled = true;
+    });
+
+    try {
+      const response = await api(CONTROL_API.ROOMS.RUN, {
+        params: { id: roomId },
+        body: { language, code: codeRef.current, stdin: tc.input || undefined },
+      });
+
+      if (token.cancelled) return;
+
+      setMultiRunState((prev) => {
+        if (prev.status !== 'running' && prev.status !== 'completed') return prev;
+        const next = new Map(prev.results);
+        next.set(tc.id, { status: 'running', jobId: response.jobId });
+        return { ...prev, results: next };
+      });
+
+      pollCaseExecution(tc.id, response.jobId, tc.expectedOutput, token);
+    } catch (error) {
+      if (token.cancelled) return;
+      const apiError = await readApiError(error);
+      setMultiRunState((prev) => {
+        if (prev.status !== 'running' && prev.status !== 'completed') return prev;
+        const next = new Map(prev.results);
+        next.set(tc.id, {
+          status: 'request-error',
+          message: apiError?.message ?? t('workspace.runFailed'),
+        });
+        return { ...prev, results: next };
+      });
+    }
+  };
+
+  const handleRunSingleCase = async (caseId: string) => {
+    const tc = testCases.find((c) => c.id === caseId);
+    if (!tc) return;
+
+    setMultiRunState((prev) => {
+      const results =
+        prev.status === 'running' || prev.status === 'completed'
+          ? new Map(prev.results)
+          : new Map<string, CaseRunState>();
+      results.set(caseId, { status: 'queued' });
+      return { status: 'running', results };
+    });
+
+    await runCase(tc);
+  };
+
+  const handleRunCodeRef = useRef(handleRunCode);
+  handleRunCodeRef.current = handleRunCode;
+  const handleSubmitCodeRef = useRef(handleSubmitCode);
+  handleSubmitCodeRef.current = handleSubmitCode;
+
+  const multiRunResults =
+    multiRunState.status === 'running' || multiRunState.status === 'completed'
+      ? multiRunState.results
+      : null;
+  const prevMultiRunStatus = useRef(multiRunState.status);
+  useEffect(() => {
+    if (
+      prevMultiRunStatus.current !== 'completed' &&
+      multiRunState.status === 'completed' &&
+      multiRunResults
+    ) {
+      const { passed, total } = countPassed(multiRunResults);
+      if (passed === total && total > 0) {
+        toast.success(t('workspace.runResultsSummary', { passed, total }));
+      } else {
+        toast(t('workspace.runResultsSummary', { passed, total }));
+      }
+    }
+    prevMultiRunStatus.current = multiRunState.status;
+  }, [multiRunState.status, multiRunResults, t]);
+
   const problemPanelData: ProblemData | null = useMemo(
     () =>
       problem
@@ -466,7 +546,7 @@ export function RoomWorkspace({
         <ResizablePanel defaultSize={room.problemId ? 50 : 75} minSize={20}>
           <ResizablePanelGroup orientation="vertical">
             {/* Editor panel */}
-            <ResizablePanel defaultSize={65} minSize={20}>
+            <ResizablePanel defaultSize={55} minSize={20}>
               <div className="flex h-full flex-col">
                 {/* Editor toolbar */}
                 <div className="flex h-9 shrink-0 items-center justify-between border-b border-border bg-card px-3">
@@ -491,16 +571,33 @@ export function RoomWorkspace({
                       type="button"
                       size="sm"
                       disabled={runDisabled}
-                      onClick={() => void handleRunCode()}
+                      onClick={() => void handleRunCodeRef.current()}
                       className={`h-7 gap-1.5 px-3 text-xs font-medium ${runDisabled ? '' : 'run-glow'}`}
                     >
-                      {isRunBusy ? (
+                      {isMultiRunBusy ? (
                         <Loader2 className="size-3 animate-spin" />
                       ) : (
                         <Play className="size-3 fill-current" />
                       )}
                       {t('workspace.runCode')}
                     </Button>
+                    {canSubmitCode ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        disabled={submitDisabled}
+                        onClick={() => void handleSubmitCodeRef.current()}
+                        className="h-7 gap-1.5 px-3 text-xs font-medium"
+                      >
+                        {isSubmitBusy ? (
+                          <Loader2 className="size-3 animate-spin" />
+                        ) : (
+                          <Send className="size-3" />
+                        )}
+                        {t('workspace.submitCode')}
+                      </Button>
+                    ) : null}
                   </div>
                 </div>
 
@@ -509,82 +606,108 @@ export function RoomWorkspace({
                   <Editor
                     height="100%"
                     language={monacoLanguage}
-                    value={workspaceCode}
+                    defaultValue={codeRef.current}
                     onChange={handleEditorChange}
+                    onMount={handleEditorMount}
                     theme="syncode-dark"
                     beforeMount={handleEditorWillMount}
                     options={editorOptions}
                     loading={EDITOR_LOADING}
                   />
                 </div>
-
-                {/* Collapsible stdin */}
-                <div className="border-t border-border bg-card">
-                  <button
-                    type="button"
-                    onClick={() => setStdinExpanded((prev) => !prev)}
-                    className="flex h-7 w-full items-center gap-1.5 px-3 text-[10px] font-medium uppercase tracking-widest text-muted-foreground transition-colors hover:text-foreground"
-                  >
-                    {stdinExpanded ? <ChevronDown size={10} /> : <ChevronUp size={10} />}
-                    {t('workspace.stdinHeading')}
-                  </button>
-                  {stdinExpanded ? (
-                    <div className="border-t border-border/60">
-                      <textarea
-                        value={workspaceInput}
-                        onChange={(e) => setWorkspaceInput(e.target.value)}
-                        spellCheck={false}
-                        rows={3}
-                        className="w-full resize-none bg-transparent px-3 py-2 font-mono text-xs text-foreground outline-none placeholder:text-muted-foreground/50"
-                        placeholder={t('workspace.stdinPlaceholder')}
-                      />
-                    </div>
-                  ) : null}
-                </div>
               </div>
             </ResizablePanel>
 
-            <ResizableHandle className="h-1 bg-border transition-colors hover:bg-primary/40 active:bg-primary/60" />
+            {/* Test case handle — click to toggle */}
+            <ResizableHandle className="group relative flex h-6 items-center justify-center bg-card transition-colors hover:bg-primary/10">
+              <button
+                type="button"
+                onClick={toggleTestCasePanel}
+                className="flex cursor-pointer items-center gap-1 font-mono text-[10px] uppercase tracking-widest text-muted-foreground/60 transition-colors group-hover:text-foreground"
+              >
+                <ChevronUp size={10} />
+                {t('workspace.inputLabel')}
+              </button>
+            </ResizableHandle>
+
+            {/* Test case panel */}
+            <ResizablePanel
+              panelRef={testCasePanelRef}
+              defaultSize={15}
+              minSize={5}
+              collapsible
+              collapsedSize={0}
+            >
+              <div className="h-full bg-card">
+                <TestCaseEditor
+                  cases={testCases}
+                  activeCaseId={activeCaseId}
+                  onActiveCaseChange={setActiveCaseId}
+                  onCaseInputChange={handleCaseInputChange}
+                  onAddCase={handleAddCase}
+                  onRemoveCase={handleRemoveCase}
+                  readOnly={isEditorReadOnly}
+                />
+              </div>
+            </ResizablePanel>
+
+            {/* Output handle — click to toggle */}
+            <ResizableHandle className="group relative flex h-6 items-center justify-center bg-card transition-colors hover:bg-primary/10">
+              <button
+                type="button"
+                onClick={toggleOutputPanel}
+                className="flex cursor-pointer items-center gap-1 font-mono text-[10px] uppercase tracking-widest text-muted-foreground/60 transition-colors group-hover:text-foreground"
+              >
+                <ChevronUp size={10} />
+                {t('workspace.outputTab')}
+              </button>
+            </ResizableHandle>
 
             {/* Output panel */}
-            <ResizablePanel defaultSize={35} minSize={10}>
+            <ResizablePanel
+              panelRef={outputPanelRef}
+              defaultSize={30}
+              minSize={8}
+              collapsible
+              collapsedSize={0}
+            >
               <div className="flex h-full flex-col">
-                {/* Terminal header */}
-                <div className="flex h-8 shrink-0 items-center gap-2 border-b border-border bg-card px-3">
-                  <div className="flex items-center gap-1.5">
-                    <Circle className="size-2.5 fill-destructive/60 text-destructive/60" />
-                    <Minus className="size-2.5 text-warning/60" />
-                    <X className="size-2.5 text-muted-foreground/40" />
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <TerminalSquare className="size-3 text-muted-foreground/60" />
-                    <span className="font-mono text-[10px] text-muted-foreground/60">
-                      {t('workspace.outputHeading')}
-                    </span>
-                  </div>
-                  {runState.status === 'completed' || runState.status === 'failed' ? (
-                    <div className="ml-auto flex items-center gap-2 text-[10px]">
-                      {runState.status === 'completed' ? (
-                        <span className="flex items-center gap-1 text-success">
-                          <CheckCircle2 size={11} />
-                          {t('workspace.executionComplete')}
-                        </span>
-                      ) : (
-                        <span className="flex items-center gap-1 text-destructive">
-                          <XCircle size={11} />
-                          {t('workspace.executionFailed')}
-                        </span>
-                      )}
-                      <span className="font-mono text-muted-foreground/50">
-                        exit {runState.exitCode} &middot; {runState.durationMs}ms
-                      </span>
-                    </div>
+                <div className="flex h-8 shrink-0 items-center border-b border-border bg-card">
+                  <button
+                    type="button"
+                    onClick={() => setActiveOutputTab('output')}
+                    className={tabClassName(activeOutputTab === 'output')}
+                  >
+                    <TerminalSquare className="size-3" />
+                    {t('workspace.outputTab')}
+                  </button>
+
+                  {canSubmitCode ? (
+                    <button
+                      type="button"
+                      onClick={() => setActiveOutputTab('results')}
+                      className={tabClassName(activeOutputTab === 'results')}
+                    >
+                      <CheckCircle2 className="size-3" />
+                      {t('workspace.resultsTab')}
+                      {isSubmitBusy ? (
+                        <Loader2 className="size-2.5 animate-spin text-primary" />
+                      ) : null}
+                    </button>
                   ) : null}
                 </div>
 
+                {/* Tab content */}
                 <div className="relative flex-1 overflow-auto bg-background p-3">
-                  <div className="pointer-events-none absolute inset-0 scan-lines" />
-                  <ExecutionOutput runState={runState} />
+                  {activeOutputTab === 'output' ? (
+                    <RunResultsPanel
+                      multiRunState={multiRunState}
+                      cases={testCases}
+                      onRunCase={handleRunSingleCase}
+                    />
+                  ) : (
+                    <SubmissionOutput submitState={submitState} />
+                  )}
                 </div>
               </div>
             </ResizablePanel>
@@ -693,8 +816,53 @@ function isExecutionResultPayload(
   return 'stdout' in response;
 }
 
-const RUN_ERROR_KEYS: Partial<Record<string, string>> = {
+function SubmissionOutput({ submitState }: { submitState: SubmitState }) {
+  const { t } = useTranslation('rooms');
+
+  if (submitState.status === 'idle') {
+    return (
+      <div className="relative flex flex-col items-center justify-center py-8 text-center">
+        <div className="pointer-events-none dot-grid absolute inset-0 opacity-[0.03]" />
+        <CheckCircle2 className="relative mb-2 size-5 text-muted-foreground/20" />
+        <p className="relative font-mono text-xs text-muted-foreground/40">
+          {t('workspace.noOutput')}
+        </p>
+      </div>
+    );
+  }
+
+  if (submitState.status === 'submitting') {
+    return (
+      <div className="flex items-center gap-2">
+        <Loader2 className="size-3 animate-spin text-primary" />
+        <span className="font-mono text-xs text-muted-foreground">{t('workspace.submitting')}</span>
+      </div>
+    );
+  }
+
+  if (submitState.status === 'polling') {
+    return (
+      <div className="flex items-center gap-2">
+        <Loader2 className="size-3 animate-spin text-primary" />
+        <span className="font-mono text-xs text-primary/80">
+          {t('workspace.submissionPolling')}
+        </span>
+        <span className="terminal-cursor" />
+      </div>
+    );
+  }
+
+  if (submitState.status === 'request-error') {
+    return <p className="font-mono text-xs text-destructive">{submitState.message}</p>;
+  }
+
+  return <ExecutionDetailsPanel details={submitState.details} />;
+}
+
+const SUBMIT_ERROR_KEYS: Partial<Record<string, string>> = {
   [ERROR_CODES.ROOM_EDITOR_LOCKED]: 'workspace.editorLockedError',
   [ERROR_CODES.ROOM_PERMISSION_DENIED]: 'workspace.permissionDenied',
   [ERROR_CODES.ROOM_ACCESS_DENIED]: 'workspace.permissionDenied',
+  [ERROR_CODES.PROBLEM_NOT_FOUND]: 'workspace.problemNotFound',
+  [ERROR_CODES.PROBLEM_NO_TEST_CASES]: 'workspace.noProblemTestCases',
 };
