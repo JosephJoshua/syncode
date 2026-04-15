@@ -15,6 +15,7 @@ export const roomParticipants = pgTable(
       .references(() => users.id),
     role: roomRoleEnum('role').notNull(),
     isActive: boolean('is_active').notNull().default(true),
+    isReady: boolean('is_ready').notNull().default(false),
     joinedAt: timestamp('joined_at', { withTimezone: true }).notNull().defaultNow(),
     leftAt: timestamp('left_at', { withTimezone: true }),
   },
