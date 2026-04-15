@@ -11,8 +11,8 @@ export const RESULT_TTL_SECONDS = 24 * 60 * 60;
  * enqueue → result-queue → cache pattern. This class extracts the
  * duplicated result-caching and job-status logic.
  */
-export class QueueClientHelper {
-  private resultCallback?: (jobId: string, data: unknown) => Promise<void>;
+export class QueueClientHelper<TResult = unknown> {
+  private resultCallback?: (jobId: string, data: TResult) => Promise<void>;
 
   constructor(
     private readonly queueService: IQueueService,
@@ -24,7 +24,7 @@ export class QueueClientHelper {
   /**
    * Register a processor that caches results arriving on a return queue.
    */
-  processResultQueue<T>(queue: string, label: string): void {
+  processResultQueue<T extends TResult>(queue: string, label: string): void {
     this.queueService.process<T & { jobId: string }>(
       queue,
       async (job) => {
@@ -51,7 +51,7 @@ export class QueueClientHelper {
     );
   }
 
-  setResultCallback(callback: (jobId: string, data: unknown) => Promise<void>): void {
+  setResultCallback(callback: (jobId: string, data: TResult) => Promise<void>): void {
     this.resultCallback = callback;
   }
 

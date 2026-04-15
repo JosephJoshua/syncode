@@ -30,6 +30,7 @@ export class StubExecutionClient implements IExecutionClient {
   private readonly jobs = new Map<string, StubJob>();
   private readonly delayMs: number;
   private readonly failRate: number;
+  private resultCallback?: (jobId: string, result: RunCodeResult) => Promise<void>;
 
   constructor(options: StubExecutionClientOptions = {}) {
     this.delayMs = options.delayMs ?? 800;
@@ -65,8 +66,8 @@ export class StubExecutionClient implements IExecutionClient {
     return true;
   }
 
-  onResult(_callback: (jobId: string, result: RunCodeResult) => Promise<void>): void {
-    // No-op in stub mode
+  onResult(callback: (jobId: string, result: RunCodeResult) => Promise<void>): void {
+    this.resultCallback = callback;
   }
 
   private scheduleCompletion(jobId: string, request: RunCodeRequest): void {
@@ -108,6 +109,8 @@ export class StubExecutionClient implements IExecutionClient {
           timedOut: false,
         };
       }
+
+      this.resultCallback?.(jobId, current.result).catch(() => {});
     }, this.delayMs);
   }
 }
