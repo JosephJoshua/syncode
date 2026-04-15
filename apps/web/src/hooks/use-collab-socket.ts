@@ -55,7 +55,7 @@ export function useCollabSocket({
 
       ws.onopen = () => {
         backoffMs = INITIAL_BACKOFF_MS;
-        ws!.send(JSON.stringify({ event: 'join', data: { roomId } }));
+        ws!.send(JSON.stringify({ type: 'join', data: { roomId } }));
       };
 
       ws.onmessage = (event) => {
