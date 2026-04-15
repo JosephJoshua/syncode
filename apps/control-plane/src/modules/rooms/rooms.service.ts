@@ -847,7 +847,7 @@ export class RoomsService {
     );
 
     // Fire-and-forget collab notification stays outside the transaction.
-    void this.updateCollabRoomState(roomId, targetStatus, editorLocked);
+    void this.updateCollabRoomState(roomId, targetStatus, editorLocked, userId);
 
     return {
       roomId,
@@ -1076,9 +1076,10 @@ export class RoomsService {
     roomId: string,
     phase: RoomStatus,
     editorLocked: boolean,
+    changedBy?: string,
   ): Promise<void> {
     try {
-      await this.collabClient.updateRoomState({ roomId, phase, editorLocked });
+      await this.collabClient.updateRoomState({ roomId, phase, editorLocked, changedBy });
     } catch (error) {
       this.logger.warn(`Failed to update collab room state for room ${roomId}`, error);
     }
