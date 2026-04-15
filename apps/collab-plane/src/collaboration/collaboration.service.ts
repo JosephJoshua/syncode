@@ -96,22 +96,61 @@ export class CollaborationService implements OnModuleDestroy {
   }
 
   async updateRoomState(request: UpdateRoomStateRequest): Promise<UpdateRoomStateResponse> {
-    const { room } = this.roomRegistry.updateRoomState(request.roomId, {
-      phase: request.phase,
-      editorLocked: request.editorLocked,
-    });
+    const { room, previousPhase, previousEditorLocked } = this.roomRegistry.updateRoomState(
+      request.roomId,
+      {
+        phase: request.phase,
+        editorLocked: request.editorLocked,
+      },
+    );
 
+    const now = Date.now();
+
+    // Always broadcast the canonical room-state message
     const roomStateMessage: WsMessage = {
       type: 'room-state',
-      data: {
-        phase: room.phase,
-        editorLocked: room.editorLocked,
-      },
-      timestamp: Date.now(),
+      data: { phase: room.phase, editorLocked: room.editorLocked },
+      timestamp: now,
     };
 
     for (const client of room.clients.values()) {
       client.send(JSON.stringify(roomStateMessage));
+    }
+
+    // Phase changed — broadcast granular event + snapshot
+    if (previousPhase !== request.phase) {
+      const phaseChangeMessage: WsMessage = {
+        type: 'phase-change',
+        data: { phase: request.phase, previousPhase },
+        timestamp: now,
+      };
+
+      for (const client of room.clients.values()) {
+        client.send(JSON.stringify(phaseChangeMessage));
+      }
+
+      void this.snapshotScheduler.takeSnapshot(request.roomId, 'phase_change');
+    }
+
+    // Editor lock changed — broadcast granular event
+    if (previousEditorLocked !== request.editorLocked) {
+      const editorLockMessage: WsMessage = {
+        type: 'editor-lock',
+        data: {
+          locked: request.editorLocked,
+          lockedBy: request.changedBy ?? null,
+        },
+        timestamp: now,
+      };
+
+      for (const client of room.clients.values()) {
+        client.send(JSON.stringify(editorLockMessage));
+      }
+
+      // Lock acquired (false → true) → submission snapshot
+      if (request.editorLocked) {
+        void this.snapshotScheduler.takeSnapshot(request.roomId, 'submission');
+      }
     }
 
     this.logger.debug(

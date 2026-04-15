@@ -181,6 +181,88 @@ describe('CollaborationService', () => {
 
       expect(result).toEqual({ success: true });
     });
+
+    it('GIVEN phase change WHEN updating state THEN takes phase_change snapshot', async () => {
+      const { service, snapshotScheduler } = createFixture();
+      await service.createDocument({ roomId: 'room-1', initialPhase: 'waiting' });
+
+      await service.updateRoomState({
+        roomId: 'room-1',
+        phase: 'coding',
+        editorLocked: false,
+      });
+
+      expect(snapshotScheduler.takeSnapshot).toHaveBeenCalledWith('room-1', 'phase_change');
+    });
+
+    it('GIVEN editorLocked changes false to true WHEN updating state THEN takes submission snapshot', async () => {
+      const { service, snapshotScheduler } = createFixture();
+      await service.createDocument({ roomId: 'room-1', editorLocked: false });
+
+      await service.updateRoomState({
+        roomId: 'room-1',
+        phase: 'coding',
+        editorLocked: true,
+      });
+
+      expect(snapshotScheduler.takeSnapshot).toHaveBeenCalledWith('room-1', 'submission');
+    });
+
+    it('GIVEN same phase WHEN updating state THEN does not take phase_change snapshot', async () => {
+      const { service, snapshotScheduler } = createFixture();
+      await service.createDocument({ roomId: 'room-1', initialPhase: 'coding' });
+
+      await service.updateRoomState({
+        roomId: 'room-1',
+        phase: 'coding',
+        editorLocked: true,
+      });
+
+      expect(snapshotScheduler.takeSnapshot).not.toHaveBeenCalledWith('room-1', 'phase_change');
+    });
+
+    it('GIVEN phase change WHEN updating state THEN broadcasts phase-change event to all clients', async () => {
+      const { service, roomRegistry } = createFixture();
+      await service.createDocument({ roomId: 'room-1', initialPhase: 'waiting' });
+
+      const client = fakeClient();
+      roomRegistry.addClient('room-1', 'user-1', client);
+
+      await service.updateRoomState({
+        roomId: 'room-1',
+        phase: 'coding',
+        editorLocked: false,
+      });
+
+      const calls = (client.send as ReturnType<typeof vi.fn>).mock.calls;
+      const messages = calls.map((c: [string]) => JSON.parse(c[0]));
+      const phaseChangeMsg = messages.find((m: { type: string }) => m.type === 'phase-change');
+      expect(phaseChangeMsg).toBeDefined();
+      expect(phaseChangeMsg.data.phase).toBe('coding');
+      expect(phaseChangeMsg.data.previousPhase).toBe('waiting');
+    });
+
+    it('GIVEN editorLocked changes WHEN updating state THEN broadcasts editor-lock event to all clients', async () => {
+      const { service, roomRegistry } = createFixture();
+      await service.createDocument({ roomId: 'room-1', editorLocked: false });
+
+      const client = fakeClient();
+      roomRegistry.addClient('room-1', 'user-1', client);
+
+      await service.updateRoomState({
+        roomId: 'room-1',
+        phase: 'waiting',
+        editorLocked: true,
+        changedBy: 'host-user',
+      });
+
+      const calls = (client.send as ReturnType<typeof vi.fn>).mock.calls;
+      const messages = calls.map((c: [string]) => JSON.parse(c[0]));
+      const lockMsg = messages.find((m: { type: string }) => m.type === 'editor-lock');
+      expect(lockMsg).toBeDefined();
+      expect(lockMsg.data.locked).toBe(true);
+      expect(lockMsg.data.lockedBy).toBe('host-user');
+    });
   });
 
   describe('room TTL', () => {
