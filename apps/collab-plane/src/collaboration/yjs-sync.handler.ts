@@ -9,6 +9,7 @@ import { YjsDocumentStore } from './yjs-document-store.js';
 
 @Injectable()
 export class YjsSyncHandler {
+  private static readonly SYNC_STEP2 = 1;
   private static readonly SYNC_UPDATE = 2;
 
   private readonly logger = new Logger(YjsSyncHandler.name);
@@ -63,9 +64,11 @@ export class YjsSyncHandler {
       return;
     }
 
-    // Editor lock enforcement: block Yjs Update from restricted users.
+    // Editor lock enforcement: block Yjs writes (SyncStep2 + Update) from restricted users.
+    // Both sub-types apply updates via Y.applyUpdate — blocking only Update would let
+    // a crafted SyncStep2 bypass the lock.
     // message[0] = WsMessageType.SYNC (outer envelope), message[1] = sync sub-type
-    if (message[1] === YjsSyncHandler.SYNC_UPDATE) {
+    if (message[1] === YjsSyncHandler.SYNC_STEP2 || message[1] === YjsSyncHandler.SYNC_UPDATE) {
       const room = this.roomRegistry.getRoom(roomId);
       const client = this.roomRegistry.getClient(roomId, senderUserId);
       if (room && client?.user) {

@@ -22,6 +22,19 @@ function encodeUpdate(update: Uint8Array): Uint8Array {
   return encoding.toUint8Array(encoder);
 }
 
+/**
+ * Encode a raw update as a SyncStep2 message (sub-type 1).
+ * In y-protocols, SyncStep2 and Update both apply via Y.applyUpdate.
+ */
+function encodeSyncStep2(update: Uint8Array): Uint8Array {
+  const encoder = encoding.createEncoder();
+  encoding.writeVarUint(encoder, WsMessageType.SYNC);
+  // SyncStep2 sub-type = 1, followed by the update payload
+  encoding.writeVarUint(encoder, 1);
+  encoding.writeVarUint8Array(encoder, update);
+  return encoding.toUint8Array(encoder);
+}
+
 function fakeClient(userId: string): AuthenticatedClient {
   return {
     user: { sub: userId, roomId: 'room-1', role: 'candidate', type: 'collab', iat: 0, exp: 0 },
@@ -268,6 +281,26 @@ describe('YjsSyncHandler', () => {
       handler.handleSyncMessage('room-1', 'user-1', encodeUpdate(capturedUpdate));
 
       expect(docStore.getDoc('room-1')!.getText('code').toString()).toBe('candidate edit');
+    });
+
+    it('GIVEN locked room WHEN candidate sends SyncStep2 THEN update is silently dropped', () => {
+      const { docStore, roomRegistry, handler } = setup();
+      docStore.createDoc('room-1');
+      roomRegistry.createRoom('room-1', { phase: 'coding', editorLocked: true });
+      const client = fakeClientWithRole('user-1', 'candidate');
+      roomRegistry.addClient('room-1', 'user-1', client);
+
+      const clientDoc = new Y.Doc();
+      let capturedUpdate!: Uint8Array;
+      clientDoc.on('update', (update: Uint8Array) => {
+        capturedUpdate = update;
+      });
+      clientDoc.getText('code').insert(0, 'bypass attempt via SyncStep2');
+      clientDoc.destroy();
+
+      handler.handleSyncMessage('room-1', 'user-1', encodeSyncStep2(capturedUpdate));
+
+      expect(docStore.getDoc('room-1')!.getText('code').toString()).toBe('');
     });
   });
 });

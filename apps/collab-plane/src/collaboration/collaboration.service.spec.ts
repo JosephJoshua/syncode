@@ -263,6 +263,32 @@ describe('CollaborationService', () => {
       expect(lockMsg.data.locked).toBe(true);
       expect(lockMsg.data.lockedBy).toBe('host-user');
     });
+
+    it('GIVEN both phase and lock change WHEN updating state THEN triggers phase_change snapshot but not submission snapshot', async () => {
+      const { service, roomRegistry, snapshotScheduler } = createFixture();
+      await service.createDocument({
+        roomId: 'room-1',
+        initialPhase: 'coding',
+        editorLocked: true,
+      });
+
+      const client = fakeClient();
+      roomRegistry.addClient('room-1', 'user-1', client);
+
+      await service.updateRoomState({
+        roomId: 'room-1',
+        phase: 'wrapup',
+        editorLocked: false,
+      });
+
+      expect(snapshotScheduler.takeSnapshot).toHaveBeenCalledWith('room-1', 'phase_change');
+      expect(snapshotScheduler.takeSnapshot).not.toHaveBeenCalledWith('room-1', 'submission');
+
+      const calls = (client.send as ReturnType<typeof vi.fn>).mock.calls;
+      const messages = calls.map((c: [string]) => JSON.parse(c[0]));
+      expect(messages.some((m: { type: string }) => m.type === 'phase-change')).toBe(true);
+      expect(messages.some((m: { type: string }) => m.type === 'editor-lock')).toBe(true);
+    });
   });
 
   describe('room TTL', () => {

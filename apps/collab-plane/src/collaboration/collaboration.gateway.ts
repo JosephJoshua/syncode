@@ -6,6 +6,7 @@ import {
   SubscribeMessage,
   WebSocketGateway,
 } from '@nestjs/websockets';
+import { COLLAB_WS_EVENTS } from '@syncode/contracts';
 import type { WebSocket } from 'ws';
 import type { AuthenticatedClient } from '../auth/index.js';
 import { WsAuthService } from '../auth/index.js';
@@ -125,7 +126,7 @@ export class CollaborationGateway implements OnGatewayConnection, OnGatewayDisco
 
     const room = this.roomRegistry.getRoom(roomId);
     const roomState: WsMessage = {
-      type: 'room-state',
+      type: COLLAB_WS_EVENTS.ROOM_STATE,
       data: {
         phase: room?.phase ?? 'waiting',
         editorLocked: room?.editorLocked ?? false,
