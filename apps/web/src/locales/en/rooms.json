@@ -226,6 +226,7 @@
     "timerRunning": "Timer is live",
     "timerPaused": "Timer is paused",
     "sessionState": "Session State",
-    "phaseChanged": "Phase changed to {{phase}}"
+    "phaseChanged": "Phase changed to {{phase}}",
+    "sessionHeading": "Session"
   }
 }
