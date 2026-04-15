@@ -1,5 +1,6 @@
-import Editor from '@monaco-editor/react';
+import Editor, { type OnMount } from '@monaco-editor/react';
 import type {
+  ExecutionDetailsResponse,
   ExecutionResultResponse,
   JobStatusResponse,
   ProblemDetail,
@@ -8,18 +9,7 @@ import type {
 import { CONTROL_API, ERROR_CODES } from '@syncode/contracts';
 import type { RoomRole, RoomStatus } from '@syncode/shared';
 import { Badge, Button } from '@syncode/ui';
-import {
-  CheckCircle2,
-  ChevronDown,
-  ChevronUp,
-  Circle,
-  Loader2,
-  Minus,
-  Play,
-  TerminalSquare,
-  X,
-  XCircle,
-} from 'lucide-react';
+import { CheckCircle2, ChevronUp, Loader2, Play, Send, TerminalSquare } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -27,10 +17,12 @@ import {
   Separator as ResizableHandle,
   Panel as ResizablePanel,
   Group as ResizablePanelGroup,
+  usePanelRef,
 } from 'react-resizable-panels';
 import { toast } from 'sonner';
 import { api, readApiError, resolveErrorMessage } from '@/lib/api-client.js';
 import { buildInviteLink } from '@/lib/room-stage.js';
+import { ExecutionDetailsPanel } from './execution-details-panel.js';
 import { HostControlPanel } from './host-control-panel.js';
 import { InviteLinkInline } from './invite-link-inline.js';
 import { RoomHeaderBar } from './room-header-bar.js';
@@ -38,17 +30,24 @@ import { type Participant, RoomParticipantCard } from './room-participant-card.j
 import { type ProblemData, RoomProblemPanel } from './room-problem-panel.js';
 import { RoomStatusBar } from './room-status-bar.js';
 import {
+  type CaseRunState,
+  countPassed,
   EDITOR_LOADING,
   EDITOR_OPTIONS_BASE,
   EXECUTION_POLL_INTERVAL_MS,
-  ExecutionOutput,
   getDefaultCode,
   handleEditorWillMount,
   languageExtension,
-  type RunState,
+  type MultiRunState,
+  SUBMISSION_POLL_INTERVAL_MS,
+  type SubmitState,
+  type TestCaseEntry,
+  tabClassName,
   toMonacoLanguage,
 } from './room-workspace-utils.js';
+import { RunResultsPanel } from './run-results-panel.js';
 import { StageTransitionOverlay } from './stage-transition-overlay.js';
+import { TestCaseEditor } from './testcase-editor.js';
 
 interface RoomWorkspaceProps {
   room: RoomDetail;
@@ -106,24 +105,60 @@ export function RoomWorkspace({
 
   const language = room.language ?? 'python';
   const monacoLanguage = toMonacoLanguage(language);
-  const [workspaceCode, setWorkspaceCode] = useState(() => getDefaultCode(language));
-  const [workspaceInput, setWorkspaceInput] = useState('');
-  const [runState, setRunState] = useState<RunState>({ status: 'idle' });
-  const [stdinExpanded, setStdinExpanded] = useState(false);
-  const cancelPollRef = useRef<(() => void) | null>(null);
+  const testCasePanelRef = usePanelRef();
+  const outputPanelRef = usePanelRef();
+  const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
+  const codeStorageKey = `syncode:code:${roomId}:${language}`;
+  const codeRef = useRef(
+    (() => {
+      try {
+        const saved = localStorage.getItem(codeStorageKey);
+        if (saved) return saved;
+      } catch {}
+      return getDefaultCode(language);
+    })(),
+  );
+  const [submitState, setSubmitState] = useState<SubmitState>({ status: 'idle' });
+  const [activeOutputTab, setActiveOutputTab] = useState<'output' | 'results'>('output');
+  const cancelSubmitPollRef = useRef<(() => void) | null>(null);
+
+  const [testCases, setTestCases] = useState<TestCaseEntry[]>([]);
+  const [activeCaseId, setActiveCaseId] = useState('');
+  const [multiRunState, setMultiRunState] = useState<MultiRunState>({ status: 'idle' });
+  const cancelMultiRunRef = useRef(new Map<string, () => void>());
+  const nextCustomId = useRef(1);
 
   useEffect(() => {
     if (codeInitializedRef.current || !problem) return;
     const starterCode = problem.starterCode?.[language];
     if (starterCode) {
-      setWorkspaceCode(starterCode);
+      codeRef.current = starterCode;
+      editorRef.current?.setValue(starterCode);
+      try {
+        localStorage.setItem(codeStorageKey, starterCode);
+      } catch {}
       codeInitializedRef.current = true;
     }
-  }, [problem, language]);
+  }, [problem, language, codeStorageKey]);
+
+  useEffect(() => {
+    if (!problem) return;
+    const entries: TestCaseEntry[] = problem.testCases.map((tc, i) => ({
+      id: `problem-${i}`,
+      input: tc.input,
+      expectedOutput: tc.expectedOutput,
+      label: t('workspace.testcaseTab', { index: i + 1 }),
+      fromProblem: true,
+    }));
+    setTestCases(entries);
+    if (entries.length > 0) setActiveCaseId(entries[0]?.id ?? '');
+  }, [problem, t]);
 
   useEffect(() => {
     return () => {
-      cancelPollRef.current?.();
+      cancelSubmitPollRef.current?.();
+      for (const cancel of cancelMultiRunRef.current.values()) cancel();
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     };
   }, []);
 
@@ -139,84 +174,237 @@ export function RoomWorkspace({
   );
   const inviteLink = room.roomCode ? buildInviteLink(roomId, room.roomCode) : window.location.href;
 
-  const isRunBusy =
-    runState.status === 'submitting' ||
-    runState.status === 'queued' ||
-    runState.status === 'running';
-  const runDisabled = !canRunCode || isEditorReadOnly || isRunBusy;
+  const canSubmitCode = room.myCapabilities.includes('code:submit') && !!room.problemId;
+
+  const handleAddCase = useCallback(() => {
+    const idx = nextCustomId.current++;
+    const id = `custom-${idx}`;
+    const entry: TestCaseEntry = {
+      id,
+      input: '',
+      expectedOutput: null,
+      label: t('workspace.customCaseTab', { index: idx }),
+      fromProblem: false,
+    };
+    setTestCases((prev) => [...prev, entry]);
+    setActiveCaseId(id);
+  }, [t]);
+
+  const handleRemoveCase = useCallback((id: string) => {
+    setTestCases((prev) => {
+      const next = prev.filter((c) => c.id !== id);
+      // If we removed the active case, select the first remaining
+      setActiveCaseId((activeId) => (activeId === id ? (next[0]?.id ?? '') : activeId));
+      return next;
+    });
+  }, []);
+
+  const handleCaseInputChange = useCallback((id: string, input: string) => {
+    setTestCases((prev) => prev.map((c) => (c.id === id ? { ...c, input } : c)));
+  }, []);
+
+  const isMultiRunBusy = multiRunState.status === 'running';
+  const isSubmitBusy = submitState.status === 'submitting' || submitState.status === 'polling';
+  const runDisabled = !canRunCode || isEditorReadOnly || isMultiRunBusy;
+  const submitDisabled = !canSubmitCode || isEditorReadOnly || isSubmitBusy;
+
+  const toggleTestCasePanel = useCallback(() => {
+    const panel = testCasePanelRef.current;
+    if (!panel) return;
+    if (panel.isCollapsed()) panel.expand();
+    else panel.collapse();
+  }, [testCasePanelRef]);
+
+  const toggleOutputPanel = useCallback(() => {
+    const panel = outputPanelRef.current;
+    if (!panel) return;
+    if (panel.isCollapsed()) panel.expand();
+    else panel.collapse();
+  }, [outputPanelRef]);
 
   const editorOptions = useMemo(
     () => ({ ...EDITOR_OPTIONS_BASE, readOnly: isEditorReadOnly }),
     [isEditorReadOnly],
   );
 
-  const handleEditorChange = useCallback((value: string | undefined) => {
-    if (value !== undefined) setWorkspaceCode(value);
+  const handleEditorMount: OnMount = useCallback((editorInstance, monaco) => {
+    editorRef.current = editorInstance;
+
+    editorInstance.addAction({
+      id: 'syncode-run',
+      label: 'Run Code',
+      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter],
+      run: () => void handleRunCodeRef.current(),
+    });
+
+    editorInstance.addAction({
+      id: 'syncode-submit',
+      label: 'Submit Code',
+      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.Enter],
+      run: () => void handleSubmitCodeRef.current(),
+    });
   }, []);
 
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleEditorChange = useCallback(
+    (value: string | undefined) => {
+      if (value === undefined) return;
+      codeRef.current = value;
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = setTimeout(() => {
+        try {
+          localStorage.setItem(codeStorageKey, value);
+        } catch {}
+      }, 500);
+    },
+    [codeStorageKey],
+  );
+
   const handleRunCode = async () => {
-    cancelPollRef.current?.();
-    setRunState({ status: 'submitting' });
+    for (const cancel of cancelMultiRunRef.current.values()) cancel();
+    cancelMultiRunRef.current.clear();
+    setActiveOutputTab('output');
 
-    try {
-      const response = await api(CONTROL_API.ROOMS.RUN, {
-        params: { id: roomId },
-        body: {
-          language,
-          code: workspaceCode,
-          stdin: workspaceInput || undefined,
-        },
-      });
+    const initialResults = new Map<string, CaseRunState>();
+    for (const tc of testCases) {
+      initialResults.set(tc.id, { status: 'queued' });
+    }
+    setMultiRunState({ status: 'running', results: initialResults });
 
-      setRunState({ status: 'queued', jobId: response.jobId });
-      cancelPollRef.current = pollExecution(response.jobId);
-    } catch (error) {
-      const apiError = await readApiError(error);
-      const message = resolveErrorMessage(apiError, RUN_ERROR_KEYS, 'workspace.runFailed', t);
-      setRunState({ status: 'request-error', message });
-      toast.error(message);
+    for (const tc of testCases) {
+      void runCase(tc);
     }
   };
 
-  const pollExecution = (jobId: string) => {
-    let cancelled = false;
-
+  const pollCaseExecution = (
+    caseId: string,
+    jobId: string,
+    expectedOutput: string | null,
+    token: { cancelled: boolean },
+  ) => {
     const poll = async () => {
       try {
-        const response = await api(CONTROL_API.EXECUTION.GET_RESULT, {
-          params: { jobId },
-        });
-
-        if (cancelled) return;
+        const response = await api(CONTROL_API.EXECUTION.GET_RESULT, { params: { jobId } });
+        if (token.cancelled) return;
 
         if (isExecutionResultPayload(response)) {
-          setRunState({
-            status: response.status,
-            jobId,
-            stdout: response.stdout,
-            stderr: response.stderr,
-            exitCode: response.exitCode,
-            durationMs: response.durationMs,
-            error: response.error,
+          const passed =
+            expectedOutput != null ? response.stdout.trim() === expectedOutput.trim() : null;
+
+          setMultiRunState((prev) => {
+            if (prev.status !== 'running' && prev.status !== 'completed') return prev;
+            const next = new Map(prev.results);
+            next.set(caseId, {
+              status: response.status,
+              jobId,
+              stdout: response.stdout,
+              stderr: response.stderr,
+              exitCode: response.exitCode,
+              durationMs: response.durationMs,
+              memoryUsageMb: response.memoryUsageMb,
+              timedOut: response.timedOut,
+              error: response.error,
+              passed,
+            });
+
+            let allDone = true;
+            for (const s of next.values()) {
+              if (s.status === 'queued' || s.status === 'running') {
+                allDone = false;
+                break;
+              }
+            }
+
+            return { status: allDone ? 'completed' : 'running', results: next } as MultiRunState;
           });
           return;
         }
 
         if (response.status === 'queued' || response.status === 'running') {
-          setRunState({ status: response.status, jobId });
+          setMultiRunState((prev) => {
+            if (prev.status !== 'running' && prev.status !== 'completed') return prev;
+            const current = prev.results.get(caseId);
+            if (current?.status === response.status) return prev;
+            const next = new Map(prev.results);
+            next.set(
+              caseId,
+              response.status === 'queued' ? { status: 'queued' } : { status: 'running', jobId },
+            );
+            return { ...prev, results: next };
+          });
           setTimeout(() => {
-            if (!cancelled) void poll();
+            if (!token.cancelled) void poll();
           }, EXECUTION_POLL_INTERVAL_MS);
           return;
         }
+      } catch (error) {
+        const apiError = await readApiError(error);
+        if (!token.cancelled) {
+          setMultiRunState((prev) => {
+            if (prev.status !== 'running' && prev.status !== 'completed') return prev;
+            const next = new Map(prev.results);
+            next.set(caseId, {
+              status: 'request-error',
+              message: apiError?.message ?? t('workspace.runFailed'),
+            });
+            return { ...prev, results: next };
+          });
+        }
+      }
+    };
 
-        setRunState({ status: 'request-error', message: t('workspace.runFailed') });
+    void poll();
+  };
+
+  const handleSubmitCode = async () => {
+    cancelSubmitPollRef.current?.();
+    setSubmitState({ status: 'submitting' });
+    setActiveOutputTab('results');
+
+    try {
+      const response = await api(CONTROL_API.ROOMS.SUBMIT, {
+        params: { id: roomId },
+        body: { language, code: codeRef.current },
+      });
+
+      setSubmitState({ status: 'polling', submissionId: response.submissionId });
+      cancelSubmitPollRef.current = pollSubmission(response.submissionId);
+    } catch (error) {
+      const apiError = await readApiError(error);
+      const message = resolveErrorMessage(apiError, SUBMIT_ERROR_KEYS, 'workspace.submitFailed', t);
+      setSubmitState({ status: 'request-error', message });
+      toast.error(message);
+    }
+  };
+
+  const pollSubmission = (submissionId: string) => {
+    let cancelled = false;
+
+    const poll = async () => {
+      try {
+        const details: ExecutionDetailsResponse = await api(
+          CONTROL_API.EXECUTION.GET_SUBMISSION_DETAILS,
+          { params: { submissionId } },
+        );
+
+        if (cancelled) return;
+
+        if (details.status === 'completed' || details.status === 'failed') {
+          setSubmitState({ status: 'completed', submissionId, details });
+          return;
+        }
+
+        // Still pending/running — update with latest partial results and keep polling
+        setSubmitState({ status: 'polling', submissionId });
+        setTimeout(() => {
+          if (!cancelled) void poll();
+        }, SUBMISSION_POLL_INTERVAL_MS);
       } catch (error) {
         const apiError = await readApiError(error);
         if (!cancelled) {
-          setRunState({
+          setSubmitState({
             status: 'request-error',
-            message: apiError?.message ?? t('workspace.runFailed'),
+            message: apiError?.message ?? t('workspace.submitFailed'),
           });
         }
       }
