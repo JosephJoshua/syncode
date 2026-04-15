@@ -55,7 +55,6 @@ export class ExecutionService {
         .select({
           input: testCases.input,
           expectedOutput: testCases.expectedOutput,
-          description: testCases.description,
           timeoutMs: testCases.timeoutMs,
           memoryMb: testCases.memoryMb,
         })
@@ -124,12 +123,14 @@ export class ExecutionService {
     const failedCount = results.filter((r) => r.status === 'rejected').length;
     if (failedCount > 0) {
       this.logger.error(`${failedCount}/${cases.length} test case jobs failed to enqueue`);
-    }
 
-    if (failedCount === cases.length) {
+      const enqueuedCount = cases.length - failedCount;
       await this.db
         .update(submissions)
-        .set({ status: 'failed', completedAt: new Date() })
+        .set({
+          totalTestCases: enqueuedCount,
+          ...(enqueuedCount === 0 && { status: 'failed' as const, completedAt: new Date() }),
+        })
         .where(eq(submissions.id, submission.id));
     }
 

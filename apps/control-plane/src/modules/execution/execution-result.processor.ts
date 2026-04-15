@@ -18,7 +18,7 @@ export class ExecutionResultProcessor implements OnModuleInit {
   ) {}
 
   onModuleInit() {
-    this.executionClient.onResult?.(this.handleResult.bind(this));
+    this.executionClient.onResult(this.handleResult.bind(this));
   }
 
   async handleResult(jobId: string, result: RunCodeResult): Promise<void> {
@@ -77,6 +77,8 @@ export class ExecutionResultProcessor implements OnModuleInit {
       FROM agg
       WHERE ${submissions.id} = ${meta.submissionId}
     `);
+
+    await this.cacheService.del(`${EXEC_META_KEY_PREFIX}${jobId}`);
 
     this.logger.debug(
       `Persisted result for job ${jobId} (submission ${meta.submissionId}, case ${meta.testCaseIndex})`,
