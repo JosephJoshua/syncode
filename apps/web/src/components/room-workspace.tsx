@@ -542,16 +542,17 @@ export function RoomWorkspace({
               defaultSize={25}
               minSize={10}
               collapsible
-              collapsedSize={3}
-              onResize={(size) => setLeftCollapsed(size.asPercentage <= 3)}
+              collapsedSize={2}
+              onResize={(size) => setLeftCollapsed(size.asPercentage <= 2)}
             >
               {leftCollapsed ? (
                 <button
                   type="button"
                   onClick={() => leftPanelRef.current?.expand()}
-                  className="flex h-full w-full items-center justify-center bg-card/80"
+                  className="flex h-full w-full cursor-pointer flex-col items-center justify-center gap-2 border-r border-border bg-card/80 transition-colors hover:bg-primary/5"
                 >
-                  <span className="rotate-180 font-mono text-[10px] uppercase tracking-widest text-muted-foreground/60 [writing-mode:vertical-lr]">
+                  <ChevronRight size={14} className="text-muted-foreground/40" />
+                  <span className="rotate-180 font-mono text-[11px] font-medium uppercase tracking-widest text-muted-foreground/60 [writing-mode:vertical-lr]">
                     {t('problem.heading')}
                   </span>
                 </button>
@@ -764,16 +765,17 @@ export function RoomWorkspace({
           defaultSize={25}
           minSize={15}
           collapsible
-          collapsedSize={3}
-          onResize={(size) => setRightCollapsed(size.asPercentage <= 3)}
+          collapsedSize={2}
+          onResize={(size) => setRightCollapsed(size.asPercentage <= 2)}
         >
           {rightCollapsed ? (
             <button
               type="button"
               onClick={() => rightPanelRef.current?.expand()}
-              className="flex h-full w-full items-center justify-center bg-card/80"
+              className="flex h-full w-full cursor-pointer flex-col items-center justify-center gap-2 border-l border-border bg-card/80 transition-colors hover:bg-primary/5"
             >
-              <span className="rotate-180 font-mono text-[10px] uppercase tracking-widest text-muted-foreground/60 [writing-mode:vertical-lr]">
+              <ChevronLeft size={14} className="text-muted-foreground/40" />
+              <span className="rotate-180 font-mono text-[11px] font-medium uppercase tracking-widest text-muted-foreground/60 [writing-mode:vertical-lr]">
                 {t('workspace.sessionHeading')}
               </span>
             </button>
