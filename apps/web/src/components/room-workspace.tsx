@@ -542,7 +542,7 @@ export function RoomWorkspace({
               defaultSize={25}
               minSize={10}
               collapsible
-              collapsedSize="3rem"
+              collapsedSize="2.25rem"
               onResize={(size) => setLeftCollapsed(size.asPercentage < 5)}
             >
               {leftCollapsed ? (
@@ -765,7 +765,7 @@ export function RoomWorkspace({
           defaultSize={25}
           minSize={15}
           collapsible
-          collapsedSize="3rem"
+          collapsedSize="2.25rem"
           onResize={(size) => setRightCollapsed(size.asPercentage < 5)}
         >
           {rightCollapsed ? (
