@@ -38,6 +38,7 @@ export interface ParticipantResult {
   avatarUrl: string | null;
   role: RoomRole;
   isActive: boolean;
+  isReady: boolean;
   joinedAt: Date;
 }
 

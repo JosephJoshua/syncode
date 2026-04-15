@@ -1,5 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type {
+  BroadcastParticipantReadyRequest,
+  BroadcastParticipantReadyResponse,
   CreateDocumentRequest,
   CreateDocumentResponse,
   DestroyDocumentResponse,
@@ -48,6 +50,17 @@ export class HttpCollabClient implements ICollabClient {
         json: request,
       })
       .json<UpdateRoomStateResponse>();
+  }
+
+  async broadcastParticipantReady(
+    roomId: string,
+    request: BroadcastParticipantReadyRequest,
+  ): Promise<BroadcastParticipantReadyResponse> {
+    return this.client
+      .post(buildUrl(COLLAB_INTERNAL.BROADCAST_PARTICIPANT_READY.route, { roomId }), {
+        json: request,
+      })
+      .json<BroadcastParticipantReadyResponse>();
   }
 
   async healthCheck(): Promise<boolean> {

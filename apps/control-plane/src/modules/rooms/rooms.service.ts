@@ -566,6 +566,37 @@ export class RoomsService {
     };
   }
 
+  async toggleReady(roomId: string, userId: string): Promise<RoomDetailResult> {
+    const [participant] = await this.db
+      .select({ isReady: roomParticipants.isReady })
+      .from(roomParticipants)
+      .where(
+        and(
+          eq(roomParticipants.roomId, roomId),
+          eq(roomParticipants.userId, userId),
+          eq(roomParticipants.isActive, true),
+        ),
+      );
+
+    if (!participant) {
+      throw new NotFoundException({
+        message: 'Not a participant of this room',
+        code: ERROR_CODES.PARTICIPANT_NOT_FOUND,
+      });
+    }
+
+    const newReady = !participant.isReady;
+
+    await this.db
+      .update(roomParticipants)
+      .set({ isReady: newReady })
+      .where(and(eq(roomParticipants.roomId, roomId), eq(roomParticipants.userId, userId)));
+
+    void this.broadcastParticipantReady(roomId, userId, newReady);
+
+    return this.getRoom(roomId, userId);
+  }
+
   async destroyRoom(roomId: string, userId: string): Promise<DestroyRoomResult> {
     await this.db.transaction(async (tx) => {
       const [room] = await tx.select().from(rooms).where(eq(rooms.id, roomId)).for('update');
@@ -671,6 +702,7 @@ export class RoomsService {
         avatarUrl: users.avatarUrl,
         role: roomParticipants.role,
         isActive: roomParticipants.isActive,
+        isReady: roomParticipants.isReady,
         joinedAt: roomParticipants.joinedAt,
       })
       .from(roomParticipants)
@@ -802,6 +834,14 @@ export class RoomsService {
       }
 
       await tx.update(rooms).set(roomUpdate).where(eq(rooms.id, roomId));
+
+      // Reset all participants' ready status when leaving the lobby
+      if (lockedStatus === RoomStatus.WAITING) {
+        await tx
+          .update(roomParticipants)
+          .set({ isReady: false })
+          .where(eq(roomParticipants.roomId, roomId));
+      }
 
       if (lockedStatus === RoomStatus.WAITING && targetStatus === RoomStatus.WARMUP) {
         const [session] = await tx
@@ -1099,6 +1139,18 @@ export class RoomsService {
       await this.collabClient.updateRoomState({ roomId, phase, editorLocked, changedBy });
     } catch (error) {
       this.logger.warn(`Failed to update collab room state for room ${roomId}`, error);
+    }
+  }
+
+  private async broadcastParticipantReady(
+    roomId: string,
+    userId: string,
+    isReady: boolean,
+  ): Promise<void> {
+    try {
+      await this.collabClient.broadcastParticipantReady(roomId, { roomId, userId, isReady });
+    } catch (error) {
+      this.logger.warn(`Failed to broadcast participant ready for room ${roomId}`, error);
     }
   }
 

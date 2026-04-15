@@ -40,6 +40,7 @@ export function createMockCollabClient() {
     destroyDocument: vi.fn().mockResolvedValue({ roomId: 'stub', finalSnapshot: undefined }),
     kickUser: vi.fn(),
     updateRoomState: vi.fn().mockResolvedValue({ success: true }),
+    broadcastParticipantReady: vi.fn().mockResolvedValue({ success: true }),
     healthCheck: vi.fn(),
   };
 }

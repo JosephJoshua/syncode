@@ -238,6 +238,19 @@ export class RoomsController {
     return this.roomsService.submitProblem(id, user.id, body);
   }
 
+  @Post(CONTROL_API.ROOMS.TOGGLE_READY.route)
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Toggle ready status' })
+  @ApiParam({ name: 'id', description: 'Room ID (UUID)' })
+  @ApiResponse({ status: 200, type: RoomDetailDto })
+  async toggleReady(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+  ): Promise<RoomDetailDto> {
+    const result = await this.roomsService.toggleReady(id, user.id);
+    return this.serializeRoomDetail(result);
+  }
+
   @Post(CONTROL_API.ROOMS.TRANSITION_PHASE.route)
   @HttpCode(200)
   @ApiOperation({ summary: 'Transition the room stage' })
