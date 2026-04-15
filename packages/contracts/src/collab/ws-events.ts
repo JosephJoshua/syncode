@@ -26,8 +26,15 @@ export interface EditorLockEventData {
   lockedBy: string | null;
 }
 
+/** Sent when a participant toggles their ready status. */
+export interface ParticipantReadyEventData {
+  userId: string;
+  isReady: boolean;
+}
+
 export const COLLAB_WS_EVENTS = {
   ROOM_STATE: 'room-state',
   PHASE_CHANGE: 'phase-change',
   EDITOR_LOCK: 'editor-lock',
+  PARTICIPANT_READY: 'participant-ready',
 } as const;

@@ -35,6 +35,16 @@ export interface UpdateRoomStateResponse {
   success: boolean;
 }
 
+export interface BroadcastParticipantReadyRequest {
+  roomId: string;
+  userId: string;
+  isReady: boolean;
+}
+
+export interface BroadcastParticipantReadyResponse {
+  success: boolean;
+}
+
 export const COLLAB_INTERNAL = {
   CREATE_DOCUMENT: defineRoute<CreateDocumentRequest, CreateDocumentResponse>()(
     'internal/documents',
@@ -52,5 +62,9 @@ export const COLLAB_INTERNAL = {
     'internal/documents/:roomId/state',
     'POST',
   ),
+  BROADCAST_PARTICIPANT_READY: defineRoute<
+    BroadcastParticipantReadyRequest,
+    BroadcastParticipantReadyResponse
+  >()('internal/documents/:roomId/participant-ready', 'POST'),
   HEALTH: defineRoute<void, { status: 'ok' }>()('internal/health', 'GET'),
 };

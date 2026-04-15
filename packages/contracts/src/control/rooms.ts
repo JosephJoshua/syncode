@@ -209,6 +209,7 @@ export const roomParticipantSummarySchema = z.object({
   avatarUrl: z.string().nullable().describe('Avatar URL'),
   role: z.enum(ROOM_ROLES).describe('Participant role'),
   isActive: z.boolean().describe('Whether the participant is currently active in the room'),
+  isReady: z.boolean().describe('Whether the participant has marked themselves as ready'),
   joinedAt: z.iso.datetime().describe('ISO 8601 join timestamp'),
 });
 
