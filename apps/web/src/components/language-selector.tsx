@@ -1,6 +1,6 @@
 import type { SupportedLanguage } from '@syncode/shared';
 import { cn, Select, SelectContent, SelectItem, SelectTrigger } from '@syncode/ui';
-import { getLanguageSelectorOptions } from './language-selector.data';
+import { getLanguageSelectorOptions } from './language-selector.data.js';
 
 const DEFAULT_PLACEHOLDER = 'Select language';
 const EMPTY_PLACEHOLDER = 'No languages available';
