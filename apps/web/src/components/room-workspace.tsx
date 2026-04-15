@@ -9,7 +9,16 @@ import type {
 import { CONTROL_API, ERROR_CODES } from '@syncode/contracts';
 import type { RoomRole, RoomStatus } from '@syncode/shared';
 import { Badge, Button } from '@syncode/ui';
-import { CheckCircle2, Loader2, Play, Send, TerminalSquare } from 'lucide-react';
+import {
+  CheckCircle2,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Loader2,
+  Play,
+  Send,
+  TerminalSquare,
+} from 'lucide-react';
 import { motion } from 'motion/react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -129,6 +138,7 @@ export function RoomWorkspace({
   );
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
+  const [bottomCollapsed, setBottomCollapsed] = useState(false);
   const cancelSubmitPollRef = useRef<(() => void) | null>(null);
 
   const [testCases, setTestCases] = useState<TestCaseEntry[]>([]);
@@ -554,7 +564,17 @@ export function RoomWorkspace({
                 />
               )}
             </ResizablePanel>
-            <ResizableHandle className="w-1 bg-border transition-colors hover:bg-primary/40 active:bg-primary/60" />
+            <ResizableHandle className="group relative w-1 bg-border transition-colors hover:bg-primary/40 active:bg-primary/60">
+              <button
+                type="button"
+                onClick={() =>
+                  leftCollapsed ? leftPanelRef.current?.expand() : leftPanelRef.current?.collapse()
+                }
+                className="absolute top-1/2 -translate-y-1/2 -left-2.5 z-10 flex size-5 items-center justify-center rounded-full border border-border bg-card text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100"
+              >
+                <ChevronLeft size={12} />
+              </button>
+            </ResizableHandle>
           </>
         ) : null}
 
@@ -631,6 +651,18 @@ export function RoomWorkspace({
                     loading={EDITOR_LOADING}
                   />
                 </div>
+
+                {/* Expand bar shown when bottom panel is collapsed */}
+                {bottomCollapsed ? (
+                  <button
+                    type="button"
+                    onClick={() => bottomPanelRef.current?.expand()}
+                    className="flex h-6 shrink-0 cursor-pointer items-center justify-center gap-1 border-t border-border bg-card font-mono text-[10px] uppercase tracking-widest text-muted-foreground/50 transition-colors hover:bg-primary/10 hover:text-foreground"
+                  >
+                    <TerminalSquare size={10} />
+                    {t('workspace.outputTab')}
+                  </button>
+                ) : null}
               </div>
             </ResizablePanel>
 
@@ -644,6 +676,7 @@ export function RoomWorkspace({
               minSize={8}
               collapsible
               collapsedSize={0}
+              onResize={(size) => setBottomCollapsed(size.asPercentage === 0)}
             >
               <div className="flex h-full flex-col bg-card">
                 {/* Integrated tab bar */}
@@ -677,6 +710,13 @@ export function RoomWorkspace({
                       ) : null}
                     </button>
                   ) : null}
+                  <button
+                    type="button"
+                    onClick={() => bottomPanelRef.current?.collapse()}
+                    className="ml-auto mr-2 flex items-center text-muted-foreground/40 transition-colors hover:text-foreground"
+                  >
+                    <ChevronDown size={14} />
+                  </button>
                 </div>
 
                 {/* Tab content */}
@@ -706,7 +746,17 @@ export function RoomWorkspace({
           </ResizablePanelGroup>
         </ResizablePanel>
 
-        <ResizableHandle className="w-1 bg-border transition-colors hover:bg-primary/40 active:bg-primary/60" />
+        <ResizableHandle className="group relative w-1 bg-border transition-colors hover:bg-primary/40 active:bg-primary/60">
+          <button
+            type="button"
+            onClick={() =>
+              rightCollapsed ? rightPanelRef.current?.expand() : rightPanelRef.current?.collapse()
+            }
+            className="absolute top-1/2 -translate-y-1/2 -right-2.5 z-10 flex size-5 items-center justify-center rounded-full border border-border bg-card text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100"
+          >
+            <ChevronRight size={12} />
+          </button>
+        </ResizableHandle>
 
         {/* Right: Session Sidebar */}
         <ResizablePanel
