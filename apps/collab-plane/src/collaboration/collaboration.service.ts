@@ -148,6 +148,17 @@ export class CollaborationService implements OnModuleDestroy {
     return { success: true };
   }
 
+  broadcastParticipantReady(roomId: string, userId: string, isReady: boolean): void {
+    const room = this.roomRegistry.getRoom(roomId);
+    if (!room) return;
+
+    this.broadcastJson(room, {
+      type: COLLAB_WS_EVENTS.PARTICIPANT_READY,
+      data: { userId, isReady },
+      timestamp: Date.now(),
+    });
+  }
+
   /**
    * Fire-and-forget notification to control-plane that a user disconnected.
    * The callback client catches errors internally per its port contract.
