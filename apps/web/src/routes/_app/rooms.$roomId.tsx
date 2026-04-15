@@ -166,7 +166,11 @@ function RoomPage() {
 
   const handleRoomStatePatch = useCallback(
     (patch: Partial<Pick<RoomDetail, 'status' | 'editorLocked'>>) => {
-      setRoom((prev) => (prev ? { ...prev, ...patch } : prev));
+      setRoom((prev) => {
+        if (!prev) return prev;
+        if (patch.status === prev.status && patch.editorLocked === prev.editorLocked) return prev;
+        return { ...prev, ...patch };
+      });
     },
     [],
   );

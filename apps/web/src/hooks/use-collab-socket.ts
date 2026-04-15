@@ -4,6 +4,7 @@ import {
   type EditorLockEventData,
   type PhaseChangeEventData,
   type RoomStateEventData,
+  WsCloseCode,
 } from '@syncode/contracts';
 import type { RoomStatus } from '@syncode/shared';
 import { ROOM_STATUS_LABELS } from '@syncode/shared';
@@ -12,10 +13,7 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 
 /** Close codes where reconnection should NOT be attempted. */
-const NO_RECONNECT_CODES = new Set([
-  4002, // Kicked
-  4003, // Room Closed
-]);
+const NO_RECONNECT_CODES = new Set([WsCloseCode.KICKED, WsCloseCode.ROOM_CLOSED]);
 
 const INITIAL_BACKOFF_MS = 1000;
 const MAX_BACKOFF_MS = 30_000;

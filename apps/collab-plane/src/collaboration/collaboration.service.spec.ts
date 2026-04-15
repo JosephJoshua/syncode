@@ -1,5 +1,5 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
-import type { IControlPlaneCallbackClient } from '@syncode/contracts';
+import { COLLAB_WS_EVENTS, type IControlPlaneCallbackClient } from '@syncode/contracts';
 import { describe, expect, it, vi } from 'vitest';
 import type { AuthenticatedClient } from '../auth/index.js';
 import type { AwarenessHandler } from './awareness.handler.js';
@@ -162,7 +162,7 @@ describe('CollaborationService', () => {
       expect(result).toEqual({ success: true });
 
       const sentMessage = JSON.parse((client1.send as ReturnType<typeof vi.fn>).mock.calls[0][0]);
-      expect(sentMessage.type).toBe('room-state');
+      expect(sentMessage.type).toBe(COLLAB_WS_EVENTS.ROOM_STATE);
       expect(sentMessage.data.phase).toBe('coding');
       expect(sentMessage.data.editorLocked).toBe(false);
 
@@ -236,7 +236,9 @@ describe('CollaborationService', () => {
 
       const calls = (client.send as ReturnType<typeof vi.fn>).mock.calls;
       const messages = calls.map((c: [string]) => JSON.parse(c[0]));
-      const phaseChangeMsg = messages.find((m: { type: string }) => m.type === 'phase-change');
+      const phaseChangeMsg = messages.find(
+        (m: { type: string }) => m.type === COLLAB_WS_EVENTS.PHASE_CHANGE,
+      );
       expect(phaseChangeMsg).toBeDefined();
       expect(phaseChangeMsg.data.phase).toBe('coding');
       expect(phaseChangeMsg.data.previousPhase).toBe('waiting');
@@ -258,7 +260,9 @@ describe('CollaborationService', () => {
 
       const calls = (client.send as ReturnType<typeof vi.fn>).mock.calls;
       const messages = calls.map((c: [string]) => JSON.parse(c[0]));
-      const lockMsg = messages.find((m: { type: string }) => m.type === 'editor-lock');
+      const lockMsg = messages.find(
+        (m: { type: string }) => m.type === COLLAB_WS_EVENTS.EDITOR_LOCK,
+      );
       expect(lockMsg).toBeDefined();
       expect(lockMsg.data.locked).toBe(true);
       expect(lockMsg.data.lockedBy).toBe('host-user');
@@ -286,8 +290,12 @@ describe('CollaborationService', () => {
 
       const calls = (client.send as ReturnType<typeof vi.fn>).mock.calls;
       const messages = calls.map((c: [string]) => JSON.parse(c[0]));
-      expect(messages.some((m: { type: string }) => m.type === 'phase-change')).toBe(true);
-      expect(messages.some((m: { type: string }) => m.type === 'editor-lock')).toBe(true);
+      expect(messages.some((m: { type: string }) => m.type === COLLAB_WS_EVENTS.PHASE_CHANGE)).toBe(
+        true,
+      );
+      expect(messages.some((m: { type: string }) => m.type === COLLAB_WS_EVENTS.EDITOR_LOCK)).toBe(
+        true,
+      );
     });
   });
 

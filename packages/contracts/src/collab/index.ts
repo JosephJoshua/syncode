@@ -21,6 +21,7 @@ export {
   type UpdateRoomStateRequest,
   type UpdateRoomStateResponse,
 } from './internal.js';
+export { WsCloseCode } from './ws-close-codes.js';
 export {
   COLLAB_WS_EVENTS,
   type CollabWsMessage,

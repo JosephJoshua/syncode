@@ -18,7 +18,7 @@ import type {
 } from '@syncode/contracts';
 import { COLLAB_WS_EVENTS, CONTROL_PLANE_CALLBACK } from '@syncode/contracts';
 import { AwarenessHandler } from './awareness.handler.js';
-import { RoomRegistry } from './room-registry.js';
+import { type RoomEntry, RoomRegistry } from './room-registry.js';
 import { SnapshotScheduler } from './snapshot.scheduler.js';
 import { WsCloseCode } from './ws-close-codes.js';
 import type { WsMessage } from './ws-message.types.js';
@@ -107,45 +107,33 @@ export class CollaborationService implements OnModuleDestroy {
     const now = Date.now();
 
     // Always broadcast the canonical room-state message
-    const roomStateMessage: WsMessage = {
+    this.broadcastJson(room, {
       type: COLLAB_WS_EVENTS.ROOM_STATE,
       data: { phase: room.phase, editorLocked: room.editorLocked },
       timestamp: now,
-    };
-
-    for (const client of room.clients.values()) {
-      client.send(JSON.stringify(roomStateMessage));
-    }
+    });
 
     // Phase changed — broadcast granular event + snapshot
     if (previousPhase !== request.phase) {
-      const phaseChangeMessage: WsMessage = {
+      this.broadcastJson(room, {
         type: COLLAB_WS_EVENTS.PHASE_CHANGE,
         data: { phase: request.phase, previousPhase },
         timestamp: now,
-      };
-
-      for (const client of room.clients.values()) {
-        client.send(JSON.stringify(phaseChangeMessage));
-      }
+      });
 
       void this.snapshotScheduler.takeSnapshot(request.roomId, 'phase_change');
     }
 
     // Editor lock changed — broadcast granular event
     if (previousEditorLocked !== request.editorLocked) {
-      const editorLockMessage: WsMessage = {
+      this.broadcastJson(room, {
         type: COLLAB_WS_EVENTS.EDITOR_LOCK,
         data: {
           locked: request.editorLocked,
           lockedBy: request.changedBy ?? null,
         },
         timestamp: now,
-      };
-
-      for (const client of room.clients.values()) {
-        client.send(JSON.stringify(editorLockMessage));
-      }
+      });
 
       // Lock acquired (false → true) → submission snapshot
       if (request.editorLocked) {
@@ -181,6 +169,13 @@ export class CollaborationService implements OnModuleDestroy {
       clearTimeout(timer);
       this.roomTtls.delete(roomId);
       this.logger.debug(`Room TTL cancelled for ${roomId} (client reconnected)`);
+    }
+  }
+
+  private broadcastJson(room: RoomEntry, message: WsMessage): void {
+    const serialized = JSON.stringify(message);
+    for (const client of room.clients.values()) {
+      client.send(serialized);
     }
   }
 
