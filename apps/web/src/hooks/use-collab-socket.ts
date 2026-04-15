@@ -2,6 +2,7 @@ import {
   COLLAB_WS_EVENTS,
   type CollabWsMessage,
   type EditorLockEventData,
+  type ParticipantReadyEventData,
   type PhaseChangeEventData,
   type RoomStateEventData,
 } from '@syncode/contracts';
@@ -25,6 +26,7 @@ export interface UseCollabSocketOptions {
   collabToken: string | null;
   roomId: string;
   onRoomStatePatch: (patch: { status?: RoomStatus; editorLocked?: boolean }) => void;
+  onParticipantReady: (userId: string, isReady: boolean) => void;
 }
 
 export function useCollabSocket({
@@ -32,10 +34,13 @@ export function useCollabSocket({
   collabToken,
   roomId,
   onRoomStatePatch,
+  onParticipantReady,
 }: UseCollabSocketOptions): void {
   const { t } = useTranslation('rooms');
   const patchRef = useRef(onRoomStatePatch);
   patchRef.current = onRoomStatePatch;
+  const participantReadyRef = useRef(onParticipantReady);
+  participantReadyRef.current = onParticipantReady;
   const tRef = useRef(t);
   tRef.current = t;
 
@@ -94,6 +99,11 @@ export function useCollabSocket({
             } else {
               toast.info(tRef.current('lobby.editorUnlocked'));
             }
+            break;
+          }
+          case COLLAB_WS_EVENTS.PARTICIPANT_READY: {
+            const data = message.data as ParticipantReadyEventData;
+            participantReadyRef.current(data.userId, data.isReady);
             break;
           }
         }

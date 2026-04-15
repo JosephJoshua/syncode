@@ -99,7 +99,8 @@
     "roleBalance": "{{interviewers}} interviewer · {{candidates}} candidate",
     "editorLocked": "Editor locked",
     "editorUnlocked": "Editor unlocked",
-    "awaitingController": "Waiting for the host or current interviewer to open the workspace."
+    "awaitingController": "Waiting for the host or current interviewer to open the workspace.",
+    "readyFailed": "Failed to update ready status."
   },
   "roleSelect": {
     "heading": "Your Role",

@@ -175,6 +175,16 @@ function RoomPage() {
     [],
   );
 
+  const handleParticipantReady = useCallback((userId: string, isReady: boolean) => {
+    setRoom((prev) => {
+      if (!prev) return prev;
+      const updated = prev.participants.map((p) => (p.userId === userId ? { ...p, isReady } : p));
+      // Skip re-render if nothing changed
+      if (updated === prev.participants) return prev;
+      return { ...prev, participants: updated };
+    });
+  }, []);
+
   // Capture from room detail for the direct-navigation path (no ?code= join).
   // The join path sets the ref earlier from the join response.
   if (room?.collabToken && room?.collabUrl && !collabCredsRef.current) {
@@ -186,6 +196,7 @@ function RoomPage() {
     collabToken: collabCredsRef.current?.collabToken ?? null,
     roomId,
     onRoomStatePatch: handleRoomStatePatch,
+    onParticipantReady: handleParticipantReady,
   });
 
   const canChangePhase = room?.myCapabilities.includes('room:change-phase') ?? false;
@@ -287,6 +298,16 @@ function RoomPage() {
       toast.error(apiError?.message ?? t('workspace.removeParticipantFailed'));
     },
   });
+
+  const handleToggleReady = useCallback(async () => {
+    try {
+      const updated = await api(CONTROL_API.ROOMS.TOGGLE_READY, { params: { id: roomId } });
+      setRoom(updated);
+    } catch (error) {
+      const apiError = await readApiError(error);
+      toast.error(apiError?.message ?? t('lobby.readyFailed'));
+    }
+  }, [roomId, t]);
 
   const confirmRemoveParticipant = () => {
     if (!pendingRemoval || removeParticipantMutation.isPending) return;
@@ -434,6 +455,7 @@ function RoomPage() {
         joinNotice={joinNotice}
         onParticipantRoleChange={handleParticipantRoleChange}
         onTransferOwnership={handleTransferOwnership}
+        onToggleReady={handleToggleReady}
         onTransition={handleTransition}
       />
     </>
