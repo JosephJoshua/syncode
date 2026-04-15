@@ -30,6 +30,17 @@ function fakeClient(userId: string): AuthenticatedClient {
   } as unknown as AuthenticatedClient;
 }
 
+function fakeClientWithRole(
+  userId: string,
+  role: 'interviewer' | 'candidate' | 'observer',
+): AuthenticatedClient {
+  return {
+    user: { sub: userId, roomId: 'room-1', role, type: 'collab', iat: 0, exp: 0 },
+    close: vi.fn(),
+    send: vi.fn(),
+  } as unknown as AuthenticatedClient;
+}
+
 function setup() {
   const docStore = new YjsDocumentStore();
   const roomRegistry = new RoomRegistry();
@@ -174,6 +185,89 @@ describe('YjsSyncHandler', () => {
       const { handler } = setup();
 
       expect(() => handler.registerUpdateBroadcast('room-1')).not.toThrow();
+    });
+  });
+
+  describe('editor lock enforcement', () => {
+    it('GIVEN locked room WHEN candidate sends Yjs update THEN update is silently dropped', () => {
+      const { docStore, roomRegistry, handler } = setup();
+      docStore.createDoc('room-1');
+      roomRegistry.createRoom('room-1', { phase: 'coding', editorLocked: true });
+      const client = fakeClientWithRole('user-1', 'candidate');
+      roomRegistry.addClient('room-1', 'user-1', client);
+
+      const clientDoc = new Y.Doc();
+      let capturedUpdate!: Uint8Array;
+      clientDoc.on('update', (update: Uint8Array) => {
+        capturedUpdate = update;
+      });
+      clientDoc.getText('code').insert(0, 'sneaky edit');
+      clientDoc.destroy();
+
+      handler.handleSyncMessage('room-1', 'user-1', encodeUpdate(capturedUpdate));
+
+      // Doc should NOT have the edit
+      expect(docStore.getDoc('room-1')!.getText('code').toString()).toBe('');
+    });
+
+    it('GIVEN locked room WHEN interviewer sends Yjs update THEN update is applied', () => {
+      const { docStore, roomRegistry, handler } = setup();
+      docStore.createDoc('room-1');
+      roomRegistry.createRoom('room-1', { phase: 'coding', editorLocked: true });
+      const client = fakeClientWithRole('user-1', 'interviewer');
+      roomRegistry.addClient('room-1', 'user-1', client);
+
+      const clientDoc = new Y.Doc();
+      let capturedUpdate!: Uint8Array;
+      clientDoc.on('update', (update: Uint8Array) => {
+        capturedUpdate = update;
+      });
+      clientDoc.getText('code').insert(0, 'interviewer edit');
+      clientDoc.destroy();
+
+      handler.handleSyncMessage('room-1', 'user-1', encodeUpdate(capturedUpdate));
+
+      expect(docStore.getDoc('room-1')!.getText('code').toString()).toBe('interviewer edit');
+    });
+
+    it('GIVEN unlocked room WHEN observer sends Yjs update THEN update is silently dropped', () => {
+      const { docStore, roomRegistry, handler } = setup();
+      docStore.createDoc('room-1');
+      roomRegistry.createRoom('room-1', { phase: 'coding', editorLocked: false });
+      const client = fakeClientWithRole('user-1', 'observer');
+      roomRegistry.addClient('room-1', 'user-1', client);
+
+      const clientDoc = new Y.Doc();
+      let capturedUpdate!: Uint8Array;
+      clientDoc.on('update', (update: Uint8Array) => {
+        capturedUpdate = update;
+      });
+      clientDoc.getText('code').insert(0, 'observer edit');
+      clientDoc.destroy();
+
+      handler.handleSyncMessage('room-1', 'user-1', encodeUpdate(capturedUpdate));
+
+      expect(docStore.getDoc('room-1')!.getText('code').toString()).toBe('');
+    });
+
+    it('GIVEN unlocked room WHEN candidate sends Yjs update THEN update is applied', () => {
+      const { docStore, roomRegistry, handler } = setup();
+      docStore.createDoc('room-1');
+      roomRegistry.createRoom('room-1', { phase: 'coding', editorLocked: false });
+      const client = fakeClientWithRole('user-1', 'candidate');
+      roomRegistry.addClient('room-1', 'user-1', client);
+
+      const clientDoc = new Y.Doc();
+      let capturedUpdate!: Uint8Array;
+      clientDoc.on('update', (update: Uint8Array) => {
+        capturedUpdate = update;
+      });
+      clientDoc.getText('code').insert(0, 'candidate edit');
+      clientDoc.destroy();
+
+      handler.handleSyncMessage('room-1', 'user-1', encodeUpdate(capturedUpdate));
+
+      expect(docStore.getDoc('room-1')!.getText('code').toString()).toBe('candidate edit');
     });
   });
 });

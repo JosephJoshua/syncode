@@ -9,6 +9,8 @@ import { YjsDocumentStore } from './yjs-document-store.js';
 
 @Injectable()
 export class YjsSyncHandler {
+  private static readonly SYNC_UPDATE = 2;
+
   private readonly logger = new Logger(YjsSyncHandler.name);
 
   constructor(
@@ -59,6 +61,22 @@ export class YjsSyncHandler {
     const doc = this.docStore.getDoc(roomId);
     if (!doc) {
       return;
+    }
+
+    // Editor lock enforcement: block Yjs Update from restricted users.
+    // message[0] = WsMessageType.SYNC (outer envelope), message[1] = sync sub-type
+    if (message[1] === YjsSyncHandler.SYNC_UPDATE) {
+      const room = this.roomRegistry.getRoom(roomId);
+      const client = this.roomRegistry.getClient(roomId, senderUserId);
+      if (room && client?.user) {
+        const { role } = client.user;
+        if (role === 'observer' || (room.editorLocked && role === 'candidate')) {
+          this.logger.debug(
+            `Blocked Yjs update from ${role} user ${senderUserId} in room ${roomId} (editorLocked=${room.editorLocked})`,
+          );
+          return;
+        }
+      }
     }
 
     const decoder = decoding.createDecoder(message);
