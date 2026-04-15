@@ -5,12 +5,18 @@ import {
   AvatarImage,
   Badge,
   Button,
+  cn,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
 } from '@syncode/ui';
-import { Crown, Loader2 } from 'lucide-react';
+import { Crown, EllipsisVertical, Loader2, Trash2 } from 'lucide-react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ROLE_LABEL_KEYS } from '@/lib/room-stage.js';
 
@@ -36,8 +42,10 @@ interface RoomParticipantCardProps {
   canManageParticipants: boolean;
   isUpdatingRole: boolean;
   isTransferringOwnership: boolean;
+  isRemovingParticipant?: boolean;
   onRoleChange?: (userId: string, role: RoomRole) => void;
   onTransferOwnership?: (userId: string, displayName: string) => void;
+  onRemoveParticipant?: (userId: string, displayName: string) => void;
   /** Compact mode for the workspace sidebar (no avatar, single line) */
   compact?: boolean;
 }
@@ -49,8 +57,10 @@ export function RoomParticipantCard({
   canManageParticipants,
   isUpdatingRole,
   isTransferringOwnership,
+  isRemovingParticipant = false,
   onRoleChange,
   onTransferOwnership,
+  onRemoveParticipant,
   compact = false,
 }: RoomParticipantCardProps) {
   const { t } = useTranslation('rooms');
@@ -58,6 +68,10 @@ export function RoomParticipantCard({
   const isMe = participant.userId === currentUserId;
   const isHost = participant.userId === roomHostId;
   const initial = displayName.charAt(0).toUpperCase();
+  const showParticipantActions = Boolean(
+    canManageParticipants && !isHost && (onTransferOwnership || onRemoveParticipant),
+  );
+  const [isParticipantMenuOpen, setIsParticipantMenuOpen] = useState(false);
 
   if (compact) {
     return (
@@ -73,26 +87,81 @@ export function RoomParticipantCard({
           </span>
           {isHost ? <Crown className="size-3 shrink-0 text-primary" /> : null}
         </div>
-        <Badge variant={participant.role} className="text-[10px]">
-          {t(ROLE_LABEL_KEYS[participant.role])}
-        </Badge>
-        {isUpdatingRole ? <Loader2 className="size-3 animate-spin text-muted-foreground" /> : null}
-        {canManageParticipants && !isHost && onTransferOwnership ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="xs"
-            className="hidden shrink-0 text-muted-foreground group-hover:inline-flex"
-            disabled={isTransferringOwnership}
-            onClick={() => onTransferOwnership(participant.userId, displayName)}
-          >
-            {isTransferringOwnership ? (
-              <Loader2 className="size-3 animate-spin" />
-            ) : (
-              <Crown className="size-3" />
+        <div className="flex shrink-0 items-center justify-end gap-1.5">
+          <div
+            className={cn(
+              'flex items-center gap-1.5 transition-transform duration-200 ease-out',
+              showParticipantActions &&
+                (isParticipantMenuOpen
+                  ? '-translate-x-0.5'
+                  : 'group-hover:-translate-x-0.5 group-focus-within:-translate-x-0.5'),
             )}
-          </Button>
-        ) : null}
+          >
+            <Badge variant={participant.role} className="text-[10px]">
+              {t(ROLE_LABEL_KEYS[participant.role])}
+            </Badge>
+            {isUpdatingRole ? (
+              <Loader2 className="size-3 animate-spin text-muted-foreground" />
+            ) : null}
+          </div>
+          {showParticipantActions ? (
+            <div
+              className={cn(
+                'overflow-hidden transition-all duration-200 ease-out',
+                isParticipantMenuOpen ? 'w-6' : 'w-0 group-hover:w-6 group-focus-within:w-6',
+              )}
+            >
+              <DropdownMenu open={isParticipantMenuOpen} onOpenChange={setIsParticipantMenuOpen}>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-xs"
+                    className={cn(
+                      'size-6 text-muted-foreground transition-all duration-200 ease-out',
+                      isParticipantMenuOpen
+                        ? 'translate-x-0 opacity-100'
+                        : 'opacity-0 group-hover:translate-x-0 group-hover:opacity-100 group-focus-within:translate-x-0 group-focus-within:opacity-100',
+                    )}
+                    aria-label={t('workspace.participantActions')}
+                  >
+                    <EllipsisVertical className="size-3" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="end"
+                  side="bottom"
+                  className="min-w-40 rounded-xl border-border/60"
+                >
+                  <DropdownMenuItem
+                    disabled={isTransferringOwnership || isRemovingParticipant}
+                    onSelect={() => onTransferOwnership?.(participant.userId, displayName)}
+                  >
+                    {isTransferringOwnership ? (
+                      <Loader2 className="size-3.5 animate-spin text-muted-foreground" />
+                    ) : (
+                      <Crown className="size-3.5 text-muted-foreground" />
+                    )}
+                    {t('workspace.transferOwnership')}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    disabled={
+                      !onRemoveParticipant || isTransferringOwnership || isRemovingParticipant
+                    }
+                    onSelect={() => onRemoveParticipant?.(participant.userId, displayName)}
+                  >
+                    {isRemovingParticipant ? (
+                      <Loader2 className="size-3.5 animate-spin text-muted-foreground" />
+                    ) : (
+                      <Trash2 className="size-3.5 text-muted-foreground" />
+                    )}
+                    {t('workspace.removeParticipant')}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          ) : null}
+        </div>
       </div>
     );
   }
