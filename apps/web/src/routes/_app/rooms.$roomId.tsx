@@ -56,11 +56,11 @@ function RoomPage() {
     displayName: string;
   } | null>(null);
   const [now, setNow] = useState(Date.now());
-  const [collabCreds, setCollabCreds] = useState<{
-    collabToken: string;
-    collabUrl: string;
-  } | null>(null);
   const joinPromiseRef = useRef<Promise<void> | null>(null);
+  // Capture collab credentials once — subsequent polls generate fresh JWTs which would
+  // cause the WebSocket to reconnect on every poll if used directly. The collab JWT has
+  // a 24h lifetime, so the first token is valid for the entire session.
+  const collabCredsRef = useRef<{ collabToken: string; collabUrl: string } | null>(null);
 
   // Tick clock only when the timer is actively running (coding + not paused)
   const timerActive =
@@ -107,7 +107,10 @@ function RoomPage() {
             if (cancelled) return;
 
             setRoom(joined.room);
-            setCollabCreds({ collabToken: joined.collabToken, collabUrl: joined.collabUrl });
+            collabCredsRef.current = {
+              collabToken: joined.collabToken,
+              collabUrl: joined.collabUrl,
+            };
             const notice = buildJoinNotice(joined, t);
             setJoinNotice(notice);
             toast.success(notice);
@@ -168,9 +171,15 @@ function RoomPage() {
     [],
   );
 
+  // Capture from room detail for the direct-navigation path (no ?code= join).
+  // The join path sets the ref earlier from the join response.
+  if (room?.collabToken && room?.collabUrl && !collabCredsRef.current) {
+    collabCredsRef.current = { collabToken: room.collabToken, collabUrl: room.collabUrl };
+  }
+
   useCollabSocket({
-    collabUrl: collabCreds?.collabUrl ?? null,
-    collabToken: collabCreds?.collabToken ?? null,
+    collabUrl: collabCredsRef.current?.collabUrl ?? null,
+    collabToken: collabCredsRef.current?.collabToken ?? null,
     roomId,
     onRoomStatePatch: handleRoomStatePatch,
   });
