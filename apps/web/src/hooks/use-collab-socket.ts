@@ -4,7 +4,6 @@ import {
   type EditorLockEventData,
   type PhaseChangeEventData,
   type RoomStateEventData,
-  WsCloseCode,
 } from '@syncode/contracts';
 import type { RoomStatus } from '@syncode/shared';
 import { ROOM_STATUS_LABELS } from '@syncode/shared';
@@ -12,8 +11,11 @@ import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 
-/** Close codes where reconnection should NOT be attempted. */
-const NO_RECONNECT_CODES = new Set([WsCloseCode.KICKED, WsCloseCode.ROOM_CLOSED]);
+/** Only reconnect on standard close codes (network issues). All 4xxx codes are
+ *  intentional server rejections where retrying won't help. */
+function shouldReconnect(code: number): boolean {
+  return code < 4000;
+}
 
 const INITIAL_BACKOFF_MS = 1000;
 const MAX_BACKOFF_MS = 30_000;
@@ -54,12 +56,14 @@ export function useCollabSocket({
       ws = new WebSocket(url);
 
       ws.onopen = () => {
-        backoffMs = INITIAL_BACKOFF_MS;
         ws!.send(JSON.stringify({ type: 'join', data: { roomId } }));
       };
 
       ws.onmessage = (event) => {
         if (typeof event.data !== 'string') return;
+
+        // First message received means join succeeded — reset backoff
+        backoffMs = INITIAL_BACKOFF_MS;
 
         let message: CollabWsMessage;
         try {
@@ -97,7 +101,7 @@ export function useCollabSocket({
 
       ws.onclose = (event) => {
         ws = null;
-        if (disposed || NO_RECONNECT_CODES.has(event.code)) return;
+        if (disposed || !shouldReconnect(event.code)) return;
 
         reconnectTimer = setTimeout(() => {
           reconnectTimer = null;
