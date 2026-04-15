@@ -85,6 +85,31 @@ describe('RoomRegistry', () => {
     });
   });
 
+  describe('updateRoomState', () => {
+    it('GIVEN existing room WHEN updating state THEN returns updated room and previous values', () => {
+      const registry = new RoomRegistry();
+      registry.createRoom('room-1', { phase: 'waiting', editorLocked: false });
+
+      const result = registry.updateRoomState('room-1', {
+        phase: 'coding',
+        editorLocked: true,
+      });
+
+      expect(result.room.phase).toBe('coding');
+      expect(result.room.editorLocked).toBe(true);
+      expect(result.previousPhase).toBe('waiting');
+      expect(result.previousEditorLocked).toBe(false);
+    });
+
+    it('GIVEN non-existent room WHEN updating state THEN throws NotFoundException', () => {
+      const registry = new RoomRegistry();
+
+      expect(() =>
+        registry.updateRoomState('room-1', { phase: 'coding', editorLocked: false }),
+      ).toThrow(NotFoundException);
+    });
+  });
+
   describe('deleteRoom', () => {
     it('GIVEN existing room WHEN deleting THEN returns true and room is gone', () => {
       const registry = new RoomRegistry();

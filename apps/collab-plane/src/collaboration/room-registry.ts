@@ -9,6 +9,12 @@ export interface RoomEntry {
   clients: Map<string, AuthenticatedClient>;
 }
 
+export interface RoomStateUpdate {
+  room: RoomEntry;
+  previousPhase: string;
+  previousEditorLocked: boolean;
+}
+
 @Injectable()
 export class RoomRegistry {
   private readonly logger = new Logger(RoomRegistry.name);
@@ -52,15 +58,19 @@ export class RoomRegistry {
       phase: string;
       editorLocked: boolean;
     },
-  ): RoomEntry {
+  ): RoomStateUpdate {
     const room = this.rooms.get(roomId);
     if (!room) {
       throw new NotFoundException(`Room ${roomId} not found`);
     }
 
+    const previousPhase = room.phase;
+    const previousEditorLocked = room.editorLocked;
+
     room.phase = state.phase;
     room.editorLocked = state.editorLocked;
-    return room;
+
+    return { room, previousPhase, previousEditorLocked };
   }
 
   deleteRoom(roomId: string): boolean {

@@ -96,7 +96,7 @@ export class CollaborationService implements OnModuleDestroy {
   }
 
   async updateRoomState(request: UpdateRoomStateRequest): Promise<UpdateRoomStateResponse> {
-    const room = this.roomRegistry.updateRoomState(request.roomId, {
+    const { room } = this.roomRegistry.updateRoomState(request.roomId, {
       phase: request.phase,
       editorLocked: request.editorLocked,
     });
