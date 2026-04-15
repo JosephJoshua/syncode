@@ -139,6 +139,7 @@ export function RoomWorkspace({
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
   const [bottomCollapsed, setBottomCollapsed] = useState(false);
+  const rightMountedRef = useRef(false);
   const cancelSubmitPollRef = useRef<(() => void) | null>(null);
 
   const [testCases, setTestCases] = useState<TestCaseEntry[]>([]);
@@ -543,7 +544,7 @@ export function RoomWorkspace({
               minSize={10}
               collapsible
               collapsedSize="2.25rem"
-              onResize={(size) => setLeftCollapsed(size.asPercentage < 5)}
+              onResize={() => setLeftCollapsed(leftPanelRef.current?.isCollapsed() ?? false)}
             >
               {leftCollapsed ? (
                 <button
@@ -573,7 +574,7 @@ export function RoomWorkspace({
                 }
                 className="absolute top-1/2 -translate-y-1/2 -left-2.5 z-10 flex size-5 items-center justify-center rounded-full border border-border bg-card text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100"
               >
-                <ChevronLeft size={12} />
+                {leftCollapsed ? <ChevronRight size={12} /> : <ChevronLeft size={12} />}
               </button>
             </ResizableHandle>
           </>
@@ -677,7 +678,7 @@ export function RoomWorkspace({
               minSize={8}
               collapsible
               collapsedSize={0}
-              onResize={(size) => setBottomCollapsed(size.asPercentage === 0)}
+              onResize={() => setBottomCollapsed(bottomPanelRef.current?.isCollapsed() ?? false)}
             >
               <div className="flex h-full flex-col bg-card">
                 {/* Integrated tab bar */}
@@ -755,7 +756,7 @@ export function RoomWorkspace({
             }
             className="absolute top-1/2 -translate-y-1/2 -right-2.5 z-10 flex size-5 items-center justify-center rounded-full border border-border bg-card text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100"
           >
-            <ChevronRight size={12} />
+            {rightCollapsed ? <ChevronLeft size={12} /> : <ChevronRight size={12} />}
           </button>
         </ResizableHandle>
 
@@ -766,7 +767,7 @@ export function RoomWorkspace({
           minSize={15}
           collapsible
           collapsedSize="2.25rem"
-          onResize={(size) => setRightCollapsed(size.asPercentage < 5)}
+          onResize={() => setRightCollapsed(rightPanelRef.current?.isCollapsed() ?? false)}
         >
           {rightCollapsed ? (
             <button
@@ -782,14 +783,17 @@ export function RoomWorkspace({
           ) : (
             <motion.div
               className="flex h-full flex-col overflow-y-auto bg-card/80 backdrop-blur-sm"
-              initial={{ opacity: 0, x: 16 }}
+              initial={rightMountedRef.current ? false : { opacity: 0, x: 16 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+              onAnimationComplete={() => {
+                rightMountedRef.current = true;
+              }}
             >
               {/* Host control section */}
               <motion.div
                 className="border-b border-border p-3"
-                initial={{ opacity: 0, y: 8 }}
+                initial={rightMountedRef.current ? false : { opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.35, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
               >
@@ -814,7 +818,7 @@ export function RoomWorkspace({
               {/* Participants */}
               <motion.div
                 className="flex-1 border-b border-border p-3"
-                initial={{ opacity: 0, y: 8 }}
+                initial={rightMountedRef.current ? false : { opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.35, delay: 0.2, ease: [0.22, 1, 0.36, 1] }}
               >
@@ -851,7 +855,7 @@ export function RoomWorkspace({
               {/* Invite link */}
               <motion.div
                 className="p-3"
-                initial={{ opacity: 0, y: 8 }}
+                initial={rightMountedRef.current ? false : { opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.35, delay: 0.3, ease: [0.22, 1, 0.36, 1] }}
               >
