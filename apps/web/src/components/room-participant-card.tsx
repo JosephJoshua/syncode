@@ -68,7 +68,9 @@ export function RoomParticipantCard({
   const isMe = participant.userId === currentUserId;
   const isHost = participant.userId === roomHostId;
   const initial = displayName.charAt(0).toUpperCase();
-  const showParticipantActions = Boolean(canManageParticipants && !isHost && onTransferOwnership);
+  const showParticipantActions = Boolean(
+    canManageParticipants && !isHost && (onTransferOwnership || onRemoveParticipant),
+  );
   const [isParticipantMenuOpen, setIsParticipantMenuOpen] = useState(false);
 
   if (compact) {
