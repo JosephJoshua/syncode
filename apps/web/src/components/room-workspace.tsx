@@ -1,5 +1,6 @@
-import Editor from '@monaco-editor/react';
+import Editor, { type OnMount } from '@monaco-editor/react';
 import type {
+  ExecutionDetailsResponse,
   ExecutionResultResponse,
   JobStatusResponse,
   ProblemDetail,
@@ -8,18 +9,7 @@ import type {
 import { CONTROL_API, ERROR_CODES } from '@syncode/contracts';
 import type { RoomRole, RoomStatus } from '@syncode/shared';
 import { Badge, Button } from '@syncode/ui';
-import {
-  CheckCircle2,
-  ChevronDown,
-  ChevronUp,
-  Circle,
-  Loader2,
-  Minus,
-  Play,
-  TerminalSquare,
-  X,
-  XCircle,
-} from 'lucide-react';
+import { CheckCircle2, ChevronUp, Loader2, Play, Send, TerminalSquare } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -27,10 +17,12 @@ import {
   Separator as ResizableHandle,
   Panel as ResizablePanel,
   Group as ResizablePanelGroup,
+  usePanelRef,
 } from 'react-resizable-panels';
 import { toast } from 'sonner';
 import { api, readApiError, resolveErrorMessage } from '@/lib/api-client.js';
 import { buildInviteLink } from '@/lib/room-stage.js';
+import { ExecutionDetailsPanel } from './execution-details-panel.js';
 import { HostControlPanel } from './host-control-panel.js';
 import { InviteLinkInline } from './invite-link-inline.js';
 import { RoomHeaderBar } from './room-header-bar.js';
@@ -38,17 +30,24 @@ import { type Participant, RoomParticipantCard } from './room-participant-card.j
 import { type ProblemData, RoomProblemPanel } from './room-problem-panel.js';
 import { RoomStatusBar } from './room-status-bar.js';
 import {
+  type CaseRunState,
+  countPassed,
   EDITOR_LOADING,
   EDITOR_OPTIONS_BASE,
   EXECUTION_POLL_INTERVAL_MS,
-  ExecutionOutput,
   getDefaultCode,
   handleEditorWillMount,
   languageExtension,
-  type RunState,
+  type MultiRunState,
+  SUBMISSION_POLL_INTERVAL_MS,
+  type SubmitState,
+  type TestCaseEntry,
+  tabClassName,
   toMonacoLanguage,
 } from './room-workspace-utils.js';
+import { RunResultsPanel } from './run-results-panel.js';
 import { StageTransitionOverlay } from './stage-transition-overlay.js';
+import { TestCaseEditor } from './testcase-editor.js';
 
 interface RoomWorkspaceProps {
   room: RoomDetail;
@@ -106,24 +105,60 @@ export function RoomWorkspace({
 
   const language = room.language ?? 'python';
   const monacoLanguage = toMonacoLanguage(language);
-  const [workspaceCode, setWorkspaceCode] = useState(() => getDefaultCode(language));
-  const [workspaceInput, setWorkspaceInput] = useState('');
-  const [runState, setRunState] = useState<RunState>({ status: 'idle' });
-  const [stdinExpanded, setStdinExpanded] = useState(false);
-  const cancelPollRef = useRef<(() => void) | null>(null);
+  const testCasePanelRef = usePanelRef();
+  const outputPanelRef = usePanelRef();
+  const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
+  const codeStorageKey = `syncode:code:${roomId}:${language}`;
+  const codeRef = useRef(
+    (() => {
+      try {
+        const saved = localStorage.getItem(codeStorageKey);
+        if (saved) return saved;
+      } catch {}
+      return getDefaultCode(language);
+    })(),
+  );
+  const [submitState, setSubmitState] = useState<SubmitState>({ status: 'idle' });
+  const [activeOutputTab, setActiveOutputTab] = useState<'output' | 'results'>('output');
+  const cancelSubmitPollRef = useRef<(() => void) | null>(null);
+
+  const [testCases, setTestCases] = useState<TestCaseEntry[]>([]);
+  const [activeCaseId, setActiveCaseId] = useState('');
+  const [multiRunState, setMultiRunState] = useState<MultiRunState>({ status: 'idle' });
+  const cancelMultiRunRef = useRef(new Map<string, () => void>());
+  const nextCustomId = useRef(1);
 
   useEffect(() => {
     if (codeInitializedRef.current || !problem) return;
     const starterCode = problem.starterCode?.[language];
     if (starterCode) {
-      setWorkspaceCode(starterCode);
+      codeRef.current = starterCode;
+      editorRef.current?.setValue(starterCode);
+      try {
+        localStorage.setItem(codeStorageKey, starterCode);
+      } catch {}
       codeInitializedRef.current = true;
     }
-  }, [problem, language]);
+  }, [problem, language, codeStorageKey]);
+
+  useEffect(() => {
+    if (!problem) return;
+    const entries: TestCaseEntry[] = problem.testCases.map((tc, i) => ({
+      id: `problem-${i}`,
+      input: tc.input,
+      expectedOutput: tc.expectedOutput,
+      label: t('workspace.testcaseTab', { index: i + 1 }),
+      fromProblem: true,
+    }));
+    setTestCases(entries);
+    if (entries.length > 0) setActiveCaseId(entries[0]?.id ?? '');
+  }, [problem, t]);
 
   useEffect(() => {
     return () => {
-      cancelPollRef.current?.();
+      cancelSubmitPollRef.current?.();
+      for (const cancel of cancelMultiRunRef.current.values()) cancel();
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     };
   }, []);
 
@@ -139,84 +174,239 @@ export function RoomWorkspace({
   );
   const inviteLink = room.roomCode ? buildInviteLink(roomId, room.roomCode) : window.location.href;
 
-  const isRunBusy =
-    runState.status === 'submitting' ||
-    runState.status === 'queued' ||
-    runState.status === 'running';
-  const runDisabled = !canRunCode || isEditorReadOnly || isRunBusy;
+  const canSubmitCode = room.myCapabilities.includes('code:submit') && !!room.problemId;
+
+  const handleAddCase = useCallback(() => {
+    const idx = nextCustomId.current++;
+    const id = `custom-${idx}`;
+    const entry: TestCaseEntry = {
+      id,
+      input: '',
+      expectedOutput: null,
+      label: t('workspace.customCaseTab', { index: idx }),
+      fromProblem: false,
+    };
+    setTestCases((prev) => [...prev, entry]);
+    setActiveCaseId(id);
+  }, [t]);
+
+  const handleRemoveCase = useCallback((id: string) => {
+    setTestCases((prev) => {
+      const next = prev.filter((c) => c.id !== id);
+      // If we removed the active case, select the first remaining
+      setActiveCaseId((activeId) => (activeId === id ? (next[0]?.id ?? '') : activeId));
+      return next;
+    });
+  }, []);
+
+  const handleCaseInputChange = useCallback((id: string, input: string) => {
+    setTestCases((prev) => prev.map((c) => (c.id === id ? { ...c, input } : c)));
+  }, []);
+
+  const isMultiRunBusy = multiRunState.status === 'running';
+  const isSubmitBusy = submitState.status === 'submitting' || submitState.status === 'polling';
+  const runDisabled = !canRunCode || isEditorReadOnly || isMultiRunBusy;
+  const submitDisabled = !canSubmitCode || isEditorReadOnly || isSubmitBusy;
+
+  const toggleTestCasePanel = useCallback(() => {
+    const panel = testCasePanelRef.current;
+    if (!panel) return;
+    if (panel.isCollapsed()) panel.expand();
+    else panel.collapse();
+  }, [testCasePanelRef]);
+
+  const toggleOutputPanel = useCallback(() => {
+    const panel = outputPanelRef.current;
+    if (!panel) return;
+    if (panel.isCollapsed()) panel.expand();
+    else panel.collapse();
+  }, [outputPanelRef]);
 
   const editorOptions = useMemo(
     () => ({ ...EDITOR_OPTIONS_BASE, readOnly: isEditorReadOnly }),
     [isEditorReadOnly],
   );
 
-  const handleEditorChange = useCallback((value: string | undefined) => {
-    if (value !== undefined) setWorkspaceCode(value);
+  const handleEditorMount: OnMount = useCallback((editorInstance, monaco) => {
+    editorRef.current = editorInstance;
+
+    editorInstance.addAction({
+      id: 'syncode-run',
+      label: 'Run Code',
+      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter],
+      run: () => void handleRunCodeRef.current(),
+    });
+
+    editorInstance.addAction({
+      id: 'syncode-submit',
+      label: 'Submit Code',
+      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.Enter],
+      run: () => void handleSubmitCodeRef.current(),
+    });
   }, []);
 
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleEditorChange = useCallback(
+    (value: string | undefined) => {
+      if (value === undefined) return;
+      codeRef.current = value;
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = setTimeout(() => {
+        try {
+          localStorage.setItem(codeStorageKey, value);
+        } catch {}
+      }, 500);
+    },
+    [codeStorageKey],
+  );
+
   const handleRunCode = async () => {
-    cancelPollRef.current?.();
-    setRunState({ status: 'submitting' });
+    if (testCases.length === 0) return;
 
-    try {
-      const response = await api(CONTROL_API.ROOMS.RUN, {
-        params: { id: roomId },
-        body: {
-          language,
-          code: workspaceCode,
-          stdin: workspaceInput || undefined,
-        },
-      });
+    for (const cancel of cancelMultiRunRef.current.values()) cancel();
+    cancelMultiRunRef.current.clear();
+    setActiveOutputTab('output');
 
-      setRunState({ status: 'queued', jobId: response.jobId });
-      cancelPollRef.current = pollExecution(response.jobId);
-    } catch (error) {
-      const apiError = await readApiError(error);
-      const message = resolveErrorMessage(apiError, RUN_ERROR_KEYS, 'workspace.runFailed', t);
-      setRunState({ status: 'request-error', message });
-      toast.error(message);
+    const initialResults = new Map<string, CaseRunState>();
+    for (const tc of testCases) {
+      initialResults.set(tc.id, { status: 'queued' });
+    }
+    setMultiRunState({ status: 'running', results: initialResults });
+
+    for (const tc of testCases) {
+      void runCase(tc);
     }
   };
 
-  const pollExecution = (jobId: string) => {
-    let cancelled = false;
-
+  const pollCaseExecution = (
+    caseId: string,
+    jobId: string,
+    expectedOutput: string | null,
+    token: { cancelled: boolean },
+  ) => {
     const poll = async () => {
       try {
-        const response = await api(CONTROL_API.EXECUTION.GET_RESULT, {
-          params: { jobId },
-        });
-
-        if (cancelled) return;
+        const response = await api(CONTROL_API.EXECUTION.GET_RESULT, { params: { jobId } });
+        if (token.cancelled) return;
 
         if (isExecutionResultPayload(response)) {
-          setRunState({
-            status: response.status,
-            jobId,
-            stdout: response.stdout,
-            stderr: response.stderr,
-            exitCode: response.exitCode,
-            durationMs: response.durationMs,
-            error: response.error,
+          const passed =
+            expectedOutput != null ? response.stdout.trim() === expectedOutput.trim() : null;
+
+          setMultiRunState((prev) => {
+            if (prev.status !== 'running' && prev.status !== 'completed') return prev;
+            const next = new Map(prev.results);
+            next.set(caseId, {
+              status: response.status,
+              jobId,
+              stdout: response.stdout,
+              stderr: response.stderr,
+              exitCode: response.exitCode,
+              durationMs: response.durationMs,
+              memoryUsageMb: response.memoryUsageMb,
+              timedOut: response.timedOut,
+              error: response.error,
+              passed,
+            });
+
+            let allDone = true;
+            for (const s of next.values()) {
+              if (s.status === 'queued' || s.status === 'running') {
+                allDone = false;
+                break;
+              }
+            }
+
+            return { status: allDone ? 'completed' : 'running', results: next } as MultiRunState;
           });
           return;
         }
 
         if (response.status === 'queued' || response.status === 'running') {
-          setRunState({ status: response.status, jobId });
+          setMultiRunState((prev) => {
+            if (prev.status !== 'running' && prev.status !== 'completed') return prev;
+            const current = prev.results.get(caseId);
+            if (current?.status === response.status) return prev;
+            const next = new Map(prev.results);
+            next.set(
+              caseId,
+              response.status === 'queued' ? { status: 'queued' } : { status: 'running', jobId },
+            );
+            return { ...prev, results: next };
+          });
           setTimeout(() => {
-            if (!cancelled) void poll();
+            if (!token.cancelled) void poll();
           }, EXECUTION_POLL_INTERVAL_MS);
           return;
         }
+      } catch (error) {
+        const apiError = await readApiError(error);
+        if (!token.cancelled) {
+          setMultiRunState((prev) => {
+            if (prev.status !== 'running' && prev.status !== 'completed') return prev;
+            const next = new Map(prev.results);
+            next.set(caseId, {
+              status: 'request-error',
+              message: apiError?.message ?? t('workspace.runFailed'),
+            });
+            return { ...prev, results: next };
+          });
+        }
+      }
+    };
 
-        setRunState({ status: 'request-error', message: t('workspace.runFailed') });
+    void poll();
+  };
+
+  const handleSubmitCode = async () => {
+    cancelSubmitPollRef.current?.();
+    setSubmitState({ status: 'submitting' });
+    setActiveOutputTab('results');
+
+    try {
+      const response = await api(CONTROL_API.ROOMS.SUBMIT, {
+        params: { id: roomId },
+        body: { language, code: codeRef.current },
+      });
+
+      setSubmitState({ status: 'polling', submissionId: response.submissionId });
+      cancelSubmitPollRef.current = pollSubmission(response.submissionId);
+    } catch (error) {
+      const apiError = await readApiError(error);
+      const message = resolveErrorMessage(apiError, SUBMIT_ERROR_KEYS, 'workspace.submitFailed', t);
+      setSubmitState({ status: 'request-error', message });
+      toast.error(message);
+    }
+  };
+
+  const pollSubmission = (submissionId: string) => {
+    let cancelled = false;
+
+    const poll = async () => {
+      try {
+        const details: ExecutionDetailsResponse = await api(
+          CONTROL_API.EXECUTION.GET_SUBMISSION_DETAILS,
+          { params: { submissionId } },
+        );
+
+        if (cancelled) return;
+
+        if (details.status === 'completed' || details.status === 'failed') {
+          setSubmitState({ status: 'completed', submissionId, details });
+          return;
+        }
+
+        // Still pending/running — update with latest partial results and keep polling
+        setSubmitState({ status: 'polling', submissionId });
+        setTimeout(() => {
+          if (!cancelled) void poll();
+        }, SUBMISSION_POLL_INTERVAL_MS);
       } catch (error) {
         const apiError = await readApiError(error);
         if (!cancelled) {
-          setRunState({
+          setSubmitState({
             status: 'request-error',
-            message: apiError?.message ?? t('workspace.runFailed'),
+            message: apiError?.message ?? t('workspace.submitFailed'),
           });
         }
       }
@@ -228,6 +418,86 @@ export function RoomWorkspace({
       cancelled = true;
     };
   };
+
+  const runCase = async (tc: TestCaseEntry) => {
+    cancelMultiRunRef.current.get(tc.id)?.();
+    const token = { cancelled: false };
+    cancelMultiRunRef.current.set(tc.id, () => {
+      token.cancelled = true;
+    });
+
+    try {
+      const response = await api(CONTROL_API.ROOMS.RUN, {
+        params: { id: roomId },
+        body: { language, code: codeRef.current, stdin: tc.input || undefined },
+      });
+
+      if (token.cancelled) return;
+
+      setMultiRunState((prev) => {
+        if (prev.status !== 'running' && prev.status !== 'completed') return prev;
+        const next = new Map(prev.results);
+        next.set(tc.id, { status: 'running', jobId: response.jobId });
+        return { ...prev, results: next };
+      });
+
+      pollCaseExecution(tc.id, response.jobId, tc.expectedOutput, token);
+    } catch (error) {
+      if (token.cancelled) return;
+      const apiError = await readApiError(error);
+      setMultiRunState((prev) => {
+        if (prev.status !== 'running' && prev.status !== 'completed') return prev;
+        const next = new Map(prev.results);
+        next.set(tc.id, {
+          status: 'request-error',
+          message: apiError?.message ?? t('workspace.runFailed'),
+        });
+        return { ...prev, results: next };
+      });
+    }
+  };
+
+  const handleRunSingleCase = async (caseId: string) => {
+    const tc = testCases.find((c) => c.id === caseId);
+    if (!tc) return;
+
+    setMultiRunState((prev) => {
+      const results =
+        prev.status === 'running' || prev.status === 'completed'
+          ? new Map(prev.results)
+          : new Map<string, CaseRunState>();
+      results.set(caseId, { status: 'queued' });
+      return { status: 'running', results };
+    });
+
+    await runCase(tc);
+  };
+
+  const handleRunCodeRef = useRef(handleRunCode);
+  handleRunCodeRef.current = handleRunCode;
+  const handleSubmitCodeRef = useRef(handleSubmitCode);
+  handleSubmitCodeRef.current = handleSubmitCode;
+
+  const multiRunResults =
+    multiRunState.status === 'running' || multiRunState.status === 'completed'
+      ? multiRunState.results
+      : null;
+  const prevMultiRunStatus = useRef(multiRunState.status);
+  useEffect(() => {
+    if (
+      prevMultiRunStatus.current !== 'completed' &&
+      multiRunState.status === 'completed' &&
+      multiRunResults
+    ) {
+      const { passed, total } = countPassed(multiRunResults);
+      if (passed === total && total > 0) {
+        toast.success(t('workspace.runResultsSummary', { passed, total }));
+      } else {
+        toast(t('workspace.runResultsSummary', { passed, total }));
+      }
+    }
+    prevMultiRunStatus.current = multiRunState.status;
+  }, [multiRunState.status, multiRunResults, t]);
 
   const problemPanelData: ProblemData | null = useMemo(
     () =>
@@ -278,7 +548,7 @@ export function RoomWorkspace({
         <ResizablePanel defaultSize={room.problemId ? 50 : 75} minSize={20}>
           <ResizablePanelGroup orientation="vertical">
             {/* Editor panel */}
-            <ResizablePanel defaultSize={65} minSize={20}>
+            <ResizablePanel defaultSize={55} minSize={20}>
               <div className="flex h-full flex-col">
                 {/* Editor toolbar */}
                 <div className="flex h-9 shrink-0 items-center justify-between border-b border-border bg-card px-3">
@@ -303,16 +573,33 @@ export function RoomWorkspace({
                       type="button"
                       size="sm"
                       disabled={runDisabled}
-                      onClick={() => void handleRunCode()}
+                      onClick={() => void handleRunCodeRef.current()}
                       className={`h-7 gap-1.5 px-3 text-xs font-medium ${runDisabled ? '' : 'run-glow'}`}
                     >
-                      {isRunBusy ? (
+                      {isMultiRunBusy ? (
                         <Loader2 className="size-3 animate-spin" />
                       ) : (
                         <Play className="size-3 fill-current" />
                       )}
                       {t('workspace.runCode')}
                     </Button>
+                    {canSubmitCode ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        disabled={submitDisabled}
+                        onClick={() => void handleSubmitCodeRef.current()}
+                        className="h-7 gap-1.5 px-3 text-xs font-medium"
+                      >
+                        {isSubmitBusy ? (
+                          <Loader2 className="size-3 animate-spin" />
+                        ) : (
+                          <Send className="size-3" />
+                        )}
+                        {t('workspace.submitCode')}
+                      </Button>
+                    ) : null}
                   </div>
                 </div>
 
@@ -321,82 +608,108 @@ export function RoomWorkspace({
                   <Editor
                     height="100%"
                     language={monacoLanguage}
-                    value={workspaceCode}
+                    defaultValue={codeRef.current}
                     onChange={handleEditorChange}
+                    onMount={handleEditorMount}
                     theme="syncode-dark"
                     beforeMount={handleEditorWillMount}
                     options={editorOptions}
                     loading={EDITOR_LOADING}
                   />
                 </div>
-
-                {/* Collapsible stdin */}
-                <div className="border-t border-border bg-card">
-                  <button
-                    type="button"
-                    onClick={() => setStdinExpanded((prev) => !prev)}
-                    className="flex h-7 w-full items-center gap-1.5 px-3 text-[10px] font-medium uppercase tracking-widest text-muted-foreground transition-colors hover:text-foreground"
-                  >
-                    {stdinExpanded ? <ChevronDown size={10} /> : <ChevronUp size={10} />}
-                    {t('workspace.stdinHeading')}
-                  </button>
-                  {stdinExpanded ? (
-                    <div className="border-t border-border/60">
-                      <textarea
-                        value={workspaceInput}
-                        onChange={(e) => setWorkspaceInput(e.target.value)}
-                        spellCheck={false}
-                        rows={3}
-                        className="w-full resize-none bg-transparent px-3 py-2 font-mono text-xs text-foreground outline-none placeholder:text-muted-foreground/50"
-                        placeholder={t('workspace.stdinPlaceholder')}
-                      />
-                    </div>
-                  ) : null}
-                </div>
               </div>
             </ResizablePanel>
 
-            <ResizableHandle className="h-1 bg-border transition-colors hover:bg-primary/40 active:bg-primary/60" />
+            {/* Test case handle — click to toggle */}
+            <ResizableHandle className="group relative flex h-6 items-center justify-center bg-card transition-colors hover:bg-primary/10">
+              <button
+                type="button"
+                onClick={toggleTestCasePanel}
+                className="flex cursor-pointer items-center gap-1 font-mono text-[10px] uppercase tracking-widest text-muted-foreground/60 transition-colors group-hover:text-foreground"
+              >
+                <ChevronUp size={10} />
+                {t('workspace.inputLabel')}
+              </button>
+            </ResizableHandle>
+
+            {/* Test case panel */}
+            <ResizablePanel
+              panelRef={testCasePanelRef}
+              defaultSize={15}
+              minSize={5}
+              collapsible
+              collapsedSize={0}
+            >
+              <div className="h-full bg-card">
+                <TestCaseEditor
+                  cases={testCases}
+                  activeCaseId={activeCaseId}
+                  onActiveCaseChange={setActiveCaseId}
+                  onCaseInputChange={handleCaseInputChange}
+                  onAddCase={handleAddCase}
+                  onRemoveCase={handleRemoveCase}
+                  readOnly={isEditorReadOnly}
+                />
+              </div>
+            </ResizablePanel>
+
+            {/* Output handle — click to toggle */}
+            <ResizableHandle className="group relative flex h-6 items-center justify-center bg-card transition-colors hover:bg-primary/10">
+              <button
+                type="button"
+                onClick={toggleOutputPanel}
+                className="flex cursor-pointer items-center gap-1 font-mono text-[10px] uppercase tracking-widest text-muted-foreground/60 transition-colors group-hover:text-foreground"
+              >
+                <ChevronUp size={10} />
+                {t('workspace.outputTab')}
+              </button>
+            </ResizableHandle>
 
             {/* Output panel */}
-            <ResizablePanel defaultSize={35} minSize={10}>
+            <ResizablePanel
+              panelRef={outputPanelRef}
+              defaultSize={30}
+              minSize={8}
+              collapsible
+              collapsedSize={0}
+            >
               <div className="flex h-full flex-col">
-                {/* Terminal header */}
-                <div className="flex h-8 shrink-0 items-center gap-2 border-b border-border bg-card px-3">
-                  <div className="flex items-center gap-1.5">
-                    <Circle className="size-2.5 fill-destructive/60 text-destructive/60" />
-                    <Minus className="size-2.5 text-warning/60" />
-                    <X className="size-2.5 text-muted-foreground/40" />
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <TerminalSquare className="size-3 text-muted-foreground/60" />
-                    <span className="font-mono text-[10px] text-muted-foreground/60">
-                      {t('workspace.outputHeading')}
-                    </span>
-                  </div>
-                  {runState.status === 'completed' || runState.status === 'failed' ? (
-                    <div className="ml-auto flex items-center gap-2 text-[10px]">
-                      {runState.status === 'completed' ? (
-                        <span className="flex items-center gap-1 text-success">
-                          <CheckCircle2 size={11} />
-                          {t('workspace.executionComplete')}
-                        </span>
-                      ) : (
-                        <span className="flex items-center gap-1 text-destructive">
-                          <XCircle size={11} />
-                          {t('workspace.executionFailed')}
-                        </span>
-                      )}
-                      <span className="font-mono text-muted-foreground/50">
-                        exit {runState.exitCode} &middot; {runState.durationMs}ms
-                      </span>
-                    </div>
+                <div className="flex h-8 shrink-0 items-center border-b border-border bg-card">
+                  <button
+                    type="button"
+                    onClick={() => setActiveOutputTab('output')}
+                    className={tabClassName(activeOutputTab === 'output')}
+                  >
+                    <TerminalSquare className="size-3" />
+                    {t('workspace.outputTab')}
+                  </button>
+
+                  {canSubmitCode ? (
+                    <button
+                      type="button"
+                      onClick={() => setActiveOutputTab('results')}
+                      className={tabClassName(activeOutputTab === 'results')}
+                    >
+                      <CheckCircle2 className="size-3" />
+                      {t('workspace.resultsTab')}
+                      {isSubmitBusy ? (
+                        <Loader2 className="size-2.5 animate-spin text-primary" />
+                      ) : null}
+                    </button>
                   ) : null}
                 </div>
 
+                {/* Tab content */}
                 <div className="relative flex-1 overflow-auto bg-background p-3">
-                  <div className="pointer-events-none absolute inset-0 scan-lines" />
-                  <ExecutionOutput runState={runState} />
+                  {activeOutputTab === 'output' ? (
+                    <RunResultsPanel
+                      multiRunState={multiRunState}
+                      cases={testCases}
+                      onRunCase={handleRunSingleCase}
+                    />
+                  ) : (
+                    <SubmissionOutput submitState={submitState} />
+                  )}
                 </div>
               </div>
             </ResizablePanel>
@@ -505,8 +818,53 @@ function isExecutionResultPayload(
   return 'stdout' in response;
 }
 
-const RUN_ERROR_KEYS: Partial<Record<string, string>> = {
+function SubmissionOutput({ submitState }: { submitState: SubmitState }) {
+  const { t } = useTranslation('rooms');
+
+  if (submitState.status === 'idle') {
+    return (
+      <div className="relative flex flex-col items-center justify-center py-8 text-center">
+        <div className="pointer-events-none dot-grid absolute inset-0 opacity-[0.03]" />
+        <CheckCircle2 className="relative mb-2 size-5 text-muted-foreground/20" />
+        <p className="relative font-mono text-xs text-muted-foreground/40">
+          {t('workspace.noOutput')}
+        </p>
+      </div>
+    );
+  }
+
+  if (submitState.status === 'submitting') {
+    return (
+      <div className="flex items-center gap-2">
+        <Loader2 className="size-3 animate-spin text-primary" />
+        <span className="font-mono text-xs text-muted-foreground">{t('workspace.submitting')}</span>
+      </div>
+    );
+  }
+
+  if (submitState.status === 'polling') {
+    return (
+      <div className="flex items-center gap-2">
+        <Loader2 className="size-3 animate-spin text-primary" />
+        <span className="font-mono text-xs text-primary/80">
+          {t('workspace.submissionPolling')}
+        </span>
+        <span className="terminal-cursor" />
+      </div>
+    );
+  }
+
+  if (submitState.status === 'request-error') {
+    return <p className="font-mono text-xs text-destructive">{submitState.message}</p>;
+  }
+
+  return <ExecutionDetailsPanel details={submitState.details} />;
+}
+
+const SUBMIT_ERROR_KEYS: Partial<Record<string, string>> = {
   [ERROR_CODES.ROOM_EDITOR_LOCKED]: 'workspace.editorLockedError',
   [ERROR_CODES.ROOM_PERMISSION_DENIED]: 'workspace.permissionDenied',
   [ERROR_CODES.ROOM_ACCESS_DENIED]: 'workspace.permissionDenied',
+  [ERROR_CODES.PROBLEM_NOT_FOUND]: 'workspace.problemNotFound',
+  [ERROR_CODES.PROBLEM_NO_TEST_CASES]: 'workspace.noProblemTestCases',
 };

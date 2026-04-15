@@ -16,6 +16,18 @@ const CODE_DIR = '/tmp/syncode';
 const SOURCE_NAME = 'code';
 const STDIN_PATH = `${CODE_DIR}/stdin.txt`;
 const BINARY_PATH = `${CODE_DIR}/code.out`;
+const DURATION_PATH = `${CODE_DIR}/duration_ns.txt`;
+
+/**
+ * Wrap a run command with inline nanosecond timing.
+ * Measures wall-clock time INSIDE the container (no network overhead).
+ * Preserves the inner command's exit code.
+ */
+function timedCommand(runCmd: string): string {
+  // Single sh -c invocation that captures start/end timestamps around the actual command.
+  // Uses $$ to avoid variable collision. Writes duration to a file for later retrieval.
+  return `sh -c 'SC_START=$(date +%s%N); ${runCmd}; SC_CODE=$?; SC_END=$(date +%s%N); echo $((SC_END - SC_START)) > ${DURATION_PATH}; exit $SC_CODE'`;
+}
 
 export class E2bSandboxAdapter implements ISandboxProvider, OnModuleDestroy {
   private readonly logger = new Logger(E2bSandboxAdapter.name);
@@ -47,7 +59,6 @@ export class E2bSandboxAdapter implements ISandboxProvider, OnModuleDestroy {
 
     const startTime = Date.now();
 
-    // Sandbox.create() is the infra boundary, so if it throws, propagate for BullMQ retry.
     const sandbox = await Sandbox.create({ apiKey: this.apiKey });
     this.activeSandboxes.add(sandbox);
 
@@ -64,7 +75,6 @@ export class E2bSandboxAdapter implements ISandboxProvider, OnModuleDestroy {
         try {
           await sandbox.commands.run(compileCmd, { timeoutMs });
         } catch (e) {
-          const durationMs = Date.now() - startTime;
           if (e instanceof CommandExitError) {
             return {
               requestId,
@@ -72,12 +82,12 @@ export class E2bSandboxAdapter implements ISandboxProvider, OnModuleDestroy {
               stdout: e.stdout,
               stderr: e.stderr,
               exitCode: e.exitCode,
-              durationMs,
+              durationMs: Date.now() - startTime,
               timedOut: false,
               error: e.stderr || 'Compilation failed',
             };
           }
-          throw e; // Infra error — propagate to outer catch.
+          throw e;
         }
       }
 
@@ -90,8 +100,13 @@ export class E2bSandboxAdapter implements ISandboxProvider, OnModuleDestroy {
       const elapsed = Date.now() - startTime;
       const remainingMs = Math.max(1, timeoutMs - elapsed);
 
-      const result = await sandbox.commands.run(runCmd, { timeoutMs: remainingMs });
-      const durationMs = Date.now() - startTime;
+      const fallbackStart = Date.now();
+      const result = await sandbox.commands.run(timedCommand(runCmd), {
+        timeoutMs: remainingMs,
+      });
+
+      const durationMs = await this.readDurationMs(sandbox, Date.now() - fallbackStart);
+      const memoryUsageMb = await this.peakMemoryMb(sandbox);
 
       return {
         requestId,
@@ -101,13 +116,16 @@ export class E2bSandboxAdapter implements ISandboxProvider, OnModuleDestroy {
         exitCode: result.exitCode,
         durationMs,
         timedOut: false,
+        memoryUsageMb,
       };
     } catch (error) {
-      const durationMs = Date.now() - startTime;
-      const timedOut = durationMs >= timeoutMs; // Best-effort heuristic.
+      const totalElapsed = Date.now() - startTime;
+      const timedOut = totalElapsed >= timeoutMs;
 
-      // CommandExitError carries the actual stdout/stderr from a non-zero exit.
       if (error instanceof CommandExitError) {
+        const durationMs = await this.readDurationMs(sandbox, totalElapsed);
+        const memoryUsageMb = await this.peakMemoryMb(sandbox);
+
         return {
           requestId,
           status: 'failed',
@@ -116,17 +134,17 @@ export class E2bSandboxAdapter implements ISandboxProvider, OnModuleDestroy {
           exitCode: error.exitCode,
           durationMs,
           timedOut,
+          memoryUsageMb,
         };
       }
 
-      // Infra-level errors (network, E2B outage, timeout).
       return {
         requestId,
         status: 'failed',
         stdout: '',
         stderr: '',
         exitCode: -1,
-        durationMs,
+        durationMs: totalElapsed,
         timedOut,
         error: error instanceof Error ? error.message : String(error),
       };
@@ -136,9 +154,31 @@ export class E2bSandboxAdapter implements ISandboxProvider, OnModuleDestroy {
       try {
         await sandbox.kill();
       } catch (error) {
-        // Sandbox may already be destroyed.
         this.logger.warn('Failed to cleanup E2B sandbox', error);
       }
+    }
+  }
+
+  private async readDurationMs(sandbox: Sandbox, fallbackMs: number): Promise<number> {
+    try {
+      const content = await sandbox.files.read(DURATION_PATH);
+      const ns = Number(content.trim());
+      if (Number.isNaN(ns) || ns < 0) return fallbackMs;
+      return Math.round(ns / 1_000_000);
+    } catch {
+      return fallbackMs;
+    }
+  }
+
+  private async peakMemoryMb(sandbox: Sandbox): Promise<number | undefined> {
+    try {
+      const metrics = await sandbox.getMetrics();
+      if (metrics.length === 0) return undefined;
+      const peakBytes = Math.max(...metrics.map((m) => m.memUsed));
+      return Math.round((peakBytes / (1024 * 1024)) * 10) / 10;
+    } catch {
+      this.logger.warn('Could not read sandbox metrics');
+      return undefined;
     }
   }
 
@@ -147,7 +187,6 @@ export class E2bSandboxAdapter implements ISandboxProvider, OnModuleDestroy {
   }
 
   async healthCheck(): Promise<boolean> {
-    // TODO: consider taking another approach for this when health probes are more frequent.
     try {
       const sandbox = await Sandbox.create({ apiKey: this.apiKey });
       await sandbox.kill();

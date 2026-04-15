@@ -119,12 +119,12 @@ const problemsData: ProblemSeed[] = [
       '2 <= nums.length <= 10^4\n-10^9 <= nums[i] <= 10^9\n-10^9 <= target <= 10^9\nOnly one valid answer exists.',
     examples: [
       {
-        input: 'nums = [2,7,11,15], target = 9',
+        input: '[2,7,11,15]\n9',
         output: '[0,1]',
         explanation: 'Because nums[0] + nums[1] == 9, we return [0, 1].',
       },
-      { input: 'nums = [3,2,4], target = 6', output: '[1,2]' },
-      { input: 'nums = [3,3], target = 6', output: '[0,1]' },
+      { input: '[3,2,4]\n6', output: '[1,2]' },
+      { input: '[3,3]\n6', output: '[0,1]' },
     ],
     starterCode: {
       python:
@@ -183,9 +183,9 @@ const problemsData: ProblemSeed[] = [
     company: 'Amazon',
     constraints: '1 <= s.length <= 10^4\ns consists of parentheses only.',
     examples: [
-      { input: 's = "()"', output: 'true' },
-      { input: 's = "()[]{}"', output: 'true' },
-      { input: 's = "(]"', output: 'false' },
+      { input: '()', output: 'true' },
+      { input: '()[]{}', output: 'true' },
+      { input: '(]', output: 'false' },
     ],
     starterCode: {
       python: 'class Solution:\n    def isValid(self, s: str) -> bool:\n        pass\n',
@@ -251,9 +251,9 @@ const problemsData: ProblemSeed[] = [
     constraints:
       'The number of nodes in the list is the range [0, 5000].\n-5000 <= Node.val <= 5000',
     examples: [
-      { input: 'head = [1,2,3,4,5]', output: '[5,4,3,2,1]' },
-      { input: 'head = [1,2]', output: '[2,1]' },
-      { input: 'head = []', output: '[]' },
+      { input: '[1,2,3,4,5]', output: '[5,4,3,2,1]' },
+      { input: '[1,2]', output: '[2,1]' },
+      { input: '[]', output: '[]' },
     ],
     starterCode: {
       python:
@@ -309,17 +309,17 @@ const problemsData: ProblemSeed[] = [
       '0 <= s.length <= 5 * 10^4\ns consists of English letters, digits, symbols and spaces.',
     examples: [
       {
-        input: 's = "abcabcbb"',
+        input: 'abcabcbb',
         output: '3',
         explanation: 'The answer is "abc", with the length of 3.',
       },
       {
-        input: 's = "bbbbb"',
+        input: 'bbbbb',
         output: '1',
         explanation: 'The answer is "b", with the length of 1.',
       },
       {
-        input: 's = "pwwkew"',
+        input: 'pwwkew',
         output: '3',
         explanation: 'The answer is "wke", with the length of 3.',
       },
@@ -383,9 +383,9 @@ const problemsData: ProblemSeed[] = [
     constraints:
       'The number of nodes in the tree is in the range [0, 2000].\n-1000 <= Node.val <= 1000',
     examples: [
-      { input: 'root = [3,9,20,null,null,15,7]', output: '[[3],[9,20],[15,7]]' },
-      { input: 'root = [1]', output: '[[1]]' },
-      { input: 'root = []', output: '[]' },
+      { input: '[3,9,20,null,null,15,7]', output: '[[3],[9,20],[15,7]]' },
+      { input: '[1]', output: '[[1]]' },
+      { input: '[]', output: '[]' },
     ],
     starterCode: {
       python:
@@ -437,9 +437,9 @@ const problemsData: ProblemSeed[] = [
     company: 'Google',
     constraints: '1 <= coins.length <= 12\n1 <= coins[i] <= 2^31 - 1\n0 <= amount <= 10^4',
     examples: [
-      { input: 'coins = [1,5,10], amount = 12', output: '3', explanation: '12 = 10 + 1 + 1' },
-      { input: 'coins = [2], amount = 3', output: '-1' },
-      { input: 'coins = [1], amount = 0', output: '0' },
+      { input: '[1,5,10]\n12', output: '3', explanation: '12 = 10 + 1 + 1' },
+      { input: '[2]\n3', output: '-1' },
+      { input: '[1]\n0', output: '0' },
     ],
     starterCode: {
       python:
@@ -501,9 +501,9 @@ const problemsData: ProblemSeed[] = [
     constraints:
       'k == lists.length\n0 <= k <= 10^4\n0 <= lists[i].length <= 500\n-10^4 <= lists[i][j] <= 10^4\nlists[i] is sorted in ascending order.\nThe sum of lists[i].length will not exceed 10^4.',
     examples: [
-      { input: 'lists = [[1,4,5],[1,3,4],[2,6]]', output: '[1,1,2,3,4,4,5,6]' },
-      { input: 'lists = []', output: '[]' },
-      { input: 'lists = [[]]', output: '[]' },
+      { input: '[[1,4,5],[1,3,4],[2,6]]', output: '[1,1,2,3,4,4,5,6]' },
+      { input: '[]', output: '[]' },
+      { input: '[[]]', output: '[]' },
     ],
     starterCode: {
       python:
@@ -562,8 +562,8 @@ const problemsData: ProblemSeed[] = [
     company: 'Google',
     constraints: 'n == height.length\n1 <= n <= 2 * 10^4\n0 <= height[i] <= 10^5',
     examples: [
-      { input: 'height = [0,1,0,2,1,0,1,3,2,1,2,1]', output: '6' },
-      { input: 'height = [4,2,0,3,2,5]', output: '9' },
+      { input: '[0,1,0,2,1,0,1,3,2,1,2,1]', output: '6' },
+      { input: '[4,2,0,3,2,5]', output: '9' },
     ],
     starterCode: {
       python: 'class Solution:\n    def trap(self, height: list[int]) -> int:\n        pass\n',
@@ -673,7 +673,14 @@ async function seed() {
     if (p.testCases.length > 0) {
       const insertedCases = await db
         .insert(schema.testCases)
-        .values(p.testCases.map((tc) => ({ ...tc, problemId: inserted.id })))
+        .values(
+          p.testCases.map((tc) => ({
+            ...tc,
+            problemId: inserted.id,
+            timeoutMs: p.timeLimit,
+            memoryMb: p.memoryLimit,
+          })),
+        )
         .onConflictDoNothing()
         .returning({ id: schema.testCases.id });
       testCaseCount += insertedCases.length;
