@@ -42,79 +42,81 @@ function CaseRow({
   const { t: tc } = useTranslation('common');
 
   const isCompleted = state?.status === 'completed' || state?.status === 'failed';
+  const isError = state?.status === 'request-error';
   const passed = isCompleted && state.passed === true;
   const failed = isCompleted && state.passed === false;
+  const done = isCompleted && state.passed === null;
   const isLoading = state?.status === 'queued' || state?.status === 'running';
 
   return (
     <div className="rounded-md border border-border bg-card/50">
-      <button
-        type="button"
-        aria-expanded={expanded}
-        onClick={onToggle}
-        className="flex w-full cursor-pointer items-center gap-2 px-2.5 py-1.5 text-left"
-      >
-        {expanded ? (
-          <ChevronDown className="size-3 shrink-0 text-primary" />
-        ) : (
-          <ChevronRight className="size-3 shrink-0 text-muted-foreground/50" />
-        )}
+      <div className="flex items-center">
+        <button
+          type="button"
+          aria-expanded={expanded}
+          onClick={onToggle}
+          className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 px-2.5 py-1.5 text-left"
+        >
+          {expanded ? (
+            <ChevronDown className="size-3 shrink-0 text-primary" />
+          ) : (
+            <ChevronRight className="size-3 shrink-0 text-muted-foreground/50" />
+          )}
 
-        <span className="font-mono text-[11px] text-foreground/80">{caseEntry.label}</span>
+          <span className="font-mono text-[11px] text-foreground/80">{caseEntry.label}</span>
 
-        {/* Status indicator */}
-        {passed ? (
-          <span className="flex items-center gap-0.5 font-mono text-[10px] font-semibold text-success">
-            <CheckCircle2 className="size-3" />
-            {t('workspace.casePass')}
-          </span>
-        ) : failed ? (
-          <span className="flex items-center gap-0.5 font-mono text-[10px] font-semibold text-destructive">
-            <XCircle className="size-3" />
-            {t('workspace.caseFail')}
-          </span>
-        ) : isLoading ? (
-          <span className="flex items-center gap-0.5 font-mono text-[10px] text-primary">
-            <Loader2 className="size-3 animate-spin" />
-          </span>
-        ) : (
-          <span className="font-mono text-[10px] text-muted-foreground/50">
-            {t('workspace.casePending')}
-          </span>
-        )}
+          {passed ? (
+            <span className="flex items-center gap-0.5 font-mono text-[10px] font-semibold text-success">
+              <CheckCircle2 className="size-3" />
+              {t('workspace.casePass')}
+            </span>
+          ) : failed ? (
+            <span className="flex items-center gap-0.5 font-mono text-[10px] font-semibold text-destructive">
+              <XCircle className="size-3" />
+              {t('workspace.caseFail')}
+            </span>
+          ) : isError ? (
+            <span className="flex items-center gap-0.5 font-mono text-[10px] font-semibold text-destructive">
+              <XCircle className="size-3" />
+              error
+            </span>
+          ) : isLoading ? (
+            <Loader2 className="size-3 animate-spin text-primary" />
+          ) : done ? (
+            <span className="font-mono text-[10px] text-muted-foreground">done</span>
+          ) : (
+            <span className="font-mono text-[10px] text-muted-foreground/50">
+              {t('workspace.casePending')}
+            </span>
+          )}
 
-        {isCompleted && state.timedOut ? (
-          <span className="font-mono text-[10px] font-semibold text-warning">TLE</span>
-        ) : null}
+          {isCompleted && state.timedOut ? (
+            <span className="font-mono text-[10px] font-semibold text-warning">TLE</span>
+          ) : null}
 
-        {/* Metrics */}
-        {isCompleted ? (
-          <div className="ml-auto flex items-center gap-3 font-mono text-[10px] text-muted-foreground/50">
-            <span>{formatMs(state.durationMs)}</span>
-            {state.memoryUsageMb != null ? <span>{formatMb(state.memoryUsageMb)}</span> : null}
-          </div>
-        ) : null}
+          {isCompleted ? (
+            <div className="ml-auto flex items-center gap-3 font-mono text-[10px] text-muted-foreground/50">
+              <span>{formatMs(state.durationMs)}</span>
+              {state.memoryUsageMb != null ? <span>{formatMb(state.memoryUsageMb)}</span> : null}
+            </div>
+          ) : null}
+        </button>
 
-        {/* Re-run button */}
         {onRun ? (
           <button
             type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onRun();
-            }}
-            className={`${isCompleted ? '' : 'ml-auto'} rounded p-0.5 text-muted-foreground/50 transition-colors hover:text-primary`}
-            title="Run this case"
+            onClick={onRun}
+            className="shrink-0 rounded p-1.5 text-muted-foreground/50 transition-colors hover:text-primary"
+            title={t('workspace.runCode')}
           >
             <Play className="size-3" />
           </button>
         ) : null}
-      </button>
+      </div>
 
       {/* Expanded detail */}
       {expanded && isCompleted ? (
         <div className="space-y-2 border-t border-border/60 px-2.5 py-2">
-          {/* Output diff for failed cases with expected output */}
           {failed && caseEntry.expectedOutput != null ? (
             <div className="space-y-1.5">
               <div className="flex items-center gap-1 font-mono text-[10px] font-semibold uppercase tracking-wider text-destructive/80">
@@ -125,7 +127,6 @@ function CaseRow({
             </div>
           ) : null}
 
-          {/* stdout */}
           <div>
             <span className="font-mono text-[10px] uppercase text-muted-foreground/50">
               {tc('execution.stdout')}
@@ -135,7 +136,6 @@ function CaseRow({
             </pre>
           </div>
 
-          {/* stderr (only if non-empty) */}
           {state.stderr ? (
             <div>
               <span className="font-mono text-[10px] uppercase text-muted-foreground/50">
@@ -146,6 +146,12 @@ function CaseRow({
               </pre>
             </div>
           ) : null}
+        </div>
+      ) : null}
+
+      {expanded && isError ? (
+        <div className="border-t border-border/60 px-2.5 py-2">
+          <p className="font-mono text-xs text-destructive">{state.message}</p>
         </div>
       ) : null}
     </div>
@@ -184,9 +190,11 @@ export function RunResultsPanel({ multiRunState, cases, onRunCase }: RunResultsP
         <span className="font-mono text-xs font-semibold text-foreground">
           {t('workspace.runResults')}
         </span>
-        <span className="font-mono text-[10px] text-muted-foreground">
-          {t('workspace.runResultsSummary', { passed, total })}
-        </span>
+        {total > 0 ? (
+          <span className="font-mono text-[10px] text-muted-foreground">
+            {t('workspace.runResultsSummary', { passed, total })}
+          </span>
+        ) : null}
       </div>
 
       <div className="space-y-1">

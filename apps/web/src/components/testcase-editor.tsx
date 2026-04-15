@@ -52,7 +52,7 @@ export function TestCaseEditor({
             >
               {c.label}
             </button>
-            {!c.fromProblem ? (
+            {!c.fromProblem && !readOnly ? (
               <button
                 type="button"
                 onClick={(e) => {
@@ -66,14 +66,16 @@ export function TestCaseEditor({
             ) : null}
           </div>
         ))}
-        <button
-          type="button"
-          onClick={onAddCase}
-          className="shrink-0 px-2 py-1 text-muted-foreground/50 transition-colors hover:text-primary"
-          title={t('workspace.addTestcase')}
-        >
-          <Plus size={12} />
-        </button>
+        {!readOnly ? (
+          <button
+            type="button"
+            onClick={onAddCase}
+            className="shrink-0 px-2 py-1 text-muted-foreground/50 transition-colors hover:text-primary"
+            title={t('workspace.addTestcase')}
+          >
+            <Plus size={12} />
+          </button>
+        ) : null}
       </div>
 
       {/* Active case content */}

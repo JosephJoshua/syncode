@@ -261,6 +261,8 @@ export function RoomWorkspace({
   );
 
   const handleRunCode = async () => {
+    if (testCases.length === 0) return;
+
     for (const cancel of cancelMultiRunRef.current.values()) cancel();
     cancelMultiRunRef.current.clear();
     setActiveOutputTab('output');

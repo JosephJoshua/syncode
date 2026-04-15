@@ -172,7 +172,7 @@ export function ExecutionDetailsPanel({ details, className = '' }: ExecutionDeta
                   ) : null}
 
                   {/* Expected / Actual side-by-side for passed cases too */}
-                  {passed && tc.expectedOutput ? (
+                  {passed && tc.expectedOutput != null ? (
                     <div className="grid grid-cols-2 gap-2">
                       <div>
                         <span className="font-mono text-[10px] uppercase text-muted-foreground/50">

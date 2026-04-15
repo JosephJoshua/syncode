@@ -63,16 +63,21 @@ export type MultiRunState =
 export function countPassed(results: Map<string, CaseRunState>): {
   passed: number;
   total: number;
+  errors: number;
 } {
   let passed = 0;
   let total = 0;
+  let errors = 0;
   for (const state of results.values()) {
     if (state.status === 'completed' || state.status === 'failed') {
       total++;
       if (state.passed === true) passed++;
+    } else if (state.status === 'request-error') {
+      total++;
+      errors++;
     }
   }
-  return { passed, total };
+  return { passed, total, errors };
 }
 
 export function formatMs(value: number | null): string {
