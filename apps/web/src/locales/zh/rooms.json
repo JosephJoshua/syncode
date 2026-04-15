@@ -224,6 +224,7 @@
     "timerHeading": "编码计时",
     "timerRunning": "计时进行中",
     "timerPaused": "计时已暂停",
-    "sessionState": "会话状态"
+    "sessionState": "会话状态",
+    "phaseChanged": "阶段已切换至{{phase}}"
   }
 }

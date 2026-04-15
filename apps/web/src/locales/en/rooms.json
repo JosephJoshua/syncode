@@ -224,6 +224,7 @@
     "timerHeading": "Coding Time",
     "timerRunning": "Timer is live",
     "timerPaused": "Timer is paused",
-    "sessionState": "Session State"
+    "sessionState": "Session State",
+    "phaseChanged": "Phase changed to {{phase}}"
   }
 }

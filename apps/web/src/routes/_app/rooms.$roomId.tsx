@@ -18,6 +18,7 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { RoomLobby } from '@/components/room-lobby.js';
 import { RoomWorkspace } from '@/components/room-workspace.js';
+import { useCollabSocket } from '@/hooks/use-collab-socket.js';
 import { type ApiErrorResult, api, readApiError, resolveErrorMessage } from '@/lib/api-client.js';
 import { computeRoomElapsedMs, isWorkspaceStage, ROLE_LABEL_KEYS } from '@/lib/room-stage.js';
 import { useAuthStore } from '@/stores/auth.store.js';
@@ -55,6 +56,10 @@ function RoomPage() {
     displayName: string;
   } | null>(null);
   const [now, setNow] = useState(Date.now());
+  const [collabCreds, setCollabCreds] = useState<{
+    collabToken: string;
+    collabUrl: string;
+  } | null>(null);
   const joinPromiseRef = useRef<Promise<void> | null>(null);
 
   // Tick clock only when the timer is actively running (coding + not paused)
@@ -102,6 +107,7 @@ function RoomPage() {
             if (cancelled) return;
 
             setRoom(joined.room);
+            setCollabCreds({ collabToken: joined.collabToken, collabUrl: joined.collabUrl });
             const notice = buildJoinNotice(joined, t);
             setJoinNotice(notice);
             toast.success(notice);
@@ -154,6 +160,20 @@ function RoomPage() {
 
     return () => window.clearInterval(interval);
   }, [refreshRoomDetail, roomStatus]);
+
+  const handleRoomStatePatch = useCallback(
+    (patch: Partial<Pick<RoomDetail, 'status' | 'editorLocked'>>) => {
+      setRoom((prev) => (prev ? { ...prev, ...patch } : prev));
+    },
+    [],
+  );
+
+  useCollabSocket({
+    collabUrl: collabCreds?.collabUrl ?? null,
+    collabToken: collabCreds?.collabToken ?? null,
+    roomId,
+    onRoomStatePatch: handleRoomStatePatch,
+  });
 
   const canChangePhase = room?.myCapabilities.includes('room:change-phase') ?? false;
   const canManageParticipants = room?.myCapabilities.includes('participant:assign-role') ?? false;
