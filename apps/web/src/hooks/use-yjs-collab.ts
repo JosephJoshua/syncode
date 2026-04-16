@@ -62,30 +62,26 @@ export function useYjsCollab({
   const connKeyRef = useRef('');
   const latestPhaseRef = useRef('');
 
+  // Connection lifecycle — only recreate provider when connection params change.
+  // userName/userColor are NOT deps here; they update via the separate effect below.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: userName and userColor are intentionally excluded — they are handled by the awareness-update effect to avoid destroying the provider on metadata changes.
   useEffect(() => {
     if (!collabUrl || !collabToken) {
       if (providerRef.current) {
         providerRef.current.destroy();
         providerRef.current = null;
+        connKeyRef.current = '';
       }
       setStatus('disconnected');
       setCollab(null);
       return;
     }
 
-    // Only recreate the provider when connection params change
     const connKey = `${collabUrl}|${collabToken}|${roomId}`;
     if (connKey === connKeyRef.current && providerRef.current) {
-      // Connection params unchanged — just update awareness user info
-      providerRef.current.awareness.setLocalStateField('user', {
-        name: userName,
-        color: userColor,
-        colorLight: `${userColor}33`,
-      });
       return;
     }
 
-    // Connection params changed — tear down old provider and create new one
     if (providerRef.current) {
       providerRef.current.destroy();
     }
@@ -128,14 +124,9 @@ export function useYjsCollab({
     provider.connect();
 
     return () => {
-      // Don't destroy immediately — StrictMode will re-run the effect.
-      // The connKey check above ensures we only destroy when params actually change,
-      // or when the component truly unmounts (next effect won't run).
-      // Use a microtask to let StrictMode's second mount run first.
+      // Defer destruction so React StrictMode's second mount can reuse the provider.
       const currentProvider = providerRef.current;
       setTimeout(() => {
-        // If the provider hasn't been replaced by a new effect run, it means
-        // the component truly unmounted — destroy it.
         if (providerRef.current === currentProvider) {
           currentProvider?.destroy();
           providerRef.current = null;
@@ -143,7 +134,16 @@ export function useYjsCollab({
         }
       }, 0);
     };
-  }, [collabUrl, collabToken, roomId, userName, userColor]);
+  }, [collabUrl, collabToken, roomId]);
+
+  // Update awareness user info when name/color changes (no reconnection needed).
+  useEffect(() => {
+    providerRef.current?.awareness.setLocalStateField('user', {
+      name: userName,
+      color: userColor,
+      colorLight: `${userColor}33`,
+    });
+  }, [userName, userColor]);
 
   return { status, doc: collab?.doc ?? null, awareness: collab?.awareness ?? null };
 }

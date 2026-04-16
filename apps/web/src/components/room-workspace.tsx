@@ -99,8 +99,10 @@ export function RoomWorkspace({
 }: RoomWorkspaceProps) {
   const { t } = useTranslation('rooms');
 
-  const { remoteRun, remoteSubmit, broadcastRun, broadcastSubmit, clearExecution } =
-    useSharedExecution(awareness, doc);
+  const { remoteRun, remoteSubmit, broadcastRun, broadcastSubmit } = useSharedExecution(
+    awareness,
+    doc,
+  );
 
   const [problem, setProblem] = useState<ProblemDetail | null>(null);
   const [problemLoading, setProblemLoading] = useState(!!room.problemId);

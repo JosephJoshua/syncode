@@ -80,9 +80,12 @@ export function CollaborativeEditor({
         const user = state.user as
           | { name?: string; color?: string; colorLight?: string }
           | undefined;
-        if (!user?.color) return;
-        const light = user.colorLight ?? `${user.color}33`;
-        const name = (user.name ?? '').replace(/[\\"]/g, '');
+        if (!user?.color || !/^#[\da-f]{3,8}$/i.test(user.color)) return;
+        const light =
+          user.colorLight && /^#[\da-f]{3,8}$/i.test(user.colorLight)
+            ? user.colorLight
+            : `${user.color}33`;
+        const name = (user.name ?? '').replace(/[\\";{}]/g, '');
 
         rules.push(
           `.yRemoteSelection-${clientID} {
@@ -133,13 +136,14 @@ export function CollaborativeEditor({
 
     const onAwarenessChange = ({
       added,
+      updated,
       removed,
     }: {
       added: number[];
       updated: number[];
       removed: number[];
     }) => {
-      if (added.length > 0 || removed.length > 0) updateStyles();
+      if (added.length > 0 || updated.length > 0 || removed.length > 0) updateStyles();
     };
     awareness.on('change', onAwarenessChange);
     updateStyles();

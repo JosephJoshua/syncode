@@ -48,6 +48,10 @@ export class CollaborationGateway
 
   private heartbeat(): void {
     for (const client of this.clients) {
+      if (client.readyState !== client.OPEN) {
+        this.clients.delete(client);
+        continue;
+      }
       const ws = client as WebSocket & { isAlive?: boolean };
       if (ws.isAlive === false) {
         this.logger.debug('Terminating unresponsive client');
