@@ -18,7 +18,7 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { RoomLobby } from '@/components/room-lobby.js';
 import { RoomWorkspace } from '@/components/room-workspace.js';
-import { useCollabSocket } from '@/hooks/use-collab-socket.js';
+import { useYjsCollab } from '@/hooks/use-yjs-collab.js';
 import { type ApiErrorResult, api, readApiError, resolveErrorMessage } from '@/lib/api-client.js';
 import { computeRoomElapsedMs, isWorkspaceStage, ROLE_LABEL_KEYS } from '@/lib/room-stage.js';
 import { useAuthStore } from '@/stores/auth.store.js';
@@ -34,6 +34,23 @@ const REMOVE_PARTICIPANT_ROUTE = defineRoute<void, void>()(
   'rooms/:id/participants/:userId',
   'DELETE',
 );
+
+const CURSOR_COLORS = [
+  '#00e599',
+  '#60a5fa',
+  '#f59e0b',
+  '#818cf8',
+  '#ec4899',
+  '#22d3ee',
+  '#f97316',
+  '#a78bfa',
+];
+
+function userCursorColor(participants: { userId: string }[], currentUserId: string | null): string {
+  if (!currentUserId) return CURSOR_COLORS[0]!;
+  const index = participants.findIndex((p) => p.userId === currentUserId);
+  return CURSOR_COLORS[index >= 0 ? index % CURSOR_COLORS.length : 0]!;
+}
 
 function RoomPage() {
   const { t } = useTranslation('rooms');
@@ -192,10 +209,19 @@ function RoomPage() {
     collabCredsRef.current = { collabToken: room.collabToken, collabUrl: room.collabUrl };
   }
 
-  const collabStatus = useCollabSocket({
+  const currentUser = useAuthStore((s) => s.user);
+  const cursorColor = userCursorColor(room?.participants ?? [], currentUserId);
+
+  const {
+    status: collabStatus,
+    doc,
+    awareness,
+  } = useYjsCollab({
     collabUrl: collabCredsRef.current?.collabUrl ?? null,
     collabToken: collabCredsRef.current?.collabToken ?? null,
     roomId,
+    userName: currentUser?.displayName ?? currentUser?.username ?? 'Anonymous',
+    userColor: cursorColor,
     onRoomStatePatch: handleRoomStatePatch,
     onParticipantReady: handleParticipantReady,
   });
@@ -431,6 +457,8 @@ function RoomPage() {
               : null
           }
           collabStatus={collabStatus}
+          doc={doc}
+          awareness={awareness}
         />
       </>
     );
