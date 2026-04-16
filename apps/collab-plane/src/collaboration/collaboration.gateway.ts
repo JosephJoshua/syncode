@@ -115,8 +115,14 @@ export class CollaborationGateway implements OnGatewayConnection, OnGatewayDisco
     }
 
     if (this.roomRegistry.hasClient(roomId, userId)) {
-      client.close(WsCloseCode.ALREADY_CONNECTED, 'Already connected');
-      return;
+      // Evict the stale connection — the new one replaces it.
+      // This handles reconnection races where the old socket hasn't
+      // fired handleDisconnect yet.
+      const stale = this.roomRegistry.getClient(roomId, userId);
+      this.roomRegistry.removeClient(roomId, userId);
+      this.awarenessHandler.removeClient(roomId, userId);
+      stale?.close(WsCloseCode.ALREADY_CONNECTED, 'Replaced by new connection');
+      this.logger.log(`Evicted stale connection for userId=${userId} in room ${roomId}`);
     }
 
     this.roomRegistry.addClient(roomId, userId, authenticated);

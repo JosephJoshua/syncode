@@ -219,19 +219,22 @@ describe('CollaborationGateway', () => {
       expect(client.close).toHaveBeenCalledWith(WsCloseCode.ROOM_NOT_FOUND, 'Room not found');
     });
 
-    it('GIVEN duplicate connection WHEN joining THEN closes with ALREADY_CONNECTED', () => {
+    it('GIVEN duplicate connection WHEN joining THEN evicts stale connection and lets new one proceed', () => {
       const { gateway, roomRegistry } = createFixture();
       roomRegistry.createRoom('room-1');
-      roomRegistry.addClient(
-        'room-1',
-        'user-1',
-        fakeClient(VALID_PAYLOAD) as unknown as AuthenticatedClient,
+      const staleClient = fakeClient(VALID_PAYLOAD);
+      roomRegistry.addClient('room-1', 'user-1', staleClient as unknown as AuthenticatedClient);
+      const newClient = fakeClient(VALID_PAYLOAD);
+
+      gateway.handleJoin(newClient as unknown as WebSocket, { roomId: 'room-1' });
+
+      // Stale connection is closed, new one is registered
+      expect(staleClient.close).toHaveBeenCalledWith(
+        WsCloseCode.ALREADY_CONNECTED,
+        'Replaced by new connection',
       );
-      const client = fakeClient(VALID_PAYLOAD);
-
-      gateway.handleJoin(client as unknown as WebSocket, { roomId: 'room-1' });
-
-      expect(client.close).toHaveBeenCalledWith(WsCloseCode.ALREADY_CONNECTED, 'Already connected');
+      expect(newClient.close).not.toHaveBeenCalled();
+      expect(roomRegistry.hasClient('room-1', 'user-1')).toBe(true);
     });
 
     it('GIVEN unauthenticated client WHEN joining THEN closes with UNAUTHORIZED', () => {
