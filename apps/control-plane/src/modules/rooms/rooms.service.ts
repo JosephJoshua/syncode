@@ -567,52 +567,60 @@ export class RoomsService {
   }
 
   async toggleReady(roomId: string, userId: string): Promise<RoomDetailResult> {
-    const [room] = await this.db
-      .select({ status: rooms.status })
-      .from(rooms)
-      .where(eq(rooms.id, roomId));
+    const newReady = await this.db.transaction(async (tx) => {
+      const [room] = await tx
+        .select({ status: rooms.status })
+        .from(rooms)
+        .where(eq(rooms.id, roomId));
 
-    if (!room) {
-      throw new NotFoundException({ message: 'Room not found', code: ERROR_CODES.ROOM_NOT_FOUND });
-    }
+      if (!room) {
+        throw new NotFoundException({
+          message: 'Room not found',
+          code: ERROR_CODES.ROOM_NOT_FOUND,
+        });
+      }
 
-    if (room.status !== RoomStatus.WAITING) {
-      throw new BadRequestException({
-        message: 'Ready status can only be toggled in the waiting phase',
-        code: ERROR_CODES.ROOM_INVALID_TRANSITION,
-      });
-    }
+      if (room.status !== RoomStatus.WAITING) {
+        throw new BadRequestException({
+          message: 'Ready status can only be toggled in the waiting phase',
+          code: ERROR_CODES.ROOM_INVALID_TRANSITION,
+        });
+      }
 
-    const [participant] = await this.db
-      .select({ isReady: roomParticipants.isReady })
-      .from(roomParticipants)
-      .where(
-        and(
-          eq(roomParticipants.roomId, roomId),
-          eq(roomParticipants.userId, userId),
-          eq(roomParticipants.isActive, true),
-        ),
-      );
+      const [participant] = await tx
+        .select({ isReady: roomParticipants.isReady })
+        .from(roomParticipants)
+        .where(
+          and(
+            eq(roomParticipants.roomId, roomId),
+            eq(roomParticipants.userId, userId),
+            eq(roomParticipants.isActive, true),
+          ),
+        )
+        .for('update');
 
-    if (!participant) {
-      throw new NotFoundException({
-        message: 'Not a participant of this room',
-        code: ERROR_CODES.PARTICIPANT_NOT_FOUND,
-      });
-    }
+      if (!participant) {
+        throw new NotFoundException({
+          message: 'Not a participant of this room',
+          code: ERROR_CODES.PARTICIPANT_NOT_FOUND,
+        });
+      }
 
-    const newReady = !participant.isReady;
+      const toggled = !participant.isReady;
 
-    await this.db
-      .update(roomParticipants)
-      .set({ isReady: newReady })
-      .where(
-        and(
-          eq(roomParticipants.roomId, roomId),
-          eq(roomParticipants.userId, userId),
-          eq(roomParticipants.isActive, true),
-        ),
-      );
+      await tx
+        .update(roomParticipants)
+        .set({ isReady: toggled })
+        .where(
+          and(
+            eq(roomParticipants.roomId, roomId),
+            eq(roomParticipants.userId, userId),
+            eq(roomParticipants.isActive, true),
+          ),
+        );
+
+      return toggled;
+    });
 
     void this.broadcastParticipantReady(roomId, userId, newReady);
 
