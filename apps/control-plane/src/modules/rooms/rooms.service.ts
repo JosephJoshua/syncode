@@ -105,8 +105,19 @@ export class RoomsService {
       return inserted;
     });
 
+    let initialContent: string | undefined;
+    if (room.problemId && room.language) {
+      const problem = await this.db
+        .select({ starterCode: problems.starterCode })
+        .from(problems)
+        .where(eq(problems.id, room.problemId))
+        .then((rows) => rows[0]);
+      const starterMap = problem?.starterCode as Record<string, string> | null;
+      initialContent = starterMap?.[room.language] ?? undefined;
+    }
+
     const [collabCreated, mediaCreated] = await Promise.all([
-      this.createCollabDocument(room.id, room.status, room.editorLocked),
+      this.createCollabDocument(room.id, room.status, room.editorLocked, initialContent),
       this.createMediaRoom(room.id),
     ]);
 
@@ -1250,9 +1261,15 @@ export class RoomsService {
     roomId: string,
     initialPhase: RoomStatus,
     editorLocked: boolean,
+    initialContent?: string,
   ): Promise<boolean> {
     try {
-      await this.collabClient.createDocument({ roomId, initialPhase, editorLocked });
+      await this.collabClient.createDocument({
+        roomId,
+        initialPhase,
+        editorLocked,
+        initialContent,
+      });
       return true;
     } catch (error) {
       this.logger.warn(`Collab document creation failed for ${roomId}`, error);

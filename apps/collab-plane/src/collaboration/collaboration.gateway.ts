@@ -1,12 +1,12 @@
 import type { IncomingMessage } from 'node:http';
-import { Logger } from '@nestjs/common';
+import { Logger, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
 import {
   type OnGatewayConnection,
   type OnGatewayDisconnect,
   SubscribeMessage,
   WebSocketGateway,
 } from '@nestjs/websockets';
-import { COLLAB_WS_EVENTS } from '@syncode/contracts';
+import { COLLAB_WS_EVENTS, WsMessageType } from '@syncode/contracts';
 import type { WebSocket } from 'ws';
 import type { AuthenticatedClient } from '../auth/index.js';
 import { WsAuthService } from '../auth/index.js';
@@ -15,12 +15,17 @@ import { CollaborationService } from './collaboration.service.js';
 import { RoomRegistry } from './room-registry.js';
 import { WsCloseCode } from './ws-close-codes.js';
 import type { JoinMessageData, WsMessage } from './ws-message.types.js';
-import { WsMessageType } from './ws-message-types.js';
 import { YjsSyncHandler } from './yjs-sync.handler.js';
 
+const HEARTBEAT_INTERVAL_MS = 30_000;
+
 @WebSocketGateway()
-export class CollaborationGateway implements OnGatewayConnection, OnGatewayDisconnect {
+export class CollaborationGateway
+  implements OnGatewayConnection, OnGatewayDisconnect, OnModuleInit, OnModuleDestroy
+{
   private readonly logger = new Logger(CollaborationGateway.name);
+  private readonly clients = new Set<WebSocket>();
+  private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(
     private readonly wsAuthService: WsAuthService,
@@ -30,7 +35,42 @@ export class CollaborationGateway implements OnGatewayConnection, OnGatewayDisco
     private readonly awarenessHandler: AwarenessHandler,
   ) {}
 
+  onModuleInit(): void {
+    this.heartbeatTimer = setInterval(() => this.heartbeat(), HEARTBEAT_INTERVAL_MS);
+  }
+
+  onModuleDestroy(): void {
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+    }
+  }
+
+  private heartbeat(): void {
+    for (const client of this.clients) {
+      if (client.readyState !== client.OPEN) {
+        this.clients.delete(client);
+        continue;
+      }
+      const ws = client as WebSocket & { isAlive?: boolean };
+      if (ws.isAlive === false) {
+        this.logger.debug('Terminating unresponsive client');
+        this.clients.delete(client);
+        ws.terminate();
+        continue;
+      }
+      ws.isAlive = false;
+      ws.ping();
+    }
+  }
+
   async handleConnection(client: WebSocket, request: IncomingMessage): Promise<void> {
+    this.clients.add(client);
+    (client as WebSocket & { isAlive?: boolean }).isAlive = true;
+    client.on('pong', () => {
+      (client as WebSocket & { isAlive?: boolean }).isAlive = true;
+    });
+
     try {
       const payload = await this.wsAuthService.authenticate(request);
       (client as AuthenticatedClient).user = payload;
@@ -67,6 +107,7 @@ export class CollaborationGateway implements OnGatewayConnection, OnGatewayDisco
   }
 
   handleDisconnect(client: WebSocket): void {
+    this.clients.delete(client);
     const authenticated = client as AuthenticatedClient;
     if (!authenticated.user) {
       return;
@@ -116,8 +157,14 @@ export class CollaborationGateway implements OnGatewayConnection, OnGatewayDisco
     }
 
     if (this.roomRegistry.hasClient(roomId, userId)) {
-      client.close(WsCloseCode.ALREADY_CONNECTED, 'Already connected');
-      return;
+      // Evict the stale connection — the new one replaces it.
+      // This handles reconnection races where the old socket hasn't
+      // fired handleDisconnect yet.
+      const stale = this.roomRegistry.getClient(roomId, userId);
+      this.roomRegistry.removeClient(roomId, userId);
+      this.awarenessHandler.removeClient(roomId, userId);
+      stale?.close(WsCloseCode.ALREADY_CONNECTED, 'Replaced by new connection');
+      this.logger.log(`Evicted stale connection for userId=${userId} in room ${roomId}`);
     }
 
     this.roomRegistry.addClient(roomId, userId, authenticated);

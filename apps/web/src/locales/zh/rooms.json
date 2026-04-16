@@ -231,6 +231,8 @@
     "timerPaused": "计时已暂停",
     "sessionState": "会话状态",
     "phaseChanged": "阶段已切换至{{phase}}",
-    "sessionHeading": "会话"
+    "sessionHeading": "会话",
+    "remoteRunning": "{{name}} 正在运行代码...",
+    "remoteSubmitting": "{{name}} 正在提交..."
   }
 }

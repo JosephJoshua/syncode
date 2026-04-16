@@ -1,4 +1,3 @@
-import Editor, { type OnMount } from '@monaco-editor/react';
 import type {
   ExecutionDetailsResponse,
   ExecutionResultResponse,
@@ -29,8 +28,14 @@ import {
   usePanelRef,
 } from 'react-resizable-panels';
 import { toast } from 'sonner';
+import type { Awareness } from 'y-protocols/awareness';
+import type * as Y from 'yjs';
+import { useSharedExecution } from '@/hooks/use-shared-execution.js';
+import type { CollabConnectionStatus } from '@/hooks/use-yjs-collab.js';
 import { api, readApiError, resolveErrorMessage } from '@/lib/api-client.js';
 import { buildInviteLink } from '@/lib/room-stage.js';
+import { CODE_TEXT_KEY } from '@/lib/yjs-collab-provider.js';
+import { CollaborativeEditor } from './collaborative-editor.js';
 import { ExecutionDetailsPanel } from './execution-details-panel.js';
 import { HostControlPanel } from './host-control-panel.js';
 import { InviteLinkInline } from './invite-link-inline.js';
@@ -42,10 +47,7 @@ import {
   type CaseRunState,
   countPassed,
   EDITOR_LOADING,
-  EDITOR_OPTIONS_BASE,
   EXECUTION_POLL_INTERVAL_MS,
-  getDefaultCode,
-  handleEditorWillMount,
   languageExtension,
   type MultiRunState,
   SUBMISSION_POLL_INTERVAL_MS,
@@ -62,6 +64,8 @@ interface RoomWorkspaceProps {
   room: RoomDetail;
   currentUserId: string | null;
   roomId: string;
+  doc: Y.Doc | null;
+  awareness: Awareness | null;
   elapsedMs: number;
   isTransitioning: boolean;
   onTransition: (targetStatus: RoomStatus) => Promise<void>;
@@ -71,13 +75,16 @@ interface RoomWorkspaceProps {
   isUpdatingRole: string | null;
   isTransferringOwnership: string | null;
   isRemovingParticipant: string | null;
-  collabStatus: 'connecting' | 'connected' | 'reconnecting' | 'disconnected';
+  collabStatus: CollabConnectionStatus;
+  currentUserName: string;
 }
 
 export function RoomWorkspace({
   room,
   currentUserId,
   roomId,
+  doc,
+  awareness,
   elapsedMs,
   isTransitioning,
   onTransition,
@@ -88,13 +95,18 @@ export function RoomWorkspace({
   isTransferringOwnership,
   isRemovingParticipant,
   collabStatus,
+  currentUserName,
 }: RoomWorkspaceProps) {
   const { t } = useTranslation('rooms');
+
+  const { remoteRun, remoteSubmit, broadcastRun, broadcastSubmit } = useSharedExecution(
+    awareness,
+    doc,
+  );
 
   const [problem, setProblem] = useState<ProblemDetail | null>(null);
   const [problemLoading, setProblemLoading] = useState(!!room.problemId);
   const [problemError, setProblemError] = useState<string | null>(null);
-  const codeInitializedRef = useRef(false);
 
   useEffect(() => {
     if (!room.problemId) return;
@@ -123,17 +135,6 @@ export function RoomWorkspace({
   const bottomPanelRef = usePanelRef();
   const leftPanelRef = usePanelRef();
   const rightPanelRef = usePanelRef();
-  const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
-  const codeStorageKey = `syncode:code:${roomId}:${language}`;
-  const codeRef = useRef(
-    (() => {
-      try {
-        const saved = localStorage.getItem(codeStorageKey);
-        if (saved) return saved;
-      } catch {}
-      return getDefaultCode(language);
-    })(),
-  );
   const [submitState, setSubmitState] = useState<SubmitState>({ status: 'idle' });
   const [activeBottomTab, setActiveBottomTab] = useState<'testcases' | 'output' | 'results'>(
     'testcases',
@@ -149,19 +150,6 @@ export function RoomWorkspace({
   const [multiRunState, setMultiRunState] = useState<MultiRunState>({ status: 'idle' });
   const cancelMultiRunRef = useRef(new Map<string, () => void>());
   const nextCustomId = useRef(1);
-
-  useEffect(() => {
-    if (codeInitializedRef.current || !problem) return;
-    const starterCode = problem.starterCode?.[language];
-    if (starterCode) {
-      codeRef.current = starterCode;
-      editorRef.current?.setValue(starterCode);
-      try {
-        localStorage.setItem(codeStorageKey, starterCode);
-      } catch {}
-      codeInitializedRef.current = true;
-    }
-  }, [problem, language, codeStorageKey]);
 
   useEffect(() => {
     if (!problem) return;
@@ -180,7 +168,6 @@ export function RoomWorkspace({
     return () => {
       cancelSubmitPollRef.current?.();
       for (const cancel of cancelMultiRunRef.current.values()) cancel();
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     };
   }, []);
 
@@ -227,46 +214,17 @@ export function RoomWorkspace({
 
   const isMultiRunBusy = multiRunState.status === 'running';
   const isSubmitBusy = submitState.status === 'submitting' || submitState.status === 'polling';
-  const runDisabled = !canRunCode || isEditorReadOnly || isMultiRunBusy;
-  const submitDisabled = !canSubmitCode || isEditorReadOnly || isSubmitBusy;
+  const isRemoteRunActive = remoteRun?.multiRunState.status === 'running' && !isMultiRunBusy;
+  const isRemoteSubmitActive =
+    (remoteSubmit?.submitState.status === 'polling' ||
+      remoteSubmit?.submitState.status === 'submitting') &&
+    !isSubmitBusy;
+  const runDisabled = !canRunCode || isEditorReadOnly || isMultiRunBusy || isRemoteRunActive;
+  const submitDisabled = !canSubmitCode || isEditorReadOnly || isSubmitBusy || isRemoteSubmitActive;
 
-  const editorOptions = useMemo(
-    () => ({ ...EDITOR_OPTIONS_BASE, readOnly: isEditorReadOnly }),
-    [isEditorReadOnly],
-  );
-
-  const handleEditorMount: OnMount = useCallback((editorInstance, monaco) => {
-    editorRef.current = editorInstance;
-
-    editorInstance.addAction({
-      id: 'syncode-run',
-      label: 'Run Code',
-      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter],
-      run: () => void handleRunCodeRef.current(),
-    });
-
-    editorInstance.addAction({
-      id: 'syncode-submit',
-      label: 'Submit Code',
-      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.Enter],
-      run: () => void handleSubmitCodeRef.current(),
-    });
-  }, []);
-
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const handleEditorChange = useCallback(
-    (value: string | undefined) => {
-      if (value === undefined) return;
-      codeRef.current = value;
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-      saveTimerRef.current = setTimeout(() => {
-        try {
-          localStorage.setItem(codeStorageKey, value);
-        } catch {}
-      }, 500);
-    },
-    [codeStorageKey],
-  );
+  const getCode = useCallback(() => {
+    return doc?.getText(CODE_TEXT_KEY).toString() ?? '';
+  }, [doc]);
 
   const handleRunCode = async () => {
     if (testCases.length === 0) return;
@@ -281,8 +239,22 @@ export function RoomWorkspace({
     }
     setMultiRunState({ status: 'running', results: initialResults });
 
-    for (const tc of testCases) {
-      void runCase(tc);
+    const code = getCode();
+    const results = await Promise.all(
+      testCases.map(async (tc) => {
+        const jobId = await runCase(tc, code);
+        return jobId
+          ? { caseId: tc.id, jobId, label: tc.label, expectedOutput: tc.expectedOutput }
+          : null;
+      }),
+    );
+    const jobs = results.filter(
+      (j): j is { caseId: string; jobId: string; label: string; expectedOutput: string | null } =>
+        j !== null,
+    );
+
+    if (jobs.length > 0) {
+      broadcastRun(currentUserName, jobs);
     }
   };
 
@@ -374,11 +346,12 @@ export function RoomWorkspace({
     try {
       const response = await api(CONTROL_API.ROOMS.SUBMIT, {
         params: { id: roomId },
-        body: { language, code: codeRef.current },
+        body: { language, code: getCode() },
       });
 
       setSubmitState({ status: 'polling', submissionId: response.submissionId });
       cancelSubmitPollRef.current = pollSubmission(response.submissionId);
+      broadcastSubmit(currentUserName, response.submissionId);
     } catch (error) {
       const apiError = await readApiError(error);
       const message = resolveErrorMessage(apiError, SUBMIT_ERROR_KEYS, 'workspace.submitFailed', t);
@@ -427,7 +400,7 @@ export function RoomWorkspace({
     };
   };
 
-  const runCase = async (tc: TestCaseEntry) => {
+  const runCase = async (tc: TestCaseEntry, code?: string): Promise<string | null> => {
     cancelMultiRunRef.current.get(tc.id)?.();
     const token = { cancelled: false };
     cancelMultiRunRef.current.set(tc.id, () => {
@@ -437,10 +410,10 @@ export function RoomWorkspace({
     try {
       const response = await api(CONTROL_API.ROOMS.RUN, {
         params: { id: roomId },
-        body: { language, code: codeRef.current, stdin: tc.input || undefined },
+        body: { language, code: code ?? getCode(), stdin: tc.input || undefined },
       });
 
-      if (token.cancelled) return;
+      if (token.cancelled) return null;
 
       setMultiRunState((prev) => {
         if (prev.status !== 'running' && prev.status !== 'completed') return prev;
@@ -450,8 +423,9 @@ export function RoomWorkspace({
       });
 
       pollCaseExecution(tc.id, response.jobId, tc.expectedOutput, token);
+      return response.jobId;
     } catch (error) {
-      if (token.cancelled) return;
+      if (token.cancelled) return null;
       const apiError = await readApiError(error);
       setMultiRunState((prev) => {
         if (prev.status !== 'running' && prev.status !== 'completed') return prev;
@@ -462,6 +436,7 @@ export function RoomWorkspace({
         });
         return { ...prev, results: next };
       });
+      return null;
     }
   };
 
@@ -486,10 +461,25 @@ export function RoomWorkspace({
   const handleSubmitCodeRef = useRef(handleSubmitCode);
   handleSubmitCodeRef.current = handleSubmitCode;
 
+  // Show remote results when local user is idle
   const multiRunResults =
     multiRunState.status === 'running' || multiRunState.status === 'completed'
       ? multiRunState.results
-      : null;
+      : remoteRun?.multiRunState.status === 'running' ||
+          remoteRun?.multiRunState.status === 'completed'
+        ? remoteRun.multiRunState.results
+        : null;
+
+  // Auto-switch tabs when remote execution starts
+  const prevRemoteRunRef = useRef(isRemoteRunActive);
+  const prevRemoteSubmitRef = useRef(isRemoteSubmitActive);
+  useEffect(() => {
+    if (isRemoteRunActive && !prevRemoteRunRef.current) setActiveBottomTab('output');
+    if (isRemoteSubmitActive && !prevRemoteSubmitRef.current) setActiveBottomTab('results');
+    prevRemoteRunRef.current = isRemoteRunActive;
+    prevRemoteSubmitRef.current = isRemoteSubmitActive;
+  }, [isRemoteRunActive, isRemoteSubmitActive]);
+
   const prevMultiRunStatus = useRef(multiRunState.status);
   useEffect(() => {
     if (
@@ -641,19 +631,35 @@ export function RoomWorkspace({
                   </div>
                 </div>
 
+                {/* Remote execution indicator */}
+                {isRemoteRunActive && remoteRun ? (
+                  <div className="flex h-6 shrink-0 items-center gap-1.5 border-b border-border bg-primary/5 px-3 font-mono text-[10px] text-primary">
+                    <Loader2 className="size-3 animate-spin" />
+                    {t('workspace.remoteRunning', { name: remoteRun.userName })}
+                  </div>
+                ) : null}
+                {isRemoteSubmitActive && remoteSubmit ? (
+                  <div className="flex h-6 shrink-0 items-center gap-1.5 border-b border-border bg-amber-500/5 px-3 font-mono text-[10px] text-amber-400">
+                    <Loader2 className="size-3 animate-spin" />
+                    {t('workspace.remoteSubmitting', { name: remoteSubmit.userName })}
+                  </div>
+                ) : null}
+
                 {/* Monaco editor */}
                 <div className="flex-1 overflow-hidden">
-                  <Editor
-                    height="100%"
-                    language={monacoLanguage}
-                    defaultValue={codeRef.current}
-                    onChange={handleEditorChange}
-                    onMount={handleEditorMount}
-                    theme="syncode-dark"
-                    beforeMount={handleEditorWillMount}
-                    options={editorOptions}
-                    loading={EDITOR_LOADING}
-                  />
+                  {doc && awareness ? (
+                    <CollaborativeEditor
+                      key={doc.clientID}
+                      doc={doc}
+                      awareness={awareness}
+                      language={monacoLanguage}
+                      readOnly={isEditorReadOnly}
+                      onRunCode={() => void handleRunCodeRef.current()}
+                      onSubmitCode={() => void handleSubmitCodeRef.current()}
+                    />
+                  ) : (
+                    EDITOR_LOADING
+                  )}
                 </div>
 
                 {/* Expand bar shown when bottom panel is collapsed */}

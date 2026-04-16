@@ -1,5 +1,6 @@
 import type { IncomingMessage } from 'node:http';
 import { UnauthorizedException } from '@nestjs/common';
+import { WsMessageType } from '@syncode/contracts';
 import { describe, expect, it, vi } from 'vitest';
 import type { WebSocket } from 'ws';
 import type { CollabTokenPayload } from '../auth/collab-token-payload.js';
@@ -9,7 +10,6 @@ import { CollaborationGateway } from './collaboration.gateway.js';
 import type { CollaborationService } from './collaboration.service.js';
 import { RoomRegistry } from './room-registry.js';
 import { WsCloseCode } from './ws-close-codes.js';
-import { WsMessageType } from './ws-message-types.js';
 import type { YjsSyncHandler } from './yjs-sync.handler.js';
 
 const VALID_PAYLOAD: CollabTokenPayload = {
@@ -219,19 +219,22 @@ describe('CollaborationGateway', () => {
       expect(client.close).toHaveBeenCalledWith(WsCloseCode.ROOM_NOT_FOUND, 'Room not found');
     });
 
-    it('GIVEN duplicate connection WHEN joining THEN closes with ALREADY_CONNECTED', () => {
+    it('GIVEN duplicate connection WHEN joining THEN evicts stale connection and lets new one proceed', () => {
       const { gateway, roomRegistry } = createFixture();
       roomRegistry.createRoom('room-1');
-      roomRegistry.addClient(
-        'room-1',
-        'user-1',
-        fakeClient(VALID_PAYLOAD) as unknown as AuthenticatedClient,
+      const staleClient = fakeClient(VALID_PAYLOAD);
+      roomRegistry.addClient('room-1', 'user-1', staleClient as unknown as AuthenticatedClient);
+      const newClient = fakeClient(VALID_PAYLOAD);
+
+      gateway.handleJoin(newClient as unknown as WebSocket, { roomId: 'room-1' });
+
+      // Stale connection is closed, new one is registered
+      expect(staleClient.close).toHaveBeenCalledWith(
+        WsCloseCode.ALREADY_CONNECTED,
+        'Replaced by new connection',
       );
-      const client = fakeClient(VALID_PAYLOAD);
-
-      gateway.handleJoin(client as unknown as WebSocket, { roomId: 'room-1' });
-
-      expect(client.close).toHaveBeenCalledWith(WsCloseCode.ALREADY_CONNECTED, 'Already connected');
+      expect(newClient.close).not.toHaveBeenCalled();
+      expect(roomRegistry.hasClient('room-1', 'user-1')).toBe(true);
     });
 
     it('GIVEN unauthenticated client WHEN joining THEN closes with UNAUTHORIZED', () => {
@@ -281,6 +284,114 @@ describe('CollaborationGateway', () => {
       const client = fakeClient(VALID_PAYLOAD);
 
       expect(() => gateway.handleDisconnect(client as unknown as WebSocket)).not.toThrow();
+    });
+  });
+
+  describe('heartbeat', () => {
+    it('GIVEN connected client WHEN heartbeat fires THEN sends ping and marks as not alive', async () => {
+      const { gateway, wsAuthService } = createFixture();
+      wsAuthService.authenticate.mockResolvedValueOnce(VALID_PAYLOAD);
+      const client = fakeClient(VALID_PAYLOAD) as unknown as WebSocket & {
+        isAlive?: boolean;
+        readyState: number;
+        OPEN: number;
+        ping: ReturnType<typeof vi.fn>;
+        terminate: ReturnType<typeof vi.fn>;
+      };
+      client.readyState = 1;
+      client.OPEN = 1;
+      client.ping = vi.fn();
+      client.terminate = vi.fn();
+
+      await gateway.handleConnection(client as unknown as WebSocket, {} as IncomingMessage);
+
+      // Simulate heartbeat
+      (gateway as unknown as { heartbeat(): void }).heartbeat();
+
+      expect(client.ping).toHaveBeenCalledOnce();
+      expect(client.isAlive).toBe(false);
+    });
+
+    it('GIVEN unresponsive client WHEN heartbeat fires twice THEN terminates the client', async () => {
+      const { gateway, wsAuthService } = createFixture();
+      wsAuthService.authenticate.mockResolvedValueOnce(VALID_PAYLOAD);
+      const client = fakeClient(VALID_PAYLOAD) as unknown as WebSocket & {
+        isAlive?: boolean;
+        readyState: number;
+        OPEN: number;
+        ping: ReturnType<typeof vi.fn>;
+        terminate: ReturnType<typeof vi.fn>;
+      };
+      client.readyState = 1;
+      client.OPEN = 1;
+      client.ping = vi.fn();
+      client.terminate = vi.fn();
+
+      await gateway.handleConnection(client as unknown as WebSocket, {} as IncomingMessage);
+
+      // First heartbeat: marks as not alive, sends ping
+      (gateway as unknown as { heartbeat(): void }).heartbeat();
+      expect(client.isAlive).toBe(false);
+
+      // No pong received — second heartbeat terminates
+      (gateway as unknown as { heartbeat(): void }).heartbeat();
+      expect(client.terminate).toHaveBeenCalledOnce();
+    });
+
+    it('GIVEN client with pong WHEN heartbeat fires twice THEN client stays alive', async () => {
+      const { gateway, wsAuthService } = createFixture();
+      wsAuthService.authenticate.mockResolvedValueOnce(VALID_PAYLOAD);
+      const listeners = new Map<string, (...args: unknown[]) => void>();
+      const client = {
+        close: vi.fn(),
+        send: vi.fn(),
+        on: vi.fn((event: string, cb: (...args: unknown[]) => void) => {
+          listeners.set(event, cb);
+        }),
+        readyState: 1,
+        OPEN: 1,
+        ping: vi.fn(),
+        terminate: vi.fn(),
+        isAlive: true,
+      };
+
+      await gateway.handleConnection(client as unknown as WebSocket, {} as IncomingMessage);
+
+      // First heartbeat
+      (gateway as unknown as { heartbeat(): void }).heartbeat();
+      expect(client.isAlive).toBe(false);
+
+      // Simulate pong
+      listeners.get('pong')?.();
+      expect(client.isAlive).toBe(true);
+
+      // Second heartbeat — should ping again, NOT terminate
+      (gateway as unknown as { heartbeat(): void }).heartbeat();
+      expect(client.terminate).not.toHaveBeenCalled();
+      expect(client.ping).toHaveBeenCalledTimes(2);
+    });
+
+    it('GIVEN closed client WHEN heartbeat fires THEN removes from tracking set', async () => {
+      const { gateway, wsAuthService } = createFixture();
+      wsAuthService.authenticate.mockResolvedValueOnce(VALID_PAYLOAD);
+      const client = fakeClient(VALID_PAYLOAD) as unknown as WebSocket & {
+        readyState: number;
+        OPEN: number;
+        ping: ReturnType<typeof vi.fn>;
+        terminate: ReturnType<typeof vi.fn>;
+      };
+      client.readyState = 3; // CLOSED
+      client.OPEN = 1;
+      client.ping = vi.fn();
+      client.terminate = vi.fn();
+
+      await gateway.handleConnection(client as unknown as WebSocket, {} as IncomingMessage);
+
+      (gateway as unknown as { heartbeat(): void }).heartbeat();
+
+      // Should not ping or terminate — just remove
+      expect(client.ping).not.toHaveBeenCalled();
+      expect(client.terminate).not.toHaveBeenCalled();
     });
   });
 });

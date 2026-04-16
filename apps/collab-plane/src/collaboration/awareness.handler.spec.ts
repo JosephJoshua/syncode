@@ -1,3 +1,4 @@
+import { WsMessageType } from '@syncode/contracts';
 import * as encoding from 'lib0/encoding';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as awarenessProtocol from 'y-protocols/awareness';
@@ -5,7 +6,6 @@ import * as Y from 'yjs';
 import type { AuthenticatedClient } from '../auth/index.js';
 import { AwarenessHandler } from './awareness.handler.js';
 import { RoomRegistry } from './room-registry.js';
-import { WsMessageType } from './ws-message-types.js';
 import { YjsDocumentStore } from './yjs-document-store.js';
 
 function fakeClient(userId: string): AuthenticatedClient {

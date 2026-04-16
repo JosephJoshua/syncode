@@ -157,29 +157,6 @@ export const handleEditorWillMount: BeforeMount = (monaco) => {
   });
 };
 
-export function getDefaultCode(language: string): string {
-  switch (language) {
-    case 'python':
-      return '# Write your solution here\n\n';
-    case 'javascript':
-      return '// Write your solution here\n\n';
-    case 'typescript':
-      return '// Write your solution here\n\n';
-    case 'java':
-      return 'public class Main {\n  public static void main(String[] args) {\n    // Write your solution here\n  }\n}\n';
-    case 'cpp':
-      return '#include <bits/stdc++.h>\nusing namespace std;\n\nint main() {\n  // Write your solution here\n  return 0;\n}\n';
-    case 'c':
-      return '#include <stdio.h>\n\nint main(void) {\n  // Write your solution here\n  return 0;\n}\n';
-    case 'go':
-      return 'package main\n\nfunc main() {\n  // Write your solution here\n}\n';
-    case 'rust':
-      return 'fn main() {\n    // Write your solution here\n}\n';
-    default:
-      return '# Write your solution here\n\n';
-  }
-}
-
 export const EDITOR_OPTIONS_BASE = {
   fontSize: 14,
   fontFamily: "'Geist Mono', 'IBM Plex Mono', 'Fira Code', monospace",

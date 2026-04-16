@@ -4,7 +4,7 @@ import { ConfigModule } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { WsAdapter } from '@nestjs/platform-ws';
 import { Test } from '@nestjs/testing';
-import { CONTROL_PLANE_CALLBACK } from '@syncode/contracts';
+import { CONTROL_PLANE_CALLBACK, WsMessageType } from '@syncode/contracts';
 import * as decoding from 'lib0/decoding';
 import * as encoding from 'lib0/encoding';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -14,7 +14,6 @@ import * as syncProtocol from 'y-protocols/sync';
 import * as Y from 'yjs';
 import { CollaborationModule } from './collaboration.module.js';
 import { CollaborationService } from './collaboration.service.js';
-import { WsMessageType } from './ws-message-types.js';
 
 const JWT_SECRET = 'integration-test-secret-at-least-32-characters-long';
 

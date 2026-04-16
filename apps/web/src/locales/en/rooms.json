@@ -231,6 +231,8 @@
     "timerPaused": "Timer is paused",
     "sessionState": "Session State",
     "phaseChanged": "Phase changed to {{phase}}",
-    "sessionHeading": "Session"
+    "sessionHeading": "Session",
+    "remoteRunning": "{{name}} is running code...",
+    "remoteSubmitting": "{{name}} is submitting..."
   }
 }

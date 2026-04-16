@@ -15,7 +15,7 @@ import {
   SelectItem,
   SelectTrigger,
 } from '@syncode/ui';
-import { Crown, EllipsisVertical, Loader2, Trash2 } from 'lucide-react';
+import { CheckCircle2, Crown, EllipsisVertical, Loader2, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ROLE_LABEL_KEYS } from '@/lib/room-stage.js';
@@ -87,6 +87,9 @@ export function RoomParticipantCard({
             {isMe ? <span className="ml-1 text-xs text-primary">{t('lobby.you')}</span> : null}
           </span>
           {isHost ? <Crown className="size-3 shrink-0 text-primary" /> : null}
+          {participant.isReady ? (
+            <CheckCircle2 className="size-3 shrink-0 text-emerald-400" />
+          ) : null}
         </div>
         <div className="flex shrink-0 items-center justify-end gap-1.5">
           <div
@@ -189,10 +192,16 @@ export function RoomParticipantCard({
                 {t('role.host')}
               </span>
             ) : null}
+            {participant.isReady ? (
+              <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide text-emerald-400">
+                <CheckCircle2 className="size-2.5" />
+                {t('lobby.ready')}
+              </span>
+            ) : null}
           </div>
 
           <div className="mt-1.5 flex items-center gap-2">
-            {canManageParticipants && !isHost ? (
+            {canManageParticipants && (!isHost || isMe) ? (
               <Select
                 value={participant.role}
                 onValueChange={(value) => onRoleChange?.(participant.userId, value as RoomRole)}
