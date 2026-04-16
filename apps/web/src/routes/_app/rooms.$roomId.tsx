@@ -460,6 +460,7 @@ function RoomPage() {
           collabStatus={collabStatus}
           doc={doc}
           awareness={awareness}
+          currentUserName={currentUser?.displayName ?? currentUser?.username ?? 'Anonymous'}
         />
       </>
     );

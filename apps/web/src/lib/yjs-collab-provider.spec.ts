@@ -49,7 +49,7 @@ class MockWebSocket {
 
   simulateBinaryMessage(data: Uint8Array) {
     this.onmessage?.({
-      data: data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength),
+      data: (data.buffer as ArrayBuffer).slice(data.byteOffset, data.byteOffset + data.byteLength),
     });
   }
 

@@ -30,6 +30,7 @@ import {
 import { toast } from 'sonner';
 import type { Awareness } from 'y-protocols/awareness';
 import type * as Y from 'yjs';
+import { useSharedExecution } from '@/hooks/use-shared-execution.js';
 import type { CollabConnectionStatus } from '@/hooks/use-yjs-collab.js';
 import { api, readApiError, resolveErrorMessage } from '@/lib/api-client.js';
 import { buildInviteLink } from '@/lib/room-stage.js';
@@ -75,6 +76,7 @@ interface RoomWorkspaceProps {
   isTransferringOwnership: string | null;
   isRemovingParticipant: string | null;
   collabStatus: CollabConnectionStatus;
+  currentUserName: string;
 }
 
 export function RoomWorkspace({
@@ -93,8 +95,12 @@ export function RoomWorkspace({
   isTransferringOwnership,
   isRemovingParticipant,
   collabStatus,
+  currentUserName,
 }: RoomWorkspaceProps) {
   const { t } = useTranslation('rooms');
+
+  const { remoteRun, remoteSubmit, broadcastRun, broadcastSubmit, clearExecution } =
+    useSharedExecution(awareness, doc);
 
   const [problem, setProblem] = useState<ProblemDetail | null>(null);
   const [problemLoading, setProblemLoading] = useState(!!room.problemId);
@@ -227,8 +233,19 @@ export function RoomWorkspace({
     setMultiRunState({ status: 'running', results: initialResults });
 
     const code = getCode();
-    for (const tc of testCases) {
-      void runCase(tc, code);
+    const jobs: { caseId: string; jobId: string; label: string; expectedOutput: string | null }[] =
+      [];
+    await Promise.all(
+      testCases.map(async (tc) => {
+        const jobId = await runCase(tc, code);
+        if (jobId) {
+          jobs.push({ caseId: tc.id, jobId, label: tc.label, expectedOutput: tc.expectedOutput });
+        }
+      }),
+    );
+
+    if (jobs.length > 0) {
+      broadcastRun(currentUserName, jobs);
     }
   };
 
@@ -325,6 +342,7 @@ export function RoomWorkspace({
 
       setSubmitState({ status: 'polling', submissionId: response.submissionId });
       cancelSubmitPollRef.current = pollSubmission(response.submissionId);
+      broadcastSubmit(currentUserName, response.submissionId);
     } catch (error) {
       const apiError = await readApiError(error);
       const message = resolveErrorMessage(apiError, SUBMIT_ERROR_KEYS, 'workspace.submitFailed', t);
@@ -373,7 +391,7 @@ export function RoomWorkspace({
     };
   };
 
-  const runCase = async (tc: TestCaseEntry, code?: string) => {
+  const runCase = async (tc: TestCaseEntry, code?: string): Promise<string | null> => {
     cancelMultiRunRef.current.get(tc.id)?.();
     const token = { cancelled: false };
     cancelMultiRunRef.current.set(tc.id, () => {
@@ -386,7 +404,7 @@ export function RoomWorkspace({
         body: { language, code: code ?? getCode(), stdin: tc.input || undefined },
       });
 
-      if (token.cancelled) return;
+      if (token.cancelled) return null;
 
       setMultiRunState((prev) => {
         if (prev.status !== 'running' && prev.status !== 'completed') return prev;
@@ -396,8 +414,9 @@ export function RoomWorkspace({
       });
 
       pollCaseExecution(tc.id, response.jobId, tc.expectedOutput, token);
+      return response.jobId;
     } catch (error) {
-      if (token.cancelled) return;
+      if (token.cancelled) return null;
       const apiError = await readApiError(error);
       setMultiRunState((prev) => {
         if (prev.status !== 'running' && prev.status !== 'completed') return prev;
@@ -408,6 +427,7 @@ export function RoomWorkspace({
         });
         return { ...prev, results: next };
       });
+      return null;
     }
   };
 
@@ -432,10 +452,19 @@ export function RoomWorkspace({
   const handleSubmitCodeRef = useRef(handleSubmitCode);
   handleSubmitCodeRef.current = handleSubmitCode;
 
+  // Show remote results when local user is idle
   const multiRunResults =
     multiRunState.status === 'running' || multiRunState.status === 'completed'
       ? multiRunState.results
-      : null;
+      : remoteRun?.multiRunState.status === 'running' ||
+          remoteRun?.multiRunState.status === 'completed'
+        ? remoteRun.multiRunState.results
+        : null;
+
+  const effectiveRunStatus =
+    multiRunState.status !== 'idle'
+      ? multiRunState.status
+      : (remoteRun?.multiRunState.status ?? 'idle');
   const prevMultiRunStatus = useRef(multiRunState.status);
   useEffect(() => {
     if (
@@ -586,6 +615,21 @@ export function RoomWorkspace({
                     ) : null}
                   </div>
                 </div>
+
+                {/* Remote execution indicator */}
+                {remoteRun?.multiRunState.status === 'running' &&
+                multiRunState.status === 'idle' ? (
+                  <div className="flex h-6 shrink-0 items-center gap-1.5 border-b border-border bg-primary/5 px-3 font-mono text-[10px] text-primary">
+                    <Loader2 className="size-3 animate-spin" />
+                    {t('workspace.remoteRunning', { name: remoteRun.userName })}
+                  </div>
+                ) : null}
+                {remoteSubmit?.submitState.status === 'polling' && submitState.status === 'idle' ? (
+                  <div className="flex h-6 shrink-0 items-center gap-1.5 border-b border-border bg-amber-500/5 px-3 font-mono text-[10px] text-amber-400">
+                    <Loader2 className="size-3 animate-spin" />
+                    {t('workspace.remoteSubmitting', { name: remoteSubmit.userName })}
+                  </div>
+                ) : null}
 
                 {/* Monaco editor */}
                 <div className="flex-1 overflow-hidden">
