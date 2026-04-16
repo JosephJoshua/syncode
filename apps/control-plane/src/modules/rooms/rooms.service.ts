@@ -606,7 +606,13 @@ export class RoomsService {
     await this.db
       .update(roomParticipants)
       .set({ isReady: newReady })
-      .where(and(eq(roomParticipants.roomId, roomId), eq(roomParticipants.userId, userId)));
+      .where(
+        and(
+          eq(roomParticipants.roomId, roomId),
+          eq(roomParticipants.userId, userId),
+          eq(roomParticipants.isActive, true),
+        ),
+      );
 
     void this.broadcastParticipantReady(roomId, userId, newReady);
 

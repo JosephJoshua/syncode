@@ -130,7 +130,7 @@ export class CollaborationService implements OnModuleDestroy {
         type: COLLAB_WS_EVENTS.EDITOR_LOCK,
         data: {
           locked: request.editorLocked,
-          lockedBy: request.changedBy ?? null,
+          lockedBy: request.editorLocked ? (request.changedBy ?? null) : null,
         },
         timestamp: now,
       });

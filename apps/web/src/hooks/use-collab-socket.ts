@@ -12,10 +12,10 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 
-/** Only reconnect on standard close codes (network issues). All 4xxx codes are
- *  intentional server rejections where retrying won't help. */
+/** Reconnect on transient close codes (network issues, server restart).
+ *  Skip normal closure (1000) and all 4xxx server rejections. */
 function shouldReconnect(code: number): boolean {
-  return code < 4000;
+  return code !== 1000 && code < 4000;
 }
 
 const INITIAL_BACKOFF_MS = 1000;
