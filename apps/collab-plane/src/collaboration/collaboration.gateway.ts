@@ -1,5 +1,5 @@
 import type { IncomingMessage } from 'node:http';
-import { Logger } from '@nestjs/common';
+import { Logger, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
 import {
   type OnGatewayConnection,
   type OnGatewayDisconnect,
@@ -17,9 +17,15 @@ import { WsCloseCode } from './ws-close-codes.js';
 import type { JoinMessageData, WsMessage } from './ws-message.types.js';
 import { YjsSyncHandler } from './yjs-sync.handler.js';
 
+const HEARTBEAT_INTERVAL_MS = 30_000;
+
 @WebSocketGateway()
-export class CollaborationGateway implements OnGatewayConnection, OnGatewayDisconnect {
+export class CollaborationGateway
+  implements OnGatewayConnection, OnGatewayDisconnect, OnModuleInit, OnModuleDestroy
+{
   private readonly logger = new Logger(CollaborationGateway.name);
+  private readonly clients = new Set<WebSocket>();
+  private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(
     private readonly wsAuthService: WsAuthService,
@@ -29,7 +35,37 @@ export class CollaborationGateway implements OnGatewayConnection, OnGatewayDisco
     private readonly awarenessHandler: AwarenessHandler,
   ) {}
 
+  onModuleInit(): void {
+    this.heartbeatTimer = setInterval(() => this.heartbeat(), HEARTBEAT_INTERVAL_MS);
+  }
+
+  onModuleDestroy(): void {
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+    }
+  }
+
+  private heartbeat(): void {
+    for (const client of this.clients) {
+      const ws = client as WebSocket & { isAlive?: boolean };
+      if (ws.isAlive === false) {
+        this.logger.debug('Terminating unresponsive client');
+        ws.terminate();
+        continue;
+      }
+      ws.isAlive = false;
+      ws.ping();
+    }
+  }
+
   async handleConnection(client: WebSocket, request: IncomingMessage): Promise<void> {
+    this.clients.add(client);
+    (client as WebSocket & { isAlive?: boolean }).isAlive = true;
+    client.on('pong', () => {
+      (client as WebSocket & { isAlive?: boolean }).isAlive = true;
+    });
+
     try {
       const payload = await this.wsAuthService.authenticate(request);
       (client as AuthenticatedClient).user = payload;
@@ -66,6 +102,7 @@ export class CollaborationGateway implements OnGatewayConnection, OnGatewayDisco
   }
 
   handleDisconnect(client: WebSocket): void {
+    this.clients.delete(client);
     const authenticated = client as AuthenticatedClient;
     if (!authenticated.user) {
       return;
