@@ -6,6 +6,7 @@ import {
   joinRoomSchema,
   listRoomsQuerySchema,
   listRoomsResponseSchema,
+  mediaTokenResponseSchema,
   roomDetailSchema,
   runCodeResponseSchema,
   runCodeSchema,
@@ -44,3 +45,4 @@ export class UpdateRoomParticipantResponseDto extends createZodDto(
 export class TransitionRoomPhaseResponseDto extends createZodDto(
   transitionRoomPhaseResponseSchema,
 ) {}
+export class MediaTokenResponseDto extends createZodDto(mediaTokenResponseSchema) {}

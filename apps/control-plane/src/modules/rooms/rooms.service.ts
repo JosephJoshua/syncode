@@ -49,6 +49,7 @@ import {
   INVITE_CODE_MAX_RETRIES,
   isRoomRole,
   isValidStatusTransition,
+  type RoomCapability,
   type RoomMode,
   RoomRole,
   RoomStatus,
@@ -70,6 +71,7 @@ import type {
   CreateRoomResult,
   DestroyRoomResult,
   JoinRoomResult,
+  MediaTokenResult,
   RoomDetailResult,
   RoomSummaryResult,
   TransferOwnershipResult,
@@ -732,6 +734,56 @@ export class RoomsService {
       problemId: room.problemId,
       roomId,
     });
+  }
+
+  private static readonly MEDIA_TOKEN_TTL_SECONDS = 4 * 60 * 60; // 4 hours
+  private static readonly MEDIA_CAPABILITIES: RoomCapability[] = [
+    'media:audio',
+    'media:video',
+    'media:screenshare',
+  ];
+
+  async generateMediaToken(roomId: string, userId: string): Promise<MediaTokenResult> {
+    const [room, participant] = await this.getRoomContext(roomId, userId);
+
+    if (!participant) {
+      throw new ForbiddenException({
+        message: 'Not a participant of this room',
+        code: ERROR_CODES.ROOM_ACCESS_DENIED,
+      });
+    }
+
+    if (room.status === RoomStatus.FINISHED) {
+      throw new ForbiddenException({
+        message: 'Cannot generate media token for a finished room',
+        code: ERROR_CODES.ROOM_FINISHED,
+      });
+    }
+
+    const capabilities = resolveRoomPermissions(participant.role, {
+      isHost: room.hostId === userId,
+    });
+
+    const hasMediaCapability = RoomsService.MEDIA_CAPABILITIES.some((cap) => capabilities.has(cap));
+
+    if (!hasMediaCapability) {
+      throw new ForbiddenException({
+        message: 'You do not have media permissions in this room',
+        code: ERROR_CODES.ROOM_PERMISSION_DENIED,
+      });
+    }
+
+    const { token, url } = await this.mediaService.generateToken({
+      roomName: roomId,
+      participantIdentity: userId,
+      canPublish: true,
+      canSubscribe: true,
+      ttlSeconds: RoomsService.MEDIA_TOKEN_TTL_SECONDS,
+    });
+
+    const expiresAt = new Date(Date.now() + RoomsService.MEDIA_TOKEN_TTL_SECONDS * 1000);
+
+    return { token, url, expiresAt };
   }
 
   private fetchParticipants(roomId: string) {

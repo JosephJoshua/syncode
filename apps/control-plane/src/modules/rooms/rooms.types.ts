@@ -95,3 +95,9 @@ export interface TransitionPhaseResult {
   transitionedAt: Date;
   transitionedBy: string;
 }
+
+export interface MediaTokenResult {
+  token: string;
+  url: string;
+  expiresAt: Date;
+}

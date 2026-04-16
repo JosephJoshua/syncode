@@ -38,6 +38,7 @@ let db: Database;
 let cleanup: () => Promise<void>;
 let service: RoomsService;
 let mockExecutionClient: ReturnType<typeof createMockExecutionClient>;
+let mockCollabClient: ReturnType<typeof createMockCollabClient>;
 
 beforeEach(async () => {
   vi.clearAllMocks();
@@ -46,6 +47,7 @@ beforeEach(async () => {
   db = testDb.db;
   cleanup = testDb.cleanup;
   mockExecutionClient = createMockExecutionClient();
+  mockCollabClient = createMockCollabClient();
 
   const module = await Test.createTestingModule({
     providers: [
@@ -54,7 +56,7 @@ beforeEach(async () => {
       { provide: DB_CLIENT, useValue: db },
       { provide: EXECUTION_CLIENT, useValue: mockExecutionClient },
       { provide: CACHE_SERVICE, useValue: new InMemoryCacheService() },
-      { provide: COLLAB_CLIENT, useValue: createMockCollabClient() },
+      { provide: COLLAB_CLIENT, useValue: mockCollabClient },
       { provide: MEDIA_SERVICE, useValue: createMockMediaService() },
       { provide: STORAGE_SERVICE, useValue: createMockStorageService() },
       { provide: JwtService, useValue: createMockJwtService() },
@@ -90,6 +92,37 @@ describe('createRoom', () => {
       .where(eq(roomParticipants.roomId, result.roomId));
     expect(participants).toHaveLength(1);
     expect(participants[0]).toMatchObject({ userId: user.id, role: 'interviewer' });
+  });
+
+  it('GIVEN problemId and language WHEN creating room THEN passes starter code as initialContent to collab', async () => {
+    const user = await insertUser(db);
+    const problem = await insertProblem(db, {
+      starterCode: { python: '# starter', javascript: '// starter' },
+    });
+
+    await service.createRoom(user.id, {
+      mode: 'peer',
+      problemId: problem.id,
+      language: 'python',
+      config: { maxParticipants: 2, maxDuration: 120, isPrivate: true },
+    });
+
+    expect(mockCollabClient.createDocument).toHaveBeenCalledWith(
+      expect.objectContaining({ initialContent: '# starter' }),
+    );
+  });
+
+  it('GIVEN no problemId WHEN creating room THEN passes no initialContent to collab', async () => {
+    const user = await insertUser(db);
+
+    await service.createRoom(user.id, {
+      mode: 'peer',
+      config: { maxParticipants: 2, maxDuration: 120, isPrivate: true },
+    });
+
+    expect(mockCollabClient.createDocument).toHaveBeenCalledWith(
+      expect.objectContaining({ initialContent: undefined }),
+    );
   });
 });
 
