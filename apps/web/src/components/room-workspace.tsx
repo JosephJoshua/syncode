@@ -597,6 +597,7 @@ export function RoomWorkspace({
                 <div className="flex-1 overflow-hidden">
                   {doc && awareness ? (
                     <CollaborativeEditor
+                      key={doc.clientID}
                       doc={doc}
                       awareness={awareness}
                       language={monacoLanguage}
