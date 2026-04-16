@@ -1,4 +1,3 @@
-import Editor, { type OnMount } from '@monaco-editor/react';
 import type {
   ExecutionDetailsResponse,
   ExecutionResultResponse,
@@ -29,8 +28,11 @@ import {
   usePanelRef,
 } from 'react-resizable-panels';
 import { toast } from 'sonner';
+import type { Awareness } from 'y-protocols/awareness';
+import type * as Y from 'yjs';
 import { api, readApiError, resolveErrorMessage } from '@/lib/api-client.js';
 import { buildInviteLink } from '@/lib/room-stage.js';
+import { CollaborativeEditor } from './collaborative-editor.js';
 import { ExecutionDetailsPanel } from './execution-details-panel.js';
 import { HostControlPanel } from './host-control-panel.js';
 import { InviteLinkInline } from './invite-link-inline.js';
@@ -42,10 +44,7 @@ import {
   type CaseRunState,
   countPassed,
   EDITOR_LOADING,
-  EDITOR_OPTIONS_BASE,
   EXECUTION_POLL_INTERVAL_MS,
-  getDefaultCode,
-  handleEditorWillMount,
   languageExtension,
   type MultiRunState,
   SUBMISSION_POLL_INTERVAL_MS,
@@ -62,6 +61,8 @@ interface RoomWorkspaceProps {
   room: RoomDetail;
   currentUserId: string | null;
   roomId: string;
+  doc: Y.Doc | null;
+  awareness: Awareness | null;
   elapsedMs: number;
   isTransitioning: boolean;
   onTransition: (targetStatus: RoomStatus) => Promise<void>;
@@ -78,6 +79,8 @@ export function RoomWorkspace({
   room,
   currentUserId,
   roomId,
+  doc,
+  awareness,
   elapsedMs,
   isTransitioning,
   onTransition,
@@ -94,7 +97,6 @@ export function RoomWorkspace({
   const [problem, setProblem] = useState<ProblemDetail | null>(null);
   const [problemLoading, setProblemLoading] = useState(!!room.problemId);
   const [problemError, setProblemError] = useState<string | null>(null);
-  const codeInitializedRef = useRef(false);
 
   useEffect(() => {
     if (!room.problemId) return;
@@ -123,17 +125,6 @@ export function RoomWorkspace({
   const bottomPanelRef = usePanelRef();
   const leftPanelRef = usePanelRef();
   const rightPanelRef = usePanelRef();
-  const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
-  const codeStorageKey = `syncode:code:${roomId}:${language}`;
-  const codeRef = useRef(
-    (() => {
-      try {
-        const saved = localStorage.getItem(codeStorageKey);
-        if (saved) return saved;
-      } catch {}
-      return getDefaultCode(language);
-    })(),
-  );
   const [submitState, setSubmitState] = useState<SubmitState>({ status: 'idle' });
   const [activeBottomTab, setActiveBottomTab] = useState<'testcases' | 'output' | 'results'>(
     'testcases',
@@ -151,17 +142,13 @@ export function RoomWorkspace({
   const nextCustomId = useRef(1);
 
   useEffect(() => {
-    if (codeInitializedRef.current || !problem) return;
+    if (!problem || !doc) return;
     const starterCode = problem.starterCode?.[language];
-    if (starterCode) {
-      codeRef.current = starterCode;
-      editorRef.current?.setValue(starterCode);
-      try {
-        localStorage.setItem(codeStorageKey, starterCode);
-      } catch {}
-      codeInitializedRef.current = true;
+    const yText = doc.getText('code');
+    if (starterCode && yText.toString() === '') {
+      yText.insert(0, starterCode);
     }
-  }, [problem, language, codeStorageKey]);
+  }, [problem, language, doc]);
 
   useEffect(() => {
     if (!problem) return;
@@ -180,7 +167,6 @@ export function RoomWorkspace({
     return () => {
       cancelSubmitPollRef.current?.();
       for (const cancel of cancelMultiRunRef.current.values()) cancel();
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     };
   }, []);
 
@@ -230,43 +216,9 @@ export function RoomWorkspace({
   const runDisabled = !canRunCode || isEditorReadOnly || isMultiRunBusy;
   const submitDisabled = !canSubmitCode || isEditorReadOnly || isSubmitBusy;
 
-  const editorOptions = useMemo(
-    () => ({ ...EDITOR_OPTIONS_BASE, readOnly: isEditorReadOnly }),
-    [isEditorReadOnly],
-  );
-
-  const handleEditorMount: OnMount = useCallback((editorInstance, monaco) => {
-    editorRef.current = editorInstance;
-
-    editorInstance.addAction({
-      id: 'syncode-run',
-      label: 'Run Code',
-      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter],
-      run: () => void handleRunCodeRef.current(),
-    });
-
-    editorInstance.addAction({
-      id: 'syncode-submit',
-      label: 'Submit Code',
-      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.Enter],
-      run: () => void handleSubmitCodeRef.current(),
-    });
-  }, []);
-
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const handleEditorChange = useCallback(
-    (value: string | undefined) => {
-      if (value === undefined) return;
-      codeRef.current = value;
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-      saveTimerRef.current = setTimeout(() => {
-        try {
-          localStorage.setItem(codeStorageKey, value);
-        } catch {}
-      }, 500);
-    },
-    [codeStorageKey],
-  );
+  const getCode = useCallback(() => {
+    return doc?.getText('code').toString() ?? '';
+  }, [doc]);
 
   const handleRunCode = async () => {
     if (testCases.length === 0) return;
@@ -374,7 +326,7 @@ export function RoomWorkspace({
     try {
       const response = await api(CONTROL_API.ROOMS.SUBMIT, {
         params: { id: roomId },
-        body: { language, code: codeRef.current },
+        body: { language, code: getCode() },
       });
 
       setSubmitState({ status: 'polling', submissionId: response.submissionId });
@@ -437,7 +389,7 @@ export function RoomWorkspace({
     try {
       const response = await api(CONTROL_API.ROOMS.RUN, {
         params: { id: roomId },
-        body: { language, code: codeRef.current, stdin: tc.input || undefined },
+        body: { language, code: getCode(), stdin: tc.input || undefined },
       });
 
       if (token.cancelled) return;
@@ -643,17 +595,18 @@ export function RoomWorkspace({
 
                 {/* Monaco editor */}
                 <div className="flex-1 overflow-hidden">
-                  <Editor
-                    height="100%"
-                    language={monacoLanguage}
-                    defaultValue={codeRef.current}
-                    onChange={handleEditorChange}
-                    onMount={handleEditorMount}
-                    theme="syncode-dark"
-                    beforeMount={handleEditorWillMount}
-                    options={editorOptions}
-                    loading={EDITOR_LOADING}
-                  />
+                  {doc && awareness ? (
+                    <CollaborativeEditor
+                      doc={doc}
+                      awareness={awareness}
+                      language={monacoLanguage}
+                      readOnly={isEditorReadOnly}
+                      onRunCode={() => void handleRunCodeRef.current()}
+                      onSubmitCode={() => void handleSubmitCodeRef.current()}
+                    />
+                  ) : (
+                    EDITOR_LOADING
+                  )}
                 </div>
 
                 {/* Expand bar shown when bottom panel is collapsed */}
