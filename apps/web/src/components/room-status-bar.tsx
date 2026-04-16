@@ -1,7 +1,7 @@
 import type { RoomRole, RoomStatus } from '@syncode/shared';
 import { Command, Lock, WifiOff } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import type { CollabConnectionStatus } from '@/hooks/use-collab-socket.js';
+import type { CollabConnectionStatus } from '@/hooks/use-yjs-collab.js';
 import { formatTimer, STAGE_THEME } from '@/lib/room-stage.js';
 
 interface RoomStatusBarProps {
