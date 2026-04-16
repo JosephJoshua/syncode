@@ -33,11 +33,8 @@ export interface YjsCollabProviderOptions {
 const INITIAL_BACKOFF_MS = 1_000;
 const MAX_BACKOFF_MS = 30_000;
 
-/** Reconnect on transient codes. Also retry on 4009 (ALREADY_CONNECTED) since
- *  the old connection will time out on the server shortly. */
 function shouldReconnect(code: number): boolean {
   if (code === 1000) return false;
-  if (code === 4009) return true;
   return code < 4000;
 }
 
@@ -144,16 +141,21 @@ export class YjsCollabProvider {
   }
 
   private handleTextMessage(raw: string): void {
-    this.backoffMs = INITIAL_BACKOFF_MS;
-    this.hasConnected = true;
-    this.setStatus('connected');
-
     let message: CollabWsMessage;
     try {
       message = JSON.parse(raw);
     } catch {
       return;
     }
+
+    this.backoffMs = INITIAL_BACKOFF_MS;
+    if (!this.hasConnected) {
+      this.hasConnected = true;
+      // Re-broadcast awareness so remote clients receive user metadata
+      // that was set in the constructor before the WS was open.
+      this.awareness.setLocalStateField('user', this.options.user);
+    }
+    this.setStatus('connected');
 
     switch (message.type) {
       case COLLAB_WS_EVENTS.ROOM_STATE: {
