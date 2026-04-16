@@ -1,10 +1,10 @@
+import { WsMessageType } from '@syncode/contracts';
 import * as encoding from 'lib0/encoding';
 import { describe, expect, it, vi } from 'vitest';
 import * as syncProtocol from 'y-protocols/sync';
 import * as Y from 'yjs';
 import type { AuthenticatedClient } from '../auth/index.js';
 import { RoomRegistry } from './room-registry.js';
-import { WsMessageType } from './ws-message-types.js';
 import { YjsDocumentStore } from './yjs-document-store.js';
 import { YjsSyncHandler } from './yjs-sync.handler.js';
 

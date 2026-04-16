@@ -1,5 +1,6 @@
 import type { IncomingMessage } from 'node:http';
 import { UnauthorizedException } from '@nestjs/common';
+import { WsMessageType } from '@syncode/contracts';
 import { describe, expect, it, vi } from 'vitest';
 import type { WebSocket } from 'ws';
 import type { CollabTokenPayload } from '../auth/collab-token-payload.js';
@@ -9,7 +10,6 @@ import { CollaborationGateway } from './collaboration.gateway.js';
 import type { CollaborationService } from './collaboration.service.js';
 import { RoomRegistry } from './room-registry.js';
 import { WsCloseCode } from './ws-close-codes.js';
-import { WsMessageType } from './ws-message-types.js';
 import type { YjsSyncHandler } from './yjs-sync.handler.js';
 
 const VALID_PAYLOAD: CollabTokenPayload = {

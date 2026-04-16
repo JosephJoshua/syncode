@@ -6,7 +6,7 @@ import {
   SubscribeMessage,
   WebSocketGateway,
 } from '@nestjs/websockets';
-import { COLLAB_WS_EVENTS } from '@syncode/contracts';
+import { COLLAB_WS_EVENTS, WsMessageType } from '@syncode/contracts';
 import type { WebSocket } from 'ws';
 import type { AuthenticatedClient } from '../auth/index.js';
 import { WsAuthService } from '../auth/index.js';
@@ -15,7 +15,6 @@ import { CollaborationService } from './collaboration.service.js';
 import { RoomRegistry } from './room-registry.js';
 import { WsCloseCode } from './ws-close-codes.js';
 import type { JoinMessageData, WsMessage } from './ws-message.types.js';
-import { WsMessageType } from './ws-message-types.js';
 import { YjsSyncHandler } from './yjs-sync.handler.js';
 
 @WebSocketGateway()
