@@ -461,10 +461,6 @@ export function RoomWorkspace({
         ? remoteRun.multiRunState.results
         : null;
 
-  const effectiveRunStatus =
-    multiRunState.status !== 'idle'
-      ? multiRunState.status
-      : (remoteRun?.multiRunState.status ?? 'idle');
   const prevMultiRunStatus = useRef(multiRunState.status);
   useEffect(() => {
     if (

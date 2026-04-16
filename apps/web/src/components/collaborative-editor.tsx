@@ -82,7 +82,7 @@ export function CollaborativeEditor({
           | undefined;
         if (!user?.color) return;
         const light = user.colorLight ?? `${user.color}33`;
-        const name = user.name ?? '';
+        const name = (user.name ?? '').replace(/[\\"]/g, '');
 
         rules.push(
           `.yRemoteSelection-${clientID} { background-color: ${light}; }`,
@@ -108,11 +108,21 @@ export function CollaborativeEditor({
       styleEl.textContent = rules.join('\n');
     };
 
-    awareness.on('change', updateStyles);
+    const onAwarenessChange = ({
+      added,
+      removed,
+    }: {
+      added: number[];
+      updated: number[];
+      removed: number[];
+    }) => {
+      if (added.length > 0 || removed.length > 0) updateStyles();
+    };
+    awareness.on('change', onAwarenessChange);
     updateStyles();
 
     return () => {
-      awareness.off('change', updateStyles);
+      awareness.off('change', onAwarenessChange);
       styleEl.remove();
     };
   }, [awareness, doc.clientID]);

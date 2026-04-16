@@ -14,8 +14,6 @@ import {
 } from '@/components/room-workspace-utils.js';
 import { api } from '@/lib/api-client.js';
 
-// ── Awareness payload shapes ────────────────────────────────────────────────
-
 interface RemoteCaseInfo {
   caseId: string;
   jobId: string;
@@ -37,8 +35,6 @@ interface SubmitAwareness {
 
 type ExecutionAwareness = RunAwareness | SubmitAwareness;
 
-// ── Return types ────────────────────────────────────────────────────────────
-
 export interface RemoteRunState {
   userName: string;
   multiRunState: MultiRunState;
@@ -48,8 +44,6 @@ export interface RemoteSubmitState {
   userName: string;
   submitState: SubmitState;
 }
-
-// ── Helpers ─────────────────────────────────────────────────────────────────
 
 function isExecutionResult(response: { status: string }): response is {
   status: 'completed' | 'failed';
@@ -64,8 +58,6 @@ function isExecutionResult(response: { status: string }): response is {
   return response.status === 'completed' || response.status === 'failed';
 }
 
-// ── Hook ────────────────────────────────────────────────────────────────────
-
 export function useSharedExecution(awareness: Awareness | null, doc: Y.Doc | null) {
   const [remoteRun, setRemoteRun] = useState<RemoteRunState | null>(null);
   const [remoteSubmit, setRemoteSubmit] = useState<RemoteSubmitState | null>(null);
@@ -75,8 +67,6 @@ export function useSharedExecution(awareness: Awareness | null, doc: Y.Doc | nul
   const activeRemoteSubmitRef = useRef<string | null>(null);
   const cancelRemoteRunRef = useRef<(() => void) | null>(null);
   const cancelRemoteSubmitRef = useRef<(() => void) | null>(null);
-
-  // ── Broadcast functions (called by the local user after getting jobIds) ──
 
   const broadcastRun = useCallback(
     (userName: string, cases: RemoteCaseInfo[]) => {
@@ -103,8 +93,6 @@ export function useSharedExecution(awareness: Awareness | null, doc: Y.Doc | nul
   const clearExecution = useCallback(() => {
     awareness?.setLocalStateField('execution', null);
   }, [awareness]);
-
-  // ── Observe remote awareness and start independent polling ──
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: polling helpers are defined inside the effect to avoid stale closure issues; they only use stable refs (setRemoteRun, setRemoteSubmit) and effect-scoped variables.
   useEffect(() => {
@@ -220,7 +208,6 @@ export function useSharedExecution(awareness: Awareness | null, doc: Y.Doc | nul
         }
       });
 
-      // ── Handle remote run ──
       const runKey = foundRun
         ? `${runSourceClientId}:${(foundRun as RunAwareness).cases.map((c) => c.jobId).join(',')}`
         : null;
@@ -249,9 +236,10 @@ export function useSharedExecution(awareness: Awareness | null, doc: Y.Doc | nul
         }
       } else if (!runKey && activeRemoteRunRef.current) {
         activeRemoteRunRef.current = null;
+        cancelRemoteRunRef.current?.();
+        setRemoteRun(null);
       }
 
-      // ── Handle remote submit ──
       const submitKey = foundSubmit
         ? `${submitSourceClientId}:${(foundSubmit as SubmitAwareness).submissionId}`
         : null;
@@ -273,6 +261,8 @@ export function useSharedExecution(awareness: Awareness | null, doc: Y.Doc | nul
         pollSubmission(submit.submissionId, submit.userName, () => cancelled);
       } else if (!submitKey && activeRemoteSubmitRef.current) {
         activeRemoteSubmitRef.current = null;
+        cancelRemoteSubmitRef.current?.();
+        setRemoteSubmit(null);
       }
     };
 
