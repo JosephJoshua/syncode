@@ -1,5 +1,7 @@
 import type { ICollabClient } from './client.js';
 import type {
+  BroadcastParticipantReadyRequest,
+  BroadcastParticipantReadyResponse,
   CreateDocumentRequest,
   CreateDocumentResponse,
   DestroyDocumentResponse,
@@ -69,6 +71,16 @@ export class StubCollabClient implements ICollabClient {
         editorLocked: request.editorLocked,
       });
     }
+
+    return { success: true };
+  }
+
+  async broadcastParticipantReady(
+    _roomId: string,
+    _request: BroadcastParticipantReadyRequest,
+  ): Promise<BroadcastParticipantReadyResponse> {
+    await this.delay();
+    this.maybeThrow('broadcastParticipantReady');
 
     return { success: true };
   }

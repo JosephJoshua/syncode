@@ -1,6 +1,7 @@
 import type { RoomRole, RoomStatus } from '@syncode/shared';
-import { Command, Lock } from 'lucide-react';
+import { Command, Lock, WifiOff } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import type { CollabConnectionStatus } from '@/hooks/use-collab-socket.js';
 import { formatTimer, STAGE_THEME } from '@/lib/room-stage.js';
 
 interface RoomStatusBarProps {
@@ -9,7 +10,15 @@ interface RoomStatusBarProps {
   elapsedMs: number;
   editorLocked: boolean;
   participantCount: number;
+  collabStatus: CollabConnectionStatus;
 }
+
+const STATUS_INDICATOR: Record<CollabConnectionStatus, { dotClass: string; labelKey: string }> = {
+  connected: { dotClass: 'bg-success live-pulse', labelKey: 'statusBar.connected' },
+  connecting: { dotClass: 'bg-warning animate-pulse', labelKey: 'statusBar.connecting' },
+  reconnecting: { dotClass: 'bg-warning animate-pulse', labelKey: 'statusBar.reconnecting' },
+  disconnected: { dotClass: 'bg-destructive', labelKey: 'statusBar.disconnected' },
+};
 
 export function RoomStatusBar({
   status,
@@ -17,8 +26,11 @@ export function RoomStatusBar({
   elapsedMs,
   editorLocked,
   participantCount,
+  collabStatus,
 }: RoomStatusBarProps) {
   const { t } = useTranslation('rooms');
+
+  const indicator = STATUS_INDICATOR[collabStatus];
 
   return (
     <footer className="flex h-7 shrink-0 items-center border-t border-border bg-background text-[10px]">
@@ -27,9 +39,12 @@ export function RoomStatusBar({
       <div className="flex flex-1 items-center px-2.5">
         <div className="flex items-center gap-2">
           <span className="flex items-center gap-1.5">
-            <span className="size-1.5 rounded-full bg-success live-pulse" />
-            <span className="font-mono text-muted-foreground">{t('statusBar.connected')}</span>
+            <span className={`size-1.5 rounded-full ${indicator.dotClass}`} />
+            <span className="font-mono text-muted-foreground">{t(indicator.labelKey)}</span>
           </span>
+          {collabStatus === 'reconnecting' || collabStatus === 'disconnected' ? (
+            <WifiOff size={10} className="text-warning" />
+          ) : null}
           <span className="text-border">|</span>
           <span className="font-mono text-muted-foreground">
             {participantCount} {t('statusBar.participants')}

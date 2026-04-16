@@ -12,6 +12,8 @@ export {
   userDisconnectedPayloadSchema,
 } from './events.js';
 export {
+  type BroadcastParticipantReadyRequest,
+  type BroadcastParticipantReadyResponse,
   COLLAB_INTERNAL,
   type CreateDocumentRequest,
   type CreateDocumentResponse,
@@ -21,3 +23,12 @@ export {
   type UpdateRoomStateRequest,
   type UpdateRoomStateResponse,
 } from './internal.js';
+export { WsCloseCode } from './ws-close-codes.js';
+export {
+  COLLAB_WS_EVENTS,
+  type CollabWsMessage,
+  type EditorLockEventData,
+  type ParticipantReadyEventData,
+  type PhaseChangeEventData,
+  type RoomStateEventData,
+} from './ws-events.js';

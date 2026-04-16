@@ -33,6 +33,7 @@ export interface Participant {
   avatarUrl: string | null;
   role: RoomRole;
   isActive: boolean;
+  isReady: boolean;
 }
 
 interface RoomParticipantCardProps {

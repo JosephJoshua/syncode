@@ -1,5 +1,6 @@
 import { Body, Controller, Delete, Get, Param, Post } from '@nestjs/common';
 import {
+  type BroadcastParticipantReadyRequest,
   COLLAB_INTERNAL,
   type CreateDocumentRequest,
   type KickUserRequest,
@@ -29,6 +30,15 @@ export class InternalController {
   @Post(COLLAB_INTERNAL.UPDATE_ROOM_STATE.route)
   updateRoomState(@Param('roomId') roomId: string, @Body() body: UpdateRoomStateRequest) {
     return this.collaborationService.updateRoomState({ ...body, roomId });
+  }
+
+  @Post(COLLAB_INTERNAL.BROADCAST_PARTICIPANT_READY.route)
+  broadcastParticipantReady(
+    @Param('roomId') roomId: string,
+    @Body() body: BroadcastParticipantReadyRequest,
+  ) {
+    this.collaborationService.broadcastParticipantReady(roomId, body.userId, body.isReady);
+    return { success: true };
   }
 
   @Get(COLLAB_INTERNAL.HEALTH.route)

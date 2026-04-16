@@ -1,4 +1,9 @@
-import { ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
@@ -653,5 +658,55 @@ describe('markParticipantInactive', () => {
 
     expect(row!.isActive).toBe(false);
     expect(row!.leftAt).toEqual(leftAt);
+  });
+});
+
+describe('toggleReady', () => {
+  it('GIVEN active participant in waiting room WHEN toggling ready THEN sets isReady=true', async () => {
+    const host = await insertUser(db);
+    const room = await insertRoom(db, host.id, { status: 'waiting' });
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+
+    const result = await service.toggleReady(room.id, host.id);
+
+    const [row] = await db
+      .select()
+      .from(roomParticipants)
+      .where(and(eq(roomParticipants.roomId, room.id), eq(roomParticipants.userId, host.id)));
+
+    expect(row!.isReady).toBe(true);
+    expect(result.participants.find((p) => p.userId === host.id)?.isReady).toBe(true);
+  });
+
+  it('GIVEN ready participant WHEN toggling again THEN sets isReady=false', async () => {
+    const host = await insertUser(db);
+    const room = await insertRoom(db, host.id, { status: 'waiting' });
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+
+    await service.toggleReady(room.id, host.id);
+    await service.toggleReady(room.id, host.id);
+
+    const [row] = await db
+      .select()
+      .from(roomParticipants)
+      .where(and(eq(roomParticipants.roomId, room.id), eq(roomParticipants.userId, host.id)));
+
+    expect(row!.isReady).toBe(false);
+  });
+
+  it('GIVEN room in coding phase WHEN toggling ready THEN throws BadRequestException', async () => {
+    const host = await insertUser(db);
+    const room = await insertRoom(db, host.id, { status: 'coding' });
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+
+    await expect(service.toggleReady(room.id, host.id)).rejects.toThrow(BadRequestException);
+  });
+
+  it('GIVEN non-participant WHEN toggling ready THEN throws NotFoundException', async () => {
+    const host = await insertUser(db);
+    const stranger = await insertUser(db);
+    const room = await insertRoom(db, host.id, { status: 'waiting' });
+
+    await expect(service.toggleReady(room.id, stranger.id)).rejects.toThrow(NotFoundException);
   });
 });

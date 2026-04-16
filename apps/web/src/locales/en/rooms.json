@@ -100,7 +100,8 @@
     "roleBalance": "{{interviewers}} interviewer · {{candidates}} candidate",
     "editorLocked": "Editor locked",
     "editorUnlocked": "Editor unlocked",
-    "awaitingController": "Waiting for the host or current interviewer to open the workspace."
+    "awaitingController": "Waiting for the host or current interviewer to open the workspace.",
+    "readyFailed": "Failed to update ready status."
   },
   "roleSelect": {
     "heading": "Your Role",
@@ -145,6 +146,9 @@
   },
   "statusBar": {
     "connected": "Connected",
+    "connecting": "Connecting",
+    "reconnecting": "Reconnecting",
+    "disconnected": "Disconnected",
     "participants": "participants",
     "elapsed": "elapsed"
   },
@@ -225,6 +229,8 @@
     "timerHeading": "Coding Time",
     "timerRunning": "Timer is live",
     "timerPaused": "Timer is paused",
-    "sessionState": "Session State"
+    "sessionState": "Session State",
+    "phaseChanged": "Phase changed to {{phase}}",
+    "sessionHeading": "Session"
   }
 }

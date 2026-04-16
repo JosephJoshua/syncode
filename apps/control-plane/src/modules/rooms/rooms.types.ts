@@ -38,6 +38,7 @@ export interface ParticipantResult {
   avatarUrl: string | null;
   role: RoomRole;
   isActive: boolean;
+  isReady: boolean;
   joinedAt: Date;
 }
 
@@ -51,6 +52,8 @@ export interface RoomDetailResult extends RoomBaseResult {
   timerPaused: boolean;
   elapsedMs: number;
   editorLocked: boolean;
+  collabToken?: string;
+  collabUrl?: string;
 }
 
 export interface DestroyRoomResult {

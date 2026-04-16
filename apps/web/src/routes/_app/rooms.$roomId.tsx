@@ -18,6 +18,7 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { RoomLobby } from '@/components/room-lobby.js';
 import { RoomWorkspace } from '@/components/room-workspace.js';
+import { useCollabSocket } from '@/hooks/use-collab-socket.js';
 import { type ApiErrorResult, api, readApiError, resolveErrorMessage } from '@/lib/api-client.js';
 import { computeRoomElapsedMs, isWorkspaceStage, ROLE_LABEL_KEYS } from '@/lib/room-stage.js';
 import { useAuthStore } from '@/stores/auth.store.js';
@@ -56,6 +57,10 @@ function RoomPage() {
   } | null>(null);
   const [now, setNow] = useState(Date.now());
   const joinPromiseRef = useRef<Promise<void> | null>(null);
+  // Capture collab credentials once — subsequent polls generate fresh JWTs which would
+  // cause the WebSocket to reconnect on every poll if used directly. The collab JWT has
+  // a 24h lifetime, so the first token is valid for the entire session.
+  const collabCredsRef = useRef<{ collabToken: string; collabUrl: string } | null>(null);
 
   // Tick clock only when the timer is actively running (coding + not paused)
   const timerActive =
@@ -102,6 +107,10 @@ function RoomPage() {
             if (cancelled) return;
 
             setRoom(joined.room);
+            collabCredsRef.current = {
+              collabToken: joined.collabToken,
+              collabUrl: joined.collabUrl,
+            };
             const notice = buildJoinNotice(joined, t);
             setJoinNotice(notice);
             toast.success(notice);
@@ -154,6 +163,42 @@ function RoomPage() {
 
     return () => window.clearInterval(interval);
   }, [refreshRoomDetail, roomStatus]);
+
+  const handleRoomStatePatch = useCallback(
+    (patch: Partial<Pick<RoomDetail, 'status' | 'editorLocked'>>) => {
+      setRoom((prev) => {
+        if (!prev) return prev;
+        if (patch.status === prev.status && patch.editorLocked === prev.editorLocked) return prev;
+        return { ...prev, ...patch };
+      });
+    },
+    [],
+  );
+
+  const handleParticipantReady = useCallback((userId: string, isReady: boolean) => {
+    setRoom((prev) => {
+      if (!prev) return prev;
+      if (!prev.participants.some((p) => p.userId === userId && p.isReady !== isReady)) return prev;
+      return {
+        ...prev,
+        participants: prev.participants.map((p) => (p.userId === userId ? { ...p, isReady } : p)),
+      };
+    });
+  }, []);
+
+  // Capture from room detail for the direct-navigation path (no ?code= join).
+  // The join path sets the ref earlier from the join response.
+  if (room?.collabToken && room?.collabUrl && !collabCredsRef.current) {
+    collabCredsRef.current = { collabToken: room.collabToken, collabUrl: room.collabUrl };
+  }
+
+  const collabStatus = useCollabSocket({
+    collabUrl: collabCredsRef.current?.collabUrl ?? null,
+    collabToken: collabCredsRef.current?.collabToken ?? null,
+    roomId,
+    onRoomStatePatch: handleRoomStatePatch,
+    onParticipantReady: handleParticipantReady,
+  });
 
   const canChangePhase = room?.myCapabilities.includes('room:change-phase') ?? false;
   const canManageParticipants = room?.myCapabilities.includes('participant:assign-role') ?? false;
@@ -254,6 +299,16 @@ function RoomPage() {
       toast.error(apiError?.message ?? t('workspace.removeParticipantFailed'));
     },
   });
+
+  const handleToggleReady = useCallback(async () => {
+    try {
+      const updated = await api(CONTROL_API.ROOMS.TOGGLE_READY, { params: { id: roomId } });
+      setRoom(updated);
+    } catch (error) {
+      const apiError = await readApiError(error);
+      toast.error(apiError?.message ?? t('lobby.readyFailed'));
+    }
+  }, [roomId, t]);
 
   const confirmRemoveParticipant = () => {
     if (!pendingRemoval || removeParticipantMutation.isPending) return;
@@ -375,6 +430,7 @@ function RoomPage() {
               ? (removeParticipantMutation.variables?.userId ?? null)
               : null
           }
+          collabStatus={collabStatus}
         />
       </>
     );
@@ -401,6 +457,7 @@ function RoomPage() {
         joinNotice={joinNotice}
         onParticipantRoleChange={handleParticipantRoleChange}
         onTransferOwnership={handleTransferOwnership}
+        onToggleReady={handleToggleReady}
         onTransition={handleTransition}
       />
     </>

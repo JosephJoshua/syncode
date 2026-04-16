@@ -28,9 +28,19 @@ export interface UpdateRoomStateRequest {
   roomId: string;
   phase: string;
   editorLocked: boolean;
+  changedBy?: string;
 }
 
 export interface UpdateRoomStateResponse {
+  success: boolean;
+}
+
+export interface BroadcastParticipantReadyRequest {
+  userId: string;
+  isReady: boolean;
+}
+
+export interface BroadcastParticipantReadyResponse {
   success: boolean;
 }
 
@@ -51,5 +61,9 @@ export const COLLAB_INTERNAL = {
     'internal/documents/:roomId/state',
     'POST',
   ),
+  BROADCAST_PARTICIPANT_READY: defineRoute<
+    BroadcastParticipantReadyRequest,
+    BroadcastParticipantReadyResponse
+  >()('internal/documents/:roomId/participant-ready', 'POST'),
   HEALTH: defineRoute<void, { status: 'ok' }>()('internal/health', 'GET'),
 };

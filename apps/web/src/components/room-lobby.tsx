@@ -2,7 +2,7 @@ import type { RoomMode, RoomRole, RoomStatus } from '@syncode/shared';
 import { Badge, Button, Card } from '@syncode/ui';
 import { AlertTriangle, Check, Copy, Crown, Loader2, Play } from 'lucide-react';
 import { motion } from 'motion/react';
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useClipboard } from '@/hooks/use-clipboard.js';
 import {
@@ -30,6 +30,7 @@ interface RoomLobbyProps {
   joinNotice: string | null;
   onParticipantRoleChange: (userId: string, role: RoomRole) => void;
   onTransferOwnership: (userId: string, displayName: string) => void;
+  onToggleReady: () => void;
   onTransition: (targetStatus: RoomStatus) => void;
 }
 
@@ -50,11 +51,11 @@ export function RoomLobby({
   joinNotice,
   onParticipantRoleChange,
   onTransferOwnership,
+  onToggleReady,
   onTransition,
 }: RoomLobbyProps) {
   const { t } = useTranslation('rooms');
   const { copied, copy } = useClipboard();
-  const [readyMap, setReadyMap] = useState<Record<string, boolean>>({});
 
   const activeParticipants = useMemo(() => participants.filter((p) => p.isActive), [participants]);
   const roleSummary = useMemo(
@@ -69,16 +70,13 @@ export function RoomLobby({
   const myRole = currentUserId
     ? (participants.find((p) => p.userId === currentUserId)?.role ?? 'observer')
     : 'observer';
-  const readyCount = activeParticipants.filter((p) => readyMap[p.userId]).length;
-  const myReady = Boolean(currentUserId && readyMap[currentUserId]);
+  const readyCount = activeParticipants.filter((p) => p.isReady).length;
+  const myReady = Boolean(
+    currentUserId && activeParticipants.find((p) => p.userId === currentUserId)?.isReady,
+  );
   const canEnterWorkspace = status === 'waiting' && canChangePhase && isRoomValid && myReady;
 
   const inviteLink = buildInviteLink(roomId, roomCode);
-
-  const toggleReady = () => {
-    if (!currentUserId) return;
-    setReadyMap((prev) => ({ ...prev, [currentUserId]: !prev[currentUserId] }));
-  };
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-4 sm:py-6">
@@ -200,7 +198,7 @@ export function RoomLobby({
                 <Button
                   variant={myReady ? 'outline' : 'default'}
                   className="w-full"
-                  onClick={toggleReady}
+                  onClick={onToggleReady}
                 >
                   {myReady ? t('readyButton.cancelReady') : t('readyButton.ready')}
                 </Button>

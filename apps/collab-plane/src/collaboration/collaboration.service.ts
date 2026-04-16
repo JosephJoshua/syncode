@@ -16,9 +16,9 @@ import type {
   UpdateRoomStateResponse,
   UserDisconnectedPayload,
 } from '@syncode/contracts';
-import { CONTROL_PLANE_CALLBACK } from '@syncode/contracts';
+import { COLLAB_WS_EVENTS, CONTROL_PLANE_CALLBACK } from '@syncode/contracts';
 import { AwarenessHandler } from './awareness.handler.js';
-import { RoomRegistry } from './room-registry.js';
+import { type RoomEntry, RoomRegistry } from './room-registry.js';
 import { SnapshotScheduler } from './snapshot.scheduler.js';
 import { WsCloseCode } from './ws-close-codes.js';
 import type { WsMessage } from './ws-message.types.js';
@@ -96,22 +96,49 @@ export class CollaborationService implements OnModuleDestroy {
   }
 
   async updateRoomState(request: UpdateRoomStateRequest): Promise<UpdateRoomStateResponse> {
-    const room = this.roomRegistry.updateRoomState(request.roomId, {
-      phase: request.phase,
-      editorLocked: request.editorLocked,
+    const { room, previousPhase, previousEditorLocked } = this.roomRegistry.updateRoomState(
+      request.roomId,
+      {
+        phase: request.phase,
+        editorLocked: request.editorLocked,
+      },
+    );
+
+    const now = Date.now();
+
+    // Always broadcast the canonical room-state message
+    this.broadcastJson(room, {
+      type: COLLAB_WS_EVENTS.ROOM_STATE,
+      data: { phase: room.phase, editorLocked: room.editorLocked },
+      timestamp: now,
     });
 
-    const roomStateMessage: WsMessage = {
-      type: 'room-state',
-      data: {
-        phase: room.phase,
-        editorLocked: room.editorLocked,
-      },
-      timestamp: Date.now(),
-    };
+    // Phase changed — broadcast granular event + snapshot
+    if (previousPhase !== request.phase) {
+      this.broadcastJson(room, {
+        type: COLLAB_WS_EVENTS.PHASE_CHANGE,
+        data: { phase: request.phase, previousPhase },
+        timestamp: now,
+      });
 
-    for (const client of room.clients.values()) {
-      client.send(JSON.stringify(roomStateMessage));
+      void this.snapshotScheduler.takeSnapshot(request.roomId, 'phase_change');
+    }
+
+    // Editor lock changed — broadcast granular event
+    if (previousEditorLocked !== request.editorLocked) {
+      this.broadcastJson(room, {
+        type: COLLAB_WS_EVENTS.EDITOR_LOCK,
+        data: {
+          locked: request.editorLocked,
+          lockedBy: request.editorLocked ? (request.changedBy ?? null) : null,
+        },
+        timestamp: now,
+      });
+
+      // Lock acquired (false → true) → submission snapshot
+      if (request.editorLocked) {
+        void this.snapshotScheduler.takeSnapshot(request.roomId, 'submission');
+      }
     }
 
     this.logger.debug(
@@ -119,6 +146,17 @@ export class CollaborationService implements OnModuleDestroy {
     );
 
     return { success: true };
+  }
+
+  broadcastParticipantReady(roomId: string, userId: string, isReady: boolean): void {
+    const room = this.roomRegistry.getRoom(roomId);
+    if (!room) return;
+
+    this.broadcastJson(room, {
+      type: COLLAB_WS_EVENTS.PARTICIPANT_READY,
+      data: { userId, isReady },
+      timestamp: Date.now(),
+    });
   }
 
   /**
@@ -142,6 +180,13 @@ export class CollaborationService implements OnModuleDestroy {
       clearTimeout(timer);
       this.roomTtls.delete(roomId);
       this.logger.debug(`Room TTL cancelled for ${roomId} (client reconnected)`);
+    }
+  }
+
+  private broadcastJson(room: RoomEntry, message: WsMessage): void {
+    const serialized = JSON.stringify(message);
+    for (const client of room.clients.values()) {
+      client.send(serialized);
     }
   }
 

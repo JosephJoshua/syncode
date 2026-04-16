@@ -1,5 +1,5 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
-import type { IControlPlaneCallbackClient } from '@syncode/contracts';
+import { COLLAB_WS_EVENTS, type IControlPlaneCallbackClient } from '@syncode/contracts';
 import { describe, expect, it, vi } from 'vitest';
 import type { AuthenticatedClient } from '../auth/index.js';
 import type { AwarenessHandler } from './awareness.handler.js';
@@ -162,7 +162,7 @@ describe('CollaborationService', () => {
       expect(result).toEqual({ success: true });
 
       const sentMessage = JSON.parse((client1.send as ReturnType<typeof vi.fn>).mock.calls[0][0]);
-      expect(sentMessage.type).toBe('room-state');
+      expect(sentMessage.type).toBe(COLLAB_WS_EVENTS.ROOM_STATE);
       expect(sentMessage.data.phase).toBe('coding');
       expect(sentMessage.data.editorLocked).toBe(false);
 
@@ -180,6 +180,122 @@ describe('CollaborationService', () => {
       });
 
       expect(result).toEqual({ success: true });
+    });
+
+    it('GIVEN phase change WHEN updating state THEN takes phase_change snapshot', async () => {
+      const { service, snapshotScheduler } = createFixture();
+      await service.createDocument({ roomId: 'room-1', initialPhase: 'waiting' });
+
+      await service.updateRoomState({
+        roomId: 'room-1',
+        phase: 'coding',
+        editorLocked: false,
+      });
+
+      expect(snapshotScheduler.takeSnapshot).toHaveBeenCalledWith('room-1', 'phase_change');
+    });
+
+    it('GIVEN editorLocked changes false to true WHEN updating state THEN takes submission snapshot', async () => {
+      const { service, snapshotScheduler } = createFixture();
+      await service.createDocument({ roomId: 'room-1', editorLocked: false });
+
+      await service.updateRoomState({
+        roomId: 'room-1',
+        phase: 'coding',
+        editorLocked: true,
+      });
+
+      expect(snapshotScheduler.takeSnapshot).toHaveBeenCalledWith('room-1', 'submission');
+    });
+
+    it('GIVEN same phase WHEN updating state THEN does not take phase_change snapshot', async () => {
+      const { service, snapshotScheduler } = createFixture();
+      await service.createDocument({ roomId: 'room-1', initialPhase: 'coding' });
+
+      await service.updateRoomState({
+        roomId: 'room-1',
+        phase: 'coding',
+        editorLocked: true,
+      });
+
+      expect(snapshotScheduler.takeSnapshot).not.toHaveBeenCalledWith('room-1', 'phase_change');
+    });
+
+    it('GIVEN phase change WHEN updating state THEN broadcasts phase-change event to all clients', async () => {
+      const { service, roomRegistry } = createFixture();
+      await service.createDocument({ roomId: 'room-1', initialPhase: 'waiting' });
+
+      const client = fakeClient();
+      roomRegistry.addClient('room-1', 'user-1', client);
+
+      await service.updateRoomState({
+        roomId: 'room-1',
+        phase: 'coding',
+        editorLocked: false,
+      });
+
+      const calls = (client.send as ReturnType<typeof vi.fn>).mock.calls;
+      const messages = calls.map((c: [string]) => JSON.parse(c[0]));
+      const phaseChangeMsg = messages.find(
+        (m: { type: string }) => m.type === COLLAB_WS_EVENTS.PHASE_CHANGE,
+      );
+      expect(phaseChangeMsg).toBeDefined();
+      expect(phaseChangeMsg.data.phase).toBe('coding');
+      expect(phaseChangeMsg.data.previousPhase).toBe('waiting');
+    });
+
+    it('GIVEN editorLocked changes WHEN updating state THEN broadcasts editor-lock event to all clients', async () => {
+      const { service, roomRegistry } = createFixture();
+      await service.createDocument({ roomId: 'room-1', editorLocked: false });
+
+      const client = fakeClient();
+      roomRegistry.addClient('room-1', 'user-1', client);
+
+      await service.updateRoomState({
+        roomId: 'room-1',
+        phase: 'waiting',
+        editorLocked: true,
+        changedBy: 'host-user',
+      });
+
+      const calls = (client.send as ReturnType<typeof vi.fn>).mock.calls;
+      const messages = calls.map((c: [string]) => JSON.parse(c[0]));
+      const lockMsg = messages.find(
+        (m: { type: string }) => m.type === COLLAB_WS_EVENTS.EDITOR_LOCK,
+      );
+      expect(lockMsg).toBeDefined();
+      expect(lockMsg.data.locked).toBe(true);
+      expect(lockMsg.data.lockedBy).toBe('host-user');
+    });
+
+    it('GIVEN both phase and lock change WHEN updating state THEN triggers phase_change snapshot but not submission snapshot', async () => {
+      const { service, roomRegistry, snapshotScheduler } = createFixture();
+      await service.createDocument({
+        roomId: 'room-1',
+        initialPhase: 'coding',
+        editorLocked: true,
+      });
+
+      const client = fakeClient();
+      roomRegistry.addClient('room-1', 'user-1', client);
+
+      await service.updateRoomState({
+        roomId: 'room-1',
+        phase: 'wrapup',
+        editorLocked: false,
+      });
+
+      expect(snapshotScheduler.takeSnapshot).toHaveBeenCalledWith('room-1', 'phase_change');
+      expect(snapshotScheduler.takeSnapshot).not.toHaveBeenCalledWith('room-1', 'submission');
+
+      const calls = (client.send as ReturnType<typeof vi.fn>).mock.calls;
+      const messages = calls.map((c: [string]) => JSON.parse(c[0]));
+      expect(messages.some((m: { type: string }) => m.type === COLLAB_WS_EVENTS.PHASE_CHANGE)).toBe(
+        true,
+      );
+      expect(messages.some((m: { type: string }) => m.type === COLLAB_WS_EVENTS.EDITOR_LOCK)).toBe(
+        true,
+      );
     });
   });
 

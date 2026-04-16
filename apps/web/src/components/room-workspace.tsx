@@ -9,7 +9,16 @@ import type {
 import { CONTROL_API, ERROR_CODES } from '@syncode/contracts';
 import type { RoomRole, RoomStatus } from '@syncode/shared';
 import { Badge, Button } from '@syncode/ui';
-import { CheckCircle2, ChevronUp, Loader2, Play, Send, TerminalSquare } from 'lucide-react';
+import {
+  CheckCircle2,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Loader2,
+  Play,
+  Send,
+  TerminalSquare,
+} from 'lucide-react';
 import { motion } from 'motion/react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -62,6 +71,7 @@ interface RoomWorkspaceProps {
   isUpdatingRole: string | null;
   isTransferringOwnership: string | null;
   isRemovingParticipant: string | null;
+  collabStatus: 'connecting' | 'connected' | 'reconnecting' | 'disconnected';
 }
 
 export function RoomWorkspace({
@@ -77,6 +87,7 @@ export function RoomWorkspace({
   isUpdatingRole,
   isTransferringOwnership,
   isRemovingParticipant,
+  collabStatus,
 }: RoomWorkspaceProps) {
   const { t } = useTranslation('rooms');
 
@@ -109,8 +120,9 @@ export function RoomWorkspace({
 
   const language = room.language ?? 'python';
   const monacoLanguage = toMonacoLanguage(language);
-  const testCasePanelRef = usePanelRef();
-  const outputPanelRef = usePanelRef();
+  const bottomPanelRef = usePanelRef();
+  const leftPanelRef = usePanelRef();
+  const rightPanelRef = usePanelRef();
   const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
   const codeStorageKey = `syncode:code:${roomId}:${language}`;
   const codeRef = useRef(
@@ -123,7 +135,13 @@ export function RoomWorkspace({
     })(),
   );
   const [submitState, setSubmitState] = useState<SubmitState>({ status: 'idle' });
-  const [activeOutputTab, setActiveOutputTab] = useState<'output' | 'results'>('output');
+  const [activeBottomTab, setActiveBottomTab] = useState<'testcases' | 'output' | 'results'>(
+    'testcases',
+  );
+  const [leftCollapsed, setLeftCollapsed] = useState(false);
+  const [rightCollapsed, setRightCollapsed] = useState(false);
+  const [bottomCollapsed, setBottomCollapsed] = useState(false);
+  const rightMountedRef = useRef(false);
   const cancelSubmitPollRef = useRef<(() => void) | null>(null);
 
   const [testCases, setTestCases] = useState<TestCaseEntry[]>([]);
@@ -212,20 +230,6 @@ export function RoomWorkspace({
   const runDisabled = !canRunCode || isEditorReadOnly || isMultiRunBusy;
   const submitDisabled = !canSubmitCode || isEditorReadOnly || isSubmitBusy;
 
-  const toggleTestCasePanel = useCallback(() => {
-    const panel = testCasePanelRef.current;
-    if (!panel) return;
-    if (panel.isCollapsed()) panel.expand();
-    else panel.collapse();
-  }, [testCasePanelRef]);
-
-  const toggleOutputPanel = useCallback(() => {
-    const panel = outputPanelRef.current;
-    if (!panel) return;
-    if (panel.isCollapsed()) panel.expand();
-    else panel.collapse();
-  }, [outputPanelRef]);
-
   const editorOptions = useMemo(
     () => ({ ...EDITOR_OPTIONS_BASE, readOnly: isEditorReadOnly }),
     [isEditorReadOnly],
@@ -269,7 +273,7 @@ export function RoomWorkspace({
 
     for (const cancel of cancelMultiRunRef.current.values()) cancel();
     cancelMultiRunRef.current.clear();
-    setActiveOutputTab('output');
+    setActiveBottomTab('output');
 
     const initialResults = new Map<string, CaseRunState>();
     for (const tc of testCases) {
@@ -365,7 +369,7 @@ export function RoomWorkspace({
   const handleSubmitCode = async () => {
     cancelSubmitPollRef.current?.();
     setSubmitState({ status: 'submitting' });
-    setActiveOutputTab('results');
+    setActiveBottomTab('results');
 
     try {
       const response = await api(CONTROL_API.ROOMS.SUBMIT, {
@@ -536,15 +540,45 @@ export function RoomWorkspace({
         {/* Left: Problem Panel */}
         {room.problemId ? (
           <>
-            <ResizablePanel defaultSize={25} minSize={10} collapsible collapsedSize={3}>
-              <RoomProblemPanel
-                problem={problemPanelData}
-                loading={problemLoading}
-                error={problemError}
-                hasProblem
-              />
+            <ResizablePanel
+              panelRef={leftPanelRef}
+              defaultSize={25}
+              minSize={10}
+              collapsible
+              collapsedSize="2.25rem"
+              onResize={() => setLeftCollapsed(leftPanelRef.current?.isCollapsed() ?? false)}
+            >
+              {leftCollapsed ? (
+                <button
+                  type="button"
+                  onClick={() => leftPanelRef.current?.expand()}
+                  className="flex h-full w-full cursor-pointer flex-col items-center justify-center gap-2 border-r border-border bg-card/80 transition-colors hover:bg-primary/5"
+                >
+                  <ChevronRight size={14} className="text-muted-foreground/40" />
+                  <span className="rotate-180 font-mono text-[11px] font-medium uppercase tracking-widest text-muted-foreground/60 [writing-mode:vertical-lr]">
+                    {t('problem.heading')}
+                  </span>
+                </button>
+              ) : (
+                <RoomProblemPanel
+                  problem={problemPanelData}
+                  loading={problemLoading}
+                  error={problemError}
+                  hasProblem
+                />
+              )}
             </ResizablePanel>
-            <ResizableHandle className="w-1 bg-border transition-colors hover:bg-primary/40 active:bg-primary/60" />
+            <ResizableHandle className="group relative w-1 bg-border transition-colors hover:bg-primary/40 active:bg-primary/60">
+              <button
+                type="button"
+                onClick={() =>
+                  leftCollapsed ? leftPanelRef.current?.expand() : leftPanelRef.current?.collapse()
+                }
+                className="absolute top-1/2 -translate-y-1/2 -left-2.5 z-10 flex size-5 items-center justify-center rounded-full border border-border bg-card text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100"
+              >
+                {leftCollapsed ? <ChevronRight size={12} /> : <ChevronLeft size={12} />}
+              </button>
+            </ResizableHandle>
           </>
         ) : null}
 
@@ -621,78 +655,57 @@ export function RoomWorkspace({
                     loading={EDITOR_LOADING}
                   />
                 </div>
+
+                {/* Expand bar shown when bottom panel is collapsed */}
+                {bottomCollapsed ? (
+                  <button
+                    type="button"
+                    onClick={() => bottomPanelRef.current?.expand()}
+                    className="flex h-6 shrink-0 cursor-pointer items-center justify-center gap-1 border-t border-border bg-card font-mono text-[10px] uppercase tracking-widest text-muted-foreground/50 transition-colors hover:bg-primary/10 hover:text-foreground"
+                  >
+                    <TerminalSquare size={10} />
+                    {t('workspace.outputTab')}
+                  </button>
+                ) : null}
               </div>
             </ResizablePanel>
 
-            {/* Test case handle — click to toggle */}
-            <ResizableHandle className="group relative flex h-6 items-center justify-center bg-card transition-colors hover:bg-primary/10">
-              <button
-                type="button"
-                onClick={toggleTestCasePanel}
-                className="flex cursor-pointer items-center gap-1 font-mono text-[10px] uppercase tracking-widest text-muted-foreground/60 transition-colors group-hover:text-foreground"
-              >
-                <ChevronUp size={10} />
-                {t('workspace.inputLabel')}
-              </button>
-            </ResizableHandle>
+            {/* Thin drag handle between editor and bottom panel */}
+            <ResizableHandle className="h-1 bg-border transition-colors hover:bg-primary/40 active:bg-primary/60" />
 
-            {/* Test case panel */}
+            {/* Bottom panel: test cases + output + results */}
             <ResizablePanel
-              panelRef={testCasePanelRef}
-              defaultSize={15}
-              minSize={5}
-              collapsible
-              collapsedSize={0}
-            >
-              <div className="h-full bg-card">
-                <TestCaseEditor
-                  cases={testCases}
-                  activeCaseId={activeCaseId}
-                  onActiveCaseChange={setActiveCaseId}
-                  onCaseInputChange={handleCaseInputChange}
-                  onAddCase={handleAddCase}
-                  onRemoveCase={handleRemoveCase}
-                  readOnly={isEditorReadOnly}
-                />
-              </div>
-            </ResizablePanel>
-
-            {/* Output handle — click to toggle */}
-            <ResizableHandle className="group relative flex h-6 items-center justify-center bg-card transition-colors hover:bg-primary/10">
-              <button
-                type="button"
-                onClick={toggleOutputPanel}
-                className="flex cursor-pointer items-center gap-1 font-mono text-[10px] uppercase tracking-widest text-muted-foreground/60 transition-colors group-hover:text-foreground"
-              >
-                <ChevronUp size={10} />
-                {t('workspace.outputTab')}
-              </button>
-            </ResizableHandle>
-
-            {/* Output panel */}
-            <ResizablePanel
-              panelRef={outputPanelRef}
-              defaultSize={30}
+              panelRef={bottomPanelRef}
+              defaultSize={35}
               minSize={8}
               collapsible
               collapsedSize={0}
+              onResize={() => setBottomCollapsed(bottomPanelRef.current?.isCollapsed() ?? false)}
             >
-              <div className="flex h-full flex-col">
-                <div className="flex h-8 shrink-0 items-center border-b border-border bg-card">
+              <div className="flex h-full flex-col bg-card">
+                {/* Integrated tab bar */}
+                <div className="flex h-8 shrink-0 items-center border-b border-border">
                   <button
                     type="button"
-                    onClick={() => setActiveOutputTab('output')}
-                    className={tabClassName(activeOutputTab === 'output')}
+                    onClick={() => setActiveBottomTab('testcases')}
+                    className={tabClassName(activeBottomTab === 'testcases')}
+                  >
+                    <TerminalSquare className="size-3" />
+                    {t('workspace.inputLabel')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveBottomTab('output')}
+                    className={tabClassName(activeBottomTab === 'output')}
                   >
                     <TerminalSquare className="size-3" />
                     {t('workspace.outputTab')}
                   </button>
-
                   {canSubmitCode ? (
                     <button
                       type="button"
-                      onClick={() => setActiveOutputTab('results')}
-                      className={tabClassName(activeOutputTab === 'results')}
+                      onClick={() => setActiveBottomTab('results')}
+                      className={tabClassName(activeBottomTab === 'results')}
                     >
                       <CheckCircle2 className="size-3" />
                       {t('workspace.resultsTab')}
@@ -701,11 +714,28 @@ export function RoomWorkspace({
                       ) : null}
                     </button>
                   ) : null}
+                  <button
+                    type="button"
+                    onClick={() => bottomPanelRef.current?.collapse()}
+                    className="ml-auto mr-2 flex items-center text-muted-foreground/40 transition-colors hover:text-foreground"
+                  >
+                    <ChevronDown size={14} />
+                  </button>
                 </div>
 
                 {/* Tab content */}
                 <div className="relative flex-1 overflow-auto bg-background p-3">
-                  {activeOutputTab === 'output' ? (
+                  {activeBottomTab === 'testcases' ? (
+                    <TestCaseEditor
+                      cases={testCases}
+                      activeCaseId={activeCaseId}
+                      onActiveCaseChange={setActiveCaseId}
+                      onCaseInputChange={handleCaseInputChange}
+                      onAddCase={handleAddCase}
+                      onRemoveCase={handleRemoveCase}
+                      readOnly={isEditorReadOnly}
+                    />
+                  ) : activeBottomTab === 'output' ? (
                     <RunResultsPanel
                       multiRunState={multiRunState}
                       cases={testCases}
@@ -720,88 +750,121 @@ export function RoomWorkspace({
           </ResizablePanelGroup>
         </ResizablePanel>
 
-        <ResizableHandle className="w-1 bg-border transition-colors hover:bg-primary/40 active:bg-primary/60" />
+        <ResizableHandle className="group relative w-1 bg-border transition-colors hover:bg-primary/40 active:bg-primary/60">
+          <button
+            type="button"
+            onClick={() =>
+              rightCollapsed ? rightPanelRef.current?.expand() : rightPanelRef.current?.collapse()
+            }
+            className="absolute top-1/2 -translate-y-1/2 -right-2.5 z-10 flex size-5 items-center justify-center rounded-full border border-border bg-card text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100"
+          >
+            {rightCollapsed ? <ChevronLeft size={12} /> : <ChevronRight size={12} />}
+          </button>
+        </ResizableHandle>
 
         {/* Right: Session Sidebar */}
-        <ResizablePanel defaultSize={25} minSize={15}>
-          <motion.div
-            className="flex h-full flex-col overflow-y-auto bg-card/80 backdrop-blur-sm"
-            initial={{ opacity: 0, x: 16 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-          >
-            {/* Host control section */}
-            <motion.div
-              className="border-b border-border p-3"
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.35, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
+        <ResizablePanel
+          panelRef={rightPanelRef}
+          defaultSize={25}
+          minSize={15}
+          collapsible
+          collapsedSize="2.25rem"
+          onResize={() => setRightCollapsed(rightPanelRef.current?.isCollapsed() ?? false)}
+        >
+          {rightCollapsed ? (
+            <button
+              type="button"
+              onClick={() => rightPanelRef.current?.expand()}
+              className="flex h-full w-full cursor-pointer flex-col items-center justify-center gap-2 border-l border-border bg-card/80 transition-colors hover:bg-primary/5"
             >
-              <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                {t('hostControl.heading')}
+              <ChevronLeft size={14} className="text-muted-foreground/40" />
+              <span className="rotate-180 font-mono text-[11px] font-medium uppercase tracking-widest text-muted-foreground/60 [writing-mode:vertical-lr]">
+                {t('workspace.sessionHeading')}
               </span>
-              <div className="mt-2">
-                <HostControlPanel
-                  currentStatus={room.status}
-                  elapsedMs={elapsedMs}
-                  timerPaused={room.timerPaused}
-                  editorLocked={room.editorLocked}
-                  canChangePhase={room.myCapabilities.includes('room:change-phase')}
-                  isPending={isTransitioning}
-                  onTransition={(targetStatus) => {
-                    void onTransition(targetStatus);
-                  }}
-                />
-              </div>
-            </motion.div>
-
-            {/* Participants */}
+            </button>
+          ) : (
             <motion.div
-              className="flex-1 border-b border-border p-3"
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.35, delay: 0.2, ease: [0.22, 1, 0.36, 1] }}
+              className="flex h-full flex-col overflow-y-auto bg-card/80 backdrop-blur-sm"
+              initial={rightMountedRef.current ? false : { opacity: 0, x: 16 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+              onAnimationComplete={() => {
+                rightMountedRef.current = true;
+              }}
             >
-              <div className="flex items-center justify-between">
+              {/* Host control section */}
+              <motion.div
+                className="border-b border-border p-3"
+                initial={rightMountedRef.current ? false : { opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.35, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
+              >
                 <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                  {t('workspace.participantsHeading')}
+                  {t('hostControl.heading')}
                 </span>
-                <span className="font-mono text-[10px] text-muted-foreground/60">
-                  {participants.length}
-                </span>
-              </div>
-              <div className="mt-2 space-y-0.5">
-                {participants.map((participant: Participant) => (
-                  <RoomParticipantCard
-                    key={participant.userId}
-                    participant={participant}
-                    currentUserId={currentUserId}
-                    roomHostId={room.hostId}
-                    canManageParticipants={canManageParticipants}
-                    isUpdatingRole={isUpdatingRole === participant.userId}
-                    isTransferringOwnership={isTransferringOwnership === participant.userId}
-                    isRemovingParticipant={isRemovingParticipant === participant.userId}
-                    onRoleChange={(uid, role) => {
-                      void onParticipantRoleChange(uid, role);
+                <div className="mt-2">
+                  <HostControlPanel
+                    currentStatus={room.status}
+                    elapsedMs={elapsedMs}
+                    timerPaused={room.timerPaused}
+                    editorLocked={room.editorLocked}
+                    canChangePhase={room.myCapabilities.includes('room:change-phase')}
+                    isPending={isTransitioning}
+                    onTransition={(targetStatus) => {
+                      void onTransition(targetStatus);
                     }}
-                    onTransferOwnership={onTransferOwnership}
-                    onRemoveParticipant={onRemoveParticipant}
-                    compact
                   />
-                ))}
-              </div>
-            </motion.div>
+                </div>
+              </motion.div>
 
-            {/* Invite link */}
-            <motion.div
-              className="p-3"
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.35, delay: 0.3, ease: [0.22, 1, 0.36, 1] }}
-            >
-              <InviteLinkInline inviteLink={inviteLink} />
+              {/* Participants */}
+              <motion.div
+                className="flex-1 border-b border-border p-3"
+                initial={rightMountedRef.current ? false : { opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.35, delay: 0.2, ease: [0.22, 1, 0.36, 1] }}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                    {t('workspace.participantsHeading')}
+                  </span>
+                  <span className="font-mono text-[10px] text-muted-foreground/60">
+                    {participants.length}
+                  </span>
+                </div>
+                <div className="mt-2 space-y-0.5">
+                  {participants.map((participant: Participant) => (
+                    <RoomParticipantCard
+                      key={participant.userId}
+                      participant={participant}
+                      currentUserId={currentUserId}
+                      roomHostId={room.hostId}
+                      canManageParticipants={canManageParticipants}
+                      isUpdatingRole={isUpdatingRole === participant.userId}
+                      isTransferringOwnership={isTransferringOwnership === participant.userId}
+                      isRemovingParticipant={isRemovingParticipant === participant.userId}
+                      onRoleChange={(uid, role) => {
+                        void onParticipantRoleChange(uid, role);
+                      }}
+                      onTransferOwnership={onTransferOwnership}
+                      onRemoveParticipant={onRemoveParticipant}
+                      compact
+                    />
+                  ))}
+                </div>
+              </motion.div>
+
+              {/* Invite link */}
+              <motion.div
+                className="p-3"
+                initial={rightMountedRef.current ? false : { opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.35, delay: 0.3, ease: [0.22, 1, 0.36, 1] }}
+              >
+                <InviteLinkInline inviteLink={inviteLink} />
+              </motion.div>
             </motion.div>
-          </motion.div>
+          )}
         </ResizablePanel>
       </ResizablePanelGroup>
 
@@ -811,6 +874,7 @@ export function RoomWorkspace({
         elapsedMs={elapsedMs}
         editorLocked={room.editorLocked}
         participantCount={participants.length}
+        collabStatus={collabStatus}
       />
     </div>
   );

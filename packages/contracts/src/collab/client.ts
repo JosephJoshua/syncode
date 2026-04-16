@@ -1,4 +1,6 @@
 import type {
+  BroadcastParticipantReadyRequest,
+  BroadcastParticipantReadyResponse,
   CreateDocumentRequest,
   CreateDocumentResponse,
   DestroyDocumentResponse,
@@ -14,6 +16,10 @@ export interface ICollabClient {
   kickUser(roomId: string, request: KickUserRequest): Promise<KickUserResponse>;
   updateRoomState(request: UpdateRoomStateRequest): Promise<UpdateRoomStateResponse>;
   healthCheck(): Promise<boolean>;
+  broadcastParticipantReady(
+    roomId: string,
+    request: BroadcastParticipantReadyRequest,
+  ): Promise<BroadcastParticipantReadyResponse>;
 }
 
 export const COLLAB_CLIENT = Symbol.for('COLLAB_CLIENT');

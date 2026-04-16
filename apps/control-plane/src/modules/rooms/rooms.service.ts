@@ -219,7 +219,24 @@ export class RoomsService {
       throw new NotFoundException({ message: 'Room not found', code: ERROR_CODES.ROOM_NOT_FOUND });
     }
 
-    return this.assembleRoomDetail(room, participantRows, userId);
+    const detail = await this.assembleRoomDetail(room, participantRows, userId);
+
+    if (room.status !== RoomStatus.FINISHED) {
+      const collabToken = await this.jwtService.signAsync({
+        sub: userId,
+        roomId,
+        role: detail.myRole,
+        type: 'collab',
+      });
+
+      return {
+        ...detail,
+        collabToken,
+        collabUrl: this.configService.get('COLLAB_PLANE_URL', { infer: true })!,
+      };
+    }
+
+    return detail;
   }
 
   async joinRoom(roomId: string, userId: string, input: JoinRoomInput): Promise<JoinRoomResult> {
@@ -549,6 +566,67 @@ export class RoomsService {
     };
   }
 
+  async toggleReady(roomId: string, userId: string): Promise<RoomDetailResult> {
+    const newReady = await this.db.transaction(async (tx) => {
+      const [room] = await tx
+        .select({ status: rooms.status })
+        .from(rooms)
+        .where(eq(rooms.id, roomId));
+
+      if (!room) {
+        throw new NotFoundException({
+          message: 'Room not found',
+          code: ERROR_CODES.ROOM_NOT_FOUND,
+        });
+      }
+
+      if (room.status !== RoomStatus.WAITING) {
+        throw new BadRequestException({
+          message: 'Ready status can only be toggled in the waiting phase',
+          code: ERROR_CODES.ROOM_INVALID_TRANSITION,
+        });
+      }
+
+      const [participant] = await tx
+        .select({ isReady: roomParticipants.isReady })
+        .from(roomParticipants)
+        .where(
+          and(
+            eq(roomParticipants.roomId, roomId),
+            eq(roomParticipants.userId, userId),
+            eq(roomParticipants.isActive, true),
+          ),
+        )
+        .for('update');
+
+      if (!participant) {
+        throw new NotFoundException({
+          message: 'Not a participant of this room',
+          code: ERROR_CODES.PARTICIPANT_NOT_FOUND,
+        });
+      }
+
+      const toggled = !participant.isReady;
+
+      await tx
+        .update(roomParticipants)
+        .set({ isReady: toggled })
+        .where(
+          and(
+            eq(roomParticipants.roomId, roomId),
+            eq(roomParticipants.userId, userId),
+            eq(roomParticipants.isActive, true),
+          ),
+        );
+
+      return toggled;
+    });
+
+    void this.broadcastParticipantReady(roomId, userId, newReady);
+
+    return this.getRoom(roomId, userId);
+  }
+
   async destroyRoom(roomId: string, userId: string): Promise<DestroyRoomResult> {
     await this.db.transaction(async (tx) => {
       const [room] = await tx.select().from(rooms).where(eq(rooms.id, roomId)).for('update');
@@ -654,6 +732,7 @@ export class RoomsService {
         avatarUrl: users.avatarUrl,
         role: roomParticipants.role,
         isActive: roomParticipants.isActive,
+        isReady: roomParticipants.isReady,
         joinedAt: roomParticipants.joinedAt,
       })
       .from(roomParticipants)
@@ -786,6 +865,14 @@ export class RoomsService {
 
       await tx.update(rooms).set(roomUpdate).where(eq(rooms.id, roomId));
 
+      // Reset all participants' ready status when leaving the lobby
+      if (lockedStatus === RoomStatus.WAITING) {
+        await tx
+          .update(roomParticipants)
+          .set({ isReady: false })
+          .where(eq(roomParticipants.roomId, roomId));
+      }
+
       if (lockedStatus === RoomStatus.WAITING && targetStatus === RoomStatus.WARMUP) {
         const [session] = await tx
           .insert(sessions)
@@ -847,7 +934,7 @@ export class RoomsService {
     );
 
     // Fire-and-forget collab notification stays outside the transaction.
-    void this.updateCollabRoomState(roomId, targetStatus, editorLocked);
+    void this.updateCollabRoomState(roomId, targetStatus, editorLocked, userId);
 
     return {
       roomId,
@@ -1076,11 +1163,24 @@ export class RoomsService {
     roomId: string,
     phase: RoomStatus,
     editorLocked: boolean,
+    changedBy?: string,
   ): Promise<void> {
     try {
-      await this.collabClient.updateRoomState({ roomId, phase, editorLocked });
+      await this.collabClient.updateRoomState({ roomId, phase, editorLocked, changedBy });
     } catch (error) {
       this.logger.warn(`Failed to update collab room state for room ${roomId}`, error);
+    }
+  }
+
+  private async broadcastParticipantReady(
+    roomId: string,
+    userId: string,
+    isReady: boolean,
+  ): Promise<void> {
+    try {
+      await this.collabClient.broadcastParticipantReady(roomId, { userId, isReady });
+    } catch (error) {
+      this.logger.warn(`Failed to broadcast participant ready for room ${roomId}`, error);
     }
   }
 
