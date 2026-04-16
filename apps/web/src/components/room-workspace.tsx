@@ -212,8 +212,13 @@ export function RoomWorkspace({
 
   const isMultiRunBusy = multiRunState.status === 'running';
   const isSubmitBusy = submitState.status === 'submitting' || submitState.status === 'polling';
-  const runDisabled = !canRunCode || isEditorReadOnly || isMultiRunBusy;
-  const submitDisabled = !canSubmitCode || isEditorReadOnly || isSubmitBusy;
+  const isRemoteRunActive = remoteRun?.multiRunState.status === 'running' && !isMultiRunBusy;
+  const isRemoteSubmitActive =
+    (remoteSubmit?.submitState.status === 'polling' ||
+      remoteSubmit?.submitState.status === 'submitting') &&
+    !isSubmitBusy;
+  const runDisabled = !canRunCode || isEditorReadOnly || isMultiRunBusy || isRemoteRunActive;
+  const submitDisabled = !canSubmitCode || isEditorReadOnly || isSubmitBusy || isRemoteSubmitActive;
 
   const getCode = useCallback(() => {
     return doc?.getText(CODE_TEXT_KEY).toString() ?? '';
@@ -461,6 +466,16 @@ export function RoomWorkspace({
         ? remoteRun.multiRunState.results
         : null;
 
+  // Auto-switch tabs when remote execution starts
+  const prevRemoteRunRef = useRef(isRemoteRunActive);
+  const prevRemoteSubmitRef = useRef(isRemoteSubmitActive);
+  useEffect(() => {
+    if (isRemoteRunActive && !prevRemoteRunRef.current) setActiveBottomTab('output');
+    if (isRemoteSubmitActive && !prevRemoteSubmitRef.current) setActiveBottomTab('results');
+    prevRemoteRunRef.current = isRemoteRunActive;
+    prevRemoteSubmitRef.current = isRemoteSubmitActive;
+  }, [isRemoteRunActive, isRemoteSubmitActive]);
+
   const prevMultiRunStatus = useRef(multiRunState.status);
   useEffect(() => {
     if (
@@ -613,14 +628,13 @@ export function RoomWorkspace({
                 </div>
 
                 {/* Remote execution indicator */}
-                {remoteRun?.multiRunState.status === 'running' &&
-                multiRunState.status === 'idle' ? (
+                {isRemoteRunActive && remoteRun ? (
                   <div className="flex h-6 shrink-0 items-center gap-1.5 border-b border-border bg-primary/5 px-3 font-mono text-[10px] text-primary">
                     <Loader2 className="size-3 animate-spin" />
                     {t('workspace.remoteRunning', { name: remoteRun.userName })}
                   </div>
                 ) : null}
-                {remoteSubmit?.submitState.status === 'polling' && submitState.status === 'idle' ? (
+                {isRemoteSubmitActive && remoteSubmit ? (
                   <div className="flex h-6 shrink-0 items-center gap-1.5 border-b border-border bg-amber-500/5 px-3 font-mono text-[10px] text-amber-400">
                     <Loader2 className="size-3 animate-spin" />
                     {t('workspace.remoteSubmitting', { name: remoteSubmit.userName })}

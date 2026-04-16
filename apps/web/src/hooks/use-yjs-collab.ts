@@ -64,6 +64,7 @@ export function useYjsCollab({
     }
 
     const colorLight = `${userColor}33`;
+    let latestPhase = '';
 
     const provider = new YjsCollabProvider({
       url: collabUrl,
@@ -72,6 +73,7 @@ export function useYjsCollab({
       user: { name: userName, color: userColor, colorLight },
       onConnectionStatusChange: setStatus,
       onRoomStatePatch: (patch) => {
+        if (patch.status) latestPhase = patch.status;
         patchRef.current({
           status: patch.status as RoomStatus | undefined,
           editorLocked: patch.editorLocked,
@@ -81,11 +83,13 @@ export function useYjsCollab({
         participantReadyRef.current(userId, isReady);
       },
       onPhaseChange: (phase) => {
+        latestPhase = phase;
         const label = ROOM_STATUS_LABELS[phase as RoomStatus] ?? phase;
         toast.info(tRef.current('workspace.phaseChanged', { phase: label }));
         phaseChangeRef.current?.();
       },
       onEditorLock: (locked) => {
+        if (latestPhase === 'finished') return;
         if (locked) {
           toast.warning(tRef.current('lobby.editorLocked'));
         } else {

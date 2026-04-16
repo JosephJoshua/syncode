@@ -33,8 +33,12 @@ export interface YjsCollabProviderOptions {
 const INITIAL_BACKOFF_MS = 1_000;
 const MAX_BACKOFF_MS = 30_000;
 
+/** Reconnect on transient codes. Also retry on 4009 (ALREADY_CONNECTED) since
+ *  the old connection will time out on the server shortly. */
 function shouldReconnect(code: number): boolean {
-  return code !== 1000 && code < 4000;
+  if (code === 1000) return false;
+  if (code === 4009) return true;
+  return code < 4000;
 }
 
 export class YjsCollabProvider {
