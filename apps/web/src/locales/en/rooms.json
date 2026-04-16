@@ -55,6 +55,7 @@
     "visibilityLabel": "Visibility",
     "problemPlaceholder": "Type to search and select a problem",
     "languagePlaceholder": "Select a language",
+    "noLanguagesAvailable": "No languages available",
     "publicRoom": "Public Room",
     "publicRoomDescription": "Anyone with the link can join directly",
     "button": "Create Collaborative Room",
