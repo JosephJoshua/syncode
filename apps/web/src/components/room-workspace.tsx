@@ -30,8 +30,10 @@ import {
 import { toast } from 'sonner';
 import type { Awareness } from 'y-protocols/awareness';
 import type * as Y from 'yjs';
+import type { CollabConnectionStatus } from '@/hooks/use-yjs-collab.js';
 import { api, readApiError, resolveErrorMessage } from '@/lib/api-client.js';
 import { buildInviteLink } from '@/lib/room-stage.js';
+import { CODE_TEXT_KEY } from '@/lib/yjs-collab-provider.js';
 import { CollaborativeEditor } from './collaborative-editor.js';
 import { ExecutionDetailsPanel } from './execution-details-panel.js';
 import { HostControlPanel } from './host-control-panel.js';
@@ -72,7 +74,7 @@ interface RoomWorkspaceProps {
   isUpdatingRole: string | null;
   isTransferringOwnership: string | null;
   isRemovingParticipant: string | null;
-  collabStatus: 'connecting' | 'connected' | 'reconnecting' | 'disconnected';
+  collabStatus: CollabConnectionStatus;
 }
 
 export function RoomWorkspace({
@@ -144,7 +146,7 @@ export function RoomWorkspace({
   useEffect(() => {
     if (!problem || !doc) return;
     const starterCode = problem.starterCode?.[language];
-    const yText = doc.getText('code');
+    const yText = doc.getText(CODE_TEXT_KEY);
     if (starterCode && yText.toString() === '') {
       yText.insert(0, starterCode);
     }
@@ -233,8 +235,9 @@ export function RoomWorkspace({
     }
     setMultiRunState({ status: 'running', results: initialResults });
 
+    const code = getCode();
     for (const tc of testCases) {
-      void runCase(tc);
+      void runCase(tc, code);
     }
   };
 
@@ -379,7 +382,7 @@ export function RoomWorkspace({
     };
   };
 
-  const runCase = async (tc: TestCaseEntry) => {
+  const runCase = async (tc: TestCaseEntry, code?: string) => {
     cancelMultiRunRef.current.get(tc.id)?.();
     const token = { cancelled: false };
     cancelMultiRunRef.current.set(tc.id, () => {
@@ -389,7 +392,7 @@ export function RoomWorkspace({
     try {
       const response = await api(CONTROL_API.ROOMS.RUN, {
         params: { id: roomId },
-        body: { language, code: getCode(), stdin: tc.input || undefined },
+        body: { language, code: code ?? getCode(), stdin: tc.input || undefined },
       });
 
       if (token.cancelled) return;

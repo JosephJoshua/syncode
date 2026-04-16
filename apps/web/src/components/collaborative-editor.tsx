@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import { MonacoBinding } from 'y-monaco';
 import type { Awareness } from 'y-protocols/awareness';
 import type * as Y from 'yjs';
+import { CODE_TEXT_KEY } from '@/lib/yjs-collab-provider.js';
 import {
   EDITOR_LOADING,
   EDITOR_OPTIONS_BASE,
@@ -17,9 +18,6 @@ interface CollaborativeEditorProps {
   onRunCode: () => void;
   onSubmitCode: () => void;
 }
-
-/** Y.Text key used by the collab-plane's YjsDocumentStore. */
-const CODE_TEXT_KEY = 'code';
 
 export function CollaborativeEditor({
   doc,

@@ -19,6 +19,11 @@ export interface UseYjsCollabOptions {
   onParticipantReady: (userId: string, isReady: boolean) => void;
 }
 
+interface CollabState {
+  doc: Y.Doc;
+  awareness: Awareness;
+}
+
 export interface YjsCollabResult {
   status: CollabConnectionStatus;
   doc: Y.Doc | null;
@@ -37,8 +42,7 @@ export function useYjsCollab({
   const [status, setStatus] = useState<CollabConnectionStatus>(
     collabUrl && collabToken ? 'connecting' : 'disconnected',
   );
-  const [doc, setDoc] = useState<Y.Doc | null>(null);
-  const [awareness, setAwareness] = useState<Awareness | null>(null);
+  const [collab, setCollab] = useState<CollabState | null>(null);
   const { t } = useTranslation('rooms');
 
   const patchRef = useRef(onRoomStatePatch);
@@ -51,8 +55,7 @@ export function useYjsCollab({
   useEffect(() => {
     if (!collabUrl || !collabToken) {
       setStatus('disconnected');
-      setDoc(null);
-      setAwareness(null);
+      setCollab(null);
       return;
     }
 
@@ -86,8 +89,7 @@ export function useYjsCollab({
       },
     });
 
-    setDoc(provider.doc);
-    setAwareness(provider.awareness);
+    setCollab({ doc: provider.doc, awareness: provider.awareness });
     provider.connect();
 
     return () => {
@@ -95,5 +97,5 @@ export function useYjsCollab({
     };
   }, [collabUrl, collabToken, roomId, userName, userColor]);
 
-  return { status, doc, awareness };
+  return { status, doc: collab?.doc ?? null, awareness: collab?.awareness ?? null };
 }

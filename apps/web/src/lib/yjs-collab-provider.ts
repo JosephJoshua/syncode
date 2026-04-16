@@ -15,6 +15,9 @@ import * as Y from 'yjs';
 
 export type CollabConnectionStatus = 'connecting' | 'connected' | 'reconnecting' | 'disconnected';
 
+/** Y.Text key used by the collab-plane's YjsDocumentStore. Must match server's CODE_KEY. */
+export const CODE_TEXT_KEY = 'code';
+
 export interface YjsCollabProviderOptions {
   url: string;
   token: string;
@@ -42,6 +45,7 @@ export class YjsCollabProvider {
   private disposed = false;
   private backoffMs = INITIAL_BACKOFF_MS;
   private hasConnected = false;
+  private currentStatus: CollabConnectionStatus = 'disconnected';
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly options: YjsCollabProviderOptions;
 
@@ -59,7 +63,7 @@ export class YjsCollabProvider {
   connect(): void {
     if (this.disposed) return;
 
-    this.options.onConnectionStatusChange(this.hasConnected ? 'reconnecting' : 'connecting');
+    this.setStatus(this.hasConnected ? 'reconnecting' : 'connecting');
 
     const url = new URL(this.options.url);
     if (url.protocol === 'https:') url.protocol = 'wss:';
@@ -87,11 +91,11 @@ export class YjsCollabProvider {
       if (this.disposed) return;
 
       if (!shouldReconnect(event.code)) {
-        this.options.onConnectionStatusChange('disconnected');
+        this.setStatus('disconnected');
         return;
       }
 
-      this.options.onConnectionStatusChange('reconnecting');
+      this.setStatus('reconnecting');
       this.reconnectTimer = setTimeout(() => {
         this.reconnectTimer = null;
         this.connect();
@@ -129,10 +133,16 @@ export class YjsCollabProvider {
     }
   }
 
+  private setStatus(status: CollabConnectionStatus): void {
+    if (status === this.currentStatus) return;
+    this.currentStatus = status;
+    this.options.onConnectionStatusChange(status);
+  }
+
   private handleTextMessage(raw: string): void {
     this.backoffMs = INITIAL_BACKOFF_MS;
     this.hasConnected = true;
-    this.options.onConnectionStatusChange('connected');
+    this.setStatus('connected');
 
     let message: CollabWsMessage;
     try {
