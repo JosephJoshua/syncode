@@ -32,3 +32,4 @@ export {
   type PhaseChangeEventData,
   type RoomStateEventData,
 } from './ws-events.js';
+export { WsMessageType } from './ws-message-types.js';
