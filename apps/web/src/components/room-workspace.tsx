@@ -71,6 +71,7 @@ interface RoomWorkspaceProps {
   isUpdatingRole: string | null;
   isTransferringOwnership: string | null;
   isRemovingParticipant: string | null;
+  collabStatus: 'connecting' | 'connected' | 'reconnecting' | 'disconnected';
 }
 
 export function RoomWorkspace({
@@ -86,6 +87,7 @@ export function RoomWorkspace({
   isUpdatingRole,
   isTransferringOwnership,
   isRemovingParticipant,
+  collabStatus,
 }: RoomWorkspaceProps) {
   const { t } = useTranslation('rooms');
 
@@ -872,6 +874,7 @@ export function RoomWorkspace({
         elapsedMs={elapsedMs}
         editorLocked={room.editorLocked}
         participantCount={participants.length}
+        collabStatus={collabStatus}
       />
     </div>
   );

@@ -145,6 +145,9 @@
   },
   "statusBar": {
     "connected": "Connected",
+    "connecting": "Connecting",
+    "reconnecting": "Reconnecting",
+    "disconnected": "Disconnected",
     "participants": "participants",
     "elapsed": "elapsed"
   },

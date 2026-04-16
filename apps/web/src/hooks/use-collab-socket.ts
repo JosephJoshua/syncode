@@ -8,7 +8,7 @@ import {
 } from '@syncode/contracts';
 import type { RoomStatus } from '@syncode/shared';
 import { ROOM_STATUS_LABELS } from '@syncode/shared';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 
@@ -29,13 +29,18 @@ export interface UseCollabSocketOptions {
   onParticipantReady: (userId: string, isReady: boolean) => void;
 }
 
+export type CollabConnectionStatus = 'connecting' | 'connected' | 'reconnecting' | 'disconnected';
+
 export function useCollabSocket({
   collabUrl,
   collabToken,
   roomId,
   onRoomStatePatch,
   onParticipantReady,
-}: UseCollabSocketOptions): void {
+}: UseCollabSocketOptions): CollabConnectionStatus {
+  const [status, setStatus] = useState<CollabConnectionStatus>(
+    collabUrl && collabToken ? 'connecting' : 'disconnected',
+  );
   const { t } = useTranslation('rooms');
   const patchRef = useRef(onRoomStatePatch);
   patchRef.current = onRoomStatePatch;
@@ -45,15 +50,21 @@ export function useCollabSocket({
   tRef.current = t;
 
   useEffect(() => {
-    if (!collabUrl || !collabToken) return;
+    if (!collabUrl || !collabToken) {
+      setStatus('disconnected');
+      return;
+    }
 
     let ws: WebSocket | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     let backoffMs = INITIAL_BACKOFF_MS;
     let disposed = false;
+    let hasConnected = false;
 
     function connect() {
       if (disposed) return;
+
+      setStatus(hasConnected ? 'reconnecting' : 'connecting');
 
       const url = new URL(collabUrl!);
       url.searchParams.set('token', collabToken!);
@@ -67,8 +78,10 @@ export function useCollabSocket({
       ws.onmessage = (event) => {
         if (typeof event.data !== 'string') return;
 
-        // First message received means join succeeded — reset backoff
+        // First message received means join succeeded
         backoffMs = INITIAL_BACKOFF_MS;
+        hasConnected = true;
+        setStatus('connected');
 
         let message: CollabWsMessage;
         try {
@@ -111,8 +124,13 @@ export function useCollabSocket({
 
       ws.onclose = (event) => {
         ws = null;
-        if (disposed || !shouldReconnect(event.code)) return;
+        if (disposed) return;
+        if (!shouldReconnect(event.code)) {
+          setStatus('disconnected');
+          return;
+        }
 
+        setStatus('reconnecting');
         reconnectTimer = setTimeout(() => {
           reconnectTimer = null;
           connect();
@@ -136,4 +154,6 @@ export function useCollabSocket({
       }
     };
   }, [collabUrl, collabToken, roomId]);
+
+  return status;
 }

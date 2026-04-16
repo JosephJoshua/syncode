@@ -192,7 +192,7 @@ function RoomPage() {
     collabCredsRef.current = { collabToken: room.collabToken, collabUrl: room.collabUrl };
   }
 
-  useCollabSocket({
+  const collabStatus = useCollabSocket({
     collabUrl: collabCredsRef.current?.collabUrl ?? null,
     collabToken: collabCredsRef.current?.collabToken ?? null,
     roomId,
@@ -430,6 +430,7 @@ function RoomPage() {
               ? (removeParticipantMutation.variables?.userId ?? null)
               : null
           }
+          collabStatus={collabStatus}
         />
       </>
     );

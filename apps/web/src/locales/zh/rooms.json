@@ -145,6 +145,9 @@
   },
   "statusBar": {
     "connected": "已连接",
+    "connecting": "连接中",
+    "reconnecting": "重新连接中",
+    "disconnected": "已断开",
     "participants": "名参与者",
     "elapsed": "已过"
   },
