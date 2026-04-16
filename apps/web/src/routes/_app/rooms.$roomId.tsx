@@ -224,6 +224,7 @@ function RoomPage() {
     userColor: cursorColor,
     onRoomStatePatch: handleRoomStatePatch,
     onParticipantReady: handleParticipantReady,
+    onPhaseChange: () => void refreshRoomDetail(),
   });
 
   const canChangePhase = room?.myCapabilities.includes('room:change-phase') ?? false;

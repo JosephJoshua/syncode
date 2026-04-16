@@ -17,6 +17,7 @@ export interface UseYjsCollabOptions {
   userColor: string;
   onRoomStatePatch: (patch: { status?: RoomStatus; editorLocked?: boolean }) => void;
   onParticipantReady: (userId: string, isReady: boolean) => void;
+  onPhaseChange?: () => void;
 }
 
 interface CollabState {
@@ -38,6 +39,7 @@ export function useYjsCollab({
   userColor,
   onRoomStatePatch,
   onParticipantReady,
+  onPhaseChange,
 }: UseYjsCollabOptions): YjsCollabResult {
   const [status, setStatus] = useState<CollabConnectionStatus>(
     collabUrl && collabToken ? 'connecting' : 'disconnected',
@@ -49,6 +51,8 @@ export function useYjsCollab({
   patchRef.current = onRoomStatePatch;
   const participantReadyRef = useRef(onParticipantReady);
   participantReadyRef.current = onParticipantReady;
+  const phaseChangeRef = useRef(onPhaseChange);
+  phaseChangeRef.current = onPhaseChange;
   const tRef = useRef(t);
   tRef.current = t;
 
@@ -79,6 +83,7 @@ export function useYjsCollab({
       onPhaseChange: (phase) => {
         const label = ROOM_STATUS_LABELS[phase as RoomStatus] ?? phase;
         toast.info(tRef.current('workspace.phaseChanged', { phase: label }));
+        phaseChangeRef.current?.();
       },
       onEditorLock: (locked) => {
         if (locked) {
