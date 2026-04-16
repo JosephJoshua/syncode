@@ -67,7 +67,8 @@ export function useCollabSocket({
       setStatus(hasConnected ? 'reconnecting' : 'connecting');
 
       const url = new URL(collabUrl!);
-      url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+      if (url.protocol === 'https:') url.protocol = 'wss:';
+      else if (url.protocol === 'http:') url.protocol = 'ws:';
       url.searchParams.set('token', collabToken!);
 
       ws = new WebSocket(url);
