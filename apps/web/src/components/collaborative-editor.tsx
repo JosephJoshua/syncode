@@ -68,6 +68,55 @@ export function CollaborativeEditor({
     };
   }, [doc, awareness]);
 
+  // Inject dynamic CSS for remote cursor colors from awareness state.
+  useEffect(() => {
+    const styleEl = document.createElement('style');
+    document.head.appendChild(styleEl);
+
+    const updateStyles = () => {
+      const rules: string[] = [];
+      awareness.getStates().forEach((state, clientID) => {
+        if (clientID === doc.clientID) return;
+        const user = state.user as
+          | { name?: string; color?: string; colorLight?: string }
+          | undefined;
+        if (!user?.color) return;
+        const light = user.colorLight ?? `${user.color}33`;
+        const name = user.name ?? '';
+
+        rules.push(
+          `.yRemoteSelection-${clientID} { background-color: ${light}; }`,
+          `.yRemoteSelectionHead-${clientID} { position: relative; border-left: 2px solid ${user.color}; }`,
+          `.yRemoteSelectionHead-${clientID}::after {
+            position: absolute;
+            content: "${name}";
+            background-color: ${user.color};
+            color: #fff;
+            font-size: 10px;
+            font-family: sans-serif;
+            padding: 0 3px;
+            border-radius: 2px 2px 2px 0;
+            line-height: 16px;
+            white-space: nowrap;
+            top: 0;
+            left: -2px;
+            pointer-events: none;
+            z-index: 10;
+          }`,
+        );
+      });
+      styleEl.textContent = rules.join('\n');
+    };
+
+    awareness.on('change', updateStyles);
+    updateStyles();
+
+    return () => {
+      awareness.off('change', updateStyles);
+      styleEl.remove();
+    };
+  }, [awareness, doc.clientID]);
+
   return (
     <Editor
       height="100%"
