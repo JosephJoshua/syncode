@@ -196,7 +196,7 @@ export class YjsCollabProvider {
     const encoder = encoding.createEncoder();
     encoding.writeVarUint(encoder, WsMessageType.SYNC);
 
-    syncProtocol.readSyncMessage(decoder, encoder, this.doc, null);
+    syncProtocol.readSyncMessage(decoder, encoder, this.doc, this);
 
     if (encoding.length(encoder) > 1) {
       this.send(encoding.toUint8Array(encoder));
@@ -211,7 +211,7 @@ export class YjsCollabProvider {
   }
 
   private handleDocUpdate = (update: Uint8Array, origin: unknown): void => {
-    if (origin === null) return;
+    if (origin === this) return;
 
     const encoder = encoding.createEncoder();
     encoding.writeVarUint(encoder, WsMessageType.SYNC);

@@ -144,15 +144,6 @@ export function RoomWorkspace({
   const nextCustomId = useRef(1);
 
   useEffect(() => {
-    if (!problem || !doc) return;
-    const starterCode = problem.starterCode?.[language];
-    const yText = doc.getText(CODE_TEXT_KEY);
-    if (starterCode && yText.toString() === '') {
-      yText.insert(0, starterCode);
-    }
-  }, [problem, language, doc]);
-
-  useEffect(() => {
     if (!problem) return;
     const entries: TestCaseEntry[] = problem.testCases.map((tc, i) => ({
       id: `problem-${i}`,
@@ -219,7 +210,7 @@ export function RoomWorkspace({
   const submitDisabled = !canSubmitCode || isEditorReadOnly || isSubmitBusy;
 
   const getCode = useCallback(() => {
-    return doc?.getText('code').toString() ?? '';
+    return doc?.getText(CODE_TEXT_KEY).toString() ?? '';
   }, [doc]);
 
   const handleRunCode = async () => {
