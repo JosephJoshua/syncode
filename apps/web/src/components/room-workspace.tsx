@@ -240,15 +240,17 @@ export function RoomWorkspace({
     setMultiRunState({ status: 'running', results: initialResults });
 
     const code = getCode();
-    const jobs: { caseId: string; jobId: string; label: string; expectedOutput: string | null }[] =
-      [];
-    await Promise.all(
+    const results = await Promise.all(
       testCases.map(async (tc) => {
         const jobId = await runCase(tc, code);
-        if (jobId) {
-          jobs.push({ caseId: tc.id, jobId, label: tc.label, expectedOutput: tc.expectedOutput });
-        }
+        return jobId
+          ? { caseId: tc.id, jobId, label: tc.label, expectedOutput: tc.expectedOutput }
+          : null;
       }),
+    );
+    const jobs = results.filter(
+      (j): j is { caseId: string; jobId: string; label: string; expectedOutput: string | null } =>
+        j !== null,
     );
 
     if (jobs.length > 0) {

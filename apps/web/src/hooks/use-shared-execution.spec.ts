@@ -110,26 +110,6 @@ describe('useSharedExecution', () => {
     const remoteDoc = new Y.Doc();
     const remoteAwareness = new Awareness(remoteDoc);
 
-    // Cross-connect awareness: when remote changes, apply to local
-    remoteAwareness.on(
-      'update',
-      ({ added, updated, removed }: { added: number[]; updated: number[]; removed: number[] }) => {
-        const changedClients = added.concat(updated, removed);
-        const encoded =
-          Awareness.prototype.constructor === Awareness
-            ? // Use the awareness protocol to encode and apply
-              (() => {
-                const {
-                  encodeAwarenessUpdate,
-                  applyAwarenessUpdate,
-                } = require('y-protocols/awareness');
-                const update = encodeAwarenessUpdate(remoteAwareness, changedClients);
-                applyAwarenessUpdate(localAwareness, update, null);
-              })()
-            : undefined;
-      },
-    );
-
     const { result } = renderHook(() => useSharedExecution(localAwareness, localDoc));
 
     // Simulate remote user setting execution awareness

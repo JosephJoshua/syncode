@@ -55,6 +55,7 @@ export class CollaborationGateway
       const ws = client as WebSocket & { isAlive?: boolean };
       if (ws.isAlive === false) {
         this.logger.debug('Terminating unresponsive client');
+        this.clients.delete(client);
         ws.terminate();
         continue;
       }

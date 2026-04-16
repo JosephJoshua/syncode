@@ -7,12 +7,12 @@ const mockConnect = vi.fn();
 const mockDestroy = vi.fn();
 const mockSetLocalStateField = vi.fn();
 
-vi.mock('@/lib/yjs-collab-provider.js', () => {
-  const Y = require('yjs');
-  const { Awareness } = require('y-protocols/awareness');
+vi.mock('@/lib/yjs-collab-provider.js', async () => {
+  const Y = await import('yjs');
+  const { Awareness } = await import('y-protocols/awareness');
 
   return {
-    YjsCollabProvider: vi.fn().mockImplementation((opts: Record<string, unknown>) => {
+    YjsCollabProvider: vi.fn().mockImplementation(() => {
       const doc = new Y.Doc();
       const awareness = new Awareness(doc);
       awareness.setLocalStateField = mockSetLocalStateField;
