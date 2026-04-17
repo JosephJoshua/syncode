@@ -8,7 +8,7 @@ import {
 } from '@syncode/ui';
 import { Check, ChevronDown, Mic, MicOff, TriangleAlert, Video, VideoOff } from 'lucide-react';
 import type { LiveKitConnectionState, MediaDeviceOption } from '@/hooks/use-livekit.js';
-import { MediaSettingsPanel } from './media-settings-panel.js';
+import { type AudioProcessingSettings, MediaSettingsPanel } from './media-settings-panel.js';
 
 interface MediaControlsProps {
   connectionState: LiveKitConnectionState;
@@ -21,6 +21,10 @@ interface MediaControlsProps {
   activeAudioDeviceId: string | null;
   activeVideoDeviceId: string | null;
   onSwitchDevice: (kind: MediaDeviceKind, deviceId: string) => void;
+  outputVolume: number;
+  onOutputVolumeChange: (volume: number) => void;
+  audioProcessing: AudioProcessingSettings;
+  onAudioProcessingChange: (settings: AudioProcessingSettings) => void;
 }
 
 export function MediaControls({
@@ -34,6 +38,10 @@ export function MediaControls({
   activeAudioDeviceId,
   activeVideoDeviceId,
   onSwitchDevice,
+  outputVolume,
+  onOutputVolumeChange,
+  audioProcessing,
+  onAudioProcessingChange,
 }: MediaControlsProps) {
   const isConnected = connectionState === 'connected';
   const isConnecting = connectionState === 'connecting' || connectionState === 'reconnecting';
@@ -125,6 +133,10 @@ export function MediaControls({
             activeAudioDeviceId={activeAudioDeviceId}
             activeVideoDeviceId={activeVideoDeviceId}
             onSwitchDevice={onSwitchDevice}
+            outputVolume={outputVolume}
+            onOutputVolumeChange={onOutputVolumeChange}
+            audioProcessing={audioProcessing}
+            onAudioProcessingChange={onAudioProcessingChange}
           />
         </>
       ) : null}

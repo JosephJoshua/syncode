@@ -46,6 +46,7 @@ export interface UseLiveKitResult {
   videoInputDevices: MediaDeviceOption[];
   activeAudioDeviceId: string | null;
   activeVideoDeviceId: string | null;
+  setOutputVolume: (volume: number) => void;
   speakingMap: ReadonlyMap<string, boolean>;
   remoteParticipants: MediaParticipant[];
   localParticipant: MediaParticipant | null;
@@ -368,6 +369,12 @@ export function useLiveKit({ url, token, connect }: UseLiveKitOptions): UseLiveK
     [refreshParticipants, refreshDevices],
   );
 
+  const setOutputVolume = useCallback((volume: number) => {
+    for (const el of audioElementsRef.current.values()) {
+      el.volume = Math.max(0, Math.min(1, volume));
+    }
+  }, []);
+
   return {
     connectionState,
     isMicrophoneEnabled,
@@ -379,6 +386,7 @@ export function useLiveKit({ url, token, connect }: UseLiveKitOptions): UseLiveK
     videoInputDevices,
     activeAudioDeviceId,
     activeVideoDeviceId,
+    setOutputVolume,
     speakingMap,
     remoteParticipants,
     localParticipant,

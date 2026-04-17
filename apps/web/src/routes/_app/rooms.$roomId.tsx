@@ -17,6 +17,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { MediaControls } from '@/components/media-controls.js';
+import type { AudioProcessingSettings } from '@/components/media-settings-panel.js';
 import { RoomLobby } from '@/components/room-lobby.js';
 import { RoomWorkspace } from '@/components/room-workspace.js';
 import {
@@ -269,6 +270,7 @@ function RoomPage() {
     videoInputDevices,
     activeAudioDeviceId,
     activeVideoDeviceId,
+    setOutputVolume,
     speakingMap,
     remoteParticipants: mediaRemoteParticipants,
     localParticipant: mediaLocalParticipant,
@@ -293,6 +295,21 @@ function RoomPage() {
     return map;
   }, [mediaLocalParticipant, mediaRemoteParticipants]);
 
+  const [outputVolume, setOutputVolumeState] = useState(1);
+  const [audioProcessing, setAudioProcessing] = useState<AudioProcessingSettings>({
+    noiseSuppression: true,
+    echoCancellation: true,
+    autoGainControl: false,
+  });
+
+  const handleOutputVolumeChange = useCallback(
+    (vol: number) => {
+      setOutputVolumeState(vol);
+      setOutputVolume(vol);
+    },
+    [setOutputVolume],
+  );
+
   const mediaControlsElement = hasMediaCapability ? (
     <MediaControls
       connectionState={mediaConnectionState}
@@ -305,6 +322,10 @@ function RoomPage() {
       activeAudioDeviceId={activeAudioDeviceId}
       activeVideoDeviceId={activeVideoDeviceId}
       onSwitchDevice={(kind, id) => void switchDevice(kind, id)}
+      outputVolume={outputVolume}
+      onOutputVolumeChange={handleOutputVolumeChange}
+      audioProcessing={audioProcessing}
+      onAudioProcessingChange={setAudioProcessing}
     />
   ) : null;
 
