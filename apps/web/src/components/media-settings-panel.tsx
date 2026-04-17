@@ -34,6 +34,9 @@ interface MediaSettingsPanelProps {
   onVideoFilterChange: (settings: { brightness: number; contrast: number }) => void;
 }
 
+const LEVEL_BAR_COUNT = 16;
+const LEVEL_BAR_KEYS = Array.from({ length: LEVEL_BAR_COUNT }, (_, i) => `bar-${String(i)}`);
+
 function AudioLevelMeter({ deviceId }: { deviceId: string | null }) {
   const [level, setLevel] = useState(0);
   const cleanupRef = useRef<(() => void) | null>(null);
@@ -90,12 +93,11 @@ function AudioLevelMeter({ deviceId }: { deviceId: string | null }) {
     };
   }, [deviceId]);
 
-  const bars = 16;
-  const barKeys = Array.from({ length: bars }, (_, i) => `bar-${String(i)}`);
+  const bars = LEVEL_BAR_COUNT;
 
   return (
     <div className="flex items-center gap-0.5">
-      {barKeys.map((key, i) => {
+      {LEVEL_BAR_KEYS.map((key, i) => {
         const threshold = (i + 1) / bars;
         const active = level >= threshold;
         return (
@@ -225,10 +227,6 @@ export function MediaSettingsPanel({
   const [brightness, setBrightness] = useState(1);
   const [contrast, setContrast] = useState(1);
 
-  const applyVideoFilter = (b: number, c: number) => {
-    onVideoFilterChange({ brightness: b, contrast: c });
-  };
-
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
@@ -296,7 +294,7 @@ export function MediaSettingsPanel({
                   onChange={(e) => {
                     const v = Number(e.target.value);
                     setBrightness(v);
-                    applyVideoFilter(v, contrast);
+                    onVideoFilterChange({ brightness: v, contrast });
                   }}
                   className="h-1 w-full cursor-pointer appearance-none rounded-full bg-muted accent-primary"
                 />
@@ -318,7 +316,7 @@ export function MediaSettingsPanel({
                   onChange={(e) => {
                     const v = Number(e.target.value);
                     setContrast(v);
-                    applyVideoFilter(brightness, v);
+                    onVideoFilterChange({ brightness, contrast: v });
                   }}
                   className="h-1 w-full cursor-pointer appearance-none rounded-full bg-muted accent-primary"
                 />
@@ -330,7 +328,7 @@ export function MediaSettingsPanel({
                   onClick={() => {
                     setBrightness(1);
                     setContrast(1);
-                    applyVideoFilter(1, 1);
+                    onVideoFilterChange({ brightness: 1, contrast: 1 });
                   }}
                   className="text-[10px] text-muted-foreground hover:text-foreground"
                 >

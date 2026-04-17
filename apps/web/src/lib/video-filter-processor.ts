@@ -56,6 +56,11 @@ export class VideoFilterProcessor implements TrackProcessor<Track.Kind.Video> {
   private async setup(): Promise<void> {
     if (!this.sourceTrack) return;
 
+    if (this.processedTrack) {
+      this.processedTrack.stop();
+      this.processedTrack = undefined;
+    }
+
     const trackSettings = this.sourceTrack.getSettings();
     const width = trackSettings.width ?? 640;
     const height = trackSettings.height ?? 480;

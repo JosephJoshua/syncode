@@ -49,6 +49,11 @@ export interface UseLiveKitResult {
   activeVideoDeviceId: string | null;
   setOutputVolume: (volume: number) => void;
   setVideoFilter: (settings: VideoFilterSettings) => Promise<void>;
+  setAudioProcessing: (settings: {
+    noiseSuppression: boolean;
+    echoCancellation: boolean;
+    autoGainControl: boolean;
+  }) => Promise<void>;
   speakingMap: ReadonlyMap<string, boolean>;
   remoteParticipants: MediaParticipant[];
   localParticipant: MediaParticipant | null;
@@ -96,11 +101,22 @@ export function useLiveKit({ url, token, connect }: UseLiveKitOptions): UseLiveK
     const localMediaTrack = localVideo?.isMuted
       ? null
       : (localVideo?.track?.mediaStreamTrack ?? null);
-    setLocalParticipant({
+    const nextLocal: MediaParticipant = {
       identity: room.localParticipant.identity,
       isMuted: !room.localParticipant.isMicrophoneEnabled,
       hasVideo: localMediaTrack !== null,
       videoTrack: localMediaTrack,
+    };
+    setLocalParticipant((prev) => {
+      if (
+        prev &&
+        prev.identity === nextLocal.identity &&
+        prev.isMuted === nextLocal.isMuted &&
+        prev.hasVideo === nextLocal.hasVideo &&
+        prev.videoTrack === nextLocal.videoTrack
+      )
+        return prev;
+      return nextLocal;
     });
 
     const remotes: MediaParticipant[] = [];
@@ -115,7 +131,20 @@ export function useLiveKit({ url, token, connect }: UseLiveKitOptions): UseLiveK
         videoTrack: mediaTrack,
       });
     }
-    setRemoteParticipants(remotes);
+    setRemoteParticipants((prev) => {
+      if (
+        prev.length === remotes.length &&
+        prev.every(
+          (p, i) =>
+            p.identity === remotes[i]?.identity &&
+            p.isMuted === remotes[i]?.isMuted &&
+            p.hasVideo === remotes[i]?.hasVideo &&
+            p.videoTrack === remotes[i]?.videoTrack,
+        )
+      )
+        return prev;
+      return remotes;
+    });
   }, []);
 
   const refreshDevices = useCallback(async () => {
@@ -410,6 +439,25 @@ export function useLiveKit({ url, token, connect }: UseLiveKitOptions): UseLiveK
     await cameraPub.track.setProcessor(processor, true);
   }, []);
 
+  const setAudioProcessing = useCallback(
+    async (settings: {
+      noiseSuppression: boolean;
+      echoCancellation: boolean;
+      autoGainControl: boolean;
+    }) => {
+      const room = roomRef.current;
+      if (!room || !room.localParticipant.isMicrophoneEnabled) return;
+      await room.localParticipant.setMicrophoneEnabled(false);
+      await room.localParticipant.setMicrophoneEnabled(true, {
+        noiseSuppression: settings.noiseSuppression,
+        echoCancellation: settings.echoCancellation,
+        autoGainControl: settings.autoGainControl,
+      });
+      setIsMicrophoneEnabled(true);
+    },
+    [],
+  );
+
   return {
     connectionState,
     isMicrophoneEnabled,
@@ -423,6 +471,7 @@ export function useLiveKit({ url, token, connect }: UseLiveKitOptions): UseLiveK
     activeVideoDeviceId,
     setOutputVolume,
     setVideoFilter,
+    setAudioProcessing,
     speakingMap,
     remoteParticipants,
     localParticipant,
