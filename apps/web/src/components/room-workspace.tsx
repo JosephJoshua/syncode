@@ -80,6 +80,7 @@ interface RoomWorkspaceProps {
   speakingMap?: ReadonlyMap<string, boolean>;
   mediaControls?: React.ReactNode;
   mediaConnectedSet?: ReadonlySet<string>;
+  mediaMutedMap?: ReadonlyMap<string, boolean>;
   dockedVideoPanel?: React.ReactNode;
 }
 
@@ -103,6 +104,7 @@ export function RoomWorkspace({
   speakingMap,
   mediaControls,
   mediaConnectedSet,
+  mediaMutedMap,
   dockedVideoPanel,
 }: RoomWorkspaceProps) {
   const { t } = useTranslation('rooms');
@@ -547,6 +549,7 @@ export function RoomWorkspace({
         speakingMap={speakingMap}
         mediaControls={mediaControls}
         mediaConnectedSet={mediaConnectedSet}
+        mediaMutedMap={mediaMutedMap}
       />
 
       {/* Main resizable 3-panel area */}
@@ -878,6 +881,7 @@ export function RoomWorkspace({
                       isRemovingParticipant={isRemovingParticipant === participant.userId}
                       isSpeaking={speakingMap?.get(participant.userId) ?? false}
                       isMediaConnected={mediaConnectedSet?.has(participant.userId) ?? false}
+                      isMediaMuted={mediaMutedMap?.get(participant.userId) ?? false}
                       onRoleChange={(uid, role) => {
                         void onParticipantRoleChange(uid, role);
                       }}

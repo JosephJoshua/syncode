@@ -285,6 +285,14 @@ function RoomPage() {
     return set;
   }, [mediaLocalParticipant, mediaRemoteParticipants]);
 
+  const mediaMutedMap = useMemo(() => {
+    const map = new Map<string, boolean>();
+    if (mediaLocalParticipant)
+      map.set(mediaLocalParticipant.identity, mediaLocalParticipant.isMuted);
+    for (const p of mediaRemoteParticipants) map.set(p.identity, p.isMuted);
+    return map;
+  }, [mediaLocalParticipant, mediaRemoteParticipants]);
+
   const mediaControlsElement = hasMediaCapability ? (
     <MediaControls
       connectionState={mediaConnectionState}
@@ -578,6 +586,7 @@ function RoomPage() {
           speakingMap={speakingMap}
           mediaControls={mediaControlsElement}
           mediaConnectedSet={mediaConnectedSet}
+          mediaMutedMap={mediaMutedMap}
           dockedVideoPanel={
             showMediaPanel && videoPanelMode === 'docked' ? (
               <DockedVideoPanel tiles={videoTiles} onUndock={() => setVideoPanelMode('floating')} />
@@ -621,6 +630,7 @@ function RoomPage() {
         onTransition={handleTransition}
         speakingMap={speakingMap}
         mediaConnectedSet={mediaConnectedSet}
+        mediaMutedMap={mediaMutedMap}
       />
     </>
   );

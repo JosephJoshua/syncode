@@ -1,7 +1,7 @@
 import type { RoomRole, RoomStatus } from '@syncode/shared';
 import { Avatar, AvatarFallback, AvatarImage, Badge, cn } from '@syncode/ui';
 import { Link } from '@tanstack/react-router';
-import { ArrowLeft, Crown } from 'lucide-react';
+import { ArrowLeft, Crown, MicOff } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { formatTimer, STAGE_THEME } from '@/lib/room-stage.js';
 import type { Participant } from './room-participant-card.js';
@@ -24,6 +24,7 @@ interface RoomHeaderBarProps {
   speakingMap?: ReadonlyMap<string, boolean>;
   mediaControls?: React.ReactNode;
   mediaConnectedSet?: ReadonlySet<string>;
+  mediaMutedMap?: ReadonlyMap<string, boolean>;
 }
 
 export function RoomHeaderBar({
@@ -36,6 +37,7 @@ export function RoomHeaderBar({
   speakingMap,
   mediaControls,
   mediaConnectedSet,
+  mediaMutedMap,
 }: RoomHeaderBarProps) {
   const { t } = useTranslation('rooms');
   const isActive = status === 'coding' || status === 'warmup';
@@ -100,16 +102,22 @@ export function RoomHeaderBar({
                   {(p.displayName ?? p.username).charAt(0).toUpperCase()}
                 </AvatarFallback>
               </Avatar>
-              <span
-                className={cn(
-                  'absolute -bottom-0.5 -right-0.5 size-1.5 rounded-full border border-background',
-                  mediaConnectedSet?.has(p.userId)
-                    ? 'bg-emerald-400'
-                    : p.isActive
-                      ? 'bg-muted-foreground/50'
-                      : 'bg-muted-foreground/20',
-                )}
-              />
+              {mediaConnectedSet?.has(p.userId) && mediaMutedMap?.get(p.userId) ? (
+                <span className="absolute -bottom-1 -right-1 flex size-3 items-center justify-center rounded-full border border-background bg-destructive/90">
+                  <MicOff className="size-1.5 text-white" />
+                </span>
+              ) : (
+                <span
+                  className={cn(
+                    'absolute -bottom-0.5 -right-0.5 size-1.5 rounded-full border border-background',
+                    mediaConnectedSet?.has(p.userId)
+                      ? 'bg-emerald-400'
+                      : p.isActive
+                        ? 'bg-muted-foreground/50'
+                        : 'bg-muted-foreground/20',
+                  )}
+                />
+              )}
             </div>
           ))}
           {participants.length > 4 ? (

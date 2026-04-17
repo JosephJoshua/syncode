@@ -19,6 +19,7 @@ export type LiveKitConnectionState =
 
 export interface MediaParticipant {
   identity: string;
+  isMuted: boolean;
   hasVideo: boolean;
   videoTrack: MediaStreamTrack | null;
 }
@@ -93,6 +94,7 @@ export function useLiveKit({ url, token, connect }: UseLiveKitOptions): UseLiveK
       : (localVideo?.track?.mediaStreamTrack ?? null);
     setLocalParticipant({
       identity: room.localParticipant.identity,
+      isMuted: !room.localParticipant.isMicrophoneEnabled,
       hasVideo: localMediaTrack !== null,
       videoTrack: localMediaTrack,
     });
@@ -100,9 +102,11 @@ export function useLiveKit({ url, token, connect }: UseLiveKitOptions): UseLiveK
     const remotes: MediaParticipant[] = [];
     for (const p of room.remoteParticipants.values()) {
       const videoPub = p.getTrackPublication(Track.Source.Camera);
+      const audioPub = p.getTrackPublication(Track.Source.Microphone);
       const mediaTrack = videoPub?.isMuted ? null : (videoPub?.track?.mediaStreamTrack ?? null);
       remotes.push({
         identity: p.identity,
+        isMuted: !audioPub || audioPub.isMuted,
         hasVideo: mediaTrack !== null,
         videoTrack: mediaTrack,
       });

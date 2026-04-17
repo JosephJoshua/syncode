@@ -34,6 +34,7 @@ interface RoomLobbyProps {
   onTransition: (targetStatus: RoomStatus) => void;
   speakingMap?: ReadonlyMap<string, boolean>;
   mediaConnectedSet?: ReadonlySet<string>;
+  mediaMutedMap?: ReadonlyMap<string, boolean>;
 }
 
 export function RoomLobby({
@@ -57,6 +58,7 @@ export function RoomLobby({
   onTransition,
   speakingMap,
   mediaConnectedSet,
+  mediaMutedMap,
 }: RoomLobbyProps) {
   const { t } = useTranslation('rooms');
   const { copied, copy } = useClipboard();
@@ -133,6 +135,7 @@ export function RoomLobby({
                   isTransferringOwnership={isTransferringOwnership === participant.userId}
                   isSpeaking={speakingMap?.get(participant.userId) ?? false}
                   isMediaConnected={mediaConnectedSet?.has(participant.userId) ?? false}
+                  isMediaMuted={mediaMutedMap?.get(participant.userId) ?? false}
                   onRoleChange={onParticipantRoleChange}
                   onTransferOwnership={onTransferOwnership}
                 />

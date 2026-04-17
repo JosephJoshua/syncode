@@ -15,7 +15,7 @@ import {
   SelectItem,
   SelectTrigger,
 } from '@syncode/ui';
-import { CheckCircle2, Crown, EllipsisVertical, Loader2, Trash2 } from 'lucide-react';
+import { CheckCircle2, Crown, EllipsisVertical, Loader2, MicOff, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ROLE_LABEL_KEYS } from '@/lib/room-stage.js';
@@ -46,6 +46,7 @@ interface RoomParticipantCardProps {
   isRemovingParticipant?: boolean;
   isSpeaking?: boolean;
   isMediaConnected?: boolean;
+  isMediaMuted?: boolean;
   onRoleChange?: (userId: string, role: RoomRole) => void;
   onTransferOwnership?: (userId: string, displayName: string) => void;
   onRemoveParticipant?: (userId: string, displayName: string) => void;
@@ -63,6 +64,7 @@ export function RoomParticipantCard({
   isRemovingParticipant = false,
   isSpeaking = false,
   isMediaConnected = false,
+  isMediaMuted = false,
   onRoleChange,
   onTransferOwnership,
   onRemoveParticipant,
@@ -88,16 +90,22 @@ export function RoomParticipantCard({
             {participant.avatarUrl ? <AvatarImage src={participant.avatarUrl} /> : null}
             <AvatarFallback>{initial}</AvatarFallback>
           </Avatar>
-          <span
-            className={cn(
-              'absolute -bottom-0.5 -right-0.5 size-2 rounded-full border border-card',
-              isMediaConnected
-                ? 'bg-emerald-400'
-                : participant.isActive
-                  ? 'bg-muted-foreground/50'
-                  : 'bg-muted-foreground/20',
-            )}
-          />
+          {isMediaConnected && isMediaMuted ? (
+            <span className="absolute -bottom-1 -right-1 flex size-3 items-center justify-center rounded-full border border-card bg-destructive/90">
+              <MicOff className="size-1.5 text-white" />
+            </span>
+          ) : (
+            <span
+              className={cn(
+                'absolute -bottom-0.5 -right-0.5 size-2 rounded-full border border-card',
+                isMediaConnected
+                  ? 'bg-emerald-400'
+                  : participant.isActive
+                    ? 'bg-muted-foreground/50'
+                    : 'bg-muted-foreground/20',
+              )}
+            />
+          )}
         </div>
         <div className="flex min-w-0 flex-1 items-center gap-2">
           <span className="truncate text-sm text-foreground">
@@ -196,16 +204,22 @@ export function RoomParticipantCard({
             {participant.avatarUrl ? <AvatarImage src={participant.avatarUrl} /> : null}
             <AvatarFallback className="text-sm">{initial}</AvatarFallback>
           </Avatar>
-          <span
-            className={cn(
-              'absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border-2 border-card',
-              isMediaConnected
-                ? 'bg-emerald-400'
-                : participant.isActive
-                  ? 'bg-muted-foreground/50'
-                  : 'bg-muted-foreground/20',
-            )}
-          />
+          {isMediaConnected && isMediaMuted ? (
+            <span className="absolute -bottom-1 -right-1 flex size-3.5 items-center justify-center rounded-full border-2 border-card bg-destructive/90">
+              <MicOff className="size-2 text-white" />
+            </span>
+          ) : (
+            <span
+              className={cn(
+                'absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border-2 border-card',
+                isMediaConnected
+                  ? 'bg-emerald-400'
+                  : participant.isActive
+                    ? 'bg-muted-foreground/50'
+                    : 'bg-muted-foreground/20',
+              )}
+            />
+          )}
         </div>
 
         <div className="min-w-0 flex-1">
