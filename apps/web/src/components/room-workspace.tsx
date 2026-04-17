@@ -77,6 +77,10 @@ interface RoomWorkspaceProps {
   isRemovingParticipant: string | null;
   collabStatus: CollabConnectionStatus;
   currentUserName: string;
+  speakingMap?: ReadonlyMap<string, boolean>;
+  mediaControls?: React.ReactNode;
+  mediaConnectedSet?: ReadonlySet<string>;
+  dockedVideoPanel?: React.ReactNode;
 }
 
 export function RoomWorkspace({
@@ -96,6 +100,10 @@ export function RoomWorkspace({
   isRemovingParticipant,
   collabStatus,
   currentUserName,
+  speakingMap,
+  mediaControls,
+  mediaConnectedSet,
+  dockedVideoPanel,
 }: RoomWorkspaceProps) {
   const { t } = useTranslation('rooms');
 
@@ -141,8 +149,21 @@ export function RoomWorkspace({
   );
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
+  const [rightNarrow, setRightNarrow] = useState(false);
   const [bottomCollapsed, setBottomCollapsed] = useState(false);
   const rightMountedRef = useRef(false);
+  const rightContentRef = useRef<HTMLDivElement>(null);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: rightCollapsed triggers re-attach when the panel DOM changes between collapsed/expanded states
+  useEffect(() => {
+    const el = rightContentRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry) setRightNarrow(entry.contentRect.width < 200);
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [rightCollapsed]);
   const cancelSubmitPollRef = useRef<(() => void) | null>(null);
 
   const [testCases, setTestCases] = useState<TestCaseEntry[]>([]);
@@ -523,6 +544,9 @@ export function RoomWorkspace({
         isHost={amHost}
         elapsedMs={elapsedMs}
         participants={participants}
+        speakingMap={speakingMap}
+        mediaControls={mediaControls}
+        mediaConnectedSet={mediaConnectedSet}
       />
 
       {/* Main resizable 3-panel area */}
@@ -790,7 +814,8 @@ export function RoomWorkspace({
             </button>
           ) : (
             <motion.div
-              className="flex h-full flex-col overflow-y-auto bg-card/80 backdrop-blur-sm"
+              ref={rightContentRef}
+              className="flex h-full min-w-0 flex-col overflow-y-auto bg-card/80 backdrop-blur-sm"
               initial={rightMountedRef.current ? false : { opacity: 0, x: 16 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
@@ -798,9 +823,8 @@ export function RoomWorkspace({
                 rightMountedRef.current = true;
               }}
             >
-              {/* Host control section */}
               <motion.div
-                className="border-b border-border p-3"
+                className={`border-b border-border ${rightNarrow ? 'p-2' : 'p-3'}`}
                 initial={rightMountedRef.current ? false : { opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.35, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
@@ -823,20 +847,23 @@ export function RoomWorkspace({
                 </div>
               </motion.div>
 
-              {/* Participants */}
+              {dockedVideoPanel}
+
               <motion.div
-                className="flex-1 border-b border-border p-3"
+                className={`shrink-0 border-b border-border ${rightNarrow ? 'p-2' : 'p-3'}`}
                 initial={rightMountedRef.current ? false : { opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.35, delay: 0.2, ease: [0.22, 1, 0.36, 1] }}
               >
                 <div className="flex items-center justify-between">
                   <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                    {t('workspace.participantsHeading')}
+                    {rightNarrow ? `${participants.length}` : t('workspace.participantsHeading')}
                   </span>
-                  <span className="font-mono text-[10px] text-muted-foreground/60">
-                    {participants.length}
-                  </span>
+                  {!rightNarrow ? (
+                    <span className="font-mono text-[10px] text-muted-foreground/60">
+                      {participants.length}
+                    </span>
+                  ) : null}
                 </div>
                 <div className="mt-2 space-y-0.5">
                   {participants.map((participant: Participant) => (
@@ -849,6 +876,8 @@ export function RoomWorkspace({
                       isUpdatingRole={isUpdatingRole === participant.userId}
                       isTransferringOwnership={isTransferringOwnership === participant.userId}
                       isRemovingParticipant={isRemovingParticipant === participant.userId}
+                      isSpeaking={speakingMap?.get(participant.userId) ?? false}
+                      isMediaConnected={mediaConnectedSet?.has(participant.userId) ?? false}
                       onRoleChange={(uid, role) => {
                         void onParticipantRoleChange(uid, role);
                       }}
@@ -861,14 +890,16 @@ export function RoomWorkspace({
               </motion.div>
 
               {/* Invite link */}
-              <motion.div
-                className="p-3"
-                initial={rightMountedRef.current ? false : { opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.35, delay: 0.3, ease: [0.22, 1, 0.36, 1] }}
-              >
-                <InviteLinkInline inviteLink={inviteLink} />
-              </motion.div>
+              {!rightNarrow ? (
+                <motion.div
+                  className="p-3"
+                  initial={rightMountedRef.current ? false : { opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.35, delay: 0.3, ease: [0.22, 1, 0.36, 1] }}
+                >
+                  <InviteLinkInline inviteLink={inviteLink} />
+                </motion.div>
+              ) : null}
             </motion.div>
           )}
         </ResizablePanel>

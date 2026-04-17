@@ -16,8 +16,15 @@ import { AlertTriangle, Loader2 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
+import { MediaControls } from '@/components/media-controls.js';
 import { RoomLobby } from '@/components/room-lobby.js';
 import { RoomWorkspace } from '@/components/room-workspace.js';
+import {
+  DockedVideoPanel,
+  FloatingVideoPanel,
+  type VideoPanelParticipant,
+} from '@/components/video-panel.js';
+import { useLiveKit } from '@/hooks/use-livekit.js';
 import { useYjsCollab } from '@/hooks/use-yjs-collab.js';
 import { type ApiErrorResult, api, readApiError, resolveErrorMessage } from '@/lib/api-client.js';
 import { computeRoomElapsedMs, isWorkspaceStage, ROLE_LABEL_KEYS } from '@/lib/room-stage.js';
@@ -226,6 +233,102 @@ function RoomPage() {
     onParticipantReady: handleParticipantReady,
     onPhaseChange: () => void refreshRoomDetail(),
   });
+
+  const mediaCredsRef = useRef<{ token: string; url: string } | null>(null);
+  const [mediaReady, setMediaReady] = useState(false);
+  const [videoPanelMode, setVideoPanelMode] = useState<'floating' | 'docked'>('docked');
+  const [isVideoMinimized, setIsVideoMinimized] = useState(false);
+
+  const hasMediaCapability =
+    room?.myCapabilities.some(
+      (c) => c === 'media:audio' || c === 'media:video' || c === 'media:screenshare',
+    ) ?? false;
+
+  useEffect(() => {
+    if (!room || !hasMediaCapability || mediaCredsRef.current) return;
+    if (room.status === 'finished') return;
+
+    api(CONTROL_API.ROOMS.MEDIA_TOKEN, { params: { id: roomId } })
+      .then((result) => {
+        mediaCredsRef.current = { token: result.token, url: result.url };
+        setMediaReady(true);
+      })
+      .catch((err) => {
+        console.warn('[LiveKit] Failed to fetch media token:', err);
+      });
+  }, [room, hasMediaCapability, roomId]);
+
+  const {
+    connectionState: mediaConnectionState,
+    isMicrophoneEnabled,
+    isCameraEnabled,
+    toggleMicrophone,
+    toggleCamera,
+    speakingMap,
+    remoteParticipants: mediaRemoteParticipants,
+    localParticipant: mediaLocalParticipant,
+  } = useLiveKit({
+    url: mediaCredsRef.current?.url ?? null,
+    token: mediaCredsRef.current?.token ?? null,
+    connect: mediaReady && hasMediaCapability && room?.status !== 'finished',
+  });
+
+  const mediaConnectedSet = useMemo(() => {
+    const set = new Set<string>();
+    if (mediaLocalParticipant) set.add(mediaLocalParticipant.identity);
+    for (const p of mediaRemoteParticipants) set.add(p.identity);
+    return set;
+  }, [mediaLocalParticipant, mediaRemoteParticipants]);
+
+  const mediaControlsElement = hasMediaCapability ? (
+    <MediaControls
+      connectionState={mediaConnectionState}
+      isMicrophoneEnabled={isMicrophoneEnabled}
+      isCameraEnabled={isCameraEnabled}
+      onToggleMicrophone={() => void toggleMicrophone()}
+      onToggleCamera={() => void toggleCamera()}
+    />
+  ) : null;
+
+  const videoTiles = useMemo(() => {
+    const tiles: VideoPanelParticipant[] = [];
+
+    if (mediaLocalParticipant && currentUserId) {
+      const me = room?.participants.find((p) => p.userId === currentUserId);
+      tiles.push({
+        identity: currentUserId,
+        displayName: `${me?.displayName ?? me?.username ?? 'You'} (You)`,
+        avatarUrl: me?.avatarUrl ?? null,
+        hasVideo: mediaLocalParticipant.hasVideo,
+        videoTrack: mediaLocalParticipant.videoTrack,
+        isSpeaking: speakingMap.get(currentUserId) ?? false,
+        isLocal: true,
+      });
+    }
+
+    for (const mp of mediaRemoteParticipants) {
+      const p = room?.participants.find((rp) => rp.userId === mp.identity);
+      tiles.push({
+        identity: mp.identity,
+        displayName: p?.displayName ?? p?.username ?? mp.identity,
+        avatarUrl: p?.avatarUrl ?? null,
+        hasVideo: mp.hasVideo,
+        videoTrack: mp.videoTrack,
+        isSpeaking: speakingMap.get(mp.identity) ?? false,
+        isLocal: false,
+      });
+    }
+
+    return tiles;
+  }, [
+    mediaLocalParticipant,
+    mediaRemoteParticipants,
+    speakingMap,
+    currentUserId,
+    room?.participants,
+  ]);
+
+  const hasVideoTiles = videoTiles.length > 0;
 
   const canChangePhase = room?.myCapabilities.includes('room:change-phase') ?? false;
   const canManageParticipants = room?.myCapabilities.includes('participant:assign-role') ?? false;
@@ -461,7 +564,23 @@ function RoomPage() {
           doc={doc}
           awareness={awareness}
           currentUserName={currentUser?.displayName ?? currentUser?.username ?? 'Anonymous'}
+          speakingMap={speakingMap}
+          mediaControls={mediaControlsElement}
+          mediaConnectedSet={mediaConnectedSet}
+          dockedVideoPanel={
+            hasVideoTiles && videoPanelMode === 'docked' ? (
+              <DockedVideoPanel tiles={videoTiles} onUndock={() => setVideoPanelMode('floating')} />
+            ) : null
+          }
         />
+        {hasVideoTiles && videoPanelMode === 'floating' ? (
+          <FloatingVideoPanel
+            tiles={videoTiles}
+            isMinimized={isVideoMinimized}
+            onToggleMinimize={() => setIsVideoMinimized((v) => !v)}
+            onDock={() => setVideoPanelMode('docked')}
+          />
+        ) : null}
       </>
     );
   }
@@ -489,6 +608,8 @@ function RoomPage() {
         onTransferOwnership={handleTransferOwnership}
         onToggleReady={handleToggleReady}
         onTransition={handleTransition}
+        speakingMap={speakingMap}
+        mediaConnectedSet={mediaConnectedSet}
       />
     </>
   );

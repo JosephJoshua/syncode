@@ -44,6 +44,8 @@ interface RoomParticipantCardProps {
   isUpdatingRole: boolean;
   isTransferringOwnership: boolean;
   isRemovingParticipant?: boolean;
+  isSpeaking?: boolean;
+  isMediaConnected?: boolean;
   onRoleChange?: (userId: string, role: RoomRole) => void;
   onTransferOwnership?: (userId: string, displayName: string) => void;
   onRemoveParticipant?: (userId: string, displayName: string) => void;
@@ -59,6 +61,8 @@ export function RoomParticipantCard({
   isUpdatingRole,
   isTransferringOwnership,
   isRemovingParticipant = false,
+  isSpeaking = false,
+  isMediaConnected = false,
   onRoleChange,
   onTransferOwnership,
   onRemoveParticipant,
@@ -77,10 +81,24 @@ export function RoomParticipantCard({
   if (compact) {
     return (
       <div className="group flex items-center gap-2.5 py-2">
-        <Avatar className="size-6 text-[9px]">
-          {participant.avatarUrl ? <AvatarImage src={participant.avatarUrl} /> : null}
-          <AvatarFallback>{initial}</AvatarFallback>
-        </Avatar>
+        <div className="relative">
+          <Avatar
+            className={cn('size-6 text-[9px] transition-shadow', isSpeaking && 'speaking-ring')}
+          >
+            {participant.avatarUrl ? <AvatarImage src={participant.avatarUrl} /> : null}
+            <AvatarFallback>{initial}</AvatarFallback>
+          </Avatar>
+          <span
+            className={cn(
+              'absolute -bottom-0.5 -right-0.5 size-2 rounded-full border border-card',
+              isMediaConnected
+                ? 'bg-emerald-400'
+                : participant.isActive
+                  ? 'bg-muted-foreground/50'
+                  : 'bg-muted-foreground/20',
+            )}
+          />
+        </div>
         <div className="flex min-w-0 flex-1 items-center gap-2">
           <span className="truncate text-sm text-foreground">
             {displayName}
@@ -173,10 +191,22 @@ export function RoomParticipantCard({
   return (
     <div className="rounded-xl border border-border/60 bg-card/80 p-3">
       <div className="flex items-start gap-3">
-        <Avatar className="size-9 shrink-0">
-          {participant.avatarUrl ? <AvatarImage src={participant.avatarUrl} /> : null}
-          <AvatarFallback className="text-sm">{initial}</AvatarFallback>
-        </Avatar>
+        <div className="relative shrink-0">
+          <Avatar className={cn('size-9 transition-shadow', isSpeaking && 'speaking-ring')}>
+            {participant.avatarUrl ? <AvatarImage src={participant.avatarUrl} /> : null}
+            <AvatarFallback className="text-sm">{initial}</AvatarFallback>
+          </Avatar>
+          <span
+            className={cn(
+              'absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border-2 border-card',
+              isMediaConnected
+                ? 'bg-emerald-400'
+                : participant.isActive
+                  ? 'bg-muted-foreground/50'
+                  : 'bg-muted-foreground/20',
+            )}
+          />
+        </div>
 
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
