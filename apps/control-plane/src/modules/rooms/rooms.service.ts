@@ -245,7 +245,9 @@ export class RoomsService {
       return {
         ...detail,
         collabToken,
-        collabUrl: this.configService.get('COLLAB_PLANE_URL', { infer: true })!,
+        collabUrl:
+          this.configService.get('COLLAB_PLANE_CLIENT_URL', { infer: true }) ??
+          this.configService.get('COLLAB_PLANE_URL', { infer: true })!,
       };
     }
 
@@ -363,7 +365,9 @@ export class RoomsService {
       }),
     ]);
 
-    const collabUrl = this.configService.get('COLLAB_PLANE_URL', { infer: true })!;
+    const collabUrl =
+      this.configService.get('COLLAB_PLANE_CLIENT_URL', { infer: true }) ??
+      this.configService.get('COLLAB_PLANE_URL', { infer: true })!;
 
     return {
       room: roomDetail,
@@ -781,9 +785,10 @@ export class RoomsService {
       ttlSeconds: RoomsService.MEDIA_TOKEN_TTL_SECONDS,
     });
 
+    const clientUrl = this.configService.get('LIVEKIT_CLIENT_URL', { infer: true }) ?? url;
     const expiresAt = new Date(Date.now() + RoomsService.MEDIA_TOKEN_TTL_SECONDS * 1000);
 
-    return { token, url, expiresAt };
+    return { token, url: clientUrl, expiresAt };
   }
 
   private fetchParticipants(roomId: string) {
