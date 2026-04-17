@@ -8,6 +8,7 @@ import {
 } from '@syncode/ui';
 import { Check, ChevronDown, Mic, MicOff, TriangleAlert, Video, VideoOff } from 'lucide-react';
 import type { LiveKitConnectionState, MediaDeviceOption } from '@/hooks/use-livekit.js';
+import { MediaSettingsPanel } from './media-settings-panel.js';
 
 interface MediaControlsProps {
   connectionState: LiveKitConnectionState;
@@ -114,6 +115,19 @@ export function MediaControls({
           />
         ) : null}
       </div>
+
+      {isConnected ? (
+        <>
+          <div className="mx-px h-3 w-px bg-border/40" />
+          <MediaSettingsPanel
+            audioInputDevices={audioInputDevices}
+            videoInputDevices={videoInputDevices}
+            activeAudioDeviceId={activeAudioDeviceId}
+            activeVideoDeviceId={activeVideoDeviceId}
+            onSwitchDevice={onSwitchDevice}
+          />
+        </>
+      ) : null}
     </div>
   );
 }
