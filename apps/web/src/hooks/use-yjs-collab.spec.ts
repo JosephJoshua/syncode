@@ -1,4 +1,4 @@
-import { act, renderHook } from '@testing-library/react';
+import { renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { type UseYjsCollabOptions, useYjsCollab } from './use-yjs-collab.js';
 
@@ -119,18 +119,11 @@ describe('useYjsCollab', () => {
     expect(mockConnect.mock.calls.length).toBe(connectCalls);
   });
 
-  it('GIVEN connected WHEN unmounted THEN destroys provider after deferred timeout', () => {
+  it('GIVEN connected WHEN unmounted THEN destroys provider immediately', () => {
     const opts = defaultOptions();
     const { unmount } = renderHook(() => useYjsCollab(opts));
 
     unmount();
-    expect(mockDestroy).not.toHaveBeenCalled();
-
-    // Deferred destruction fires in setTimeout(0)
-    act(() => {
-      vi.advanceTimersByTime(1);
-    });
-
     expect(mockDestroy).toHaveBeenCalledOnce();
   });
 

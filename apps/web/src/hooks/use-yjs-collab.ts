@@ -56,44 +56,29 @@ export function useYjsCollab({
   const tRef = useRef(t);
   tRef.current = t;
 
-  // Persist provider across React StrictMode double-invocations.
-  // Only recreate when connection-critical params change.
   const providerRef = useRef<YjsCollabProvider | null>(null);
-  const connKeyRef = useRef('');
   const latestPhaseRef = useRef('');
 
-  // Connection lifecycle — only recreate provider when connection params change.
-  // userName/userColor are NOT deps here; they update via the separate effect below.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: userName and userColor are intentionally excluded — they are handled by the awareness-update effect to avoid destroying the provider on metadata changes.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: userName and userColor update via the separate awareness effect below
   useEffect(() => {
     if (!collabUrl || !collabToken) {
-      if (providerRef.current) {
-        providerRef.current.destroy();
-        providerRef.current = null;
-        connKeyRef.current = '';
-      }
       setStatus('disconnected');
       setCollab(null);
       return;
     }
 
-    const connKey = `${collabUrl}|${collabToken}|${roomId}`;
-    if (connKey === connKeyRef.current && providerRef.current) {
-      return;
-    }
-
-    if (providerRef.current) {
-      providerRef.current.destroy();
-    }
-    connKeyRef.current = connKey;
+    let disposed = false;
 
     const provider = new YjsCollabProvider({
       url: collabUrl,
       token: collabToken,
       roomId,
       user: { name: userName, color: userColor, colorLight: `${userColor}33` },
-      onConnectionStatusChange: setStatus,
+      onConnectionStatusChange: (s) => {
+        if (!disposed) setStatus(s);
+      },
       onRoomStatePatch: (patch) => {
+        if (disposed) return;
         if (patch.status) latestPhaseRef.current = patch.status;
         patchRef.current({
           status: patch.status as RoomStatus | undefined,
@@ -101,15 +86,17 @@ export function useYjsCollab({
         });
       },
       onParticipantReady: (userId, isReady) => {
-        participantReadyRef.current(userId, isReady);
+        if (!disposed) participantReadyRef.current(userId, isReady);
       },
       onPhaseChange: (phase) => {
+        if (disposed) return;
         latestPhaseRef.current = phase;
         const label = ROOM_STATUS_LABELS[phase as RoomStatus] ?? phase;
         toast.info(tRef.current('workspace.phaseChanged', { phase: label }));
         phaseChangeRef.current?.();
       },
       onEditorLock: (locked) => {
+        if (disposed) return;
         if (latestPhaseRef.current === 'finished') return;
         if (locked) {
           toast.warning(tRef.current('lobby.editorLocked'));
@@ -124,15 +111,11 @@ export function useYjsCollab({
     provider.connect();
 
     return () => {
-      // Defer destruction so React StrictMode's second mount can reuse the provider.
-      const currentProvider = providerRef.current;
-      setTimeout(() => {
-        if (providerRef.current === currentProvider) {
-          currentProvider?.destroy();
-          providerRef.current = null;
-          connKeyRef.current = '';
-        }
-      }, 0);
+      disposed = true;
+      provider.destroy();
+      if (providerRef.current === provider) {
+        providerRef.current = null;
+      }
     };
   }, [collabUrl, collabToken, roomId]);
 
