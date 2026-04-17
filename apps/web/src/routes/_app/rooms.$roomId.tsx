@@ -338,7 +338,8 @@ function RoomPage() {
     room?.participants,
   ]);
 
-  const hasVideoTiles = videoTiles.length > 0;
+  const showMediaPanel =
+    mediaConnectionState === 'connected' || mediaConnectionState === 'reconnecting';
 
   const canChangePhase = room?.myCapabilities.includes('room:change-phase') ?? false;
   const canManageParticipants = room?.myCapabilities.includes('participant:assign-role') ?? false;
@@ -578,12 +579,12 @@ function RoomPage() {
           mediaControls={mediaControlsElement}
           mediaConnectedSet={mediaConnectedSet}
           dockedVideoPanel={
-            hasVideoTiles && videoPanelMode === 'docked' ? (
+            showMediaPanel && videoPanelMode === 'docked' ? (
               <DockedVideoPanel tiles={videoTiles} onUndock={() => setVideoPanelMode('floating')} />
             ) : null
           }
         />
-        {hasVideoTiles && videoPanelMode === 'floating' ? (
+        {showMediaPanel && videoPanelMode === 'floating' ? (
           <FloatingVideoPanel
             tiles={videoTiles}
             isMinimized={isVideoMinimized}
