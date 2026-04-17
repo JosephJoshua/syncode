@@ -58,10 +58,14 @@ function useDeviceProbe(
 ) {
   const [probed, setProbed] = useState<LocalDevices | null>(null);
   const [probing, setProbing] = useState(false);
+  const [denied, setDenied] = useState(false);
+  const [retryKey, setRetryKey] = useState(0);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: retryKey triggers re-probe on user retry
   useEffect(() => {
     if (!open) {
       setProbed(null);
+      setDenied(false);
       return;
     }
 
@@ -69,6 +73,7 @@ function useDeviceProbe(
 
     let cancelled = false;
     setProbing(true);
+    setDenied(false);
 
     (async () => {
       let stream: MediaStream | null = null;
@@ -78,7 +83,11 @@ function useDeviceProbe(
         try {
           stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         } catch {
-          // no permissions at all
+          if (!cancelled) {
+            setDenied(true);
+            setProbing(false);
+          }
+          return;
         }
       }
 
@@ -105,12 +114,16 @@ function useDeviceProbe(
     return () => {
       cancelled = true;
     };
-  }, [open, existingAudio.length, existingVideo.length]);
+  }, [open, existingAudio.length, existingVideo.length, retryKey]);
+
+  const retry = () => setRetryKey((n) => n + 1);
 
   return {
     audioDevices: existingAudio.length > 0 ? existingAudio : (probed?.audio ?? []),
     videoDevices: existingVideo.length > 0 ? existingVideo : (probed?.video ?? []),
     probing,
+    denied,
+    retry,
   };
 }
 
@@ -176,7 +189,6 @@ function AudioLevelMeter({ deviceId }: { deviceId: string | null }) {
         const threshold = (i + 1) / bars;
         const active = level >= threshold;
         return (
-          // biome-ignore lint/suspicious/noArrayIndexKey: static bar count
           <div
             key={key}
             className={cn(
@@ -304,7 +316,7 @@ export function MediaSettingsPanel({
   const [selectedAudioId, setSelectedAudioId] = useState<string | null>(null);
   const [selectedVideoId, setSelectedVideoId] = useState<string | null>(null);
 
-  const { audioDevices, videoDevices, probing } = useDeviceProbe(
+  const { audioDevices, videoDevices, probing, denied, retry } = useDeviceProbe(
     open,
     audioInputDevices,
     videoInputDevices,
@@ -339,6 +351,27 @@ export function MediaSettingsPanel({
           <div className="flex items-center justify-center gap-2 py-8">
             <Loader2 className="size-4 animate-spin text-muted-foreground" />
             <span className="text-xs text-muted-foreground">Requesting device access...</span>
+          </div>
+        ) : denied ? (
+          <div className="flex flex-col items-center gap-3 px-4 py-8 text-center">
+            <div className="flex size-10 items-center justify-center rounded-full bg-destructive/10">
+              <Mic className="size-4 text-destructive" />
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-foreground">Permission denied</p>
+              <p className="text-[11px] text-muted-foreground">
+                Allow camera and microphone access in your browser settings, then try again.
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={retry}
+            >
+              Try again
+            </Button>
           </div>
         ) : (
           <div className="space-y-1 p-1.5">
