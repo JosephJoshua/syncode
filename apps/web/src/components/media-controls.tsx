@@ -1,6 +1,13 @@
-import { Button, cn } from '@syncode/ui';
-import { Mic, MicOff, TriangleAlert, Video, VideoOff } from 'lucide-react';
-import type { LiveKitConnectionState } from '@/hooks/use-livekit.js';
+import {
+  Button,
+  cn,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@syncode/ui';
+import { Check, ChevronDown, Mic, MicOff, TriangleAlert, Video, VideoOff } from 'lucide-react';
+import type { LiveKitConnectionState, MediaDeviceOption } from '@/hooks/use-livekit.js';
 
 interface MediaControlsProps {
   connectionState: LiveKitConnectionState;
@@ -8,6 +15,11 @@ interface MediaControlsProps {
   isCameraEnabled: boolean;
   onToggleMicrophone: () => void;
   onToggleCamera: () => void;
+  audioInputDevices: MediaDeviceOption[];
+  videoInputDevices: MediaDeviceOption[];
+  activeAudioDeviceId: string | null;
+  activeVideoDeviceId: string | null;
+  onSwitchDevice: (kind: MediaDeviceKind, deviceId: string) => void;
 }
 
 export function MediaControls({
@@ -16,6 +28,11 @@ export function MediaControls({
   isCameraEnabled,
   onToggleMicrophone,
   onToggleCamera,
+  audioInputDevices,
+  videoInputDevices,
+  activeAudioDeviceId,
+  activeVideoDeviceId,
+  onSwitchDevice,
 }: MediaControlsProps) {
   const isConnected = connectionState === 'connected';
   const isConnecting = connectionState === 'connecting' || connectionState === 'reconnecting';
@@ -38,45 +55,106 @@ export function MediaControls({
         </span>
       ) : null}
 
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon-xs"
-        disabled={!isConnected}
-        className={cn(
-          'size-6 rounded-md transition-all duration-150',
-          isConnected &&
-            !isMicrophoneEnabled &&
-            'bg-destructive/15 text-destructive hover:bg-destructive/25',
-          isConnected &&
-            isMicrophoneEnabled &&
-            'text-foreground/80 hover:bg-background/80 hover:text-foreground',
-          !isConnected && 'text-muted-foreground/40',
-        )}
-        onClick={onToggleMicrophone}
-        aria-label={isMicrophoneEnabled ? 'Mute microphone' : 'Unmute microphone'}
-      >
-        {isMicrophoneEnabled ? <Mic className="size-3" /> : <MicOff className="size-3" />}
-      </Button>
+      <div className="flex items-center">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-xs"
+          disabled={!isConnected}
+          className={cn(
+            'size-6 rounded-md rounded-r-none transition-all duration-150',
+            isConnected &&
+              !isMicrophoneEnabled &&
+              'bg-destructive/15 text-destructive hover:bg-destructive/25',
+            isConnected &&
+              isMicrophoneEnabled &&
+              'text-foreground/80 hover:bg-background/80 hover:text-foreground',
+            !isConnected && 'text-muted-foreground/40',
+          )}
+          onClick={onToggleMicrophone}
+          aria-label={isMicrophoneEnabled ? 'Mute microphone' : 'Unmute microphone'}
+        >
+          {isMicrophoneEnabled ? <Mic className="size-3" /> : <MicOff className="size-3" />}
+        </Button>
+        {isConnected && audioInputDevices.length > 1 ? (
+          <DeviceDropdown
+            devices={audioInputDevices}
+            activeDeviceId={activeAudioDeviceId}
+            onSelect={(id) => onSwitchDevice('audioinput', id)}
+          />
+        ) : null}
+      </div>
 
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon-xs"
-        disabled={!isConnected}
-        className={cn(
-          'size-6 rounded-md transition-all duration-150',
-          isConnected && isCameraEnabled && 'bg-primary/15 text-primary hover:bg-primary/25',
-          isConnected &&
-            !isCameraEnabled &&
-            'text-foreground/80 hover:bg-background/80 hover:text-foreground',
-          !isConnected && 'text-muted-foreground/40',
-        )}
-        onClick={onToggleCamera}
-        aria-label={isCameraEnabled ? 'Turn off camera' : 'Turn on camera'}
-      >
-        {isCameraEnabled ? <Video className="size-3" /> : <VideoOff className="size-3" />}
-      </Button>
+      <div className="mx-px h-3 w-px bg-border/40" />
+
+      <div className="flex items-center">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-xs"
+          disabled={!isConnected}
+          className={cn(
+            'size-6 rounded-md rounded-r-none transition-all duration-150',
+            isConnected && isCameraEnabled && 'bg-primary/15 text-primary hover:bg-primary/25',
+            isConnected &&
+              !isCameraEnabled &&
+              'text-foreground/80 hover:bg-background/80 hover:text-foreground',
+            !isConnected && 'text-muted-foreground/40',
+          )}
+          onClick={onToggleCamera}
+          aria-label={isCameraEnabled ? 'Turn off camera' : 'Turn on camera'}
+        >
+          {isCameraEnabled ? <Video className="size-3" /> : <VideoOff className="size-3" />}
+        </Button>
+        {isConnected && videoInputDevices.length > 1 ? (
+          <DeviceDropdown
+            devices={videoInputDevices}
+            activeDeviceId={activeVideoDeviceId}
+            onSelect={(id) => onSwitchDevice('videoinput', id)}
+          />
+        ) : null}
+      </div>
     </div>
+  );
+}
+
+function DeviceDropdown({
+  devices,
+  activeDeviceId,
+  onSelect,
+}: {
+  devices: MediaDeviceOption[];
+  activeDeviceId: string | null;
+  onSelect: (deviceId: string) => void;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-xs"
+          className="size-6 rounded-md rounded-l-none px-0.5 text-muted-foreground/60 hover:text-foreground"
+        >
+          <ChevronDown className="size-2.5" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="max-w-64">
+        {devices.map((device) => (
+          <DropdownMenuItem
+            key={device.deviceId}
+            onSelect={() => onSelect(device.deviceId)}
+            className="gap-2 text-xs"
+          >
+            {device.deviceId === activeDeviceId ? (
+              <Check className="size-3 shrink-0 text-primary" />
+            ) : (
+              <span className="size-3 shrink-0" />
+            )}
+            <span className="truncate">{device.label}</span>
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

@@ -264,6 +264,11 @@ function RoomPage() {
     isCameraEnabled,
     toggleMicrophone,
     toggleCamera,
+    switchDevice,
+    audioInputDevices,
+    videoInputDevices,
+    activeAudioDeviceId,
+    activeVideoDeviceId,
     speakingMap,
     remoteParticipants: mediaRemoteParticipants,
     localParticipant: mediaLocalParticipant,
@@ -287,6 +292,11 @@ function RoomPage() {
       isCameraEnabled={isCameraEnabled}
       onToggleMicrophone={() => void toggleMicrophone()}
       onToggleCamera={() => void toggleCamera()}
+      audioInputDevices={audioInputDevices}
+      videoInputDevices={videoInputDevices}
+      activeAudioDeviceId={activeAudioDeviceId}
+      activeVideoDeviceId={activeVideoDeviceId}
+      onSwitchDevice={(kind, id) => void switchDevice(kind, id)}
     />
   ) : null;
 

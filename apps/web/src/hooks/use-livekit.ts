@@ -29,12 +29,22 @@ export interface UseLiveKitOptions {
   connect: boolean;
 }
 
+export interface MediaDeviceOption {
+  deviceId: string;
+  label: string;
+}
+
 export interface UseLiveKitResult {
   connectionState: LiveKitConnectionState;
   isMicrophoneEnabled: boolean;
   isCameraEnabled: boolean;
   toggleMicrophone: () => Promise<void>;
   toggleCamera: () => Promise<void>;
+  switchDevice: (kind: MediaDeviceKind, deviceId: string) => Promise<void>;
+  audioInputDevices: MediaDeviceOption[];
+  videoInputDevices: MediaDeviceOption[];
+  activeAudioDeviceId: string | null;
+  activeVideoDeviceId: string | null;
   speakingMap: ReadonlyMap<string, boolean>;
   remoteParticipants: MediaParticipant[];
   localParticipant: MediaParticipant | null;
@@ -60,6 +70,10 @@ export function useLiveKit({ url, token, connect }: UseLiveKitOptions): UseLiveK
   const [speakingMap, setSpeakingMap] = useState<ReadonlyMap<string, boolean>>(new Map());
   const [remoteParticipants, setRemoteParticipants] = useState<MediaParticipant[]>([]);
   const [localParticipant, setLocalParticipant] = useState<MediaParticipant | null>(null);
+  const [audioInputDevices, setAudioInputDevices] = useState<MediaDeviceOption[]>([]);
+  const [videoInputDevices, setVideoInputDevices] = useState<MediaDeviceOption[]>([]);
+  const [activeAudioDeviceId, setActiveAudioDeviceId] = useState<string | null>(null);
+  const [activeVideoDeviceId, setActiveVideoDeviceId] = useState<string | null>(null);
 
   const roomRef = useRef<Room | null>(null);
   const audioElementsRef = useRef<Map<string, HTMLAudioElement>>(new Map());
@@ -95,6 +109,30 @@ export function useLiveKit({ url, token, connect }: UseLiveKitOptions): UseLiveK
     setRemoteParticipants(remotes);
   }, []);
 
+  const refreshDevices = useCallback(async () => {
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      setAudioInputDevices(
+        devices
+          .filter((d) => d.kind === 'audioinput' && d.deviceId)
+          .map((d, i) => ({ deviceId: d.deviceId, label: d.label || `Microphone ${i + 1}` })),
+      );
+      setVideoInputDevices(
+        devices
+          .filter((d) => d.kind === 'videoinput' && d.deviceId)
+          .map((d, i) => ({ deviceId: d.deviceId, label: d.label || `Camera ${i + 1}` })),
+      );
+
+      const room = roomRef.current;
+      if (room) {
+        setActiveAudioDeviceId(room.localParticipant.activeDeviceMap.get('audioinput') ?? null);
+        setActiveVideoDeviceId(room.localParticipant.activeDeviceMap.get('videoinput') ?? null);
+      }
+    } catch {
+      // permissions denied or no devices
+    }
+  }, []);
+
   const cleanupAudio = useCallback(() => {
     for (const el of audioElementsRef.current.values()) {
       el.srcObject = null;
@@ -111,6 +149,10 @@ export function useLiveKit({ url, token, connect }: UseLiveKitOptions): UseLiveK
     setLocalParticipant(null);
     setIsMicrophoneEnabled(false);
     setIsCameraEnabled(false);
+    setAudioInputDevices([]);
+    setVideoInputDevices([]);
+    setActiveAudioDeviceId(null);
+    setActiveVideoDeviceId(null);
   }, [cleanupAudio]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: refreshParticipants/cleanupAudio/resetState are stable useCallback refs
@@ -226,6 +268,10 @@ export function useLiveKit({ url, token, connect }: UseLiveKitOptions): UseLiveK
     room.on(RoomEvent.ParticipantConnected, onParticipantConnected);
     room.on(RoomEvent.ParticipantDisconnected, onParticipantDisconnected);
     room.on(RoomEvent.Disconnected, onDisconnected);
+    room.on(RoomEvent.ActiveDeviceChanged, () => void refreshDevices());
+
+    const onDeviceChange = () => void refreshDevices();
+    navigator.mediaDevices.addEventListener('devicechange', onDeviceChange);
 
     setConnectionState('connecting');
 
@@ -236,6 +282,7 @@ export function useLiveKit({ url, token, connect }: UseLiveKitOptions): UseLiveK
         await room.localParticipant.setMicrophoneEnabled(true);
         setIsMicrophoneEnabled(true);
         refreshParticipants();
+        void refreshDevices();
       })
       .catch((err) => {
         console.error('[LiveKit] Connection failed:', err);
@@ -243,6 +290,7 @@ export function useLiveKit({ url, token, connect }: UseLiveKitOptions): UseLiveK
       });
 
     return () => {
+      navigator.mediaDevices.removeEventListener('devicechange', onDeviceChange);
       cleanupAudio();
       void room.disconnect();
       if (roomRef.current === room) {
@@ -268,12 +316,25 @@ export function useLiveKit({ url, token, connect }: UseLiveKitOptions): UseLiveK
     refreshParticipants();
   }, [refreshParticipants]);
 
+  const switchDevice = useCallback(async (kind: MediaDeviceKind, deviceId: string) => {
+    const room = roomRef.current;
+    if (!room) return;
+    await room.switchActiveDevice(kind, deviceId);
+    if (kind === 'audioinput') setActiveAudioDeviceId(deviceId);
+    else if (kind === 'videoinput') setActiveVideoDeviceId(deviceId);
+  }, []);
+
   return {
     connectionState,
     isMicrophoneEnabled,
     isCameraEnabled,
     toggleMicrophone,
     toggleCamera,
+    switchDevice,
+    audioInputDevices,
+    videoInputDevices,
+    activeAudioDeviceId,
+    activeVideoDeviceId,
     speakingMap,
     remoteParticipants,
     localParticipant,
