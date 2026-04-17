@@ -31,6 +31,7 @@ interface MediaSettingsPanelProps {
   onOutputVolumeChange: (volume: number) => void;
   audioProcessing: AudioProcessingSettings;
   onAudioProcessingChange: (settings: AudioProcessingSettings) => void;
+  onVideoFilterChange: (settings: { brightness: number; contrast: number }) => void;
 }
 
 function AudioLevelMeter({ deviceId }: { deviceId: string | null }) {
@@ -218,10 +219,15 @@ export function MediaSettingsPanel({
   onOutputVolumeChange,
   audioProcessing,
   onAudioProcessingChange,
+  onVideoFilterChange,
 }: MediaSettingsPanelProps) {
   const [open, setOpen] = useState(false);
   const [brightness, setBrightness] = useState(1);
   const [contrast, setContrast] = useState(1);
+
+  const applyVideoFilter = (b: number, c: number) => {
+    onVideoFilterChange({ brightness: b, contrast: c });
+  };
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -287,7 +293,11 @@ export function MediaSettingsPanel({
                   max="1.5"
                   step="0.05"
                   value={brightness}
-                  onChange={(e) => setBrightness(Number(e.target.value))}
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    setBrightness(v);
+                    applyVideoFilter(v, contrast);
+                  }}
                   className="h-1 w-full cursor-pointer appearance-none rounded-full bg-muted accent-primary"
                 />
               </div>
@@ -305,7 +315,11 @@ export function MediaSettingsPanel({
                   max="1.5"
                   step="0.05"
                   value={contrast}
-                  onChange={(e) => setContrast(Number(e.target.value))}
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    setContrast(v);
+                    applyVideoFilter(brightness, v);
+                  }}
                   className="h-1 w-full cursor-pointer appearance-none rounded-full bg-muted accent-primary"
                 />
               </div>
@@ -316,6 +330,7 @@ export function MediaSettingsPanel({
                   onClick={() => {
                     setBrightness(1);
                     setContrast(1);
+                    applyVideoFilter(1, 1);
                   }}
                   className="text-[10px] text-muted-foreground hover:text-foreground"
                 >

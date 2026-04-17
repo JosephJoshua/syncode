@@ -271,6 +271,7 @@ function RoomPage() {
     activeAudioDeviceId,
     activeVideoDeviceId,
     setOutputVolume,
+    setVideoFilter,
     speakingMap,
     remoteParticipants: mediaRemoteParticipants,
     localParticipant: mediaLocalParticipant,
@@ -326,6 +327,7 @@ function RoomPage() {
       onOutputVolumeChange={handleOutputVolumeChange}
       audioProcessing={audioProcessing}
       onAudioProcessingChange={setAudioProcessing}
+      onVideoFilterChange={(settings) => void setVideoFilter(settings)}
     />
   ) : null;
 

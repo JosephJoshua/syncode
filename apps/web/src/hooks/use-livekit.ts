@@ -9,6 +9,7 @@ import {
   Track,
 } from 'livekit-client';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { VideoFilterProcessor, type VideoFilterSettings } from '@/lib/video-filter-processor.js';
 
 export type LiveKitConnectionState =
   | 'disconnected'
@@ -47,6 +48,7 @@ export interface UseLiveKitResult {
   activeAudioDeviceId: string | null;
   activeVideoDeviceId: string | null;
   setOutputVolume: (volume: number) => void;
+  setVideoFilter: (settings: VideoFilterSettings) => Promise<void>;
   speakingMap: ReadonlyMap<string, boolean>;
   remoteParticipants: MediaParticipant[];
   localParticipant: MediaParticipant | null;
@@ -80,6 +82,7 @@ export function useLiveKit({ url, token, connect }: UseLiveKitOptions): UseLiveK
   const roomRef = useRef<Room | null>(null);
   const audioElementsRef = useRef<Map<string, HTMLAudioElement>>(new Map());
   const micEnabledOnceRef = useRef(false);
+  const videoProcessorRef = useRef<VideoFilterProcessor | null>(null);
 
   const refreshParticipants = useCallback(() => {
     const room = roomRef.current;
@@ -149,6 +152,10 @@ export function useLiveKit({ url, token, connect }: UseLiveKitOptions): UseLiveK
 
   const resetState = useCallback(() => {
     cleanupAudio();
+    if (videoProcessorRef.current) {
+      void videoProcessorRef.current.destroy();
+      videoProcessorRef.current = null;
+    }
     setConnectionState('disconnected');
     setSpeakingMap(new Map());
     setRemoteParticipants([]);
@@ -375,6 +382,34 @@ export function useLiveKit({ url, token, connect }: UseLiveKitOptions): UseLiveK
     }
   }, []);
 
+  const setVideoFilter = useCallback(async (settings: VideoFilterSettings) => {
+    const room = roomRef.current;
+    if (!room) return;
+
+    const isDefault = settings.brightness === 1 && settings.contrast === 1;
+    const cameraPub = room.localParticipant.getTrackPublication(Track.Source.Camera);
+
+    if (isDefault) {
+      if (videoProcessorRef.current && cameraPub?.track) {
+        await cameraPub.track.stopProcessor();
+        videoProcessorRef.current = null;
+      }
+      return;
+    }
+
+    if (videoProcessorRef.current) {
+      videoProcessorRef.current.updateSettings(settings);
+      return;
+    }
+
+    if (!cameraPub?.track) return;
+
+    const processor = new VideoFilterProcessor();
+    processor.updateSettings(settings);
+    videoProcessorRef.current = processor;
+    await cameraPub.track.setProcessor(processor, true);
+  }, []);
+
   return {
     connectionState,
     isMicrophoneEnabled,
@@ -387,6 +422,7 @@ export function useLiveKit({ url, token, connect }: UseLiveKitOptions): UseLiveK
     activeAudioDeviceId,
     activeVideoDeviceId,
     setOutputVolume,
+    setVideoFilter,
     speakingMap,
     remoteParticipants,
     localParticipant,

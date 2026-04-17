@@ -8,6 +8,7 @@ import {
 } from '@syncode/ui';
 import { Check, ChevronDown, Mic, MicOff, TriangleAlert, Video, VideoOff } from 'lucide-react';
 import type { LiveKitConnectionState, MediaDeviceOption } from '@/hooks/use-livekit.js';
+import type { VideoFilterSettings } from '@/lib/video-filter-processor.js';
 import { type AudioProcessingSettings, MediaSettingsPanel } from './media-settings-panel.js';
 
 interface MediaControlsProps {
@@ -25,6 +26,7 @@ interface MediaControlsProps {
   onOutputVolumeChange: (volume: number) => void;
   audioProcessing: AudioProcessingSettings;
   onAudioProcessingChange: (settings: AudioProcessingSettings) => void;
+  onVideoFilterChange: (settings: VideoFilterSettings) => void;
 }
 
 export function MediaControls({
@@ -42,6 +44,7 @@ export function MediaControls({
   onOutputVolumeChange,
   audioProcessing,
   onAudioProcessingChange,
+  onVideoFilterChange,
 }: MediaControlsProps) {
   const isConnected = connectionState === 'connected';
   const isConnecting = connectionState === 'connecting' || connectionState === 'reconnecting';
@@ -137,6 +140,7 @@ export function MediaControls({
             onOutputVolumeChange={onOutputVolumeChange}
             audioProcessing={audioProcessing}
             onAudioProcessingChange={onAudioProcessingChange}
+            onVideoFilterChange={onVideoFilterChange}
           />
         </>
       ) : null}
