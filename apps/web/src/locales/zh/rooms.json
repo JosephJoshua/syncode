@@ -233,6 +233,9 @@
     "phaseChanged": "阶段已切换至{{phase}}",
     "sessionHeading": "会话",
     "remoteRunning": "{{name}} 正在运行代码...",
-    "remoteSubmitting": "{{name}} 正在提交..."
+    "remoteSubmitting": "{{name}} 正在提交...",
+    "languagePickerLabel": "语言",
+    "languagePickerPlaceholder": "选择语言",
+    "languageChangeFailed": "切换语言失败。"
   }
 }

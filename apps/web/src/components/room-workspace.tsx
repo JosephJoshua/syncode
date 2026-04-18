@@ -39,6 +39,7 @@ import { CollaborativeEditor } from './collaborative-editor.js';
 import { ExecutionDetailsPanel } from './execution-details-panel.js';
 import { HostControlPanel } from './host-control-panel.js';
 import { InviteLinkInline } from './invite-link-inline.js';
+import { LanguagePicker } from './language-picker.js';
 import { RoomHeaderBar } from './room-header-bar.js';
 import { type Participant, RoomParticipantCard } from './room-participant-card.js';
 import { type ProblemData, RoomProblemPanel } from './room-problem-panel.js';
@@ -632,9 +633,12 @@ export function RoomWorkspace({
                     ) : null}
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground/50">
-                      {language}
-                    </span>
+                    <LanguagePicker
+                      roomId={roomId}
+                      currentLanguage={room.language}
+                      myCapabilities={room.myCapabilities}
+                      className="h-7 min-w-[8rem]"
+                    />
                     <Button
                       type="button"
                       size="sm"

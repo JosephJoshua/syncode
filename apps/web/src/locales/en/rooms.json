@@ -233,6 +233,9 @@
     "phaseChanged": "Phase changed to {{phase}}",
     "sessionHeading": "Session",
     "remoteRunning": "{{name}} is running code...",
-    "remoteSubmitting": "{{name}} is submitting..."
+    "remoteSubmitting": "{{name}} is submitting...",
+    "languagePickerLabel": "Language",
+    "languagePickerPlaceholder": "Select a language",
+    "languageChangeFailed": "Failed to change the language."
   }
 }
