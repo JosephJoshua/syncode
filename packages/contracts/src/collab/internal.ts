@@ -3,6 +3,7 @@ import { defineRoute } from '../route-utils.js';
 export interface CreateDocumentRequest {
   roomId: string;
   initialContentByLanguage?: Record<string, string>;
+  initialLanguage?: string;
   initialPhase?: string;
   editorLocked?: boolean;
 }

@@ -63,6 +63,22 @@ describe('CollaborationService', () => {
       expect(result.createdAt).toBeGreaterThan(0);
     });
 
+    it('GIVEN initialLanguage WHEN creating document THEN registry reflects the active language', async () => {
+      const { service, roomRegistry } = createFixture();
+
+      await service.createDocument({ roomId: 'room-1', initialLanguage: 'python' });
+
+      expect(roomRegistry.getRoom('room-1')?.language).toBe('python');
+    });
+
+    it('GIVEN no initialLanguage WHEN creating document THEN registry language is null', async () => {
+      const { service, roomRegistry } = createFixture();
+
+      await service.createDocument({ roomId: 'room-1' });
+
+      expect(roomRegistry.getRoom('room-1')?.language).toBeNull();
+    });
+
     it('GIVEN existing document WHEN creating duplicate THEN throws ConflictException', async () => {
       const { service } = createFixture();
       await service.createDocument({ roomId: 'room-1' });
@@ -339,6 +355,15 @@ describe('CollaborationService', () => {
       const call = (client.send as ReturnType<typeof vi.fn>).mock.calls[0];
       const msg = JSON.parse(call[0]);
       expect(msg.data).toEqual({ language: 'javascript', changedBy: null });
+    });
+
+    it('GIVEN a room WHEN changeLanguage THEN registry reflects the new active language', async () => {
+      const { service, roomRegistry } = createFixture();
+      await service.createDocument({ roomId: 'room-1', initialLanguage: 'python' });
+
+      await service.changeLanguage({ roomId: 'room-1', language: 'javascript' });
+
+      expect(roomRegistry.getRoom('room-1')?.language).toBe('javascript');
     });
 
     it('GIVEN unknown room WHEN changeLanguage THEN returns { success: false }', async () => {

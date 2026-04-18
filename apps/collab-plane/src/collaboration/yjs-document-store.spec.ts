@@ -84,29 +84,6 @@ describe('YjsDocumentStore', () => {
     });
   });
 
-  describe('getAllCodeTexts', () => {
-    it('GIVEN seeded languages WHEN getAllCodeTexts THEN returns every code:<lang> Y.Text', () => {
-      const store = new YjsDocumentStore();
-      store.createDoc('room-1', {
-        initialContentByLanguage: {
-          python: 'print("hi")',
-          javascript: 'console.log("hi")',
-        },
-      });
-
-      expect(store.getAllCodeTexts('room-1')).toEqual({
-        python: 'print("hi")',
-        javascript: 'console.log("hi")',
-      });
-    });
-
-    it('GIVEN non-existent room WHEN getAllCodeTexts THEN returns empty record', () => {
-      const store = new YjsDocumentStore();
-
-      expect(store.getAllCodeTexts('room-1')).toEqual({});
-    });
-  });
-
   describe('destroyDoc', () => {
     it('GIVEN doc with content WHEN destroying THEN returns Uint8Array that can reconstruct the doc', () => {
       const store = new YjsDocumentStore();

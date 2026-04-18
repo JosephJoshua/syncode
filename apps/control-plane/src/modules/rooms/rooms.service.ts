@@ -124,7 +124,13 @@ export class RoomsService {
     }
 
     const [collabCreated, mediaCreated] = await Promise.all([
-      this.createCollabDocument(room.id, room.status, room.editorLocked, initialContentByLanguage),
+      this.createCollabDocument(
+        room.id,
+        room.status,
+        room.editorLocked,
+        initialContentByLanguage,
+        room.language ?? undefined,
+      ),
       this.createMediaRoom(room.id),
     ]);
 
@@ -1431,6 +1437,7 @@ export class RoomsService {
     initialPhase: RoomStatus,
     editorLocked: boolean,
     initialContentByLanguage?: Record<string, string>,
+    initialLanguage?: string,
   ): Promise<boolean> {
     try {
       await this.collabClient.createDocument({
@@ -1438,6 +1445,7 @@ export class RoomsService {
         initialPhase,
         editorLocked,
         initialContentByLanguage,
+        initialLanguage,
       });
       return true;
     } catch (error) {

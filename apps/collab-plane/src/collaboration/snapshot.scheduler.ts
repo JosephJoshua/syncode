@@ -4,6 +4,7 @@ import {
   type IControlPlaneCallbackClient,
   type SnapshotTrigger,
 } from '@syncode/contracts';
+import { RoomRegistry } from './room-registry.js';
 import { YjsDocumentStore } from './yjs-document-store.js';
 
 @Injectable()
@@ -15,6 +16,7 @@ export class SnapshotScheduler implements OnModuleDestroy {
     private readonly docStore: YjsDocumentStore,
     @Inject(CONTROL_PLANE_CALLBACK)
     private readonly callbackClient: IControlPlaneCallbackClient,
+    private readonly roomRegistry: RoomRegistry,
   ) {}
 
   startPeriodicSnapshots(roomId: string): void {
@@ -40,9 +42,17 @@ export class SnapshotScheduler implements OnModuleDestroy {
     const snapshot = this.docStore.encodeSnapshot(roomId);
     if (!snapshot) return;
 
-    // Serialize every `code:<language>` Y.Text as a JSON record so the control-plane
-    // can index each language independently (see code-snapshots handler).
-    const code = JSON.stringify(this.docStore.getAllCodeTexts(roomId));
+    const language = this.roomRegistry.getRoom(roomId)?.language ?? null;
+    if (!language) {
+      this.logger.debug(
+        `Skipping snapshot for room ${roomId} (trigger=${trigger}): no active language`,
+      );
+      return;
+    }
+
+    // Snapshot only the active language's Y.Text as plain text. Per-language
+    // code is preserved inside the binary `snapshot` (Yjs doc) itself.
+    const code = this.docStore.getCodeText(roomId, language);
 
     try {
       await this.callbackClient.notifySnapshotReady({

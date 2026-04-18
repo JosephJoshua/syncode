@@ -48,6 +48,7 @@ export class CollaborationService implements OnModuleDestroy {
     const room = this.roomRegistry.createRoom(request.roomId, {
       phase: request.initialPhase,
       editorLocked: request.editorLocked,
+      language: request.initialLanguage,
     });
     this.docStore.createDoc(request.roomId, {
       initialContentByLanguage: request.initialContentByLanguage,
@@ -167,6 +168,8 @@ export class CollaborationService implements OnModuleDestroy {
       },
       timestamp: Date.now(),
     });
+
+    this.roomRegistry.updateLanguage(request.roomId, request.language);
 
     this.logger.debug(
       `Language change broadcast for room ${request.roomId}: language=${request.language}`,

@@ -110,6 +110,7 @@ describe('createRoom', () => {
     expect(mockCollabClient.createDocument).toHaveBeenCalledWith(
       expect.objectContaining({
         initialContentByLanguage: { python: '# starter', javascript: '// starter' },
+        initialLanguage: 'python',
       }),
     );
   });
@@ -123,7 +124,7 @@ describe('createRoom', () => {
     });
 
     expect(mockCollabClient.createDocument).toHaveBeenCalledWith(
-      expect.objectContaining({ initialContentByLanguage: undefined }),
+      expect.objectContaining({ initialContentByLanguage: undefined, initialLanguage: undefined }),
     );
   });
 });

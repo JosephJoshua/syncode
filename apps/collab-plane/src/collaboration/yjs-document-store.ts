@@ -57,26 +57,6 @@ export class YjsDocumentStore implements OnModuleDestroy {
     return this.docs.get(roomId)?.getText(YjsDocumentStore.codeKey(language)).toString() ?? '';
   }
 
-  /**
-   * Returns a snapshot of every `code:<language>` Y.Text present in the doc.
-   * Used by the snapshot scheduler which doesn't know which language is "current".
-   */
-  getAllCodeTexts(roomId: string): Record<string, string> {
-    const doc = this.docs.get(roomId);
-    if (!doc) {
-      return {};
-    }
-
-    const result: Record<string, string> = {};
-    for (const key of doc.share.keys()) {
-      if (key.startsWith('code:')) {
-        const language = key.slice('code:'.length);
-        result[language] = doc.getText(key).toString();
-      }
-    }
-    return result;
-  }
-
   encodeSnapshot(roomId: string): Uint8Array | undefined {
     const doc = this.docs.get(roomId);
     if (!doc) {
