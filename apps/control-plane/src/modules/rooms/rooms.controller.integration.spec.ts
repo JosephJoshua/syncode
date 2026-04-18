@@ -36,6 +36,7 @@ import { RoomsService } from './rooms.service.js';
 let app: INestApplication;
 let db: Database;
 let cleanup: () => Promise<void>;
+let mockMediaService: ReturnType<typeof createMockMediaService>;
 
 beforeEach(async () => {
   vi.clearAllMocks();
@@ -43,6 +44,7 @@ beforeEach(async () => {
   const testDb = await createTestDb();
   db = testDb.db;
   cleanup = testDb.cleanup;
+  mockMediaService = createMockMediaService();
 
   const module = await Test.createTestingModule({
     controllers: [RoomsController],
@@ -53,7 +55,7 @@ beforeEach(async () => {
       { provide: EXECUTION_CLIENT, useValue: createMockExecutionClient() },
       { provide: CACHE_SERVICE, useValue: new InMemoryCacheService() },
       { provide: COLLAB_CLIENT, useValue: createMockCollabClient() },
-      { provide: MEDIA_SERVICE, useValue: createMockMediaService() },
+      { provide: MEDIA_SERVICE, useValue: mockMediaService },
       { provide: STORAGE_SERVICE, useValue: createMockStorageService() },
       { provide: JwtService, useValue: createMockJwtService() },
       { provide: ConfigService, useValue: createMockConfigService() },
@@ -345,5 +347,91 @@ describe('POST /rooms/:id/submit', () => {
       .expect(202);
 
     expect(res.body.submissionId).toEqual(expect.any(String));
+  });
+});
+
+describe('POST /rooms/:id/media/token', () => {
+  it('GIVEN active participant with media capability WHEN generating token THEN returns 200 with token, url, and expiresAt', async () => {
+    const user = await insertUser(db);
+    const room = await insertRoom(db, user.id, { status: 'coding' });
+    await insertParticipant(db, room.id, user.id, 'interviewer');
+
+    mockMediaService.generateToken.mockResolvedValue({
+      token: 'lk-test-token',
+      url: 'wss://livekit.example.com',
+    });
+
+    const res = await asUser(
+      request(app.getHttpServer()).post(`/rooms/${room.id}/media/token`),
+      user,
+    ).expect(200);
+
+    expect(res.body.token).toBe('lk-test-token');
+    expect(res.body.url).toBe('wss://livekit.example.com');
+    expect(res.body.expiresAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  });
+
+  it('GIVEN observer role WHEN generating token THEN returns 403', async () => {
+    const host = await insertUser(db);
+    const observer = await insertUser(db);
+    const room = await insertRoom(db, host.id, { status: 'coding' });
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+    await insertParticipant(db, room.id, observer.id, 'observer');
+
+    await asUser(
+      request(app.getHttpServer()).post(`/rooms/${room.id}/media/token`),
+      observer,
+    ).expect(403);
+  });
+
+  it('GIVEN user is not a participant WHEN generating token THEN returns 403', async () => {
+    const host = await insertUser(db);
+    const stranger = await insertUser(db);
+    const room = await insertRoom(db, host.id, { status: 'coding' });
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+
+    await asUser(
+      request(app.getHttpServer()).post(`/rooms/${room.id}/media/token`),
+      stranger,
+    ).expect(403);
+  });
+
+  it('GIVEN room is finished WHEN generating token THEN returns 403', async () => {
+    const user = await insertUser(db);
+    const room = await insertRoom(db, user.id, { status: 'finished' });
+    await insertParticipant(db, room.id, user.id, 'interviewer');
+
+    await asUser(request(app.getHttpServer()).post(`/rooms/${room.id}/media/token`), user).expect(
+      403,
+    );
+  });
+
+  it('GIVEN room does not exist WHEN generating token THEN returns 404', async () => {
+    const user = await insertUser(db);
+
+    await asUser(
+      request(app.getHttpServer()).post('/rooms/00000000-0000-0000-0000-000000000000/media/token'),
+      user,
+    ).expect(404);
+  });
+
+  it('GIVEN candidate role WHEN generating token THEN returns 200', async () => {
+    const host = await insertUser(db);
+    const candidate = await insertUser(db);
+    const room = await insertRoom(db, host.id, { status: 'coding' });
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+    await insertParticipant(db, room.id, candidate.id, 'candidate');
+
+    mockMediaService.generateToken.mockResolvedValue({
+      token: 'lk-candidate-token',
+      url: 'wss://livekit.example.com',
+    });
+
+    const res = await asUser(
+      request(app.getHttpServer()).post(`/rooms/${room.id}/media/token`),
+      candidate,
+    ).expect(200);
+
+    expect(res.body.token).toBe('lk-candidate-token');
   });
 });

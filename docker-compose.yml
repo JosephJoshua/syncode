@@ -65,6 +65,20 @@ services:
       start_period: 10s
       retries: 3
 
+  livekit:
+    image: livekit/livekit-server:v1.9.11
+    container_name: syncode-livekit
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:7880:7880"
+    environment:
+      LIVEKIT_KEYS: "${LIVEKIT_API_KEY:-devkey}: ${LIVEKIT_API_SECRET:-devsecret}"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:7880"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
 volumes:
   pg_data:
   redis_data:

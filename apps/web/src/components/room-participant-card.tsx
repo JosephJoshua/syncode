@@ -15,7 +15,20 @@ import {
   SelectItem,
   SelectTrigger,
 } from '@syncode/ui';
-import { CheckCircle2, Crown, EllipsisVertical, Loader2, Trash2 } from 'lucide-react';
+import {
+  CheckCircle2,
+  Crown,
+  EllipsisVertical,
+  Loader2,
+  MicOff,
+  Signal,
+  SignalLow,
+  SignalMedium,
+  Trash2,
+  VideoOff,
+  Volume2,
+  VolumeX,
+} from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ROLE_LABEL_KEYS } from '@/lib/room-stage.js';
@@ -25,6 +38,116 @@ const ASSIGNABLE_ROLES: Array<{ value: RoomRole; labelKey: string }> = [
   { value: 'interviewer', labelKey: 'roleSelect.interviewer' },
   { value: 'observer', labelKey: 'roleSelect.observer' },
 ];
+
+function PresenceDot({
+  isMediaConnected,
+  isMediaMuted,
+  isActive,
+  size = 'sm',
+}: {
+  isMediaConnected: boolean;
+  isMediaMuted: boolean;
+  isActive: boolean;
+  size?: 'sm' | 'md';
+}) {
+  if (isMediaConnected && isMediaMuted) {
+    const cls =
+      size === 'sm'
+        ? 'absolute -bottom-1 -right-1 flex size-3 items-center justify-center rounded-full border border-card bg-destructive/90'
+        : 'absolute -bottom-1 -right-1 flex size-3.5 items-center justify-center rounded-full border-2 border-card bg-destructive/90';
+    const iconCls = size === 'sm' ? 'size-1.5 text-white' : 'size-2 text-white';
+    return (
+      <span className={cls}>
+        <MicOff className={iconCls} />
+      </span>
+    );
+  }
+  return (
+    <span
+      className={cn(
+        'absolute rounded-full',
+        size === 'sm'
+          ? '-bottom-0.5 -right-0.5 size-2 border border-card'
+          : '-bottom-0.5 -right-0.5 size-2.5 border-2 border-card',
+        isMediaConnected
+          ? 'bg-emerald-400'
+          : isActive
+            ? 'bg-muted-foreground/50'
+            : 'bg-muted-foreground/20',
+      )}
+    />
+  );
+}
+
+function MediaActionsContent({
+  isLocallyMuted,
+  isVideoHidden,
+  localVolume,
+  onLocalMuteToggle,
+  onLocalVolumeChange,
+  onVideoHiddenToggle,
+}: {
+  isLocallyMuted: boolean;
+  isVideoHidden: boolean;
+  localVolume?: number;
+  onLocalMuteToggle?: (muted: boolean) => void;
+  onLocalVolumeChange?: (volume: number) => void;
+  onVideoHiddenToggle?: (hidden: boolean) => void;
+}) {
+  return (
+    <>
+      {onLocalMuteToggle ? (
+        <DropdownMenuItem onSelect={() => onLocalMuteToggle(!isLocallyMuted)}>
+          {isLocallyMuted ? (
+            <Volume2 className="size-3.5 text-muted-foreground" />
+          ) : (
+            <VolumeX className="size-3.5 text-muted-foreground" />
+          )}
+          {isLocallyMuted ? 'Unmute for me' : 'Mute for me'}
+        </DropdownMenuItem>
+      ) : null}
+      {onLocalVolumeChange ? (
+        <div className="flex min-h-9 items-center gap-2 px-3 py-2">
+          <Volume2 className="size-3.5 shrink-0 text-muted-foreground" />
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step="0.05"
+            value={localVolume ?? 1}
+            onChange={(e) => onLocalVolumeChange(Number(e.target.value))}
+            className="h-1 flex-1 cursor-pointer appearance-none rounded-full bg-muted accent-primary"
+            onClick={(e) => e.stopPropagation()}
+          />
+          <span className="w-6 text-right font-mono text-[9px] text-muted-foreground/60">
+            {Math.round((localVolume ?? 1) * 100)}
+          </span>
+        </div>
+      ) : null}
+      {onVideoHiddenToggle ? (
+        <DropdownMenuItem onSelect={() => onVideoHiddenToggle(!isVideoHidden)}>
+          <VideoOff className="size-3.5 text-muted-foreground" />
+          {isVideoHidden ? 'Show video' : 'Hide video'}
+        </DropdownMenuItem>
+      ) : null}
+    </>
+  );
+}
+
+function ConnectionQualityIcon({ quality }: { quality?: string }) {
+  if (!quality) return null;
+  switch (quality) {
+    case 'excellent':
+      return <Signal className="size-3 text-emerald-400" />;
+    case 'good':
+      return <SignalMedium className="size-3 text-amber-400" />;
+    case 'poor':
+    case 'lost':
+      return <SignalLow className="size-3 text-destructive" />;
+    default:
+      return null;
+  }
+}
 
 export interface Participant {
   userId: string;
@@ -44,10 +167,19 @@ interface RoomParticipantCardProps {
   isUpdatingRole: boolean;
   isTransferringOwnership: boolean;
   isRemovingParticipant?: boolean;
+  isSpeaking?: boolean;
+  isMediaConnected?: boolean;
+  isMediaMuted?: boolean;
+  connectionQuality?: string;
+  isLocallyMuted?: boolean;
+  isVideoHidden?: boolean;
+  localVolume?: number;
+  onLocalMuteToggle?: (muted: boolean) => void;
+  onLocalVolumeChange?: (volume: number) => void;
+  onVideoHiddenToggle?: (hidden: boolean) => void;
   onRoleChange?: (userId: string, role: RoomRole) => void;
   onTransferOwnership?: (userId: string, displayName: string) => void;
   onRemoveParticipant?: (userId: string, displayName: string) => void;
-  /** Compact mode for the workspace sidebar (no avatar, single line) */
   compact?: boolean;
 }
 
@@ -59,6 +191,16 @@ export function RoomParticipantCard({
   isUpdatingRole,
   isTransferringOwnership,
   isRemovingParticipant = false,
+  isSpeaking = false,
+  isMediaConnected = false,
+  isMediaMuted = false,
+  connectionQuality,
+  isLocallyMuted = false,
+  isVideoHidden = false,
+  localVolume,
+  onLocalMuteToggle,
+  onLocalVolumeChange,
+  onVideoHiddenToggle,
   onRoleChange,
   onTransferOwnership,
   onRemoveParticipant,
@@ -69,18 +211,29 @@ export function RoomParticipantCard({
   const isMe = participant.userId === currentUserId;
   const isHost = participant.userId === roomHostId;
   const initial = displayName.charAt(0).toUpperCase();
-  const showParticipantActions = Boolean(
-    canManageParticipants && !isHost && (onTransferOwnership || onRemoveParticipant),
-  );
+  const hasManageActions =
+    canManageParticipants && !isHost && (onTransferOwnership || onRemoveParticipant);
+  const hasMediaActions = !isMe && isMediaConnected && (onLocalMuteToggle || onVideoHiddenToggle);
+  const showParticipantActions = Boolean(hasManageActions || hasMediaActions);
   const [isParticipantMenuOpen, setIsParticipantMenuOpen] = useState(false);
 
   if (compact) {
     return (
       <div className="group flex items-center gap-2.5 py-2">
-        <Avatar className="size-6 text-[9px]">
-          {participant.avatarUrl ? <AvatarImage src={participant.avatarUrl} /> : null}
-          <AvatarFallback>{initial}</AvatarFallback>
-        </Avatar>
+        <div className="relative">
+          <Avatar
+            className={cn('size-6 text-[9px] transition-shadow', isSpeaking && 'speaking-ring')}
+          >
+            {participant.avatarUrl ? <AvatarImage src={participant.avatarUrl} /> : null}
+            <AvatarFallback>{initial}</AvatarFallback>
+          </Avatar>
+          <PresenceDot
+            isMediaConnected={isMediaConnected}
+            isMediaMuted={isMediaMuted}
+            isActive={participant.isActive}
+            size="sm"
+          />
+        </div>
         <div className="flex min-w-0 flex-1 items-center gap-2">
           <span className="truncate text-sm text-foreground">
             {displayName}
@@ -90,6 +243,7 @@ export function RoomParticipantCard({
           {participant.isReady ? (
             <CheckCircle2 className="size-3 shrink-0 text-emerald-400" />
           ) : null}
+          <ConnectionQualityIcon quality={connectionQuality} />
         </div>
         <div className="flex shrink-0 items-center justify-end gap-1.5">
           <div
@@ -135,32 +289,46 @@ export function RoomParticipantCard({
                 <DropdownMenuContent
                   align="end"
                   side="bottom"
-                  className="min-w-40 rounded-xl border-border/60"
+                  className="min-w-44 rounded-xl border-border/60"
                 >
-                  <DropdownMenuItem
-                    disabled={isTransferringOwnership || isRemovingParticipant}
-                    onSelect={() => onTransferOwnership?.(participant.userId, displayName)}
-                  >
-                    {isTransferringOwnership ? (
-                      <Loader2 className="size-3.5 animate-spin text-muted-foreground" />
-                    ) : (
-                      <Crown className="size-3.5 text-muted-foreground" />
-                    )}
-                    {t('workspace.transferOwnership')}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    disabled={
-                      !onRemoveParticipant || isTransferringOwnership || isRemovingParticipant
-                    }
-                    onSelect={() => onRemoveParticipant?.(participant.userId, displayName)}
-                  >
-                    {isRemovingParticipant ? (
-                      <Loader2 className="size-3.5 animate-spin text-muted-foreground" />
-                    ) : (
-                      <Trash2 className="size-3.5 text-muted-foreground" />
-                    )}
-                    {t('workspace.removeParticipant')}
-                  </DropdownMenuItem>
+                  {hasMediaActions ? (
+                    <MediaActionsContent
+                      isLocallyMuted={isLocallyMuted}
+                      isVideoHidden={isVideoHidden}
+                      localVolume={localVolume}
+                      onLocalMuteToggle={onLocalMuteToggle}
+                      onLocalVolumeChange={onLocalVolumeChange}
+                      onVideoHiddenToggle={onVideoHiddenToggle}
+                    />
+                  ) : null}
+                  {hasManageActions ? (
+                    <>
+                      <DropdownMenuItem
+                        disabled={isTransferringOwnership || isRemovingParticipant}
+                        onSelect={() => onTransferOwnership?.(participant.userId, displayName)}
+                      >
+                        {isTransferringOwnership ? (
+                          <Loader2 className="size-3.5 animate-spin text-muted-foreground" />
+                        ) : (
+                          <Crown className="size-3.5 text-muted-foreground" />
+                        )}
+                        {t('workspace.transferOwnership')}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        disabled={
+                          !onRemoveParticipant || isTransferringOwnership || isRemovingParticipant
+                        }
+                        onSelect={() => onRemoveParticipant?.(participant.userId, displayName)}
+                      >
+                        {isRemovingParticipant ? (
+                          <Loader2 className="size-3.5 animate-spin text-muted-foreground" />
+                        ) : (
+                          <Trash2 className="size-3.5 text-muted-foreground" />
+                        )}
+                        {t('workspace.removeParticipant')}
+                      </DropdownMenuItem>
+                    </>
+                  ) : null}
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
@@ -173,10 +341,18 @@ export function RoomParticipantCard({
   return (
     <div className="rounded-xl border border-border/60 bg-card/80 p-3">
       <div className="flex items-start gap-3">
-        <Avatar className="size-9 shrink-0">
-          {participant.avatarUrl ? <AvatarImage src={participant.avatarUrl} /> : null}
-          <AvatarFallback className="text-sm">{initial}</AvatarFallback>
-        </Avatar>
+        <div className="relative shrink-0">
+          <Avatar className={cn('size-9 transition-shadow', isSpeaking && 'speaking-ring')}>
+            {participant.avatarUrl ? <AvatarImage src={participant.avatarUrl} /> : null}
+            <AvatarFallback className="text-sm">{initial}</AvatarFallback>
+          </Avatar>
+          <PresenceDot
+            isMediaConnected={isMediaConnected}
+            isMediaMuted={isMediaMuted}
+            isActive={participant.isActive}
+            size="md"
+          />
+        </div>
 
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
@@ -225,22 +401,46 @@ export function RoomParticipantCard({
           </div>
         </div>
 
-        {canManageParticipants && !isHost && onTransferOwnership ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="xs"
-            className="shrink-0 text-[11px] text-muted-foreground"
-            disabled={isTransferringOwnership}
-            onClick={() => onTransferOwnership(participant.userId, displayName)}
-          >
-            {isTransferringOwnership ? (
-              <Loader2 className="size-3 animate-spin" />
-            ) : (
-              <Crown className="size-3" />
-            )}
-            {t('workspace.transferOwnership')}
-          </Button>
+        {showParticipantActions ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-xs"
+                className="size-7 shrink-0 text-muted-foreground"
+              >
+                <EllipsisVertical className="size-3.5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="min-w-44 rounded-xl border-border/60">
+              {hasMediaActions ? (
+                <MediaActionsContent
+                  isLocallyMuted={isLocallyMuted}
+                  isVideoHidden={isVideoHidden}
+                  localVolume={localVolume}
+                  onLocalMuteToggle={onLocalMuteToggle}
+                  onLocalVolumeChange={onLocalVolumeChange}
+                  onVideoHiddenToggle={onVideoHiddenToggle}
+                />
+              ) : null}
+              {hasManageActions ? (
+                <>
+                  <DropdownMenuItem
+                    disabled={isTransferringOwnership}
+                    onSelect={() => onTransferOwnership?.(participant.userId, displayName)}
+                  >
+                    {isTransferringOwnership ? (
+                      <Loader2 className="size-3.5 animate-spin text-muted-foreground" />
+                    ) : (
+                      <Crown className="size-3.5 text-muted-foreground" />
+                    )}
+                    {t('workspace.transferOwnership')}
+                  </DropdownMenuItem>
+                </>
+              ) : null}
+            </DropdownMenuContent>
+          </DropdownMenu>
         ) : null}
       </div>
     </div>

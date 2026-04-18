@@ -32,6 +32,17 @@ interface RoomLobbyProps {
   onTransferOwnership: (userId: string, displayName: string) => void;
   onToggleReady: () => void;
   onTransition: (targetStatus: RoomStatus) => void;
+  speakingMap?: ReadonlyMap<string, boolean>;
+  mediaConnectedSet?: ReadonlySet<string>;
+  mediaMutedMap?: ReadonlyMap<string, boolean>;
+  participantMediaControls?: {
+    setVolume: (identity: string, volume: number) => void;
+    setMuted: (identity: string, muted: boolean) => void;
+    setVideoHidden: (identity: string, hidden: boolean) => void;
+    volumeMap: ReadonlyMap<string, number>;
+    muteSet: ReadonlySet<string>;
+    videoHiddenSet: ReadonlySet<string>;
+  };
 }
 
 export function RoomLobby({
@@ -53,6 +64,10 @@ export function RoomLobby({
   onTransferOwnership,
   onToggleReady,
   onTransition,
+  speakingMap,
+  mediaConnectedSet,
+  mediaMutedMap,
+  participantMediaControls,
 }: RoomLobbyProps) {
   const { t } = useTranslation('rooms');
   const { copied, copy } = useClipboard();
@@ -127,6 +142,32 @@ export function RoomLobby({
                   canManageParticipants={canManageParticipants}
                   isUpdatingRole={isUpdatingRole === participant.userId}
                   isTransferringOwnership={isTransferringOwnership === participant.userId}
+                  isSpeaking={speakingMap?.get(participant.userId) ?? false}
+                  isMediaConnected={mediaConnectedSet?.has(participant.userId) ?? false}
+                  isMediaMuted={mediaMutedMap?.get(participant.userId) ?? false}
+                  isLocallyMuted={
+                    participantMediaControls?.muteSet.has(participant.userId) ?? false
+                  }
+                  isVideoHidden={
+                    participantMediaControls?.videoHiddenSet.has(participant.userId) ?? false
+                  }
+                  localVolume={participantMediaControls?.volumeMap.get(participant.userId)}
+                  onLocalMuteToggle={
+                    participantMediaControls
+                      ? (muted) => participantMediaControls.setMuted(participant.userId, muted)
+                      : undefined
+                  }
+                  onLocalVolumeChange={
+                    participantMediaControls
+                      ? (vol) => participantMediaControls.setVolume(participant.userId, vol)
+                      : undefined
+                  }
+                  onVideoHiddenToggle={
+                    participantMediaControls
+                      ? (hidden) =>
+                          participantMediaControls.setVideoHidden(participant.userId, hidden)
+                      : undefined
+                  }
                   onRoleChange={onParticipantRoleChange}
                   onTransferOwnership={onTransferOwnership}
                 />

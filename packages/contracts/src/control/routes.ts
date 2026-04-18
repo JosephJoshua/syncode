@@ -27,6 +27,7 @@ import type {
   joinRoomSchema,
   listRoomsQuerySchema,
   listRoomsResponseSchema,
+  mediaTokenResponseSchema,
   roomDetailSchema,
   runCodeResponseSchema,
   runCodeSchema,
@@ -123,6 +124,10 @@ export const CONTROL_API = {
       z.infer<typeof transitionRoomPhaseResponseSchema>
     >()('rooms/:id/control/transition', 'POST'),
     TOGGLE_READY: defineRoute<void, z.infer<typeof roomDetailSchema>>()('rooms/:id/ready', 'POST'),
+    MEDIA_TOKEN: defineRoute<void, z.infer<typeof mediaTokenResponseSchema>>()(
+      'rooms/:id/media/token',
+      'POST',
+    ),
   },
   EXECUTION: {
     GET_RESULT: defineRoute<

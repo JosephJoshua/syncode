@@ -38,6 +38,7 @@ import {
   JoinRoomResponseDto,
   ListRoomsQueryDto,
   ListRoomsResponseDto,
+  MediaTokenResponseDto,
   RoomDetailDto,
   RunCodeDto,
   RunCodeResponseDto,
@@ -264,6 +265,31 @@ export class RoomsController {
   ): Promise<TransitionRoomPhaseResponseDto> {
     const result = await this.roomsService.transitionPhase(id, user.id, body.targetStatus);
     return { ...result, transitionedAt: result.transitionedAt.toISOString() };
+  }
+
+  @Post(CONTROL_API.ROOMS.MEDIA_TOKEN.route)
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Generate LiveKit access token' })
+  @ApiParam({ name: 'id', description: 'Room ID (UUID)' })
+  @ApiResponse({ status: 200, type: MediaTokenResponseDto, description: 'Token generated' })
+  @ApiResponse({
+    status: 403,
+    type: ErrorResponseDto,
+    description: 'Not a participant or lacks media capability',
+  })
+  @ApiResponse({ status: 404, type: ErrorResponseDto, description: 'Room not found' })
+  @ApiResponse({
+    status: 503,
+    type: ErrorResponseDto,
+    description: 'Media service unavailable',
+  })
+  @ApiResponse({ status: 504, type: ErrorResponseDto, description: 'Media service timeout' })
+  async generateMediaToken(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+  ): Promise<MediaTokenResponseDto> {
+    const result = await this.roomsService.generateMediaToken(id, user.id);
+    return { ...result, expiresAt: result.expiresAt.toISOString() };
   }
 
   private serializeRoomDetail(detail: Awaited<ReturnType<RoomsService['getRoom']>>): RoomDetailDto {
