@@ -30,10 +30,17 @@ export interface MediaDeviceOption {
   label: string;
 }
 
+export interface AudioProcessingOptions {
+  noiseSuppression: boolean;
+  echoCancellation: boolean;
+  autoGainControl: boolean;
+}
+
 export interface UseLiveKitOptions {
   url: string | null;
   token: string | null;
   connect: boolean;
+  audioProcessing?: AudioProcessingOptions;
 }
 
 export interface UseLiveKitResult {
@@ -72,7 +79,12 @@ function mapConnectionState(state: ConnectionState): LiveKitConnectionState {
   }
 }
 
-export function useLiveKit({ url, token, connect }: UseLiveKitOptions): UseLiveKitResult {
+export function useLiveKit({
+  url,
+  token,
+  connect,
+  audioProcessing,
+}: UseLiveKitOptions): UseLiveKitResult {
   const [connectionState, setConnectionState] = useState<LiveKitConnectionState>('disconnected');
   const [isMicrophoneEnabled, setIsMicrophoneEnabled] = useState(false);
   const [isCameraEnabled, setIsCameraEnabled] = useState(false);
@@ -88,6 +100,9 @@ export function useLiveKit({ url, token, connect }: UseLiveKitOptions): UseLiveK
   const audioElementsRef = useRef<Map<string, HTMLAudioElement>>(new Map());
   const micEnabledOnceRef = useRef(false);
   const videoProcessorRef = useRef<VideoFilterProcessor | null>(null);
+
+  const audioProcessingRef = useRef(audioProcessing);
+  audioProcessingRef.current = audioProcessing;
 
   const refreshParticipants = useCallback(() => {
     const room = roomRef.current;
@@ -209,10 +224,15 @@ export function useLiveKit({ url, token, connect }: UseLiveKitOptions): UseLiveK
       return;
     }
 
+    const ap = audioProcessingRef.current;
     const room = new Room({
       adaptiveStream: true,
       dynacast: true,
-      audioCaptureDefaults: { echoCancellation: true, noiseSuppression: true },
+      audioCaptureDefaults: {
+        echoCancellation: ap?.echoCancellation ?? true,
+        noiseSuppression: ap?.noiseSuppression ?? true,
+        autoGainControl: ap?.autoGainControl ?? false,
+      },
       videoCaptureDefaults: { resolution: { width: 640, height: 480, frameRate: 24 } },
     });
 

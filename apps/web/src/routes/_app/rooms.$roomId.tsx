@@ -245,19 +245,47 @@ function RoomPage() {
       (c) => c === 'media:audio' || c === 'media:video' || c === 'media:screenshare',
     ) ?? false;
 
-  useEffect(() => {
-    if (!room || !hasMediaCapability || mediaCredsRef.current) return;
-    if (room.status === 'finished') return;
+  const mediaTokenTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    api(CONTROL_API.ROOMS.MEDIA_TOKEN, { params: { id: roomId } })
-      .then((result) => {
-        mediaCredsRef.current = { token: result.token, url: result.url };
-        setMediaReady(true);
-      })
-      .catch((err) => {
-        console.warn('[LiveKit] Failed to fetch media token:', err);
-      });
+  useEffect(() => {
+    if (!room || !hasMediaCapability) return;
+    if (room.status === 'finished') return;
+    if (mediaCredsRef.current) return;
+
+    const fetchToken = () => {
+      api(CONTROL_API.ROOMS.MEDIA_TOKEN, { params: { id: roomId } })
+        .then((result) => {
+          mediaCredsRef.current = { token: result.token, url: result.url };
+          setMediaReady(true);
+
+          const expiresAt = new Date(result.expiresAt).getTime();
+          const refreshIn = Math.max(expiresAt - Date.now() - 5 * 60 * 1000, 60_000);
+          if (mediaTokenTimerRef.current) clearTimeout(mediaTokenTimerRef.current);
+          mediaTokenTimerRef.current = setTimeout(() => {
+            mediaCredsRef.current = null;
+            setMediaReady(false);
+          }, refreshIn);
+        })
+        .catch((err) => {
+          console.warn('[LiveKit] Failed to fetch media token:', err);
+        });
+    };
+
+    fetchToken();
+
+    return () => {
+      if (mediaTokenTimerRef.current) {
+        clearTimeout(mediaTokenTimerRef.current);
+        mediaTokenTimerRef.current = null;
+      }
+    };
   }, [room, hasMediaCapability, roomId]);
+
+  const [audioProcessing, setAudioProcessing] = useState<AudioProcessingSettings>({
+    noiseSuppression: true,
+    echoCancellation: true,
+    autoGainControl: false,
+  });
 
   const {
     connectionState: mediaConnectionState,
@@ -280,6 +308,7 @@ function RoomPage() {
     url: mediaCredsRef.current?.url ?? null,
     token: mediaCredsRef.current?.token ?? null,
     connect: mediaReady && hasMediaCapability && room?.status !== 'finished',
+    audioProcessing,
   });
 
   const mediaConnectedSet = useMemo(() => {
@@ -298,11 +327,6 @@ function RoomPage() {
   }, [mediaLocalParticipant, mediaRemoteParticipants]);
 
   const [outputVolume, setOutputVolumeState] = useState(1);
-  const [audioProcessing, setAudioProcessing] = useState<AudioProcessingSettings>({
-    noiseSuppression: true,
-    echoCancellation: true,
-    autoGainControl: false,
-  });
 
   const handleOutputVolumeChange = useCallback(
     (vol: number) => {

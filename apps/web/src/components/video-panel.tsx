@@ -7,7 +7,7 @@ import {
   PanelRightClose,
   Video,
 } from 'lucide-react';
-import { motion, useMotionValue, useSpring } from 'motion/react';
+import { AnimatePresence, motion, useMotionValue, useSpring } from 'motion/react';
 import { useCallback, useEffect, useRef } from 'react';
 
 export interface VideoPanelParticipant {
@@ -246,9 +246,21 @@ export function FloatingVideoPanel({
           </div>
         </div>
 
-        {!isMinimized && activeTile ? (
-          <div className="p-1">
-            <ParticipantTile {...activeTile} />
+        {!isMinimized ? (
+          <div className="relative p-1">
+            <AnimatePresence mode="popLayout">
+              {activeTile ? (
+                <motion.div
+                  key={activeTile.identity}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <ParticipantTile {...activeTile} />
+                </motion.div>
+              ) : null}
+            </AnimatePresence>
           </div>
         ) : null}
       </div>
@@ -262,7 +274,8 @@ interface DockedVideoPanelProps {
 }
 
 export function DockedVideoPanel({ tiles, onUndock }: DockedVideoPanelProps) {
-  if (tiles.length === 0) return null;
+  const hasAnyVideo = tiles.some((t) => t.hasVideo);
+  if (tiles.length === 0 || (tiles.length <= 1 && !hasAnyVideo)) return null;
 
   return (
     <div className="shrink-0 border-b border-border p-2 @container">
