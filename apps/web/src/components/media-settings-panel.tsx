@@ -12,8 +12,10 @@ import {
   Separator,
 } from '@syncode/ui';
 import {
+  Gauge,
   Loader2,
   Mic,
+  Radio,
   Settings,
   Shield,
   SlidersHorizontal,
@@ -30,6 +32,17 @@ export interface AudioProcessingSettings {
   autoGainControl: boolean;
 }
 
+export type VideoQualityPreset = 'low' | 'medium' | 'high';
+
+export const VIDEO_QUALITY_PRESETS: Record<
+  VideoQualityPreset,
+  { label: string; width: number; height: number; frameRate: number }
+> = {
+  low: { label: 'Low (320p)', width: 320, height: 240, frameRate: 15 },
+  medium: { label: 'Medium (480p)', width: 640, height: 480, frameRate: 24 },
+  high: { label: 'High (720p)', width: 1280, height: 720, frameRate: 30 },
+};
+
 interface MediaSettingsPanelProps {
   audioInputDevices: MediaDeviceOption[];
   videoInputDevices: MediaDeviceOption[];
@@ -41,6 +54,10 @@ interface MediaSettingsPanelProps {
   audioProcessing: AudioProcessingSettings;
   onAudioProcessingChange: (settings: AudioProcessingSettings) => void;
   onVideoFilterChange: (settings: { brightness: number; contrast: number }) => void;
+  videoQuality: VideoQualityPreset;
+  onVideoQualityChange: (quality: VideoQualityPreset) => void;
+  isPushToTalkMode: boolean;
+  onTogglePushToTalkMode: () => void;
 }
 
 const LEVEL_BAR_COUNT = 16;
@@ -309,6 +326,10 @@ export function MediaSettingsPanel({
   audioProcessing,
   onAudioProcessingChange,
   onVideoFilterChange,
+  videoQuality,
+  onVideoQualityChange,
+  isPushToTalkMode,
+  onTogglePushToTalkMode,
 }: MediaSettingsPanelProps) {
   const [open, setOpen] = useState(false);
   const [brightness, setBrightness] = useState(1);
@@ -558,6 +579,60 @@ export function MediaSettingsPanel({
                   {Math.round(outputVolume * 100)}%
                 </span>
               </div>
+            </div>
+
+            <div className="space-y-2 rounded-lg bg-muted/20 p-2.5">
+              <div className="flex items-center gap-1.5">
+                <Gauge className="size-3 text-muted-foreground" />
+                <span className="text-xs font-medium text-foreground">Video quality</span>
+              </div>
+              <div className="flex gap-1">
+                {(
+                  Object.entries(VIDEO_QUALITY_PRESETS) as [
+                    VideoQualityPreset,
+                    (typeof VIDEO_QUALITY_PRESETS)[VideoQualityPreset],
+                  ][]
+                ).map(([key, preset]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => onVideoQualityChange(key)}
+                    className={cn(
+                      'flex-1 rounded-md border px-2 py-1.5 text-center text-[10px] font-medium transition-colors',
+                      videoQuality === key
+                        ? 'border-primary/30 bg-primary/10 text-primary'
+                        : 'border-border/60 text-muted-foreground hover:bg-muted/50',
+                    )}
+                  >
+                    {preset.label.split(' ')[0]}
+                  </button>
+                ))}
+              </div>
+              <span className="font-mono text-[9px] text-muted-foreground/60">
+                {VIDEO_QUALITY_PRESETS[videoQuality].width}x
+                {VIDEO_QUALITY_PRESETS[videoQuality].height} @{' '}
+                {VIDEO_QUALITY_PRESETS[videoQuality].frameRate}fps
+              </span>
+            </div>
+
+            <div className="space-y-2 rounded-lg bg-muted/20 p-2.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <Radio className="size-3 text-muted-foreground" />
+                  <span className="text-xs font-medium text-foreground">Push to talk</span>
+                </div>
+                <ToggleChip
+                  label={isPushToTalkMode ? 'On' : 'Off'}
+                  icon={Radio}
+                  active={isPushToTalkMode}
+                  onClick={onTogglePushToTalkMode}
+                />
+              </div>
+              {isPushToTalkMode ? (
+                <span className="font-mono text-[9px] text-muted-foreground/60">
+                  Hold Space to talk
+                </span>
+              ) : null}
             </div>
 
             {audioDevices.length === 0 && videoDevices.length === 0 ? (

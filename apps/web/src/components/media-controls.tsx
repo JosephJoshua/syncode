@@ -39,6 +39,10 @@ interface MediaControlsProps {
   audioProcessing: AudioProcessingSettings;
   onAudioProcessingChange: (settings: AudioProcessingSettings) => void;
   onVideoFilterChange: (settings: VideoFilterSettings) => void;
+  videoQuality: import('./media-settings-panel.js').VideoQualityPreset;
+  onVideoQualityChange: (quality: import('./media-settings-panel.js').VideoQualityPreset) => void;
+  isPushToTalkMode: boolean;
+  onTogglePushToTalkMode: () => void;
 }
 
 export function MediaControls({
@@ -60,6 +64,10 @@ export function MediaControls({
   audioProcessing,
   onAudioProcessingChange,
   onVideoFilterChange,
+  videoQuality,
+  onVideoQualityChange,
+  isPushToTalkMode,
+  onTogglePushToTalkMode,
 }: MediaControlsProps) {
   const isConnected = connectionState === 'connected';
   const isConnecting = connectionState === 'connecting' || connectionState === 'reconnecting';
@@ -177,6 +185,10 @@ export function MediaControls({
             audioProcessing={audioProcessing}
             onAudioProcessingChange={onAudioProcessingChange}
             onVideoFilterChange={onVideoFilterChange}
+            videoQuality={videoQuality}
+            onVideoQualityChange={onVideoQualityChange}
+            isPushToTalkMode={isPushToTalkMode}
+            onTogglePushToTalkMode={onTogglePushToTalkMode}
           />
         </>
       ) : null}

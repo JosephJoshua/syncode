@@ -17,7 +17,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { MediaControls } from '@/components/media-controls.js';
-import type { AudioProcessingSettings } from '@/components/media-settings-panel.js';
+import type {
+  AudioProcessingSettings,
+  VideoQualityPreset,
+} from '@/components/media-settings-panel.js';
 import { RoomLobby } from '@/components/room-lobby.js';
 import { RoomWorkspace } from '@/components/room-workspace.js';
 import {
@@ -26,6 +29,7 @@ import {
   type VideoPanelParticipant,
 } from '@/components/video-panel.js';
 import { useLiveKit } from '@/hooks/use-livekit.js';
+import { useMediaShortcuts } from '@/hooks/use-media-shortcuts.js';
 import { useYjsCollab } from '@/hooks/use-yjs-collab.js';
 import { type ApiErrorResult, api, readApiError, resolveErrorMessage } from '@/lib/api-client.js';
 import { computeRoomElapsedMs, isWorkspaceStage, ROLE_LABEL_KEYS } from '@/lib/room-stage.js';
@@ -286,6 +290,7 @@ function RoomPage() {
     echoCancellation: true,
     autoGainControl: false,
   });
+  const [videoQuality, setVideoQuality] = useState<VideoQualityPreset>('medium');
 
   const {
     connectionState: mediaConnectionState,
@@ -309,6 +314,9 @@ function RoomPage() {
     videoHiddenSet,
     setVideoFilter,
     setAudioProcessing: applyAudioProcessing,
+    isPushToTalkMode,
+    togglePushToTalkMode,
+    handlePushToTalk,
     speakingMap,
     remoteParticipants: mediaRemoteParticipants,
     localParticipant: mediaLocalParticipant,
@@ -367,8 +375,20 @@ function RoomPage() {
         void applyAudioProcessing(settings);
       }}
       onVideoFilterChange={(settings) => void setVideoFilter(settings)}
+      videoQuality={videoQuality}
+      onVideoQualityChange={setVideoQuality}
+      isPushToTalkMode={isPushToTalkMode}
+      onTogglePushToTalkMode={togglePushToTalkMode}
     />
   ) : null;
+
+  useMediaShortcuts({
+    toggleMicrophone: () => void toggleMicrophone(),
+    toggleCamera: () => void toggleCamera(),
+    toggleScreenShare: () => void toggleScreenShare(),
+    togglePushToTalk: isPushToTalkMode ? handlePushToTalk : undefined,
+    enabled: hasMediaCapability && mediaConnectionState === 'connected',
+  });
 
   const videoTiles = useMemo(() => {
     const tiles: VideoPanelParticipant[] = [];
@@ -707,6 +727,14 @@ function RoomPage() {
         speakingMap={speakingMap}
         mediaConnectedSet={mediaConnectedSet}
         mediaMutedMap={mediaMutedMap}
+        participantMediaControls={{
+          setVolume: setParticipantVolume,
+          setMuted: setParticipantMuted,
+          setVideoHidden: setParticipantVideoHidden,
+          volumeMap: participantVolumeMap,
+          muteSet: localMuteSet,
+          videoHiddenSet,
+        }}
       />
     </>
   );

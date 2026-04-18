@@ -333,22 +333,74 @@ export function RoomParticipantCard({
           </div>
         </div>
 
-        {canManageParticipants && !isHost && onTransferOwnership ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="xs"
-            className="shrink-0 text-[11px] text-muted-foreground"
-            disabled={isTransferringOwnership}
-            onClick={() => onTransferOwnership(participant.userId, displayName)}
-          >
-            {isTransferringOwnership ? (
-              <Loader2 className="size-3 animate-spin" />
-            ) : (
-              <Crown className="size-3" />
-            )}
-            {t('workspace.transferOwnership')}
-          </Button>
+        {showParticipantActions ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-xs"
+                className="size-7 shrink-0 text-muted-foreground"
+              >
+                <EllipsisVertical className="size-3.5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="min-w-44 rounded-xl border-border/60">
+              {hasMediaActions ? (
+                <>
+                  {onLocalMuteToggle ? (
+                    <DropdownMenuItem onSelect={() => onLocalMuteToggle(!isLocallyMuted)}>
+                      {isLocallyMuted ? (
+                        <Volume2 className="size-3.5 text-muted-foreground" />
+                      ) : (
+                        <VolumeX className="size-3.5 text-muted-foreground" />
+                      )}
+                      {isLocallyMuted ? 'Unmute for me' : 'Mute for me'}
+                    </DropdownMenuItem>
+                  ) : null}
+                  {onLocalVolumeChange ? (
+                    <div className="flex items-center gap-2 px-2 py-1.5">
+                      <Volume2 className="size-3.5 shrink-0 text-muted-foreground" />
+                      <input
+                        type="range"
+                        min="0"
+                        max="1"
+                        step="0.05"
+                        value={localVolume ?? 1}
+                        onChange={(e) => onLocalVolumeChange(Number(e.target.value))}
+                        className="h-1 flex-1 cursor-pointer appearance-none rounded-full bg-muted accent-primary"
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                      <span className="w-6 text-right font-mono text-[9px] text-muted-foreground/60">
+                        {Math.round((localVolume ?? 1) * 100)}
+                      </span>
+                    </div>
+                  ) : null}
+                  {onVideoHiddenToggle ? (
+                    <DropdownMenuItem onSelect={() => onVideoHiddenToggle(!isVideoHidden)}>
+                      <VideoOff className="size-3.5 text-muted-foreground" />
+                      {isVideoHidden ? 'Show video' : 'Hide video'}
+                    </DropdownMenuItem>
+                  ) : null}
+                </>
+              ) : null}
+              {hasManageActions ? (
+                <>
+                  <DropdownMenuItem
+                    disabled={isTransferringOwnership}
+                    onSelect={() => onTransferOwnership?.(participant.userId, displayName)}
+                  >
+                    {isTransferringOwnership ? (
+                      <Loader2 className="size-3.5 animate-spin text-muted-foreground" />
+                    ) : (
+                      <Crown className="size-3.5 text-muted-foreground" />
+                    )}
+                    {t('workspace.transferOwnership')}
+                  </DropdownMenuItem>
+                </>
+              ) : null}
+            </DropdownMenuContent>
+          </DropdownMenu>
         ) : null}
       </div>
     </div>

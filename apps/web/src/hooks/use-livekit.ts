@@ -1,6 +1,8 @@
 import {
+  type ConnectionQuality,
   ConnectionState,
   type LocalTrackPublication,
+  type Participant,
   type RemoteParticipant,
   type RemoteTrack,
   type RemoteTrackPublication,
@@ -71,6 +73,10 @@ export interface UseLiveKitResult {
     echoCancellation: boolean;
     autoGainControl: boolean;
   }) => Promise<void>;
+  connectionQualityMap: ReadonlyMap<string, ConnectionQuality>;
+  isPushToTalkMode: boolean;
+  togglePushToTalkMode: () => void;
+  handlePushToTalk: (pressed: boolean) => void;
   speakingMap: ReadonlyMap<string, boolean>;
   remoteParticipants: MediaParticipant[];
   localParticipant: MediaParticipant | null;
@@ -110,7 +116,11 @@ export function useLiveKit({
   const [isMicrophoneEnabled, setIsMicrophoneEnabled] = useState(false);
   const [isCameraEnabled, setIsCameraEnabled] = useState(false);
   const [isScreenShareEnabled, setIsScreenShareEnabled] = useState(false);
+  const [isPushToTalkMode, setIsPushToTalkMode] = useState(false);
   const [speakingMap, setSpeakingMap] = useState<ReadonlyMap<string, boolean>>(new Map());
+  const [connectionQualityMap, setConnectionQualityMap] = useState<
+    ReadonlyMap<string, ConnectionQuality>
+  >(new Map());
   const [remoteParticipants, setRemoteParticipants] = useState<MediaParticipant[]>([]);
   const [localParticipant, setLocalParticipant] = useState<MediaParticipant | null>(null);
   const [audioInputDevices, setAudioInputDevices] = useState<MediaDeviceOption[]>([]);
@@ -228,6 +238,7 @@ export function useLiveKit({
     }
     setConnectionState('disconnected');
     setSpeakingMap(new Map());
+    setConnectionQualityMap(new Map());
     setRemoteParticipants([]);
     setLocalParticipant(null);
     setIsMicrophoneEnabled(false);
@@ -294,12 +305,13 @@ export function useLiveKit({
 
     const onTrackSubscribed = (
       track: RemoteTrack,
-      _pub: RemoteTrackPublication,
+      pub: RemoteTrackPublication,
       participant: RemoteParticipant,
     ) => {
       if (disposed) return;
       if (track.kind === Track.Kind.Audio) {
-        const existing = audioElementsRef.current.get(participant.identity);
+        const audioKey = `${participant.identity}:${pub.source}`;
+        const existing = audioElementsRef.current.get(audioKey);
         if (existing) {
           existing.srcObject = null;
           existing.remove();
@@ -308,22 +320,23 @@ export function useLiveKit({
         if (localMuteRef.current.has(participant.identity)) el.muted = true;
         const vol = volumeMapRef.current.get(participant.identity);
         if (vol !== undefined) el.volume = vol;
-        audioElementsRef.current.set(participant.identity, el);
+        audioElementsRef.current.set(audioKey, el);
       }
       refreshParticipants();
     };
 
     const onTrackUnsubscribed = (
       _track: RemoteTrack,
-      _pub: RemoteTrackPublication,
+      pub: RemoteTrackPublication,
       participant: RemoteParticipant,
     ) => {
       if (disposed) return;
-      const el = audioElementsRef.current.get(participant.identity);
+      const audioKey = `${participant.identity}:${pub.source}`;
+      const el = audioElementsRef.current.get(audioKey);
       if (el) {
         el.srcObject = null;
         el.remove();
-        audioElementsRef.current.delete(participant.identity);
+        audioElementsRef.current.delete(audioKey);
       }
       refreshParticipants();
     };
@@ -366,11 +379,12 @@ export function useLiveKit({
     };
     const onParticipantDisconnected = (p: RemoteParticipant) => {
       if (disposed) return;
-      const el = audioElementsRef.current.get(p.identity);
-      if (el) {
-        el.srcObject = null;
-        el.remove();
-        audioElementsRef.current.delete(p.identity);
+      for (const [key, el] of audioElementsRef.current) {
+        if (key.startsWith(`${p.identity}:`)) {
+          el.srcObject = null;
+          el.remove();
+          audioElementsRef.current.delete(key);
+        }
       }
       refreshParticipants();
     };
@@ -390,6 +404,18 @@ export function useLiveKit({
     room.on(RoomEvent.ParticipantConnected, onParticipantConnected);
     room.on(RoomEvent.ParticipantDisconnected, onParticipantDisconnected);
     room.on(RoomEvent.Disconnected, onDisconnected);
+    room.on(
+      RoomEvent.ConnectionQualityChanged,
+      (quality: ConnectionQuality, participant: Participant) => {
+        if (disposed) return;
+        setConnectionQualityMap((prev) => {
+          if (prev.get(participant.identity) === quality) return prev;
+          const next = new Map(prev);
+          next.set(participant.identity, quality);
+          return next;
+        });
+      },
+    );
     room.on(RoomEvent.ActiveDeviceChanged, () => void refreshDevices());
 
     const onDeviceChange = () => void refreshDevices();
@@ -478,6 +504,40 @@ export function useLiveKit({
     }
   }, [refreshParticipants]);
 
+  const togglePushToTalkMode = useCallback(() => {
+    setIsPushToTalkMode((prev) => {
+      const next = !prev;
+      const room = roomRef.current;
+      if (room && next && room.localParticipant.isMicrophoneEnabled) {
+        void room.localParticipant.setMicrophoneEnabled(false);
+        setIsMicrophoneEnabled(false);
+      }
+      return next;
+    });
+  }, []);
+
+  const handlePushToTalk = useCallback((pressed: boolean) => {
+    const room = roomRef.current;
+    if (!room) return;
+    const ap = audioProcessingRef.current;
+    if (pressed) {
+      void room.localParticipant.setMicrophoneEnabled(
+        true,
+        ap
+          ? {
+              noiseSuppression: ap.noiseSuppression,
+              echoCancellation: ap.echoCancellation,
+              autoGainControl: ap.autoGainControl,
+            }
+          : undefined,
+      );
+      setIsMicrophoneEnabled(true);
+    } else {
+      void room.localParticipant.setMicrophoneEnabled(false);
+      setIsMicrophoneEnabled(false);
+    }
+  }, []);
+
   const switchDevice = useCallback(
     async (kind: MediaDeviceKind, deviceId: string) => {
       const room = roomRef.current;
@@ -509,8 +569,9 @@ export function useLiveKit({
       next.set(identity, clamped);
       return next;
     });
-    const el = audioElementsRef.current.get(identity);
-    if (el) el.volume = clamped;
+    for (const [key, el] of audioElementsRef.current) {
+      if (key.startsWith(`${identity}:`)) el.volume = clamped;
+    }
   }, []);
 
   const setParticipantMuted = useCallback((identity: string, muted: boolean) => {
@@ -520,8 +581,9 @@ export function useLiveKit({
       else next.delete(identity);
       return next;
     });
-    const el = audioElementsRef.current.get(identity);
-    if (el) el.muted = muted;
+    for (const [key, el] of audioElementsRef.current) {
+      if (key.startsWith(`${identity}:`)) el.muted = muted;
+    }
   }, []);
 
   const setParticipantVideoHidden = useCallback((identity: string, hidden: boolean) => {
@@ -604,6 +666,10 @@ export function useLiveKit({
     videoHiddenSet,
     setVideoFilter,
     setAudioProcessing,
+    connectionQualityMap,
+    isPushToTalkMode,
+    togglePushToTalkMode,
+    handlePushToTalk,
     speakingMap,
     remoteParticipants,
     localParticipant,
