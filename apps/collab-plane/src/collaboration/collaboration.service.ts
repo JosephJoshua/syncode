@@ -6,6 +6,8 @@ import {
   type OnModuleDestroy,
 } from '@nestjs/common';
 import type {
+  ChangeLanguageRequest,
+  ChangeLanguageResponse,
   CreateDocumentRequest,
   CreateDocumentResponse,
   DestroyDocumentResponse,
@@ -145,6 +147,29 @@ export class CollaborationService implements OnModuleDestroy {
 
     this.logger.debug(
       `Room state updated for ${request.roomId}: phase=${request.phase}, editorLocked=${request.editorLocked}`,
+    );
+
+    return { success: true };
+  }
+
+  async changeLanguage(request: ChangeLanguageRequest): Promise<ChangeLanguageResponse> {
+    const room = this.roomRegistry.getRoom(request.roomId);
+    if (!room) {
+      this.logger.debug(`changeLanguage: room ${request.roomId} not found; no broadcast sent`);
+      return { success: false };
+    }
+
+    this.broadcastJson(room, {
+      type: COLLAB_WS_EVENTS.LANGUAGE_CHANGE,
+      data: {
+        language: request.language,
+        changedBy: request.changedBy ?? null,
+      },
+      timestamp: Date.now(),
+    });
+
+    this.logger.debug(
+      `Language change broadcast for room ${request.roomId}: language=${request.language}`,
     );
 
     return { success: true };

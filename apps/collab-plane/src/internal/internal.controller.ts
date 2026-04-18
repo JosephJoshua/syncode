@@ -1,6 +1,7 @@
 import { Body, Controller, Delete, Get, Param, Post } from '@nestjs/common';
 import {
   type BroadcastParticipantReadyRequest,
+  type ChangeLanguageRequest,
   COLLAB_INTERNAL,
   type CreateDocumentRequest,
   type KickUserRequest,
@@ -39,6 +40,11 @@ export class InternalController {
   ) {
     this.collaborationService.broadcastParticipantReady(roomId, body.userId, body.isReady);
     return { success: true };
+  }
+
+  @Post(COLLAB_INTERNAL.CHANGE_LANGUAGE.route)
+  changeLanguage(@Param('roomId') roomId: string, @Body() body: ChangeLanguageRequest) {
+    return this.collaborationService.changeLanguage({ ...body, roomId });
   }
 
   @Get(COLLAB_INTERNAL.HEALTH.route)

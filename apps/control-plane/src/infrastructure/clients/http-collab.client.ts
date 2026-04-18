@@ -2,6 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import type {
   BroadcastParticipantReadyRequest,
   BroadcastParticipantReadyResponse,
+  ChangeLanguageRequest,
+  ChangeLanguageResponse,
   CreateDocumentRequest,
   CreateDocumentResponse,
   DestroyDocumentResponse,
@@ -61,6 +63,14 @@ export class HttpCollabClient implements ICollabClient {
         json: request,
       })
       .json<BroadcastParticipantReadyResponse>();
+  }
+
+  async changeLanguage(request: ChangeLanguageRequest): Promise<ChangeLanguageResponse> {
+    return this.client
+      .post(buildUrl(COLLAB_INTERNAL.CHANGE_LANGUAGE.route, { roomId: request.roomId }), {
+        json: request,
+      })
+      .json<ChangeLanguageResponse>();
   }
 
   async healthCheck(): Promise<boolean> {

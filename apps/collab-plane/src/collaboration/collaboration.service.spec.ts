@@ -299,6 +299,60 @@ describe('CollaborationService', () => {
     });
   });
 
+  describe('changeLanguage', () => {
+    it('GIVEN a room WHEN changeLanguage THEN LANGUAGE_CHANGE broadcast to all clients', async () => {
+      const { service, roomRegistry } = createFixture();
+      await service.createDocument({ roomId: 'room-1' });
+
+      const client1 = fakeClient();
+      const client2 = fakeClient();
+      roomRegistry.addClient('room-1', 'user-1', client1);
+      roomRegistry.addClient('room-1', 'user-2', client2);
+
+      const result = await service.changeLanguage({
+        roomId: 'room-1',
+        language: 'python',
+        changedBy: 'host-user',
+      });
+
+      expect(result).toEqual({ success: true });
+
+      for (const client of [client1, client2]) {
+        const call = (client.send as ReturnType<typeof vi.fn>).mock.calls[0];
+        expect(call).toBeDefined();
+        const msg = JSON.parse(call[0]);
+        expect(msg.type).toBe(COLLAB_WS_EVENTS.LANGUAGE_CHANGE);
+        expect(msg.data).toEqual({ language: 'python', changedBy: 'host-user' });
+        expect(msg.timestamp).toEqual(expect.any(Number));
+      }
+    });
+
+    it('GIVEN a room and no changedBy WHEN changeLanguage THEN broadcast data.changedBy is null', async () => {
+      const { service, roomRegistry } = createFixture();
+      await service.createDocument({ roomId: 'room-1' });
+
+      const client = fakeClient();
+      roomRegistry.addClient('room-1', 'user-1', client);
+
+      await service.changeLanguage({ roomId: 'room-1', language: 'javascript' });
+
+      const call = (client.send as ReturnType<typeof vi.fn>).mock.calls[0];
+      const msg = JSON.parse(call[0]);
+      expect(msg.data).toEqual({ language: 'javascript', changedBy: null });
+    });
+
+    it('GIVEN unknown room WHEN changeLanguage THEN returns { success: false }', async () => {
+      const { service } = createFixture();
+
+      const result = await service.changeLanguage({
+        roomId: 'does-not-exist',
+        language: 'python',
+      });
+
+      expect(result).toEqual({ success: false });
+    });
+  });
+
   describe('room TTL', () => {
     it('GIVEN room with no clients WHEN 5 minutes elapse THEN room is cleaned up', async () => {
       vi.useFakeTimers();
