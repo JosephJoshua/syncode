@@ -12,6 +12,8 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import {
+  BROWSEABLE_ROOM_STATUSES,
+  type BrowseRoomsQuery,
   COLLAB_CLIENT,
   type CreateRoomInput,
   type DestroyDocumentResponse,
@@ -72,6 +74,7 @@ import type {
   DestroyRoomResult,
   JoinRoomResult,
   MediaTokenResult,
+  PublicRoomSummaryResult,
   RoomDetailResult,
   RoomSummaryResult,
   TransferOwnershipResult,
@@ -220,6 +223,99 @@ export class RoomsService {
         }));
       },
     });
+  }
+
+  async browsePublicRooms(
+    _userId: string,
+    query: BrowseRoomsQuery,
+  ): Promise<PaginatedResult<PublicRoomSummaryResult>> {
+    const escapedSearch = query.search
+      ? query.search.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_')
+      : null;
+
+    const result = await paginate<PublicRoomSummaryResult>({
+      cursor: query.cursor,
+      limit: query.limit,
+      getCursorValues: (row) => [row.createdAt.toISOString(), row.roomId],
+      fetchPage: async (decoded, fetchLimit) => {
+        const conditions = [
+          eq(rooms.isPrivate, false),
+          inArray(rooms.status, [...BROWSEABLE_ROOM_STATUSES]),
+          sql`(select count(*)::int from room_participants rp
+               where rp.room_id = ${rooms.id} and rp.is_active = true) < ${rooms.maxParticipants}`,
+        ];
+
+        if (query.status) conditions.push(eq(rooms.status, query.status));
+        if (query.language) conditions.push(eq(rooms.language, query.language));
+        if (query.difficulty) conditions.push(eq(problems.difficulty, query.difficulty));
+        if (escapedSearch) {
+          conditions.push(sql`${problems.title} ILIKE ${`%${escapedSearch}%`} ESCAPE '\\'`);
+        }
+
+        if (decoded?.length === 2 && decoded[0] && decoded[1]) {
+          const [cursorSort, cursorId] = decoded;
+          const cursorDate = new Date(cursorSort);
+          if (!Number.isNaN(cursorDate.getTime())) {
+            conditions.push(
+              or(
+                lt(rooms.createdAt, cursorDate),
+                and(eq(rooms.createdAt, cursorDate), lt(rooms.id, cursorId)),
+              )!,
+            );
+          }
+        }
+
+        const rows = await this.db
+          .select({
+            roomId: rooms.id,
+            name: rooms.name,
+            status: rooms.status,
+            mode: rooms.mode,
+            hostId: rooms.hostId,
+            hostUsername: users.username,
+            hostDisplayName: users.displayName,
+            hostAvatarUrl: users.avatarUrl,
+            language: rooms.language,
+            problemTitle: problems.title,
+            problemDifficulty: problems.difficulty,
+            maxParticipants: rooms.maxParticipants,
+            participantCount: sql<number>`(
+              select count(*)::int from room_participants rp
+              where rp.room_id = ${rooms.id} and rp.is_active = true
+            )`.as('participant_count'),
+            createdAt: rooms.createdAt,
+          })
+          .from(rooms)
+          .innerJoin(users, eq(users.id, rooms.hostId))
+          .leftJoin(problems, eq(problems.id, rooms.problemId))
+          .where(and(...conditions))
+          .orderBy(desc(rooms.createdAt), desc(rooms.id))
+          .limit(fetchLimit);
+
+        const withResolvedAvatars = await resolveAvatarUrls(
+          rows.map((row) => ({ ...row, avatarUrl: row.hostAvatarUrl })),
+          this.storageService,
+        );
+
+        return withResolvedAvatars.map((row) => ({
+          roomId: row.roomId,
+          name: row.name,
+          status: row.status,
+          mode: row.mode,
+          hostId: row.hostId,
+          hostName: row.hostDisplayName ?? row.hostUsername,
+          hostAvatarUrl: row.avatarUrl,
+          language: row.language,
+          problemTitle: row.problemTitle ?? null,
+          problemDifficulty: row.problemDifficulty ?? null,
+          participantCount: row.participantCount,
+          maxParticipants: row.maxParticipants,
+          createdAt: row.createdAt,
+        }));
+      },
+    });
+
+    return result;
   }
 
   async getRoom(roomId: string, userId: string): Promise<RoomDetailResult> {
