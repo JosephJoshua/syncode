@@ -39,6 +39,101 @@ const ASSIGNABLE_ROLES: Array<{ value: RoomRole; labelKey: string }> = [
   { value: 'observer', labelKey: 'roleSelect.observer' },
 ];
 
+function PresenceDot({
+  isMediaConnected,
+  isMediaMuted,
+  isActive,
+  size = 'sm',
+}: {
+  isMediaConnected: boolean;
+  isMediaMuted: boolean;
+  isActive: boolean;
+  size?: 'sm' | 'md';
+}) {
+  if (isMediaConnected && isMediaMuted) {
+    const cls =
+      size === 'sm'
+        ? 'absolute -bottom-1 -right-1 flex size-3 items-center justify-center rounded-full border border-card bg-destructive/90'
+        : 'absolute -bottom-1 -right-1 flex size-3.5 items-center justify-center rounded-full border-2 border-card bg-destructive/90';
+    const iconCls = size === 'sm' ? 'size-1.5 text-white' : 'size-2 text-white';
+    return (
+      <span className={cls}>
+        <MicOff className={iconCls} />
+      </span>
+    );
+  }
+  return (
+    <span
+      className={cn(
+        'absolute rounded-full',
+        size === 'sm'
+          ? '-bottom-0.5 -right-0.5 size-2 border border-card'
+          : '-bottom-0.5 -right-0.5 size-2.5 border-2 border-card',
+        isMediaConnected
+          ? 'bg-emerald-400'
+          : isActive
+            ? 'bg-muted-foreground/50'
+            : 'bg-muted-foreground/20',
+      )}
+    />
+  );
+}
+
+function MediaActionsContent({
+  isLocallyMuted,
+  isVideoHidden,
+  localVolume,
+  onLocalMuteToggle,
+  onLocalVolumeChange,
+  onVideoHiddenToggle,
+}: {
+  isLocallyMuted: boolean;
+  isVideoHidden: boolean;
+  localVolume?: number;
+  onLocalMuteToggle?: (muted: boolean) => void;
+  onLocalVolumeChange?: (volume: number) => void;
+  onVideoHiddenToggle?: (hidden: boolean) => void;
+}) {
+  return (
+    <>
+      {onLocalMuteToggle ? (
+        <DropdownMenuItem onSelect={() => onLocalMuteToggle(!isLocallyMuted)}>
+          {isLocallyMuted ? (
+            <Volume2 className="size-3.5 text-muted-foreground" />
+          ) : (
+            <VolumeX className="size-3.5 text-muted-foreground" />
+          )}
+          {isLocallyMuted ? 'Unmute for me' : 'Mute for me'}
+        </DropdownMenuItem>
+      ) : null}
+      {onLocalVolumeChange ? (
+        <div className="flex min-h-9 items-center gap-2 px-3 py-2">
+          <Volume2 className="size-3.5 shrink-0 text-muted-foreground" />
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step="0.05"
+            value={localVolume ?? 1}
+            onChange={(e) => onLocalVolumeChange(Number(e.target.value))}
+            className="h-1 flex-1 cursor-pointer appearance-none rounded-full bg-muted accent-primary"
+            onClick={(e) => e.stopPropagation()}
+          />
+          <span className="w-6 text-right font-mono text-[9px] text-muted-foreground/60">
+            {Math.round((localVolume ?? 1) * 100)}
+          </span>
+        </div>
+      ) : null}
+      {onVideoHiddenToggle ? (
+        <DropdownMenuItem onSelect={() => onVideoHiddenToggle(!isVideoHidden)}>
+          <VideoOff className="size-3.5 text-muted-foreground" />
+          {isVideoHidden ? 'Show video' : 'Hide video'}
+        </DropdownMenuItem>
+      ) : null}
+    </>
+  );
+}
+
 function ConnectionQualityIcon({ quality }: { quality?: string }) {
   if (!quality) return null;
   switch (quality) {
@@ -132,22 +227,12 @@ export function RoomParticipantCard({
             {participant.avatarUrl ? <AvatarImage src={participant.avatarUrl} /> : null}
             <AvatarFallback>{initial}</AvatarFallback>
           </Avatar>
-          {isMediaConnected && isMediaMuted ? (
-            <span className="absolute -bottom-1 -right-1 flex size-3 items-center justify-center rounded-full border border-card bg-destructive/90">
-              <MicOff className="size-1.5 text-white" />
-            </span>
-          ) : (
-            <span
-              className={cn(
-                'absolute -bottom-0.5 -right-0.5 size-2 rounded-full border border-card',
-                isMediaConnected
-                  ? 'bg-emerald-400'
-                  : participant.isActive
-                    ? 'bg-muted-foreground/50'
-                    : 'bg-muted-foreground/20',
-              )}
-            />
-          )}
+          <PresenceDot
+            isMediaConnected={isMediaConnected}
+            isMediaMuted={isMediaMuted}
+            isActive={participant.isActive}
+            size="sm"
+          />
         </div>
         <div className="flex min-w-0 flex-1 items-center gap-2">
           <span className="truncate text-sm text-foreground">
@@ -207,42 +292,14 @@ export function RoomParticipantCard({
                   className="min-w-44 rounded-xl border-border/60"
                 >
                   {hasMediaActions ? (
-                    <>
-                      {onLocalMuteToggle ? (
-                        <DropdownMenuItem onSelect={() => onLocalMuteToggle(!isLocallyMuted)}>
-                          {isLocallyMuted ? (
-                            <Volume2 className="size-3.5 text-muted-foreground" />
-                          ) : (
-                            <VolumeX className="size-3.5 text-muted-foreground" />
-                          )}
-                          {isLocallyMuted ? 'Unmute for me' : 'Mute for me'}
-                        </DropdownMenuItem>
-                      ) : null}
-                      {onLocalVolumeChange ? (
-                        <div className="flex min-h-9 items-center gap-2 px-3 py-2">
-                          <Volume2 className="size-3.5 shrink-0 text-muted-foreground" />
-                          <input
-                            type="range"
-                            min="0"
-                            max="1"
-                            step="0.05"
-                            value={localVolume ?? 1}
-                            onChange={(e) => onLocalVolumeChange(Number(e.target.value))}
-                            className="h-1 flex-1 cursor-pointer appearance-none rounded-full bg-muted accent-primary"
-                            onClick={(e) => e.stopPropagation()}
-                          />
-                          <span className="w-6 text-right font-mono text-[9px] text-muted-foreground/60">
-                            {Math.round((localVolume ?? 1) * 100)}
-                          </span>
-                        </div>
-                      ) : null}
-                      {onVideoHiddenToggle ? (
-                        <DropdownMenuItem onSelect={() => onVideoHiddenToggle(!isVideoHidden)}>
-                          <VideoOff className="size-3.5 text-muted-foreground" />
-                          {isVideoHidden ? 'Show video' : 'Hide video'}
-                        </DropdownMenuItem>
-                      ) : null}
-                    </>
+                    <MediaActionsContent
+                      isLocallyMuted={isLocallyMuted}
+                      isVideoHidden={isVideoHidden}
+                      localVolume={localVolume}
+                      onLocalMuteToggle={onLocalMuteToggle}
+                      onLocalVolumeChange={onLocalVolumeChange}
+                      onVideoHiddenToggle={onVideoHiddenToggle}
+                    />
                   ) : null}
                   {hasManageActions ? (
                     <>
@@ -289,22 +346,12 @@ export function RoomParticipantCard({
             {participant.avatarUrl ? <AvatarImage src={participant.avatarUrl} /> : null}
             <AvatarFallback className="text-sm">{initial}</AvatarFallback>
           </Avatar>
-          {isMediaConnected && isMediaMuted ? (
-            <span className="absolute -bottom-1 -right-1 flex size-3.5 items-center justify-center rounded-full border-2 border-card bg-destructive/90">
-              <MicOff className="size-2 text-white" />
-            </span>
-          ) : (
-            <span
-              className={cn(
-                'absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border-2 border-card',
-                isMediaConnected
-                  ? 'bg-emerald-400'
-                  : participant.isActive
-                    ? 'bg-muted-foreground/50'
-                    : 'bg-muted-foreground/20',
-              )}
-            />
-          )}
+          <PresenceDot
+            isMediaConnected={isMediaConnected}
+            isMediaMuted={isMediaMuted}
+            isActive={participant.isActive}
+            size="md"
+          />
         </div>
 
         <div className="min-w-0 flex-1">
@@ -368,42 +415,14 @@ export function RoomParticipantCard({
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="min-w-44 rounded-xl border-border/60">
               {hasMediaActions ? (
-                <>
-                  {onLocalMuteToggle ? (
-                    <DropdownMenuItem onSelect={() => onLocalMuteToggle(!isLocallyMuted)}>
-                      {isLocallyMuted ? (
-                        <Volume2 className="size-3.5 text-muted-foreground" />
-                      ) : (
-                        <VolumeX className="size-3.5 text-muted-foreground" />
-                      )}
-                      {isLocallyMuted ? 'Unmute for me' : 'Mute for me'}
-                    </DropdownMenuItem>
-                  ) : null}
-                  {onLocalVolumeChange ? (
-                    <div className="flex min-h-9 items-center gap-2 px-3 py-2">
-                      <Volume2 className="size-3.5 shrink-0 text-muted-foreground" />
-                      <input
-                        type="range"
-                        min="0"
-                        max="1"
-                        step="0.05"
-                        value={localVolume ?? 1}
-                        onChange={(e) => onLocalVolumeChange(Number(e.target.value))}
-                        className="h-1 flex-1 cursor-pointer appearance-none rounded-full bg-muted accent-primary"
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                      <span className="w-6 text-right font-mono text-[9px] text-muted-foreground/60">
-                        {Math.round((localVolume ?? 1) * 100)}
-                      </span>
-                    </div>
-                  ) : null}
-                  {onVideoHiddenToggle ? (
-                    <DropdownMenuItem onSelect={() => onVideoHiddenToggle(!isVideoHidden)}>
-                      <VideoOff className="size-3.5 text-muted-foreground" />
-                      {isVideoHidden ? 'Show video' : 'Hide video'}
-                    </DropdownMenuItem>
-                  ) : null}
-                </>
+                <MediaActionsContent
+                  isLocallyMuted={isLocallyMuted}
+                  isVideoHidden={isVideoHidden}
+                  localVolume={localVolume}
+                  onLocalMuteToggle={onLocalMuteToggle}
+                  onLocalVolumeChange={onLocalVolumeChange}
+                  onVideoHiddenToggle={onVideoHiddenToggle}
+                />
               ) : null}
               {hasManageActions ? (
                 <>

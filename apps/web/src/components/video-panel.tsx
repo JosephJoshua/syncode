@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { AnimatePresence, motion, useMotionValue, useSpring } from 'motion/react';
 import { useCallback, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useVideoTrack } from '@/hooks/use-video-track.js';
 
 export interface VideoPanelParticipant {
@@ -32,11 +33,9 @@ function ParticipantTile({
   isSpeaking,
   isLocal,
 }: Omit<VideoPanelParticipant, 'identity'>) {
+  const { t } = useTranslation('rooms');
   const videoRef = useVideoTrack(videoTrack);
-  const initial = displayName
-    .replace(/\s*\(You\)$/, '')
-    .charAt(0)
-    .toUpperCase();
+  const initial = displayName.charAt(0).toUpperCase();
 
   return (
     <div
@@ -71,6 +70,7 @@ function ParticipantTile({
           ) : null}
           <span className="font-mono text-[10px] font-medium text-white/90 drop-shadow-sm">
             {displayName}
+            {isLocal ? <span className="ml-1 text-white/60">{t('lobby.you')}</span> : null}
           </span>
         </div>
       </div>

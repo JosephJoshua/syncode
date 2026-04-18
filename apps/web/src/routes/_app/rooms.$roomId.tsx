@@ -405,7 +405,7 @@ function RoomPage() {
       const me = room?.participants.find((p) => p.userId === currentUserId);
       tiles.push({
         identity: currentUserId,
-        displayName: `${me?.displayName ?? me?.username ?? 'You'} (You)`,
+        displayName: me?.displayName ?? me?.username ?? 'You',
         avatarUrl: me?.avatarUrl ?? null,
         hasVideo: mediaLocalParticipant.hasVideo,
         videoTrack: mediaLocalParticipant.videoTrack,
