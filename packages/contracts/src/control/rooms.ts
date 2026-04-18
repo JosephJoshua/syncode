@@ -308,6 +308,82 @@ export const transitionRoomPhaseResponseSchema = z.object({
 
 export type TransitionRoomPhaseResponse = z.infer<typeof transitionRoomPhaseResponseSchema>;
 
+// ── Browse public rooms ──────────────────────────────────────────────
+
+export const PROBLEM_DIFFICULTIES = ['easy', 'medium', 'hard'] as const;
+
+export type ProblemDifficulty = (typeof PROBLEM_DIFFICULTIES)[number];
+
+export const BROWSEABLE_ROOM_STATUSES = ['waiting', 'coding', 'paused', 'reviewing'] as const;
+
+export type BrowseableRoomStatus = (typeof BROWSEABLE_ROOM_STATUSES)[number];
+
+export const browseRoomsQuerySchema = paginationQuerySchema.extend({
+  status: z
+    .enum(BROWSEABLE_ROOM_STATUSES)
+    .optional()
+    .describe('Filter by high-level browseable room status bucket')
+    .meta({ examples: ['waiting'] }),
+  language: z
+    .enum(SUPPORTED_LANGUAGES)
+    .optional()
+    .describe('Filter by programming language')
+    .meta({ examples: ['python'] }),
+  difficulty: z
+    .enum(PROBLEM_DIFFICULTIES)
+    .optional()
+    .describe('Filter by problem difficulty')
+    .meta({ examples: ['easy'] }),
+  search: z
+    .string()
+    .trim()
+    .min(1)
+    .max(100)
+    .optional()
+    .describe('Free-text search across room name, problem title, and host username')
+    .meta({ examples: ['two sum'] }),
+});
+
+export type BrowseRoomsQuery = z.infer<typeof browseRoomsQuerySchema>;
+
+export const publicRoomSummarySchema = z.object({
+  roomId: z.uuid().describe('Room identifier'),
+  name: z.string().nullable().describe('Room name'),
+  status: z.enum(ROOM_STATUSES).describe('Room status'),
+  mode: z.enum(ROOM_MODES).describe('Room mode'),
+  hostId: z.uuid().describe('Host user ID'),
+  hostName: z.string().describe('Host username'),
+  hostAvatarUrl: z.string().nullable().describe('Host avatar URL'),
+  language: z.enum(SUPPORTED_LANGUAGES).nullable().describe('Programming language'),
+  problemTitle: z.string().nullable().describe('Problem title'),
+  problemDifficulty: z.enum(PROBLEM_DIFFICULTIES).nullable().describe('Problem difficulty'),
+  participantCount: z.number().int().describe('Number of active participants'),
+  maxParticipants: z.number().int().describe('Maximum participants allowed'),
+  createdAt: z.iso.datetime().describe('ISO 8601 creation timestamp'),
+});
+
+export type PublicRoomSummary = z.infer<typeof publicRoomSummarySchema>;
+
+export const browseRoomsResponseSchema = z.object({
+  data: z.array(publicRoomSummarySchema),
+  pagination: paginationSchema,
+});
+
+export type BrowseRoomsResponse = z.infer<typeof browseRoomsResponseSchema>;
+
+// ── Change room language ────────────────────────────────────────────
+
+export const changeRoomLanguageSchema = z
+  .object({
+    language: z
+      .enum(SUPPORTED_LANGUAGES)
+      .describe('Programming language to switch the room to')
+      .meta({ examples: ['python'] }),
+  })
+  .strict();
+
+export type ChangeRoomLanguageInput = z.infer<typeof changeRoomLanguageSchema>;
+
 // ── Media token ──────────────────────────────────────────────────────
 
 export const mediaTokenResponseSchema = z.object({
