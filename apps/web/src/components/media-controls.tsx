@@ -6,7 +6,16 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@syncode/ui';
-import { Check, ChevronDown, Mic, MicOff, TriangleAlert, Video, VideoOff } from 'lucide-react';
+import {
+  Check,
+  ChevronDown,
+  Mic,
+  MicOff,
+  MonitorUp,
+  TriangleAlert,
+  Video,
+  VideoOff,
+} from 'lucide-react';
 import type { LiveKitConnectionState, MediaDeviceOption } from '@/hooks/use-livekit.js';
 import type { VideoFilterSettings } from '@/lib/video-filter-processor.js';
 import { type AudioProcessingSettings, MediaSettingsPanel } from './media-settings-panel.js';
@@ -15,8 +24,11 @@ interface MediaControlsProps {
   connectionState: LiveKitConnectionState;
   isMicrophoneEnabled: boolean;
   isCameraEnabled: boolean;
+  isScreenShareEnabled: boolean;
+  canScreenShare: boolean;
   onToggleMicrophone: () => void;
   onToggleCamera: () => void;
+  onToggleScreenShare: () => void;
   audioInputDevices: MediaDeviceOption[];
   videoInputDevices: MediaDeviceOption[];
   activeAudioDeviceId: string | null;
@@ -33,8 +45,11 @@ export function MediaControls({
   connectionState,
   isMicrophoneEnabled,
   isCameraEnabled,
+  isScreenShareEnabled,
+  canScreenShare,
   onToggleMicrophone,
   onToggleCamera,
+  onToggleScreenShare,
   audioInputDevices,
   videoInputDevices,
   activeAudioDeviceId,
@@ -126,6 +141,27 @@ export function MediaControls({
           />
         ) : null}
       </div>
+
+      {isConnected && canScreenShare ? (
+        <>
+          <div className="mx-px h-3 w-px bg-border/40" />
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-xs"
+            className={cn(
+              'size-6 rounded-md transition-all duration-150',
+              isScreenShareEnabled
+                ? 'bg-primary/15 text-primary hover:bg-primary/25'
+                : 'text-foreground/80 hover:bg-background/80 hover:text-foreground',
+            )}
+            onClick={onToggleScreenShare}
+            aria-label={isScreenShareEnabled ? 'Stop sharing screen' : 'Share screen'}
+          >
+            <MonitorUp className="size-3" />
+          </Button>
+        </>
+      ) : null}
 
       {isConnected ? (
         <>

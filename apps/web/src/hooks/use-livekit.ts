@@ -23,6 +23,8 @@ export interface MediaParticipant {
   isMuted: boolean;
   hasVideo: boolean;
   videoTrack: MediaStreamTrack | null;
+  hasScreenShare: boolean;
+  screenShareTrack: MediaStreamTrack | null;
 }
 
 export interface MediaDeviceOption {
@@ -47,8 +49,10 @@ export interface UseLiveKitResult {
   connectionState: LiveKitConnectionState;
   isMicrophoneEnabled: boolean;
   isCameraEnabled: boolean;
+  isScreenShareEnabled: boolean;
   toggleMicrophone: () => Promise<void>;
   toggleCamera: () => Promise<void>;
+  toggleScreenShare: () => Promise<void>;
   switchDevice: (kind: MediaDeviceKind, deviceId: string) => Promise<void>;
   audioInputDevices: MediaDeviceOption[];
   videoInputDevices: MediaDeviceOption[];
@@ -79,6 +83,17 @@ function mapConnectionState(state: ConnectionState): LiveKitConnectionState {
   }
 }
 
+function participantEqual(a: MediaParticipant, b: MediaParticipant): boolean {
+  return (
+    a.identity === b.identity &&
+    a.isMuted === b.isMuted &&
+    a.hasVideo === b.hasVideo &&
+    a.videoTrack === b.videoTrack &&
+    a.hasScreenShare === b.hasScreenShare &&
+    a.screenShareTrack === b.screenShareTrack
+  );
+}
+
 export function useLiveKit({
   url,
   token,
@@ -88,6 +103,7 @@ export function useLiveKit({
   const [connectionState, setConnectionState] = useState<LiveKitConnectionState>('disconnected');
   const [isMicrophoneEnabled, setIsMicrophoneEnabled] = useState(false);
   const [isCameraEnabled, setIsCameraEnabled] = useState(false);
+  const [isScreenShareEnabled, setIsScreenShareEnabled] = useState(false);
   const [speakingMap, setSpeakingMap] = useState<ReadonlyMap<string, boolean>>(new Map());
   const [remoteParticipants, setRemoteParticipants] = useState<MediaParticipant[]>([]);
   const [localParticipant, setLocalParticipant] = useState<MediaParticipant | null>(null);
@@ -116,21 +132,20 @@ export function useLiveKit({
     const localMediaTrack = localVideo?.isMuted
       ? null
       : (localVideo?.track?.mediaStreamTrack ?? null);
+    const localScreen = room.localParticipant.getTrackPublication(Track.Source.ScreenShare);
+    const localScreenTrack = localScreen?.isMuted
+      ? null
+      : (localScreen?.track?.mediaStreamTrack ?? null);
     const nextLocal: MediaParticipant = {
       identity: room.localParticipant.identity,
       isMuted: !room.localParticipant.isMicrophoneEnabled,
       hasVideo: localMediaTrack !== null,
       videoTrack: localMediaTrack,
+      hasScreenShare: localScreenTrack !== null,
+      screenShareTrack: localScreenTrack,
     };
     setLocalParticipant((prev) => {
-      if (
-        prev &&
-        prev.identity === nextLocal.identity &&
-        prev.isMuted === nextLocal.isMuted &&
-        prev.hasVideo === nextLocal.hasVideo &&
-        prev.videoTrack === nextLocal.videoTrack
-      )
-        return prev;
+      if (prev && participantEqual(prev, nextLocal)) return prev;
       return nextLocal;
     });
 
@@ -138,25 +153,20 @@ export function useLiveKit({
     for (const p of room.remoteParticipants.values()) {
       const videoPub = p.getTrackPublication(Track.Source.Camera);
       const audioPub = p.getTrackPublication(Track.Source.Microphone);
+      const screenPub = p.getTrackPublication(Track.Source.ScreenShare);
       const mediaTrack = videoPub?.isMuted ? null : (videoPub?.track?.mediaStreamTrack ?? null);
+      const screenTrack = screenPub?.isMuted ? null : (screenPub?.track?.mediaStreamTrack ?? null);
       remotes.push({
         identity: p.identity,
         isMuted: !audioPub || audioPub.isMuted,
         hasVideo: mediaTrack !== null,
         videoTrack: mediaTrack,
+        hasScreenShare: screenTrack !== null,
+        screenShareTrack: screenTrack,
       });
     }
     setRemoteParticipants((prev) => {
-      if (
-        prev.length === remotes.length &&
-        prev.every(
-          (p, i) =>
-            p.identity === remotes[i]?.identity &&
-            p.isMuted === remotes[i]?.isMuted &&
-            p.hasVideo === remotes[i]?.hasVideo &&
-            p.videoTrack === remotes[i]?.videoTrack,
-        )
-      )
+      if (prev.length === remotes.length && prev.every((p, i) => participantEqual(p, remotes[i]!)))
         return prev;
       return remotes;
     });
@@ -206,6 +216,7 @@ export function useLiveKit({
     setLocalParticipant(null);
     setIsMicrophoneEnabled(false);
     setIsCameraEnabled(false);
+    setIsScreenShareEnabled(false);
     setAudioInputDevices([]);
     setVideoInputDevices([]);
     setActiveAudioDeviceId(null);
@@ -302,6 +313,7 @@ export function useLiveKit({
       if (disposed) return;
       if (pub.source === Track.Source.Camera) setIsCameraEnabled(true);
       else if (pub.source === Track.Source.Microphone) setIsMicrophoneEnabled(true);
+      else if (pub.source === Track.Source.ScreenShare) setIsScreenShareEnabled(true);
       refreshParticipants();
     };
 
@@ -309,6 +321,7 @@ export function useLiveKit({
       if (disposed) return;
       if (pub.source === Track.Source.Camera) setIsCameraEnabled(false);
       else if (pub.source === Track.Source.Microphone) setIsMicrophoneEnabled(false);
+      else if (pub.source === Track.Source.ScreenShare) setIsScreenShareEnabled(false);
       refreshParticipants();
     };
 
@@ -407,6 +420,20 @@ export function useLiveKit({
     refreshParticipants();
   }, [refreshParticipants]);
 
+  const toggleScreenShare = useCallback(async () => {
+    const room = roomRef.current;
+    if (!room) return;
+    const enabled = room.localParticipant.isScreenShareEnabled;
+    try {
+      await room.localParticipant.setScreenShareEnabled(!enabled, { audio: true });
+      setIsScreenShareEnabled(!enabled);
+      refreshParticipants();
+    } catch {
+      setIsScreenShareEnabled(false);
+      refreshParticipants();
+    }
+  }, [refreshParticipants]);
+
   const switchDevice = useCallback(
     async (kind: MediaDeviceKind, deviceId: string) => {
       const room = roomRef.current;
@@ -482,8 +509,10 @@ export function useLiveKit({
     connectionState,
     isMicrophoneEnabled,
     isCameraEnabled,
+    isScreenShareEnabled,
     toggleMicrophone,
     toggleCamera,
+    toggleScreenShare,
     switchDevice,
     audioInputDevices,
     videoInputDevices,

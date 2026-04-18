@@ -14,10 +14,12 @@ interface IMockRoom {
     identity: string;
     isMicrophoneEnabled: boolean;
     isCameraEnabled: boolean;
+    isScreenShareEnabled: boolean;
     activeDeviceMap: Map<string, string>;
     getTrackPublication: ReturnType<typeof vi.fn>;
     setMicrophoneEnabled: ReturnType<typeof vi.fn>;
     setCameraEnabled: ReturnType<typeof vi.fn>;
+    setScreenShareEnabled: ReturnType<typeof vi.fn>;
   };
   remoteParticipants: Map<string, unknown>;
   switchActiveDevice: ReturnType<typeof vi.fn>;
@@ -59,7 +61,7 @@ vi.mock('livekit-client', () => {
   } as const;
 
   const Track = {
-    Source: { Camera: 'camera', Microphone: 'microphone' } as const,
+    Source: { Camera: 'camera', Microphone: 'microphone', ScreenShare: 'screen_share' } as const,
     Kind: { Audio: 'audio', Video: 'video' } as const,
   };
 
@@ -74,10 +76,12 @@ vi.mock('livekit-client', () => {
         identity: 'local-user',
         isMicrophoneEnabled: false,
         isCameraEnabled: false,
+        isScreenShareEnabled: false,
         activeDeviceMap: new Map<string, string>(),
         getTrackPublication: vi.fn().mockReturnValue(null),
         setMicrophoneEnabled: vi.fn().mockResolvedValue(undefined),
         setCameraEnabled: vi.fn().mockResolvedValue(undefined),
+        setScreenShareEnabled: vi.fn().mockResolvedValue(undefined),
       },
       remoteParticipants: new Map(),
       switchActiveDevice: vi.fn().mockResolvedValue(undefined),
@@ -458,5 +462,45 @@ describe('useLiveKit', () => {
     expect(result.current.activeVideoDeviceId).toBeNull();
     expect(result.current.speakingMap.size).toBe(0);
     expect(result.current.remoteParticipants).toEqual([]);
+    expect(result.current.isScreenShareEnabled).toBe(false);
+  });
+
+  // -----------------------------------------------------------------------
+  // 10. Screen share
+  // -----------------------------------------------------------------------
+
+  it('GIVEN connected WHEN toggleScreenShare called THEN isScreenShareEnabled flips', async () => {
+    const { result } = renderHook(() => useLiveKit(defaultOptions()));
+    await flushPromises();
+
+    expect(result.current.isScreenShareEnabled).toBe(false);
+
+    await act(async () => {
+      await result.current.toggleScreenShare();
+    });
+
+    expect(result.current.isScreenShareEnabled).toBe(true);
+
+    latestRoom.current!.localParticipant.isScreenShareEnabled = true;
+    await act(async () => {
+      await result.current.toggleScreenShare();
+    });
+
+    expect(result.current.isScreenShareEnabled).toBe(false);
+  });
+
+  it('GIVEN screen share fails WHEN toggleScreenShare called THEN isScreenShareEnabled stays false', async () => {
+    const { result } = renderHook(() => useLiveKit(defaultOptions()));
+    await flushPromises();
+
+    latestRoom.current!.localParticipant.setScreenShareEnabled.mockRejectedValueOnce(
+      new Error('user cancelled'),
+    );
+
+    await act(async () => {
+      await result.current.toggleScreenShare();
+    });
+
+    expect(result.current.isScreenShareEnabled).toBe(false);
   });
 });

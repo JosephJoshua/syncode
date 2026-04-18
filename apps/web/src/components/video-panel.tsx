@@ -3,6 +3,7 @@ import {
   GripHorizontal,
   Maximize2,
   Minimize2,
+  MonitorUp,
   PanelRight,
   PanelRightClose,
   Video,
@@ -16,6 +17,8 @@ export interface VideoPanelParticipant {
   avatarUrl: string | null;
   hasVideo: boolean;
   videoTrack: MediaStreamTrack | null;
+  hasScreenShare: boolean;
+  screenShareTrack: MediaStreamTrack | null;
   isSpeaking: boolean;
   isLocal: boolean;
 }
@@ -84,8 +87,51 @@ function ParticipantTile({
   );
 }
 
+function ScreenShareTile({
+  displayName,
+  screenShareTrack,
+}: {
+  displayName: string;
+  screenShareTrack: MediaStreamTrack;
+}) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    const el = videoRef.current;
+    if (!el) return;
+    const stream = new MediaStream([screenShareTrack]);
+    el.srcObject = stream;
+    return () => {
+      el.srcObject = null;
+    };
+  }, [screenShareTrack]);
+
+  return (
+    <div className="relative overflow-hidden rounded-lg bg-black/95 ring-1 ring-primary/30">
+      <video
+        ref={videoRef}
+        autoPlay
+        playsInline
+        muted
+        className="w-full object-contain"
+        style={{ maxHeight: '40vh' }}
+      />
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-2.5 pb-2 pt-5">
+        <div className="flex items-center gap-1.5">
+          <MonitorUp className="size-3 text-primary" />
+          <span className="font-mono text-[10px] font-medium text-white/90 drop-shadow-sm">
+            {displayName}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function pickActiveTile(tiles: VideoPanelParticipant[]): VideoPanelParticipant | null {
   if (tiles.length === 0) return null;
+  const screenSharer = tiles.find((t) => t.hasScreenShare && t.screenShareTrack);
+  if (screenSharer) return screenSharer;
   const speaking = tiles.find((t) => t.isSpeaking && !t.isLocal);
   if (speaking) return speaking;
   const remote = tiles.find((t) => !t.isLocal);
@@ -251,13 +297,20 @@ export function FloatingVideoPanel({
             <AnimatePresence mode="popLayout">
               {activeTile ? (
                 <motion.div
-                  key={activeTile.identity}
+                  key={`${activeTile.identity}-${activeTile.hasScreenShare ? 'screen' : 'cam'}`}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
                   transition={{ duration: 0.2 }}
                 >
-                  <ParticipantTile {...activeTile} />
+                  {activeTile.hasScreenShare && activeTile.screenShareTrack ? (
+                    <ScreenShareTile
+                      displayName={activeTile.displayName}
+                      screenShareTrack={activeTile.screenShareTrack}
+                    />
+                  ) : (
+                    <ParticipantTile {...activeTile} />
+                  )}
                 </motion.div>
               ) : null}
             </AnimatePresence>
@@ -275,7 +328,10 @@ interface DockedVideoPanelProps {
 
 export function DockedVideoPanel({ tiles, onUndock }: DockedVideoPanelProps) {
   const hasAnyVideo = tiles.some((t) => t.hasVideo);
-  if (tiles.length === 0 || (tiles.length <= 1 && !hasAnyVideo)) return null;
+  const hasAnyScreenShare = tiles.some((t) => t.hasScreenShare);
+  if (tiles.length === 0 || (tiles.length <= 1 && !hasAnyVideo && !hasAnyScreenShare)) return null;
+
+  const screenSharers = tiles.filter((t) => t.hasScreenShare && t.screenShareTrack);
 
   return (
     <div className="shrink-0 border-b border-border p-2 @container">
@@ -297,10 +353,19 @@ export function DockedVideoPanel({ tiles, onUndock }: DockedVideoPanelProps) {
           <PanelRightClose className="size-2.5" />
         </Button>
       </div>
-      <div className="grid grid-cols-1 gap-1 @[280px]:grid-cols-2">
-        {tiles.map((tile) => (
-          <ParticipantTile key={tile.identity} {...tile} />
+      <div className="flex flex-col gap-1">
+        {screenSharers.map((tile) => (
+          <ScreenShareTile
+            key={`screen-${tile.identity}`}
+            displayName={tile.displayName}
+            screenShareTrack={tile.screenShareTrack!}
+          />
         ))}
+        <div className="grid grid-cols-1 gap-1 @[280px]:grid-cols-2">
+          {tiles.map((tile) => (
+            <ParticipantTile key={tile.identity} {...tile} />
+          ))}
+        </div>
       </div>
     </div>
   );

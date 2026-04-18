@@ -291,8 +291,10 @@ function RoomPage() {
     connectionState: mediaConnectionState,
     isMicrophoneEnabled,
     isCameraEnabled,
+    isScreenShareEnabled,
     toggleMicrophone,
     toggleCamera,
+    toggleScreenShare,
     switchDevice,
     audioInputDevices,
     videoInputDevices,
@@ -341,8 +343,11 @@ function RoomPage() {
       connectionState={mediaConnectionState}
       isMicrophoneEnabled={isMicrophoneEnabled}
       isCameraEnabled={isCameraEnabled}
+      isScreenShareEnabled={isScreenShareEnabled}
+      canScreenShare={room?.myCapabilities.includes('media:screenshare') ?? false}
       onToggleMicrophone={() => void toggleMicrophone()}
       onToggleCamera={() => void toggleCamera()}
+      onToggleScreenShare={() => void toggleScreenShare()}
       audioInputDevices={audioInputDevices}
       videoInputDevices={videoInputDevices}
       activeAudioDeviceId={activeAudioDeviceId}
@@ -370,6 +375,8 @@ function RoomPage() {
         avatarUrl: me?.avatarUrl ?? null,
         hasVideo: mediaLocalParticipant.hasVideo,
         videoTrack: mediaLocalParticipant.videoTrack,
+        hasScreenShare: mediaLocalParticipant.hasScreenShare,
+        screenShareTrack: mediaLocalParticipant.screenShareTrack,
         isSpeaking: speakingMap.get(currentUserId) ?? false,
         isLocal: true,
       });
@@ -383,6 +390,8 @@ function RoomPage() {
         avatarUrl: p?.avatarUrl ?? null,
         hasVideo: mp.hasVideo,
         videoTrack: mp.videoTrack,
+        hasScreenShare: mp.hasScreenShare,
+        screenShareTrack: mp.screenShareTrack,
         isSpeaking: speakingMap.get(mp.identity) ?? false,
         isLocal: false,
       });
