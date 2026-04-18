@@ -43,6 +43,7 @@ export function createMockCollabClient() {
     kickUser: vi.fn(),
     updateRoomState: vi.fn().mockResolvedValue({ success: true }),
     broadcastParticipantReady: vi.fn().mockResolvedValue({ success: true }),
+    changeLanguage: vi.fn().mockResolvedValue({ success: true }),
     healthCheck: vi.fn(),
   };
 }

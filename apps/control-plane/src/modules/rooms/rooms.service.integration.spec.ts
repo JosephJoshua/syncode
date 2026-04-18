@@ -1059,3 +1059,149 @@ describe('toggleReady', () => {
     await expect(service.toggleReady(room.id, stranger.id)).rejects.toThrow(NotFoundException);
   });
 });
+
+describe('changeLanguage', () => {
+  it('GIVEN a candidate participant WHEN switching language THEN rooms.language updated AND response reflects new language', async () => {
+    const host = await insertUser(db);
+    const candidate = await insertUser(db);
+    const room = await insertRoom(db, host.id, { status: 'coding', language: 'python' });
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+    await insertParticipant(db, room.id, candidate.id, 'candidate');
+
+    const result = await service.changeLanguage(room.id, candidate.id, 'javascript');
+
+    expect(result.language).toBe('javascript');
+    const [updated] = await db.select().from(rooms).where(eq(rooms.id, room.id));
+    expect(updated!.language).toBe('javascript');
+  });
+
+  it('GIVEN an interviewer participant WHEN switching language THEN succeeds', async () => {
+    const host = await insertUser(db);
+    const candidate = await insertUser(db);
+    const room = await insertRoom(db, host.id, { status: 'coding', language: 'python' });
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+    await insertParticipant(db, room.id, candidate.id, 'candidate');
+
+    const result = await service.changeLanguage(room.id, host.id, 'typescript');
+
+    expect(result.language).toBe('typescript');
+    const [updated] = await db.select().from(rooms).where(eq(rooms.id, room.id));
+    expect(updated!.language).toBe('typescript');
+  });
+
+  it('GIVEN an observer participant (non-host) WHEN switching language THEN ForbiddenException with ROOM_PERMISSION_DENIED', async () => {
+    const host = await insertUser(db);
+    const candidate = await insertUser(db);
+    const observer = await insertUser(db);
+    const room = await insertRoom(db, host.id, { status: 'coding', language: 'python' });
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+    await insertParticipant(db, room.id, candidate.id, 'candidate');
+    await insertParticipant(db, room.id, observer.id, 'observer');
+
+    await expect(service.changeLanguage(room.id, observer.id, 'javascript')).rejects.toMatchObject({
+      response: expect.objectContaining({ code: ERROR_CODES.ROOM_PERMISSION_DENIED }),
+    });
+    await expect(service.changeLanguage(room.id, observer.id, 'javascript')).rejects.toThrow(
+      ForbiddenException,
+    );
+
+    const [unchanged] = await db.select().from(rooms).where(eq(rooms.id, room.id));
+    expect(unchanged!.language).toBe('python');
+  });
+
+  it('GIVEN a finished room WHEN switching THEN BadRequestException with ROOM_INVALID_STATE', async () => {
+    const host = await insertUser(db);
+    const candidate = await insertUser(db);
+    const room = await insertRoom(db, host.id, { status: 'finished', language: 'python' });
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+    await insertParticipant(db, room.id, candidate.id, 'candidate');
+
+    await expect(service.changeLanguage(room.id, candidate.id, 'javascript')).rejects.toMatchObject(
+      {
+        response: expect.objectContaining({ code: ERROR_CODES.ROOM_INVALID_STATE }),
+      },
+    );
+    await expect(service.changeLanguage(room.id, candidate.id, 'javascript')).rejects.toThrow(
+      BadRequestException,
+    );
+
+    const [unchanged] = await db.select().from(rooms).where(eq(rooms.id, room.id));
+    expect(unchanged!.language).toBe('python');
+  });
+
+  it('GIVEN a non-participant WHEN switching THEN ForbiddenException with ROOM_ACCESS_DENIED', async () => {
+    const host = await insertUser(db);
+    const stranger = await insertUser(db);
+    const room = await insertRoom(db, host.id, { status: 'coding', language: 'python' });
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+
+    await expect(service.changeLanguage(room.id, stranger.id, 'javascript')).rejects.toMatchObject({
+      response: expect.objectContaining({ code: ERROR_CODES.ROOM_ACCESS_DENIED }),
+    });
+    await expect(service.changeLanguage(room.id, stranger.id, 'javascript')).rejects.toThrow(
+      ForbiddenException,
+    );
+  });
+
+  it('GIVEN a host who is currently an observer WHEN switching THEN succeeds (host override)', async () => {
+    const host = await insertUser(db);
+    const candidate = await insertUser(db);
+    const room = await insertRoom(db, host.id, { status: 'coding', language: 'python' });
+    // host is stored as observer here to exercise host override
+    await insertParticipant(db, room.id, host.id, 'observer');
+    await insertParticipant(db, room.id, candidate.id, 'candidate');
+
+    const result = await service.changeLanguage(room.id, host.id, 'typescript');
+
+    expect(result.language).toBe('typescript');
+    const [updated] = await db.select().from(rooms).where(eq(rooms.id, room.id));
+    expect(updated!.language).toBe('typescript');
+  });
+
+  it('GIVEN same language as current WHEN switching THEN idempotent — response language equals input; no DB update side-effects observable', async () => {
+    const host = await insertUser(db);
+    const candidate = await insertUser(db);
+    const room = await insertRoom(db, host.id, { status: 'coding', language: 'python' });
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+    await insertParticipant(db, room.id, candidate.id, 'candidate');
+
+    const [before] = await db.select().from(rooms).where(eq(rooms.id, room.id));
+
+    const result = await service.changeLanguage(room.id, candidate.id, 'python');
+
+    expect(result.language).toBe('python');
+    const [after] = await db.select().from(rooms).where(eq(rooms.id, room.id));
+    expect(after!.language).toBe('python');
+    // No observable change — updatedAt stays the same since we skipped the UPDATE.
+    expect(after!.updatedAt).toEqual(before!.updatedAt);
+  });
+
+  it('GIVEN collab-plane throws WHEN switching THEN DB is still updated AND response reflects new language (best-effort broadcast)', async () => {
+    const host = await insertUser(db);
+    const candidate = await insertUser(db);
+    const room = await insertRoom(db, host.id, { status: 'coding', language: 'python' });
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+    await insertParticipant(db, room.id, candidate.id, 'candidate');
+
+    mockCollabClient.changeLanguage.mockRejectedValueOnce(new Error('boom'));
+
+    const result = await service.changeLanguage(room.id, candidate.id, 'javascript');
+
+    expect(result.language).toBe('javascript');
+    const [updated] = await db.select().from(rooms).where(eq(rooms.id, room.id));
+    expect(updated!.language).toBe('javascript');
+  });
+
+  it('GIVEN a non-existent room WHEN switching THEN NotFoundException with ROOM_NOT_FOUND', async () => {
+    const user = await insertUser(db);
+
+    await expect(
+      service.changeLanguage('00000000-0000-0000-0000-000000000000', user.id, 'python'),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({ code: ERROR_CODES.ROOM_NOT_FOUND }),
+    });
+    await expect(
+      service.changeLanguage('00000000-0000-0000-0000-000000000000', user.id, 'python'),
+    ).rejects.toThrow(NotFoundException);
+  });
+});

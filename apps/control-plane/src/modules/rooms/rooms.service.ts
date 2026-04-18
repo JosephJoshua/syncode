@@ -46,6 +46,7 @@ import {
   users,
 } from '@syncode/db';
 import {
+  hasResolvedRoomPermission,
   INVITE_CODE_CHARSET,
   INVITE_CODE_LENGTH,
   INVITE_CODE_MAX_RETRIES,
@@ -56,6 +57,7 @@ import {
   RoomRole,
   RoomStatus,
   resolveRoomPermissions,
+  type SupportedLanguage,
 } from '@syncode/shared';
 import {
   type IMediaService,
@@ -758,6 +760,75 @@ export class RoomsService {
     });
 
     void this.broadcastParticipantReady(roomId, userId, newReady);
+
+    return this.getRoom(roomId, userId);
+  }
+
+  async changeLanguage(
+    roomId: string,
+    userId: string,
+    language: SupportedLanguage,
+  ): Promise<RoomDetailResult> {
+    const prevLanguage = await this.db.transaction(async (tx) => {
+      const [room] = await tx.select().from(rooms).where(eq(rooms.id, roomId)).for('update');
+      if (!room) {
+        throw new NotFoundException({
+          message: 'Room not found',
+          code: ERROR_CODES.ROOM_NOT_FOUND,
+        });
+      }
+
+      if (room.status === RoomStatus.FINISHED) {
+        throw new BadRequestException({
+          message: 'Cannot change language in a finished room',
+          code: ERROR_CODES.ROOM_INVALID_STATE,
+        });
+      }
+
+      const [participant] = await tx
+        .select({ role: roomParticipants.role, isActive: roomParticipants.isActive })
+        .from(roomParticipants)
+        .where(and(eq(roomParticipants.roomId, roomId), eq(roomParticipants.userId, userId)));
+
+      if (!participant?.isActive) {
+        throw new ForbiddenException({
+          message: 'Not a participant of this room',
+          code: ERROR_CODES.ROOM_ACCESS_DENIED,
+        });
+      }
+
+      const role = this.normalizeParticipantRole(
+        room.mode as RoomMode,
+        participant.role,
+        room.hostId,
+        userId,
+      );
+      const isHost = room.hostId === userId;
+
+      if (!hasResolvedRoomPermission(role, 'code:change-language', { isHost })) {
+        throw new ForbiddenException({
+          message: 'You do not have permission to change the language',
+          code: ERROR_CODES.ROOM_PERMISSION_DENIED,
+        });
+      }
+
+      if (room.language === language) {
+        return room.language;
+      }
+
+      await tx.update(rooms).set({ language }).where(eq(rooms.id, roomId));
+      return room.language;
+    });
+
+    if (prevLanguage !== language) {
+      try {
+        await this.collabClient.changeLanguage({ roomId, language, changedBy: userId });
+      } catch (err) {
+        this.logger.warn(
+          `changeLanguage broadcast failed for ${roomId}: ${(err as Error).message}`,
+        );
+      }
+    }
 
     return this.getRoom(roomId, userId);
   }
