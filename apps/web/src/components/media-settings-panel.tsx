@@ -83,6 +83,7 @@ function useDeviceProbe(
     if (!open) {
       setProbed(null);
       setDenied(false);
+      setProbing(false);
       return;
     }
 

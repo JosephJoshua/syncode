@@ -37,10 +37,10 @@ const envSchema = z
     LIVEKIT_API_KEY: z.string().min(1),
     LIVEKIT_API_SECRET: z.string().min(1),
     LIVEKIT_URL: z.url(),
-    LIVEKIT_CLIENT_URL: z.string().optional(),
+    LIVEKIT_CLIENT_URL: z.url().optional(),
 
     COLLAB_PLANE_URL: z.url().default('http://localhost:3001'),
-    COLLAB_PLANE_CLIENT_URL: z.string().optional(),
+    COLLAB_PLANE_CLIENT_URL: z.url().optional(),
 
     USE_EXECUTION_STUB: booleanEnv.default(false),
     USE_AI_STUB: booleanEnv.default(false),

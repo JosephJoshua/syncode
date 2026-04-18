@@ -642,13 +642,18 @@ export function useLiveKit({
     }) => {
       const room = roomRef.current;
       if (!room || !room.localParticipant.isMicrophoneEnabled) return;
-      await room.localParticipant.setMicrophoneEnabled(false);
-      await room.localParticipant.setMicrophoneEnabled(true, {
-        noiseSuppression: settings.noiseSuppression,
-        echoCancellation: settings.echoCancellation,
-        autoGainControl: settings.autoGainControl,
-      });
-      setIsMicrophoneEnabled(true);
+      try {
+        await room.localParticipant.setMicrophoneEnabled(false);
+        await room.localParticipant.setMicrophoneEnabled(true, {
+          noiseSuppression: settings.noiseSuppression,
+          echoCancellation: settings.echoCancellation,
+          autoGainControl: settings.autoGainControl,
+        });
+        setIsMicrophoneEnabled(true);
+      } catch (err) {
+        console.warn('[LiveKit] Failed to update audio processing:', err);
+        setIsMicrophoneEnabled(room.localParticipant.isMicrophoneEnabled);
+      }
     },
     [],
   );

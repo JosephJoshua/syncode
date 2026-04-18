@@ -256,9 +256,12 @@ function RoomPage() {
     if (room.status === 'finished') return;
     if (mediaCredsRef.current) return;
 
+    let disposed = false;
+
     const fetchToken = () => {
       api(CONTROL_API.ROOMS.MEDIA_TOKEN, { params: { id: roomId } })
         .then((result) => {
+          if (disposed) return;
           mediaCredsRef.current = { token: result.token, url: result.url };
           setMediaReady(true);
 
@@ -266,11 +269,14 @@ function RoomPage() {
           const refreshIn = Math.max(expiresAt - Date.now() - 5 * 60 * 1000, 60_000);
           if (mediaTokenTimerRef.current) clearTimeout(mediaTokenTimerRef.current);
           mediaTokenTimerRef.current = setTimeout(() => {
+            if (disposed) return;
             mediaCredsRef.current = null;
             setMediaReady(false);
+            fetchToken();
           }, refreshIn);
         })
         .catch((err) => {
+          if (disposed) return;
           console.warn('[LiveKit] Failed to fetch media token:', err);
         });
     };
@@ -278,6 +284,7 @@ function RoomPage() {
     fetchToken();
 
     return () => {
+      disposed = true;
       if (mediaTokenTimerRef.current) {
         clearTimeout(mediaTokenTimerRef.current);
         mediaTokenTimerRef.current = null;
