@@ -116,6 +116,7 @@ export function useLiveKit({
   const audioElementsRef = useRef<Map<string, HTMLAudioElement>>(new Map());
   const micEnabledOnceRef = useRef(false);
   const videoProcessorRef = useRef<VideoFilterProcessor | null>(null);
+  const pendingVideoFilterRef = useRef<VideoFilterSettings | null>(null);
 
   const audioProcessingRef = useRef(audioProcessing);
   audioProcessingRef.current = audioProcessing;
@@ -311,9 +312,20 @@ export function useLiveKit({
 
     const onLocalTrackPublished = (pub: LocalTrackPublication) => {
       if (disposed) return;
-      if (pub.source === Track.Source.Camera) setIsCameraEnabled(true);
-      else if (pub.source === Track.Source.Microphone) setIsMicrophoneEnabled(true);
-      else if (pub.source === Track.Source.ScreenShare) setIsScreenShareEnabled(true);
+      if (pub.source === Track.Source.Camera) {
+        setIsCameraEnabled(true);
+        const pending = pendingVideoFilterRef.current;
+        if (pending && (pending.brightness !== 1 || pending.contrast !== 1) && pub.track) {
+          const processor = new VideoFilterProcessor();
+          processor.updateSettings(pending);
+          videoProcessorRef.current = processor;
+          void pub.track.setProcessor(processor, true);
+        }
+      } else if (pub.source === Track.Source.Microphone) {
+        setIsMicrophoneEnabled(true);
+      } else if (pub.source === Track.Source.ScreenShare) {
+        setIsScreenShareEnabled(true);
+      }
       refreshParticipants();
     };
 
@@ -406,7 +418,21 @@ export function useLiveKit({
     const room = roomRef.current;
     if (!room) return;
     const enabled = room.localParticipant.isMicrophoneEnabled;
-    await room.localParticipant.setMicrophoneEnabled(!enabled);
+    if (enabled) {
+      await room.localParticipant.setMicrophoneEnabled(false);
+    } else {
+      const ap = audioProcessingRef.current;
+      await room.localParticipant.setMicrophoneEnabled(
+        true,
+        ap
+          ? {
+              noiseSuppression: ap.noiseSuppression,
+              echoCancellation: ap.echoCancellation,
+              autoGainControl: ap.autoGainControl,
+            }
+          : undefined,
+      );
+    }
     setIsMicrophoneEnabled(!enabled);
     micEnabledOnceRef.current = true;
   }, []);
@@ -459,10 +485,12 @@ export function useLiveKit({
   }, []);
 
   const setVideoFilter = useCallback(async (settings: VideoFilterSettings) => {
+    const isDefault = settings.brightness === 1 && settings.contrast === 1;
+    pendingVideoFilterRef.current = isDefault ? null : settings;
+
     const room = roomRef.current;
     if (!room) return;
 
-    const isDefault = settings.brightness === 1 && settings.contrast === 1;
     const cameraPub = room.localParticipant.getTrackPublication(Track.Source.Camera);
 
     if (isDefault) {
