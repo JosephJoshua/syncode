@@ -4,6 +4,7 @@ import {
   type IControlPlaneCallbackClient,
   type SnapshotTrigger,
 } from '@syncode/contracts';
+import type { SupportedLanguage } from '@syncode/shared';
 import { RoomRegistry } from './room-registry.js';
 import { YjsDocumentStore } from './yjs-document-store.js';
 
@@ -59,6 +60,10 @@ export class SnapshotScheduler implements OnModuleDestroy {
         roomId,
         snapshot: Array.from(snapshot),
         code,
+        // Registry stores the raw string fed from typed SupportedLanguage inputs
+        // (CreateDocumentRequest.initialLanguage / ChangeLanguageRequest.language).
+        // The contracts' internal interfaces use `string`, so narrow here.
+        language: language as SupportedLanguage,
         timestamp: Date.now(),
         trigger,
       });

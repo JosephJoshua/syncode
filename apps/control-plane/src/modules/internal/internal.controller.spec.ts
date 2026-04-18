@@ -51,6 +51,7 @@ describe('InternalController', () => {
       roomId: 'room-123',
       snapshot: [1, 2, 3],
       code: 'const x = 1;',
+      language: 'python',
       timestamp: 1712500000000,
       trigger: 'periodic',
     };
@@ -81,6 +82,7 @@ describe('InternalController', () => {
       roomId: 'room-456',
       snapshot: [4, 5, 6],
       code: 'let y = 2;',
+      language: 'javascript',
       timestamp: 1712500001000,
       trigger: 'submission',
     };
@@ -121,15 +123,17 @@ describe('InternalController', () => {
     expect(result).toEqual({ success: false });
   });
 
-  it('GIVEN valid snapshot with session WHEN handleSnapshotReady THEN inserts into DB and returns success', async () => {
+  it('GIVEN payload language differs from session language WHEN handleSnapshotReady THEN persists the payload language (reflects mid-session switch)', async () => {
     const mocks = createMocks();
+    // Session was started in typescript; user has since switched to python.
     mocks.db.limit.mockResolvedValueOnce([{ id: 'session-1', language: 'typescript' }]);
     const controller = await createController(mocks);
 
     const payload: SnapshotReadyPayload = {
       roomId: 'room-123',
       snapshot: [1, 2, 3],
-      code: 'const x = 1;',
+      code: 'print(1)',
+      language: 'python',
       timestamp: 1712500000000,
       trigger: 'periodic',
     };
@@ -142,8 +146,8 @@ describe('InternalController', () => {
       expect.objectContaining({
         sessionId: 'session-1',
         roomId: 'room-123',
-        code: 'const x = 1;',
-        language: 'typescript',
+        code: 'print(1)',
+        language: 'python',
         trigger: 'periodic',
       }),
     );
@@ -158,6 +162,7 @@ describe('InternalController', () => {
       roomId: 'room-123',
       snapshot: [1, 2, 3],
       code: 'const x = 1;',
+      language: 'typescript',
       timestamp: 1712500000000,
       trigger: 'periodic',
     };

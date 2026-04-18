@@ -38,7 +38,7 @@ export class InternalController {
   @ApiExcludeEndpoint()
   async handleSnapshotReady(@Body() payload: SnapshotReadyDto): Promise<{ success: boolean }> {
     try {
-      const { roomId, snapshot, code, timestamp, trigger } = payload;
+      const { roomId, snapshot, code, language, timestamp, trigger } = payload;
 
       // S3 upload (binary for reconstruction)
       const snapshotBuffer = Buffer.from(snapshot);
@@ -57,12 +57,21 @@ export class InternalController {
         .where(eq(sessions.roomId, roomId))
         .limit(1);
 
-      if (session?.language) {
+      // Prefer the payload language (reflects mid-session switches); fall back to
+      // the session's initial language only if the payload omitted it.
+      const persistedLanguage = language ?? session?.language ?? null;
+
+      if (session && persistedLanguage) {
+        if (!language) {
+          this.logger.warn(
+            `Snapshot payload for room ${roomId} missing language; falling back to session.language=${session.language}`,
+          );
+        }
         await this.db.insert(codeSnapshots).values({
           sessionId: session.id,
           roomId,
           code,
-          language: session.language,
+          language: persistedLanguage,
           trigger,
           linesOfCode: code ? code.split('\n').length : 0,
           createdAt: new Date(timestamp),

@@ -160,6 +160,10 @@ export class CollaborationService implements OnModuleDestroy {
       return { success: false };
     }
 
+    // Update the registry BEFORE broadcasting so a concurrent periodic snapshot
+    // reads the new active language rather than the old one.
+    this.roomRegistry.updateLanguage(request.roomId, request.language);
+
     this.broadcastJson(room, {
       type: COLLAB_WS_EVENTS.LANGUAGE_CHANGE,
       data: {
@@ -168,8 +172,6 @@ export class CollaborationService implements OnModuleDestroy {
       },
       timestamp: Date.now(),
     });
-
-    this.roomRegistry.updateLanguage(request.roomId, request.language);
 
     this.logger.debug(
       `Language change broadcast for room ${request.roomId}: language=${request.language}`,

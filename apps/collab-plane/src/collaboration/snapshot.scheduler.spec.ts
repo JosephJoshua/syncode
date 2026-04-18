@@ -42,6 +42,7 @@ describe('SnapshotScheduler', () => {
           trigger: 'periodic',
           snapshot: expect.any(Array),
           code: 'const x = 1;',
+          language: 'python',
           timestamp: expect.any(Number),
         }),
       );
@@ -65,7 +66,7 @@ describe('SnapshotScheduler', () => {
       await scheduler.takeSnapshot('room-1', 'periodic');
 
       expect(callbackClient.notifySnapshotReady).toHaveBeenCalledWith(
-        expect.objectContaining({ code: 'console.log(2)' }),
+        expect.objectContaining({ code: 'console.log(2)', language: 'javascript' }),
       );
     });
 

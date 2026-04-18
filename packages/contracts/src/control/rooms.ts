@@ -338,7 +338,7 @@ export const browseRoomsQuerySchema = paginationQuerySchema.extend({
     .min(1)
     .max(100)
     .optional()
-    .describe('Free-text search across room name, problem title, and host username')
+    .describe('Case-insensitive substring match on problem title')
     .meta({ examples: ['two sum'] }),
 });
 

@@ -1,3 +1,4 @@
+import { SUPPORTED_LANGUAGES } from '@syncode/shared';
 import { z } from 'zod';
 import { defineRoute } from '../route-utils.js';
 
@@ -7,6 +8,9 @@ export const snapshotReadyPayloadSchema = z
     roomId: z.uuid().describe('Room identifier'),
     snapshot: z.array(z.number()).describe('Binary snapshot as JSON array of bytes'),
     code: z.string().describe('Decoded document text content for the active language'),
+    language: z
+      .enum(SUPPORTED_LANGUAGES)
+      .describe('Active programming language at the moment of the snapshot'),
     timestamp: z.number().int().positive().describe('Epoch timestamp (ms)'),
     trigger: z
       .enum(['periodic', 'phase_change', 'submission', 'session_end'])
