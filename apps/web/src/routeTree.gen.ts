@@ -20,6 +20,7 @@ import { Route as AppBookmarksRouteImport } from './routes/_app/bookmarks'
 import { Route as AppRoomsIndexRouteImport } from './routes/_app/rooms.index'
 import { Route as AppProblemsIndexRouteImport } from './routes/_app/problems.index'
 import { Route as AppRoomsCreateRouteImport } from './routes/_app/rooms.create'
+import { Route as AppRoomsBrowseRouteImport } from './routes/_app/rooms.browse'
 import { Route as AppRoomsRoomIdRouteImport } from './routes/_app/rooms.$roomId'
 import { Route as AppProblemsProblemIdRouteImport } from './routes/_app/problems.$problemId'
 import { Route as AppSessionsSessionIdFeedbackRouteImport } from './routes/_app/sessions.$sessionId.feedback'
@@ -77,6 +78,11 @@ const AppRoomsCreateRoute = AppRoomsCreateRouteImport.update({
   path: '/rooms/create',
   getParentRoute: () => AppRouteRoute,
 } as any)
+const AppRoomsBrowseRoute = AppRoomsBrowseRouteImport.update({
+  id: '/rooms/browse',
+  path: '/rooms/browse',
+  getParentRoute: () => AppRouteRoute,
+} as any)
 const AppRoomsRoomIdRoute = AppRoomsRoomIdRouteImport.update({
   id: '/rooms/$roomId',
   path: '/rooms/$roomId',
@@ -103,6 +109,7 @@ export interface FileRoutesByFullPath {
   '/register': typeof PublicRegisterRoute
   '/problems/$problemId': typeof AppProblemsProblemIdRoute
   '/rooms/$roomId': typeof AppRoomsRoomIdRoute
+  '/rooms/browse': typeof AppRoomsBrowseRoute
   '/rooms/create': typeof AppRoomsCreateRoute
   '/problems/': typeof AppProblemsIndexRoute
   '/rooms/': typeof AppRoomsIndexRoute
@@ -117,6 +124,7 @@ export interface FileRoutesByTo {
   '/register': typeof PublicRegisterRoute
   '/problems/$problemId': typeof AppProblemsProblemIdRoute
   '/rooms/$roomId': typeof AppRoomsRoomIdRoute
+  '/rooms/browse': typeof AppRoomsBrowseRoute
   '/rooms/create': typeof AppRoomsCreateRoute
   '/problems': typeof AppProblemsIndexRoute
   '/rooms': typeof AppRoomsIndexRoute
@@ -134,6 +142,7 @@ export interface FileRoutesById {
   '/_public/': typeof PublicIndexRoute
   '/_app/problems/$problemId': typeof AppProblemsProblemIdRoute
   '/_app/rooms/$roomId': typeof AppRoomsRoomIdRoute
+  '/_app/rooms/browse': typeof AppRoomsBrowseRoute
   '/_app/rooms/create': typeof AppRoomsCreateRoute
   '/_app/problems/': typeof AppProblemsIndexRoute
   '/_app/rooms/': typeof AppRoomsIndexRoute
@@ -150,6 +159,7 @@ export interface FileRouteTypes {
     | '/register'
     | '/problems/$problemId'
     | '/rooms/$roomId'
+    | '/rooms/browse'
     | '/rooms/create'
     | '/problems/'
     | '/rooms/'
@@ -164,6 +174,7 @@ export interface FileRouteTypes {
     | '/register'
     | '/problems/$problemId'
     | '/rooms/$roomId'
+    | '/rooms/browse'
     | '/rooms/create'
     | '/problems'
     | '/rooms'
@@ -180,6 +191,7 @@ export interface FileRouteTypes {
     | '/_public/'
     | '/_app/problems/$problemId'
     | '/_app/rooms/$roomId'
+    | '/_app/rooms/browse'
     | '/_app/rooms/create'
     | '/_app/problems/'
     | '/_app/rooms/'
@@ -270,6 +282,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppRoomsCreateRouteImport
       parentRoute: typeof AppRouteRoute
     }
+    '/_app/rooms/browse': {
+      id: '/_app/rooms/browse'
+      path: '/rooms/browse'
+      fullPath: '/rooms/browse'
+      preLoaderRoute: typeof AppRoomsBrowseRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
     '/_app/rooms/$roomId': {
       id: '/_app/rooms/$roomId'
       path: '/rooms/$roomId'
@@ -300,6 +319,7 @@ interface AppRouteRouteChildren {
   AppProfileRoute: typeof AppProfileRoute
   AppProblemsProblemIdRoute: typeof AppProblemsProblemIdRoute
   AppRoomsRoomIdRoute: typeof AppRoomsRoomIdRoute
+  AppRoomsBrowseRoute: typeof AppRoomsBrowseRoute
   AppRoomsCreateRoute: typeof AppRoomsCreateRoute
   AppProblemsIndexRoute: typeof AppProblemsIndexRoute
   AppRoomsIndexRoute: typeof AppRoomsIndexRoute
@@ -312,6 +332,7 @@ const AppRouteRouteChildren: AppRouteRouteChildren = {
   AppProfileRoute: AppProfileRoute,
   AppProblemsProblemIdRoute: AppProblemsProblemIdRoute,
   AppRoomsRoomIdRoute: AppRoomsRoomIdRoute,
+  AppRoomsBrowseRoute: AppRoomsBrowseRoute,
   AppRoomsCreateRoute: AppRoomsCreateRoute,
   AppProblemsIndexRoute: AppProblemsIndexRoute,
   AppRoomsIndexRoute: AppRoomsIndexRoute,

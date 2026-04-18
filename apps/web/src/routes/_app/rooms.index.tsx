@@ -14,6 +14,7 @@ import {
   ArrowRight,
   Clock3,
   Code2,
+  Compass,
   Hash,
   LinkIcon,
   Loader2,
@@ -160,12 +161,20 @@ function RoomsPage() {
           </p>
         </div>
 
-        <Link to="/rooms/create">
-          <Button className="gap-2 shadow-[0_0_25px_hsl(var(--primary)/0.3)] hover:shadow-[0_0_35px_hsl(var(--primary)/0.5)]">
-            <Plus size={18} />
-            {t('button.createRoom')}
-          </Button>
-        </Link>
+        <div className="flex flex-wrap items-center gap-2">
+          <Link to="/rooms/browse">
+            <Button variant="outline" className="gap-2">
+              <Compass size={16} />
+              {t('button.browsePublic')}
+            </Button>
+          </Link>
+          <Link to="/rooms/create">
+            <Button className="gap-2 shadow-[0_0_25px_hsl(var(--primary)/0.3)] hover:shadow-[0_0_35px_hsl(var(--primary)/0.5)]">
+              <Plus size={18} />
+              {t('button.createRoom')}
+            </Button>
+          </Link>
+        </div>
       </motion.div>
 
       <motion.div

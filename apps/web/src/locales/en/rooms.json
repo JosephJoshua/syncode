@@ -9,7 +9,42 @@
     "noActive": "No active rooms"
   },
   "button": {
-    "createRoom": "Create Room"
+    "createRoom": "Create Room",
+    "browsePublic": "Browse public rooms"
+  },
+  "browse": {
+    "heading": "Public Rooms",
+    "subheading": "Drop into an open interview room and practice with someone already online.",
+    "resultCount_one": "{{count}} room matches",
+    "resultCount_other": "{{count}} rooms match",
+    "filters": {
+      "search": "Search rooms, problems, or hosts",
+      "language": "Language",
+      "languageAll": "Any language",
+      "difficulty": "Difficulty",
+      "difficultyAll": "Any",
+      "difficultyEasy": "Easy",
+      "difficultyMedium": "Medium",
+      "difficultyHard": "Hard",
+      "status": "Status",
+      "statusAll": "All statuses"
+    },
+    "card": {
+      "participantFraction": "{{current}} / {{max}}",
+      "hostedBy": "Hosted by {{name}}",
+      "unknownProblem": "No problem selected",
+      "join": "Join room"
+    },
+    "emptyState": {
+      "title": "Nothing on air right now",
+      "subtitle": "Public rooms come and go. Create your own, or loosen your filters to see more.",
+      "createRoom": "Start a new room",
+      "clearFilters": "Clear filters"
+    },
+    "loadMore": "Load more rooms",
+    "loading": "Tuning into the lobby…",
+    "joinSuccess": "Joined room. Taking you there now.",
+    "joinFailed": "Couldn't join this room. It may be full or no longer public."
   },
   "join": {
     "heading": "Join a Room",

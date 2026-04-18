@@ -9,7 +9,42 @@
     "noActive": "无活跃房间"
   },
   "button": {
-    "createRoom": "创建房间"
+    "createRoom": "创建房间",
+    "browsePublic": "浏览公开房间"
+  },
+  "browse": {
+    "heading": "公开房间",
+    "subheading": "加入一个开放的面试房间，和正在线上的伙伴一起练习。",
+    "resultCount_one": "匹配到 {{count}} 个房间",
+    "resultCount_other": "匹配到 {{count}} 个房间",
+    "filters": {
+      "search": "搜索房间、题目或主持人",
+      "language": "语言",
+      "languageAll": "全部语言",
+      "difficulty": "难度",
+      "difficultyAll": "全部",
+      "difficultyEasy": "简单",
+      "difficultyMedium": "中等",
+      "difficultyHard": "困难",
+      "status": "状态",
+      "statusAll": "全部状态"
+    },
+    "card": {
+      "participantFraction": "{{current}} / {{max}}",
+      "hostedBy": "主持人 {{name}}",
+      "unknownProblem": "未选择题目",
+      "join": "加入房间"
+    },
+    "emptyState": {
+      "title": "当前没有进行中的房间",
+      "subtitle": "公开房间随时变化。创建你自己的，或放宽筛选条件试试。",
+      "createRoom": "创建新房间",
+      "clearFilters": "清除筛选"
+    },
+    "loadMore": "加载更多房间",
+    "loading": "正在连接大厅…",
+    "joinSuccess": "加入成功，正在进入房间。",
+    "joinFailed": "无法加入该房间。可能房间已满或不再公开。"
   },
   "join": {
     "heading": "加入房间",
