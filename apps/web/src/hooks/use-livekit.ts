@@ -155,9 +155,13 @@ export function useLiveKit({
     }
 
     const localVideo = room.localParticipant.getTrackPublication(Track.Source.Camera);
-    const localMediaTrack = localVideo?.isMuted
+    const rawLocalTrack = localVideo?.isMuted
       ? null
       : (localVideo?.track?.mediaStreamTrack ?? null);
+    const localMediaTrack =
+      rawLocalTrack && videoProcessorRef.current?.processedTrack
+        ? videoProcessorRef.current.processedTrack
+        : rawLocalTrack;
     const localScreen = room.localParticipant.getTrackPublication(Track.Source.ScreenShare);
     const localScreenTrack = localScreen?.isMuted
       ? null
@@ -595,35 +599,40 @@ export function useLiveKit({
     });
   }, []);
 
-  const setVideoFilter = useCallback(async (settings: VideoFilterSettings) => {
-    const isDefault = settings.brightness === 1 && settings.contrast === 1;
-    pendingVideoFilterRef.current = isDefault ? null : settings;
+  const setVideoFilter = useCallback(
+    async (settings: VideoFilterSettings) => {
+      const isDefault = settings.brightness === 1 && settings.contrast === 1;
+      pendingVideoFilterRef.current = isDefault ? null : settings;
 
-    const room = roomRef.current;
-    if (!room) return;
+      const room = roomRef.current;
+      if (!room) return;
 
-    const cameraPub = room.localParticipant.getTrackPublication(Track.Source.Camera);
+      const cameraPub = room.localParticipant.getTrackPublication(Track.Source.Camera);
 
-    if (isDefault) {
-      if (videoProcessorRef.current && cameraPub?.track) {
-        await cameraPub.track.stopProcessor();
-        videoProcessorRef.current = null;
+      if (isDefault) {
+        if (videoProcessorRef.current && cameraPub?.track) {
+          await cameraPub.track.stopProcessor();
+          videoProcessorRef.current = null;
+          refreshParticipants();
+        }
+        return;
       }
-      return;
-    }
 
-    if (videoProcessorRef.current) {
-      videoProcessorRef.current.updateSettings(settings);
-      return;
-    }
+      if (videoProcessorRef.current) {
+        videoProcessorRef.current.updateSettings(settings);
+        return;
+      }
 
-    if (!cameraPub?.track) return;
+      if (!cameraPub?.track) return;
 
-    const processor = new VideoFilterProcessor();
-    processor.updateSettings(settings);
-    videoProcessorRef.current = processor;
-    await cameraPub.track.setProcessor(processor, true);
-  }, []);
+      const processor = new VideoFilterProcessor();
+      processor.updateSettings(settings);
+      videoProcessorRef.current = processor;
+      await cameraPub.track.setProcessor(processor, true);
+      refreshParticipants();
+    },
+    [refreshParticipants],
+  );
 
   const setAudioProcessing = useCallback(
     async (settings: {

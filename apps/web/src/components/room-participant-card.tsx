@@ -21,6 +21,9 @@ import {
   EllipsisVertical,
   Loader2,
   MicOff,
+  Signal,
+  SignalLow,
+  SignalMedium,
   Trash2,
   VideoOff,
   Volume2,
@@ -35,6 +38,21 @@ const ASSIGNABLE_ROLES: Array<{ value: RoomRole; labelKey: string }> = [
   { value: 'interviewer', labelKey: 'roleSelect.interviewer' },
   { value: 'observer', labelKey: 'roleSelect.observer' },
 ];
+
+function ConnectionQualityIcon({ quality }: { quality?: string }) {
+  if (!quality) return null;
+  switch (quality) {
+    case 'excellent':
+      return <Signal className="size-3 text-emerald-400" />;
+    case 'good':
+      return <SignalMedium className="size-3 text-amber-400" />;
+    case 'poor':
+    case 'lost':
+      return <SignalLow className="size-3 text-destructive" />;
+    default:
+      return null;
+  }
+}
 
 export interface Participant {
   userId: string;
@@ -57,6 +75,7 @@ interface RoomParticipantCardProps {
   isSpeaking?: boolean;
   isMediaConnected?: boolean;
   isMediaMuted?: boolean;
+  connectionQuality?: string;
   isLocallyMuted?: boolean;
   isVideoHidden?: boolean;
   localVolume?: number;
@@ -80,6 +99,7 @@ export function RoomParticipantCard({
   isSpeaking = false,
   isMediaConnected = false,
   isMediaMuted = false,
+  connectionQuality,
   isLocallyMuted = false,
   isVideoHidden = false,
   localVolume,
@@ -138,6 +158,7 @@ export function RoomParticipantCard({
           {participant.isReady ? (
             <CheckCircle2 className="size-3 shrink-0 text-emerald-400" />
           ) : null}
+          <ConnectionQualityIcon quality={connectionQuality} />
         </div>
         <div className="flex shrink-0 items-center justify-end gap-1.5">
           <div

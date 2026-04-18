@@ -81,6 +81,7 @@ interface RoomWorkspaceProps {
   mediaControls?: React.ReactNode;
   mediaConnectedSet?: ReadonlySet<string>;
   mediaMutedMap?: ReadonlyMap<string, boolean>;
+  connectionQualityMap?: ReadonlyMap<string, unknown>;
   participantMediaControls?: {
     setVolume: (identity: string, volume: number) => void;
     setMuted: (identity: string, muted: boolean) => void;
@@ -113,6 +114,7 @@ export function RoomWorkspace({
   mediaControls,
   mediaConnectedSet,
   mediaMutedMap,
+  connectionQualityMap,
   participantMediaControls,
   dockedVideoPanel,
 }: RoomWorkspaceProps) {
@@ -891,6 +893,9 @@ export function RoomWorkspace({
                       isSpeaking={speakingMap?.get(participant.userId) ?? false}
                       isMediaConnected={mediaConnectedSet?.has(participant.userId) ?? false}
                       isMediaMuted={mediaMutedMap?.get(participant.userId) ?? false}
+                      connectionQuality={
+                        connectionQualityMap?.get(participant.userId) as string | undefined
+                      }
                       isLocallyMuted={
                         participantMediaControls?.muteSet.has(participant.userId) ?? false
                       }

@@ -314,6 +314,7 @@ function RoomPage() {
     videoHiddenSet,
     setVideoFilter,
     setAudioProcessing: applyAudioProcessing,
+    connectionQualityMap,
     isPushToTalkMode,
     togglePushToTalkMode,
     handlePushToTalk,
@@ -675,6 +676,7 @@ function RoomPage() {
           mediaControls={mediaControlsElement}
           mediaConnectedSet={mediaConnectedSet}
           mediaMutedMap={mediaMutedMap}
+          connectionQualityMap={connectionQualityMap}
           participantMediaControls={{
             setVolume: setParticipantVolume,
             setMuted: setParticipantMuted,
