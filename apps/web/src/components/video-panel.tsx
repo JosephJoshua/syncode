@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { AnimatePresence, motion, useMotionValue, useSpring } from 'motion/react';
 import { useCallback, useEffect, useRef } from 'react';
+import { useVideoTrack } from '@/hooks/use-video-track.js';
 
 export interface VideoPanelParticipant {
   identity: string;
@@ -31,21 +32,11 @@ function ParticipantTile({
   isSpeaking,
   isLocal,
 }: Omit<VideoPanelParticipant, 'identity'>) {
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const videoRef = useVideoTrack(videoTrack);
   const initial = displayName
     .replace(/\s*\(You\)$/, '')
     .charAt(0)
     .toUpperCase();
-
-  useEffect(() => {
-    const el = videoRef.current;
-    if (!el || !videoTrack) return;
-    const stream = new MediaStream([videoTrack]);
-    el.srcObject = stream;
-    return () => {
-      el.srcObject = null;
-    };
-  }, [videoTrack]);
 
   return (
     <div
@@ -94,17 +85,7 @@ function ScreenShareTile({
   displayName: string;
   screenShareTrack: MediaStreamTrack;
 }) {
-  const videoRef = useRef<HTMLVideoElement>(null);
-
-  useEffect(() => {
-    const el = videoRef.current;
-    if (!el) return;
-    const stream = new MediaStream([screenShareTrack]);
-    el.srcObject = stream;
-    return () => {
-      el.srcObject = null;
-    };
-  }, [screenShareTrack]);
+  const videoRef = useVideoTrack(screenShareTrack);
 
   return (
     <div className="relative overflow-hidden rounded-lg bg-black/95 ring-1 ring-primary/30">
@@ -331,7 +312,10 @@ export function DockedVideoPanel({ tiles, onUndock }: DockedVideoPanelProps) {
   const hasAnyScreenShare = tiles.some((t) => t.hasScreenShare);
   if (tiles.length === 0 || (tiles.length <= 1 && !hasAnyVideo && !hasAnyScreenShare)) return null;
 
-  const screenSharers = tiles.filter((t) => t.hasScreenShare && t.screenShareTrack);
+  const screenSharers = tiles.filter(
+    (t): t is VideoPanelParticipant & { screenShareTrack: MediaStreamTrack } =>
+      t.hasScreenShare && t.screenShareTrack !== null,
+  );
 
   return (
     <div className="shrink-0 border-b border-border p-2 @container">
@@ -358,7 +342,7 @@ export function DockedVideoPanel({ tiles, onUndock }: DockedVideoPanelProps) {
           <ScreenShareTile
             key={`screen-${tile.identity}`}
             displayName={tile.displayName}
-            screenShareTrack={tile.screenShareTrack!}
+            screenShareTrack={tile.screenShareTrack}
           />
         ))}
         <div className="grid grid-cols-1 gap-1 @[280px]:grid-cols-2">
