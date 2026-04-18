@@ -78,6 +78,7 @@ function defaultOptions(
     onParticipantReady: vi.fn(),
     onPhaseChange: vi.fn(),
     onEditorLock: vi.fn(),
+    onLanguageChange: vi.fn(),
     ...overrides,
   };
 }
@@ -260,6 +261,33 @@ describe('YjsCollabProvider', () => {
         }),
       );
       expect(opts.onParticipantReady).toHaveBeenCalledWith('user-2', true);
+
+      // Language change
+      ws.simulateTextMessage(
+        JSON.stringify({
+          type: COLLAB_WS_EVENTS.LANGUAGE_CHANGE,
+          data: { language: 'go', changedBy: 'user-3' },
+          timestamp: Date.now(),
+        }),
+      );
+      expect(opts.onLanguageChange).toHaveBeenCalledWith('go', 'user-3');
+
+      provider.destroy();
+    });
+
+    it('GIVEN LANGUAGE_CHANGE message WHEN received AND no onLanguageChange handler THEN does not throw', () => {
+      const opts = defaultOptions({ onLanguageChange: undefined });
+      const { provider, ws } = connectProvider(opts);
+
+      expect(() =>
+        ws.simulateTextMessage(
+          JSON.stringify({
+            type: COLLAB_WS_EVENTS.LANGUAGE_CHANGE,
+            data: { language: 'rust', changedBy: null },
+            timestamp: Date.now(),
+          }),
+        ),
+      ).not.toThrow();
 
       provider.destroy();
     });

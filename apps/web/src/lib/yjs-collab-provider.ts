@@ -2,6 +2,7 @@ import {
   COLLAB_WS_EVENTS,
   type CollabWsMessage,
   type EditorLockEventData,
+  type LanguageChangeEventData,
   type ParticipantReadyEventData,
   type PhaseChangeEventData,
   type RoomStateEventData,
@@ -31,6 +32,7 @@ export interface YjsCollabProviderOptions {
   onParticipantReady: (userId: string, isReady: boolean) => void;
   onPhaseChange: (phase: string, previousPhase: string) => void;
   onEditorLock: (locked: boolean, lockedBy: string | null) => void;
+  onLanguageChange?: (language: string, changedBy: string | null) => void;
 }
 
 const INITIAL_BACKOFF_MS = 1_000;
@@ -182,6 +184,11 @@ export class YjsCollabProvider {
       case COLLAB_WS_EVENTS.PARTICIPANT_READY: {
         const data = message.data as ParticipantReadyEventData;
         this.options.onParticipantReady(data.userId, data.isReady);
+        break;
+      }
+      case COLLAB_WS_EVENTS.LANGUAGE_CHANGE: {
+        const data = message.data as LanguageChangeEventData;
+        this.options.onLanguageChange?.(data.language, data.changedBy);
         break;
       }
     }

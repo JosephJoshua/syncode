@@ -237,6 +237,10 @@ function RoomPage() {
     onRoomStatePatch: handleRoomStatePatch,
     onParticipantReady: handleParticipantReady,
     onPhaseChange: () => void refreshRoomDetail(),
+    onLanguageChange: () => {
+      void queryClient.invalidateQueries({ queryKey: ['rooms', roomId] });
+      void refreshRoomDetail();
+    },
   });
 
   const mediaCredsRef = useRef<{ token: string; url: string } | null>(null);
