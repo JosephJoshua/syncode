@@ -1,5 +1,6 @@
 import {
   JOINABLE_ROLES,
+  PROBLEM_DIFFICULTIES,
   ROOM_MODES,
   ROOM_ROLES,
   ROOM_STATUSES,
@@ -309,10 +310,6 @@ export const transitionRoomPhaseResponseSchema = z.object({
 export type TransitionRoomPhaseResponse = z.infer<typeof transitionRoomPhaseResponseSchema>;
 
 // ── Browse public rooms ──────────────────────────────────────────────
-
-export const PROBLEM_DIFFICULTIES = ['easy', 'medium', 'hard'] as const;
-
-export type ProblemDifficulty = (typeof PROBLEM_DIFFICULTIES)[number];
 
 export const BROWSEABLE_ROOM_STATUSES = ['waiting', 'warmup', 'coding', 'wrapup'] as const;
 
