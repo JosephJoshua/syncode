@@ -1,22 +1,33 @@
 import { ConflictException, Injectable, Logger, type OnModuleDestroy } from '@nestjs/common';
 import * as Y from 'yjs';
 
+export interface CreateDocOptions {
+  initialContentByLanguage?: Record<string, string>;
+}
+
 @Injectable()
 export class YjsDocumentStore implements OnModuleDestroy {
-  private static readonly CODE_KEY = 'code';
-
   private readonly logger = new Logger(YjsDocumentStore.name);
   private readonly docs = new Map<string, Y.Doc>();
 
-  createDoc(roomId: string, initialContent?: string): Y.Doc {
+  private static codeKey(language: string): string {
+    return `code:${language}`;
+  }
+
+  createDoc(roomId: string, options?: CreateDocOptions): Y.Doc {
     if (this.docs.has(roomId)) {
       throw new ConflictException(`Room ${roomId} already exists`);
     }
 
     const doc = new Y.Doc();
 
-    if (initialContent) {
-      doc.getText(YjsDocumentStore.CODE_KEY).insert(0, initialContent);
+    const seeds = options?.initialContentByLanguage;
+    if (seeds) {
+      for (const [language, content] of Object.entries(seeds)) {
+        if (content && content.length > 0) {
+          doc.getText(YjsDocumentStore.codeKey(language)).insert(0, content);
+        }
+      }
     }
 
     this.docs.set(roomId, doc);
@@ -42,8 +53,28 @@ export class YjsDocumentStore implements OnModuleDestroy {
     return snapshot;
   }
 
-  getCodeText(roomId: string): string {
-    return this.docs.get(roomId)?.getText(YjsDocumentStore.CODE_KEY).toString() ?? '';
+  getCodeText(roomId: string, language: string): string {
+    return this.docs.get(roomId)?.getText(YjsDocumentStore.codeKey(language)).toString() ?? '';
+  }
+
+  /**
+   * Returns a snapshot of every `code:<language>` Y.Text present in the doc.
+   * Used by the snapshot scheduler which doesn't know which language is "current".
+   */
+  getAllCodeTexts(roomId: string): Record<string, string> {
+    const doc = this.docs.get(roomId);
+    if (!doc) {
+      return {};
+    }
+
+    const result: Record<string, string> = {};
+    for (const key of doc.share.keys()) {
+      if (key.startsWith('code:')) {
+        const language = key.slice('code:'.length);
+        result[language] = doc.getText(key).toString();
+      }
+    }
+    return result;
   }
 
   encodeSnapshot(roomId: string): Uint8Array | undefined {

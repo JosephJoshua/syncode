@@ -40,7 +40,9 @@ export class SnapshotScheduler implements OnModuleDestroy {
     const snapshot = this.docStore.encodeSnapshot(roomId);
     if (!snapshot) return;
 
-    const code = this.docStore.getCodeText(roomId);
+    // Serialize every `code:<language>` Y.Text as a JSON record so the control-plane
+    // can index each language independently (see code-snapshots handler).
+    const code = JSON.stringify(this.docStore.getAllCodeTexts(roomId));
 
     try {
       await this.callbackClient.notifySnapshotReady({

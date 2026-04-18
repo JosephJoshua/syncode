@@ -110,19 +110,21 @@ export class RoomsService {
       return inserted;
     });
 
-    let initialContent: string | undefined;
-    if (room.problemId && room.language) {
+    let initialContentByLanguage: Record<string, string> | undefined;
+    if (room.problemId) {
       const problem = await this.db
         .select({ starterCode: problems.starterCode })
         .from(problems)
         .where(eq(problems.id, room.problemId))
         .then((rows) => rows[0]);
-      const starterMap = problem?.starterCode as Record<string, string> | null;
-      initialContent = starterMap?.[room.language] ?? undefined;
+      const starterMap = (problem?.starterCode ?? null) as Record<string, string> | null;
+      if (starterMap && Object.keys(starterMap).length > 0) {
+        initialContentByLanguage = starterMap;
+      }
     }
 
     const [collabCreated, mediaCreated] = await Promise.all([
-      this.createCollabDocument(room.id, room.status, room.editorLocked, initialContent),
+      this.createCollabDocument(room.id, room.status, room.editorLocked, initialContentByLanguage),
       this.createMediaRoom(room.id),
     ]);
 
@@ -1428,14 +1430,14 @@ export class RoomsService {
     roomId: string,
     initialPhase: RoomStatus,
     editorLocked: boolean,
-    initialContent?: string,
+    initialContentByLanguage?: Record<string, string>,
   ): Promise<boolean> {
     try {
       await this.collabClient.createDocument({
         roomId,
         initialPhase,
         editorLocked,
-        initialContent,
+        initialContentByLanguage,
       });
       return true;
     } catch (error) {

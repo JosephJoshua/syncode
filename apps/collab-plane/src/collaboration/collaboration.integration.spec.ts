@@ -178,7 +178,10 @@ afterEach(async () => {
 
 describe('Yjs Document Sync (integration)', () => {
   it('GIVEN room with initial content WHEN client joins and completes sync THEN client has the document', async () => {
-    await service.createDocument({ roomId: 'room-1', initialContent: 'hello world' });
+    await service.createDocument({
+      roomId: 'room-1',
+      initialContentByLanguage: { python: 'hello world' },
+    });
 
     const { ws, messages } = await connectAndJoin('room-1', 'user-1');
 
@@ -205,7 +208,7 @@ describe('Yjs Document Sync (integration)', () => {
       }
     }
 
-    expect(clientDoc.getText('code').toString()).toBe('hello world');
+    expect(clientDoc.getText('code:python').toString()).toBe('hello world');
 
     clientDoc.destroy();
     ws.close();

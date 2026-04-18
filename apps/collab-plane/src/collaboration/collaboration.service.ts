@@ -47,7 +47,9 @@ export class CollaborationService implements OnModuleDestroy {
       phase: request.initialPhase,
       editorLocked: request.editorLocked,
     });
-    this.docStore.createDoc(request.roomId, request.initialContent);
+    this.docStore.createDoc(request.roomId, {
+      initialContentByLanguage: request.initialContentByLanguage,
+    });
     this.syncHandler.registerUpdateBroadcast(request.roomId);
     this.awarenessHandler.createRoom(request.roomId);
     this.snapshotScheduler.startPeriodicSnapshots(request.roomId);

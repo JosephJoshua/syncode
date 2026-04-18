@@ -94,7 +94,7 @@ describe('createRoom', () => {
     expect(participants[0]).toMatchObject({ userId: user.id, role: 'interviewer' });
   });
 
-  it('GIVEN problemId and language WHEN creating room THEN passes starter code as initialContent to collab', async () => {
+  it('GIVEN problemId WHEN creating room THEN passes full starterCode map as initialContentByLanguage to collab', async () => {
     const user = await insertUser(db);
     const problem = await insertProblem(db, {
       starterCode: { python: '# starter', javascript: '// starter' },
@@ -108,11 +108,13 @@ describe('createRoom', () => {
     });
 
     expect(mockCollabClient.createDocument).toHaveBeenCalledWith(
-      expect.objectContaining({ initialContent: '# starter' }),
+      expect.objectContaining({
+        initialContentByLanguage: { python: '# starter', javascript: '// starter' },
+      }),
     );
   });
 
-  it('GIVEN no problemId WHEN creating room THEN passes no initialContent to collab', async () => {
+  it('GIVEN no problemId WHEN creating room THEN passes no initialContentByLanguage to collab', async () => {
     const user = await insertUser(db);
 
     await service.createRoom(user.id, {
@@ -121,7 +123,7 @@ describe('createRoom', () => {
     });
 
     expect(mockCollabClient.createDocument).toHaveBeenCalledWith(
-      expect.objectContaining({ initialContent: undefined }),
+      expect.objectContaining({ initialContentByLanguage: undefined }),
     );
   });
 });
