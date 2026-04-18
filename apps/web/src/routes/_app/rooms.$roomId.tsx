@@ -301,6 +301,12 @@ function RoomPage() {
     activeAudioDeviceId,
     activeVideoDeviceId,
     setOutputVolume,
+    setParticipantVolume,
+    setParticipantMuted,
+    setParticipantVideoHidden,
+    participantVolumeMap,
+    localMuteSet,
+    videoHiddenSet,
     setVideoFilter,
     setAudioProcessing: applyAudioProcessing,
     speakingMap,
@@ -384,12 +390,13 @@ function RoomPage() {
 
     for (const mp of mediaRemoteParticipants) {
       const p = room?.participants.find((rp) => rp.userId === mp.identity);
+      const hidden = videoHiddenSet.has(mp.identity);
       tiles.push({
         identity: mp.identity,
         displayName: p?.displayName ?? p?.username ?? mp.identity,
         avatarUrl: p?.avatarUrl ?? null,
-        hasVideo: mp.hasVideo,
-        videoTrack: mp.videoTrack,
+        hasVideo: hidden ? false : mp.hasVideo,
+        videoTrack: hidden ? null : mp.videoTrack,
         hasScreenShare: mp.hasScreenShare,
         screenShareTrack: mp.screenShareTrack,
         isSpeaking: speakingMap.get(mp.identity) ?? false,
@@ -404,6 +411,7 @@ function RoomPage() {
     speakingMap,
     currentUserId,
     room?.participants,
+    videoHiddenSet,
   ]);
 
   const showMediaPanel =
@@ -647,6 +655,14 @@ function RoomPage() {
           mediaControls={mediaControlsElement}
           mediaConnectedSet={mediaConnectedSet}
           mediaMutedMap={mediaMutedMap}
+          participantMediaControls={{
+            setVolume: setParticipantVolume,
+            setMuted: setParticipantMuted,
+            setVideoHidden: setParticipantVideoHidden,
+            volumeMap: participantVolumeMap,
+            muteSet: localMuteSet,
+            videoHiddenSet,
+          }}
           dockedVideoPanel={
             showMediaPanel && videoPanelMode === 'docked' ? (
               <DockedVideoPanel tiles={videoTiles} onUndock={() => setVideoPanelMode('floating')} />

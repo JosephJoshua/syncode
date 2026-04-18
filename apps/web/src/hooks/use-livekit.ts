@@ -59,6 +59,12 @@ export interface UseLiveKitResult {
   activeAudioDeviceId: string | null;
   activeVideoDeviceId: string | null;
   setOutputVolume: (volume: number) => void;
+  setParticipantVolume: (identity: string, volume: number) => void;
+  setParticipantMuted: (identity: string, muted: boolean) => void;
+  setParticipantVideoHidden: (identity: string, hidden: boolean) => void;
+  participantVolumeMap: ReadonlyMap<string, number>;
+  localMuteSet: ReadonlySet<string>;
+  videoHiddenSet: ReadonlySet<string>;
   setVideoFilter: (settings: VideoFilterSettings) => Promise<void>;
   setAudioProcessing: (settings: {
     noiseSuppression: boolean;
@@ -111,6 +117,15 @@ export function useLiveKit({
   const [videoInputDevices, setVideoInputDevices] = useState<MediaDeviceOption[]>([]);
   const [activeAudioDeviceId, setActiveAudioDeviceId] = useState<string | null>(null);
   const [activeVideoDeviceId, setActiveVideoDeviceId] = useState<string | null>(null);
+  const [participantVolumeMap, setParticipantVolumeMap] = useState<ReadonlyMap<string, number>>(
+    new Map(),
+  );
+  const [localMuteSet, setLocalMuteSet] = useState<ReadonlySet<string>>(new Set());
+  const [videoHiddenSet, setVideoHiddenSet] = useState<ReadonlySet<string>>(new Set());
+  const localMuteRef = useRef(localMuteSet);
+  localMuteRef.current = localMuteSet;
+  const volumeMapRef = useRef(participantVolumeMap);
+  volumeMapRef.current = participantVolumeMap;
 
   const roomRef = useRef<Room | null>(null);
   const audioElementsRef = useRef<Map<string, HTMLAudioElement>>(new Map());
@@ -290,6 +305,9 @@ export function useLiveKit({
           existing.remove();
         }
         const el = track.attach();
+        if (localMuteRef.current.has(participant.identity)) el.muted = true;
+        const vol = volumeMapRef.current.get(participant.identity);
+        if (vol !== undefined) el.volume = vol;
         audioElementsRef.current.set(participant.identity, el);
       }
       refreshParticipants();
@@ -484,6 +502,37 @@ export function useLiveKit({
     }
   }, []);
 
+  const setParticipantVolume = useCallback((identity: string, volume: number) => {
+    const clamped = Math.max(0, Math.min(1, volume));
+    setParticipantVolumeMap((prev) => {
+      const next = new Map(prev);
+      next.set(identity, clamped);
+      return next;
+    });
+    const el = audioElementsRef.current.get(identity);
+    if (el) el.volume = clamped;
+  }, []);
+
+  const setParticipantMuted = useCallback((identity: string, muted: boolean) => {
+    setLocalMuteSet((prev) => {
+      const next = new Set(prev);
+      if (muted) next.add(identity);
+      else next.delete(identity);
+      return next;
+    });
+    const el = audioElementsRef.current.get(identity);
+    if (el) el.muted = muted;
+  }, []);
+
+  const setParticipantVideoHidden = useCallback((identity: string, hidden: boolean) => {
+    setVideoHiddenSet((prev) => {
+      const next = new Set(prev);
+      if (hidden) next.add(identity);
+      else next.delete(identity);
+      return next;
+    });
+  }, []);
+
   const setVideoFilter = useCallback(async (settings: VideoFilterSettings) => {
     const isDefault = settings.brightness === 1 && settings.contrast === 1;
     pendingVideoFilterRef.current = isDefault ? null : settings;
@@ -547,6 +596,12 @@ export function useLiveKit({
     activeAudioDeviceId,
     activeVideoDeviceId,
     setOutputVolume,
+    setParticipantVolume,
+    setParticipantMuted,
+    setParticipantVideoHidden,
+    participantVolumeMap,
+    localMuteSet,
+    videoHiddenSet,
     setVideoFilter,
     setAudioProcessing,
     speakingMap,

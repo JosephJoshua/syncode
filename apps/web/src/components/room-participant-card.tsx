@@ -15,7 +15,17 @@ import {
   SelectItem,
   SelectTrigger,
 } from '@syncode/ui';
-import { CheckCircle2, Crown, EllipsisVertical, Loader2, MicOff, Trash2 } from 'lucide-react';
+import {
+  CheckCircle2,
+  Crown,
+  EllipsisVertical,
+  Loader2,
+  MicOff,
+  Trash2,
+  VideoOff,
+  Volume2,
+  VolumeX,
+} from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ROLE_LABEL_KEYS } from '@/lib/room-stage.js';
@@ -47,10 +57,15 @@ interface RoomParticipantCardProps {
   isSpeaking?: boolean;
   isMediaConnected?: boolean;
   isMediaMuted?: boolean;
+  isLocallyMuted?: boolean;
+  isVideoHidden?: boolean;
+  localVolume?: number;
+  onLocalMuteToggle?: (muted: boolean) => void;
+  onLocalVolumeChange?: (volume: number) => void;
+  onVideoHiddenToggle?: (hidden: boolean) => void;
   onRoleChange?: (userId: string, role: RoomRole) => void;
   onTransferOwnership?: (userId: string, displayName: string) => void;
   onRemoveParticipant?: (userId: string, displayName: string) => void;
-  /** Compact mode for the workspace sidebar (no avatar, single line) */
   compact?: boolean;
 }
 
@@ -65,6 +80,12 @@ export function RoomParticipantCard({
   isSpeaking = false,
   isMediaConnected = false,
   isMediaMuted = false,
+  isLocallyMuted = false,
+  isVideoHidden = false,
+  localVolume,
+  onLocalMuteToggle,
+  onLocalVolumeChange,
+  onVideoHiddenToggle,
   onRoleChange,
   onTransferOwnership,
   onRemoveParticipant,
@@ -75,9 +96,10 @@ export function RoomParticipantCard({
   const isMe = participant.userId === currentUserId;
   const isHost = participant.userId === roomHostId;
   const initial = displayName.charAt(0).toUpperCase();
-  const showParticipantActions = Boolean(
-    canManageParticipants && !isHost && (onTransferOwnership || onRemoveParticipant),
-  );
+  const hasManageActions =
+    canManageParticipants && !isHost && (onTransferOwnership || onRemoveParticipant);
+  const hasMediaActions = !isMe && isMediaConnected && (onLocalMuteToggle || onVideoHiddenToggle);
+  const showParticipantActions = Boolean(hasManageActions || hasMediaActions);
   const [isParticipantMenuOpen, setIsParticipantMenuOpen] = useState(false);
 
   if (compact) {
@@ -161,32 +183,74 @@ export function RoomParticipantCard({
                 <DropdownMenuContent
                   align="end"
                   side="bottom"
-                  className="min-w-40 rounded-xl border-border/60"
+                  className="min-w-44 rounded-xl border-border/60"
                 >
-                  <DropdownMenuItem
-                    disabled={isTransferringOwnership || isRemovingParticipant}
-                    onSelect={() => onTransferOwnership?.(participant.userId, displayName)}
-                  >
-                    {isTransferringOwnership ? (
-                      <Loader2 className="size-3.5 animate-spin text-muted-foreground" />
-                    ) : (
-                      <Crown className="size-3.5 text-muted-foreground" />
-                    )}
-                    {t('workspace.transferOwnership')}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    disabled={
-                      !onRemoveParticipant || isTransferringOwnership || isRemovingParticipant
-                    }
-                    onSelect={() => onRemoveParticipant?.(participant.userId, displayName)}
-                  >
-                    {isRemovingParticipant ? (
-                      <Loader2 className="size-3.5 animate-spin text-muted-foreground" />
-                    ) : (
-                      <Trash2 className="size-3.5 text-muted-foreground" />
-                    )}
-                    {t('workspace.removeParticipant')}
-                  </DropdownMenuItem>
+                  {hasMediaActions ? (
+                    <>
+                      {onLocalMuteToggle ? (
+                        <DropdownMenuItem onSelect={() => onLocalMuteToggle(!isLocallyMuted)}>
+                          {isLocallyMuted ? (
+                            <Volume2 className="size-3.5 text-muted-foreground" />
+                          ) : (
+                            <VolumeX className="size-3.5 text-muted-foreground" />
+                          )}
+                          {isLocallyMuted ? 'Unmute for me' : 'Mute for me'}
+                        </DropdownMenuItem>
+                      ) : null}
+                      {onLocalVolumeChange ? (
+                        <div className="flex items-center gap-2 px-2 py-1.5">
+                          <Volume2 className="size-3.5 shrink-0 text-muted-foreground" />
+                          <input
+                            type="range"
+                            min="0"
+                            max="1"
+                            step="0.05"
+                            value={localVolume ?? 1}
+                            onChange={(e) => onLocalVolumeChange(Number(e.target.value))}
+                            className="h-1 flex-1 cursor-pointer appearance-none rounded-full bg-muted accent-primary"
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                          <span className="w-6 text-right font-mono text-[9px] text-muted-foreground/60">
+                            {Math.round((localVolume ?? 1) * 100)}
+                          </span>
+                        </div>
+                      ) : null}
+                      {onVideoHiddenToggle ? (
+                        <DropdownMenuItem onSelect={() => onVideoHiddenToggle(!isVideoHidden)}>
+                          <VideoOff className="size-3.5 text-muted-foreground" />
+                          {isVideoHidden ? 'Show video' : 'Hide video'}
+                        </DropdownMenuItem>
+                      ) : null}
+                    </>
+                  ) : null}
+                  {hasManageActions ? (
+                    <>
+                      <DropdownMenuItem
+                        disabled={isTransferringOwnership || isRemovingParticipant}
+                        onSelect={() => onTransferOwnership?.(participant.userId, displayName)}
+                      >
+                        {isTransferringOwnership ? (
+                          <Loader2 className="size-3.5 animate-spin text-muted-foreground" />
+                        ) : (
+                          <Crown className="size-3.5 text-muted-foreground" />
+                        )}
+                        {t('workspace.transferOwnership')}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        disabled={
+                          !onRemoveParticipant || isTransferringOwnership || isRemovingParticipant
+                        }
+                        onSelect={() => onRemoveParticipant?.(participant.userId, displayName)}
+                      >
+                        {isRemovingParticipant ? (
+                          <Loader2 className="size-3.5 animate-spin text-muted-foreground" />
+                        ) : (
+                          <Trash2 className="size-3.5 text-muted-foreground" />
+                        )}
+                        {t('workspace.removeParticipant')}
+                      </DropdownMenuItem>
+                    </>
+                  ) : null}
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
