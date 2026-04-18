@@ -26,8 +26,23 @@ describe('browseRoomsQuerySchema', () => {
     expect(result.success).toBe(false);
   });
 
-  test('GIVEN status outside BROWSEABLE_ROOM_STATUSES WHEN parsed THEN rejects', () => {
+  test('GIVEN status "finished" WHEN parsed THEN rejects (finished is the only non-browseable status)', () => {
     const result = browseRoomsQuerySchema.safeParse({ status: 'finished' });
+    expect(result.success).toBe(false);
+  });
+
+  test.each([
+    'waiting',
+    'warmup',
+    'coding',
+    'wrapup',
+  ] as const)('GIVEN browseable status %s WHEN parsed THEN accepts', (status) => {
+    const result = browseRoomsQuerySchema.parse({ status });
+    expect(result.status).toBe(status);
+  });
+
+  test('GIVEN status outside ROOM_STATUSES WHEN parsed THEN rejects', () => {
+    const result = browseRoomsQuerySchema.safeParse({ status: 'bogus' });
     expect(result.success).toBe(false);
   });
 
