@@ -119,6 +119,99 @@ describe('GET /rooms', () => {
   });
 });
 
+describe('GET /rooms/public', () => {
+  it('GIVEN one public and one private waiting room WHEN fetching with auth THEN returns only the public room', async () => {
+    const host = await insertUser(db);
+    const caller = await insertUser(db);
+    const publicRoom = await insertRoom(db, host.id, {
+      isPrivate: false,
+      status: 'waiting',
+    });
+    await insertParticipant(db, publicRoom.id, host.id, 'interviewer');
+    const privateRoom = await insertRoom(db, host.id, {
+      isPrivate: true,
+      status: 'waiting',
+    });
+    await insertParticipant(db, privateRoom.id, host.id, 'interviewer');
+
+    const res = await asUser(request(app.getHttpServer()).get('/rooms/public'), caller).expect(200);
+
+    expect(res.body.data).toHaveLength(1);
+    expect(res.body.data[0].roomId).toBe(publicRoom.id);
+    expect(res.body.data[0].createdAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(res.body.pagination).toEqual({ nextCursor: null, hasMore: false });
+  });
+
+  it('GIVEN unauthenticated request WHEN fetching public rooms THEN returns 401', async () => {
+    await request(app.getHttpServer()).get('/rooms/public').expect(401);
+  });
+
+  it('GIVEN easy and hard problem rooms WHEN filtering by difficulty=easy THEN hard-difficulty rooms are excluded', async () => {
+    const host = await insertUser(db);
+    const caller = await insertUser(db);
+    const easyProblem = await insertProblem(db, { difficulty: 'easy' });
+    const hardProblem = await insertProblem(db, { difficulty: 'hard' });
+    const easyRoom = await insertRoom(db, host.id, {
+      isPrivate: false,
+      status: 'waiting',
+      problemId: easyProblem.id,
+    });
+    await insertParticipant(db, easyRoom.id, host.id, 'interviewer');
+    const hardRoom = await insertRoom(db, host.id, {
+      isPrivate: false,
+      status: 'waiting',
+      problemId: hardProblem.id,
+    });
+    await insertParticipant(db, hardRoom.id, host.id, 'interviewer');
+
+    const res = await asUser(
+      request(app.getHttpServer()).get('/rooms/public').query({ difficulty: 'easy' }),
+      caller,
+    ).expect(200);
+
+    expect(res.body.data).toHaveLength(1);
+    expect(res.body.data[0].roomId).toBe(easyRoom.id);
+    expect(res.body.data[0].problemDifficulty).toBe('easy');
+  });
+
+  it('GIVEN a room linked to "Two Sum" WHEN searching case-insensitively THEN it is returned', async () => {
+    const host = await insertUser(db);
+    const caller = await insertUser(db);
+    const twoSum = await insertProblem(db, { title: 'Two Sum' });
+    const merge = await insertProblem(db, { title: 'Merge Intervals' });
+    const twoSumRoom = await insertRoom(db, host.id, {
+      isPrivate: false,
+      status: 'waiting',
+      problemId: twoSum.id,
+    });
+    await insertParticipant(db, twoSumRoom.id, host.id, 'interviewer');
+    const mergeRoom = await insertRoom(db, host.id, {
+      isPrivate: false,
+      status: 'waiting',
+      problemId: merge.id,
+    });
+    await insertParticipant(db, mergeRoom.id, host.id, 'interviewer');
+
+    const res = await asUser(
+      request(app.getHttpServer()).get('/rooms/public').query({ search: 'two' }),
+      caller,
+    ).expect(200);
+
+    expect(res.body.data).toHaveLength(1);
+    expect(res.body.data[0].roomId).toBe(twoSumRoom.id);
+    expect(res.body.data[0].problemTitle).toBe('Two Sum');
+  });
+
+  it('GIVEN invalid status filter WHEN fetching public rooms THEN returns 400', async () => {
+    const caller = await insertUser(db);
+
+    await asUser(
+      request(app.getHttpServer()).get('/rooms/public').query({ status: 'not-a-real-status' }),
+      caller,
+    ).expect(400);
+  });
+});
+
 describe('GET /rooms/:id', () => {
   it('GIVEN user is participant WHEN getting room THEN returns detail with ISO timestamps on participants', async () => {
     const user = await insertUser(db);

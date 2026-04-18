@@ -22,8 +22,18 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { SkipThrottle } from '@nestjs/throttler';
-import { CONTROL_API, ROOMS_SORT_BY_OPTIONS, SORT_ORDER_OPTIONS } from '@syncode/contracts';
-import { ROOM_MODES, ROOM_STATUSES } from '@syncode/shared';
+import {
+  BROWSEABLE_ROOM_STATUSES,
+  CONTROL_API,
+  ROOMS_SORT_BY_OPTIONS,
+  SORT_ORDER_OPTIONS,
+} from '@syncode/contracts';
+import {
+  PROBLEM_DIFFICULTIES,
+  ROOM_MODES,
+  ROOM_STATUSES,
+  SUPPORTED_LANGUAGES,
+} from '@syncode/shared';
 import { CurrentUser } from '@/common/decorators/current-user.decorator.js';
 import { Idempotent } from '@/common/decorators/idempotent.decorator.js';
 import { ErrorResponseDto } from '@/common/dto/error-response.dto.js';
@@ -31,6 +41,8 @@ import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard.js';
 import { IdempotencyInterceptor } from '@/common/interceptors/idempotency.interceptor.js';
 import type { AuthUser } from '@/modules/auth/auth.types.js';
 import {
+  BrowseRoomsQueryDto,
+  BrowseRoomsResponseDto,
   CreateRoomDto,
   CreateRoomResponseDto,
   DestroyRoomResponseDto,
@@ -98,6 +110,29 @@ export class RoomsController {
     @Query() query: ListRoomsQueryDto,
   ): Promise<ListRoomsResponseDto> {
     const result = await this.roomsService.listRooms(user.id, query);
+    return {
+      data: result.data.map((room) => ({
+        ...room,
+        createdAt: room.createdAt.toISOString(),
+      })),
+      pagination: result.pagination,
+    };
+  }
+
+  @Get(CONTROL_API.ROOMS.BROWSE_PUBLIC.route)
+  @ApiOperation({ summary: 'Browse public rooms with filters' })
+  @ApiQuery({ name: 'cursor', required: false, description: 'Pagination cursor' })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Page size (1-100)' })
+  @ApiQuery({ name: 'status', required: false, enum: [...BROWSEABLE_ROOM_STATUSES] })
+  @ApiQuery({ name: 'language', required: false, enum: [...SUPPORTED_LANGUAGES] })
+  @ApiQuery({ name: 'difficulty', required: false, enum: [...PROBLEM_DIFFICULTIES] })
+  @ApiQuery({ name: 'search', required: false, type: String })
+  @ApiResponse({ status: 200, type: BrowseRoomsResponseDto })
+  async browsePublicRooms(
+    @CurrentUser() user: AuthUser,
+    @Query() query: BrowseRoomsQueryDto,
+  ): Promise<BrowseRoomsResponseDto> {
+    const result = await this.roomsService.browsePublicRooms(user.id, query);
     return {
       data: result.data.map((room) => ({
         ...room,
