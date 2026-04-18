@@ -356,7 +356,21 @@ export class RoomsService {
       throw new NotFoundException({ message: 'Room not found', code: ERROR_CODES.ROOM_NOT_FOUND });
     }
 
-    if (room.inviteCode !== input.roomCode.toUpperCase()) {
+    if (room.isPrivate) {
+      if (!input.roomCode) {
+        throw new BadRequestException({
+          message: 'Room code required for private rooms',
+          code: ERROR_CODES.ROOM_INVALID_CODE,
+        });
+      }
+      if (room.inviteCode !== input.roomCode.toUpperCase()) {
+        throw new BadRequestException({
+          message: 'Invalid room code',
+          code: ERROR_CODES.ROOM_INVALID_CODE,
+        });
+      }
+    } else if (input.roomCode && room.inviteCode !== input.roomCode.toUpperCase()) {
+      // Public room but user supplied a wrong code — still reject.
       throw new BadRequestException({
         message: 'Invalid room code',
         code: ERROR_CODES.ROOM_INVALID_CODE,

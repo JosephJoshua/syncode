@@ -394,6 +394,51 @@ describe('joinRoom', () => {
   });
 });
 
+describe('joinRoom code requirement', () => {
+  it('GIVEN a public room AND no roomCode WHEN joining THEN succeeds with assigned role', async () => {
+    const host = await insertUser(db);
+    const joiner = await insertUser(db);
+    const room = await insertRoom(db, host.id, { isPrivate: false, maxParticipants: 4 });
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+
+    const result = await service.joinRoom(room.id, joiner.id, {});
+
+    expect(result.assignedRole).toBe('candidate');
+    expect(result.room.roomId).toBe(room.id);
+
+    const rows = await db
+      .select()
+      .from(roomParticipants)
+      .where(and(eq(roomParticipants.roomId, room.id), eq(roomParticipants.userId, joiner.id)));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ role: 'candidate', isActive: true });
+  });
+
+  it('GIVEN a public room AND wrong roomCode WHEN joining THEN throws BadRequestException with ROOM_INVALID_CODE', async () => {
+    const host = await insertUser(db);
+    const joiner = await insertUser(db);
+    const room = await insertRoom(db, host.id, { isPrivate: false, maxParticipants: 4 });
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+
+    await expect(
+      service.joinRoom(room.id, joiner.id, { roomCode: 'WRONG1' }),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({ code: ERROR_CODES.ROOM_INVALID_CODE }),
+    });
+  });
+
+  it('GIVEN a private room AND no roomCode WHEN joining THEN throws BadRequestException with ROOM_INVALID_CODE', async () => {
+    const host = await insertUser(db);
+    const joiner = await insertUser(db);
+    const room = await insertRoom(db, host.id, { isPrivate: true, maxParticipants: 4 });
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+
+    await expect(service.joinRoom(room.id, joiner.id, {})).rejects.toMatchObject({
+      response: expect.objectContaining({ code: ERROR_CODES.ROOM_INVALID_CODE }),
+    });
+  });
+});
+
 describe('transferOwnership', () => {
   it('GIVEN active participant WHEN host transfers ownership THEN room hostId is updated', async () => {
     const host = await insertUser(db);

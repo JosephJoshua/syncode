@@ -243,7 +243,8 @@ export const joinRoomSchema = z
     roomCode: z
       .string()
       .length(6)
-      .describe('6-char invite code')
+      .optional()
+      .describe('6-char invite code (required for private rooms, optional for public rooms)')
       .meta({ examples: ['A3K7M2'] }),
     requestedRole: z.enum(JOINABLE_ROLES).optional().describe('Requested role in the room'),
   })
