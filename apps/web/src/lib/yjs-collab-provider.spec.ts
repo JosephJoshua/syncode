@@ -4,7 +4,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as awarenessProtocol from 'y-protocols/awareness';
 import * as syncProtocol from 'y-protocols/sync';
 import * as Y from 'yjs';
-import { type CollabConnectionStatus, YjsCollabProvider } from './yjs-collab-provider.js';
+import {
+  type CollabConnectionStatus,
+  codeTextKey,
+  YjsCollabProvider,
+} from './yjs-collab-provider.js';
 
 // ── Mock WebSocket ──────────────────────────────────────────────────────────
 
@@ -141,6 +145,14 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+describe('codeTextKey', () => {
+  it('GIVEN a language WHEN called THEN returns code:<language>', () => {
+    expect(codeTextKey('python')).toBe('code:python');
+    expect(codeTextKey('rust')).toBe('code:rust');
+    expect(codeTextKey('javascript')).toBe('code:javascript');
+  });
+});
+
 describe('YjsCollabProvider', () => {
   describe('connection', () => {
     it('GIVEN http URL WHEN connecting THEN opens WebSocket with ws:// protocol and sends join message', () => {
@@ -265,7 +277,7 @@ describe('YjsCollabProvider', () => {
 
       // Build a server doc with content and run the full sync handshake
       const serverDoc = new Y.Doc();
-      serverDoc.getText('code').insert(0, 'hello world');
+      serverDoc.getText(codeTextKey('python')).insert(0, 'hello world');
 
       // Step 1: server sends SyncStep1 → client responds with SyncStep2
       const sentBefore = ws.sent.length;
@@ -277,7 +289,7 @@ describe('YjsCollabProvider', () => {
       ws.simulateBinaryMessage(buildSyncUpdate(serverUpdate));
 
       // Client doc should now have the server's content
-      expect(provider.doc.getText('code').toString()).toBe('hello world');
+      expect(provider.doc.getText(codeTextKey('python')).toString()).toBe('hello world');
 
       serverDoc.destroy();
       provider.destroy();
@@ -296,13 +308,13 @@ describe('YjsCollabProvider', () => {
       remoteDoc.on('update', (update: Uint8Array) => {
         capturedUpdate = update;
       });
-      remoteDoc.getText('code').insert(0, 'remote edit');
+      remoteDoc.getText(codeTextKey('python')).insert(0, 'remote edit');
 
       const sentBefore = ws.sent.length;
       ws.simulateBinaryMessage(buildSyncUpdate(capturedUpdate!));
 
       // Local doc should have the content
-      expect(provider.doc.getText('code').toString()).toBe('remote edit');
+      expect(provider.doc.getText(codeTextKey('python')).toString()).toBe('remote edit');
 
       // Should NOT have sent anything back (echo prevention)
       // The SyncStep1 handler may have sent a response, so only check for no NEW sends
@@ -318,7 +330,7 @@ describe('YjsCollabProvider', () => {
       const { provider, ws } = connectProvider();
 
       const sentBefore = ws.sent.length;
-      provider.doc.getText('code').insert(0, 'local edit');
+      provider.doc.getText(codeTextKey('python')).insert(0, 'local edit');
 
       // Should have sent a sync update
       expect(ws.sent.length).toBeGreaterThan(sentBefore);

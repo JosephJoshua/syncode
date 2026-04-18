@@ -15,8 +15,11 @@ import * as Y from 'yjs';
 
 export type CollabConnectionStatus = 'connecting' | 'connected' | 'reconnecting' | 'disconnected';
 
-/** Y.Text key used by the collab-plane's YjsDocumentStore. Must match server's CODE_KEY. */
-export const CODE_TEXT_KEY = 'code';
+/**
+ * Y.Text key used by the collab-plane's YjsDocumentStore for the given language.
+ * Must match the server's per-language code key format.
+ */
+export const codeTextKey = (language: string): string => `code:${language}`;
 
 export interface YjsCollabProviderOptions {
   url: string;

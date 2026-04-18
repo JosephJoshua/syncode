@@ -1,9 +1,9 @@
 import Editor, { type OnMount } from '@monaco-editor/react';
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { MonacoBinding } from 'y-monaco';
 import type { Awareness } from 'y-protocols/awareness';
 import type * as Y from 'yjs';
-import { CODE_TEXT_KEY } from '@/lib/yjs-collab-provider.js';
+import { codeTextKey } from '@/lib/yjs-collab-provider.js';
 import { buildCursorCssRules } from './cursor-styles.js';
 import {
   EDITOR_LOADING,
@@ -29,6 +29,8 @@ export function CollaborativeEditor({
   onSubmitCode,
 }: CollaborativeEditorProps) {
   const bindingRef = useRef<MonacoBinding | null>(null);
+  type EditorInstance = Parameters<OnMount>[0];
+  const [editor, setEditor] = useState<EditorInstance | null>(null);
   const onRunCodeRef = useRef(onRunCode);
   onRunCodeRef.current = onRunCode;
   const onSubmitCodeRef = useRef(onSubmitCode);
@@ -36,38 +38,43 @@ export function CollaborativeEditor({
 
   const editorOptions = useMemo(() => ({ ...EDITOR_OPTIONS_BASE, readOnly }), [readOnly]);
 
-  const handleMount: OnMount = (editor, monaco) => {
+  const handleMount: OnMount = (editorInstance, monaco) => {
     // Register keyboard shortcuts
-    editor.addAction({
+    editorInstance.addAction({
       id: 'syncode-run',
       label: 'Run Code',
       keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter],
       run: () => void onRunCodeRef.current(),
     });
 
-    editor.addAction({
+    editorInstance.addAction({
       id: 'syncode-submit',
       label: 'Submit Code',
       keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.Enter],
       run: () => void onSubmitCodeRef.current(),
     });
 
-    // Bind Monaco model to Y.Text via y-monaco
+    setEditor(editorInstance);
+  };
+
+  // Bind Monaco model to the per-language Y.Text. Rebind when language, doc, or awareness changes
+  // so switching languages preserves prior text in the old key (each language lives under its own
+  // key: `code:<language>`). Server-side YjsDocumentStore stores text under the same key.
+  useEffect(() => {
+    if (!editor) return;
+
     const model = editor.getModel();
     if (model == null) return;
 
-    const yText = doc.getText(CODE_TEXT_KEY);
+    bindingRef.current?.destroy();
+    const yText = doc.getText(codeTextKey(language));
     bindingRef.current = new MonacoBinding(yText, model, new Set([editor]), awareness);
-  };
 
-  // Clean up binding when component unmounts or doc/awareness changes.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: doc and awareness are intentional deps — when they change the old binding must be destroyed so handleMount can create a fresh one.
-  useEffect(() => {
     return () => {
       bindingRef.current?.destroy();
       bindingRef.current = null;
     };
-  }, [doc, awareness]);
+  }, [editor, doc, awareness, language]);
 
   // Inject dynamic CSS for remote cursor colors from awareness state.
   useEffect(() => {

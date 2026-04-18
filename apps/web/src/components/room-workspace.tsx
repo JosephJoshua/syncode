@@ -34,7 +34,7 @@ import { useSharedExecution } from '@/hooks/use-shared-execution.js';
 import type { CollabConnectionStatus } from '@/hooks/use-yjs-collab.js';
 import { api, readApiError, resolveErrorMessage } from '@/lib/api-client.js';
 import { buildInviteLink } from '@/lib/room-stage.js';
-import { CODE_TEXT_KEY } from '@/lib/yjs-collab-provider.js';
+import { codeTextKey } from '@/lib/yjs-collab-provider.js';
 import { CollaborativeEditor } from './collaborative-editor.js';
 import { ExecutionDetailsPanel } from './execution-details-panel.js';
 import { HostControlPanel } from './host-control-panel.js';
@@ -257,8 +257,8 @@ export function RoomWorkspace({
   const submitDisabled = !canSubmitCode || isEditorReadOnly || isSubmitBusy || isRemoteSubmitActive;
 
   const getCode = useCallback(() => {
-    return doc?.getText(CODE_TEXT_KEY).toString() ?? '';
-  }, [doc]);
+    return doc?.getText(codeTextKey(language)).toString() ?? '';
+  }, [doc, language]);
 
   const handleRunCode = async () => {
     if (testCases.length === 0) return;
