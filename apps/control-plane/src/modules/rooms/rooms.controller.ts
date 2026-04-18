@@ -43,6 +43,7 @@ import type { AuthUser } from '@/modules/auth/auth.types.js';
 import {
   BrowseRoomsQueryDto,
   BrowseRoomsResponseDto,
+  ChangeRoomLanguageDto,
   CreateRoomDto,
   CreateRoomResponseDto,
   DestroyRoomResponseDto,
@@ -284,6 +285,24 @@ export class RoomsController {
     @Param('id') id: string,
   ): Promise<RoomDetailDto> {
     const result = await this.roomsService.toggleReady(id, user.id);
+    return this.serializeRoomDetail(result);
+  }
+
+  @Patch(CONTROL_API.ROOMS.CHANGE_LANGUAGE.route)
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Change the active programming language for a room' })
+  @ApiParam({ name: 'id', description: 'Room ID (UUID)' })
+  @ApiBody({ type: ChangeRoomLanguageDto })
+  @ApiResponse({ status: 200, type: RoomDetailDto })
+  @ApiResponse({ status: 400, type: ErrorResponseDto })
+  @ApiResponse({ status: 403, type: ErrorResponseDto })
+  @ApiResponse({ status: 404, type: ErrorResponseDto })
+  async changeLanguage(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() body: ChangeRoomLanguageDto,
+  ): Promise<RoomDetailDto> {
+    const result = await this.roomsService.changeLanguage(id, user.id, body.language);
     return this.serializeRoomDetail(result);
   }
 

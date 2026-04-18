@@ -528,3 +528,69 @@ describe('POST /rooms/:id/media/token', () => {
     expect(res.body.token).toBe('lk-candidate-token');
   });
 });
+
+describe('PATCH /rooms/:id/language', () => {
+  it('GIVEN a candidate member WHEN PATCH THEN 200 with updated detail (language in response body matches input)', async () => {
+    const host = await insertUser(db);
+    const candidate = await insertUser(db);
+    const room = await insertRoom(db, host.id, { status: 'coding', language: 'python' });
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+    await insertParticipant(db, room.id, candidate.id, 'candidate');
+
+    const res = await asUser(
+      request(app.getHttpServer()).patch(`/rooms/${room.id}/language`),
+      candidate,
+    )
+      .send({ language: 'javascript' })
+      .expect(200);
+
+    expect(res.body.language).toBe('javascript');
+    expect(res.body.roomId).toBe(room.id);
+  });
+
+  it('GIVEN an observer member WHEN PATCH THEN 403', async () => {
+    const host = await insertUser(db);
+    const observer = await insertUser(db);
+    const candidate = await insertUser(db);
+    const room = await insertRoom(db, host.id, { status: 'coding', language: 'python' });
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+    await insertParticipant(db, room.id, candidate.id, 'candidate');
+    await insertParticipant(db, room.id, observer.id, 'observer');
+
+    await asUser(request(app.getHttpServer()).patch(`/rooms/${room.id}/language`), observer)
+      .send({ language: 'javascript' })
+      .expect(403);
+  });
+
+  it('GIVEN invalid language in body WHEN PATCH THEN 400', async () => {
+    const host = await insertUser(db);
+    const room = await insertRoom(db, host.id, { status: 'coding', language: 'python' });
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+
+    await asUser(request(app.getHttpServer()).patch(`/rooms/${room.id}/language`), host)
+      .send({ language: 'brainfuck' })
+      .expect(400);
+  });
+
+  it('GIVEN non-member WHEN PATCH THEN 403', async () => {
+    const host = await insertUser(db);
+    const stranger = await insertUser(db);
+    const room = await insertRoom(db, host.id, { status: 'coding', language: 'python' });
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+
+    await asUser(request(app.getHttpServer()).patch(`/rooms/${room.id}/language`), stranger)
+      .send({ language: 'javascript' })
+      .expect(403);
+  });
+
+  it('GIVEN unauthenticated WHEN PATCH THEN 401', async () => {
+    const host = await insertUser(db);
+    const room = await insertRoom(db, host.id, { status: 'coding', language: 'python' });
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+
+    await request(app.getHttpServer())
+      .patch(`/rooms/${room.id}/language`)
+      .send({ language: 'javascript' })
+      .expect(401);
+  });
+});
