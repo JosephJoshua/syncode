@@ -2,6 +2,7 @@ import { ForbiddenException, Inject, Injectable, Logger, NotFoundException } fro
 import { ERROR_CODES, type ListSessionsQuery, SESSIONS_SORT_BY_OPTIONS } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
 import {
+  codeSnapshots,
   peerFeedback,
   problems,
   runs,
@@ -18,7 +19,11 @@ import { type PaginatedResult, paginate } from '@syncode/shared/server';
 import { and, asc, type Column, desc, eq, gt, gte, inArray, lt, lte, or, sql } from 'drizzle-orm';
 import { resolveAvatarUrls } from '@/common/resolve-avatar-urls.js';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
-import type { SessionDetailResult, SessionSummaryResult } from './sessions.types.js';
+import type {
+  SessionCodeSnapshotResult,
+  SessionDetailResult,
+  SessionSummaryResult,
+} from './sessions.types.js';
 
 type SortBy = (typeof SESSIONS_SORT_BY_OPTIONS)[number];
 
@@ -307,6 +312,54 @@ export class SessionsService {
     };
   }
 
+  async listSnapshots(
+    sessionId: string,
+    userId: string,
+    isAdmin: boolean,
+  ): Promise<SessionCodeSnapshotResult[]> {
+    const [session] = await this.db
+      .select({ id: sessions.id })
+      .from(sessions)
+      .where(eq(sessions.id, sessionId))
+      .limit(1);
+
+    if (!session) {
+      throw new NotFoundException({
+        message: 'Session not found',
+        code: ERROR_CODES.SESSION_NOT_FOUND,
+      });
+    }
+
+    if (!isAdmin) {
+      await Promise.all([
+        this.assertParticipant(sessionId, userId),
+        this.assertNotSoftDeleted(sessionId, userId),
+      ]);
+    }
+
+    const snapshotRows = await this.db
+      .select({
+        snapshotId: codeSnapshots.id,
+        timestamp: codeSnapshots.createdAt,
+        trigger: codeSnapshots.trigger,
+        language: codeSnapshots.language,
+        code: codeSnapshots.code,
+        linesOfCode: codeSnapshots.linesOfCode,
+      })
+      .from(codeSnapshots)
+      .where(eq(codeSnapshots.sessionId, sessionId))
+      .orderBy(asc(codeSnapshots.createdAt), asc(codeSnapshots.id));
+
+    return snapshotRows.map((snapshot) => ({
+      snapshotId: snapshot.snapshotId,
+      timestamp: snapshot.timestamp,
+      trigger: snapshot.trigger,
+      language: snapshot.language,
+      code: snapshot.code,
+      linesOfCode: snapshot.linesOfCode ?? this.countLinesOfCode(snapshot.code),
+    }));
+  }
+
   async deleteSession(sessionId: string, userId: string, isAdmin: boolean): Promise<void> {
     const [session] = await this.db
       .select({ id: sessions.id })
@@ -429,5 +482,9 @@ export class SessionsService {
 
   private isNullableSortColumn(sortBy: SortBy): boolean {
     return sortBy === 'overallScore' || sortBy === 'finishedAt' || sortBy === 'duration';
+  }
+
+  private countLinesOfCode(code: string): number {
+    return code ? code.split('\n').length : 0;
   }
 }
