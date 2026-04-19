@@ -45,6 +45,13 @@ export interface UseLiveKitOptions {
   token: string | null;
   connect: boolean;
   audioProcessing?: AudioProcessingOptions;
+  preferredAudioDeviceId?: string | null;
+  preferredVideoDeviceId?: string | null;
+  onDevicesDiscovered?: (devices: {
+    audioInputIds: ReadonlySet<string>;
+    videoInputIds: ReadonlySet<string>;
+    audioOutputIds: ReadonlySet<string>;
+  }) => void;
 }
 
 export interface UseLiveKitResult {
@@ -111,6 +118,9 @@ export function useLiveKit({
   token,
   connect,
   audioProcessing,
+  preferredAudioDeviceId,
+  preferredVideoDeviceId,
+  onDevicesDiscovered,
 }: UseLiveKitOptions): UseLiveKitResult {
   const [connectionState, setConnectionState] = useState<LiveKitConnectionState>('disconnected');
   const [isMicrophoneEnabled, setIsMicrophoneEnabled] = useState(false);
@@ -145,6 +155,14 @@ export function useLiveKit({
 
   const audioProcessingRef = useRef(audioProcessing);
   audioProcessingRef.current = audioProcessing;
+
+  const preferredAudioDeviceIdRef = useRef(preferredAudioDeviceId);
+  preferredAudioDeviceIdRef.current = preferredAudioDeviceId;
+  const preferredVideoDeviceIdRef = useRef(preferredVideoDeviceId);
+  preferredVideoDeviceIdRef.current = preferredVideoDeviceId;
+
+  const onDevicesDiscoveredRef = useRef(onDevicesDiscovered);
+  onDevicesDiscoveredRef.current = onDevicesDiscovered;
 
   const refreshParticipants = useCallback(() => {
     const room = roomRef.current;
@@ -222,6 +240,20 @@ export function useLiveKit({
           .map((d, i) => ({ deviceId: d.deviceId, label: d.label || `Camera ${i + 1}` })),
       );
 
+      const cb = onDevicesDiscoveredRef.current;
+      if (cb) {
+        const audioInputIds = new Set(
+          devices.filter((d) => d.kind === 'audioinput' && d.deviceId).map((d) => d.deviceId),
+        );
+        const videoInputIds = new Set(
+          devices.filter((d) => d.kind === 'videoinput' && d.deviceId).map((d) => d.deviceId),
+        );
+        const audioOutputIds = new Set(
+          devices.filter((d) => d.kind === 'audiooutput' && d.deviceId).map((d) => d.deviceId),
+        );
+        cb({ audioInputIds, videoInputIds, audioOutputIds });
+      }
+
       const room = roomRef.current;
       if (room) {
         setActiveAudioDeviceId(room.localParticipant.activeDeviceMap.get('audioinput') ?? null);
@@ -273,6 +305,8 @@ export function useLiveKit({
     }
 
     const ap = audioProcessingRef.current;
+    const preferredAudio = preferredAudioDeviceIdRef.current;
+    const preferredVideo = preferredVideoDeviceIdRef.current;
     const room = new Room({
       adaptiveStream: true,
       dynacast: true,
@@ -280,8 +314,12 @@ export function useLiveKit({
         echoCancellation: ap?.echoCancellation ?? true,
         noiseSuppression: ap?.noiseSuppression ?? true,
         autoGainControl: ap?.autoGainControl ?? false,
+        deviceId: preferredAudio ?? undefined,
       },
-      videoCaptureDefaults: { resolution: { width: 640, height: 480, frameRate: 24 } },
+      videoCaptureDefaults: {
+        resolution: { width: 640, height: 480, frameRate: 24 },
+        deviceId: preferredVideo ?? undefined,
+      },
     });
 
     roomRef.current = room;
