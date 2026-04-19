@@ -324,6 +324,8 @@ export function FloatingVideoPanel({
     originWidth: number;
     originHeight: number;
   } | null>(null);
+  const pendingSizeRef = useRef<{ width: number; height: number } | null>(null);
+  const resizeRafRef = useRef<number | null>(null);
 
   const panelWidth = isMinimized ? 160 : size.width;
   const activeTile = pickActiveTile(tiles);
@@ -435,13 +437,35 @@ export function FloatingVideoPanel({
       if (!resizeRef.current) return;
       const dx = e.clientX - resizeRef.current.startX;
       const dy = e.clientY - resizeRef.current.startY;
-      setSize(clampSize(resizeRef.current.originWidth + dx, resizeRef.current.originHeight + dy));
+      pendingSizeRef.current = clampSize(
+        resizeRef.current.originWidth + dx,
+        resizeRef.current.originHeight + dy,
+      );
+      if (resizeRafRef.current !== null) return;
+      resizeRafRef.current = requestAnimationFrame(() => {
+        resizeRafRef.current = null;
+        if (pendingSizeRef.current) setSize(pendingSizeRef.current);
+      });
     },
     [clampSize],
   );
 
   const onResizePointerUp = useCallback(() => {
     resizeRef.current = null;
+    if (resizeRafRef.current !== null) {
+      cancelAnimationFrame(resizeRafRef.current);
+      resizeRafRef.current = null;
+    }
+    if (pendingSizeRef.current) {
+      setSize(pendingSizeRef.current);
+      pendingSizeRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (resizeRafRef.current !== null) cancelAnimationFrame(resizeRafRef.current);
+    };
   }, []);
 
   const zoomedTile = zoomTarget ? tiles.find((t) => t.identity === zoomTarget.identity) : null;
