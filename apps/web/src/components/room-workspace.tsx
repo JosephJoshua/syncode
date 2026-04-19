@@ -125,6 +125,17 @@ export function RoomWorkspace({
     doc,
   );
 
+  const allRequiredReady = useMemo(() => {
+    const required = room.participants.filter((participant) => {
+      if (!participant.isActive) return false;
+      if (room.mode === 'peer') {
+        return participant.role === 'interviewer' || participant.role === 'candidate';
+      }
+      return participant.role === 'candidate';
+    });
+    return required.length > 0 && required.every((participant) => participant.isReady);
+  }, [room.participants, room.mode]);
+
   const [problem, setProblem] = useState<ProblemDetail | null>(null);
   const [problemLoading, setProblemLoading] = useState(!!room.problemId);
   const [problemError, setProblemError] = useState<string | null>(null);
@@ -854,6 +865,7 @@ export function RoomWorkspace({
                     editorLocked={room.editorLocked}
                     canChangePhase={room.myCapabilities.includes('room:change-phase')}
                     isPending={isTransitioning}
+                    allRequiredReady={allRequiredReady}
                     onTransition={(targetStatus) => {
                       void onTransition(targetStatus);
                     }}

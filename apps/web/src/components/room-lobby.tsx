@@ -89,7 +89,18 @@ export function RoomLobby({
   const myReady = Boolean(
     currentUserId && activeParticipants.find((p) => p.userId === currentUserId)?.isReady,
   );
-  const canEnterWorkspace = status === 'waiting' && canChangePhase && isRoomValid && myReady;
+  const requiredPeers = useMemo(
+    () =>
+      activeParticipants.filter((p) =>
+        mode === 'peer'
+          ? p.role === 'interviewer' || p.role === 'candidate'
+          : p.role === 'candidate',
+      ),
+    [activeParticipants, mode],
+  );
+  const allPeersReady = requiredPeers.length > 0 && requiredPeers.every((p) => p.isReady);
+  const canEnterWorkspace =
+    status === 'waiting' && canChangePhase && isRoomValid && myReady && allPeersReady;
 
   const inviteLink = buildInviteLink(roomId, roomCode);
 
@@ -254,6 +265,10 @@ export function RoomLobby({
                   ) : !myReady && canChangePhase ? (
                     <p className="text-[11px] text-muted-foreground">
                       {t('readyButton.readyFirst')}
+                    </p>
+                  ) : myReady && !allPeersReady && canChangePhase ? (
+                    <p className="text-[11px] text-muted-foreground">
+                      {t('hostControl.awaitingReady')}
                     </p>
                   ) : null}
                   <Button
