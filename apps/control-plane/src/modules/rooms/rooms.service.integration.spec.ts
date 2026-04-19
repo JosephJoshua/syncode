@@ -1544,4 +1544,72 @@ describe('changeLanguage', () => {
       service.changeLanguage('00000000-0000-0000-0000-000000000000', user.id, 'python'),
     ).rejects.toThrow(NotFoundException);
   });
+
+  it('GIVEN an ongoing session for the room WHEN changing language THEN sessions.language is updated too', async () => {
+    const host = await insertUser(db);
+    const candidate = await insertUser(db);
+    const room = await insertRoom(db, host.id, { status: 'coding', language: 'python' });
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+    await insertParticipant(db, room.id, candidate.id, 'candidate');
+
+    const [session] = await db
+      .insert(sessions)
+      .values({
+        roomId: room.id,
+        mode: room.mode,
+        language: 'python',
+        status: 'ongoing',
+        startedAt: new Date(),
+      })
+      .returning();
+
+    await service.changeLanguage(room.id, candidate.id, 'javascript');
+
+    const [updatedSession] = await db.select().from(sessions).where(eq(sessions.id, session!.id));
+    expect(updatedSession!.language).toBe('javascript');
+  });
+
+  it('GIVEN no ongoing session (waiting state) WHEN changing language THEN no session row is updated (no error)', async () => {
+    const host = await insertUser(db);
+    const candidate = await insertUser(db);
+    const room = await insertRoom(db, host.id, { status: 'waiting', language: 'python' });
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+    await insertParticipant(db, room.id, candidate.id, 'candidate');
+
+    await expect(
+      service.changeLanguage(room.id, candidate.id, 'javascript'),
+    ).resolves.toMatchObject({ language: 'javascript' });
+
+    const sessionRows = await db.select().from(sessions).where(eq(sessions.roomId, room.id));
+    expect(sessionRows).toHaveLength(0);
+  });
+
+  it("GIVEN a finished session WHEN changing language THEN that finished session's language is NOT touched", async () => {
+    const host = await insertUser(db);
+    const candidate = await insertUser(db);
+    const room = await insertRoom(db, host.id, { status: 'coding', language: 'python' });
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+    await insertParticipant(db, room.id, candidate.id, 'candidate');
+
+    const [finishedSession] = await db
+      .insert(sessions)
+      .values({
+        roomId: room.id,
+        mode: room.mode,
+        language: 'python',
+        status: 'finished',
+        startedAt: new Date(Date.now() - 60_000),
+        finishedAt: new Date(),
+      })
+      .returning();
+
+    await service.changeLanguage(room.id, candidate.id, 'javascript');
+
+    const [untouched] = await db
+      .select()
+      .from(sessions)
+      .where(eq(sessions.id, finishedSession!.id));
+    expect(untouched!.language).toBe('python');
+    expect(untouched!.status).toBe('finished');
+  });
 });

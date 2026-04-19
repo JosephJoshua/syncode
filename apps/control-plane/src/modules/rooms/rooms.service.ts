@@ -907,6 +907,10 @@ export class RoomsService {
       }
 
       await tx.update(rooms).set({ language }).where(eq(rooms.id, roomId));
+      await tx
+        .update(sessions)
+        .set({ language })
+        .where(and(eq(sessions.roomId, roomId), eq(sessions.status, 'ongoing')));
       return room.language;
     });
 
