@@ -5,6 +5,7 @@ import { motion } from 'motion/react';
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useClipboard } from '@/hooks/use-clipboard.js';
+import { allRequiredPeersReady } from '@/lib/participant-readiness.js';
 import {
   buildInviteLink,
   countActiveRoleConfiguration,
@@ -89,16 +90,10 @@ export function RoomLobby({
   const myReady = Boolean(
     currentUserId && activeParticipants.find((p) => p.userId === currentUserId)?.isReady,
   );
-  const requiredPeers = useMemo(
-    () =>
-      activeParticipants.filter((p) =>
-        mode === 'peer'
-          ? p.role === 'interviewer' || p.role === 'candidate'
-          : p.role === 'candidate',
-      ),
-    [activeParticipants, mode],
+  const allPeersReady = useMemo(
+    () => allRequiredPeersReady(participants, mode),
+    [participants, mode],
   );
-  const allPeersReady = requiredPeers.length > 0 && requiredPeers.every((p) => p.isReady);
   const canEnterWorkspace =
     status === 'waiting' && canChangePhase && isRoomValid && myReady && allPeersReady;
 

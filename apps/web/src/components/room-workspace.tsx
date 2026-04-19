@@ -33,6 +33,7 @@ import type * as Y from 'yjs';
 import { useSharedExecution } from '@/hooks/use-shared-execution.js';
 import type { CollabConnectionStatus } from '@/hooks/use-yjs-collab.js';
 import { api, readApiError, resolveErrorMessage } from '@/lib/api-client.js';
+import { allRequiredPeersReady } from '@/lib/participant-readiness.js';
 import { buildInviteLink } from '@/lib/room-stage.js';
 import { CODE_TEXT_KEY } from '@/lib/yjs-collab-provider.js';
 import { CollaborativeEditor } from './collaborative-editor.js';
@@ -125,16 +126,10 @@ export function RoomWorkspace({
     doc,
   );
 
-  const allRequiredReady = useMemo(() => {
-    const required = room.participants.filter((participant) => {
-      if (!participant.isActive) return false;
-      if (room.mode === 'peer') {
-        return participant.role === 'interviewer' || participant.role === 'candidate';
-      }
-      return participant.role === 'candidate';
-    });
-    return required.length > 0 && required.every((participant) => participant.isReady);
-  }, [room.participants, room.mode]);
+  const allRequiredReady = useMemo(
+    () => allRequiredPeersReady(room.participants, room.mode),
+    [room.participants, room.mode],
+  );
 
   const [problem, setProblem] = useState<ProblemDetail | null>(null);
   const [problemLoading, setProblemLoading] = useState(!!room.problemId);
