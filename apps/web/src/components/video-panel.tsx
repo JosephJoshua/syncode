@@ -7,7 +7,6 @@ import {
   PanelRight,
   PanelRightClose,
   Video,
-  X,
 } from 'lucide-react';
 import { AnimatePresence, motion, useMotionValue, useSpring } from 'motion/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -44,21 +43,7 @@ function ParticipantTile({
   const { t } = useTranslation('rooms');
   const videoRef = useVideoTrack(videoTrack);
   const initial = displayName.charAt(0).toUpperCase();
-
-  const handleDoubleClick = onZoom
-    ? (e: React.MouseEvent) => {
-        e.preventDefault();
-        onZoom();
-      }
-    : undefined;
-
-  const interactiveProps = onZoom
-    ? {
-        role: 'button' as const,
-        tabIndex: -1,
-        onDoubleClick: handleDoubleClick,
-      }
-    : undefined;
+  const interactiveProps = useZoomInteractiveProps(onZoom);
 
   return (
     <div
@@ -136,21 +121,7 @@ function ScreenShareTile({
   fill = false,
 }: ScreenShareTileProps) {
   const videoRef = useVideoTrack(screenShareTrack);
-
-  const handleDoubleClick = onZoom
-    ? (e: React.MouseEvent) => {
-        e.preventDefault();
-        onZoom();
-      }
-    : undefined;
-
-  const interactiveProps = onZoom
-    ? {
-        role: 'button' as const,
-        tabIndex: -1,
-        onDoubleClick: handleDoubleClick,
-      }
-    : undefined;
+  const interactiveProps = useZoomInteractiveProps(onZoom);
 
   return (
     <div
@@ -197,6 +168,34 @@ function ScreenShareTile({
 
 type ZoomTarget = { identity: string; kind: 'camera' | 'screen' };
 
+function useClearZoomWhenMissing(
+  zoomTarget: ZoomTarget | null,
+  tiles: VideoPanelParticipant[],
+  setZoomTarget: (target: ZoomTarget | null) => void,
+) {
+  useEffect(() => {
+    if (zoomTarget === null) return;
+    const stillPresent = tiles.some((t) => {
+      if (t.identity !== zoomTarget.identity) return false;
+      if (zoomTarget.kind === 'screen') return t.hasScreenShare && t.screenShareTrack !== null;
+      return true;
+    });
+    if (!stillPresent) setZoomTarget(null);
+  }, [tiles, zoomTarget, setZoomTarget]);
+}
+
+function useZoomInteractiveProps(onZoom: (() => void) | undefined) {
+  if (!onZoom) return undefined;
+  return {
+    role: 'button' as const,
+    tabIndex: -1,
+    onDoubleClick: (e: React.MouseEvent) => {
+      e.preventDefault();
+      onZoom();
+    },
+  };
+}
+
 interface ZoomOverlayProps {
   tile: VideoPanelParticipant;
   kind: 'camera' | 'screen';
@@ -239,9 +238,7 @@ function ZoomOverlay({ tile, kind, onClose }: ZoomOverlayProps) {
             fill
           />
         ) : (
-          <div className="h-full w-full">
-            <ParticipantTile {...tile} fit="contain" />
-          </div>
+          <ParticipantTile {...tile} fit="contain" />
         )}
         <div className="absolute right-2 top-2 flex items-center gap-1">
           <Button
@@ -253,16 +250,6 @@ function ZoomOverlay({ tile, kind, onClose }: ZoomOverlayProps) {
             aria-label="Exit zoom"
           >
             <Minimize2 className="size-4" />
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            className="size-8 bg-black/50 text-white/90 backdrop-blur-sm hover:bg-black/70 hover:text-white"
-            onClick={onClose}
-            aria-label="Close zoom"
-          >
-            <X className="size-4" />
           </Button>
         </div>
       </div>
@@ -370,15 +357,7 @@ export function FloatingVideoPanel({
     return () => window.removeEventListener('resize', onResize);
   }, [springX, springY, clampSize]);
 
-  useEffect(() => {
-    if (zoomTarget === null) return;
-    const stillPresent = tiles.some((t) => {
-      if (t.identity !== zoomTarget.identity) return false;
-      if (zoomTarget.kind === 'screen') return t.hasScreenShare && t.screenShareTrack !== null;
-      return true;
-    });
-    if (!stillPresent) setZoomTarget(null);
-  }, [tiles, zoomTarget]);
+  useClearZoomWhenMissing(zoomTarget, tiles, setZoomTarget);
 
   const onPointerDown = useCallback((e: React.PointerEvent) => {
     e.preventDefault();
@@ -577,7 +556,7 @@ export function FloatingVideoPanel({
               onPointerUp={onResizePointerUp}
               onPointerCancel={onResizePointerUp}
             >
-              <svg viewBox="0 0 10 10" className="size-2.5 pointer-events-none" aria-hidden="true">
+              <svg viewBox="0 0 10 10" className="size-2.5 pointer-events-none">
                 <title>Resize</title>
                 <path
                   d="M1 9 L9 9 M4 9 L9 4 M7 9 L9 7"
@@ -616,15 +595,7 @@ export function DockedVideoPanel({ tiles, onUndock }: DockedVideoPanelProps) {
   const hasAnyVideo = tiles.some((t) => t.hasVideo);
   const hasAnyScreenShare = tiles.some((t) => t.hasScreenShare);
 
-  useEffect(() => {
-    if (zoomTarget === null) return;
-    const stillPresent = tiles.some((t) => {
-      if (t.identity !== zoomTarget.identity) return false;
-      if (zoomTarget.kind === 'screen') return t.hasScreenShare && t.screenShareTrack !== null;
-      return true;
-    });
-    if (!stillPresent) setZoomTarget(null);
-  }, [tiles, zoomTarget]);
+  useClearZoomWhenMissing(zoomTarget, tiles, setZoomTarget);
 
   if (tiles.length === 0 || (tiles.length <= 1 && !hasAnyVideo && !hasAnyScreenShare)) return null;
 
