@@ -141,35 +141,27 @@ function useMediaPermissions(
     };
   }, [open, detect]);
 
-  const requestAudio = useCallback(async () => {
-    setRequestingAudio(true);
-    setAudioError(null);
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      for (const t of stream.getTracks()) t.stop();
-      const signal = { cancelled: false };
-      await detect(signal);
-    } catch {
-      setAudioError('Permission denied. Update browser settings to allow.');
-    } finally {
-      setRequestingAudio(false);
-    }
-  }, [detect]);
-
-  const requestVideo = useCallback(async () => {
-    setRequestingVideo(true);
-    setVideoError(null);
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-      for (const t of stream.getTracks()) t.stop();
-      const signal = { cancelled: false };
-      await detect(signal);
-    } catch {
-      setVideoError('Permission denied. Update browser settings to allow.');
-    } finally {
-      setRequestingVideo(false);
-    }
-  }, [detect]);
+  const request = useCallback(
+    async (kind: 'audio' | 'video') => {
+      const setRequesting = kind === 'audio' ? setRequestingAudio : setRequestingVideo;
+      const setError = kind === 'audio' ? setAudioError : setVideoError;
+      setRequesting(true);
+      setError(null);
+      try {
+        const constraints: MediaStreamConstraints =
+          kind === 'audio' ? { audio: true } : { video: true };
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        for (const t of stream.getTracks()) t.stop();
+        const signal = { cancelled: false };
+        await detect(signal);
+      } catch {
+        setError('Permission denied. Update browser settings to allow.');
+      } finally {
+        setRequesting(false);
+      }
+    },
+    [detect],
+  );
 
   return {
     audioDevices: hasLiveAudio ? existingAudio : probed.audio,
@@ -180,8 +172,7 @@ function useMediaPermissions(
     videoError,
     requestingAudio,
     requestingVideo,
-    requestAudio,
-    requestVideo,
+    request,
   };
 }
 
@@ -328,6 +319,47 @@ function VideoPreview({
   );
 }
 
+function GrantPermissionPrompt({
+  kind,
+  icon: Icon,
+  onRequest,
+  requesting,
+  error,
+}: {
+  kind: 'audio' | 'video';
+  icon: React.ComponentType<{ className?: string }>;
+  onRequest: () => void;
+  requesting: boolean;
+  error: string | null;
+}) {
+  const isAudio = kind === 'audio';
+  return (
+    <div className="space-y-2">
+      <p className="text-[11px] text-muted-foreground">
+        {isAudio
+          ? 'Allow microphone access to pick a device and tune audio processing.'
+          : 'Allow camera access to preview video and pick a device before going live.'}
+      </p>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="h-7 w-full gap-1.5 text-xs"
+        onClick={onRequest}
+        disabled={requesting}
+      >
+        <Icon className="size-3" />
+        {requesting
+          ? 'Requesting...'
+          : isAudio
+            ? 'Grant Microphone Permission'
+            : 'Grant Camera Permission'}
+      </Button>
+      {error ? <p className="text-[10px] text-destructive">{error}</p> : null}
+    </div>
+  );
+}
+
 function ToggleChip({
   label,
   icon: Icon,
@@ -387,8 +419,7 @@ export function MediaSettingsPanel({
     videoError,
     requestingAudio,
     requestingVideo,
-    requestAudio,
-    requestVideo,
+    request,
   } = useMediaPermissions(open, audioInputDevices, videoInputDevices);
 
   const effectiveAudioId =
@@ -511,23 +542,13 @@ export function MediaSettingsPanel({
                 ) : null}
               </>
             ) : (
-              <div className="space-y-2">
-                <p className="text-[11px] text-muted-foreground">
-                  Allow camera access to preview video and pick a device before going live.
-                </p>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-7 w-full gap-1.5 text-xs"
-                  onClick={() => void requestVideo()}
-                  disabled={requestingVideo}
-                >
-                  <Camera className="size-3" />
-                  {requestingVideo ? 'Requesting...' : 'Grant Camera Permission'}
-                </Button>
-                {videoError ? <p className="text-[10px] text-destructive">{videoError}</p> : null}
-              </div>
+              <GrantPermissionPrompt
+                kind="video"
+                icon={Camera}
+                onRequest={() => void request('video')}
+                requesting={requestingVideo}
+                error={videoError}
+              />
             )}
           </div>
 
@@ -602,23 +623,13 @@ export function MediaSettingsPanel({
                 </div>
               </>
             ) : (
-              <div className="space-y-2">
-                <p className="text-[11px] text-muted-foreground">
-                  Allow microphone access to pick a device and tune audio processing.
-                </p>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-7 w-full gap-1.5 text-xs"
-                  onClick={() => void requestAudio()}
-                  disabled={requestingAudio}
-                >
-                  <Mic className="size-3" />
-                  {requestingAudio ? 'Requesting...' : 'Grant Microphone Permission'}
-                </Button>
-                {audioError ? <p className="text-[10px] text-destructive">{audioError}</p> : null}
-              </div>
+              <GrantPermissionPrompt
+                kind="audio"
+                icon={Mic}
+                onRequest={() => void request('audio')}
+                requesting={requestingAudio}
+                error={audioError}
+              />
             )}
           </div>
 
