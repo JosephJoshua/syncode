@@ -129,8 +129,11 @@ export class RoomsController {
   @ApiQuery({ name: 'difficulty', required: false, enum: [...PROBLEM_DIFFICULTIES] })
   @ApiQuery({ name: 'search', required: false, type: String })
   @ApiResponse({ status: 200, type: BrowseRoomsResponseDto })
-  async browsePublicRooms(@Query() query: BrowseRoomsQueryDto): Promise<BrowseRoomsResponseDto> {
-    const result = await this.roomsService.browsePublicRooms(query);
+  async browsePublicRooms(
+    @CurrentUser() user: AuthUser,
+    @Query() query: BrowseRoomsQueryDto,
+  ): Promise<BrowseRoomsResponseDto> {
+    const result = await this.roomsService.browsePublicRooms(user.id, query);
     return {
       data: result.data.map((room) => ({
         ...room,

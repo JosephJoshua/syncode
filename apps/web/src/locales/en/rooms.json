@@ -38,7 +38,9 @@
       "participantFraction": "{{current}} / {{max}}",
       "hostedBy": "Hosted by {{name}}",
       "unknownProblem": "No problem selected",
-      "join": "Join room"
+      "join": "Join room",
+      "enter": "Enter",
+      "alreadyJoined": "You're in this room"
     },
     "emptyState": {
       "title": "Nothing on air right now",

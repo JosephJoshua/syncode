@@ -76,6 +76,7 @@ describe('browseRoomsResponseSchema', () => {
           problemTitle: null,
           problemDifficulty: null,
           participantCount: 1,
+          isParticipant: false,
           maxParticipants: 2,
           createdAt: '2026-04-19T12:00:00.000Z',
         },

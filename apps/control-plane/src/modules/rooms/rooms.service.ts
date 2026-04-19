@@ -236,6 +236,7 @@ export class RoomsService {
   }
 
   async browsePublicRooms(
+    userId: string,
     query: BrowseRoomsQuery,
   ): Promise<PaginatedResult<PublicRoomSummaryResult>> {
     const escapedSearch = query.search
@@ -292,6 +293,12 @@ export class RoomsService {
               select count(*)::int from room_participants rp
               where rp.room_id = ${rooms.id} and rp.is_active = true
             )`.as('participant_count'),
+            isParticipant: sql<boolean>`exists(
+              select 1 from room_participants rp
+              where rp.room_id = ${rooms.id}
+                and rp.user_id = ${userId}
+                and rp.is_active = true
+            )`.as('is_participant'),
             createdAt: rooms.createdAt,
           })
           .from(rooms)
@@ -318,6 +325,7 @@ export class RoomsService {
           problemTitle: row.problemTitle ?? null,
           problemDifficulty: row.problemDifficulty ?? null,
           participantCount: row.participantCount,
+          isParticipant: row.isParticipant,
           maxParticipants: row.maxParticipants,
           createdAt: row.createdAt,
         }));

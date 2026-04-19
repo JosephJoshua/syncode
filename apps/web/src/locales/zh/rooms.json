@@ -38,7 +38,9 @@
       "participantFraction": "{{current}} / {{max}}",
       "hostedBy": "主持人 {{name}}",
       "unknownProblem": "未选择题目",
-      "join": "加入房间"
+      "join": "加入房间",
+      "enter": "进入",
+      "alreadyJoined": "你已加入"
     },
     "emptyState": {
       "title": "当前没有进行中的房间",

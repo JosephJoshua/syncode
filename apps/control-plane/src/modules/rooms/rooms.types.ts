@@ -44,6 +44,7 @@ export interface PublicRoomSummaryResult {
   problemTitle: string | null;
   problemDifficulty: ProblemDifficulty | null;
   participantCount: number;
+  isParticipant: boolean;
   maxParticipants: number;
   createdAt: Date;
 }

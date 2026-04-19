@@ -356,6 +356,9 @@ export const publicRoomSummarySchema = z.object({
   problemTitle: z.string().nullable().describe('Problem title'),
   problemDifficulty: z.enum(PROBLEM_DIFFICULTIES).nullable().describe('Problem difficulty'),
   participantCount: z.number().int().describe('Number of active participants'),
+  isParticipant: z
+    .boolean()
+    .describe('Whether the requesting user is an active participant in this room.'),
   maxParticipants: z.number().int().describe('Maximum participants allowed'),
   createdAt: z.iso.datetime().describe('ISO 8601 creation timestamp'),
 });

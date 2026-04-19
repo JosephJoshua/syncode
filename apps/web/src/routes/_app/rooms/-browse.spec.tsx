@@ -87,6 +87,7 @@ type BrowseResponse = {
     problemTitle: string | null;
     problemDifficulty: 'easy' | 'medium' | 'hard' | null;
     participantCount: number;
+    isParticipant: boolean;
     maxParticipants: number;
     createdAt: string;
   }>;
@@ -112,6 +113,7 @@ function makeRoom(
     problemTitle: 'Two Sum',
     problemDifficulty: 'easy',
     participantCount: 1,
+    isParticipant: false,
     maxParticipants: 2,
     createdAt: new Date().toISOString(),
     ...overrides,
@@ -286,5 +288,27 @@ describe('BrowseRoomsPage', () => {
       });
       expect(searchedForValue).toBe(true);
     });
+  });
+
+  it('GIVEN a room WHERE isParticipant is true THEN the card shows Enter and an already-joined indicator', async () => {
+    apiMock.mockResolvedValue(
+      makeResponse([
+        makeRoom({
+          roomId: 'room-mine',
+          problemTitle: 'Joined Problem',
+          isParticipant: true,
+          participantCount: 2,
+          maxParticipants: 4,
+        }),
+      ]),
+    );
+
+    renderPage();
+
+    await screen.findByText('Joined Problem');
+
+    expect(screen.getByText('browse.card.alreadyJoined')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /browse\.card\.enter/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /browse\.card\.join/i })).not.toBeInTheDocument();
   });
 });

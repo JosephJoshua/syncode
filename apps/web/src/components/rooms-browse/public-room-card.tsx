@@ -6,7 +6,7 @@ import {
 import type { ProblemDifficulty } from '@syncode/shared';
 import { Avatar, AvatarFallback, AvatarImage, Badge, Button, Card, cn } from '@syncode/ui';
 import { formatDistanceToNowStrict } from 'date-fns';
-import { Clock3, Code2, Loader2, Users } from 'lucide-react';
+import { ArrowRight, CheckCircle2, Clock3, Code2, Loader2, Users } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useTranslation } from 'react-i18next';
 import { LANGUAGE_SELECTOR_METADATA } from '@/components/language-selector.data.js';
@@ -99,6 +99,15 @@ export function PublicRoomCard({ room, index, onJoin, isJoining }: Props) {
               max: room.maxParticipants,
             })}
           </Badge>
+          {room.isParticipant && (
+            <Badge
+              variant="outline"
+              className="gap-1 border-primary/30 bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary"
+            >
+              <CheckCircle2 size={10} />
+              {t('browse.card.alreadyJoined')}
+            </Badge>
+          )}
         </div>
 
         <div className="mt-auto flex items-center justify-between gap-3 border-t border-border/40 pt-4">
@@ -119,12 +128,14 @@ export function PublicRoomCard({ room, index, onJoin, isJoining }: Props) {
           <Button
             type="button"
             size="sm"
-            disabled={isJoining || isFull}
+            variant={room.isParticipant ? 'outline' : 'default'}
+            disabled={isJoining || (isFull && !room.isParticipant)}
             onClick={() => onJoin(room.roomId)}
             className="shrink-0 gap-1.5"
           >
             {isJoining ? <Loader2 size={14} className="animate-spin" /> : null}
-            {t('browse.card.join')}
+            {room.isParticipant ? t('browse.card.enter') : t('browse.card.join')}
+            {!isJoining && room.isParticipant ? <ArrowRight size={14} /> : null}
           </Button>
         </div>
       </Card>
