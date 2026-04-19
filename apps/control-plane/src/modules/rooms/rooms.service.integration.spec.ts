@@ -349,14 +349,22 @@ describe('joinRoom', () => {
     ).rejects.toThrow(ConflictException);
   });
 
-  it('GIVEN user already active in room WHEN joining THEN throws ConflictException', async () => {
+  it('GIVEN user already active in room WHEN joining THEN idempotently returns current role with a fresh collab token', async () => {
     const user = await insertUser(db);
     const room = await insertRoom(db, user.id, { maxParticipants: 4 });
     await insertParticipant(db, room.id, user.id, 'interviewer');
 
-    await expect(service.joinRoom(room.id, user.id, { roomCode: room.inviteCode })).rejects.toThrow(
-      ConflictException,
-    );
+    const result = await service.joinRoom(room.id, user.id, { roomCode: room.inviteCode });
+
+    expect(result.assignedRole).toBe('interviewer');
+    expect(result.assignmentReason).toBe('auto-assigned');
+    expect(result.collabToken).toBeTypeOf('string');
+
+    const activeParticipants = await db
+      .select()
+      .from(roomParticipants)
+      .where(and(eq(roomParticipants.roomId, room.id), eq(roomParticipants.isActive, true)));
+    expect(activeParticipants).toHaveLength(1);
   });
   it('GIVEN user previously left WHEN rejoining THEN reactivates existing row with an available role', async () => {
     const host = await insertUser(db);

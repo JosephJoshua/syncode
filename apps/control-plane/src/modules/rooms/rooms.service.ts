@@ -408,10 +408,12 @@ export class RoomsService {
 
       const existing = existingParticipants.find((p) => p.userId === userId);
       if (existing?.isActive) {
-        throw new ConflictException({
-          message: 'Already joined this room',
-          code: ERROR_CODES.ROOM_ALREADY_JOINED,
-        });
+        // Idempotent re-join: user is already active in this room. Skip the
+        // DB write and let the post-transaction code mint a fresh collab
+        // token so the caller can (re-)enter the workspace.
+        assignedRole = this.normalizeParticipantRole(room.mode, existing.role, room.hostId, userId);
+        assignmentReason = 'auto-assigned';
+        return;
       }
 
       const activeCount = existingParticipants.filter((p) => p.isActive).length;
@@ -653,6 +655,7 @@ export class RoomsService {
         lockedRoom.mode,
         lockedRoom.status,
         nextActiveParticipants,
+        { strict: true },
       );
 
       await tx
@@ -1101,6 +1104,7 @@ export class RoomsService {
           lockedRoom.mode as RoomMode,
           RoomStatus.WARMUP,
           activeParticipants,
+          { strict: true },
         );
       }
 
@@ -1265,6 +1269,7 @@ export class RoomsService {
     mode: RoomMode,
     status: RoomStatus,
     activeParticipants: Array<{ userId: string; role: RoomRole }>,
+    options: { strict?: boolean } = {},
   ): void {
     const interviewerCount = activeParticipants.filter(
       (participant) => participant.role === RoomRole.INTERVIEWER,
@@ -1281,7 +1286,11 @@ export class RoomsService {
         });
       }
 
-      if (status !== RoomStatus.WAITING && (interviewerCount !== 1 || candidateCount !== 1)) {
+      if (
+        options.strict &&
+        status !== RoomStatus.WAITING &&
+        (interviewerCount !== 1 || candidateCount !== 1)
+      ) {
         throw new ConflictException({
           message: 'Peer rooms require exactly one active interviewer and one active candidate',
           code: ERROR_CODES.ROOM_ROLE_CONSTRAINT_VIOLATION,
@@ -1298,7 +1307,7 @@ export class RoomsService {
       });
     }
 
-    if (status !== RoomStatus.WAITING && candidateCount !== 1) {
+    if (options.strict && status !== RoomStatus.WAITING && candidateCount !== 1) {
       throw new ConflictException({
         message: 'AI rooms require exactly one active candidate after the room starts',
         code: ERROR_CODES.ROOM_ROLE_CONSTRAINT_VIOLATION,

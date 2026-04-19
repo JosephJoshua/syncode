@@ -64,6 +64,7 @@ export function LanguageSelector({
             value={option.value}
             aria-label={option.label}
             textValue={option.label}
+            hideIndicator
           >
             <LanguageSelectorValue
               iconSrc={option.iconSrc}

@@ -284,14 +284,16 @@ describe('POST /rooms/:id/join', () => {
       .expect(404);
   });
 
-  it('GIVEN user already a participant WHEN joining THEN returns 409', async () => {
+  it('GIVEN user already a participant WHEN joining THEN 200 with current role (idempotent)', async () => {
     const user = await insertUser(db);
     const room = await insertRoom(db, user.id, { maxParticipants: 4 });
     await insertParticipant(db, room.id, user.id, 'interviewer');
 
-    await asUser(request(app.getHttpServer()).post(`/rooms/${room.id}/join`), user)
+    const res = await asUser(request(app.getHttpServer()).post(`/rooms/${room.id}/join`), user)
       .send({ roomCode: room.inviteCode })
-      .expect(409);
+      .expect(200);
+
+    expect(res.body.assignedRole).toBe('interviewer');
   });
 });
 
