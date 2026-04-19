@@ -1,6 +1,7 @@
 import { Badge } from '@syncode/ui';
 import { FileText, Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { ProblemMarkdown } from './problems/problem-markdown.js';
 
 export interface ProblemData {
   title: string;
@@ -33,14 +34,12 @@ export function RoomProblemPanel({ problem, loading, error, hasProblem }: RoomPr
 
   return (
     <div className="flex h-full flex-col bg-card">
-      {/* Header */}
       <div className="flex h-8 shrink-0 items-center border-b border-border px-3">
         <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
           {t('problem.heading')}
         </span>
       </div>
 
-      {/* Content */}
       <div className="flex-1 overflow-y-auto p-4">
         {!hasProblem ? (
           <div className="flex flex-col items-center justify-center py-12 text-center">
@@ -68,7 +67,6 @@ function ProblemContent({ problem }: { problem: ProblemData }) {
 
   return (
     <div className="space-y-4">
-      {/* Title + difficulty */}
       <div>
         <h2 className="text-sm font-semibold text-foreground">{problem.title}</h2>
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
@@ -85,12 +83,8 @@ function ProblemContent({ problem }: { problem: ProblemData }) {
 
       <div className="h-px bg-border" />
 
-      {/* Description */}
-      <div className="text-xs leading-relaxed text-muted-foreground whitespace-pre-wrap">
-        {problem.description}
-      </div>
+      <ProblemMarkdown content={problem.description} compact />
 
-      {/* Examples */}
       {problem.examples.length > 0 ? (
         <div className="space-y-2.5">
           <h3 className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
@@ -118,21 +112,22 @@ function ProblemContent({ problem }: { problem: ProblemData }) {
                 </pre>
               </div>
               {example.explanation ? (
-                <p className="text-[11px] italic text-muted-foreground">{example.explanation}</p>
+                <div className="text-[11px] italic text-muted-foreground">
+                  <ProblemMarkdown content={example.explanation} compact />
+                </div>
               ) : null}
             </div>
           ))}
         </div>
       ) : null}
 
-      {/* Constraints */}
       {problem.constraints ? (
-        <div>
-          <h3 className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+        <div className="rounded border-l-2 border-amber-400/60 bg-amber-500/5 p-2.5">
+          <h3 className="font-mono text-[10px] uppercase tracking-widest text-amber-300/90">
             {t('problem.constraints')}
           </h3>
-          <div className="mt-1.5 text-xs leading-relaxed text-muted-foreground whitespace-pre-wrap">
-            {problem.constraints}
+          <div className="mt-1.5">
+            <ProblemMarkdown content={problem.constraints} compact />
           </div>
         </div>
       ) : null}
