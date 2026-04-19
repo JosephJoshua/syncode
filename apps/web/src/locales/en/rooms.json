@@ -292,6 +292,7 @@
     "remoteSubmitting": "{{name}} is submitting...",
     "languagePickerLabel": "Language",
     "languagePickerPlaceholder": "Select a language",
-    "languageChangeFailed": "Failed to change the language."
+    "languageChangeFailed": "Failed to change the language.",
+    "noStarterForLanguage": "No starter code for {{language}} — starting with a blank editor."
   }
 }

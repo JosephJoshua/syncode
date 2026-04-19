@@ -292,6 +292,7 @@
     "remoteSubmitting": "{{name}} 正在提交...",
     "languagePickerLabel": "语言",
     "languagePickerPlaceholder": "选择语言",
-    "languageChangeFailed": "切换语言失败。"
+    "languageChangeFailed": "切换语言失败。",
+    "noStarterForLanguage": "{{language}} 没有起始代码——编辑器已清空。"
   }
 }

@@ -40,6 +40,7 @@ import { ExecutionDetailsPanel } from './execution-details-panel.js';
 import { HostControlPanel } from './host-control-panel.js';
 import { InviteLinkInline } from './invite-link-inline.js';
 import { LanguagePicker } from './language-picker.js';
+import { LANGUAGE_VERSIONED_LABELS } from './language-selector.data.js';
 import { RoomHeaderBar } from './room-header-bar.js';
 import { type Participant, RoomParticipantCard } from './room-participant-card.js';
 import { type ProblemData, RoomProblemPanel } from './room-problem-panel.js';
@@ -207,6 +208,27 @@ export function RoomWorkspace({
       for (const cancel of cancelMultiRunRef.current.values()) cancel();
     };
   }, []);
+
+  const handleLanguageChanged = useCallback(
+    (updated: RoomDetail) => {
+      const previousLanguage = room.language;
+      const nextLanguage = updated.language;
+      if (
+        nextLanguage &&
+        nextLanguage !== previousLanguage &&
+        problem &&
+        !problem.starterCode?.[nextLanguage]
+      ) {
+        toast.info(
+          t('workspace.noStarterForLanguage', {
+            language: LANGUAGE_VERSIONED_LABELS[nextLanguage],
+          }),
+        );
+      }
+      onRoomUpdated(updated);
+    },
+    [onRoomUpdated, problem, room.language, t],
+  );
 
   const amHost = Boolean(currentUserId && room.hostId === currentUserId);
   const canRunCode = room.myCapabilities.includes('code:run');
@@ -639,7 +661,7 @@ export function RoomWorkspace({
                       roomId={roomId}
                       currentLanguage={room.language}
                       myCapabilities={room.myCapabilities}
-                      onLanguageChanged={onRoomUpdated}
+                      onLanguageChanged={handleLanguageChanged}
                       className="h-7 min-w-[8rem]"
                     />
                     <Button
