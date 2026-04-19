@@ -12,6 +12,7 @@ import {
   isRoomConfigurationValid,
 } from '@/lib/room-stage.js';
 import { LobbyBot } from './lobby-bot.js';
+import { LobbyMediaPreview } from './lobby-media-preview.js';
 import { type Participant, RoomParticipantCard } from './room-participant-card.js';
 
 interface RoomLobbyProps {
@@ -132,7 +133,8 @@ export function RoomLobby({
 
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-12">
         {/* Participant grid */}
-        <div className="lg:col-span-8">
+        <div className="lg:col-span-8 space-y-4">
+          <LobbyMediaPreview />
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             {activeParticipants.map((participant, index) => (
               <motion.div
