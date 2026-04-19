@@ -12,8 +12,8 @@ import {
   Separator,
 } from '@syncode/ui';
 import {
+  Camera,
   Gauge,
-  Loader2,
   Mic,
   Radio,
   Settings,
@@ -23,7 +23,7 @@ import {
   Video,
   Volume2,
 } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MediaDeviceOption } from '@/hooks/use-livekit.js';
 
 export interface AudioProcessingSettings {
@@ -63,85 +63,125 @@ interface MediaSettingsPanelProps {
 const LEVEL_BAR_COUNT = 16;
 const LEVEL_BAR_KEYS = Array.from({ length: LEVEL_BAR_COUNT }, (_, i) => `bar-${String(i)}`);
 
+type PermissionStatusValue = 'granted' | 'prompt' | 'denied' | 'unknown';
+
 interface LocalDevices {
   audio: MediaDeviceOption[];
   video: MediaDeviceOption[];
 }
 
-function useDeviceProbe(
+async function queryPermission(name: 'camera' | 'microphone'): Promise<PermissionStatusValue> {
+  if (typeof navigator === 'undefined' || !navigator.permissions?.query) return 'unknown';
+  try {
+    const status = await navigator.permissions.query({
+      name: name as PermissionName,
+    });
+    return status.state as PermissionStatusValue;
+  } catch {
+    // Firefox and Safari throw TypeError for camera/microphone permission queries.
+    return 'unknown';
+  }
+}
+
+async function enumerateByKind(): Promise<LocalDevices> {
+  const devices = await navigator.mediaDevices.enumerateDevices();
+  return {
+    audio: devices
+      .filter((d) => d.kind === 'audioinput' && d.deviceId)
+      .map((d, i) => ({ deviceId: d.deviceId, label: d.label || `Microphone ${i + 1}` })),
+    video: devices
+      .filter((d) => d.kind === 'videoinput' && d.deviceId)
+      .map((d, i) => ({ deviceId: d.deviceId, label: d.label || `Camera ${i + 1}` })),
+  };
+}
+
+function useMediaPermissions(
   open: boolean,
   existingAudio: MediaDeviceOption[],
   existingVideo: MediaDeviceOption[],
 ) {
-  const [probed, setProbed] = useState<LocalDevices | null>(null);
-  const [probing, setProbing] = useState(false);
-  const [denied, setDenied] = useState(false);
-  const [retryKey, setRetryKey] = useState(0);
+  const [audioGranted, setAudioGranted] = useState(false);
+  const [videoGranted, setVideoGranted] = useState(false);
+  const [probed, setProbed] = useState<LocalDevices>({ audio: [], video: [] });
+  const [audioError, setAudioError] = useState<string | null>(null);
+  const [videoError, setVideoError] = useState<string | null>(null);
+  const [requestingAudio, setRequestingAudio] = useState(false);
+  const [requestingVideo, setRequestingVideo] = useState(false);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: retryKey triggers re-probe on user retry
+  const hasLiveAudio = existingAudio.length > 0;
+  const hasLiveVideo = existingVideo.length > 0;
+
+  const detect = useCallback(async (signal: { cancelled: boolean }) => {
+    const [camPerm, micPerm, devices] = await Promise.all([
+      queryPermission('camera'),
+      queryPermission('microphone'),
+      enumerateByKind().catch(() => ({ audio: [], video: [] }) as LocalDevices),
+    ]);
+    if (signal.cancelled) return;
+
+    // Non-placeholder labels indicate the browser has already granted access this session.
+    const audioHasLabels = devices.audio.some((d) => d.label && !/^Microphone \d+$/.test(d.label));
+    const videoHasLabels = devices.video.some((d) => d.label && !/^Camera \d+$/.test(d.label));
+
+    setAudioGranted(micPerm === 'granted' || (micPerm === 'unknown' && audioHasLabels));
+    setVideoGranted(camPerm === 'granted' || (camPerm === 'unknown' && videoHasLabels));
+    setProbed(devices);
+  }, []);
+
   useEffect(() => {
     if (!open) {
-      setProbed(null);
-      setDenied(false);
-      setProbing(false);
+      setAudioError(null);
+      setVideoError(null);
       return;
     }
-
-    if (existingAudio.length > 0 || existingVideo.length > 0) return;
-
-    let cancelled = false;
-    setProbing(true);
-    setDenied(false);
-
-    (async () => {
-      let stream: MediaStream | null = null;
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
-      } catch {
-        try {
-          stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        } catch {
-          if (!cancelled) {
-            setDenied(true);
-            setProbing(false);
-          }
-          return;
-        }
-      }
-
-      if (cancelled) {
-        if (stream) for (const t of stream.getTracks()) t.stop();
-        return;
-      }
-
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      if (stream) for (const t of stream.getTracks()) t.stop();
-      if (cancelled) return;
-
-      setProbed({
-        audio: devices
-          .filter((d) => d.kind === 'audioinput' && d.deviceId)
-          .map((d, i) => ({ deviceId: d.deviceId, label: d.label || `Microphone ${i + 1}` })),
-        video: devices
-          .filter((d) => d.kind === 'videoinput' && d.deviceId)
-          .map((d, i) => ({ deviceId: d.deviceId, label: d.label || `Camera ${i + 1}` })),
-      });
-      setProbing(false);
-    })();
-
+    const signal = { cancelled: false };
+    void detect(signal);
     return () => {
-      cancelled = true;
+      signal.cancelled = true;
     };
-  }, [open, existingAudio.length, existingVideo.length, retryKey]);
+  }, [open, detect]);
 
-  const retry = () => setRetryKey((n) => n + 1);
+  const requestAudio = useCallback(async () => {
+    setRequestingAudio(true);
+    setAudioError(null);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      for (const t of stream.getTracks()) t.stop();
+      const signal = { cancelled: false };
+      await detect(signal);
+    } catch {
+      setAudioError('Permission denied. Update browser settings to allow.');
+    } finally {
+      setRequestingAudio(false);
+    }
+  }, [detect]);
+
+  const requestVideo = useCallback(async () => {
+    setRequestingVideo(true);
+    setVideoError(null);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      for (const t of stream.getTracks()) t.stop();
+      const signal = { cancelled: false };
+      await detect(signal);
+    } catch {
+      setVideoError('Permission denied. Update browser settings to allow.');
+    } finally {
+      setRequestingVideo(false);
+    }
+  }, [detect]);
 
   return {
-    audioDevices: existingAudio.length > 0 ? existingAudio : (probed?.audio ?? []),
-    videoDevices: existingVideo.length > 0 ? existingVideo : (probed?.video ?? []),
-    probing,
-    denied,
-    retry,
+    audioDevices: hasLiveAudio ? existingAudio : probed.audio,
+    videoDevices: hasLiveVideo ? existingVideo : probed.video,
+    audioGranted: hasLiveAudio || audioGranted,
+    videoGranted: hasLiveVideo || videoGranted,
+    audioError,
+    videoError,
+    requestingAudio,
+    requestingVideo,
+    requestAudio,
+    requestVideo,
   };
 }
 
@@ -338,11 +378,18 @@ export function MediaSettingsPanel({
   const [selectedAudioId, setSelectedAudioId] = useState<string | null>(null);
   const [selectedVideoId, setSelectedVideoId] = useState<string | null>(null);
 
-  const { audioDevices, videoDevices, probing, denied, retry } = useDeviceProbe(
-    open,
-    audioInputDevices,
-    videoInputDevices,
-  );
+  const {
+    audioDevices,
+    videoDevices,
+    audioGranted,
+    videoGranted,
+    audioError,
+    videoError,
+    requestingAudio,
+    requestingVideo,
+    requestAudio,
+    requestVideo,
+  } = useMediaPermissions(open, audioInputDevices, videoInputDevices);
 
   const effectiveAudioId =
     activeAudioDeviceId ?? selectedAudioId ?? audioDevices[0]?.deviceId ?? null;
@@ -369,40 +416,15 @@ export function MediaSettingsPanel({
           </span>
         </div>
 
-        {probing ? (
-          <div className="flex items-center justify-center gap-2 py-8">
-            <Loader2 className="size-4 animate-spin text-muted-foreground" />
-            <span className="text-xs text-muted-foreground">Requesting device access...</span>
-          </div>
-        ) : denied ? (
-          <div className="flex flex-col items-center gap-3 px-4 py-8 text-center">
-            <div className="flex size-10 items-center justify-center rounded-full bg-destructive/10">
-              <Mic className="size-4 text-destructive" />
+        <div className="space-y-1 p-1.5">
+          <div className="space-y-2 rounded-lg bg-muted/20 p-2.5">
+            <div className="flex items-center gap-1.5">
+              <Video className="size-3 text-muted-foreground" />
+              <span className="text-xs font-medium text-foreground">Camera</span>
             </div>
-            <div className="space-y-1">
-              <p className="text-xs font-medium text-foreground">Permission denied</p>
-              <p className="text-[11px] text-muted-foreground">
-                Allow camera and microphone access in your browser settings, then try again.
-              </p>
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-7 text-xs"
-              onClick={retry}
-            >
-              Try again
-            </Button>
-          </div>
-        ) : (
-          <div className="space-y-1 p-1.5">
-            {videoDevices.length > 0 ? (
-              <div className="space-y-2 rounded-lg bg-muted/20 p-2.5">
-                <div className="flex items-center gap-1.5">
-                  <Video className="size-3 text-muted-foreground" />
-                  <span className="text-xs font-medium text-foreground">Camera</span>
-                </div>
+
+            {videoGranted && videoDevices.length > 0 ? (
+              <>
                 <VideoPreview
                   deviceId={effectiveVideoId}
                   brightness={brightness}
@@ -487,16 +509,36 @@ export function MediaSettingsPanel({
                     Reset adjustments
                   </button>
                 ) : null}
+              </>
+            ) : (
+              <div className="space-y-2">
+                <p className="text-[11px] text-muted-foreground">
+                  Allow camera access to preview video and pick a device before going live.
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 w-full gap-1.5 text-xs"
+                  onClick={() => void requestVideo()}
+                  disabled={requestingVideo}
+                >
+                  <Camera className="size-3" />
+                  {requestingVideo ? 'Requesting...' : 'Grant Camera Permission'}
+                </Button>
+                {videoError ? <p className="text-[10px] text-destructive">{videoError}</p> : null}
               </div>
-            ) : null}
+            )}
+          </div>
 
-            {audioDevices.length > 0 ? (
-              <div className="space-y-2 rounded-lg bg-muted/20 p-2.5">
-                <div className="flex items-center gap-1.5">
-                  <Mic className="size-3 text-muted-foreground" />
-                  <span className="text-xs font-medium text-foreground">Microphone</span>
-                </div>
+          <div className="space-y-2 rounded-lg bg-muted/20 p-2.5">
+            <div className="flex items-center gap-1.5">
+              <Mic className="size-3 text-muted-foreground" />
+              <span className="text-xs font-medium text-foreground">Microphone</span>
+            </div>
 
+            {audioGranted && audioDevices.length > 0 ? (
+              <>
                 <AudioLevelMeter deviceId={effectiveAudioId} />
 
                 {audioDevices.length > 1 ? (
@@ -558,91 +600,103 @@ export function MediaSettingsPanel({
                     }
                   />
                 </div>
+              </>
+            ) : (
+              <div className="space-y-2">
+                <p className="text-[11px] text-muted-foreground">
+                  Allow microphone access to pick a device and tune audio processing.
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 w-full gap-1.5 text-xs"
+                  onClick={() => void requestAudio()}
+                  disabled={requestingAudio}
+                >
+                  <Mic className="size-3" />
+                  {requestingAudio ? 'Requesting...' : 'Grant Microphone Permission'}
+                </Button>
+                {audioError ? <p className="text-[10px] text-destructive">{audioError}</p> : null}
               </div>
-            ) : null}
+            )}
+          </div>
 
-            <div className="space-y-2 rounded-lg bg-muted/20 p-2.5">
-              <div className="flex items-center gap-1.5">
-                <Volume2 className="size-3 text-muted-foreground" />
-                <span className="text-xs font-medium text-foreground">Speaker volume</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <input
-                  type="range"
-                  min="0"
-                  max="1"
-                  step="0.05"
-                  value={outputVolume}
-                  onChange={(e) => onOutputVolumeChange(Number(e.target.value))}
-                  className="h-1 flex-1 cursor-pointer appearance-none rounded-full bg-muted accent-primary"
-                />
-                <span className="w-8 text-right font-mono text-[10px] text-muted-foreground/60">
-                  {Math.round(outputVolume * 100)}%
-                </span>
-              </div>
+          <div className="space-y-2 rounded-lg bg-muted/20 p-2.5">
+            <div className="flex items-center gap-1.5">
+              <Volume2 className="size-3 text-muted-foreground" />
+              <span className="text-xs font-medium text-foreground">Speaker volume</span>
             </div>
-
-            <div className="space-y-2 rounded-lg bg-muted/20 p-2.5">
-              <div className="flex items-center gap-1.5">
-                <Gauge className="size-3 text-muted-foreground" />
-                <span className="text-xs font-medium text-foreground">Video quality</span>
-              </div>
-              <div className="flex gap-1">
-                {(
-                  Object.entries(VIDEO_QUALITY_PRESETS) as [
-                    VideoQualityPreset,
-                    (typeof VIDEO_QUALITY_PRESETS)[VideoQualityPreset],
-                  ][]
-                ).map(([key, preset]) => (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => onVideoQualityChange(key)}
-                    className={cn(
-                      'flex-1 rounded-md border px-2 py-1.5 text-center text-[10px] font-medium transition-colors',
-                      videoQuality === key
-                        ? 'border-primary/30 bg-primary/10 text-primary'
-                        : 'border-border/60 text-muted-foreground hover:bg-muted/50',
-                    )}
-                  >
-                    {preset.label.split(' ')[0]}
-                  </button>
-                ))}
-              </div>
-              <span className="font-mono text-[9px] text-muted-foreground/60">
-                {VIDEO_QUALITY_PRESETS[videoQuality].width}x
-                {VIDEO_QUALITY_PRESETS[videoQuality].height} @{' '}
-                {VIDEO_QUALITY_PRESETS[videoQuality].frameRate}fps
+            <div className="flex items-center gap-2">
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value={outputVolume}
+                onChange={(e) => onOutputVolumeChange(Number(e.target.value))}
+                className="h-1 flex-1 cursor-pointer appearance-none rounded-full bg-muted accent-primary"
+              />
+              <span className="w-8 text-right font-mono text-[10px] text-muted-foreground/60">
+                {Math.round(outputVolume * 100)}%
               </span>
             </div>
+          </div>
 
-            <div className="space-y-2 rounded-lg bg-muted/20 p-2.5">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <Radio className="size-3 text-muted-foreground" />
-                  <span className="text-xs font-medium text-foreground">Push to talk</span>
-                </div>
-                <ToggleChip
-                  label={isPushToTalkMode ? 'On' : 'Off'}
-                  icon={Radio}
-                  active={isPushToTalkMode}
-                  onClick={onTogglePushToTalkMode}
-                />
-              </div>
-              {isPushToTalkMode ? (
-                <span className="font-mono text-[9px] text-muted-foreground/60">
-                  Hold Space to talk
-                </span>
-              ) : null}
+          <div className="space-y-2 rounded-lg bg-muted/20 p-2.5">
+            <div className="flex items-center gap-1.5">
+              <Gauge className="size-3 text-muted-foreground" />
+              <span className="text-xs font-medium text-foreground">Video quality</span>
             </div>
+            <div className="flex gap-1">
+              {(
+                Object.entries(VIDEO_QUALITY_PRESETS) as [
+                  VideoQualityPreset,
+                  (typeof VIDEO_QUALITY_PRESETS)[VideoQualityPreset],
+                ][]
+              ).map(([key, preset]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => onVideoQualityChange(key)}
+                  className={cn(
+                    'flex-1 rounded-md border px-2 py-1.5 text-center text-[10px] font-medium transition-colors',
+                    videoQuality === key
+                      ? 'border-primary/30 bg-primary/10 text-primary'
+                      : 'border-border/60 text-muted-foreground hover:bg-muted/50',
+                  )}
+                >
+                  {preset.label.split(' ')[0]}
+                </button>
+              ))}
+            </div>
+            <span className="font-mono text-[9px] text-muted-foreground/60">
+              {VIDEO_QUALITY_PRESETS[videoQuality].width}x
+              {VIDEO_QUALITY_PRESETS[videoQuality].height} @{' '}
+              {VIDEO_QUALITY_PRESETS[videoQuality].frameRate}fps
+            </span>
+          </div>
 
-            {audioDevices.length === 0 && videoDevices.length === 0 ? (
-              <p className="py-4 text-center font-mono text-xs text-muted-foreground">
-                No media devices found
-              </p>
+          <div className="space-y-2 rounded-lg bg-muted/20 p-2.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <Radio className="size-3 text-muted-foreground" />
+                <span className="text-xs font-medium text-foreground">Push to talk</span>
+              </div>
+              <ToggleChip
+                label={isPushToTalkMode ? 'On' : 'Off'}
+                icon={Radio}
+                active={isPushToTalkMode}
+                onClick={onTogglePushToTalkMode}
+              />
+            </div>
+            {isPushToTalkMode ? (
+              <span className="font-mono text-[9px] text-muted-foreground/60">
+                Hold Space to talk
+              </span>
             ) : null}
           </div>
-        )}
+        </div>
       </PopoverContent>
     </Popover>
   );
