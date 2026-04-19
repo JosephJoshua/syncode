@@ -465,8 +465,8 @@ describe('transitionPhase', () => {
     const host = await insertUser(db);
     const candidate = await insertUser(db);
     const room = await insertRoom(db, host.id);
-    await insertParticipant(db, room.id, host.id, 'interviewer');
-    await insertParticipant(db, room.id, candidate.id, 'candidate');
+    await insertParticipant(db, room.id, host.id, 'interviewer', { isReady: true });
+    await insertParticipant(db, room.id, candidate.id, 'candidate', { isReady: true });
 
     const result = await service.transitionPhase(room.id, host.id, 'warmup');
 
@@ -491,6 +491,64 @@ describe('transitionPhase', () => {
     await insertParticipant(db, room.id, candidate.id, 'candidate');
 
     await expect(service.transitionPhase(room.id, host.id, 'coding')).rejects.toThrow();
+  });
+
+  it('GIVEN peer room with candidate not ready WHEN transitioning to warmup THEN throws ROOM_PARTICIPANTS_NOT_READY', async () => {
+    const host = await insertUser(db);
+    const candidate = await insertUser(db);
+    const room = await insertRoom(db, host.id);
+    await insertParticipant(db, room.id, host.id, 'interviewer', { isReady: true });
+    await insertParticipant(db, room.id, candidate.id, 'candidate', { isReady: false });
+
+    await expect(service.transitionPhase(room.id, host.id, 'warmup')).rejects.toThrow(
+      BadRequestException,
+    );
+    await expect(service.transitionPhase(room.id, host.id, 'warmup')).rejects.toMatchObject({
+      response: { code: ERROR_CODES.ROOM_PARTICIPANTS_NOT_READY },
+    });
+  });
+
+  it('GIVEN peer room with both ready WHEN transitioning to warmup THEN succeeds', async () => {
+    const host = await insertUser(db);
+    const candidate = await insertUser(db);
+    const room = await insertRoom(db, host.id);
+    await insertParticipant(db, room.id, host.id, 'interviewer', { isReady: true });
+    await insertParticipant(db, room.id, candidate.id, 'candidate', { isReady: true });
+
+    const result = await service.transitionPhase(room.id, host.id, 'warmup');
+    expect(result.currentStatus).toBe('warmup');
+  });
+
+  it('GIVEN ai room with candidate not ready WHEN transitioning to warmup THEN throws ROOM_PARTICIPANTS_NOT_READY', async () => {
+    const host = await insertUser(db);
+    const room = await insertRoom(db, host.id, { mode: 'ai' });
+    await insertParticipant(db, room.id, host.id, 'candidate', { isReady: false });
+
+    await expect(service.transitionPhase(room.id, host.id, 'warmup')).rejects.toMatchObject({
+      response: { code: ERROR_CODES.ROOM_PARTICIPANTS_NOT_READY },
+    });
+  });
+
+  it('GIVEN ai room with candidate ready WHEN transitioning to warmup THEN succeeds', async () => {
+    const host = await insertUser(db);
+    const room = await insertRoom(db, host.id, { mode: 'ai' });
+    await insertParticipant(db, room.id, host.id, 'candidate', { isReady: true });
+
+    const result = await service.transitionPhase(room.id, host.id, 'warmup');
+    expect(result.currentStatus).toBe('warmup');
+  });
+
+  it('GIVEN peer room with ready peers and not-ready observer WHEN transitioning to warmup THEN succeeds', async () => {
+    const host = await insertUser(db);
+    const candidate = await insertUser(db);
+    const observer = await insertUser(db);
+    const room = await insertRoom(db, host.id, { maxParticipants: 4 });
+    await insertParticipant(db, room.id, host.id, 'interviewer', { isReady: true });
+    await insertParticipant(db, room.id, candidate.id, 'candidate', { isReady: true });
+    await insertParticipant(db, room.id, observer.id, 'observer', { isReady: false });
+
+    const result = await service.transitionPhase(room.id, host.id, 'warmup');
+    expect(result.currentStatus).toBe('warmup');
   });
 });
 
