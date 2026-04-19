@@ -1,4 +1,5 @@
-import type { RoomMode, RoomRole, RoomStatus } from '@syncode/shared';
+import type { RoomDetail } from '@syncode/contracts';
+import type { RoomMode, RoomRole, RoomStatus, SupportedLanguage } from '@syncode/shared';
 import { Badge, Button, Card } from '@syncode/ui';
 import { AlertTriangle, Check, Copy, Crown, Loader2, Play } from 'lucide-react';
 import { motion } from 'motion/react';
@@ -10,6 +11,7 @@ import {
   countActiveRoleConfiguration,
   isRoomConfigurationValid,
 } from '@/lib/room-stage.js';
+import { LanguagePicker } from './language-picker.js';
 import { LobbyBot } from './lobby-bot.js';
 import { type Participant, RoomParticipantCard } from './room-participant-card.js';
 
@@ -22,6 +24,8 @@ interface RoomLobbyProps {
   hostId: string;
   currentUserId: string | null;
   participants: Participant[];
+  language: SupportedLanguage | null;
+  myCapabilities: readonly string[];
   canChangePhase: boolean;
   canManageParticipants: boolean;
   isTransitioning: boolean;
@@ -32,6 +36,7 @@ interface RoomLobbyProps {
   onTransferOwnership: (userId: string, displayName: string) => void;
   onToggleReady: () => void;
   onTransition: (targetStatus: RoomStatus) => void;
+  onRoomUpdated?: (room: RoomDetail) => void;
   speakingMap?: ReadonlyMap<string, boolean>;
   mediaConnectedSet?: ReadonlySet<string>;
   mediaMutedMap?: ReadonlyMap<string, boolean>;
@@ -54,6 +59,8 @@ export function RoomLobby({
   hostId,
   currentUserId,
   participants,
+  language,
+  myCapabilities,
   canChangePhase,
   canManageParticipants,
   isTransitioning,
@@ -64,6 +71,7 @@ export function RoomLobby({
   onTransferOwnership,
   onToggleReady,
   onTransition,
+  onRoomUpdated,
   speakingMap,
   mediaConnectedSet,
   mediaMutedMap,
@@ -222,6 +230,18 @@ export function RoomLobby({
                         </span>
                       ) : null}
                     </div>
+                  </div>
+                  <div className="flex items-center justify-between gap-2 border-t border-border/40 pt-1.5">
+                    <span className="shrink-0 text-xs text-muted-foreground">
+                      {t('workspace.languagePickerLabel')}
+                    </span>
+                    <LanguagePicker
+                      roomId={roomId}
+                      currentLanguage={language}
+                      myCapabilities={myCapabilities}
+                      onLanguageChanged={onRoomUpdated}
+                      className="h-8 min-w-[9rem]"
+                    />
                   </div>
                   <div className="border-t border-border/40 pt-1.5 text-[11px] text-muted-foreground">
                     <div className="flex items-center justify-between gap-2">

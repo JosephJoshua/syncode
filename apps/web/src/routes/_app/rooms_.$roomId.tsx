@@ -748,6 +748,8 @@ function RoomPage() {
         hostId={room.hostId}
         currentUserId={currentUserId}
         participants={room.participants}
+        language={room.language}
+        myCapabilities={room.myCapabilities}
         canChangePhase={canChangePhase}
         canManageParticipants={canManageParticipants}
         isTransitioning={isTransitioning}
@@ -758,6 +760,7 @@ function RoomPage() {
         onTransferOwnership={handleTransferOwnership}
         onToggleReady={handleToggleReady}
         onTransition={handleTransition}
+        onRoomUpdated={setRoom}
         speakingMap={speakingMap}
         mediaConnectedSet={mediaConnectedSet}
         mediaMutedMap={mediaMutedMap}
