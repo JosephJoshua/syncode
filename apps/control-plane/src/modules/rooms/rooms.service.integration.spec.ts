@@ -747,26 +747,24 @@ describe('browsePublicRooms', () => {
 
   it('GIVEN a private and a public room WHEN browsing THEN only the public room is returned', async () => {
     const host = await insertUser(db);
-    const caller = await insertUser(db);
     const privateRoom = await insertRoom(db, host.id, { isPrivate: true, status: 'waiting' });
     await insertParticipant(db, privateRoom.id, host.id, 'interviewer');
     const publicRoom = await insertRoom(db, host.id, { isPrivate: false, status: 'waiting' });
     await insertParticipant(db, publicRoom.id, host.id, 'interviewer');
 
-    const result = await service.browsePublicRooms(caller.id, defaultQuery);
+    const result = await service.browsePublicRooms(defaultQuery);
 
     expect(result.data.map((r) => r.roomId)).toEqual([publicRoom.id]);
   });
 
   it('GIVEN a finished public room and a waiting public room WHEN browsing THEN only the non-finished room is returned', async () => {
     const host = await insertUser(db);
-    const caller = await insertUser(db);
     const finished = await insertRoom(db, host.id, { isPrivate: false, status: 'finished' });
     await insertParticipant(db, finished.id, host.id, 'interviewer');
     const waiting = await insertRoom(db, host.id, { isPrivate: false, status: 'waiting' });
     await insertParticipant(db, waiting.id, host.id, 'interviewer');
 
-    const result = await service.browsePublicRooms(caller.id, defaultQuery);
+    const result = await service.browsePublicRooms(defaultQuery);
 
     expect(result.data.map((r) => r.roomId)).toEqual([waiting.id]);
   });
@@ -774,7 +772,6 @@ describe('browsePublicRooms', () => {
   it('GIVEN a full public room and a not-full public room WHEN browsing THEN only the not-full room is returned', async () => {
     const host = await insertUser(db);
     const second = await insertUser(db);
-    const caller = await insertUser(db);
 
     const fullRoom = await insertRoom(db, host.id, {
       isPrivate: false,
@@ -791,20 +788,19 @@ describe('browsePublicRooms', () => {
     });
     await insertParticipant(db, openRoom.id, host.id, 'interviewer');
 
-    const result = await service.browsePublicRooms(caller.id, defaultQuery);
+    const result = await service.browsePublicRooms(defaultQuery);
 
     expect(result.data.map((r) => r.roomId)).toEqual([openRoom.id]);
   });
 
   it('GIVEN public waiting and coding rooms WHEN filtering by status=waiting THEN only waiting is returned', async () => {
     const host = await insertUser(db);
-    const caller = await insertUser(db);
     const waiting = await insertRoom(db, host.id, { isPrivate: false, status: 'waiting' });
     await insertParticipant(db, waiting.id, host.id, 'interviewer');
     const coding = await insertRoom(db, host.id, { isPrivate: false, status: 'coding' });
     await insertParticipant(db, coding.id, host.id, 'interviewer');
 
-    const result = await service.browsePublicRooms(caller.id, {
+    const result = await service.browsePublicRooms({
       ...defaultQuery,
       status: 'waiting',
     });
@@ -814,7 +810,6 @@ describe('browsePublicRooms', () => {
 
   it('GIVEN public python and javascript rooms WHEN filtering by language=python THEN only python is returned', async () => {
     const host = await insertUser(db);
-    const caller = await insertUser(db);
     const py = await insertRoom(db, host.id, {
       isPrivate: false,
       status: 'waiting',
@@ -828,7 +823,7 @@ describe('browsePublicRooms', () => {
     });
     await insertParticipant(db, js.id, host.id, 'interviewer');
 
-    const result = await service.browsePublicRooms(caller.id, {
+    const result = await service.browsePublicRooms({
       ...defaultQuery,
       language: 'python',
     });
@@ -839,7 +834,6 @@ describe('browsePublicRooms', () => {
 
   it('GIVEN public rooms linked to easy and hard problems WHEN filtering by difficulty=easy THEN only the easy-linked room is returned', async () => {
     const host = await insertUser(db);
-    const caller = await insertUser(db);
     const easyProblem = await insertProblem(db, { difficulty: 'easy' });
     const hardProblem = await insertProblem(db, { difficulty: 'hard' });
     const easyRoom = await insertRoom(db, host.id, {
@@ -855,7 +849,7 @@ describe('browsePublicRooms', () => {
     });
     await insertParticipant(db, hardRoom.id, host.id, 'interviewer');
 
-    const result = await service.browsePublicRooms(caller.id, {
+    const result = await service.browsePublicRooms({
       ...defaultQuery,
       difficulty: 'easy',
     });
@@ -867,7 +861,6 @@ describe('browsePublicRooms', () => {
 
   it('GIVEN public rooms with different problem titles WHEN searching by substring THEN matches case-insensitively', async () => {
     const host = await insertUser(db);
-    const caller = await insertUser(db);
     const twoSum = await insertProblem(db, { title: 'Two Sum' });
     const merge = await insertProblem(db, { title: 'Merge Intervals' });
     const twoSumRoom = await insertRoom(db, host.id, {
@@ -883,16 +876,15 @@ describe('browsePublicRooms', () => {
     });
     await insertParticipant(db, mergeRoom.id, host.id, 'interviewer');
 
-    const lower = await service.browsePublicRooms(caller.id, { ...defaultQuery, search: 'two' });
+    const lower = await service.browsePublicRooms({ ...defaultQuery, search: 'two' });
     expect(lower.data.map((r) => r.roomId)).toEqual([twoSumRoom.id]);
 
-    const upper = await service.browsePublicRooms(caller.id, { ...defaultQuery, search: 'TWO' });
+    const upper = await service.browsePublicRooms({ ...defaultQuery, search: 'TWO' });
     expect(upper.data.map((r) => r.roomId)).toEqual([twoSumRoom.id]);
   });
 
   it('GIVEN a problem title with a literal % WHEN searching for % THEN only the %-titled room is returned', async () => {
     const host = await insertUser(db);
-    const caller = await insertUser(db);
     const twoSum = await insertProblem(db, { title: 'Two Sum' });
     const percent = await insertProblem(db, { title: '100%' });
     const twoSumRoom = await insertRoom(db, host.id, {
@@ -908,14 +900,13 @@ describe('browsePublicRooms', () => {
     });
     await insertParticipant(db, percentRoom.id, host.id, 'interviewer');
 
-    const result = await service.browsePublicRooms(caller.id, { ...defaultQuery, search: '%' });
+    const result = await service.browsePublicRooms({ ...defaultQuery, search: '%' });
 
     expect(result.data.map((r) => r.roomId)).toEqual([percentRoom.id]);
   });
 
   it('GIVEN 3 public rooms WHEN paginating with limit=2 THEN paginates correctly', async () => {
     const host = await insertUser(db);
-    const caller = await insertUser(db);
 
     const roomIds: string[] = [];
     for (let i = 0; i < 3; i++) {
@@ -928,12 +919,12 @@ describe('browsePublicRooms', () => {
       roomIds.push(room.id);
     }
 
-    const page1 = await service.browsePublicRooms(caller.id, { limit: 2 });
+    const page1 = await service.browsePublicRooms({ limit: 2 });
     expect(page1.data).toHaveLength(2);
     expect(page1.pagination.hasMore).toBe(true);
     expect(page1.pagination.nextCursor).not.toBeNull();
 
-    const page2 = await service.browsePublicRooms(caller.id, {
+    const page2 = await service.browsePublicRooms({
       limit: 2,
       cursor: page1.pagination.nextCursor!,
     });
@@ -951,11 +942,10 @@ describe('browsePublicRooms', () => {
       displayName: null,
       avatarUrl: 'avatars/alice.png',
     });
-    const caller = await insertUser(db);
     const room = await insertRoom(db, host.id, { isPrivate: false, status: 'waiting' });
     await insertParticipant(db, room.id, host.id, 'interviewer');
 
-    const result = await service.browsePublicRooms(caller.id, defaultQuery);
+    const result = await service.browsePublicRooms(defaultQuery);
 
     expect(result.data).toHaveLength(1);
     expect(result.data[0]!.hostName).toBe('alice-host');
@@ -965,7 +955,6 @@ describe('browsePublicRooms', () => {
   it('GIVEN a public room the caller is not a participant of WHEN browsing THEN room is still returned', async () => {
     const host = await insertUser(db);
     const other = await insertUser(db);
-    const caller = await insertUser(db);
     const room = await insertRoom(db, host.id, {
       isPrivate: false,
       status: 'waiting',
@@ -974,14 +963,13 @@ describe('browsePublicRooms', () => {
     await insertParticipant(db, room.id, host.id, 'interviewer');
     await insertParticipant(db, room.id, other.id, 'candidate');
 
-    const result = await service.browsePublicRooms(caller.id, defaultQuery);
+    const result = await service.browsePublicRooms(defaultQuery);
 
     expect(result.data.map((r) => r.roomId)).toEqual([room.id]);
   });
 
   it('GIVEN 3 public rooms with spaced-apart createdAt WHEN browsing THEN results are ordered createdAt desc', async () => {
     const host = await insertUser(db);
-    const caller = await insertUser(db);
 
     const oldest = await insertRoom(db, host.id, {
       isPrivate: false,
@@ -1004,7 +992,7 @@ describe('browsePublicRooms', () => {
     });
     await insertParticipant(db, newest.id, host.id, 'interviewer');
 
-    const result = await service.browsePublicRooms(caller.id, defaultQuery);
+    const result = await service.browsePublicRooms(defaultQuery);
 
     expect(result.data.map((r) => r.roomId)).toEqual([newest.id, middle.id, oldest.id]);
   });

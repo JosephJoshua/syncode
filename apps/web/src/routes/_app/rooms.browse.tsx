@@ -1,4 +1,9 @@
-import { type BrowseableRoomStatus, CONTROL_API, type PublicRoomSummary } from '@syncode/contracts';
+import {
+  BROWSEABLE_ROOM_STATUSES,
+  type BrowseableRoomStatus,
+  CONTROL_API,
+  type PublicRoomSummary,
+} from '@syncode/contracts';
 import {
   PROBLEM_DIFFICULTIES,
   type ProblemDifficulty,
@@ -26,16 +31,18 @@ import { motion } from 'motion/react';
 import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
+import { LANGUAGE_SELECTOR_METADATA } from '@/components/language-selector.data.js';
 import { BrowseEmptyState } from '@/components/rooms-browse/browse-empty-state.js';
-import {
-  BROWSEABLE_STATUSES,
-  DIFFICULTY_KEYS,
-  LANGUAGE_LABELS,
-  STATUS_KEYS,
-} from '@/components/rooms-browse/constants.js';
 import { PublicRoomCard } from '@/components/rooms-browse/public-room-card.js';
 import { api, readApiError } from '@/lib/api-client.js';
+import { ROOM_STATUS_KEYS } from '@/lib/room-stage.js';
 import { useAuthStore } from '@/stores/auth.store.js';
+
+const DIFFICULTY_KEYS: Record<ProblemDifficulty, string> = {
+  easy: 'problems:detail.easy',
+  medium: 'problems:detail.medium',
+  hard: 'problems:detail.hard',
+};
 
 export const Route = createFileRoute('/_app/rooms/browse')({
   component: BrowseRoomsPage,
@@ -78,7 +85,6 @@ function BrowseRoomsPage() {
   const deferredSearch = useDeferredValue(filters.search);
   const normalizedSearch = deferredSearch.trim();
 
-  // Reset accumulator + cursor whenever a filter changes so pagination restarts.
   // biome-ignore lint/correctness/useExhaustiveDependencies: filter changes are the intended trigger
   useEffect(() => {
     setAccumulated([]);
@@ -103,7 +109,6 @@ function BrowseRoomsPage() {
     placeholderData: (previous) => previous,
   });
 
-  // Accumulate pages into a flat list for "Load more" pagination.
   useEffect(() => {
     const data = browseQuery.data;
     if (!data) return;
@@ -248,7 +253,7 @@ function BrowseRoomsPage() {
                   >
                     {t('browse.filters.statusAll')}
                   </FilterPill>
-                  {BROWSEABLE_STATUSES.map((status) => (
+                  {BROWSEABLE_ROOM_STATUSES.map((status) => (
                     <FilterPill
                       key={status}
                       active={filters.status === status}
@@ -259,7 +264,7 @@ function BrowseRoomsPage() {
                         }))
                       }
                     >
-                      {t(STATUS_KEYS[status])}
+                      {t(ROOM_STATUS_KEYS[status])}
                     </FilterPill>
                   ))}
                 </div>
@@ -279,7 +284,7 @@ function BrowseRoomsPage() {
                       <span className={cn(filters.language === null && 'text-muted-foreground')}>
                         {filters.language === null
                           ? t('browse.filters.languageAll')
-                          : LANGUAGE_LABELS[filters.language]}
+                          : LANGUAGE_SELECTOR_METADATA[filters.language].label}
                       </span>
                       <ChevronDown size={14} className="text-muted-foreground" />
                     </button>
@@ -302,13 +307,13 @@ function BrowseRoomsPage() {
                           {SUPPORTED_LANGUAGES.map((language) => (
                             <CommandItem
                               key={language}
-                              value={LANGUAGE_LABELS[language]}
+                              value={LANGUAGE_SELECTOR_METADATA[language].label}
                               onSelect={() => {
                                 setFilters((prev) => ({ ...prev, language }));
                                 setIsLanguageOpen(false);
                               }}
                             >
-                              {LANGUAGE_LABELS[language]}
+                              {LANGUAGE_SELECTOR_METADATA[language].label}
                             </CommandItem>
                           ))}
                         </CommandGroup>

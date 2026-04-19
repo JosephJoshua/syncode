@@ -1,10 +1,5 @@
 import { CONTROL_API } from '@syncode/contracts';
-import {
-  ROOM_STATUSES,
-  RoomRole,
-  RoomStatus,
-  type RoomStatus as RoomStatusType,
-} from '@syncode/shared';
+import { ROOM_STATUSES, type RoomStatus as RoomStatusType } from '@syncode/shared';
 import { Badge, Button, Card, cn, Input } from '@syncode/ui';
 import { useQuery } from '@tanstack/react-query';
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
@@ -27,49 +22,13 @@ import type React from 'react';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '@/lib/api-client.js';
+import { ROLE_LABEL_KEYS, ROOM_STATUS_KEYS, ROOM_STATUS_STYLES } from '@/lib/room-stage.js';
 
 export const Route = createFileRoute('/_app/rooms/')({
   component: RoomsPage,
 });
 
 type StatusFilter = RoomStatusType | 'all';
-
-const ROOM_STATUS_KEYS: Record<RoomStatusType, string> = {
-  [RoomStatus.WAITING]: 'status.waiting',
-  [RoomStatus.WARMUP]: 'status.warmup',
-  [RoomStatus.CODING]: 'status.coding',
-  [RoomStatus.WRAPUP]: 'status.wrapup',
-  [RoomStatus.FINISHED]: 'status.finished',
-};
-
-const ROLE_LABEL_KEYS: Record<string, string> = {
-  [RoomRole.CANDIDATE]: 'role.candidate',
-  [RoomRole.INTERVIEWER]: 'role.interviewer',
-  [RoomRole.OBSERVER]: 'role.observer',
-};
-
-const STATUS_STYLES: Record<string, { dot: string; badge: string }> = {
-  waiting: {
-    dot: 'bg-amber-400 shadow-[0_0_6px_oklch(0.76_0.16_75/0.6)]',
-    badge: 'border-amber-500/30 bg-amber-500/10 text-amber-400',
-  },
-  warmup: {
-    dot: 'bg-sky-400 shadow-[0_0_6px_oklch(0.72_0.14_230/0.6)]',
-    badge: 'border-sky-500/30 bg-sky-500/10 text-sky-400',
-  },
-  coding: {
-    dot: 'bg-primary shadow-[0_0_6px_oklch(0.82_0.18_165/0.6)] animate-pulse',
-    badge: 'border-primary/30 bg-primary/10 text-primary',
-  },
-  wrapup: {
-    dot: 'bg-violet-400 shadow-[0_0_6px_oklch(0.65_0.18_290/0.6)]',
-    badge: 'border-violet-500/30 bg-violet-500/10 text-violet-400',
-  },
-  finished: {
-    dot: 'bg-muted-foreground/50',
-    badge: 'border-border bg-muted/30 text-muted-foreground',
-  },
-};
 
 const STATUS_FILTER_VALUES: StatusFilter[] = ['all', ...ROOM_STATUSES];
 
@@ -287,7 +246,7 @@ function RoomsPage() {
               dot: 'bg-muted-foreground/50',
               badge: 'border-border bg-muted/30 text-muted-foreground',
             };
-            const styles = STATUS_STYLES[room.status] ?? fallback;
+            const styles = ROOM_STATUS_STYLES[room.status] ?? fallback;
 
             return (
               <motion.div

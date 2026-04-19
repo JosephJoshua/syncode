@@ -23,9 +23,6 @@
       "languageAll": "Any language",
       "difficulty": "Difficulty",
       "difficultyAll": "Any",
-      "difficultyEasy": "Easy",
-      "difficultyMedium": "Medium",
-      "difficultyHard": "Hard",
       "status": "Status",
       "statusAll": "All statuses"
     },

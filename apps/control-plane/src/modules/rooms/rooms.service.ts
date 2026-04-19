@@ -236,7 +236,6 @@ export class RoomsService {
   }
 
   async browsePublicRooms(
-    _userId: string,
     query: BrowseRoomsQuery,
   ): Promise<PaginatedResult<PublicRoomSummaryResult>> {
     const escapedSearch = query.search
@@ -380,7 +379,6 @@ export class RoomsService {
         });
       }
     } else if (input.roomCode && room.inviteCode !== input.roomCode.toUpperCase()) {
-      // Public room but user supplied a wrong code — still reject.
       throw new BadRequestException({
         message: 'Invalid room code',
         code: ERROR_CODES.ROOM_INVALID_CODE,

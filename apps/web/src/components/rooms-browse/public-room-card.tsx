@@ -1,17 +1,28 @@
-import type { BrowseableRoomStatus, PublicRoomSummary } from '@syncode/contracts';
+import {
+  BROWSEABLE_ROOM_STATUSES,
+  type BrowseableRoomStatus,
+  type PublicRoomSummary,
+} from '@syncode/contracts';
+import type { ProblemDifficulty } from '@syncode/shared';
 import { Avatar, AvatarFallback, AvatarImage, Badge, Button, Card, cn } from '@syncode/ui';
 import { formatDistanceToNowStrict } from 'date-fns';
 import { Clock3, Code2, Loader2, Users } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useTranslation } from 'react-i18next';
-import {
-  BROWSEABLE_STATUSES,
-  DIFFICULTY_KEYS,
-  DIFFICULTY_STYLES,
-  LANGUAGE_LABELS,
-  STATUS_KEYS,
-  STATUS_STYLES,
-} from './constants.js';
+import { LANGUAGE_SELECTOR_METADATA } from '@/components/language-selector.data.js';
+import { ROOM_STATUS_KEYS, ROOM_STATUS_STYLES } from '@/lib/room-stage.js';
+
+const DIFFICULTY_KEYS: Record<ProblemDifficulty, string> = {
+  easy: 'problems:detail.easy',
+  medium: 'problems:detail.medium',
+  hard: 'problems:detail.hard',
+};
+
+const DIFFICULTY_STYLES: Record<ProblemDifficulty, string> = {
+  easy: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400',
+  medium: 'border-amber-500/30 bg-amber-500/10 text-amber-400',
+  hard: 'border-rose-500/30 bg-rose-500/10 text-rose-400',
+};
 
 type Props = {
   room: PublicRoomSummary;
@@ -23,13 +34,11 @@ type Props = {
 export function PublicRoomCard({ room, index, onJoin, isJoining }: Props) {
   const { t } = useTranslation('rooms');
 
-  const statusStyle =
-    BROWSEABLE_STATUSES.includes(room.status as BrowseableRoomStatus) &&
-    STATUS_STYLES[room.status as BrowseableRoomStatus]
-      ? STATUS_STYLES[room.status as BrowseableRoomStatus]
-      : { dot: 'bg-muted-foreground/50', badge: 'border-border bg-muted/30 text-muted-foreground' };
+  const statusStyle = BROWSEABLE_ROOM_STATUSES.includes(room.status as BrowseableRoomStatus)
+    ? ROOM_STATUS_STYLES[room.status]
+    : { dot: 'bg-muted-foreground/50', badge: 'border-border bg-muted/30 text-muted-foreground' };
 
-  const statusKey = STATUS_KEYS[room.status as BrowseableRoomStatus] ?? `status.${room.status}`;
+  const statusKey = ROOM_STATUS_KEYS[room.status] ?? `status.${room.status}`;
 
   const hostInitial = (room.hostName ?? '?').charAt(0).toUpperCase();
   const isFull = room.participantCount >= room.maxParticipants;
@@ -80,7 +89,7 @@ export function PublicRoomCard({ room, index, onJoin, isJoining }: Props) {
           {room.language && (
             <Badge variant="outline" className="gap-1 px-2 py-0.5 text-[11px] font-medium">
               <Code2 size={10} />
-              {LANGUAGE_LABELS[room.language]}
+              {LANGUAGE_SELECTOR_METADATA[room.language].label}
             </Badge>
           )}
           <Badge variant="secondary" className="gap-1 px-2 py-0.5 text-[11px] font-medium">

@@ -57,9 +57,6 @@ export function CollaborativeEditor({
     setEditor(editorInstance);
   };
 
-  // Bind Monaco model to the per-language Y.Text. Rebind when language, doc, or awareness changes
-  // so switching languages preserves prior text in the old key (each language lives under its own
-  // key: `code:<language>`). Server-side YjsDocumentStore stores text under the same key.
   useEffect(() => {
     if (!editor) return;
 

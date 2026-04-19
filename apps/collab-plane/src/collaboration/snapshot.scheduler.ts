@@ -40,9 +40,6 @@ export class SnapshotScheduler implements OnModuleDestroy {
   }
 
   async takeSnapshot(roomId: string, trigger: SnapshotTrigger): Promise<void> {
-    const snapshot = this.docStore.encodeSnapshot(roomId);
-    if (!snapshot) return;
-
     const language = this.roomRegistry.getRoom(roomId)?.language ?? null;
     if (!language) {
       this.logger.debug(
@@ -51,8 +48,9 @@ export class SnapshotScheduler implements OnModuleDestroy {
       return;
     }
 
-    // Snapshot only the active language's Y.Text as plain text. Per-language
-    // code is preserved inside the binary `snapshot` (Yjs doc) itself.
+    const snapshot = this.docStore.encodeSnapshot(roomId);
+    if (!snapshot) return;
+
     const code = this.docStore.getCodeText(roomId, language);
 
     try {
@@ -60,9 +58,6 @@ export class SnapshotScheduler implements OnModuleDestroy {
         roomId,
         snapshot: Array.from(snapshot),
         code,
-        // Registry stores the raw string fed from typed SupportedLanguage inputs
-        // (CreateDocumentRequest.initialLanguage / ChangeLanguageRequest.language).
-        // The contracts' internal interfaces use `string`, so narrow here.
         language: language as SupportedLanguage,
         timestamp: Date.now(),
         trigger,
