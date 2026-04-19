@@ -1,14 +1,18 @@
 import { Body, Controller, Inject, Logger, Post } from '@nestjs/common';
 import { ApiExcludeEndpoint } from '@nestjs/swagger';
 import { SkipThrottle } from '@nestjs/throttler';
-import { CONTROL_INTERNAL } from '@syncode/contracts';
+import { CONTROL_INTERNAL, type ParticipantHeartbeatResponse } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
 import { codeSnapshots, sessions } from '@syncode/db';
 import { type IStorageService, STORAGE_SERVICE } from '@syncode/shared/ports';
 import { eq } from 'drizzle-orm';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
 import { RoomsService } from '@/modules/rooms/rooms.service.js';
-import { SnapshotReadyDto, UserDisconnectedDto } from './dto/internal.dto.js';
+import {
+  ParticipantHeartbeatDto,
+  SnapshotReadyDto,
+  UserDisconnectedDto,
+} from './dto/internal.dto.js';
 
 /**
  * Receives HTTP callbacks FROM other planes.
@@ -111,5 +115,19 @@ export class InternalController {
       this.logger.error('Failed to handle user disconnection', error);
       return { success: false };
     }
+  }
+
+  /**
+   * Called by collab-plane on its heartbeat loop (~30s cadence) with the set of
+   * authenticated, alive (roomId, userId) pairs. Bumps last_heartbeat_at so the
+   * participant sweep cron knows these rows are still live.
+   */
+  @Post(CONTROL_INTERNAL.PARTICIPANT_HEARTBEAT.route)
+  @ApiExcludeEndpoint()
+  async handleParticipantHeartbeat(
+    @Body() payload: ParticipantHeartbeatDto,
+  ): Promise<ParticipantHeartbeatResponse> {
+    const updated = await this.roomsService.recordParticipantHeartbeats(payload.participants);
+    return { updated };
   }
 }

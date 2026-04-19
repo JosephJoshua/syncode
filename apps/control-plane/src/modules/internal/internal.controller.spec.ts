@@ -1,5 +1,9 @@
 import { Test } from '@nestjs/testing';
-import type { SnapshotReadyPayload, UserDisconnectedPayload } from '@syncode/contracts';
+import type {
+  ParticipantHeartbeatRequest,
+  SnapshotReadyPayload,
+  UserDisconnectedPayload,
+} from '@syncode/contracts';
 import { STORAGE_SERVICE } from '@syncode/shared/ports';
 import { describe, expect, it, vi } from 'vitest';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
@@ -10,6 +14,7 @@ function createMocks() {
   return {
     roomsService: {
       markParticipantInactive: vi.fn().mockResolvedValue(undefined),
+      recordParticipantHeartbeats: vi.fn().mockResolvedValue(0),
     },
     storageService: {
       upload: vi.fn().mockResolvedValue(undefined),
@@ -150,6 +155,27 @@ describe('InternalController', () => {
         language: 'python',
         trigger: 'periodic',
       }),
+    );
+  });
+
+  it('GIVEN heartbeat payload WHEN handleParticipantHeartbeat THEN delegates to rooms service and returns updated count', async () => {
+    const mocks = createMocks();
+    mocks.roomsService.recordParticipantHeartbeats.mockResolvedValueOnce(3);
+    const controller = await createController(mocks);
+
+    const payload: ParticipantHeartbeatRequest = {
+      participants: [
+        { roomId: 'room-1', userId: 'user-1' },
+        { roomId: 'room-1', userId: 'user-2' },
+        { roomId: 'room-2', userId: 'user-3' },
+      ],
+    };
+
+    const result = await controller.handleParticipantHeartbeat(payload);
+
+    expect(result).toEqual({ updated: 3 });
+    expect(mocks.roomsService.recordParticipantHeartbeats).toHaveBeenCalledWith(
+      payload.participants,
     );
   });
 

@@ -1518,6 +1518,34 @@ export class RoomsService {
       .where(and(eq(roomParticipants.roomId, roomId), eq(roomParticipants.userId, userId)));
   }
 
+  /**
+   * Bulk-record participant heartbeats from collab-plane. Idempotent: only touches
+   * rows that are currently active and whose (roomId, userId) appear in the batch.
+   * Returns how many rows were actually updated.
+   */
+  async recordParticipantHeartbeats(
+    participants: Array<{ roomId: string; userId: string }>,
+  ): Promise<number> {
+    if (participants.length === 0) return 0;
+
+    const values = sql.join(
+      participants.map((p) => sql`(${p.roomId}::uuid, ${p.userId}::uuid)`),
+      sql`, `,
+    );
+    const now = new Date();
+    const updated = await this.db
+      .update(roomParticipants)
+      .set({ lastHeartbeatAt: now })
+      .where(
+        and(
+          eq(roomParticipants.isActive, true),
+          sql`(${roomParticipants.roomId}, ${roomParticipants.userId}) IN (VALUES ${values})`,
+        ),
+      )
+      .returning({ id: roomParticipants.id });
+    return updated.length;
+  }
+
   private async createCollabDocument(
     roomId: string,
     initialPhase: RoomStatus,

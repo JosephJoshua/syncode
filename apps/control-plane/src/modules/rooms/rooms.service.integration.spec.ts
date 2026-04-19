@@ -750,6 +750,88 @@ describe('markParticipantInactive', () => {
   });
 });
 
+describe('recordParticipantHeartbeats', () => {
+  it('GIVEN active participants WHEN recording heartbeats THEN bumps last_heartbeat_at for each and returns count', async () => {
+    const host = await insertUser(db);
+    const joiner = await insertUser(db);
+    const room1 = await insertRoom(db, host.id);
+    const room2 = await insertRoom(db, host.id);
+    await insertParticipant(db, room1.id, host.id, 'interviewer');
+    await insertParticipant(db, room1.id, joiner.id, 'candidate');
+    await insertParticipant(db, room2.id, host.id, 'interviewer');
+
+    const before = Date.now();
+    const updated = await service.recordParticipantHeartbeats([
+      { roomId: room1.id, userId: host.id },
+      { roomId: room1.id, userId: joiner.id },
+      { roomId: room2.id, userId: host.id },
+    ]);
+    const after = Date.now();
+
+    expect(updated).toBe(3);
+
+    const rows = await db
+      .select()
+      .from(roomParticipants)
+      .where(eq(roomParticipants.roomId, room1.id));
+    for (const row of rows) {
+      expect(row.lastHeartbeatAt).not.toBeNull();
+      const ts = row.lastHeartbeatAt!.getTime();
+      expect(ts).toBeGreaterThanOrEqual(before);
+      expect(ts).toBeLessThanOrEqual(after);
+    }
+  });
+
+  it('GIVEN inactive participant in batch WHEN recording heartbeats THEN inactive row is not touched', async () => {
+    const host = await insertUser(db);
+    const room = await insertRoom(db, host.id);
+    const active = await insertUser(db);
+    const inactive = await insertUser(db);
+    await insertParticipant(db, room.id, active.id, 'candidate');
+    await insertParticipant(db, room.id, inactive.id, 'candidate');
+    // Mark one inactive
+    await db
+      .update(roomParticipants)
+      .set({ isActive: false, leftAt: new Date('2026-04-01T00:00:00Z') })
+      .where(and(eq(roomParticipants.roomId, room.id), eq(roomParticipants.userId, inactive.id)));
+
+    const updated = await service.recordParticipantHeartbeats([
+      { roomId: room.id, userId: active.id },
+      { roomId: room.id, userId: inactive.id },
+    ]);
+
+    expect(updated).toBe(1);
+
+    const [activeRow] = await db
+      .select()
+      .from(roomParticipants)
+      .where(and(eq(roomParticipants.roomId, room.id), eq(roomParticipants.userId, active.id)));
+    expect(activeRow!.lastHeartbeatAt).not.toBeNull();
+
+    const [inactiveRow] = await db
+      .select()
+      .from(roomParticipants)
+      .where(and(eq(roomParticipants.roomId, room.id), eq(roomParticipants.userId, inactive.id)));
+    expect(inactiveRow!.lastHeartbeatAt).toBeNull();
+  });
+
+  it('GIVEN empty participants list WHEN recording heartbeats THEN returns 0 and does not touch rows', async () => {
+    const host = await insertUser(db);
+    const room = await insertRoom(db, host.id);
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+
+    const updated = await service.recordParticipantHeartbeats([]);
+
+    expect(updated).toBe(0);
+
+    const [row] = await db
+      .select()
+      .from(roomParticipants)
+      .where(and(eq(roomParticipants.roomId, room.id), eq(roomParticipants.userId, host.id)));
+    expect(row!.lastHeartbeatAt).toBeNull();
+  });
+});
+
 describe('browsePublicRooms', () => {
   const defaultQuery = { limit: 10 } as const;
 
