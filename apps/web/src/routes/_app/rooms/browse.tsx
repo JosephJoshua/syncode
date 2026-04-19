@@ -7,31 +7,17 @@ import {
 import {
   PROBLEM_DIFFICULTIES,
   type ProblemDifficulty,
-  SUPPORTED_LANGUAGES,
   type SupportedLanguage,
 } from '@syncode/shared';
-import {
-  Button,
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-  cn,
-  Input,
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@syncode/ui';
+import { Button, cn, Input } from '@syncode/ui';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { ChevronDown, Code2, Compass, Loader2, Search, Sparkles } from 'lucide-react';
+import { Compass, Loader2, Search, Sparkles, X } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
-import { LANGUAGE_SELECTOR_METADATA } from '@/components/language-selector.data.js';
+import { LanguageSelector } from '@/components/language-selector.js';
 import { BrowseEmptyState } from '@/components/rooms-browse/browse-empty-state.js';
 import { PublicRoomCard } from '@/components/rooms-browse/public-room-card.js';
 import { api, readApiError } from '@/lib/api-client.js';
@@ -80,7 +66,6 @@ function BrowseRoomsPage() {
   const [filters, setFilters] = useState<BrowseFilters>(emptyFilters);
   const [cursor, setCursor] = useState<string | undefined>(undefined);
   const [accumulated, setAccumulated] = useState<PublicRoomSummary[]>([]);
-  const [isLanguageOpen, setIsLanguageOpen] = useState(false);
 
   const deferredSearch = useDeferredValue(filters.search);
   const normalizedSearch = deferredSearch.trim();
@@ -264,56 +249,25 @@ function BrowseRoomsPage() {
               </div>
 
               <div className="ml-auto flex items-center gap-2">
-                <Popover open={isLanguageOpen} onOpenChange={setIsLanguageOpen}>
-                  <PopoverTrigger asChild>
+                <div className="flex items-center gap-1">
+                  <LanguageSelector
+                    value={filters.language ?? undefined}
+                    onValueChange={(language) => setFilters((prev) => ({ ...prev, language }))}
+                    placeholder={t('browse.filters.languageAll')}
+                    ariaLabel={t('browse.filters.language')}
+                    className="h-9 w-[200px]"
+                  />
+                  {filters.language !== null && (
                     <button
                       type="button"
-                      role="combobox"
-                      aria-expanded={isLanguageOpen}
-                      aria-label={t('browse.filters.language')}
-                      className="inline-flex h-9 items-center gap-2 rounded-lg border border-input bg-background px-3 text-sm font-medium transition-colors hover:border-ring/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                      aria-label={t('browse.filters.clearLanguage')}
+                      onClick={() => setFilters((prev) => ({ ...prev, language: null }))}
+                      className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
                     >
-                      <Code2 size={14} className="text-muted-foreground" />
-                      <span className={cn(filters.language === null && 'text-muted-foreground')}>
-                        {filters.language === null
-                          ? t('browse.filters.languageAll')
-                          : LANGUAGE_SELECTOR_METADATA[filters.language].label}
-                      </span>
-                      <ChevronDown size={14} className="text-muted-foreground" />
+                      <X size={14} />
                     </button>
-                  </PopoverTrigger>
-                  <PopoverContent className="p-0" align="end">
-                    <Command>
-                      <CommandInput placeholder={t('browse.filters.language')} />
-                      <CommandList>
-                        <CommandEmpty>{t('browse.filters.languageAll')}</CommandEmpty>
-                        <CommandGroup>
-                          <CommandItem
-                            value="__all__"
-                            onSelect={() => {
-                              setFilters((prev) => ({ ...prev, language: null }));
-                              setIsLanguageOpen(false);
-                            }}
-                          >
-                            {t('browse.filters.languageAll')}
-                          </CommandItem>
-                          {SUPPORTED_LANGUAGES.map((language) => (
-                            <CommandItem
-                              key={language}
-                              value={LANGUAGE_SELECTOR_METADATA[language].label}
-                              onSelect={() => {
-                                setFilters((prev) => ({ ...prev, language }));
-                                setIsLanguageOpen(false);
-                              }}
-                            >
-                              {LANGUAGE_SELECTOR_METADATA[language].label}
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
+                  )}
+                </div>
 
                 {isFiltered && (
                   <Button

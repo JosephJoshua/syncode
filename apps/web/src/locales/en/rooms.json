@@ -28,6 +28,7 @@
       "search": "Search rooms, problems, or hosts",
       "language": "Language",
       "languageAll": "Any language",
+      "clearLanguage": "Clear language filter",
       "difficulty": "Difficulty",
       "difficultyAll": "Any",
       "status": "Status",

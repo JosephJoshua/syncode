@@ -11,6 +11,7 @@ export interface LanguageSelectorProps {
   placeholder?: string;
   emptyPlaceholder?: string;
   className?: string;
+  ariaLabel?: string;
 }
 
 export function LanguageSelector({
@@ -22,6 +23,7 @@ export function LanguageSelector({
   placeholder,
   emptyPlaceholder,
   className,
+  ariaLabel = 'Programming language',
 }: LanguageSelectorProps) {
   const options = getLanguageSelectorOptions(languages).map((option) => ({
     ...option,
@@ -34,13 +36,13 @@ export function LanguageSelector({
 
   return (
     <Select
-      value={selectedOption?.value}
+      value={selectedOption?.value ?? ''}
       onValueChange={(nextValue) => onValueChange(nextValue as SupportedLanguage)}
       disabled={isDisabled}
     >
       <SelectTrigger
         className={cn('min-w-0', className)}
-        aria-label="Programming language"
+        aria-label={ariaLabel}
         data-empty={isEmpty ? 'true' : undefined}
       >
         {selectedOption ? (
