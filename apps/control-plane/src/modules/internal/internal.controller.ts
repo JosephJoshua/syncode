@@ -1,4 +1,4 @@
-import { Body, Controller, Inject, Logger, Post } from '@nestjs/common';
+import { Body, Controller, Inject, Logger, Param, Post } from '@nestjs/common';
 import { ApiExcludeEndpoint } from '@nestjs/swagger';
 import { SkipThrottle } from '@nestjs/throttler';
 import { CONTROL_INTERNAL } from '@syncode/contracts';
@@ -8,7 +8,11 @@ import { type IStorageService, STORAGE_SERVICE } from '@syncode/shared/ports';
 import { eq } from 'drizzle-orm';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
 import { RoomsService } from '@/modules/rooms/rooms.service.js';
-import { SnapshotReadyDto, UserDisconnectedDto } from './dto/internal.dto.js';
+import {
+  PersistDocSnapshotDto,
+  SnapshotReadyDto,
+  UserDisconnectedDto,
+} from './dto/internal.dto.js';
 
 /**
  * Receives HTTP callbacks FROM other planes.
@@ -77,6 +81,27 @@ export class InternalController {
       return { success: true };
     } catch (error) {
       this.logger.error('Failed to store snapshot', error);
+      return { success: false };
+    }
+  }
+
+  /**
+   * Called by collab-plane on TTL teardown with the binary Y.Doc state, so the same
+   * content can be restored next time the doc is recreated.
+   */
+  @Post(CONTROL_INTERNAL.PERSIST_DOC_SNAPSHOT.route)
+  @ApiExcludeEndpoint()
+  async handlePersistDocSnapshot(
+    @Param('roomId') roomId: string,
+    @Body() payload: PersistDocSnapshotDto,
+  ): Promise<{ success: boolean }> {
+    try {
+      const state = new Uint8Array(payload.state);
+      await this.roomsService.persistDocSnapshot(roomId, state);
+      this.logger.debug(`Doc snapshot persisted for room ${roomId} (${state.byteLength} bytes)`);
+      return { success: true };
+    } catch (error) {
+      this.logger.error(`Failed to persist doc snapshot for room ${roomId}`, error);
       return { success: false };
     }
   }

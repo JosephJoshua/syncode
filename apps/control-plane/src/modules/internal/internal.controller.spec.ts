@@ -10,6 +10,7 @@ function createMocks() {
   return {
     roomsService: {
       markParticipantInactive: vi.fn().mockResolvedValue(undefined),
+      persistDocSnapshot: vi.fn().mockResolvedValue(undefined),
     },
     storageService: {
       upload: vi.fn().mockResolvedValue(undefined),
@@ -167,5 +168,35 @@ describe('InternalController', () => {
     expect(result).toEqual({ success: true });
     expect(mocks.storageService.upload).toHaveBeenCalled();
     expect(mocks.db.insert).not.toHaveBeenCalled();
+  });
+
+  it('GIVEN valid doc snapshot payload WHEN handlePersistDocSnapshot THEN calls RoomsService.persistDocSnapshot and returns success', async () => {
+    const mocks = createMocks();
+    const controller = await createController(mocks);
+
+    const result = await controller.handlePersistDocSnapshot('room-42', {
+      roomId: 'room-42',
+      state: [5, 6, 7],
+    });
+
+    expect(result).toEqual({ success: true });
+    expect(mocks.roomsService.persistDocSnapshot).toHaveBeenCalledOnce();
+    const [passedRoomId, passedState] = mocks.roomsService.persistDocSnapshot.mock.calls[0];
+    expect(passedRoomId).toBe('room-42');
+    expect(passedState).toBeInstanceOf(Uint8Array);
+    expect(Array.from(passedState)).toEqual([5, 6, 7]);
+  });
+
+  it('GIVEN service failure WHEN handlePersistDocSnapshot THEN returns success false and does not throw', async () => {
+    const mocks = createMocks();
+    mocks.roomsService.persistDocSnapshot.mockRejectedValueOnce(new Error('db down'));
+    const controller = await createController(mocks);
+
+    const result = await controller.handlePersistDocSnapshot('room-42', {
+      roomId: 'room-42',
+      state: [1],
+    });
+
+    expect(result).toEqual({ success: false });
   });
 });
