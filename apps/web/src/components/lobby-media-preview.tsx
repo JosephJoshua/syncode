@@ -40,6 +40,7 @@ export function LobbyMediaPreview() {
   const audioStreamRef = useRef<MediaStream | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const analyserRafRef = useRef<number | null>(null);
+  const prevBarRef = useRef(0);
 
   const selectedVideoId =
     preferredVideoId && videoDevices.some((d) => d.deviceId === preferredVideoId)
@@ -103,6 +104,7 @@ export function LobbyMediaPreview() {
       for (const t of audioStreamRef.current.getTracks()) t.stop();
       audioStreamRef.current = null;
     }
+    prevBarRef.current = 0;
     setLevel(0);
   }, []);
 
@@ -182,7 +184,12 @@ export function LobbyMediaPreview() {
           analyser.getByteFrequencyData(data);
           let sum = 0;
           for (let i = 0; i < data.length; i++) sum += data[i] ?? 0;
-          setLevel(sum / data.length / 255);
+          const avg = sum / data.length / 255;
+          const next = Math.min(BAR_COUNT, Math.ceil(avg * BAR_COUNT));
+          if (next !== prevBarRef.current) {
+            prevBarRef.current = next;
+            setLevel(next);
+          }
           analyserRafRef.current = requestAnimationFrame(tick);
         };
         analyserRafRef.current = requestAnimationFrame(tick);
@@ -270,8 +277,7 @@ export function LobbyMediaPreview() {
       <div className="mt-3 flex items-center gap-1.5">
         <div className="flex flex-1 items-center gap-0.5">
           {BAR_KEYS.map((key, i) => {
-            const threshold = (i + 1) / BAR_COUNT;
-            const active = micOn && level >= threshold;
+            const active = micOn && level > i;
             return (
               <div
                 key={key}
