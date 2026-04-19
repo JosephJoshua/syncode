@@ -41,6 +41,8 @@ export function LobbyMediaPreview() {
   const audioCtxRef = useRef<AudioContext | null>(null);
   const analyserRafRef = useRef<number | null>(null);
   const prevBarRef = useRef(0);
+  const videoRefreshedRef = useRef(false);
+  const audioRefreshedRef = useRef(false);
 
   const selectedVideoId =
     preferredVideoId && videoDevices.some((d) => d.deviceId === preferredVideoId)
@@ -129,7 +131,10 @@ export function LobbyMediaPreview() {
         videoStreamRef.current = stream;
         if (videoRef.current) videoRef.current.srcObject = stream;
         setPermission('granted');
-        void refreshDevices();
+        if (!videoRefreshedRef.current) {
+          videoRefreshedRef.current = true;
+          void refreshDevices();
+        }
       })
       .catch((err: DOMException) => {
         if (cancelled) return;
@@ -169,7 +174,10 @@ export function LobbyMediaPreview() {
         }
         audioStreamRef.current = stream;
         setPermission('granted');
-        void refreshDevices();
+        if (!audioRefreshedRef.current) {
+          audioRefreshedRef.current = true;
+          void refreshDevices();
+        }
 
         const ctx = new AudioContext();
         const source = ctx.createMediaStreamSource(stream);
