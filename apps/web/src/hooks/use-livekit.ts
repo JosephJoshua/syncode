@@ -180,9 +180,6 @@ export function useLiveKit({
       rawLocalTrack && videoProcessorRef.current?.processedTrack
         ? videoProcessorRef.current.processedTrack
         : rawLocalTrack;
-    // Keep the tile visible as soon as the camera is enabled, even if the track
-    // hasn't reached us yet. Avoids a missing panel when LocalTrackPublished
-    // fires before the MediaStreamTrack is attached.
     const localHasVideo =
       localMediaTrack !== null ||
       (room.localParticipant.isCameraEnabled && !!localVideo && !localVideo.isMuted);
@@ -447,8 +444,6 @@ export function useLiveKit({
     room.on(RoomEvent.TrackUnsubscribed, onTrackUnsubscribed);
     room.on(RoomEvent.LocalTrackPublished, onLocalTrackPublished);
     room.on(RoomEvent.LocalTrackUnpublished, onLocalTrackUnpublished);
-    // Server confirms local track is being relayed; track.mediaStreamTrack may
-    // only become available around this point, so refresh again.
     room.on(RoomEvent.LocalTrackSubscribed, () => {
       if (!disposed) refreshParticipants();
     });

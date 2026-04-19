@@ -14,6 +14,25 @@ type PermissionStatus = 'idle' | 'prompting' | 'granted' | 'denied';
 const BAR_COUNT = 12;
 const BAR_KEYS = Array.from({ length: BAR_COUNT }, (_, i) => `bar-${String(i)}`);
 
+async function acquireStream(
+  constraints: MediaStreamConstraints,
+  signal: { cancelled: boolean },
+  onStream: (stream: MediaStream) => void,
+  onDenied: (err: DOMException) => void,
+): Promise<void> {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+    if (signal.cancelled) {
+      for (const track of stream.getTracks()) track.stop();
+      return;
+    }
+    onStream(stream);
+  } catch (err) {
+    if (signal.cancelled) return;
+    onDenied(err as DOMException);
+  }
+}
+
 export function LobbyMediaPreview() {
   const { t } = useTranslation('rooms');
 
@@ -110,24 +129,20 @@ export function LobbyMediaPreview() {
     setLevel(0);
   }, []);
 
-  // Restarts the camera pipeline whenever the user toggles it or picks a different device.
   useEffect(() => {
     if (!cameraOn) {
       stopVideo();
       return;
     }
-    let cancelled = false;
+    const signal = { cancelled: false };
     setCameraError(null);
     const constraints: MediaStreamConstraints = selectedVideoId
       ? { video: { deviceId: { exact: selectedVideoId } } }
       : { video: true };
-    navigator.mediaDevices
-      .getUserMedia(constraints)
-      .then((stream) => {
-        if (cancelled) {
-          for (const t of stream.getTracks()) t.stop();
-          return;
-        }
+    void acquireStream(
+      constraints,
+      signal,
+      (stream) => {
         videoStreamRef.current = stream;
         if (videoRef.current) videoRef.current.srcObject = stream;
         setPermission('granted');
@@ -135,29 +150,28 @@ export function LobbyMediaPreview() {
           videoRefreshedRef.current = true;
           void refreshDevices();
         }
-      })
-      .catch((err: DOMException) => {
-        if (cancelled) return;
+      },
+      (err) => {
         setCameraOn(false);
         const denied = err.name === 'NotAllowedError' || err.name === 'SecurityError';
         if (denied) setPermission('denied');
         setCameraError(
           denied ? t('lobbyPreview.cameraDenied') : t('lobbyPreview.cameraUnavailable'),
         );
-      });
+      },
+    );
     return () => {
-      cancelled = true;
+      signal.cancelled = true;
       stopVideo();
     };
   }, [cameraOn, selectedVideoId, refreshDevices, stopVideo, t]);
 
-  // Re-acquires the mic stream when toggled, the device changes, or audio processing toggles change.
   useEffect(() => {
     if (!micOn) {
       stopAudio();
       return;
     }
-    let cancelled = false;
+    const signal = { cancelled: false };
     setMicError(null);
     const baseAudio: MediaTrackConstraints = {
       noiseSuppression: audioProcessing.noiseSuppression,
@@ -165,13 +179,10 @@ export function LobbyMediaPreview() {
       autoGainControl: audioProcessing.autoGainControl,
     };
     if (selectedAudioId) baseAudio.deviceId = { exact: selectedAudioId };
-    navigator.mediaDevices
-      .getUserMedia({ audio: baseAudio })
-      .then((stream) => {
-        if (cancelled) {
-          for (const t of stream.getTracks()) t.stop();
-          return;
-        }
+    void acquireStream(
+      { audio: baseAudio },
+      signal,
+      (stream) => {
         audioStreamRef.current = stream;
         setPermission('granted');
         if (!audioRefreshedRef.current) {
@@ -188,7 +199,7 @@ export function LobbyMediaPreview() {
 
         const data = new Uint8Array(analyser.frequencyBinCount);
         const tick = () => {
-          if (cancelled) return;
+          if (signal.cancelled) return;
           analyser.getByteFrequencyData(data);
           let sum = 0;
           for (let i = 0; i < data.length; i++) sum += data[i] ?? 0;
@@ -201,16 +212,16 @@ export function LobbyMediaPreview() {
           analyserRafRef.current = requestAnimationFrame(tick);
         };
         analyserRafRef.current = requestAnimationFrame(tick);
-      })
-      .catch((err: DOMException) => {
-        if (cancelled) return;
+      },
+      (err) => {
         setMicOn(false);
         const denied = err.name === 'NotAllowedError' || err.name === 'SecurityError';
         if (denied) setPermission('denied');
         setMicError(denied ? t('lobbyPreview.micDenied') : t('lobbyPreview.micUnavailable'));
-      });
+      },
+    );
     return () => {
-      cancelled = true;
+      signal.cancelled = true;
       stopAudio();
     };
   }, [
