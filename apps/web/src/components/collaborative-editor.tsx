@@ -4,7 +4,7 @@ import { MonacoBinding } from 'y-monaco';
 import type { Awareness } from 'y-protocols/awareness';
 import type * as Y from 'yjs';
 import { CODE_TEXT_KEY } from '@/lib/yjs-collab-provider.js';
-import { buildCursorCssRules } from './cursor-styles.js';
+import { buildCursorCssRules, IDLE_HIDE_MS } from './cursor-styles.js';
 import {
   EDITOR_LOADING,
   EDITOR_OPTIONS_BASE,
@@ -69,14 +69,110 @@ export function CollaborativeEditor({
     };
   }, [doc, awareness]);
 
-  // Inject dynamic CSS for remote cursor colors from awareness state.
   useEffect(() => {
     const styleEl = document.createElement('style');
     document.head.appendChild(styleEl);
 
+    const lastUpdated = new Map<number, number>();
+    const idleIds = new Set<number>();
+    const hoverIds = new Set<number>();
+    const hoverListeners = new Map<number, { over: () => void; leave: () => void }>();
+    let tickHandle: ReturnType<typeof setInterval> | null = null;
+
+    const remoteStates = () => {
+      const states = awareness.getStates();
+      const filtered = new Map<number, Record<string, unknown>>();
+      states.forEach((state, id) => {
+        if (id !== doc.clientID) filtered.set(id, state);
+      });
+      return filtered;
+    };
+
     const updateStyles = () => {
-      const rules = buildCursorCssRules(awareness.getStates(), doc.clientID);
+      const rules = buildCursorCssRules(awareness.getStates(), doc.clientID, {
+        idleClientIds: idleIds,
+        transparentClientIds: hoverIds,
+      });
       styleEl.textContent = rules.join('\n');
+    };
+
+    const detachHoverFor = (clientID: number) => {
+      const existing = hoverListeners.get(clientID);
+      if (!existing) return;
+      document.querySelectorAll<HTMLElement>(`.yRemoteSelectionHead-${clientID}`).forEach((el) => {
+        el.removeEventListener('mouseover', existing.over);
+        el.removeEventListener('mouseleave', existing.leave);
+      });
+      hoverListeners.delete(clientID);
+      hoverIds.delete(clientID);
+    };
+
+    const attachHoverFor = (clientID: number) => {
+      if (hoverListeners.has(clientID)) return;
+      const over = () => {
+        if (!hoverIds.has(clientID)) {
+          hoverIds.add(clientID);
+          updateStyles();
+        }
+      };
+      const leave = () => {
+        if (hoverIds.delete(clientID)) updateStyles();
+      };
+      hoverListeners.set(clientID, { over, leave });
+      document.querySelectorAll<HTMLElement>(`.yRemoteSelectionHead-${clientID}`).forEach((el) => {
+        el.addEventListener('mouseover', over);
+        el.addEventListener('mouseleave', leave);
+      });
+    };
+
+    // Hover targets are rendered by Monaco asynchronously, so re-bind shortly after each awareness change.
+    const scheduleHoverRebind = (clientIds: number[]) => {
+      requestAnimationFrame(() => {
+        clientIds.forEach((id) => {
+          if (id === doc.clientID) return;
+          const existing = hoverListeners.get(id);
+          if (existing) {
+            detachHoverFor(id);
+          }
+          attachHoverFor(id);
+        });
+      });
+    };
+
+    const recomputeIdle = () => {
+      const now = Date.now();
+      let changed = false;
+      const present = new Set<number>();
+      awareness.getStates().forEach((_, id) => {
+        if (id === doc.clientID) return;
+        present.add(id);
+        const stamp = lastUpdated.get(id) ?? now;
+        const shouldBeIdle = now - stamp >= IDLE_HIDE_MS;
+        if (shouldBeIdle && !idleIds.has(id)) {
+          idleIds.add(id);
+          changed = true;
+        } else if (!shouldBeIdle && idleIds.has(id)) {
+          idleIds.delete(id);
+          changed = true;
+        }
+      });
+      idleIds.forEach((id) => {
+        if (!present.has(id)) {
+          idleIds.delete(id);
+          changed = true;
+        }
+      });
+      if (changed) updateStyles();
+    };
+
+    const ensureTicking = () => {
+      const hasRemote = remoteStates().size > 0;
+      if (hasRemote && tickHandle == null) {
+        tickHandle = setInterval(recomputeIdle, 1_000);
+      } else if (!hasRemote && tickHandle != null) {
+        clearInterval(tickHandle);
+        tickHandle = null;
+      }
     };
 
     const onAwarenessChange = ({
@@ -88,13 +184,39 @@ export function CollaborativeEditor({
       updated: number[];
       removed: number[];
     }) => {
-      if (added.length > 0 || updated.length > 0 || removed.length > 0) updateStyles();
+      if (added.length === 0 && updated.length === 0 && removed.length === 0) return;
+      const now = Date.now();
+      for (const id of [...added, ...updated]) {
+        if (id === doc.clientID) continue;
+        lastUpdated.set(id, now);
+        idleIds.delete(id);
+      }
+      for (const id of removed) {
+        lastUpdated.delete(id);
+        detachHoverFor(id);
+        idleIds.delete(id);
+      }
+      updateStyles();
+      scheduleHoverRebind([...added, ...updated]);
+      ensureTicking();
     };
+
     awareness.on('change', onAwarenessChange);
+    // Seed timestamps for any peers already present at mount.
+    const now = Date.now();
+    awareness.getStates().forEach((_, id) => {
+      if (id !== doc.clientID) lastUpdated.set(id, now);
+    });
     updateStyles();
+    scheduleHoverRebind([...lastUpdated.keys()]);
+    ensureTicking();
 
     return () => {
       awareness.off('change', onAwarenessChange);
+      if (tickHandle != null) clearInterval(tickHandle);
+      hoverListeners.forEach((_, id) => {
+        detachHoverFor(id);
+      });
       styleEl.remove();
     };
   }, [awareness, doc.clientID]);
