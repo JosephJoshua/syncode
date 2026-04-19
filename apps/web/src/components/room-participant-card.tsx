@@ -255,10 +255,15 @@ export function RoomParticipantCard({
           <div
             className={cn(
               'flex items-center gap-1.5 transition-transform duration-200 ease-out',
+              !isHost && 'translate-x-[6px]',
               showParticipantActions &&
                 (isParticipantMenuOpen
-                  ? '-translate-x-0.5'
-                  : 'group-hover:-translate-x-0.5 group-focus-within:-translate-x-0.5'),
+                  ? isHost
+                    ? '-translate-x-0.5'
+                    : 'translate-x-[4px]'
+                  : isHost
+                    ? 'group-hover:-translate-x-0.5 group-focus-within:-translate-x-0.5'
+                    : 'group-hover:translate-x-[4px] group-focus-within:translate-x-[4px]'),
             )}
           >
             <Badge variant={participant.role} className="text-[10px]">
