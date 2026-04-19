@@ -1,4 +1,4 @@
-import { CONTROL_API, defineRoute, ERROR_CODES } from '@syncode/contracts';
+import { CONTROL_API, ERROR_CODES } from '@syncode/contracts';
 import type { RoomRole, RoomStatus } from '@syncode/shared';
 import {
   AlertDialog,
@@ -11,7 +11,7 @@ import {
   AlertDialogTitle,
 } from '@syncode/ui';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { AlertTriangle, Loader2 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -42,10 +42,6 @@ export const Route = createFileRoute('/_app/rooms_/$roomId')({
 import type { JoinRoomResponse, RoomDetail } from '@syncode/contracts';
 
 const ROOM_REFRESH_INTERVAL_MS = 15_000;
-const REMOVE_PARTICIPANT_ROUTE = defineRoute<void, void>()(
-  'rooms/:id/participants/:userId',
-  'DELETE',
-);
 
 const CURSOR_COLORS = [
   '#00e599',
@@ -68,6 +64,7 @@ function RoomPage() {
   const { t } = useTranslation('rooms');
   const { roomId } = Route.useParams();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const currentUserId = useAuthStore((state) => state.user?.id ?? null);
   const [room, setRoom] = useState<RoomDetail | null>(null);
   const [isJoining, setIsJoining] = useState(true);
@@ -90,6 +87,10 @@ function RoomPage() {
   // cause the WebSocket to reconnect on every poll if used directly. The collab JWT has
   // a 24h lifetime, so the first token is valid for the entire session.
   const collabCredsRef = useRef<{ collabToken: string; collabUrl: string } | null>(null);
+  // Flips to true when the server reports ROOM_PARTICIPANT_REMOVED during the
+  // post-reconnect /join re-call. Short-circuits further reconnect attempts and
+  // redirects away from the now-inaccessible room.
+  const kickedRef = useRef(false);
 
   // Tick clock only when the timer is actively running (coding + not paused)
   const timerActive =
@@ -239,6 +240,7 @@ function RoomPage() {
     onPhaseChange: () => void refreshRoomDetail(),
     onLanguageChange: () => void refreshRoomDetail(),
     onReconnected: () => {
+      if (kickedRef.current) return;
       void (async () => {
         try {
           const result = await api(CONTROL_API.ROOMS.JOIN, {
@@ -246,9 +248,15 @@ function RoomPage() {
             body: {},
           });
           setRoom(result.room);
-        } catch {
-          // Background reactivation; errors are non-fatal and intentionally swallowed.
-          // The participant sweep will eventually reconcile.
+        } catch (error) {
+          const apiError = await readApiError(error);
+          if (apiError?.code === ERROR_CODES.ROOM_PARTICIPANT_REMOVED) {
+            kickedRef.current = true;
+            toast.error(apiError.message ?? t('lobby.removedFromRoom'));
+            void navigate({ to: '/rooms' });
+            return;
+          }
+          // Other errors are non-fatal — the participant sweep will reconcile.
         }
       })();
     },
@@ -545,7 +553,7 @@ function RoomPage() {
 
   const removeParticipantMutation = useMutation({
     mutationFn: async ({ userId }: { userId: string; displayName: string }) =>
-      api(REMOVE_PARTICIPANT_ROUTE, {
+      api(CONTROL_API.ROOMS.REMOVE_PARTICIPANT, {
         params: { id: roomId, userId },
       }),
     onSuccess: async (_, variables) => {

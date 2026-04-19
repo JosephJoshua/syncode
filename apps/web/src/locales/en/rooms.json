@@ -143,7 +143,8 @@
     "editorLocked": "Editor locked",
     "editorUnlocked": "Editor unlocked",
     "awaitingController": "Waiting for the host or current interviewer to open the workspace.",
-    "readyFailed": "Failed to update ready status."
+    "readyFailed": "Failed to update ready status.",
+    "removedFromRoom": "You have been removed from this room by the host."
   },
   "roleSelect": {
     "heading": "Your Role",

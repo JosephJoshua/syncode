@@ -143,7 +143,8 @@
     "editorLocked": "编辑器已锁定",
     "editorUnlocked": "编辑器未锁定",
     "awaitingController": "等待主持人或当前面试官打开工作区。",
-    "readyFailed": "更新准备状态失败。"
+    "readyFailed": "更新准备状态失败。",
+    "removedFromRoom": "您已被房主移出此房间。"
   },
   "roleSelect": {
     "heading": "你的角色",
