@@ -51,6 +51,7 @@ export function LanguageSelector({
             iconClassName={selectedOption.iconClassName}
             badgeText={selectedOption.fallbackIconText}
             label={selectedOption.label}
+            compact
           />
         ) : (
           <span className="truncate text-sm text-muted-foreground">{triggerLabel}</span>
@@ -86,12 +87,14 @@ function LanguageSelectorValue({
   badgeText,
   label,
   mutedBadge = false,
+  compact = false,
 }: {
   iconSrc: string;
   iconClassName?: string;
   badgeText: string;
   label: string;
   mutedBadge?: boolean;
+  compact?: boolean;
 }) {
   return (
     <span className="flex min-w-0 items-center gap-2">
@@ -100,6 +103,7 @@ function LanguageSelectorValue({
         iconClassName={iconClassName}
         fallbackText={badgeText}
         muted={mutedBadge}
+        compact={compact}
       />
       <span className="truncate text-sm font-medium text-foreground">{label}</span>
     </span>
@@ -111,17 +115,20 @@ function LanguageIcon({
   iconClassName,
   fallbackText,
   muted = false,
+  compact = false,
 }: {
   iconSrc: string;
   iconClassName?: string;
   fallbackText: string;
   muted?: boolean;
+  compact?: boolean;
 }) {
   return (
     <span
       aria-hidden="true"
       className={cn(
-        'inline-flex size-6 shrink-0 items-center justify-center rounded-md border p-1 transition-colors',
+        'inline-flex shrink-0 items-center justify-center rounded-md border transition-colors',
+        compact ? 'size-5 p-0.5' : 'size-6 p-1',
         muted
           ? 'border-border/70 bg-white/88 shadow-[inset_0_1px_0_rgb(255_255_255/0.28)]'
           : 'border-primary/20 bg-white/96 shadow-[inset_0_1px_0_rgb(255_255_255/0.36)]',

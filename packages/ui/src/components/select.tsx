@@ -48,12 +48,7 @@ function SelectContent({
         )}
         style={{
           backgroundColor: 'rgb(11 13 13 / 0.985)',
-          ...(position === 'popper'
-            ? {
-                width: 'var(--radix-select-trigger-width)',
-                minWidth: 'var(--radix-select-trigger-width)',
-              }
-            : {}),
+          ...(position === 'popper' ? { minWidth: 'var(--radix-select-trigger-width)' } : {}),
         }}
         {...props}
       >
