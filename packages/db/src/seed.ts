@@ -392,36 +392,50 @@ const problemsData: ProblemSeed[] = [
   // ---- Medium -------------------------------------------------------------
   {
     title: 'Longest Substring Without Repeating Characters',
-    description:
-      'Given a string `s`, find the length of the **longest substring** without repeating characters.',
+    description: [
+      'Given a string s, find the length of the longest substring that contains no repeated characters.',
+      '',
+      '## Input Format',
+      'A single line containing the string s (may be empty).',
+      '',
+      '## Output Format',
+      'Print a single integer: the length of the longest substring with no repeated characters.',
+      '',
+      '## Constraints',
+      '- 0 <= |s| <= 5 * 10^4',
+      '- s consists of English letters, digits, symbols, and spaces.',
+      '',
+      '## Example',
+      'Input:',
+      '```',
+      'abcabcbb',
+      '```',
+      'Output:',
+      '```',
+      '3',
+      '```',
+    ].join('\n'),
     difficulty: 'medium',
     company: 'Amazon',
     constraints:
-      '0 <= s.length <= 5 * 10^4\ns consists of English letters, digits, symbols and spaces.',
+      '0 <= |s| <= 5 * 10^4\ns consists of English letters, digits, symbols, and spaces.',
     examples: [
-      {
-        input: 'abcabcbb',
-        output: '3',
-        explanation: 'The answer is "abc", with the length of 3.',
-      },
-      {
-        input: 'bbbbb',
-        output: '1',
-        explanation: 'The answer is "b", with the length of 1.',
-      },
-      {
-        input: 'pwwkew',
-        output: '3',
-        explanation: 'The answer is "wke", with the length of 3.',
-      },
+      { input: 'abcabcbb', output: '3', explanation: 'The answer is "abc".' },
+      { input: 'bbbbb', output: '1', explanation: 'The answer is "b".' },
+      { input: 'pwwkew', output: '3', explanation: 'The answer is "wke".' },
     ],
     starterCode: {
       python:
-        'class Solution:\n    def lengthOfLongestSubstring(self, s: str) -> int:\n        pass\n',
+        "import sys\n\ndef solve(s):\n    # TODO: your solution here\n    return 0\n\ndef main():\n    s = sys.stdin.readline().rstrip('\\n')\n    print(solve(s))\n\nif __name__ == '__main__':\n    main()\n",
       javascript:
-        '/**\n * @param {string} s\n * @return {number}\n */\nfunction lengthOfLongestSubstring(s) {\n\n}\n',
-      typescript: 'function lengthOfLongestSubstring(s: string): number {\n\n}\n',
-      java: 'class Solution {\n    public int lengthOfLongestSubstring(String s) {\n\n    }\n}\n',
+        "const s = require('fs').readFileSync(0, 'utf-8').split('\\n')[0] ?? '';\n\nfunction solve(s) {\n  // TODO: your solution here\n  return 0;\n}\n\nconsole.log(solve(s));\n",
+      typescript:
+        "const s: string = require('fs').readFileSync(0, 'utf-8').split('\\n')[0] ?? '';\n\nfunction solve(s: string): number {\n  // TODO: your solution here\n  return 0;\n}\n\nconsole.log(solve(s));\n",
+      java: 'import java.io.*;\n\npublic class Main {\n    public static void main(String[] args) throws IOException {\n        BufferedReader br = new BufferedReader(new InputStreamReader(System.in));\n        String s = br.readLine();\n        if (s == null) s = "";\n        // TODO: your solution here\n        int result = 0;\n        System.out.println(result);\n    }\n}\n',
+      cpp: '#include <bits/stdc++.h>\nusing namespace std;\n\nint main() {\n    ios_base::sync_with_stdio(false);\n    cin.tie(nullptr);\n    string s;\n    getline(cin, s);\n    // TODO: your solution here\n    int result = 0;\n    cout << result << endl;\n    return 0;\n}\n',
+      c: "#include <stdio.h>\n#include <string.h>\n\nint main(void) {\n    char s[50005];\n    if (!fgets(s, sizeof(s), stdin)) s[0] = '\\0';\n    size_t len = strlen(s);\n    if (len > 0 && s[len - 1] == '\\n') s[len - 1] = '\\0';\n    /* TODO: your solution here */\n    int result = 0;\n    printf(\"%d\\n\", result);\n    return 0;\n}\n",
+      go: 'package main\n\nimport (\n\t"bufio"\n\t"fmt"\n\t"os"\n)\n\nfunc main() {\n\treader := bufio.NewReader(os.Stdin)\n\ts, _ := reader.ReadString(\'\\n\')\n\tif len(s) > 0 && s[len(s)-1] == \'\\n\' {\n\t\ts = s[:len(s)-1]\n\t}\n\t_ = s\n\t// TODO: your solution here\n\tresult := 0\n\tfmt.Println(result)\n}\n',
+      rust: "use std::io::{self, BufRead};\n\nfn main() {\n    let stdin = io::stdin();\n    let mut s = String::new();\n    stdin.lock().read_line(&mut s).unwrap();\n    let s = s.trim_end_matches('\\n').trim_end_matches('\\r').to_string();\n    let _ = s;\n    // TODO: your solution here\n    let result: usize = 0;\n    println!(\"{}\", result);\n}\n",
     },
     timeLimit: 5000,
     memoryLimit: 256,
@@ -448,7 +462,13 @@ const problemsData: ProblemSeed[] = [
         isHidden: false,
         sortOrder: 2,
       },
-      { input: '', expectedOutput: '0', description: 'Empty string', isHidden: true, sortOrder: 3 },
+      {
+        input: '',
+        expectedOutput: '0',
+        description: 'Empty string',
+        isHidden: true,
+        sortOrder: 3,
+      },
       {
         input: 'abcdef',
         expectedOutput: '6',
