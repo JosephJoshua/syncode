@@ -35,13 +35,18 @@ export class StubCollabClient implements ICollabClient {
     await this.delay();
     this.maybeThrow('createDocument');
 
+    const existing = this.documents.get(request.roomId);
+    if (existing) {
+      return { roomId: request.roomId, createdAt: existing.createdAt, created: false };
+    }
+
     const createdAt = Date.now();
     this.documents.set(request.roomId, {
       createdAt,
       phase: request.initialPhase,
       editorLocked: request.editorLocked,
     });
-    return { roomId: request.roomId, createdAt };
+    return { roomId: request.roomId, createdAt, created: true };
   }
 
   async destroyDocument(roomId: string): Promise<DestroyDocumentResponse> {

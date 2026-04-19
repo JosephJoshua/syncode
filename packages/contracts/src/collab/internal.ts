@@ -5,10 +5,17 @@ export interface CreateDocumentRequest {
   initialContent?: string;
   initialPhase?: string;
   editorLocked?: boolean;
+  /**
+   * Binary Y.Doc update (as number[] for JSON transport). When present, the collab-plane
+   * applies it to the fresh doc instead of seeding from `initialContent`.
+   */
+  snapshot?: number[];
 }
 export interface CreateDocumentResponse {
   roomId: string;
   createdAt: number;
+  /** True if this call actually created a new doc; false if one already existed. */
+  created: boolean;
 }
 
 export interface DestroyDocumentResponse {

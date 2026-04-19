@@ -18,6 +18,7 @@ export * from './recording-consents.js';
 export * from './refresh-tokens.js';
 export * from './relations.js';
 export * from './role-swap-requests.js';
+export * from './room-doc-snapshots.js';
 export * from './room-participants.js';
 export * from './rooms.js';
 export * from './runs.js';

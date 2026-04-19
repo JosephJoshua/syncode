@@ -308,6 +308,16 @@ export const transitionRoomPhaseResponseSchema = z.object({
 
 export type TransitionRoomPhaseResponse = z.infer<typeof transitionRoomPhaseResponseSchema>;
 
+// ── Collab recovery ──────────────────────────────────────────────────
+
+export const ensureCollabResponseSchema = z.object({
+  recreated: z
+    .boolean()
+    .describe('True if the collab doc was missing and has been recreated from the stored snapshot'),
+});
+
+export type EnsureCollabResponse = z.infer<typeof ensureCollabResponseSchema>;
+
 // ── Media token ──────────────────────────────────────────────────────
 
 export const mediaTokenResponseSchema = z.object({
