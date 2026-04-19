@@ -5,6 +5,9 @@ export {
 export { COLLAB_CLIENT, type ICollabClient } from './client.js';
 export {
   CONTROL_INTERNAL,
+  type ParticipantHeartbeatRequest,
+  type ParticipantHeartbeatResponse,
+  participantHeartbeatRequestSchema,
   type SnapshotReadyPayload,
   type SnapshotTrigger,
   snapshotReadyPayloadSchema,

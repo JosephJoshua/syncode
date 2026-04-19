@@ -31,6 +31,27 @@ export const userDisconnectedPayloadSchema = z
 
 export type UserDisconnectedPayload = z.infer<typeof userDisconnectedPayloadSchema>;
 
+export const participantHeartbeatRequestSchema = z
+  .object({
+    participants: z
+      .array(
+        z
+          .object({
+            roomId: z.uuid().describe('Room identifier'),
+            userId: z.uuid().describe('User identifier'),
+          })
+          .strict(),
+      )
+      .describe('Authenticated, alive (roomId, userId) pairs currently connected to collab-plane'),
+  })
+  .strict();
+
+export type ParticipantHeartbeatRequest = z.infer<typeof participantHeartbeatRequestSchema>;
+
+export interface ParticipantHeartbeatResponse {
+  updated: number;
+}
+
 export const CONTROL_INTERNAL = {
   SNAPSHOT_READY: defineRoute<SnapshotReadyPayload, { success: boolean }>()(
     'internal/collab/snapshot',
@@ -38,6 +59,10 @@ export const CONTROL_INTERNAL = {
   ),
   USER_DISCONNECTED: defineRoute<UserDisconnectedPayload, { success: boolean }>()(
     'internal/collab/user-disconnected',
+    'POST',
+  ),
+  PARTICIPANT_HEARTBEAT: defineRoute<ParticipantHeartbeatRequest, ParticipantHeartbeatResponse>()(
+    'internal/participants/heartbeat',
     'POST',
   ),
 };
