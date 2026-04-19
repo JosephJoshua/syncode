@@ -41,6 +41,7 @@ import type {
   updateRoomParticipantSchema,
 } from './rooms.js';
 import type {
+  codeSnapshotsResponseSchema,
   listSessionsQuerySchema,
   sessionDetailSchema,
   sessionHistoryResponseSchema,
@@ -163,6 +164,10 @@ export const CONTROL_API = {
       z.infer<typeof listSessionsQuerySchema>,
       z.infer<typeof sessionHistoryResponseSchema>
     >()('sessions', 'GET'),
+    SNAPSHOTS: defineRoute<void, z.infer<typeof codeSnapshotsResponseSchema>>()(
+      'sessions/:sessionId/snapshots',
+      'GET',
+    ),
     GET: defineRoute<void, z.infer<typeof sessionDetailSchema>>()('sessions/:id', 'GET'),
     DELETE: defineRoute<void, void>()('sessions/:id', 'DELETE'),
   },
