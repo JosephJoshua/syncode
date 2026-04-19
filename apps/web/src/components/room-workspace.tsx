@@ -68,7 +68,11 @@ interface RoomWorkspaceProps {
   awareness: Awareness | null;
   elapsedMs: number;
   isTransitioning: boolean;
+  isLockingEditor: boolean;
+  isUnlockingEditor: boolean;
   onTransition: (targetStatus: RoomStatus) => Promise<void>;
+  onLockEditor: () => void;
+  onUnlockEditor: () => void;
   onParticipantRoleChange: (userId: string, role: RoomRole) => Promise<void>;
   onTransferOwnership: (userId: string, displayName: string) => void;
   onRemoveParticipant: (userId: string, displayName: string) => void;
@@ -101,7 +105,11 @@ export function RoomWorkspace({
   awareness,
   elapsedMs,
   isTransitioning,
+  isLockingEditor,
+  isUnlockingEditor,
   onTransition,
+  onLockEditor,
+  onUnlockEditor,
   onParticipantRoleChange,
   onTransferOwnership,
   onRemoveParticipant,
@@ -206,6 +214,8 @@ export function RoomWorkspace({
   }, []);
 
   const amHost = Boolean(currentUserId && room.hostId === currentUserId);
+  const canChangePhase = room.myCapabilities.includes('room:change-phase');
+  const canControlEditorLock = canChangePhase;
   const canRunCode = room.myCapabilities.includes('code:run');
   const canEditCode = room.myCapabilities.includes('code:edit');
   const canManageParticipants = room.myCapabilities.includes('participant:assign-role');
@@ -852,11 +862,16 @@ export function RoomWorkspace({
                     elapsedMs={elapsedMs}
                     timerPaused={room.timerPaused}
                     editorLocked={room.editorLocked}
-                    canChangePhase={room.myCapabilities.includes('room:change-phase')}
+                    canChangePhase={canChangePhase}
+                    canControlEditorLock={canControlEditorLock}
                     isPending={isTransitioning}
+                    isLockingEditor={isLockingEditor}
+                    isUnlockingEditor={isUnlockingEditor}
                     onTransition={(targetStatus) => {
                       void onTransition(targetStatus);
                     }}
+                    onLockEditor={onLockEditor}
+                    onUnlockEditor={onUnlockEditor}
                   />
                 </div>
               </motion.div>
