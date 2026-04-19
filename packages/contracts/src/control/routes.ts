@@ -117,6 +117,7 @@ export const CONTROL_API = {
       z.infer<typeof updateRoomParticipantSchema>,
       z.infer<typeof updateRoomParticipantResponseSchema>
     >()('rooms/:id/participants/:participantUserId', 'PATCH'),
+    REMOVE_PARTICIPANT: defineRoute<void, void>()('rooms/:id/participants/:userId', 'DELETE'),
     DESTROY: defineRoute<void, z.infer<typeof destroyRoomResponseSchema>>()('rooms/:id', 'DELETE'),
     RUN: defineRoute<z.infer<typeof runCodeSchema>, z.infer<typeof runCodeResponseSchema>>()(
       'rooms/:id/run',

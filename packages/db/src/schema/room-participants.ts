@@ -19,6 +19,7 @@ export const roomParticipants = pgTable(
     isReady: boolean('is_ready').notNull().default(false),
     joinedAt: timestamp('joined_at', { withTimezone: true }).notNull().defaultNow(),
     leftAt: timestamp('left_at', { withTimezone: true }),
+    removedAt: timestamp('removed_at', { withTimezone: true }),
     lastHeartbeatAt: timestamp('last_heartbeat_at', { withTimezone: true }),
   },
   (table) => [

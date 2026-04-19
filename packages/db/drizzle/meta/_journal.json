@@ -43,6 +43,13 @@
       "when": 1776605198163,
       "tag": "0005_participant_heartbeat",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1776606901660,
+      "tag": "0006_mean_ravenous",
+      "breakpoints": true
     }
   ]
 }
