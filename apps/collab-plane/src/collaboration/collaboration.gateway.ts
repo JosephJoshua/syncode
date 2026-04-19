@@ -47,6 +47,7 @@ export class CollaborationGateway
   }
 
   private heartbeat(): void {
+    const batch: Array<{ roomId: string; userId: string }> = [];
     for (const client of this.clients) {
       if (client.readyState !== client.OPEN) {
         this.clients.delete(client);
@@ -59,9 +60,22 @@ export class CollaborationGateway
         ws.terminate();
         continue;
       }
+
+      // Collect authenticated + currently-alive clients into the heartbeat batch
+      // BEFORE we flip isAlive=false for the ping/pong round-trip.
+      const authenticated = client as AuthenticatedClient;
+      if (authenticated.user) {
+        batch.push({
+          roomId: authenticated.user.roomId,
+          userId: authenticated.user.sub,
+        });
+      }
+
       ws.isAlive = false;
       ws.ping();
     }
+
+    this.collaborationService.heartbeatParticipants(batch);
   }
 
   async handleConnection(client: WebSocket, request: IncomingMessage): Promise<void> {

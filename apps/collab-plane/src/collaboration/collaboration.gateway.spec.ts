@@ -30,6 +30,7 @@ function createFixture() {
 
   const collaborationService = {
     notifyUserDisconnected: vi.fn(),
+    heartbeatParticipants: vi.fn(),
     checkRoomEmpty: vi.fn(),
     cancelRoomCleanup: vi.fn(),
   };

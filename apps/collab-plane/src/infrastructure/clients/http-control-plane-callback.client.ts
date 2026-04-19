@@ -2,6 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import {
   CONTROL_INTERNAL,
   type IControlPlaneCallbackClient,
+  type ParticipantHeartbeatRequest,
+  type ParticipantHeartbeatResponse,
   type SnapshotReadyPayload,
   type UserDisconnectedPayload,
 } from '@syncode/contracts';
@@ -47,6 +49,25 @@ export class HttpControlPlaneCallbackClient implements IControlPlaneCallbackClie
       this.logger.warn(
         `Failed to notify user disconnect (userId=${payload.userId}, roomId=${payload.roomId}): ${(error as Error).message}`,
       );
+    }
+  }
+
+  async heartbeatParticipants(
+    request: ParticipantHeartbeatRequest,
+  ): Promise<ParticipantHeartbeatResponse | null> {
+    try {
+      const response = await this.client
+        .post(CONTROL_INTERNAL.PARTICIPANT_HEARTBEAT.route, { json: request })
+        .json<ParticipantHeartbeatResponse>();
+      this.logger.debug(
+        `Participant heartbeat delivered (batch=${request.participants.length}, updated=${response.updated})`,
+      );
+      return response;
+    } catch (error) {
+      this.logger.warn(
+        `Failed to deliver participant heartbeat (batch=${request.participants.length}): ${(error as Error).message}`,
+      );
+      return null;
     }
   }
 }

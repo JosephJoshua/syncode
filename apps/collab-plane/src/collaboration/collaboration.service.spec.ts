@@ -23,6 +23,7 @@ function createFixture() {
   const callbackClient: IControlPlaneCallbackClient = {
     notifyUserDisconnected: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
     notifySnapshotReady: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+    heartbeatParticipants: vi.fn<() => Promise<null>>().mockResolvedValue(null),
   };
 
   const docStore = {

@@ -18,6 +18,7 @@ describe('SnapshotScheduler', () => {
     callbackClient = {
       notifyUserDisconnected: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
       notifySnapshotReady: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+      heartbeatParticipants: vi.fn<() => Promise<null>>().mockResolvedValue(null),
     };
     roomRegistry = new RoomRegistry();
     scheduler = new SnapshotScheduler(docStore, callbackClient, roomRegistry);

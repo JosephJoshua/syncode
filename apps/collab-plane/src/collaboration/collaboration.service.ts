@@ -14,6 +14,7 @@ import type {
   IControlPlaneCallbackClient,
   KickUserRequest,
   KickUserResponse,
+  ParticipantHeartbeatRequest,
   UpdateRoomStateRequest,
   UpdateRoomStateResponse,
   UserDisconnectedPayload,
@@ -197,6 +198,22 @@ export class CollaborationService implements OnModuleDestroy {
    */
   notifyUserDisconnected(payload: UserDisconnectedPayload): void {
     void this.callbackClient.notifyUserDisconnected(payload);
+  }
+
+  /**
+   * Fire-and-forget participant-heartbeat delivery to control-plane.
+   * The callback client swallows errors per its port contract, but we wrap
+   * in a try/catch defensively in case a synchronous throw ever occurs.
+   */
+  heartbeatParticipants(participants: ParticipantHeartbeatRequest['participants']): void {
+    if (participants.length === 0) return;
+    try {
+      void this.callbackClient.heartbeatParticipants({ participants });
+    } catch (error) {
+      this.logger.warn(
+        `Failed to dispatch participant heartbeat: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
 
   checkRoomEmpty(roomId: string): void {
