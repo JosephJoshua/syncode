@@ -298,16 +298,11 @@ export function RoomParticipantCard({
                   className="min-w-44 rounded-xl border-border/60"
                 >
                   {hasSelfMicAction ? (
-                    <DropdownMenuItem onSelect={() => onSelfMicrophoneToggle?.()}>
-                      {isSelfMicrophoneEnabled ? (
-                        <MicOff className="size-3.5 text-muted-foreground" />
-                      ) : (
-                        <Mic className="size-3.5 text-muted-foreground" />
-                      )}
-                      {isSelfMicrophoneEnabled
-                        ? t('workspace.muteMyMicrophone')
-                        : t('workspace.unmuteMyMicrophone')}
-                    </DropdownMenuItem>
+                    <SelfMicMenuItem
+                      enabled={isSelfMicrophoneEnabled}
+                      onToggle={() => onSelfMicrophoneToggle?.()}
+                      t={t}
+                    />
                   ) : null}
                   {hasMediaActions ? (
                     <MediaActionsContent
@@ -433,16 +428,11 @@ export function RoomParticipantCard({
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="min-w-44 rounded-xl border-border/60">
               {hasSelfMicAction ? (
-                <DropdownMenuItem onSelect={() => onSelfMicrophoneToggle?.()}>
-                  {isSelfMicrophoneEnabled ? (
-                    <MicOff className="size-3.5 text-muted-foreground" />
-                  ) : (
-                    <Mic className="size-3.5 text-muted-foreground" />
-                  )}
-                  {isSelfMicrophoneEnabled
-                    ? t('workspace.muteMyMicrophone')
-                    : t('workspace.unmuteMyMicrophone')}
-                </DropdownMenuItem>
+                <SelfMicMenuItem
+                  enabled={isSelfMicrophoneEnabled}
+                  onToggle={() => onSelfMicrophoneToggle?.()}
+                  t={t}
+                />
               ) : null}
               {hasMediaActions ? (
                 <MediaActionsContent
@@ -474,5 +464,26 @@ export function RoomParticipantCard({
         ) : null}
       </div>
     </div>
+  );
+}
+
+function SelfMicMenuItem({
+  enabled,
+  onToggle,
+  t,
+}: {
+  enabled: boolean;
+  onToggle: () => void;
+  t: (key: string) => string;
+}) {
+  return (
+    <DropdownMenuItem onSelect={onToggle}>
+      {enabled ? (
+        <MicOff className="size-3.5 text-muted-foreground" />
+      ) : (
+        <Mic className="size-3.5 text-muted-foreground" />
+      )}
+      {t(enabled ? 'workspace.muteMyMicrophone' : 'workspace.unmuteMyMicrophone')}
+    </DropdownMenuItem>
   );
 }
