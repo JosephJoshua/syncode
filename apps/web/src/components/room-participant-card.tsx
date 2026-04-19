@@ -20,6 +20,7 @@ import {
   Crown,
   EllipsisVertical,
   Loader2,
+  Mic,
   MicOff,
   Signal,
   SignalLow,
@@ -174,6 +175,8 @@ interface RoomParticipantCardProps {
   isLocallyMuted?: boolean;
   isVideoHidden?: boolean;
   localVolume?: number;
+  isSelfMicrophoneEnabled?: boolean;
+  onSelfMicrophoneToggle?: () => void;
   onLocalMuteToggle?: (muted: boolean) => void;
   onLocalVolumeChange?: (volume: number) => void;
   onVideoHiddenToggle?: (hidden: boolean) => void;
@@ -198,6 +201,8 @@ export function RoomParticipantCard({
   isLocallyMuted = false,
   isVideoHidden = false,
   localVolume,
+  isSelfMicrophoneEnabled = false,
+  onSelfMicrophoneToggle,
   onLocalMuteToggle,
   onLocalVolumeChange,
   onVideoHiddenToggle,
@@ -214,7 +219,8 @@ export function RoomParticipantCard({
   const hasManageActions =
     canManageParticipants && !isHost && (onTransferOwnership || onRemoveParticipant);
   const hasMediaActions = !isMe && isMediaConnected && (onLocalMuteToggle || onVideoHiddenToggle);
-  const showParticipantActions = Boolean(hasManageActions || hasMediaActions);
+  const hasSelfMicAction = isMe && isMediaConnected && Boolean(onSelfMicrophoneToggle);
+  const showParticipantActions = Boolean(hasManageActions || hasMediaActions || hasSelfMicAction);
   const [isParticipantMenuOpen, setIsParticipantMenuOpen] = useState(false);
 
   if (compact) {
@@ -291,6 +297,18 @@ export function RoomParticipantCard({
                   side="bottom"
                   className="min-w-44 rounded-xl border-border/60"
                 >
+                  {hasSelfMicAction ? (
+                    <DropdownMenuItem onSelect={() => onSelfMicrophoneToggle?.()}>
+                      {isSelfMicrophoneEnabled ? (
+                        <MicOff className="size-3.5 text-muted-foreground" />
+                      ) : (
+                        <Mic className="size-3.5 text-muted-foreground" />
+                      )}
+                      {isSelfMicrophoneEnabled
+                        ? t('workspace.muteMyMicrophone')
+                        : t('workspace.unmuteMyMicrophone')}
+                    </DropdownMenuItem>
+                  ) : null}
                   {hasMediaActions ? (
                     <MediaActionsContent
                       isLocallyMuted={isLocallyMuted}
@@ -414,6 +432,18 @@ export function RoomParticipantCard({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="min-w-44 rounded-xl border-border/60">
+              {hasSelfMicAction ? (
+                <DropdownMenuItem onSelect={() => onSelfMicrophoneToggle?.()}>
+                  {isSelfMicrophoneEnabled ? (
+                    <MicOff className="size-3.5 text-muted-foreground" />
+                  ) : (
+                    <Mic className="size-3.5 text-muted-foreground" />
+                  )}
+                  {isSelfMicrophoneEnabled
+                    ? t('workspace.muteMyMicrophone')
+                    : t('workspace.unmuteMyMicrophone')}
+                </DropdownMenuItem>
+              ) : null}
               {hasMediaActions ? (
                 <MediaActionsContent
                   isLocallyMuted={isLocallyMuted}

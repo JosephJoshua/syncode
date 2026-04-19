@@ -192,6 +192,8 @@
     "emptyStderr": "（无 stderr）",
     "participantsHeading": "参与者",
     "participantActions": "参与者操作",
+    "muteMyMicrophone": "静音我的麦克风",
+    "unmuteMyMicrophone": "取消静音我的麦克风",
     "transferOwnership": "转移主持人",
     "removeParticipant": "移除参与者",
     "removeParticipantTitle": "移除参与者",
