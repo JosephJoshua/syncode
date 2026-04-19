@@ -23,7 +23,13 @@ function RoomsLayout() {
   ] as const;
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-8 sm:py-10 lg:py-12">
+    <div className="relative mx-auto max-w-7xl px-4 py-8 sm:py-10 lg:py-12">
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-0 top-0 -z-10 flex justify-center overflow-hidden"
+      >
+        <div className="h-[320px] w-[520px] rounded-full bg-primary/10 blur-[120px]" />
+      </div>
       <motion.div
         className="mb-6 flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between"
         initial={{ opacity: 0, y: 16 }}

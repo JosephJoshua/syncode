@@ -19,6 +19,7 @@ import { motion } from 'motion/react';
 import type React from 'react';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { FilterPill } from '@/components/filter-pill.js';
 import { api } from '@/lib/api-client.js';
 import { ROLE_LABEL_KEYS, ROOM_STATUS_KEYS, ROOM_STATUS_STYLES } from '@/lib/room-stage.js';
 
@@ -168,20 +169,13 @@ function RoomsPage() {
 
       <div className="mb-6 flex flex-wrap gap-2">
         {STATUS_FILTER_VALUES.map((value) => (
-          <button
+          <FilterPill
             key={value}
-            type="button"
-            aria-pressed={statusFilter === value}
+            active={statusFilter === value}
             onClick={() => setStatusFilter(value)}
-            className={cn(
-              'inline-flex h-8 items-center rounded-lg px-3 text-xs font-medium transition-colors',
-              statusFilter === value
-                ? 'bg-primary/10 text-primary ring-1 ring-primary/20'
-                : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground',
-            )}
           >
             {value === 'all' ? t('filter.all') : t(ROOM_STATUS_KEYS[value])}
-          </button>
+          </FilterPill>
         ))}
       </div>
 
@@ -190,23 +184,31 @@ function RoomsPage() {
           <Loader2 size={32} className="animate-spin text-primary/60" />
         </div>
       ) : roomsQuery.isError ? (
-        <div className="flex flex-col items-center justify-center py-24 text-center">
-          <AlertTriangle size={32} className="mb-4 text-destructive/60" />
+        <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-destructive/40 bg-card/30 px-6 py-20 text-center backdrop-blur-sm">
+          <div className="relative mb-5">
+            <div className="absolute inset-0 -z-10 rounded-full bg-destructive/15 blur-2xl" />
+            <div className="flex size-16 items-center justify-center rounded-2xl border border-destructive/40 bg-card text-destructive/70">
+              <AlertTriangle size={28} />
+            </div>
+          </div>
           <h3 className="text-lg font-semibold text-foreground">{t('error.loadFailed')}</h3>
-          <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+          <p className="mt-1.5 max-w-sm text-sm text-muted-foreground">
             {t('error.loadFailedDescription')}
           </p>
-          <Button variant="outline" className="mt-4" onClick={() => roomsQuery.refetch()}>
+          <Button variant="outline" className="mt-5" onClick={() => roomsQuery.refetch()}>
             {t('error.retry')}
           </Button>
         </div>
       ) : rooms.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-24 text-center">
-          <div className="mb-4 flex size-16 items-center justify-center rounded-2xl border border-border/50 bg-card/60">
-            <Radio size={28} className="text-muted-foreground/40" />
+        <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border/60 bg-card/30 px-6 py-20 text-center backdrop-blur-sm">
+          <div className="relative mb-5">
+            <div className="absolute inset-0 -z-10 rounded-full bg-primary/15 blur-2xl" />
+            <div className="flex size-16 items-center justify-center rounded-2xl border border-border/60 bg-card text-primary">
+              <Radio size={28} />
+            </div>
           </div>
           <h3 className="text-lg font-semibold text-foreground">{t('empty.noRooms')}</h3>
-          <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+          <p className="mt-1.5 max-w-sm text-sm text-muted-foreground">
             {statusFilter === 'all'
               ? t('empty.noRoomsDescription')
               : t('empty.noRoomsWithStatus', { status: t(ROOM_STATUS_KEYS[statusFilter]) })}
@@ -233,7 +235,7 @@ function RoomsPage() {
                 }}
               >
                 <Link to="/rooms/$roomId" params={{ roomId: room.roomId }} className="block">
-                  <Card className="group h-full rounded-xl border border-white/[0.035] bg-card/40 p-5 ring-1 ring-border/30 backdrop-blur-sm transition-all duration-200 hover:border-primary/12 hover:bg-card/60 hover:shadow-[0_10px_30px_-24px_color-mix(in_oklch,var(--primary)_80%,transparent)] hover:ring-primary/20 sm:p-6">
+                  <Card className="group h-full rounded-2xl border border-white/[0.035] bg-card/50 p-5 ring-1 ring-border/30 backdrop-blur-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/20 hover:bg-card/70 hover:shadow-[0_20px_40px_-24px_color-mix(in_oklch,var(--primary)_70%,transparent)] hover:ring-primary/20 sm:p-6">
                     {/* Top row: status + meta */}
                     <div className="mb-4 flex items-center justify-between">
                       <Badge

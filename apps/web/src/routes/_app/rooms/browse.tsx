@@ -9,7 +9,7 @@ import {
   type ProblemDifficulty,
   type SupportedLanguage,
 } from '@syncode/shared';
-import { Button, cn, Input } from '@syncode/ui';
+import { Button, Input } from '@syncode/ui';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { Compass, Loader2, Search, Sparkles, X } from 'lucide-react';
@@ -17,6 +17,7 @@ import { motion } from 'motion/react';
 import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
+import { FilterPill } from '@/components/filter-pill.js';
 import { LanguageSelector } from '@/components/language-selector.js';
 import { BrowseEmptyState } from '@/components/rooms-browse/browse-empty-state.js';
 import { PublicRoomCard } from '@/components/rooms-browse/public-room-card.js';
@@ -141,14 +142,7 @@ function BrowseRoomsPage() {
   const resultCount = accumulated.length;
 
   return (
-    <div className="relative">
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-x-0 top-0 -z-10 flex justify-center overflow-hidden"
-      >
-        <div className="h-[320px] w-[520px] rounded-full bg-primary/10 blur-[120px]" />
-      </div>
-
+    <div>
       <motion.section
         className="mb-6 flex flex-wrap items-center justify-between gap-3"
         initial={{ opacity: 0, y: 16 }}
@@ -288,7 +282,7 @@ function BrowseRoomsPage() {
 
       {isInitialLoading ? (
         <div className="flex items-center justify-center py-24">
-          <Loader2 size={28} className="animate-spin text-primary/60" />
+          <Loader2 size={32} className="animate-spin text-primary/60" />
         </div>
       ) : accumulated.length === 0 ? (
         <BrowseEmptyState isFiltered={isFiltered} onClearFilters={handleClearFilters} />
@@ -330,31 +324,5 @@ function BrowseRoomsPage() {
         </>
       )}
     </div>
-  );
-}
-
-function FilterPill({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      aria-pressed={active}
-      onClick={onClick}
-      className={cn(
-        'inline-flex h-7 items-center rounded-full px-3 text-xs font-medium transition-colors',
-        active
-          ? 'bg-primary/10 text-primary ring-1 ring-primary/25'
-          : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground',
-      )}
-    >
-      {children}
-    </button>
   );
 }
