@@ -162,6 +162,12 @@ export function useLiveKit({
       rawLocalTrack && videoProcessorRef.current?.processedTrack
         ? videoProcessorRef.current.processedTrack
         : rawLocalTrack;
+    // Keep the tile visible as soon as the camera is enabled, even if the track
+    // hasn't reached us yet. Avoids a missing panel when LocalTrackPublished
+    // fires before the MediaStreamTrack is attached.
+    const localHasVideo =
+      localMediaTrack !== null ||
+      (room.localParticipant.isCameraEnabled && !!localVideo && !localVideo.isMuted);
     const localScreen = room.localParticipant.getTrackPublication(Track.Source.ScreenShare);
     const localScreenTrack = localScreen?.isMuted
       ? null
@@ -169,7 +175,7 @@ export function useLiveKit({
     const nextLocal: MediaParticipant = {
       identity: room.localParticipant.identity,
       isMuted: !room.localParticipant.isMicrophoneEnabled,
-      hasVideo: localMediaTrack !== null,
+      hasVideo: localHasVideo,
       videoTrack: localMediaTrack,
       hasScreenShare: localScreenTrack !== null,
       screenShareTrack: localScreenTrack,
@@ -403,6 +409,11 @@ export function useLiveKit({
     room.on(RoomEvent.TrackUnsubscribed, onTrackUnsubscribed);
     room.on(RoomEvent.LocalTrackPublished, onLocalTrackPublished);
     room.on(RoomEvent.LocalTrackUnpublished, onLocalTrackUnpublished);
+    // Server confirms local track is being relayed; track.mediaStreamTrack may
+    // only become available around this point, so refresh again.
+    room.on(RoomEvent.LocalTrackSubscribed, () => {
+      if (!disposed) refreshParticipants();
+    });
     room.on(RoomEvent.TrackMuted, onTrackMuted);
     room.on(RoomEvent.TrackUnmuted, onTrackUnmuted);
     room.on(RoomEvent.ParticipantConnected, onParticipantConnected);
@@ -488,9 +499,15 @@ export function useLiveKit({
   const toggleCamera = useCallback(async () => {
     const room = roomRef.current;
     if (!room) return;
-    const enabled = room.localParticipant.isCameraEnabled;
-    await room.localParticipant.setCameraEnabled(!enabled);
-    setIsCameraEnabled(!enabled);
+    const target = !room.localParticipant.isCameraEnabled;
+    try {
+      await room.localParticipant.setCameraEnabled(target);
+    } catch (err) {
+      console.warn('[LiveKit] Camera toggle failed:', err);
+    }
+    // Sync from the authoritative room state so a denied permission leaves
+    // the camera off regardless of the requested target.
+    setIsCameraEnabled(room.localParticipant.isCameraEnabled);
     refreshParticipants();
   }, [refreshParticipants]);
 
