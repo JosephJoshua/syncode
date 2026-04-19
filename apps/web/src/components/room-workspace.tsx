@@ -70,6 +70,7 @@ interface RoomWorkspaceProps {
   elapsedMs: number;
   isTransitioning: boolean;
   onTransition: (targetStatus: RoomStatus) => Promise<void>;
+  onRoomUpdated: (room: RoomDetail) => void;
   onParticipantRoleChange: (userId: string, role: RoomRole) => Promise<void>;
   onTransferOwnership: (userId: string, displayName: string) => void;
   onRemoveParticipant: (userId: string, displayName: string) => void;
@@ -103,6 +104,7 @@ export function RoomWorkspace({
   elapsedMs,
   isTransitioning,
   onTransition,
+  onRoomUpdated,
   onParticipantRoleChange,
   onTransferOwnership,
   onRemoveParticipant,
@@ -637,6 +639,7 @@ export function RoomWorkspace({
                       roomId={roomId}
                       currentLanguage={room.language}
                       myCapabilities={room.myCapabilities}
+                      onLanguageChanged={onRoomUpdated}
                       className="h-7 min-w-[8rem]"
                     />
                     <Button

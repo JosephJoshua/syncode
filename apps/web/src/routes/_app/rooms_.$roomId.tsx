@@ -666,6 +666,7 @@ function RoomPage() {
           elapsedMs={elapsedMs}
           isTransitioning={isTransitioning}
           onTransition={handleTransition}
+          onRoomUpdated={setRoom}
           onParticipantRoleChange={handleParticipantRoleChange}
           onTransferOwnership={handleTransferOwnership}
           onRemoveParticipant={handleRemoveParticipant}

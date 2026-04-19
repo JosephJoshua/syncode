@@ -1,6 +1,6 @@
-import { CONTROL_API } from '@syncode/contracts';
+import { CONTROL_API, type RoomDetail } from '@syncode/contracts';
 import type { SupportedLanguage } from '@syncode/shared';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { api, readApiError } from '@/lib/api-client.js';
@@ -10,6 +10,7 @@ interface LanguagePickerProps {
   roomId: string;
   currentLanguage: SupportedLanguage | null;
   myCapabilities: readonly string[];
+  onLanguageChanged?: (room: RoomDetail) => void;
   className?: string;
 }
 
@@ -22,10 +23,10 @@ export function LanguagePicker({
   roomId,
   currentLanguage,
   myCapabilities,
+  onLanguageChanged,
   className,
 }: LanguagePickerProps) {
   const { t } = useTranslation('rooms');
-  const queryClient = useQueryClient();
 
   const canChange = myCapabilities.includes('code:change-language');
 
@@ -35,8 +36,8 @@ export function LanguagePicker({
         params: { id: roomId },
         body: { language },
       }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['rooms', roomId] });
+    onSuccess: (updated) => {
+      onLanguageChanged?.(updated);
     },
     onError: async (error) => {
       const apiError = await readApiError(error);
