@@ -9,11 +9,9 @@ import {
   ArrowRight,
   Clock3,
   Code2,
-  Compass,
   Hash,
   LinkIcon,
   Loader2,
-  Plus,
   Radio,
   Users,
 } from 'lucide-react';
@@ -97,44 +95,19 @@ function RoomsPage() {
   };
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-8 sm:py-10 lg:py-12">
-      <motion.div
-        className="mb-6 flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between"
+    <div>
+      <motion.p
+        className="mb-6 text-sm text-muted-foreground"
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.45, delay: 0.05, ease: [0.22, 1, 0.36, 1] }}
       >
-        <div>
-          <div className="mb-3 inline-flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary ring-1 ring-primary/20">
-            <Radio size={20} />
-          </div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-            {t('heading')}
-          </h1>
-          <p className="mt-1.5 text-sm text-muted-foreground">
-            {statusFilter === 'all'
-              ? activeCount > 0
-                ? `${t('subtitle.activeCount', { count: activeCount })} · ${t('subtitle.totalLabel', { totalCount })}`
-                : t('subtitle.noActive')
-              : t('subtitle.totalCount', { count: totalCount })}
-          </p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <Link to="/rooms/browse">
-            <Button variant="outline" className="gap-2">
-              <Compass size={16} />
-              {t('button.browsePublic')}
-            </Button>
-          </Link>
-          <Link to="/rooms/create">
-            <Button className="gap-2 shadow-[0_0_25px_hsl(var(--primary)/0.3)] hover:shadow-[0_0_35px_hsl(var(--primary)/0.5)]">
-              <Plus size={18} />
-              {t('button.createRoom')}
-            </Button>
-          </Link>
-        </div>
-      </motion.div>
+        {statusFilter === 'all'
+          ? activeCount > 0
+            ? `${t('subtitle.activeCount', { count: activeCount })} · ${t('subtitle.totalLabel', { totalCount })}`
+            : t('subtitle.noActive')
+          : t('subtitle.totalCount', { count: totalCount })}
+      </motion.p>
 
       <motion.div
         initial={{ opacity: 0, y: 16 }}

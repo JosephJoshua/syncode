@@ -156,7 +156,7 @@ function BrowseRoomsPage() {
   const resultCount = accumulated.length;
 
   return (
-    <div className="relative mx-auto max-w-7xl px-4 py-8 sm:py-10 lg:py-12">
+    <div className="relative">
       <div
         aria-hidden="true"
         className="pointer-events-none absolute inset-x-0 top-0 -z-10 flex justify-center overflow-hidden"
@@ -165,7 +165,7 @@ function BrowseRoomsPage() {
       </div>
 
       <motion.section
-        className="mb-10 flex flex-col gap-4 sm:mb-12"
+        className="mb-6 flex flex-wrap items-center justify-between gap-3"
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
@@ -174,16 +174,9 @@ function BrowseRoomsPage() {
           <Sparkles size={13} className="text-primary" />
           {t('browse.subheading')}
         </div>
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-          <h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl lg:text-5xl">
-            {t('browse.heading')}
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            {isInitialLoading
-              ? t('browse.loading')
-              : t('browse.resultCount', { count: resultCount })}
-          </p>
-        </div>
+        <p className="text-sm text-muted-foreground">
+          {isInitialLoading ? t('browse.loading') : t('browse.resultCount', { count: resultCount })}
+        </p>
       </motion.section>
 
       <motion.div

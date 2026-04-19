@@ -35,7 +35,7 @@ import { api, getFieldErrorMessage, readApiError } from '@/lib/api-client.js';
 import i18n from '@/lib/i18n.js';
 import { useAuthStore } from '@/stores/auth.store.js';
 
-export const Route = createFileRoute('/_app/rooms/create')({
+export const Route = createFileRoute('/_app/rooms_/create')({
   component: CreateRoomPage,
 });
 

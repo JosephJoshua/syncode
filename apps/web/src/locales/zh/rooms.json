@@ -9,8 +9,15 @@
     "noActive": "无活跃房间"
   },
   "button": {
-    "createRoom": "创建房间",
-    "browsePublic": "浏览公开房间"
+    "createRoom": "创建房间"
+  },
+  "tabs": {
+    "ariaLabel": "房间分区",
+    "myRooms": "我的房间",
+    "browse": "浏览"
+  },
+  "layout": {
+    "sub": "管理你的房间，或加入开放的面试大厅。"
   },
   "browse": {
     "heading": "公开房间",

@@ -35,7 +35,7 @@ import { type ApiErrorResult, api, readApiError, resolveErrorMessage } from '@/l
 import { computeRoomElapsedMs, isWorkspaceStage, ROLE_LABEL_KEYS } from '@/lib/room-stage.js';
 import { useAuthStore } from '@/stores/auth.store.js';
 
-export const Route = createFileRoute('/_app/rooms/$roomId')({
+export const Route = createFileRoute('/_app/rooms_/$roomId')({
   component: RoomPage,
 });
 

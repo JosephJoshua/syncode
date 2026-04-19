@@ -72,7 +72,7 @@ vi.mock('@/stores/auth.store.js', () => ({
 import { toast } from 'sonner';
 import { api } from '@/lib/api-client.js';
 // Import AFTER mocks are set up.
-import { BrowseRoomsPage } from './rooms.browse.js';
+import { BrowseRoomsPage } from './browse.js';
 
 type BrowseResponse = {
   data: Array<{

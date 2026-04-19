@@ -9,8 +9,15 @@
     "noActive": "No active rooms"
   },
   "button": {
-    "createRoom": "Create Room",
-    "browsePublic": "Browse public rooms"
+    "createRoom": "Create Room"
+  },
+  "tabs": {
+    "ariaLabel": "Rooms sections",
+    "myRooms": "My rooms",
+    "browse": "Browse"
+  },
+  "layout": {
+    "sub": "Manage your rooms and drop into open interview lobbies."
   },
   "browse": {
     "heading": "Public Rooms",
