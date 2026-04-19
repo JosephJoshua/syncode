@@ -345,6 +345,59 @@ describe('PATCH /rooms/:id/participants/:participantUserId', () => {
   });
 });
 
+describe('DELETE /rooms/:id/participants/:userId', () => {
+  it('GIVEN host WHEN removing another participant THEN returns 204', async () => {
+    const host = await insertUser(db);
+    const target = await insertUser(db);
+    const room = await insertRoom(db, host.id);
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+    await insertParticipant(db, room.id, target.id, 'candidate');
+
+    await asUser(
+      request(app.getHttpServer()).delete(`/rooms/${room.id}/participants/${target.id}`),
+      host,
+    ).expect(204);
+  });
+
+  it('GIVEN non-host WHEN removing a participant THEN returns 403', async () => {
+    const host = await insertUser(db);
+    const other = await insertUser(db);
+    const target = await insertUser(db);
+    const room = await insertRoom(db, host.id);
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+    await insertParticipant(db, room.id, other.id, 'observer');
+    await insertParticipant(db, room.id, target.id, 'candidate');
+
+    await asUser(
+      request(app.getHttpServer()).delete(`/rooms/${room.id}/participants/${target.id}`),
+      other,
+    ).expect(403);
+  });
+
+  it('GIVEN host removing self WHEN requesting THEN returns 400', async () => {
+    const host = await insertUser(db);
+    const room = await insertRoom(db, host.id);
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+
+    await asUser(
+      request(app.getHttpServer()).delete(`/rooms/${room.id}/participants/${host.id}`),
+      host,
+    ).expect(400);
+  });
+
+  it('GIVEN target participant missing WHEN removing THEN returns 404', async () => {
+    const host = await insertUser(db);
+    const ghost = await insertUser(db);
+    const room = await insertRoom(db, host.id);
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+
+    await asUser(
+      request(app.getHttpServer()).delete(`/rooms/${room.id}/participants/${ghost.id}`),
+      host,
+    ).expect(404);
+  });
+});
+
 describe('POST /rooms/:id/control/transition', () => {
   it('GIVEN valid next phase WHEN transitioning THEN returns ISO timestamp with updated statuses', async () => {
     const host = await insertUser(db);

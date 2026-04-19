@@ -561,6 +561,130 @@ describe('updateParticipantRole', () => {
   });
 });
 
+describe('removeParticipant', () => {
+  it('GIVEN host WHEN removing active participant THEN row is inactive with removedAt and leftAt set', async () => {
+    const host = await insertUser(db);
+    const target = await insertUser(db);
+    const room = await insertRoom(db, host.id);
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+    await insertParticipant(db, room.id, target.id, 'candidate');
+
+    await service.removeParticipant(room.id, host.id, target.id);
+
+    const [row] = await db
+      .select()
+      .from(roomParticipants)
+      .where(and(eq(roomParticipants.roomId, room.id), eq(roomParticipants.userId, target.id)));
+    expect(row?.isActive).toBe(false);
+    expect(row?.removedAt).toBeInstanceOf(Date);
+    expect(row?.leftAt).toBeInstanceOf(Date);
+
+    expect(mockCollabClient.kickUser).toHaveBeenCalledWith(
+      room.id,
+      expect.objectContaining({ userId: target.id }),
+    );
+  });
+
+  it('GIVEN non-host caller WHEN removing participant THEN throws ForbiddenException', async () => {
+    const host = await insertUser(db);
+    const intruder = await insertUser(db);
+    const target = await insertUser(db);
+    const room = await insertRoom(db, host.id);
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+    await insertParticipant(db, room.id, intruder.id, 'observer');
+    await insertParticipant(db, room.id, target.id, 'candidate');
+
+    await expect(service.removeParticipant(room.id, intruder.id, target.id)).rejects.toThrow(
+      ForbiddenException,
+    );
+
+    const [row] = await db
+      .select()
+      .from(roomParticipants)
+      .where(and(eq(roomParticipants.roomId, room.id), eq(roomParticipants.userId, target.id)));
+    expect(row?.isActive).toBe(true);
+  });
+
+  it('GIVEN host WHEN removing self THEN throws BadRequestException', async () => {
+    const host = await insertUser(db);
+    const room = await insertRoom(db, host.id);
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+
+    await expect(service.removeParticipant(room.id, host.id, host.id)).rejects.toThrow(
+      BadRequestException,
+    );
+  });
+
+  it('GIVEN no such participant WHEN removing THEN throws NotFoundException', async () => {
+    const host = await insertUser(db);
+    const ghost = await insertUser(db);
+    const room = await insertRoom(db, host.id);
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+
+    await expect(service.removeParticipant(room.id, host.id, ghost.id)).rejects.toThrow(
+      NotFoundException,
+    );
+  });
+
+  it('GIVEN participant already inactive WHEN removing THEN throws NotFoundException', async () => {
+    const host = await insertUser(db);
+    const target = await insertUser(db);
+    const room = await insertRoom(db, host.id);
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+    await db
+      .insert(roomParticipants)
+      .values({ roomId: room.id, userId: target.id, role: 'candidate', isActive: false });
+
+    await expect(service.removeParticipant(room.id, host.id, target.id)).rejects.toThrow(
+      NotFoundException,
+    );
+  });
+
+  it('GIVEN non-existent room WHEN removing THEN throws NotFoundException', async () => {
+    const host = await insertUser(db);
+    const target = await insertUser(db);
+
+    await expect(
+      service.removeParticipant('00000000-0000-0000-0000-000000000000', host.id, target.id),
+    ).rejects.toThrow(NotFoundException);
+  });
+
+  it('GIVEN removed participant WHEN re-joining via joinRoom THEN throws ForbiddenException with ROOM_PARTICIPANT_REMOVED', async () => {
+    const host = await insertUser(db);
+    const target = await insertUser(db);
+    const room = await insertRoom(db, host.id, { maxParticipants: 4 });
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+    await insertParticipant(db, room.id, target.id, 'candidate');
+
+    await service.removeParticipant(room.id, host.id, target.id);
+
+    await expect(
+      service.joinRoom(room.id, target.id, { roomCode: room.inviteCode }),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({ code: ERROR_CODES.ROOM_PARTICIPANT_REMOVED }),
+    });
+  });
+
+  it('GIVEN collab kickUser throws WHEN removing THEN DB state still committed and error is swallowed', async () => {
+    const host = await insertUser(db);
+    const target = await insertUser(db);
+    const room = await insertRoom(db, host.id);
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+    await insertParticipant(db, room.id, target.id, 'candidate');
+
+    mockCollabClient.kickUser.mockRejectedValueOnce(new Error('collab down'));
+
+    await expect(service.removeParticipant(room.id, host.id, target.id)).resolves.toBeUndefined();
+
+    const [row] = await db
+      .select()
+      .from(roomParticipants)
+      .where(and(eq(roomParticipants.roomId, room.id), eq(roomParticipants.userId, target.id)));
+    expect(row?.isActive).toBe(false);
+    expect(row?.removedAt).toBeInstanceOf(Date);
+  });
+});
+
 describe('transitionPhase', () => {
   it('GIVEN waiting room WHEN transitioning to warmup THEN creates an ongoing session with participant snapshot', async () => {
     const host = await insertUser(db);
@@ -708,6 +832,29 @@ describe('transitionPhase (multi-step)', () => {
 
     const [updated] = await db.select().from(rooms).where(eq(rooms.id, room.id));
     expect(updated!.status).toBe('finished');
+  });
+
+  it('GIVEN peer room with 2 active participants WHEN transitioning to finished THEN all participants flip to inactive with leftAt', async () => {
+    const host = await insertUser(db);
+    const candidate = await insertUser(db);
+    const room = await insertRoom(db, host.id, { status: 'wrapup' });
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+    await insertParticipant(db, room.id, candidate.id, 'candidate');
+
+    await service.transitionPhase(room.id, host.id, 'finished');
+
+    const rows = await db
+      .select()
+      .from(roomParticipants)
+      .where(eq(roomParticipants.roomId, room.id));
+
+    expect(rows).toHaveLength(2);
+    for (const row of rows) {
+      expect(row.isActive).toBe(false);
+      expect(row.leftAt).toBeInstanceOf(Date);
+      // Not a removal — just a cascade on room end.
+      expect(row.removedAt).toBeNull();
+    }
   });
 });
 

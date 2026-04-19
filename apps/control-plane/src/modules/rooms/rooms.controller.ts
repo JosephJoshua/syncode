@@ -218,6 +218,35 @@ export class RoomsController {
     };
   }
 
+  @Delete(CONTROL_API.ROOMS.REMOVE_PARTICIPANT.route)
+  @HttpCode(204)
+  @ApiOperation({ summary: 'Remove a participant from the room (host only)' })
+  @ApiParam({ name: 'id', description: 'Room ID (UUID)' })
+  @ApiParam({ name: 'userId', description: 'Target participant user ID (UUID)' })
+  @ApiResponse({ status: 204, description: 'Participant removed' })
+  @ApiResponse({
+    status: 400,
+    type: ErrorResponseDto,
+    description: 'Cannot remove yourself',
+  })
+  @ApiResponse({
+    status: 403,
+    type: ErrorResponseDto,
+    description: 'Requester is not the host',
+  })
+  @ApiResponse({
+    status: 404,
+    type: ErrorResponseDto,
+    description: 'Room or participant not found',
+  })
+  async removeParticipant(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Param('userId') userId: string,
+  ): Promise<void> {
+    await this.roomsService.removeParticipant(id, user.id, userId);
+  }
+
   @Delete(CONTROL_API.ROOMS.DESTROY.route)
   @ApiOperation({ summary: 'Destroy a room' })
   @ApiParam({ name: 'id', description: 'Room ID (UUID)' })

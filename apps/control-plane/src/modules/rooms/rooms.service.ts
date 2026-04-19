@@ -390,11 +390,19 @@ export class RoomsService {
           userId: roomParticipants.userId,
           role: roomParticipants.role,
           isActive: roomParticipants.isActive,
+          removedAt: roomParticipants.removedAt,
         })
         .from(roomParticipants)
         .where(eq(roomParticipants.roomId, roomId));
 
       const existing = existingParticipants.find((p) => p.userId === userId);
+
+      if (existing?.removedAt) {
+        throw new ForbiddenException({
+          message: 'You have been removed from this room',
+          code: ERROR_CODES.ROOM_PARTICIPANT_REMOVED,
+        });
+      }
 
       // Code check applies only to NEW joiners. Existing participants (active or
       // inactive) were already admitted once; requiring the invite code on re-join
@@ -717,6 +725,72 @@ export class RoomsService {
       updatedAt,
       updatedBy: actorUserId,
     };
+  }
+
+  async removeParticipant(
+    roomId: string,
+    requesterId: string,
+    targetUserId: string,
+  ): Promise<void> {
+    if (requesterId === targetUserId) {
+      throw new BadRequestException({
+        message: 'Cannot remove yourself. Use transfer-ownership or leave the room.',
+        code: ERROR_CODES.ROOM_PERMISSION_DENIED,
+      });
+    }
+
+    await this.db.transaction(async (tx) => {
+      const [room] = await tx.select().from(rooms).where(eq(rooms.id, roomId)).for('update');
+
+      if (!room) {
+        throw new NotFoundException({
+          message: 'Room not found',
+          code: ERROR_CODES.ROOM_NOT_FOUND,
+        });
+      }
+
+      if (room.hostId !== requesterId) {
+        throw new ForbiddenException({
+          message: 'Only the host can remove participants',
+          code: ERROR_CODES.ROOM_PERMISSION_DENIED,
+        });
+      }
+
+      const [targetParticipant] = await tx
+        .select({
+          id: roomParticipants.id,
+          isActive: roomParticipants.isActive,
+        })
+        .from(roomParticipants)
+        .where(and(eq(roomParticipants.roomId, roomId), eq(roomParticipants.userId, targetUserId)))
+        .for('update');
+
+      if (!targetParticipant || !targetParticipant.isActive) {
+        throw new NotFoundException({
+          message: 'Participant not found',
+          code: ERROR_CODES.PARTICIPANT_NOT_FOUND,
+        });
+      }
+
+      const now = new Date();
+      await tx
+        .update(roomParticipants)
+        .set({ isActive: false, leftAt: now, removedAt: now })
+        .where(eq(roomParticipants.id, targetParticipant.id));
+    });
+
+    // Best-effort kick: close the target's WS connection. Transaction already
+    // committed, so a failure here must not propagate.
+    try {
+      await this.collabClient.kickUser(roomId, {
+        userId: targetUserId,
+        reason: 'Removed by host',
+      });
+    } catch (err) {
+      this.logger.warn(
+        `kickUser failed for user ${targetUserId} in room ${roomId}: ${(err as Error).message}`,
+      );
+    }
   }
 
   async toggleReady(roomId: string, userId: string): Promise<RoomDetailResult> {
@@ -1138,6 +1212,16 @@ export class RoomsService {
       }
 
       await tx.update(rooms).set(roomUpdate).where(eq(rooms.id, roomId));
+
+      if (targetStatus === RoomStatus.FINISHED) {
+        // Cascade: mark any remaining active participants as inactive. They
+        // weren't kicked — the room just ended — so we set leftAt but NOT
+        // removedAt.
+        await tx
+          .update(roomParticipants)
+          .set({ isActive: false, leftAt: now })
+          .where(and(eq(roomParticipants.roomId, roomId), eq(roomParticipants.isActive, true)));
+      }
 
       // Reset all participants' ready status when leaving the lobby
       if (lockedStatus === RoomStatus.WAITING) {
