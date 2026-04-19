@@ -373,26 +373,6 @@ export class RoomsService {
       throw new NotFoundException({ message: 'Room not found', code: ERROR_CODES.ROOM_NOT_FOUND });
     }
 
-    if (room.isPrivate) {
-      if (!input.roomCode) {
-        throw new BadRequestException({
-          message: 'Room code required for private rooms',
-          code: ERROR_CODES.ROOM_INVALID_CODE,
-        });
-      }
-      if (room.inviteCode !== input.roomCode.toUpperCase()) {
-        throw new BadRequestException({
-          message: 'Invalid room code',
-          code: ERROR_CODES.ROOM_INVALID_CODE,
-        });
-      }
-    } else if (input.roomCode && room.inviteCode !== input.roomCode.toUpperCase()) {
-      throw new BadRequestException({
-        message: 'Invalid room code',
-        code: ERROR_CODES.ROOM_INVALID_CODE,
-      });
-    }
-
     if (room.status === RoomStatus.FINISHED) {
       throw new ConflictException({
         message: 'Room has already finished',
@@ -415,6 +395,33 @@ export class RoomsService {
         .where(eq(roomParticipants.roomId, roomId));
 
       const existing = existingParticipants.find((p) => p.userId === userId);
+
+      // Code check applies only to NEW joiners. Existing participants (active or
+      // inactive) were already admitted once; requiring the invite code on re-join
+      // would break WS reconnect reactivation, which re-calls this endpoint with
+      // an empty body.
+      if (!existing) {
+        if (room.isPrivate) {
+          if (!input.roomCode) {
+            throw new BadRequestException({
+              message: 'Room code required for private rooms',
+              code: ERROR_CODES.ROOM_INVALID_CODE,
+            });
+          }
+          if (room.inviteCode !== input.roomCode.toUpperCase()) {
+            throw new BadRequestException({
+              message: 'Invalid room code',
+              code: ERROR_CODES.ROOM_INVALID_CODE,
+            });
+          }
+        } else if (input.roomCode && room.inviteCode !== input.roomCode.toUpperCase()) {
+          throw new BadRequestException({
+            message: 'Invalid room code',
+            code: ERROR_CODES.ROOM_INVALID_CODE,
+          });
+        }
+      }
+
       if (existing?.isActive) {
         // Idempotent re-join: user is already active in this room. Skip the
         // DB write and let the post-transaction code mint a fresh collab

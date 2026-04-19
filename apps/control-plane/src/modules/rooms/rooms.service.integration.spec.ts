@@ -448,6 +448,51 @@ describe('joinRoom code requirement', () => {
       response: expect.objectContaining({ code: ERROR_CODES.ROOM_INVALID_CODE }),
     });
   });
+
+  it('GIVEN an inactive participant of a private room WHEN re-joining without roomCode THEN reactivates the participant', async () => {
+    const host = await insertUser(db);
+    const returner = await insertUser(db);
+    const room = await insertRoom(db, host.id, { isPrivate: true, maxParticipants: 4 });
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+
+    await db
+      .insert(roomParticipants)
+      .values({ roomId: room.id, userId: returner.id, role: 'candidate', isActive: false });
+
+    const result = await service.joinRoom(room.id, returner.id, {});
+
+    expect(result.assignedRole).toBe('candidate');
+
+    const rows = await db
+      .select()
+      .from(roomParticipants)
+      .where(and(eq(roomParticipants.roomId, room.id), eq(roomParticipants.userId, returner.id)));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ role: 'candidate', isActive: true });
+    expect(rows[0]!.leftAt).toBeNull();
+  });
+
+  it('GIVEN an inactive participant of a public room WHEN re-joining without roomCode THEN reactivates the participant', async () => {
+    const host = await insertUser(db);
+    const returner = await insertUser(db);
+    const room = await insertRoom(db, host.id, { isPrivate: false, maxParticipants: 4 });
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+
+    await db
+      .insert(roomParticipants)
+      .values({ roomId: room.id, userId: returner.id, role: 'candidate', isActive: false });
+
+    const result = await service.joinRoom(room.id, returner.id, {});
+
+    expect(result.assignedRole).toBe('candidate');
+
+    const rows = await db
+      .select()
+      .from(roomParticipants)
+      .where(and(eq(roomParticipants.roomId, room.id), eq(roomParticipants.userId, returner.id)));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ role: 'candidate', isActive: true });
+  });
 });
 
 describe('transferOwnership', () => {
