@@ -18,6 +18,7 @@ import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { FilterPill } from '@/components/filter-pill.js';
+import { LANGUAGE_VERSIONED_LABELS } from '@/components/language-selector.data.js';
 import { LanguageSelector } from '@/components/language-selector.js';
 import { BrowseEmptyState } from '@/components/rooms-browse/browse-empty-state.js';
 import { PublicRoomCard } from '@/components/rooms-browse/public-room-card.js';
@@ -247,6 +248,7 @@ function BrowseRoomsPage() {
                   <LanguageSelector
                     value={filters.language ?? undefined}
                     onValueChange={(language) => setFilters((prev) => ({ ...prev, language }))}
+                    labelOverrides={LANGUAGE_VERSIONED_LABELS}
                     placeholder={t('browse.filters.languageAll')}
                     ariaLabel={t('browse.filters.language')}
                     className="h-9 w-[200px]"

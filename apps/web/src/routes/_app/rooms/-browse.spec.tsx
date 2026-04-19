@@ -191,7 +191,7 @@ describe('BrowseRoomsPage', () => {
     await screen.findByText('Two Sum');
 
     await user.click(screen.getByRole('combobox', { name: /browse\.filters\.language/i }));
-    const option = await screen.findByRole('option', { name: /^Python$/ });
+    const option = await screen.findByRole('option', { name: /^Python 3\.12$/ });
     await user.click(option);
 
     await waitFor(() => {

@@ -4,6 +4,7 @@ import { useMutation } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { api, readApiError } from '@/lib/api-client.js';
+import { LANGUAGE_VERSIONED_LABELS } from './language-selector.data.js';
 import { LanguageSelector } from './language-selector.js';
 
 interface LanguagePickerProps {
@@ -54,6 +55,7 @@ export function LanguagePicker({
         mutation.mutate(next);
       }}
       disabled={!canChange || mutation.isPending}
+      labelOverrides={LANGUAGE_VERSIONED_LABELS}
       placeholder={t('workspace.languagePickerPlaceholder')}
       className={className}
     />
