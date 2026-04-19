@@ -65,7 +65,7 @@ describe('YjsSyncHandler', () => {
   describe('sendInitialSync', () => {
     it('GIVEN room with doc WHEN sending initial sync THEN client receives a binary SyncStep1 message', () => {
       const { docStore, handler } = setup();
-      docStore.createDoc('room-1', 'hello');
+      docStore.createDoc('room-1', { initialContent: 'hello' });
       const client = fakeClient('user-1');
 
       handler.sendInitialSync('room-1', client);
@@ -88,7 +88,7 @@ describe('YjsSyncHandler', () => {
   describe('handleSyncMessage', () => {
     it('GIVEN client sends SyncStep1 WHEN handled THEN client receives SyncStep2 with missing updates', () => {
       const { docStore, roomRegistry, handler } = setup();
-      docStore.createDoc('room-1', 'server content');
+      docStore.createDoc('room-1', { initialContent: 'server content' });
       roomRegistry.createRoom('room-1');
       const client = fakeClient('user-1');
       roomRegistry.addClient('room-1', 'user-1', client);
@@ -142,7 +142,7 @@ describe('YjsSyncHandler', () => {
   describe('registerUpdateBroadcast', () => {
     it('GIVEN two clients WHEN a doc update is applied THEN only the other client receives the broadcast', () => {
       const { docStore, roomRegistry, handler } = setup();
-      const doc = docStore.createDoc('room-1');
+      const { doc } = docStore.createDoc('room-1');
       roomRegistry.createRoom('room-1');
       const client1 = fakeClient('user-1');
       const client2 = fakeClient('user-2');

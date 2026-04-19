@@ -26,7 +26,7 @@ describe('SnapshotScheduler', () => {
 
   describe('takeSnapshot', () => {
     it('GIVEN doc with content WHEN taking snapshot THEN delivers reconstructable snapshot to control-plane', async () => {
-      docStore.createDoc('room-1', 'const x = 1;');
+      docStore.createDoc('room-1', { initialContent: 'const x = 1;' });
 
       await scheduler.takeSnapshot('room-1', 'periodic');
 
@@ -55,7 +55,7 @@ describe('SnapshotScheduler', () => {
     });
 
     it('GIVEN callbackClient throws WHEN taking snapshot THEN does not rethrow', async () => {
-      docStore.createDoc('room-1', 'const x = 1;');
+      docStore.createDoc('room-1', { initialContent: 'const x = 1;' });
       vi.mocked(callbackClient.notifySnapshotReady).mockRejectedValueOnce(
         new Error('Network error'),
       );
@@ -66,7 +66,7 @@ describe('SnapshotScheduler', () => {
 
   describe('startPeriodicSnapshots', () => {
     it('GIVEN room with doc WHEN 30s elapses THEN takes one periodic snapshot', async () => {
-      docStore.createDoc('room-1', 'const x = 1;');
+      docStore.createDoc('room-1', { initialContent: 'const x = 1;' });
       scheduler.startPeriodicSnapshots('room-1');
 
       await vi.advanceTimersByTimeAsync(30_000);
@@ -77,7 +77,7 @@ describe('SnapshotScheduler', () => {
     });
 
     it('GIVEN startPeriodicSnapshots called twice WHEN 30s elapses THEN only one snapshot fires', async () => {
-      docStore.createDoc('room-1', 'const x = 1;');
+      docStore.createDoc('room-1', { initialContent: 'const x = 1;' });
       scheduler.startPeriodicSnapshots('room-1');
       scheduler.startPeriodicSnapshots('room-1');
 
@@ -89,7 +89,7 @@ describe('SnapshotScheduler', () => {
 
   describe('stopPeriodicSnapshots', () => {
     it('GIVEN periodic snapshots started WHEN stopped THEN no more snapshots fire', async () => {
-      docStore.createDoc('room-1', 'const x = 1;');
+      docStore.createDoc('room-1', { initialContent: 'const x = 1;' });
       scheduler.startPeriodicSnapshots('room-1');
       scheduler.stopPeriodicSnapshots('room-1');
 
@@ -101,7 +101,7 @@ describe('SnapshotScheduler', () => {
 
   describe('destroyRoom', () => {
     it('GIVEN periodic snapshots started WHEN room destroyed THEN no more snapshots fire', async () => {
-      docStore.createDoc('room-1', 'const x = 1;');
+      docStore.createDoc('room-1', { initialContent: 'const x = 1;' });
       scheduler.startPeriodicSnapshots('room-1');
       scheduler.destroyRoom('room-1');
 

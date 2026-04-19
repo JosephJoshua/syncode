@@ -1,38 +1,70 @@
-import { ConflictException } from '@nestjs/common';
 import { describe, expect, it } from 'vitest';
 import * as Y from 'yjs';
 import { YjsDocumentStore } from './yjs-document-store.js';
 
 describe('YjsDocumentStore', () => {
   describe('createDoc', () => {
-    it('GIVEN no existing doc WHEN creating THEN returns a Y.Doc', () => {
+    it('GIVEN no existing doc WHEN creating THEN returns a Y.Doc with created=true', () => {
       const store = new YjsDocumentStore();
-      const doc = store.createDoc('room-1');
+      const { doc, created } = store.createDoc('room-1');
 
       expect(doc).toBeInstanceOf(Y.Doc);
+      expect(created).toBe(true);
     });
 
     it('GIVEN initialContent WHEN creating THEN Y.Text("code") contains the content', () => {
       const store = new YjsDocumentStore();
-      const doc = store.createDoc('room-1', 'console.log("hello")');
+      const { doc } = store.createDoc('room-1', { initialContent: 'console.log("hello")' });
 
       expect(doc.getText('code').toString()).toBe('console.log("hello")');
     });
 
-    it('GIVEN existing doc WHEN creating duplicate THEN throws ConflictException', () => {
-      const store = new YjsDocumentStore();
-      store.createDoc('room-1');
+    it('GIVEN snapshot WHEN creating THEN the doc state matches the snapshot content', () => {
+      const seed = new Y.Doc();
+      seed.getText('code').insert(0, 'from-snapshot');
+      const snapshot = Y.encodeStateAsUpdate(seed);
+      seed.destroy();
 
-      expect(() => store.createDoc('room-1')).toThrow(ConflictException);
+      const store = new YjsDocumentStore();
+      const { doc, created } = store.createDoc('room-1', { snapshot });
+
+      expect(created).toBe(true);
+      expect(doc.getText('code').toString()).toBe('from-snapshot');
+    });
+
+    it('GIVEN both snapshot and initialContent WHEN creating THEN snapshot takes precedence', () => {
+      const seed = new Y.Doc();
+      seed.getText('code').insert(0, 'from-snapshot');
+      const snapshot = Y.encodeStateAsUpdate(seed);
+      seed.destroy();
+
+      const store = new YjsDocumentStore();
+      const { doc } = store.createDoc('room-1', {
+        snapshot,
+        initialContent: 'starter',
+      });
+
+      expect(doc.getText('code').toString()).toBe('from-snapshot');
+    });
+
+    it('GIVEN existing doc WHEN creating duplicate THEN returns existing doc with created=false', () => {
+      const store = new YjsDocumentStore();
+      const first = store.createDoc('room-1', { initialContent: 'first' });
+
+      const second = store.createDoc('room-1', { initialContent: 'second' });
+
+      expect(second.created).toBe(false);
+      expect(second.doc).toBe(first.doc);
+      expect(second.doc.getText('code').toString()).toBe('first');
     });
   });
 
   describe('getDoc', () => {
     it('GIVEN existing doc WHEN getting THEN returns the doc', () => {
       const store = new YjsDocumentStore();
-      const created = store.createDoc('room-1');
+      const { doc } = store.createDoc('room-1');
 
-      expect(store.getDoc('room-1')).toBe(created);
+      expect(store.getDoc('room-1')).toBe(doc);
     });
 
     it('GIVEN non-existent room WHEN getting THEN returns undefined', () => {
@@ -45,13 +77,12 @@ describe('YjsDocumentStore', () => {
   describe('destroyDoc', () => {
     it('GIVEN doc with content WHEN destroying THEN returns Uint8Array that can reconstruct the doc', () => {
       const store = new YjsDocumentStore();
-      store.createDoc('room-1', 'function solve() {}');
+      store.createDoc('room-1', { initialContent: 'function solve() {}' });
 
       const snapshot = store.destroyDoc('room-1');
 
       expect(snapshot).toBeInstanceOf(Uint8Array);
 
-      // Verify the snapshot can reconstruct the document.
       const reconstructed = new Y.Doc();
       Y.applyUpdate(reconstructed, snapshot!);
       expect(reconstructed.getText('code').toString()).toBe('function solve() {}');
@@ -76,13 +107,12 @@ describe('YjsDocumentStore', () => {
   describe('encodeSnapshot', () => {
     it('GIVEN existing doc with content WHEN encoding THEN returns Uint8Array that can reconstruct', () => {
       const store = new YjsDocumentStore();
-      store.createDoc('room-1', 'const x = 42;');
+      store.createDoc('room-1', { initialContent: 'const x = 42;' });
 
       const snapshot = store.encodeSnapshot('room-1');
 
       expect(snapshot).toBeInstanceOf(Uint8Array);
 
-      // Verify the snapshot can reconstruct the document.
       const reconstructed = new Y.Doc();
       Y.applyUpdate(reconstructed, snapshot!);
       expect(reconstructed.getText('code').toString()).toBe('const x = 42;');

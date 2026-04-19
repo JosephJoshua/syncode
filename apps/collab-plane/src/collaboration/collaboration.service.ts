@@ -17,6 +17,7 @@ import type {
   UserDisconnectedPayload,
 } from '@syncode/contracts';
 import { COLLAB_WS_EVENTS, CONTROL_PLANE_CALLBACK } from '@syncode/contracts';
+import * as Y from 'yjs';
 import { AwarenessHandler } from './awareness.handler.js';
 import { type RoomEntry, RoomRegistry } from './room-registry.js';
 import { SnapshotScheduler } from './snapshot.scheduler.js';
@@ -43,17 +44,30 @@ export class CollaborationService implements OnModuleDestroy {
   ) {}
 
   async createDocument(request: CreateDocumentRequest): Promise<CreateDocumentResponse> {
-    const room = this.roomRegistry.createRoom(request.roomId, {
-      phase: request.initialPhase,
-      editorLocked: request.editorLocked,
-    });
-    this.docStore.createDoc(request.roomId, request.initialContent);
-    this.syncHandler.registerUpdateBroadcast(request.roomId);
-    this.awarenessHandler.createRoom(request.roomId);
-    this.snapshotScheduler.startPeriodicSnapshots(request.roomId);
+    const existingRoom = this.roomRegistry.getRoom(request.roomId);
+    const room =
+      existingRoom ??
+      this.roomRegistry.createRoom(request.roomId, {
+        phase: request.initialPhase,
+        editorLocked: request.editorLocked,
+      });
 
-    this.logger.log(`Document created for room ${request.roomId}`);
-    return { roomId: room.roomId, createdAt: room.createdAt };
+    const snapshot = request.snapshot ? new Uint8Array(request.snapshot) : undefined;
+    const { created } = this.docStore.createDoc(request.roomId, {
+      snapshot,
+      initialContent: snapshot ? undefined : request.initialContent,
+    });
+
+    if (created) {
+      this.syncHandler.registerUpdateBroadcast(request.roomId);
+      this.awarenessHandler.createRoom(request.roomId);
+      this.snapshotScheduler.startPeriodicSnapshots(request.roomId);
+      this.logger.log(`Document created for room ${request.roomId}`);
+    } else {
+      this.logger.debug(`Document already exists for room ${request.roomId}`);
+    }
+
+    return { roomId: room.roomId, createdAt: room.createdAt, created };
   }
 
   async destroyDocument(roomId: string): Promise<DestroyDocumentResponse> {
@@ -106,14 +120,12 @@ export class CollaborationService implements OnModuleDestroy {
 
     const now = Date.now();
 
-    // Always broadcast the canonical room-state message
     this.broadcastJson(room, {
       type: COLLAB_WS_EVENTS.ROOM_STATE,
       data: { phase: room.phase, editorLocked: room.editorLocked },
       timestamp: now,
     });
 
-    // Phase changed — broadcast granular event + snapshot
     if (previousPhase !== request.phase) {
       this.broadcastJson(room, {
         type: COLLAB_WS_EVENTS.PHASE_CHANGE,
@@ -124,7 +136,6 @@ export class CollaborationService implements OnModuleDestroy {
       void this.snapshotScheduler.takeSnapshot(request.roomId, 'phase_change');
     }
 
-    // Editor lock changed — broadcast granular event
     if (previousEditorLocked !== request.editorLocked) {
       this.broadcastJson(room, {
         type: COLLAB_WS_EVENTS.EDITOR_LOCK,
@@ -135,7 +146,6 @@ export class CollaborationService implements OnModuleDestroy {
         timestamp: now,
       });
 
-      // Lock acquired (false → true) → submission snapshot
       if (request.editorLocked) {
         void this.snapshotScheduler.takeSnapshot(request.roomId, 'submission');
       }
@@ -159,10 +169,6 @@ export class CollaborationService implements OnModuleDestroy {
     });
   }
 
-  /**
-   * Fire-and-forget notification to control-plane that a user disconnected.
-   * The callback client catches errors internally per its port contract.
-   */
   notifyUserDisconnected(payload: UserDisconnectedPayload): void {
     void this.callbackClient.notifyUserDisconnected(payload);
   }
@@ -210,8 +216,26 @@ export class CollaborationService implements OnModuleDestroy {
     if (!this.roomRegistry.hasRoom(roomId)) return;
 
     await this.snapshotScheduler.takeSnapshot(roomId, 'session_end');
+    await this.persistFinalState(roomId);
     this.teardownRoom(roomId);
     this.logger.log(`Room ${roomId} cleaned up after TTL expiry`);
+  }
+
+  private async persistFinalState(roomId: string): Promise<void> {
+    const doc = this.docStore.getDoc(roomId);
+    if (!doc) return;
+
+    try {
+      const state = Y.encodeStateAsUpdate(doc);
+      await this.callbackClient.persistDocSnapshot({
+        roomId,
+        state: Array.from(state),
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Failed to persist doc snapshot for room ${roomId}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
 
   private teardownRoom(roomId: string): Uint8Array | undefined {
