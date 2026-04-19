@@ -79,6 +79,7 @@ function defaultOptions(
     onPhaseChange: vi.fn(),
     onEditorLock: vi.fn(),
     onLanguageChange: vi.fn(),
+    onReconnected: vi.fn(),
     ...overrides,
   };
 }
@@ -442,6 +443,52 @@ describe('YjsCollabProvider', () => {
       const wsBefore = MockWebSocket.instances.length;
       vi.advanceTimersByTime(60_000); // well past any backoff
       expect(MockWebSocket.instances.length).toBe(wsBefore); // no new WS created
+
+      provider.destroy();
+    });
+
+    it('GIVEN initial WS open WHEN onopen fires AND first text message arrives THEN onReconnected is NOT called', () => {
+      const onReconnected = vi.fn();
+      const { provider } = connectProvider(defaultOptions({ onReconnected }));
+
+      expect(onReconnected).not.toHaveBeenCalled();
+
+      provider.destroy();
+    });
+
+    it('GIVEN established WS WHEN WS drops and reopens THEN onReconnected is called exactly once per reconnect', () => {
+      const onReconnected = vi.fn();
+      const { provider, ws } = connectProvider(defaultOptions({ onReconnected }));
+
+      // Initial connect does not fire onReconnected.
+      expect(onReconnected).not.toHaveBeenCalled();
+
+      // Simulate drop and backoff-driven reconnect.
+      ws.simulateClose(1006);
+      vi.advanceTimersByTime(1000);
+
+      const ws2 = latestWs();
+      ws2.simulateOpen();
+      // First text message on the new WS transitions `reconnecting → connected`.
+      ws2.simulateTextMessage(
+        JSON.stringify({
+          type: COLLAB_WS_EVENTS.ROOM_STATE,
+          data: { phase: 'waiting', editorLocked: false },
+          timestamp: Date.now(),
+        }),
+      );
+
+      expect(onReconnected).toHaveBeenCalledTimes(1);
+
+      // Subsequent text messages do not re-fire.
+      ws2.simulateTextMessage(
+        JSON.stringify({
+          type: COLLAB_WS_EVENTS.PHASE_CHANGE,
+          data: { phase: 'coding', previousPhase: 'waiting' },
+          timestamp: Date.now(),
+        }),
+      );
+      expect(onReconnected).toHaveBeenCalledTimes(1);
 
       provider.destroy();
     });

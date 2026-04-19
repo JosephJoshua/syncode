@@ -33,6 +33,12 @@ export interface YjsCollabProviderOptions {
   onPhaseChange: (phase: string, previousPhase: string) => void;
   onEditorLock: (locked: boolean, lockedBy: string | null) => void;
   onLanguageChange?: (language: string, changedBy: string | null) => void;
+  /**
+   * Fires AFTER status transitions to `connected` from a prior `reconnecting`
+   * state — never on the initial `connecting → connected` transition.
+   * Used to trigger idempotent backend reactivation (e.g. re-hit POST /join).
+   */
+  onReconnected?: () => void;
 }
 
 const INITIAL_BACKOFF_MS = 1_000;
@@ -160,7 +166,12 @@ export class YjsCollabProvider {
       // that was set in the constructor before the WS was open.
       this.awareness.setLocalStateField('user', this.options.user);
     }
+    const wasReconnecting = this.currentStatus === 'reconnecting';
     this.setStatus('connected');
+    if (wasReconnecting) {
+      // Fire AFTER the status change so subscribers observe the final state.
+      this.options.onReconnected?.();
+    }
 
     switch (message.type) {
       case COLLAB_WS_EVENTS.ROOM_STATE: {

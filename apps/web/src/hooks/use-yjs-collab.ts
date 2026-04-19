@@ -19,6 +19,7 @@ export interface UseYjsCollabOptions {
   onParticipantReady: (userId: string, isReady: boolean) => void;
   onPhaseChange?: () => void;
   onLanguageChange?: (language: string, changedBy: string | null) => void;
+  onReconnected?: () => void;
 }
 
 interface CollabState {
@@ -42,6 +43,7 @@ export function useYjsCollab({
   onParticipantReady,
   onPhaseChange,
   onLanguageChange,
+  onReconnected,
 }: UseYjsCollabOptions): YjsCollabResult {
   const [status, setStatus] = useState<CollabConnectionStatus>(
     collabUrl && collabToken ? 'connecting' : 'disconnected',
@@ -57,6 +59,8 @@ export function useYjsCollab({
   phaseChangeRef.current = onPhaseChange;
   const languageChangeRef = useRef(onLanguageChange);
   languageChangeRef.current = onLanguageChange;
+  const reconnectedRef = useRef(onReconnected);
+  reconnectedRef.current = onReconnected;
   const tRef = useRef(t);
   tRef.current = t;
 
@@ -111,6 +115,10 @@ export function useYjsCollab({
       onLanguageChange: (language, changedBy) => {
         if (disposed) return;
         languageChangeRef.current?.(language, changedBy);
+      },
+      onReconnected: () => {
+        if (disposed) return;
+        reconnectedRef.current?.();
       },
     });
 

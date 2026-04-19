@@ -238,6 +238,20 @@ function RoomPage() {
     onParticipantReady: handleParticipantReady,
     onPhaseChange: () => void refreshRoomDetail(),
     onLanguageChange: () => void refreshRoomDetail(),
+    onReconnected: () => {
+      void (async () => {
+        try {
+          const result = await api(CONTROL_API.ROOMS.JOIN, {
+            params: { id: roomId },
+            body: {},
+          });
+          setRoom(result.room);
+        } catch {
+          // Background reactivation; errors are non-fatal and intentionally swallowed.
+          // The participant sweep will eventually reconcile.
+        }
+      })();
+    },
   });
 
   const mediaCredsRef = useRef<{ token: string; url: string } | null>(null);
