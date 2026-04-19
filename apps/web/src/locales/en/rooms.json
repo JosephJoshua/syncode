@@ -51,7 +51,8 @@
     "loadMore": "Load more rooms",
     "loading": "Tuning into the lobby…",
     "joinSuccess": "Joined room. Taking you there now.",
-    "joinFailed": "Couldn't join this room. It may be full or no longer public."
+    "joinFailed": "Couldn't join this room. It may be full or no longer public.",
+    "joinRemoved": "You've been removed from this room."
   },
   "join": {
     "heading": "Join a Room",

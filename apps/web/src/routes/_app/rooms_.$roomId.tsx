@@ -31,7 +31,8 @@ import {
 import { useLiveKit } from '@/hooks/use-livekit.js';
 import { useMediaShortcuts } from '@/hooks/use-media-shortcuts.js';
 import { useYjsCollab } from '@/hooks/use-yjs-collab.js';
-import { type ApiErrorResult, api, readApiError, resolveErrorMessage } from '@/lib/api-client.js';
+import { api, readApiError, resolveErrorMessage } from '@/lib/api-client.js';
+import { resolveJoinError } from '@/lib/join-errors.js';
 import { computeRoomElapsedMs, isWorkspaceStage, ROLE_LABEL_KEYS } from '@/lib/room-stage.js';
 import { useAuthStore } from '@/stores/auth.store.js';
 
@@ -790,17 +791,6 @@ function buildJoinNotice(
   return t('lobby.autoAssigned', { role: roleLabel });
 }
 
-const JOIN_ERROR_KEYS: Partial<Record<string, string>> = {
-  [ERROR_CODES.ROOM_NOT_FOUND]: 'lobby.roomNotFound',
-  [ERROR_CODES.ROOM_FULL]: 'lobby.roomFull',
-  [ERROR_CODES.ROOM_FINISHED]: 'lobby.roomFinished',
-  [ERROR_CODES.ROOM_INVALID_CODE]: 'lobby.invalidCode',
-  [ERROR_CODES.ROOM_ACCESS_DENIED]: 'lobby.accessDenied',
-  [ERROR_CODES.ROOM_PERMISSION_DENIED]: 'lobby.accessDenied',
-  [ERROR_CODES.ROOM_INVITE_CODE_EXHAUSTED]: 'lobby.invalidCode',
-  [ERROR_CODES.ROOM_ROLE_UNAVAILABLE]: 'lobby.roleUnavailable',
-};
-
 const TRANSITION_ERROR_KEYS: Partial<Record<string, string>> = {
   [ERROR_CODES.ROOM_INVALID_TRANSITION]: 'lobby.invalidTransition',
   [ERROR_CODES.ROOM_NOT_PEER_MODE]: 'lobby.notPeerMode',
@@ -819,7 +809,3 @@ const TRANSFER_ERROR_KEYS: Partial<Record<string, string>> = {
   [ERROR_CODES.PARTICIPANT_NOT_FOUND]: 'lobby.participantNotFound',
   [ERROR_CODES.ROOM_PERMISSION_DENIED]: 'lobby.accessDenied',
 };
-
-function resolveJoinError(apiError: ApiErrorResult, t: (key: string) => string): string {
-  return resolveErrorMessage(apiError, JOIN_ERROR_KEYS, 'lobby.joinFailed', t);
-}

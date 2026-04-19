@@ -51,7 +51,8 @@
     "loadMore": "加载更多房间",
     "loading": "正在连接大厅…",
     "joinSuccess": "加入成功，正在进入房间。",
-    "joinFailed": "无法加入该房间。可能房间已满或不再公开。"
+    "joinFailed": "无法加入该房间。可能房间已满或不再公开。",
+    "joinRemoved": "你已被移出该房间。"
   },
   "join": {
     "heading": "加入房间",

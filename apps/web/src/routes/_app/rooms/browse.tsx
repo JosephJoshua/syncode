@@ -23,6 +23,7 @@ import { LanguageSelector } from '@/components/language-selector.js';
 import { BrowseEmptyState } from '@/components/rooms-browse/browse-empty-state.js';
 import { PublicRoomCard } from '@/components/rooms-browse/public-room-card.js';
 import { api, readApiError } from '@/lib/api-client.js';
+import { resolveJoinError } from '@/lib/join-errors.js';
 import { ROOM_STATUS_KEYS } from '@/lib/room-stage.js';
 import { useAuthStore } from '@/stores/auth.store.js';
 
@@ -125,7 +126,7 @@ function BrowseRoomsPage() {
       void navigate({ to: '/rooms/$roomId', params: { roomId } }).catch(() => {});
     } catch (error) {
       const apiError = await readApiError(error);
-      toast.error(apiError?.message ?? t('browse.joinFailed'));
+      toast.error(resolveJoinError(apiError, t, 'browse.joinFailed'));
     }
   };
 

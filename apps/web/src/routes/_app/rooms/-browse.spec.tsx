@@ -262,6 +262,28 @@ describe('BrowseRoomsPage', () => {
     );
   });
 
+  it('GIVEN the join API returns 403 with ROOM_FULL THEN the toast shows the room-full i18n key', async () => {
+    apiMock.mockImplementation((route) => {
+      const typedRoute = route as { route?: string };
+      if (typedRoute.route === CONTROL_API.ROOMS.JOIN.route) {
+        return Promise.reject(
+          makeHttpError(403, { statusCode: 403, message: 'full', code: 'ROOM_FULL' }),
+        );
+      }
+      return Promise.resolve(makeResponse([makeRoom({ roomId: 'room-full' })]) as never);
+    });
+    const user = userEvent.setup();
+
+    renderPage();
+
+    const joinButton = await screen.findByRole('button', { name: /browse\.card\.join/i });
+    await user.click(joinButton);
+
+    await waitFor(() => {
+      expect(toastErrorMock).toHaveBeenCalledWith('lobby.roomFull');
+    });
+  });
+
   it('GIVEN the user types in the search box THEN after debounce the query refetches with search=<value>', async () => {
     apiMock.mockResolvedValue(makeResponse([makeRoom()]));
     const user = userEvent.setup();
