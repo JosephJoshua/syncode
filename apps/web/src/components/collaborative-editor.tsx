@@ -29,6 +29,7 @@ export function CollaborativeEditor({
   onSubmitCode,
 }: CollaborativeEditorProps) {
   const bindingRef = useRef<MonacoBinding | null>(null);
+  const editorRootRef = useRef<HTMLElement | null>(null);
   const onRunCodeRef = useRef(onRunCode);
   onRunCodeRef.current = onRunCode;
   const onSubmitCodeRef = useRef(onSubmitCode);
@@ -37,7 +38,6 @@ export function CollaborativeEditor({
   const editorOptions = useMemo(() => ({ ...EDITOR_OPTIONS_BASE, readOnly }), [readOnly]);
 
   const handleMount: OnMount = (editor, monaco) => {
-    // Register keyboard shortcuts
     editor.addAction({
       id: 'syncode-run',
       label: 'Run Code',
@@ -52,7 +52,8 @@ export function CollaborativeEditor({
       run: () => void onSubmitCodeRef.current(),
     });
 
-    // Bind Monaco model to Y.Text via y-monaco
+    editorRootRef.current = editor.getDomNode();
+
     const model = editor.getModel();
     if (model == null) return;
 
@@ -60,8 +61,7 @@ export function CollaborativeEditor({
     bindingRef.current = new MonacoBinding(yText, model, new Set([editor]), awareness);
   };
 
-  // Clean up binding when component unmounts or doc/awareness changes.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: doc and awareness are intentional deps — when they change the old binding must be destroyed so handleMount can create a fresh one.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: doc and awareness are intentional deps; when they change the old binding must be destroyed so handleMount creates a fresh one.
   useEffect(() => {
     return () => {
       bindingRef.current?.destroy();
@@ -73,11 +73,14 @@ export function CollaborativeEditor({
     const styleEl = document.createElement('style');
     document.head.appendChild(styleEl);
 
-    const lastUpdated = new Map<number, number>();
     const idleIds = new Set<number>();
     const hoverIds = new Set<number>();
-    const hoverListeners = new Map<number, { over: () => void; leave: () => void }>();
     let tickHandle: ReturnType<typeof setInterval> | null = null;
+
+    const getLastUpdated = (clientID: number): number => {
+      const meta = awareness.meta.get(clientID);
+      return meta?.lastUpdated ?? Date.now();
+    };
 
     const remoteStates = () => {
       const states = awareness.getStates();
@@ -96,48 +99,45 @@ export function CollaborativeEditor({
       styleEl.textContent = rules.join('\n');
     };
 
-    const detachHoverFor = (clientID: number) => {
-      const existing = hoverListeners.get(clientID);
-      if (!existing) return;
-      document.querySelectorAll<HTMLElement>(`.yRemoteSelectionHead-${clientID}`).forEach((el) => {
-        el.removeEventListener('mouseover', existing.over);
-        el.removeEventListener('mouseleave', existing.leave);
-      });
-      hoverListeners.delete(clientID);
-      hoverIds.delete(clientID);
+    const remoteCursorSelector = (event: Event): HTMLElement | null => {
+      const target = event.target as HTMLElement | null;
+      if (!target) return null;
+      const headClass = Array.from(target.classList ?? []).find((c) =>
+        c.startsWith('yRemoteSelectionHead-'),
+      );
+      if (headClass) return target;
+      return target.closest('[class*="yRemoteSelectionHead-"]');
     };
 
-    const attachHoverFor = (clientID: number) => {
-      if (hoverListeners.has(clientID)) return;
-      const over = () => {
-        if (!hoverIds.has(clientID)) {
-          hoverIds.add(clientID);
-          updateStyles();
-        }
-      };
-      const leave = () => {
-        if (hoverIds.delete(clientID)) updateStyles();
-      };
-      hoverListeners.set(clientID, { over, leave });
-      document.querySelectorAll<HTMLElement>(`.yRemoteSelectionHead-${clientID}`).forEach((el) => {
-        el.addEventListener('mouseover', over);
-        el.addEventListener('mouseleave', leave);
-      });
+    const clientIdFromElement = (el: HTMLElement): number | null => {
+      const headClass = Array.from(el.classList).find((c) => c.startsWith('yRemoteSelectionHead-'));
+      if (!headClass) return null;
+      const id = Number.parseInt(headClass.slice('yRemoteSelectionHead-'.length), 10);
+      return Number.isFinite(id) ? id : null;
     };
 
-    // Hover targets are rendered by Monaco asynchronously, so re-bind shortly after each awareness change.
-    const scheduleHoverRebind = (clientIds: number[]) => {
-      requestAnimationFrame(() => {
-        clientIds.forEach((id) => {
-          if (id === doc.clientID) return;
-          const existing = hoverListeners.get(id);
-          if (existing) {
-            detachHoverFor(id);
-          }
-          attachHoverFor(id);
-        });
-      });
+    const onMouseOver = (event: Event) => {
+      const el = remoteCursorSelector(event);
+      if (!el) return;
+      const id = clientIdFromElement(el);
+      if (id == null || id === doc.clientID) return;
+      if (!hoverIds.has(id)) {
+        hoverIds.add(id);
+        updateStyles();
+      }
     };
+
+    const onMouseOut = (event: Event) => {
+      const el = remoteCursorSelector(event);
+      if (!el) return;
+      const id = clientIdFromElement(el);
+      if (id == null) return;
+      if (hoverIds.delete(id)) updateStyles();
+    };
+
+    const root = editorRootRef.current ?? document;
+    root.addEventListener('mouseover', onMouseOver, true);
+    root.addEventListener('mouseout', onMouseOut, true);
 
     const recomputeIdle = () => {
       const now = Date.now();
@@ -146,7 +146,7 @@ export function CollaborativeEditor({
       awareness.getStates().forEach((_, id) => {
         if (id === doc.clientID) return;
         present.add(id);
-        const stamp = lastUpdated.get(id) ?? now;
+        const stamp = getLastUpdated(id);
         const shouldBeIdle = now - stamp >= IDLE_HIDE_MS;
         if (shouldBeIdle && !idleIds.has(id)) {
           idleIds.add(id);
@@ -185,38 +185,27 @@ export function CollaborativeEditor({
       removed: number[];
     }) => {
       if (added.length === 0 && updated.length === 0 && removed.length === 0) return;
-      const now = Date.now();
       for (const id of [...added, ...updated]) {
         if (id === doc.clientID) continue;
-        lastUpdated.set(id, now);
         idleIds.delete(id);
       }
       for (const id of removed) {
-        lastUpdated.delete(id);
-        detachHoverFor(id);
         idleIds.delete(id);
+        hoverIds.delete(id);
       }
       updateStyles();
-      scheduleHoverRebind([...added, ...updated]);
       ensureTicking();
     };
 
     awareness.on('change', onAwarenessChange);
-    // Seed timestamps for any peers already present at mount.
-    const now = Date.now();
-    awareness.getStates().forEach((_, id) => {
-      if (id !== doc.clientID) lastUpdated.set(id, now);
-    });
     updateStyles();
-    scheduleHoverRebind([...lastUpdated.keys()]);
     ensureTicking();
 
     return () => {
       awareness.off('change', onAwarenessChange);
+      root.removeEventListener('mouseover', onMouseOver, true);
+      root.removeEventListener('mouseout', onMouseOut, true);
       if (tickHandle != null) clearInterval(tickHandle);
-      hoverListeners.forEach((_, id) => {
-        detachHoverFor(id);
-      });
       styleEl.remove();
     };
   }, [awareness, doc.clientID]);
