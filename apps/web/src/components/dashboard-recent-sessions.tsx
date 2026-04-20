@@ -28,27 +28,12 @@ import type {
   SessionRow,
   SessionStatus,
 } from '@/lib/dashboard-session-history.js';
+import { formatSessionDateTime } from '@/lib/dashboard-session-history.js';
 import { getUserInitial } from '@/lib/user-utils.js';
 import { useAuthStore } from '@/stores/auth.store.js';
 
 type SessionFilter = 'all' | 'passed' | 'failed';
 type SessionSort = 'date-desc' | 'date-asc' | 'score-desc' | 'score-asc' | 'duration-desc';
-
-const SESSION_DATE_FORMAT = new Intl.DateTimeFormat(undefined, {
-  year: 'numeric',
-  month: 'short',
-  day: '2-digit',
-});
-
-function formatSessionDate(date: string) {
-  const parsed = new Date(date);
-
-  if (Number.isNaN(parsed.getTime())) {
-    return date;
-  }
-
-  return SESSION_DATE_FORMAT.format(parsed);
-}
 
 function getStatusBadgeVariant(status: SessionStatus) {
   if (status === 'passed') {
@@ -88,7 +73,7 @@ function compareRows(a: SessionRow, b: SessionRow, sortBy: SessionSort) {
   }
 
   if (sortBy === 'duration-desc') {
-    return b.durationMinutes - a.durationMinutes;
+    return b.durationSeconds - a.durationSeconds;
   }
 
   return new Date(b.date).getTime() - new Date(a.date).getTime();
@@ -278,7 +263,7 @@ export function DashboardRecentSessions({
               {filteredRows.map((row) => (
                 <TableRow key={row.id}>
                   <TableCell className="text-muted-foreground">
-                    {formatSessionDate(row.date)}
+                    {formatSessionDateTime(row.date)}
                   </TableCell>
                   <TableCell>
                     <Link
@@ -329,7 +314,7 @@ export function DashboardRecentSessions({
                     )}
                   </TableCell>
                   <TableCell className="text-center text-muted-foreground">
-                    {row.durationMinutes}m
+                    {row.durationLabel}
                   </TableCell>
                 </TableRow>
               ))}
