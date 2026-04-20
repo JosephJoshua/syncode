@@ -1,4 +1,4 @@
-import { Body, Controller, Inject, Logger, Post } from '@nestjs/common';
+import { Body, Controller, Inject, Logger, Post, UseGuards } from '@nestjs/common';
 import { ApiExcludeEndpoint } from '@nestjs/swagger';
 import { SkipThrottle } from '@nestjs/throttler';
 import { CONTROL_INTERNAL, type ParticipantHeartbeatResponse } from '@syncode/contracts';
@@ -6,6 +6,7 @@ import type { Database } from '@syncode/db';
 import { codeSnapshots, sessions } from '@syncode/db';
 import { type IStorageService, STORAGE_SERVICE } from '@syncode/shared/ports';
 import { eq } from 'drizzle-orm';
+import { InternalCallbackGuard } from '@/common/guards/internal-callback.guard.js';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
 import { RoomsService } from '@/modules/rooms/rooms.service.js';
 import {
@@ -16,11 +17,11 @@ import {
 
 /**
  * Receives HTTP callbacks FROM other planes.
- * These endpoints are NOT exposed via nginx.
- *
- * TODO: add shared tokens
+ * These endpoints are NOT exposed via nginx and require the shared
+ * `X-Internal-Secret` header enforced by `InternalCallbackGuard`.
  */
 @SkipThrottle()
+@UseGuards(InternalCallbackGuard)
 @Controller()
 export class InternalController {
   private readonly logger = new Logger(InternalController.name);

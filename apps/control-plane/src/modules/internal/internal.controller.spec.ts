@@ -6,6 +6,7 @@ import type {
 } from '@syncode/contracts';
 import { STORAGE_SERVICE } from '@syncode/shared/ports';
 import { describe, expect, it, vi } from 'vitest';
+import { InternalCallbackGuard } from '@/common/guards/internal-callback.guard.js';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
 import { RoomsService } from '@/modules/rooms/rooms.service.js';
 import { InternalController } from './internal.controller.js';
@@ -41,7 +42,10 @@ async function createController(mocks: ReturnType<typeof createMocks>) {
       { provide: STORAGE_SERVICE, useValue: mocks.storageService },
       { provide: DB_CLIENT, useValue: mocks.db },
     ],
-  }).compile();
+  })
+    .overrideGuard(InternalCallbackGuard)
+    .useValue({ canActivate: () => true })
+    .compile();
 
   return module.get(InternalController);
 }
