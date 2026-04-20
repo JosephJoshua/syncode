@@ -3,6 +3,8 @@ export { AI_CLIENT } from './client.js';
 export type {
   GenerateHintRequest,
   GenerateHintResult,
+  GenerateSessionReportRequest,
+  GenerateSessionReportResult,
   InterviewResponseRequest,
   InterviewResponseResult,
   ReviewCodeRequest,
