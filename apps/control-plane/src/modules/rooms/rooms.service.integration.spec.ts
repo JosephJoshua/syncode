@@ -820,6 +820,22 @@ describe('ensureCollab', () => {
     await expect(service.ensureCollab(room.id, stranger.id)).rejects.toThrow(ForbiddenException);
   });
 
+  it('GIVEN inactive (disconnected) participant WHEN ensuring collab THEN recovers without throwing', async () => {
+    const host = await insertUser(db);
+    const room = await insertRoom(db, host.id);
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+    await service.markParticipantInactive(room.id, host.id, new Date());
+
+    mockCollabClient.createDocument.mockResolvedValueOnce({
+      roomId: room.id,
+      createdAt: Date.now(),
+      created: true,
+    });
+
+    const result = await service.ensureCollab(room.id, host.id);
+    expect(result).toEqual({ recreated: true });
+  });
+
   it('GIVEN finished room WHEN ensuring collab THEN throws ConflictException', async () => {
     const host = await insertUser(db);
     const room = await insertRoom(db, host.id, { status: 'finished' });

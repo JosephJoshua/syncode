@@ -1361,13 +1361,16 @@ export class RoomsService {
       });
     }
 
+    // Allow any prior participant (active or inactive) so a disconnected user
+    // can recover their collab session. Presence of a row is sufficient proof
+    // of prior membership.
     const [participant] = await this.db
       .select({ isActive: roomParticipants.isActive })
       .from(roomParticipants)
       .where(and(eq(roomParticipants.roomId, roomId), eq(roomParticipants.userId, userId)))
       .limit(1);
 
-    if (!participant?.isActive) {
+    if (!participant) {
       throw new ForbiddenException({
         message: 'Not a participant of this room',
         code: ERROR_CODES.ROOM_ACCESS_DENIED,
