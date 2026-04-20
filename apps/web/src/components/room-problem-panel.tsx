@@ -1,6 +1,7 @@
 import { Badge } from '@syncode/ui';
 import { FileText, Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { ConstraintsBlock } from './problems/constraints-block.js';
 import { ProblemMarkdown } from './problems/problem-markdown.js';
 
 export interface ProblemData {
@@ -122,14 +123,7 @@ function ProblemContent({ problem }: { problem: ProblemData }) {
       ) : null}
 
       {problem.constraints ? (
-        <div className="rounded border-l-2 border-amber-400/60 bg-amber-500/5 p-2.5">
-          <h3 className="font-mono text-[10px] uppercase tracking-widest text-amber-300/90">
-            {t('problem.constraints')}
-          </h3>
-          <div className="mt-1.5">
-            <ProblemMarkdown content={problem.constraints} compact />
-          </div>
-        </div>
+        <ConstraintsBlock title={t('problem.constraints')} content={problem.constraints} compact />
       ) : null}
     </div>
   );

@@ -8,6 +8,7 @@ import { useTranslation } from 'react-i18next';
 import i18n from '@/lib/i18n.js';
 import { useToggleProblemBookmarkMutation } from '@/lib/problems/problem-bookmark.js';
 import { useAuthStore } from '@/stores/auth.store.js';
+import { ConstraintsBlock } from './constraints-block.js';
 import { ProblemMarkdown } from './problem-markdown.js';
 import { StarterCodeBlock } from './starter-code-block.js';
 import { formatStarterLanguageLabel } from './starter-code-language.js';
@@ -58,11 +59,13 @@ export function ProblemDetailLayout({ problem }: { problem: ProblemDetail }) {
               <ProblemMarkdown content={problem.description} />
             </SectionSurface>
 
-            <ConstraintsSurface
-              title={t('detail.constraints')}
-              constraints={problem.constraints}
-              emptyMessage={t('detail.noConstraints')}
-            />
+            {problem.constraints ? (
+              <ConstraintsBlock title={t('detail.constraints')} content={problem.constraints} />
+            ) : (
+              <SectionSurface title={t('detail.constraints')}>
+                <EmptySurfaceCopy message={t('detail.noConstraints')} />
+              </SectionSurface>
+            )}
 
             <SectionSurface title={t('detail.examples', { count: problem.examples.length })}>
               <div className="space-y-3">
@@ -310,31 +313,6 @@ function LabeledMarkdownBlock({ label, value }: { label: string; value: string }
         <ProblemMarkdown content={value} />
       </div>
     </div>
-  );
-}
-
-function ConstraintsSurface({
-  title,
-  constraints,
-  emptyMessage,
-}: {
-  title: string;
-  constraints: string | null;
-  emptyMessage: string;
-}) {
-  return (
-    <section className="overflow-hidden rounded-2xl border border-border/60 bg-card/60 border-l-4 border-l-amber-400/70">
-      <div className="border-b border-border/60 bg-amber-500/5 px-4 py-2.5">
-        <h2 className="text-lg font-semibold text-foreground">{title}</h2>
-      </div>
-      <div className="px-4 py-3">
-        {constraints ? (
-          <ProblemMarkdown content={constraints} />
-        ) : (
-          <p className="text-sm text-muted-foreground">{emptyMessage}</p>
-        )}
-      </div>
-    </section>
   );
 }
 
