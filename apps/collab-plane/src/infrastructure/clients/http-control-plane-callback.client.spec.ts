@@ -82,4 +82,26 @@ describe('HttpControlPlaneCallbackClient', () => {
 
     expect(result).toBeNull();
   });
+
+  it('GIVEN reachable control-plane WHEN authorizing join THEN posts to room-scoped endpoint and returns body', async () => {
+    const jsonFn = vi.fn().mockResolvedValueOnce({ authorized: true });
+    mockPost.mockReturnValueOnce({ json: jsonFn });
+
+    const result = await client.authorizeJoin('room-abc', 'user-xyz');
+
+    expect(mockPost).toHaveBeenCalledWith('internal/rooms/room-abc/authorize-join', {
+      json: { userId: 'user-xyz' },
+    });
+    expect(result).toEqual({ authorized: true });
+  });
+
+  it('GIVEN unreachable control-plane WHEN authorizing join THEN fails closed with authorized=false', async () => {
+    mockPost.mockReturnValueOnce({
+      json: vi.fn().mockRejectedValueOnce(new Error('Connection refused')),
+    });
+
+    const result = await client.authorizeJoin('room-abc', 'user-xyz');
+
+    expect(result).toEqual({ authorized: false });
+  });
 });

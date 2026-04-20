@@ -21,6 +21,7 @@ const mockCallbackClient = {
   notifyUserDisconnected: vi.fn().mockResolvedValue(undefined),
   notifySnapshotReady: vi.fn().mockResolvedValue(undefined),
   heartbeatParticipants: vi.fn().mockResolvedValue(null),
+  authorizeJoin: vi.fn().mockResolvedValue({ authorized: true }),
 };
 
 @Global()

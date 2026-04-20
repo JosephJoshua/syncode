@@ -1,5 +1,6 @@
 import type { IncomingMessage } from 'node:http';
 import { UnauthorizedException } from '@nestjs/common';
+import type { IControlPlaneCallbackClient } from '@syncode/contracts';
 import { WsMessageType } from '@syncode/contracts';
 import { describe, expect, it, vi } from 'vitest';
 import type { WebSocket } from 'ws';
@@ -46,12 +47,20 @@ function createFixture() {
     removeClient: vi.fn(),
   };
 
+  const callbackClient = {
+    notifyUserDisconnected: vi.fn(),
+    notifySnapshotReady: vi.fn(),
+    heartbeatParticipants: vi.fn(),
+    authorizeJoin: vi.fn().mockResolvedValue({ authorized: true }),
+  };
+
   const gateway = new CollaborationGateway(
     wsAuthService as unknown as WsAuthService,
     roomRegistry,
     collaborationService as unknown as CollaborationService,
     syncHandler as unknown as YjsSyncHandler,
     awarenessHandler as unknown as AwarenessHandler,
+    callbackClient as unknown as IControlPlaneCallbackClient,
   );
 
   return {
@@ -61,6 +70,7 @@ function createFixture() {
     collaborationService,
     syncHandler,
     awarenessHandler,
+    callbackClient,
   };
 }
 
@@ -188,12 +198,12 @@ describe('CollaborationGateway', () => {
   });
 
   describe('handleJoin', () => {
-    it('GIVEN valid join WHEN joining THEN adds client to room and sends room-state', () => {
+    it('GIVEN valid join WHEN joining THEN adds client to room and sends room-state', async () => {
       const { gateway, roomRegistry } = createFixture();
       roomRegistry.createRoom('room-1');
       const client = fakeClient(VALID_PAYLOAD);
 
-      gateway.handleJoin(client as unknown as WebSocket, { roomId: 'room-1' });
+      await gateway.handleJoin(client as unknown as WebSocket, { roomId: 'room-1' });
 
       expect(roomRegistry.hasClient('room-1', 'user-1')).toBe(true);
       const sent = JSON.parse(client.send.mock.calls[0]![0] as string);
@@ -202,32 +212,32 @@ describe('CollaborationGateway', () => {
       expect(sent.timestamp).toBeGreaterThan(0);
     });
 
-    it('GIVEN mismatched roomId WHEN joining THEN closes with UNAUTHORIZED', () => {
+    it('GIVEN mismatched roomId WHEN joining THEN closes with UNAUTHORIZED', async () => {
       const { gateway } = createFixture();
       const client = fakeClient(VALID_PAYLOAD);
 
-      gateway.handleJoin(client as unknown as WebSocket, { roomId: 'wrong-room' });
+      await gateway.handleJoin(client as unknown as WebSocket, { roomId: 'wrong-room' });
 
       expect(client.close).toHaveBeenCalledWith(WsCloseCode.UNAUTHORIZED, 'Room ID mismatch');
     });
 
-    it('GIVEN non-existent room WHEN joining THEN closes with ROOM_NOT_FOUND', () => {
+    it('GIVEN non-existent room WHEN joining THEN closes with ROOM_NOT_FOUND', async () => {
       const { gateway } = createFixture();
       const client = fakeClient(VALID_PAYLOAD);
 
-      gateway.handleJoin(client as unknown as WebSocket, { roomId: 'room-1' });
+      await gateway.handleJoin(client as unknown as WebSocket, { roomId: 'room-1' });
 
       expect(client.close).toHaveBeenCalledWith(WsCloseCode.ROOM_NOT_FOUND, 'Room not found');
     });
 
-    it('GIVEN duplicate connection WHEN joining THEN evicts stale connection and lets new one proceed', () => {
+    it('GIVEN duplicate connection WHEN joining THEN evicts stale connection and lets new one proceed', async () => {
       const { gateway, roomRegistry } = createFixture();
       roomRegistry.createRoom('room-1');
       const staleClient = fakeClient(VALID_PAYLOAD);
       roomRegistry.addClient('room-1', 'user-1', staleClient as unknown as AuthenticatedClient);
       const newClient = fakeClient(VALID_PAYLOAD);
 
-      gateway.handleJoin(newClient as unknown as WebSocket, { roomId: 'room-1' });
+      await gateway.handleJoin(newClient as unknown as WebSocket, { roomId: 'room-1' });
 
       // Stale connection is closed, new one is registered
       expect(staleClient.close).toHaveBeenCalledWith(
@@ -238,22 +248,50 @@ describe('CollaborationGateway', () => {
       expect(roomRegistry.hasClient('room-1', 'user-1')).toBe(true);
     });
 
-    it('GIVEN unauthenticated client WHEN joining THEN closes with UNAUTHORIZED', () => {
+    it('GIVEN unauthenticated client WHEN joining THEN closes with UNAUTHORIZED', async () => {
       const { gateway } = createFixture();
       const client = fakeClient();
 
-      gateway.handleJoin(client as unknown as WebSocket, { roomId: 'room-1' });
+      await gateway.handleJoin(client as unknown as WebSocket, { roomId: 'room-1' });
 
       expect(client.close).toHaveBeenCalledWith(WsCloseCode.UNAUTHORIZED, 'Unauthorized');
     });
 
-    it('GIVEN invalid payload WHEN joining THEN closes with UNAUTHORIZED', () => {
+    it('GIVEN invalid payload WHEN joining THEN closes with UNAUTHORIZED', async () => {
       const { gateway } = createFixture();
       const client = fakeClient(VALID_PAYLOAD);
 
-      gateway.handleJoin(client as unknown as WebSocket, null as never);
+      await gateway.handleJoin(client as unknown as WebSocket, null as never);
 
       expect(client.close).toHaveBeenCalledWith(WsCloseCode.UNAUTHORIZED, 'Invalid join payload');
+    });
+
+    it('GIVEN control-plane denies join WHEN joining THEN closes with FORBIDDEN and does not add client', async () => {
+      const { gateway, roomRegistry, callbackClient } = createFixture();
+      roomRegistry.createRoom('room-1');
+      callbackClient.authorizeJoin.mockResolvedValueOnce({
+        authorized: false,
+        reason: 'participant-removed',
+      });
+      const client = fakeClient(VALID_PAYLOAD);
+
+      await gateway.handleJoin(client as unknown as WebSocket, { roomId: 'room-1' });
+
+      expect(callbackClient.authorizeJoin).toHaveBeenCalledWith('room-1', 'user-1');
+      expect(client.close).toHaveBeenCalledWith(WsCloseCode.FORBIDDEN, 'participant-removed');
+      expect(roomRegistry.hasClient('room-1', 'user-1')).toBe(false);
+    });
+
+    it('GIVEN control-plane denies without reason WHEN joining THEN closes with FORBIDDEN and fallback message', async () => {
+      const { gateway, roomRegistry, callbackClient } = createFixture();
+      roomRegistry.createRoom('room-1');
+      callbackClient.authorizeJoin.mockResolvedValueOnce({ authorized: false });
+      const client = fakeClient(VALID_PAYLOAD);
+
+      await gateway.handleJoin(client as unknown as WebSocket, { roomId: 'room-1' });
+
+      expect(client.close).toHaveBeenCalledWith(WsCloseCode.FORBIDDEN, 'Join denied');
+      expect(roomRegistry.hasClient('room-1', 'user-1')).toBe(false);
     });
   });
 

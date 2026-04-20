@@ -1,5 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import {
+  type AuthorizeJoinRequest,
+  type AuthorizeJoinResponse,
+  buildUrl,
   CONTROL_INTERNAL,
   type IControlPlaneCallbackClient,
   type ParticipantHeartbeatRequest,
@@ -71,6 +74,20 @@ export class HttpControlPlaneCallbackClient implements IControlPlaneCallbackClie
         `Failed to deliver participant heartbeat (batch=${request.participants.length}): ${(error as Error).message}`,
       );
       return null;
+    }
+  }
+
+  async authorizeJoin(roomId: string, userId: string): Promise<AuthorizeJoinResponse> {
+    const url = buildUrl(CONTROL_INTERNAL.AUTHORIZE_JOIN.route, { roomId });
+    const body: AuthorizeJoinRequest = { userId };
+    try {
+      return await this.client.post(url, { json: body }).json<AuthorizeJoinResponse>();
+    } catch (error) {
+      this.logger.warn(
+        `Failed to authorize join (roomId=${roomId}, userId=${userId}): ${(error as Error).message}`,
+      );
+      // Fail closed: deny the join if we cannot reach control-plane.
+      return { authorized: false };
     }
   }
 }
