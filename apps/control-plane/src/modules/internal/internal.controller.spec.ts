@@ -72,8 +72,9 @@ describe('InternalController', () => {
     });
   });
 
-  it('GIVEN storage upload fails WHEN handleSnapshotReady THEN returns success false and does not throw', async () => {
+  it('GIVEN storage upload fails but db row can be written WHEN handleSnapshotReady THEN returns success true', async () => {
     const mocks = createMocks();
+    mocks.db.limit.mockResolvedValueOnce([{ id: 'session-1', language: 'typescript' }]);
     mocks.storageService.upload.mockRejectedValue(new Error('S3 unavailable'));
     const controller = await createController(mocks);
 
@@ -85,9 +86,27 @@ describe('InternalController', () => {
       trigger: 'submission',
     };
 
-    const result = await controller.handleSnapshotReady(payload);
+    await expect(controller.handleSnapshotReady(payload)).resolves.toEqual({ success: true });
+    expect(mocks.db.insert).toHaveBeenCalled();
+  });
 
-    expect(result).toEqual({ success: false });
+  it('GIVEN storage upload fails and no db row can be written WHEN handleSnapshotReady THEN throws', async () => {
+    const mocks = createMocks();
+    mocks.db.limit.mockResolvedValueOnce([]);
+    mocks.storageService.upload.mockRejectedValue(new Error('S3 unavailable'));
+    const controller = await createController(mocks);
+
+    const payload: SnapshotReadyPayload = {
+      roomId: 'room-456',
+      snapshot: [4, 5, 6],
+      code: 'let y = 2;',
+      timestamp: 1712500001000,
+      trigger: 'submission',
+    };
+
+    await expect(controller.handleSnapshotReady(payload)).rejects.toThrow(
+      'Failed to store snapshot',
+    );
   });
 
   it('GIVEN valid disconnect payload WHEN handleUserDisconnected THEN returns success', async () => {

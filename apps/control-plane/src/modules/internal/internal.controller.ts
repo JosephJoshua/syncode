@@ -1,4 +1,11 @@
-import { Body, Controller, Inject, Logger, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Inject,
+  InternalServerErrorException,
+  Logger,
+  Post,
+} from '@nestjs/common';
 import { ApiExcludeEndpoint } from '@nestjs/swagger';
 import { SkipThrottle } from '@nestjs/throttler';
 import { CONTROL_INTERNAL } from '@syncode/contracts';
@@ -40,22 +47,13 @@ export class InternalController {
     try {
       const { roomId, snapshot, code, timestamp, trigger } = payload;
 
-      // S3 upload (binary for reconstruction)
-      const snapshotBuffer = Buffer.from(snapshot);
-      const key = `snapshots/${roomId}/${timestamp}.yjs`;
-      await this.storageService.upload(key, snapshotBuffer, {
-        contentType: 'application/octet-stream',
-        metadata: {
-          roomId,
-          timestamp: timestamp.toString(),
-        },
-      });
-
       const [session] = await this.db
         .select({ id: sessions.id, language: sessions.language })
         .from(sessions)
         .where(eq(sessions.roomId, roomId))
         .limit(1);
+
+      let persistedToDatabase = false;
 
       if (session?.language) {
         await this.db.insert(codeSnapshots).values({
@@ -67,9 +65,33 @@ export class InternalController {
           linesOfCode: code ? code.split('\n').length : 0,
           createdAt: new Date(timestamp),
         });
+        persistedToDatabase = true;
       } else {
         this.logger.warn(
           `Skipping DB insert for room ${roomId}: ${!session ? 'no session' : 'no language'}`,
+        );
+      }
+
+      const snapshotBuffer = Buffer.from(snapshot);
+      const key = `snapshots/${roomId}/${timestamp}.yjs`;
+
+      try {
+        await this.storageService.upload(key, snapshotBuffer, {
+          contentType: 'application/octet-stream',
+          metadata: {
+            roomId,
+            timestamp: timestamp.toString(),
+          },
+        });
+      } catch (error) {
+        if (!persistedToDatabase) {
+          throw error;
+        }
+
+        this.logger.warn(
+          `Snapshot blob upload failed for room ${roomId}, but code history was stored: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
         );
       }
 
@@ -77,7 +99,7 @@ export class InternalController {
       return { success: true };
     } catch (error) {
       this.logger.error('Failed to store snapshot', error);
-      return { success: false };
+      throw new InternalServerErrorException('Failed to store snapshot');
     }
   }
 
