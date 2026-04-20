@@ -110,14 +110,15 @@ function useMediaPermissions(
 
   const hasLiveAudio = existingAudio.length > 0;
   const hasLiveVideo = existingVideo.length > 0;
+  const cancelledRef = useRef(false);
 
-  const detect = useCallback(async (signal: { cancelled: boolean }) => {
+  const detect = useCallback(async (cancelled: { current: boolean }) => {
     const [camPerm, micPerm, devices] = await Promise.all([
       queryPermission('camera'),
       queryPermission('microphone'),
       enumerateByKind().catch(() => ({ audio: [], video: [] }) as LocalDevices),
     ]);
-    if (signal.cancelled) return;
+    if (cancelled.current) return;
 
     // Non-placeholder labels indicate the browser has already granted access this session.
     const audioHasLabels = devices.audio.some((d) => d.label && !/^Microphone \d+$/.test(d.label));
@@ -134,10 +135,10 @@ function useMediaPermissions(
       setVideoError(null);
       return;
     }
-    const signal = { cancelled: false };
-    void detect(signal);
+    cancelledRef.current = false;
+    void detect(cancelledRef);
     return () => {
-      signal.cancelled = true;
+      cancelledRef.current = true;
     };
   }, [open, detect]);
 
@@ -152,12 +153,13 @@ function useMediaPermissions(
           kind === 'audio' ? { audio: true } : { video: true };
         const stream = await navigator.mediaDevices.getUserMedia(constraints);
         for (const t of stream.getTracks()) t.stop();
-        const signal = { cancelled: false };
-        await detect(signal);
+        if (cancelledRef.current) return;
+        await detect(cancelledRef);
       } catch {
+        if (cancelledRef.current) return;
         setError('Permission denied. Update browser settings to allow.');
       } finally {
-        setRequesting(false);
+        if (!cancelledRef.current) setRequesting(false);
       }
     },
     [detect],
