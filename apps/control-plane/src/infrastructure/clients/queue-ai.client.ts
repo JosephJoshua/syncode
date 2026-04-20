@@ -36,6 +36,10 @@ import { QueueClientHelper } from './queue-client.helpers.js';
 export class QueueAiClient implements IAiClient, OnModuleInit {
   private readonly logger = new Logger(QueueAiClient.name);
   private readonly helper: QueueClientHelper;
+  private sessionReportResultCallback?: (
+    jobId: string,
+    result: GenerateSessionReportResult,
+  ) => Promise<void>;
 
   constructor(
     @Inject(QUEUE_SERVICE) private readonly queueService: IQueueService,
@@ -48,9 +52,22 @@ export class QueueAiClient implements IAiClient, OnModuleInit {
     this.helper.processResultQueue<GenerateHintResult>(AI_HINT_RESULT_QUEUE, 'hint');
     this.helper.processResultQueue<ReviewCodeResult>(AI_REVIEW_RESULT_QUEUE, 'review');
     this.helper.processResultQueue<InterviewResponseResult>(AI_INTERVIEW_RESULT_QUEUE, 'interview');
-    this.helper.processResultQueue<GenerateSessionReportResult>(
+    this.queueService.process<GenerateSessionReportResult & { jobId: string }>(
       AI_SESSION_REPORT_RESULT_QUEUE,
-      'session-report',
+      async (job) => {
+        if (!job.data.jobId) {
+          this.logger.warn('Received session-report result without jobId, skipping');
+          return;
+        }
+
+        await this.cacheService.set(`ai-result:${job.data.jobId}`, job.data, 24 * 60 * 60);
+        this.logger.debug(`Cached session-report result for job ${job.data.jobId}`);
+
+        if (this.sessionReportResultCallback) {
+          await this.sessionReportResultCallback(job.data.jobId, job.data);
+        }
+      },
+      { concurrency: 10 },
     );
   }
 
@@ -144,6 +161,12 @@ export class QueueAiClient implements IAiClient, OnModuleInit {
 
   async getSessionReportJobStatus(jobId: JobId<'ai:session-report'>): Promise<JobStatus> {
     return this.helper.getJobStatus(AI_SESSION_REPORT_QUEUE, jobId);
+  }
+
+  onSessionReportResult(
+    callback: (jobId: string, result: GenerateSessionReportResult) => Promise<void>,
+  ): void {
+    this.sessionReportResultCallback = callback;
   }
 
   async healthCheck(): Promise<boolean> {
