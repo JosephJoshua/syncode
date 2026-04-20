@@ -2,7 +2,9 @@
  * ONLY FOR DEMO PURPOSES — DO NOT USE AS A PRODUCTION SEED
  */
 
-import { createHash } from 'node:crypto';
+import { randomBytes, scrypt } from 'node:crypto';
+import { promisify } from 'node:util';
+import { inArray } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from './schema/index.js';
@@ -17,15 +19,16 @@ if (!databaseUrl) {
 const client = postgres(databaseUrl, { max: 1 });
 const db = drizzle(client, { schema });
 
-// Simple hash for demo passwords — NOT for production use.
-function hashPassword(password: string): string {
-  return createHash('sha256').update(password).digest('hex');
+const scryptAsync = promisify(scrypt);
+
+// Matches the runtime format used by auth.service.ts so seeded users can log in.
+async function hashPassword(password: string): Promise<string> {
+  const salt = randomBytes(16).toString('hex');
+  const derivedKey = (await scryptAsync(password, salt, 64)) as Buffer;
+  return `${salt}:${derivedKey.toString('hex')}`;
 }
 
-// ---------------------------------------------------------------------------
-// Users
-// ---------------------------------------------------------------------------
-const demoPassword = hashPassword('password123');
+const demoPassword = await hashPassword('password123');
 
 const usersData = [
   {
@@ -628,6 +631,18 @@ async function seed() {
     .onConflictDoNothing()
     .returning({ id: schema.users.id, username: schema.users.username });
   console.log(`  Users:    ${insertedUsers.length} inserted`);
+
+  // Refresh the password hash for every demo user so stale rows from earlier
+  // seed runs (when the hash format differed) can still log in.
+  await db
+    .update(schema.users)
+    .set({ passwordHash: demoPassword })
+    .where(
+      inArray(
+        schema.users.email,
+        usersData.map((u) => u.email),
+      ),
+    );
 
   // 2. Tags
   const insertedTags = await db
