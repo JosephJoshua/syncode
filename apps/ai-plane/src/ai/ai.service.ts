@@ -1,14 +1,19 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import type {
   GenerateHintRequest,
   GenerateHintResult,
+  GenerateSessionReportRequest,
+  GenerateSessionReportResult,
   InterviewResponseRequest,
   InterviewResponseResult,
   ReviewCodeRequest,
   ReviewCodeResult,
 } from '@syncode/contracts';
+import { LLM_PROVIDER } from '../llm/llm.constants.js';
+import type { ILlmProvider } from '../llm/llm.types.js';
+import { buildSessionReportPrompt } from './prompts/session-report.prompt.js';
+import { parseSessionReportJson } from './report-json.js';
 
-// TODO: Replace stub responses with @Inject(LLM_PROVIDER) integration
 const HINT_RESPONSES: Record<string, string> = {
   gentle: 'Consider what data structure would let you look up values efficiently.',
   moderate:
@@ -20,6 +25,8 @@ const HINT_RESPONSES: Record<string, string> = {
 @Injectable()
 export class AiService {
   private readonly logger = new Logger(AiService.name);
+
+  constructor(@Inject(LLM_PROVIDER) private readonly llmProvider: ILlmProvider) {}
 
   async generateHint(request: GenerateHintRequest): Promise<GenerateHintResult> {
     this.logger.debug(`Generating ${request.hintLevel} hint for ${request.language}`);
@@ -75,6 +82,32 @@ export class AiService {
           comment: 'Consider adding input validation here.',
         },
       ],
+    };
+  }
+
+  async generateSessionReport(
+    request: GenerateSessionReportRequest,
+  ): Promise<GenerateSessionReportResult> {
+    this.logger.debug(`Generating session report for session ${request.sessionId}`);
+
+    const prompt = buildSessionReportPrompt(request);
+    const llmResult = await this.llmProvider.generateText({
+      messages: [
+        { role: 'system', content: prompt.systemPrompt },
+        { role: 'user', content: prompt.userPrompt },
+      ],
+      temperature: 0.1,
+      maxOutputTokens: 2500,
+    });
+
+    const parsed = parseSessionReportJson(llmResult.text);
+
+    return {
+      ...parsed,
+      sessionId: request.sessionId,
+      generatedAt: new Date().toISOString(),
+      testCaseBreakdown: request.finalTestCaseBreakdown,
+      model: llmResult.model,
     };
   }
 }
