@@ -227,10 +227,7 @@ export class CollaborationService implements OnModuleDestroy {
 
     try {
       const state = Y.encodeStateAsUpdate(doc);
-      await this.callbackClient.persistDocSnapshot({
-        roomId,
-        state: Array.from(state),
-      });
+      await this.callbackClient.persistDocSnapshot(roomId, { state: Array.from(state) });
     } catch (error) {
       this.logger.warn(
         `Failed to persist doc snapshot for room ${roomId}: ${error instanceof Error ? error.message : String(error)}`,

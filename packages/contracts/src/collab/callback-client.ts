@@ -11,7 +11,7 @@ import type {
 export interface IControlPlaneCallbackClient {
   notifyUserDisconnected(payload: UserDisconnectedPayload): Promise<void>;
   notifySnapshotReady(payload: SnapshotReadyPayload): Promise<void>;
-  persistDocSnapshot(payload: PersistDocSnapshotPayload): Promise<void>;
+  persistDocSnapshot(roomId: string, payload: PersistDocSnapshotPayload): Promise<void>;
 }
 
 export const CONTROL_PLANE_CALLBACK = Symbol.for('CONTROL_PLANE_CALLBACK');

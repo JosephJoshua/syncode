@@ -352,8 +352,8 @@ describe('CollaborationService', () => {
       await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
 
       expect(callbackClient.persistDocSnapshot).toHaveBeenCalledOnce();
-      const payload = vi.mocked(callbackClient.persistDocSnapshot).mock.calls[0]![0];
-      expect(payload.roomId).toBe('room-1');
+      const [roomIdArg, payload] = vi.mocked(callbackClient.persistDocSnapshot).mock.calls[0]!;
+      expect(roomIdArg).toBe('room-1');
 
       const restored = new Y.Doc();
       Y.applyUpdate(restored, new Uint8Array(payload.state));

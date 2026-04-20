@@ -197,7 +197,6 @@ describe('InternalController', () => {
     const controller = await createController(mocks);
 
     const result = await controller.handlePersistDocSnapshot('room-42', {
-      roomId: 'room-42',
       state: [5, 6, 7],
     });
 
@@ -215,7 +214,6 @@ describe('InternalController', () => {
     const controller = await createController(mocks);
 
     const result = await controller.handlePersistDocSnapshot('room-42', {
-      roomId: 'room-42',
       state: [1],
     });
 
@@ -229,7 +227,6 @@ describe('InternalController', () => {
     const sixMb = new Array<number>(6 * 1024 * 1024).fill(0);
 
     const result = await controller.handlePersistDocSnapshot('room-big', {
-      roomId: 'room-big',
       state: sixMb,
     });
 

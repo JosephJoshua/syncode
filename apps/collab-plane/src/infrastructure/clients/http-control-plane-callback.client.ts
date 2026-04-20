@@ -51,19 +51,19 @@ export class HttpControlPlaneCallbackClient implements IControlPlaneCallbackClie
     }
   }
 
-  async persistDocSnapshot(payload: PersistDocSnapshotPayload): Promise<void> {
+  async persistDocSnapshot(roomId: string, payload: PersistDocSnapshotPayload): Promise<void> {
     try {
       const path = CONTROL_INTERNAL.PERSIST_DOC_SNAPSHOT.route.replace(
         ':roomId',
-        encodeURIComponent(payload.roomId),
+        encodeURIComponent(roomId),
       );
       await this.client.post(path, { json: payload });
       this.logger.debug(
-        `Persisted doc snapshot for room ${payload.roomId} (${payload.state.length} bytes)`,
+        `Persisted doc snapshot for room ${roomId} (${payload.state.length} bytes)`,
       );
     } catch (error) {
       this.logger.warn(
-        `Failed to persist doc snapshot (roomId=${payload.roomId}): ${(error as Error).message}`,
+        `Failed to persist doc snapshot (roomId=${roomId}): ${(error as Error).message}`,
       );
     }
   }

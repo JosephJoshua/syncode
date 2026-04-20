@@ -27,9 +27,9 @@ export const userDisconnectedPayloadSchema = z
 
 export type UserDisconnectedPayload = z.infer<typeof userDisconnectedPayloadSchema>;
 
+// Room identifier is carried in the path parameter; the body only needs the state.
 export const persistDocSnapshotPayloadSchema = z
   .object({
-    roomId: z.uuid().describe('Room identifier'),
     state: z.array(z.number()).describe('Binary Y.Doc state as JSON array of bytes'),
   })
   .strict();
