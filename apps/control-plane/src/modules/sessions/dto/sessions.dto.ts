@@ -4,6 +4,7 @@ import {
   listSessionsQuerySchema,
   sessionDetailSchema,
   sessionHistoryResponseSchema,
+  sessionReportSchema,
   sessionSummarySchema,
 } from '@syncode/contracts';
 import { createZodDto } from 'nestjs-zod';
@@ -14,3 +15,4 @@ export class CodeSnapshotsResponseDto extends createZodDto(codeSnapshotsResponse
 export class SessionSummaryDto extends createZodDto(sessionSummarySchema) {}
 export class SessionHistoryResponseDto extends createZodDto(sessionHistoryResponseSchema) {}
 export class SessionDetailDto extends createZodDto(sessionDetailSchema) {}
+export class SessionReportDto extends createZodDto(sessionReportSchema) {}

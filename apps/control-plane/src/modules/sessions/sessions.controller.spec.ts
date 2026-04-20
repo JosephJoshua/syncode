@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { SessionReportsService } from './session-reports.service.js';
 import { SessionsController } from './sessions.controller.js';
 import type { SessionsService } from './sessions.service.js';
 
@@ -85,6 +86,25 @@ const SNAPSHOTS_RESULT = [
   },
 ];
 
+const REPORT_RESULT = {
+  sessionId: 'session-1',
+  generatedAt: '2026-04-01T01:00:00.000Z',
+  overallScore: 85,
+  dimensions: {
+    correctness: {
+      score: 90,
+      feedback: 'Good correctness',
+      evidence: [],
+    },
+  },
+  strengths: ['Strong debugging'],
+  areasForImprovement: ['Explain tradeoffs'],
+  detailedFeedback: 'Detailed feedback',
+  comparisonToHistory: null,
+  peerFeedbackSummary: null,
+  testCaseBreakdown: [],
+};
+
 function createFixture() {
   const sessionsService: Pick<
     SessionsService,
@@ -96,9 +116,15 @@ function createFixture() {
     getSession: vi.fn(async () => SESSION_DETAIL_RESULT),
     deleteSession: vi.fn(async () => undefined),
   };
+  const sessionReportsService: Pick<SessionReportsService, 'getReport'> = {
+    getReport: vi.fn(async () => REPORT_RESULT),
+  };
 
-  const controller = new SessionsController(sessionsService as SessionsService);
-  return { controller, sessionsService };
+  const controller = new SessionsController(
+    sessionsService as SessionsService,
+    sessionReportsService as SessionReportsService,
+  );
+  return { controller, sessionsService, sessionReportsService };
 }
 
 describe('SessionsController', () => {
@@ -168,6 +194,16 @@ describe('SessionsController', () => {
           },
         ],
       });
+    });
+  });
+
+  describe('getReport', () => {
+    it('GIVEN session report WHEN getting THEN returns the report body unchanged', async () => {
+      const { controller } = createFixture();
+
+      const result = await controller.getReport(AUTH_USER, 'session-1');
+
+      expect(result).toEqual(REPORT_RESULT);
     });
   });
 });

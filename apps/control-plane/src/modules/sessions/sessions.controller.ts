@@ -27,7 +27,9 @@ import {
   ListSessionsQueryDto,
   SessionDetailDto,
   SessionHistoryResponseDto,
+  SessionReportDto,
 } from './dto/sessions.dto.js';
+import { SessionReportsService } from './session-reports.service.js';
 import { SessionsService } from './sessions.service.js';
 
 @ApiTags('sessions')
@@ -35,7 +37,10 @@ import { SessionsService } from './sessions.service.js';
 @UseGuards(JwtAuthGuard)
 @Controller()
 export class SessionsController {
-  constructor(private readonly sessionsService: SessionsService) {}
+  constructor(
+    private readonly sessionsService: SessionsService,
+    private readonly sessionReportsService: SessionReportsService,
+  ) {}
 
   @Get(CONTROL_API.SESSIONS.LIST.route)
   @ApiOperation({ summary: 'List my session history' })
@@ -99,6 +104,34 @@ export class SessionsController {
         timestamp: snapshot.timestamp.toISOString(),
       })),
     };
+  }
+
+  @Get(CONTROL_API.SESSIONS.REPORT.route)
+  @ApiOperation({ summary: 'Get the current user training report for a session' })
+  @ApiParam({ name: 'sessionId', description: 'Session ID (UUID)' })
+  @ApiResponse({
+    status: 200,
+    type: SessionReportDto,
+    description: 'Training report',
+  })
+  @ApiResponse({ status: 400, type: ErrorResponseDto, description: 'Validation error' })
+  @ApiResponse({ status: 401, type: ErrorResponseDto, description: 'Unauthorized' })
+  @ApiResponse({
+    status: 403,
+    type: ErrorResponseDto,
+    description: 'Not a participant of this session',
+  })
+  @ApiResponse({
+    status: 404,
+    type: ErrorResponseDto,
+    description: 'Session not found or report not yet generated',
+  })
+  async getReport(
+    @CurrentUser() user: AuthUser,
+    @Param('sessionId', new ParseUUIDPipe()) sessionId: string,
+  ): Promise<SessionReportDto> {
+    const isAdmin = await this.sessionsService.isAdmin(user.id);
+    return this.sessionReportsService.getReport(sessionId, user.id, isAdmin);
   }
 
   @Get(CONTROL_API.SESSIONS.GET.route)
