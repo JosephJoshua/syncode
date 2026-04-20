@@ -24,8 +24,15 @@ export class HttpCollabClient implements ICollabClient {
   private readonly logger = new Logger(HttpCollabClient.name);
   private readonly client: KyInstance;
 
-  constructor(collabUrl: string) {
-    this.client = ky.create({ prefixUrl: collabUrl, timeout: 10_000, retry: 0 });
+  constructor(collabUrl: string, internalSecret: string) {
+    this.client = ky.create({
+      prefixUrl: collabUrl,
+      timeout: 10_000,
+      retry: 0,
+      headers: {
+        'X-Internal-Secret': internalSecret,
+      },
+    });
   }
 
   async createDocument(request: CreateDocumentRequest): Promise<CreateDocumentResponse> {
