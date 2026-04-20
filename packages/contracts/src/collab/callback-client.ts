@@ -1,4 +1,5 @@
 import type {
+  AuthorizeJoinResponse,
   ParticipantHeartbeatRequest,
   ParticipantHeartbeatResponse,
   SnapshotReadyPayload,
@@ -7,7 +8,11 @@ import type {
 
 /**
  * Port interface for collab-plane -> control-plane callbacks.
- * Fire-and-forget so implementations should catch errors internally.
+ *
+ * Notification methods are fire-and-forget; implementations must catch errors
+ * internally. `authorizeJoin` is synchronous in intent: callers await it to
+ * make a security decision, so failures must be handled at the call site
+ * (default to denying on error).
  */
 export interface IControlPlaneCallbackClient {
   notifyUserDisconnected(payload: UserDisconnectedPayload): Promise<void>;
@@ -15,6 +20,7 @@ export interface IControlPlaneCallbackClient {
   heartbeatParticipants(
     request: ParticipantHeartbeatRequest,
   ): Promise<ParticipantHeartbeatResponse | null>;
+  authorizeJoin(roomId: string, userId: string): Promise<AuthorizeJoinResponse>;
 }
 
 export const CONTROL_PLANE_CALLBACK = Symbol.for('CONTROL_PLANE_CALLBACK');

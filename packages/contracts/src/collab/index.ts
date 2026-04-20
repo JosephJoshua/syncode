@@ -4,6 +4,10 @@ export {
 } from './callback-client.js';
 export { COLLAB_CLIENT, type ICollabClient } from './client.js';
 export {
+  type AuthorizeJoinDenialReason,
+  type AuthorizeJoinRequest,
+  type AuthorizeJoinResponse,
+  authorizeJoinRequestSchema,
   CONTROL_INTERNAL,
   type ParticipantHeartbeatRequest,
   type ParticipantHeartbeatResponse,

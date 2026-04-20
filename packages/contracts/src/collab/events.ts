@@ -31,6 +31,25 @@ export const userDisconnectedPayloadSchema = z
 
 export type UserDisconnectedPayload = z.infer<typeof userDisconnectedPayloadSchema>;
 
+export const authorizeJoinRequestSchema = z
+  .object({
+    userId: z.uuid().describe('User identifier requesting to join the room'),
+  })
+  .strict();
+
+export type AuthorizeJoinRequest = z.infer<typeof authorizeJoinRequestSchema>;
+
+export type AuthorizeJoinDenialReason =
+  | 'participant-removed'
+  | 'not-participant'
+  | 'room-finished'
+  | 'room-not-found';
+
+export interface AuthorizeJoinResponse {
+  authorized: boolean;
+  reason?: AuthorizeJoinDenialReason;
+}
+
 export const participantHeartbeatRequestSchema = z
   .object({
     participants: z
@@ -63,6 +82,10 @@ export const CONTROL_INTERNAL = {
   ),
   PARTICIPANT_HEARTBEAT: defineRoute<ParticipantHeartbeatRequest, ParticipantHeartbeatResponse>()(
     'internal/participants/heartbeat',
+    'POST',
+  ),
+  AUTHORIZE_JOIN: defineRoute<AuthorizeJoinRequest, AuthorizeJoinResponse>()(
+    'internal/rooms/:roomId/authorize-join',
     'POST',
   ),
 };

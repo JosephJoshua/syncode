@@ -12,6 +12,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import {
+  type AuthorizeJoinResponse,
   BROWSEABLE_ROOM_STATUSES,
   type BrowseRoomsQuery,
   COLLAB_CLIENT,
@@ -1611,6 +1612,45 @@ export class RoomsService {
       .update(roomParticipants)
       .set({ isActive: false, leftAt })
       .where(and(eq(roomParticipants.roomId, roomId), eq(roomParticipants.userId, userId)));
+  }
+
+  /**
+   * Authoritative check for collab-plane: can this user (re)join the room?
+   *
+   * Called on every WS join to defeat stale-JWT attacks where a kicked user
+   * still holds a 24h collab token. Kick durability lives here, not in the
+   * collab gateway's local registry.
+   */
+  async authorizeJoin(roomId: string, userId: string): Promise<AuthorizeJoinResponse> {
+    const [room] = await this.db
+      .select({ status: rooms.status })
+      .from(rooms)
+      .where(eq(rooms.id, roomId))
+      .limit(1);
+
+    if (!room) {
+      return { authorized: false, reason: 'room-not-found' };
+    }
+
+    if (room.status === RoomStatus.FINISHED) {
+      return { authorized: false, reason: 'room-finished' };
+    }
+
+    const [participant] = await this.db
+      .select({ removedAt: roomParticipants.removedAt })
+      .from(roomParticipants)
+      .where(and(eq(roomParticipants.roomId, roomId), eq(roomParticipants.userId, userId)))
+      .limit(1);
+
+    if (!participant) {
+      return { authorized: false, reason: 'not-participant' };
+    }
+
+    if (participant.removedAt !== null) {
+      return { authorized: false, reason: 'participant-removed' };
+    }
+
+    return { authorized: true };
   }
 
   /**

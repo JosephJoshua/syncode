@@ -1,7 +1,11 @@
-import { Body, Controller, Inject, Logger, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Inject, Logger, Param, Post, UseGuards } from '@nestjs/common';
 import { ApiExcludeEndpoint } from '@nestjs/swagger';
 import { SkipThrottle } from '@nestjs/throttler';
-import { CONTROL_INTERNAL, type ParticipantHeartbeatResponse } from '@syncode/contracts';
+import {
+  type AuthorizeJoinResponse,
+  CONTROL_INTERNAL,
+  type ParticipantHeartbeatResponse,
+} from '@syncode/contracts';
 import type { Database } from '@syncode/db';
 import { codeSnapshots, sessions } from '@syncode/db';
 import { type IStorageService, STORAGE_SERVICE } from '@syncode/shared/ports';
@@ -10,6 +14,7 @@ import { InternalCallbackGuard } from '@/common/guards/internal-callback.guard.j
 import { DB_CLIENT } from '@/modules/db/db.module.js';
 import { RoomsService } from '@/modules/rooms/rooms.service.js';
 import {
+  AuthorizeJoinDto,
   ParticipantHeartbeatDto,
   SnapshotReadyDto,
   UserDisconnectedDto,
@@ -130,5 +135,20 @@ export class InternalController {
   ): Promise<ParticipantHeartbeatResponse> {
     const updated = await this.roomsService.recordParticipantHeartbeats(payload.participants);
     return { updated };
+  }
+
+  /**
+   * Called by collab-plane on every WS `join` attempt to verify the user is
+   * still allowed into the room. Defeats stale-JWT attacks where a kicked
+   * user holds a long-lived collab token (24h) and would otherwise reconnect
+   * undetected because the in-memory registry has no kick history.
+   */
+  @Post(CONTROL_INTERNAL.AUTHORIZE_JOIN.route)
+  @ApiExcludeEndpoint()
+  async handleAuthorizeJoin(
+    @Param('roomId') roomId: string,
+    @Body() payload: AuthorizeJoinDto,
+  ): Promise<AuthorizeJoinResponse> {
+    return this.roomsService.authorizeJoin(roomId, payload.userId);
   }
 }

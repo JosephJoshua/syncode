@@ -17,22 +17,27 @@ const INTERNAL_SECRET = 'test-internal-secret-test-internal-secret-ok';
 let app: INestApplication;
 let db: Database;
 let cleanup: () => Promise<void>;
+let mockRoomsService: {
+  markParticipantInactive: ReturnType<typeof vi.fn>;
+  recordParticipantHeartbeats: ReturnType<typeof vi.fn>;
+  authorizeJoin: ReturnType<typeof vi.fn>;
+};
 
 beforeEach(async () => {
   const testDb = await createTestDb();
   db = testDb.db;
   cleanup = testDb.cleanup;
 
+  mockRoomsService = {
+    markParticipantInactive: vi.fn().mockResolvedValue(undefined),
+    recordParticipantHeartbeats: vi.fn().mockResolvedValue(0),
+    authorizeJoin: vi.fn().mockResolvedValue({ authorized: true }),
+  };
+
   const module = await Test.createTestingModule({
     controllers: [InternalController],
     providers: [
-      {
-        provide: RoomsService,
-        useValue: {
-          markParticipantInactive: vi.fn().mockResolvedValue(undefined),
-          recordParticipantHeartbeats: vi.fn().mockResolvedValue(0),
-        },
-      },
+      { provide: RoomsService, useValue: mockRoomsService },
       { provide: STORAGE_SERVICE, useValue: createMockStorageService() },
       { provide: DB_CLIENT, useValue: db },
       {
@@ -106,5 +111,40 @@ describe('InternalController auth guard', () => {
       .post('/internal/participants/heartbeat')
       .send(VALID_HEARTBEAT_PAYLOAD)
       .expect(401);
+  });
+
+  it('GIVEN missing header WHEN calling authorize-join THEN returns 401', async () => {
+    await request(app.getHttpServer())
+      .post(`/internal/rooms/${ROOM_ID}/authorize-join`)
+      .send({ userId: USER_ID })
+      .expect(401);
+  });
+
+  it('GIVEN valid header WHEN calling authorize-join THEN delegates to rooms service', async () => {
+    mockRoomsService.authorizeJoin.mockResolvedValueOnce({ authorized: true });
+
+    const res = await request(app.getHttpServer())
+      .post(`/internal/rooms/${ROOM_ID}/authorize-join`)
+      .set('X-Internal-Secret', INTERNAL_SECRET)
+      .send({ userId: USER_ID })
+      .expect(201);
+
+    expect(res.body).toEqual({ authorized: true });
+    expect(mockRoomsService.authorizeJoin).toHaveBeenCalledWith(ROOM_ID, USER_ID);
+  });
+
+  it('GIVEN service returns a denial reason WHEN calling authorize-join THEN reason is passed through', async () => {
+    mockRoomsService.authorizeJoin.mockResolvedValueOnce({
+      authorized: false,
+      reason: 'participant-removed',
+    });
+
+    const res = await request(app.getHttpServer())
+      .post(`/internal/rooms/${ROOM_ID}/authorize-join`)
+      .set('X-Internal-Secret', INTERNAL_SECRET)
+      .send({ userId: USER_ID })
+      .expect(201);
+
+    expect(res.body).toEqual({ authorized: false, reason: 'participant-removed' });
   });
 });

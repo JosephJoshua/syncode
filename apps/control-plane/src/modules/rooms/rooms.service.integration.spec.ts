@@ -942,6 +942,63 @@ describe('markParticipantInactive', () => {
   });
 });
 
+describe('authorizeJoin', () => {
+  it('GIVEN active participant WHEN authorizing THEN returns authorized', async () => {
+    const host = await insertUser(db);
+    const room = await insertRoom(db, host.id);
+    const joiner = await insertUser(db);
+    await insertParticipant(db, room.id, joiner.id, 'candidate');
+
+    const result = await service.authorizeJoin(room.id, joiner.id);
+
+    expect(result).toEqual({ authorized: true });
+  });
+
+  it('GIVEN room does not exist WHEN authorizing THEN returns not authorized with room-not-found', async () => {
+    const joiner = await insertUser(db);
+
+    const result = await service.authorizeJoin('00000000-0000-4000-8000-000000000000', joiner.id);
+
+    expect(result).toEqual({ authorized: false, reason: 'room-not-found' });
+  });
+
+  it('GIVEN room finished WHEN authorizing THEN returns not authorized with room-finished', async () => {
+    const host = await insertUser(db);
+    const room = await insertRoom(db, host.id, { status: 'finished' });
+    const joiner = await insertUser(db);
+    await insertParticipant(db, room.id, joiner.id, 'candidate');
+
+    const result = await service.authorizeJoin(room.id, joiner.id);
+
+    expect(result).toEqual({ authorized: false, reason: 'room-finished' });
+  });
+
+  it('GIVEN user is not a participant WHEN authorizing THEN returns not authorized with not-participant', async () => {
+    const host = await insertUser(db);
+    const room = await insertRoom(db, host.id);
+    const stranger = await insertUser(db);
+
+    const result = await service.authorizeJoin(room.id, stranger.id);
+
+    expect(result).toEqual({ authorized: false, reason: 'not-participant' });
+  });
+
+  it('GIVEN participant was removed WHEN authorizing THEN returns not authorized with participant-removed', async () => {
+    const host = await insertUser(db);
+    const room = await insertRoom(db, host.id);
+    const removed = await insertUser(db);
+    const participant = await insertParticipant(db, room.id, removed.id, 'candidate');
+    await db
+      .update(roomParticipants)
+      .set({ removedAt: new Date(), isActive: false })
+      .where(eq(roomParticipants.id, participant!.id));
+
+    const result = await service.authorizeJoin(room.id, removed.id);
+
+    expect(result).toEqual({ authorized: false, reason: 'participant-removed' });
+  });
+});
+
 describe('recordParticipantHeartbeats', () => {
   it('GIVEN active participants WHEN recording heartbeats THEN bumps last_heartbeat_at for each and returns count', async () => {
     const host = await insertUser(db);
