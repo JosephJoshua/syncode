@@ -179,10 +179,10 @@ describe('enqueueForFinishedSession', () => {
         finalTestCaseBreakdown: [
           expect.objectContaining({
             testCaseIndex: 0,
-            input: 'nums = [2,7,11,15], target = 9',
+            input: null,
             passed: true,
-            expectedOutput: '[0,1]',
-            actualOutput: '[0,1]',
+            expectedOutput: null,
+            actualOutput: null,
           }),
         ],
       }),

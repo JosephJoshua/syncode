@@ -1,4 +1,4 @@
-import { ROOM_MODES, ROOM_ROLES, SUPPORTED_LANGUAGES } from '@syncode/shared';
+import { PROBLEM_DIFFICULTIES, ROOM_MODES, ROOM_ROLES, SUPPORTED_LANGUAGES } from '@syncode/shared';
 import { z } from 'zod';
 import { paginationQuerySchema, paginationSchema } from './pagination.js';
 
@@ -82,10 +82,10 @@ export const sessionDetailSchema = z.object({
     .object({
       id: z.uuid(),
       title: z.string(),
-      difficulty: z.string(),
+      difficulty: z.enum(PROBLEM_DIFFICULTIES),
     })
     .nullable(),
-  language: z.string().nullable(),
+  language: z.enum(SUPPORTED_LANGUAGES).nullable(),
   duration: z.number().int().nonnegative(),
   participants: z.array(sessionParticipantSchema),
   runs: z.array(sessionRunSchema),

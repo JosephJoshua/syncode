@@ -289,13 +289,13 @@ export class SessionReportRequestBuilderService {
 
     return rows.map((row) => ({
       testCaseIndex: row.testCaseIndex,
-      input: row.input ?? null,
-      description: row.description ?? null,
+      input: null,
+      description: row.isHidden ? null : (row.description ?? null),
       isHidden: row.isHidden ?? false,
       passed: row.passed,
-      expectedOutput: row.expectedOutput,
-      actualOutput: row.actualOutput,
-      stdout: row.stdout,
+      expectedOutput: null,
+      actualOutput: null,
+      stdout: null,
       stderr: row.stderr,
       exitCode: row.exitCode,
       durationMs: row.durationMs,

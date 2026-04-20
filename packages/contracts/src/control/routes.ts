@@ -173,7 +173,7 @@ export const CONTROL_API = {
       'sessions/:sessionId/report',
       'GET',
     ),
-    GET: defineRoute<void, z.infer<typeof sessionDetailSchema>>()('sessions/:id', 'GET'),
+    GET: defineRoute<void, z.infer<typeof sessionDetailSchema>>()('sessions/:sessionId', 'GET'),
     DELETE: defineRoute<void, void>()('sessions/:id', 'DELETE'),
   },
   HEALTH: defineRoute<void, z.infer<typeof healthCheckResponseSchema>>()('health', 'GET'),

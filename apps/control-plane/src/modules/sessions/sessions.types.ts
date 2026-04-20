@@ -1,5 +1,5 @@
 import type { CodeSnapshotTrigger } from '@syncode/contracts';
-import type { RoomMode, RoomRole, SupportedLanguage } from '@syncode/shared';
+import type { ProblemDifficulty, RoomMode, RoomRole, SupportedLanguage } from '@syncode/shared';
 
 export interface SessionSummaryResult {
   sessionId: string;
@@ -34,7 +34,7 @@ export interface SessionDetailResult {
   problem: {
     id: string;
     title: string;
-    difficulty: string;
+    difficulty: ProblemDifficulty;
   } | null;
   language: SupportedLanguage | null;
   duration: number;

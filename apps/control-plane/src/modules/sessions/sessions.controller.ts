@@ -136,7 +136,7 @@ export class SessionsController {
 
   @Get(CONTROL_API.SESSIONS.GET.route)
   @ApiOperation({ summary: 'Get session details' })
-  @ApiParam({ name: 'id', description: 'Session ID (UUID)' })
+  @ApiParam({ name: 'sessionId', description: 'Session ID (UUID)' })
   @ApiResponse({ status: 200, type: SessionDetailDto, description: 'Session detail' })
   @ApiResponse({ status: 400, type: ErrorResponseDto, description: 'Validation error' })
   @ApiResponse({ status: 401, type: ErrorResponseDto, description: 'Unauthorized' })
@@ -148,10 +148,10 @@ export class SessionsController {
   @ApiResponse({ status: 404, type: ErrorResponseDto, description: 'Session not found' })
   async getSession(
     @CurrentUser() user: AuthUser,
-    @Param('id', new ParseUUIDPipe()) id: string,
+    @Param('sessionId', new ParseUUIDPipe()) sessionId: string,
   ): Promise<SessionDetailDto> {
     const isAdmin = await this.sessionsService.isAdmin(user.id);
-    const result = await this.sessionsService.getSession(id, user.id, isAdmin);
+    const result = await this.sessionsService.getSession(sessionId, user.id, isAdmin);
     return {
       ...result,
       participants: result.participants.map((p) => ({
