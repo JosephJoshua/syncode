@@ -6,6 +6,7 @@ import type {
 } from '@syncode/contracts';
 import { describe, expect, it, vi } from 'vitest';
 import { AiService } from './ai.service.js';
+import { parseSessionReportJson } from './report-json.js';
 
 describe('AiService', () => {
   const llmProvider = {
@@ -223,6 +224,198 @@ describe('AiService', () => {
       ]);
       expect(result.overallScore).toBe(82);
       expect(result.generatedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+      expect(llmProvider.generateText).toHaveBeenCalledWith(
+        expect.objectContaining({
+          jsonMode: true,
+        }),
+      );
+    });
+
+    it('GIVEN optimal efficiency and class-based false-positive critique WHEN generateSessionReport THEN postprocesses the report into platform-aware coaching', async () => {
+      llmProvider.generateText.mockResolvedValueOnce({
+        text: JSON.stringify({
+          overallScore: 82,
+          dimensions: {
+            efficiency: {
+              score: 90,
+              feedback:
+                'The solution achieves optimal O(n) time complexity and O(n) space complexity using a hash map.',
+              evidence: [],
+            },
+            codeQuality: {
+              score: 50,
+              feedback:
+                'Code relies on raw stdin/stdout which is non-standard for class-based solutions, and string concatenation is used instead of f-strings.',
+              evidence: [
+                {
+                  type: 'code_snippet',
+                  reference: 'class Solution:',
+                  description: 'Class structure should be used instead of stdin/stdout here.',
+                },
+              ],
+            },
+          },
+          strengths: ['Optimal algorithm selection'],
+          areasForImprovement: [
+            'Separating I/O from business logic',
+            'Adding comments to explain reasoning',
+          ],
+          detailedFeedback:
+            'The candidate selected an efficient O(n) hash map strategy but mixes stdin/stdout directly into a class-based solution.',
+          comparisonToHistory: null,
+          peerFeedbackSummary: null,
+        }),
+        model: 'qwen3.5-plus',
+      });
+
+      const result = await service.generateSessionReport({
+        sessionId: '550e8400-e29b-41d4-a716-446655440000',
+        roomId: '660e8400-e29b-41d4-a716-446655440000',
+        participantId: '770e8400-e29b-41d4-a716-446655440000',
+        participantRole: 'candidate',
+        participants: [
+          {
+            userId: '770e8400-e29b-41d4-a716-446655440000',
+            username: 'alice',
+            displayName: 'Alice',
+            role: 'candidate',
+          },
+        ],
+        problem: {
+          id: '880e8400-e29b-41d4-a716-446655440000',
+          title: 'Two Sum',
+          description: 'Find two numbers.',
+          difficulty: 'easy',
+          constraints: null,
+        },
+        language: 'python',
+        durationMs: 120000,
+        startedAt: '2026-04-20T01:00:00.000Z',
+        finishedAt: '2026-04-20T01:02:00.000Z',
+        snapshots: [
+          {
+            snapshotId: '990e8400-e29b-41d4-a716-446655440000',
+            timestamp: '2026-04-20T01:01:30.000Z',
+            trigger: 'submission',
+            language: 'python',
+            code: [
+              's = input()[1:-1].split(",")',
+              'nums = [int(x) for x in s]',
+              'target = int(input())',
+              'maps = {}',
+              '',
+              'for idx, num in enumerate(nums):',
+              '  if num in maps:',
+              '    print("[" + str(maps[num]) + "," + str(idx) + "]")',
+              '    break',
+              '',
+              '  maps[target-int(num)] = idx',
+            ].join('\n'),
+            linesOfCode: 10,
+          },
+        ],
+        runs: [],
+        submissions: [],
+        finalTestCaseBreakdown: [],
+        peerFeedback: [],
+        aiMessages: [],
+        historicalContext: null,
+      });
+
+      expect(result.dimensions?.efficiency?.score).toBe(95);
+      expect(result.dimensions?.codeQuality?.feedback).not.toMatch(/class-based/i);
+      expect(result.dimensions?.codeQuality?.feedback).toMatch(
+        /stdin\/stdout structure matches this platform/i,
+      );
+      expect(result.areasForImprovement?.[0]).toMatch(
+        /clearer names|stdin\/stdout structure|print\(f/iu,
+      );
+      expect(result.detailedFeedback).not.toMatch(/class-based/i);
+      expect(result.detailedFeedback).toMatch(/Recommended next step:/);
+    });
+  });
+
+  describe('parseSessionReportJson', () => {
+    it('GIVEN peerFeedbackSummary as string WHEN parsing THEN coerces it to null', () => {
+      const result = parseSessionReportJson(
+        JSON.stringify({
+          overallScore: 82,
+          strengths: ['Strong iteration'],
+          areasForImprovement: ['Explain tradeoffs earlier'],
+          detailedFeedback: 'Detailed feedback',
+          comparisonToHistory: null,
+          peerFeedbackSummary: 'No peer feedback available',
+        }),
+      );
+
+      expect(result.peerFeedbackSummary).toBeNull();
+    });
+
+    it('GIVEN a dimension without feedback WHEN parsing THEN injects a fallback feedback string', () => {
+      const result = parseSessionReportJson(
+        JSON.stringify({
+          overallScore: 82,
+          dimensions: {
+            efficiency: {
+              score: 71,
+              evidence: [],
+            },
+          },
+          strengths: ['Strong iteration'],
+          areasForImprovement: ['Explain tradeoffs earlier'],
+          detailedFeedback: 'Detailed feedback',
+          comparisonToHistory: null,
+          peerFeedbackSummary: null,
+        }),
+      );
+
+      expect(result.dimensions?.efficiency).toEqual({
+        score: 71,
+        feedback: 'No explicit efficiency feedback was provided.',
+        evidence: [],
+      });
+    });
+
+    it('GIVEN malformed comparisonToHistory WHEN parsing THEN coerces it to null', () => {
+      const result = parseSessionReportJson(
+        JSON.stringify({
+          overallScore: 82,
+          strengths: ['Strong iteration'],
+          areasForImprovement: ['Explain tradeoffs earlier'],
+          detailedFeedback: 'Detailed feedback',
+          comparisonToHistory: {
+            trend: 'better',
+            sessionsCompared: undefined,
+            averageScore: undefined,
+          },
+          peerFeedbackSummary: null,
+        }),
+      );
+
+      expect(result.comparisonToHistory).toBeNull();
+    });
+
+    it('GIVEN soft malformed comparisonToHistory WHEN parsing THEN normalizes it', () => {
+      const result = parseSessionReportJson(
+        JSON.stringify({
+          overallScore: 82,
+          strengths: ['Strong iteration'],
+          areasForImprovement: ['Explain tradeoffs earlier'],
+          detailedFeedback: 'Detailed feedback',
+          comparisonToHistory: {
+            trend: 'better',
+            sessionsCompared: '3',
+            averageScore: '74',
+          },
+          peerFeedbackSummary: null,
+        }),
+      );
+
+      expect(result.comparisonToHistory).toEqual({
+        trend: 'improving',
+        sessionsCompared: 3,
+        averageScore: 74,
+      });
     });
   });
 });
