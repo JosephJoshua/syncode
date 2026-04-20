@@ -162,7 +162,25 @@ function RoomPage() {
             throw error;
           }
         } else if (!cancelled) {
-          await refreshRoomDetail();
+          try {
+            await refreshRoomDetail();
+          } catch (error) {
+            const apiError = await readApiError(error);
+            if (apiError?.code === ERROR_CODES.ROOM_ACCESS_DENIED) {
+              const joined = await api(CONTROL_API.ROOMS.JOIN, {
+                params: { id: roomId },
+                body: {},
+              });
+              if (cancelled) return;
+              setRoom(joined.room);
+              collabCredsRef.current = {
+                collabToken: joined.collabToken,
+                collabUrl: joined.collabUrl,
+              };
+            } else {
+              throw error;
+            }
+          }
         }
       } catch (error) {
         if (!cancelled) {
