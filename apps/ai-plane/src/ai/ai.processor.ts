@@ -59,7 +59,7 @@ export class AiProcessor implements OnModuleInit {
       async (job: QueueJob<GenerateSessionReportRequest>) => {
         await this.handleSessionReportJob(job);
       },
-      { concurrency: 2 },
+      { concurrency: 1 },
     );
     this.logger.log(`Registered processor on ${AI_SESSION_REPORT_QUEUE}`);
   }
@@ -103,13 +103,22 @@ export class AiProcessor implements OnModuleInit {
   private async handleSessionReportJob(job: QueueJob<GenerateSessionReportRequest>): Promise<void> {
     const { id: jobId, data: request } = job;
     this.logger.log(`Processing session report job ${jobId} for session ${request.sessionId}`);
+    try {
+      const result = await this.aiService.generateSessionReport(request);
+      await this.queueService.enqueue(AI_SESSION_REPORT_RESULT_QUEUE, 'session-report-result', {
+        ...result,
+        jobId,
+      });
 
-    const result = await this.aiService.generateSessionReport(request);
-    await this.queueService.enqueue(AI_SESSION_REPORT_RESULT_QUEUE, 'session-report-result', {
-      ...result,
-      jobId,
-    });
-
-    this.logger.log(`Session report job ${jobId} completed`);
+      this.logger.log(`Session report job ${jobId} completed`);
+    } catch (error) {
+      this.logger.error(
+        `Session report job ${jobId} failed for session ${request.sessionId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+        error instanceof Error ? error.stack : undefined,
+      );
+      throw error;
+    }
   }
 }

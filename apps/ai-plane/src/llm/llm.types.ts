@@ -7,6 +7,7 @@ export interface LlmGenerateTextInput {
   messages: LlmMessage[];
   temperature?: number;
   maxOutputTokens?: number;
+  jsonMode?: boolean;
 }
 
 export interface LlmGenerateTextResult {

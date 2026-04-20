@@ -108,6 +108,12 @@ describe('AiProcessor', () => {
       expect(handlers.has(AI_REVIEW_QUEUE)).toBe(true);
       expect(handlers.has(AI_INTERVIEW_QUEUE)).toBe(true);
       expect(handlers.has(AI_SESSION_REPORT_QUEUE)).toBe(true);
+
+      const sessionReportProcessCall = mockQueueService.process.mock.calls.find(
+        ([queueName]) => queueName === AI_SESSION_REPORT_QUEUE,
+      );
+
+      expect(sessionReportProcessCall?.[2]).toEqual({ concurrency: 1 });
     });
   });
 

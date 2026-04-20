@@ -18,6 +18,9 @@ interface OpenAiChatCompletionResponse {
   }>;
 }
 
+const MAX_RETRY_ATTEMPTS = 3;
+const INITIAL_RETRY_DELAY_MS = 1_000;
+
 @Injectable()
 export class OpenAiCompatibleLlmProvider implements ILlmProvider {
   constructor(
@@ -35,43 +38,79 @@ export class OpenAiCompatibleLlmProvider implements ILlmProvider {
   }
 
   async generateText(input: LlmGenerateTextInput): Promise<LlmGenerateTextResult> {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.config.timeoutMs);
+    const requestBody = {
+      model: this.config.model,
+      messages: input.messages,
+      temperature: input.temperature ?? 0.1,
+      max_tokens: input.maxOutputTokens,
+      ...(input.jsonMode ? { response_format: { type: 'json_object' as const } } : {}),
+    };
 
-    try {
-      const response = await this.fetchImpl(`${this.config.baseUrl}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${this.config.apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: this.config.model,
-          messages: input.messages,
-          temperature: input.temperature ?? 0.1,
-          max_tokens: input.maxOutputTokens,
-        }),
-        signal: controller.signal,
-      });
+    for (let attempt = 1; attempt <= MAX_RETRY_ATTEMPTS; attempt++) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), this.config.timeoutMs);
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`LLM request failed with ${response.status}: ${errorText}`);
+      try {
+        const response = await this.fetchImpl(`${this.config.baseUrl}/chat/completions`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${this.config.apiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(requestBody),
+          signal: controller.signal,
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+
+          if (attempt < MAX_RETRY_ATTEMPTS && isRetryableStatus(response.status)) {
+            await delay(getRetryDelayMs(attempt));
+            continue;
+          }
+
+          throw new Error(`LLM request failed with ${response.status}: ${errorText}`);
+        }
+
+        const data = (await response.json()) as OpenAiChatCompletionResponse;
+        const text = data.choices?.[0]?.message?.content?.trim();
+
+        if (!text) {
+          throw new Error('LLM response did not include message content');
+        }
+
+        return {
+          text,
+          model: data.model ?? this.config.model,
+        };
+      } catch (error) {
+        if (attempt < MAX_RETRY_ATTEMPTS && isRetryableTransportError(error)) {
+          await delay(getRetryDelayMs(attempt));
+          continue;
+        }
+
+        throw error;
+      } finally {
+        clearTimeout(timeout);
       }
-
-      const data = (await response.json()) as OpenAiChatCompletionResponse;
-      const text = data.choices?.[0]?.message?.content?.trim();
-
-      if (!text) {
-        throw new Error('LLM response did not include message content');
-      }
-
-      return {
-        text,
-        model: data.model ?? this.config.model,
-      };
-    } finally {
-      clearTimeout(timeout);
     }
+
+    throw new Error('LLM request failed after retries');
   }
+}
+
+function isRetryableStatus(status: number) {
+  return status === 502 || status === 503 || status === 504;
+}
+
+function isRetryableTransportError(error: unknown) {
+  return error instanceof Error && error.name === 'AbortError';
+}
+
+function getRetryDelayMs(attempt: number) {
+  return INITIAL_RETRY_DELAY_MS * 2 ** (attempt - 1);
+}
+
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
