@@ -46,6 +46,8 @@ export class YjsCollabProvider {
   private disposed = false;
   private backoffMs = INITIAL_BACKOFF_MS;
   private hasConnected = false;
+  private hasSentSyncStep1 = false;
+  private isAwaitingConnectionSync = false;
   private currentStatus: CollabConnectionStatus = 'disconnected';
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly options: YjsCollabProviderOptions;
@@ -64,6 +66,8 @@ export class YjsCollabProvider {
   connect(): void {
     if (this.disposed) return;
 
+    this.hasSentSyncStep1 = false;
+    this.isAwaitingConnectionSync = true;
     this.setStatus(this.hasConnected ? 'reconnecting' : 'connecting');
 
     const url = new URL(this.options.url);
@@ -149,13 +153,6 @@ export class YjsCollabProvider {
     }
 
     this.backoffMs = INITIAL_BACKOFF_MS;
-    if (!this.hasConnected) {
-      this.hasConnected = true;
-      // Re-broadcast awareness so remote clients receive user metadata
-      // that was set in the constructor before the WS was open.
-      this.awareness.setLocalStateField('user', this.options.user);
-    }
-    this.setStatus('connected');
 
     switch (message.type) {
       case COLLAB_WS_EVENTS.ROOM_STATE: {
@@ -164,6 +161,7 @@ export class YjsCollabProvider {
           status: data.phase,
           editorLocked: data.editorLocked,
         });
+        this.sendInitialSyncStep1();
         break;
       }
       case COLLAB_WS_EVENTS.PHASE_CHANGE: {
@@ -196,6 +194,7 @@ export class YjsCollabProvider {
   }
 
   private handleSyncMessage(message: Uint8Array): void {
+    const syncMessageType = message[1];
     const decoder = decoding.createDecoder(message);
     decoding.readVarUint(decoder);
 
@@ -204,9 +203,28 @@ export class YjsCollabProvider {
 
     syncProtocol.readSyncMessage(decoder, encoder, this.doc, this);
 
+    if (this.isAwaitingConnectionSync && (syncMessageType === 1 || syncMessageType === 2)) {
+      this.isAwaitingConnectionSync = false;
+      this.hasConnected = true;
+      this.awareness.setLocalStateField('user', this.options.user);
+      this.setStatus('connected');
+    }
+
     if (encoding.length(encoder) > 1) {
       this.send(encoding.toUint8Array(encoder));
     }
+  }
+
+  private sendInitialSyncStep1(): void {
+    if (this.hasSentSyncStep1) {
+      return;
+    }
+
+    const encoder = encoding.createEncoder();
+    encoding.writeVarUint(encoder, WsMessageType.SYNC);
+    syncProtocol.writeSyncStep1(encoder, this.doc);
+    this.send(encoding.toUint8Array(encoder));
+    this.hasSentSyncStep1 = true;
   }
 
   private handleAwarenessMessage(message: Uint8Array): void {

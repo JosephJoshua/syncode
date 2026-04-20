@@ -815,6 +815,12 @@ export class RoomsService {
     participantRows: Awaited<ReturnType<typeof this.fetchParticipants>>,
     userId: string,
   ): Promise<RoomDetailResult> {
+    const [roomSession] = await this.db
+      .select({ id: sessions.id })
+      .from(sessions)
+      .where(eq(sessions.roomId, room.id))
+      .limit(1);
+
     participantRows = await resolveAvatarUrls(participantRows, this.storageService);
     const normalizedParticipants = participantRows.map((participant) => ({
       ...participant,
@@ -845,6 +851,7 @@ export class RoomsService {
       status: room.status,
       mode: room.mode,
       hostId: room.hostId,
+      sessionId: roomSession?.id ?? null,
       problemId: room.problemId,
       language: room.language,
       config: this.buildRoomConfig(room),

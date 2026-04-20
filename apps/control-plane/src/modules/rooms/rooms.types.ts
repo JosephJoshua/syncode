@@ -43,6 +43,7 @@ export interface ParticipantResult {
 }
 
 export interface RoomDetailResult extends RoomBaseResult {
+  sessionId: string | null;
   problemId: string | null;
   config: RoomConfig;
   participants: ParticipantResult[];

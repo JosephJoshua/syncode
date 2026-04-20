@@ -481,7 +481,7 @@ describe('useLiveKit', () => {
 
     expect(result.current.isScreenShareEnabled).toBe(true);
 
-    latestRoom.current!.localParticipant.isScreenShareEnabled = true;
+    getRoom().localParticipant.isScreenShareEnabled = true;
     await act(async () => {
       await result.current.toggleScreenShare();
     });
@@ -493,7 +493,7 @@ describe('useLiveKit', () => {
     const { result } = renderHook(() => useLiveKit(defaultOptions()));
     await flushPromises();
 
-    latestRoom.current!.localParticipant.setScreenShareEnabled.mockRejectedValueOnce(
+    getRoom().localParticipant.setScreenShareEnabled.mockRejectedValueOnce(
       new Error('user cancelled'),
     );
 

@@ -685,7 +685,7 @@ export function RoomWorkspace({
 
                 {/* Monaco editor */}
                 <div className="flex-1 overflow-hidden">
-                  {doc && awareness ? (
+                  {doc && awareness && collabStatus === 'connected' ? (
                     <CollaborativeEditor
                       key={doc.clientID}
                       doc={doc}

@@ -217,6 +217,7 @@ export type RoomParticipantSummary = z.infer<typeof roomParticipantSummarySchema
 
 export const roomDetailSchema = z.object({
   ...roomBaseFields,
+  sessionId: z.uuid().nullable().describe('Current or completed session for this room'),
   problemId: z.uuid().nullable().describe('Pre-selected problem'),
   config: roomConfigSchema.required().describe('Room configuration'),
   participants: z.array(roomParticipantSummarySchema).describe('Room participants'),
