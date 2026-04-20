@@ -1,9 +1,5 @@
 import type { RoomRole, SupportedLanguage } from '@syncode/shared';
-import type {
-  CodeSnapshotTrigger,
-  SessionReport,
-  SessionReportTestCaseBreakdownItem,
-} from '../control/sessions.js';
+import type { CodeSnapshotTrigger, SessionReport } from '../control/sessions.js';
 
 export interface GenerateHintRequest {
   roomId: string;
@@ -117,7 +113,22 @@ export interface SessionReportHistoricalContext {
   priorScores: number[];
 }
 
-export interface SessionReportTestCaseContext extends SessionReportTestCaseBreakdownItem {}
+export interface SessionReportTestCaseContext {
+  testCaseIndex: number;
+  input: string | null;
+  description: string | null;
+  isHidden: boolean;
+  passed: boolean | null;
+  expectedOutput: string | null;
+  actualOutput: string | null;
+  stdout: string | null;
+  stderr: string | null;
+  exitCode: number | null;
+  durationMs: number | null;
+  memoryUsageMb: number | null;
+  timedOut: boolean;
+  errorMessage: string | null;
+}
 
 export interface GenerateSessionReportRequest {
   sessionId: string;
@@ -147,4 +158,15 @@ export interface GenerateSessionReportRequest {
 
 export interface GenerateSessionReportResult extends SessionReport {
   model?: string;
+}
+
+export function toPublicSessionReportTestCaseBreakdown(
+  breakdown: SessionReportTestCaseContext[],
+): NonNullable<SessionReport['testCaseBreakdown']> {
+  return breakdown.map((item) => ({
+    testCaseIndex: item.testCaseIndex,
+    passed: item.passed,
+    timedOut: item.timedOut,
+    errorMessage: item.timedOut ? (item.errorMessage ?? 'Time limit exceeded') : item.errorMessage,
+  }));
 }

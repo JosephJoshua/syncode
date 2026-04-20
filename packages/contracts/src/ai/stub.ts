@@ -11,6 +11,7 @@ import type {
   ReviewCodeRequest,
   ReviewCodeResult,
 } from './types.js';
+import { toPublicSessionReportTestCaseBreakdown } from './types.js';
 
 type AiJobType = 'hint' | 'review' | 'interview' | 'session-report';
 
@@ -390,7 +391,7 @@ export class StubAiClient implements IAiClient {
                     .slice(0, 3),
                 }
               : null,
-          testCaseBreakdown: request.finalTestCaseBreakdown,
+          testCaseBreakdown: toPublicSessionReportTestCaseBreakdown(request.finalTestCaseBreakdown),
           model: 'stub-ai-client',
         };
 

@@ -269,7 +269,14 @@ describe('AiProcessor', () => {
           jobId: 'session-report-job-1',
           sessionId: '550e8400-e29b-41d4-a716-446655440000',
           overallScore: expect.any(Number),
-          testCaseBreakdown: expect.any(Array),
+          testCaseBreakdown: [
+            expect.objectContaining({
+              testCaseIndex: 0,
+              passed: true,
+              timedOut: false,
+              errorMessage: null,
+            }),
+          ],
         }),
       );
     });

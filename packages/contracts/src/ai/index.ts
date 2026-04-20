@@ -10,3 +10,4 @@ export type {
   ReviewCodeRequest,
   ReviewCodeResult,
 } from './types.js';
+export { toPublicSessionReportTestCaseBreakdown } from './types.js';

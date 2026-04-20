@@ -9,6 +9,7 @@ import type {
   ReviewCodeRequest,
   ReviewCodeResult,
 } from '@syncode/contracts';
+import { toPublicSessionReportTestCaseBreakdown } from '@syncode/contracts';
 import { LLM_PROVIDER } from '../llm/llm.constants.js';
 import type { ILlmProvider } from '../llm/llm.types.js';
 import { buildSessionReportPrompt } from './prompts/session-report.prompt.js';
@@ -106,7 +107,7 @@ export class AiService {
       ...parsed,
       sessionId: request.sessionId,
       generatedAt: new Date().toISOString(),
-      testCaseBreakdown: request.finalTestCaseBreakdown,
+      testCaseBreakdown: toPublicSessionReportTestCaseBreakdown(request.finalTestCaseBreakdown),
       model: llmResult.model,
     };
   }

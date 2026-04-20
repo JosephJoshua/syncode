@@ -213,7 +213,14 @@ describe('AiService', () => {
       const result = await service.generateSessionReport(request);
 
       expect(result.sessionId).toBe(request.sessionId);
-      expect(result.testCaseBreakdown).toEqual(request.finalTestCaseBreakdown);
+      expect(result.testCaseBreakdown).toEqual([
+        {
+          testCaseIndex: 0,
+          passed: true,
+          timedOut: false,
+          errorMessage: null,
+        },
+      ]);
       expect(result.overallScore).toBe(82);
       expect(result.generatedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     });

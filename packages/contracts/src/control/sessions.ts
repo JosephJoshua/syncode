@@ -1,6 +1,5 @@
 import { ROOM_MODES, ROOM_ROLES, SUPPORTED_LANGUAGES } from '@syncode/shared';
 import { z } from 'zod';
-import { executionTestCaseDetailSchema } from './execution.js';
 import { paginationQuerySchema, paginationSchema } from './pagination.js';
 
 export const SESSIONS_SORT_BY_OPTIONS = [
@@ -145,21 +144,28 @@ export const sessionReportPeerFeedbackSummarySchema = z.object({
   themes: z.array(z.string()).default([]),
 });
 
-export const sessionReportTestCaseBreakdownSchema = executionTestCaseDetailSchema.extend({
-  input: z
-    .string()
-    .nullable()
-    .describe('Original test case input. Can be null if the case is intentionally redacted.')
-    .meta({ examples: ['nums = [2,7,11,15], target = 9'] }),
-  description: z
-    .string()
-    .nullable()
-    .describe('Optional human-readable label for the test case')
-    .meta({ examples: ['Basic happy path'] }),
-  isHidden: z
+export const sessionReportTestCaseBreakdownSchema = z.object({
+  testCaseIndex: z
+    .number()
+    .int()
+    .describe('Zero-based test case index')
+    .meta({ examples: [0] }),
+  passed: z
     .boolean()
-    .describe('Whether this test case was hidden from the participant during the session')
+    .nullable()
+    .describe('Whether the test case passed. Null means no pass/fail verdict was recorded.')
+    .meta({ examples: [true] }),
+  timedOut: z
+    .boolean()
+    .describe('Whether execution hit the time limit for this test case')
     .meta({ examples: [false] }),
+  errorMessage: z
+    .string()
+    .nullable()
+    .describe(
+      'Execution or compilation error details when available. Null for ordinary wrong-answer cases.',
+    )
+    .meta({ examples: ['Time limit exceeded'] }),
 });
 
 export const sessionReportSchema = z.object({
