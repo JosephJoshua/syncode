@@ -1,8 +1,9 @@
 import Editor, { type OnMount } from '@monaco-editor/react';
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { MonacoBinding } from 'y-monaco';
 import type { Awareness } from 'y-protocols/awareness';
 import type * as Y from 'yjs';
+import { clientIdFromElement, remoteCursorSelector } from '@/lib/remote-cursor-dom.js';
 import { CODE_TEXT_KEY } from '@/lib/yjs-collab-provider.js';
 import { buildCursorCssRules, IDLE_HIDE_MS } from './cursor-styles.js';
 import {
@@ -29,7 +30,7 @@ export function CollaborativeEditor({
   onSubmitCode,
 }: CollaborativeEditorProps) {
   const bindingRef = useRef<MonacoBinding | null>(null);
-  const editorRootRef = useRef<HTMLElement | null>(null);
+  const [editorRoot, setEditorRoot] = useState<HTMLElement | null>(null);
   const onRunCodeRef = useRef(onRunCode);
   onRunCodeRef.current = onRunCode;
   const onSubmitCodeRef = useRef(onSubmitCode);
@@ -52,7 +53,7 @@ export function CollaborativeEditor({
       run: () => void onSubmitCodeRef.current(),
     });
 
-    editorRootRef.current = editor.getDomNode();
+    setEditorRoot(editor.getDomNode());
 
     const model = editor.getModel();
     if (model == null) return;
@@ -70,6 +71,8 @@ export function CollaborativeEditor({
   }, [doc, awareness]);
 
   useEffect(() => {
+    if (!editorRoot) return;
+
     const styleEl = document.createElement('style');
     document.head.appendChild(styleEl);
 
@@ -99,25 +102,15 @@ export function CollaborativeEditor({
       styleEl.textContent = rules.join('\n');
     };
 
-    const remoteCursorSelector = (event: Event): HTMLElement | null => {
-      const target = event.target as HTMLElement | null;
+    const findRemoteCursor = (event: Event): Element | null => {
+      const target = event.target as Element | null;
       if (!target) return null;
-      const headClass = Array.from(target.classList ?? []).find((c) =>
-        c.startsWith('yRemoteSelectionHead-'),
-      );
-      if (headClass) return target;
-      return target.closest('[class*="yRemoteSelectionHead-"]');
-    };
-
-    const clientIdFromElement = (el: HTMLElement): number | null => {
-      const headClass = Array.from(el.classList).find((c) => c.startsWith('yRemoteSelectionHead-'));
-      if (!headClass) return null;
-      const id = Number.parseInt(headClass.slice('yRemoteSelectionHead-'.length), 10);
-      return Number.isFinite(id) ? id : null;
+      if (typeof target.closest !== 'function') return null;
+      return target.closest(remoteCursorSelector());
     };
 
     const onMouseOver = (event: Event) => {
-      const el = remoteCursorSelector(event);
+      const el = findRemoteCursor(event);
       if (!el) return;
       const id = clientIdFromElement(el);
       if (id == null || id === doc.clientID) return;
@@ -128,16 +121,15 @@ export function CollaborativeEditor({
     };
 
     const onMouseOut = (event: Event) => {
-      const el = remoteCursorSelector(event);
+      const el = findRemoteCursor(event);
       if (!el) return;
       const id = clientIdFromElement(el);
       if (id == null) return;
       if (hoverIds.delete(id)) updateStyles();
     };
 
-    const root = editorRootRef.current ?? document;
-    root.addEventListener('mouseover', onMouseOver, true);
-    root.addEventListener('mouseout', onMouseOut, true);
+    editorRoot.addEventListener('mouseover', onMouseOver, true);
+    editorRoot.addEventListener('mouseout', onMouseOut, true);
 
     const recomputeIdle = () => {
       const now = Date.now();
@@ -203,12 +195,12 @@ export function CollaborativeEditor({
 
     return () => {
       awareness.off('change', onAwarenessChange);
-      root.removeEventListener('mouseover', onMouseOver, true);
-      root.removeEventListener('mouseout', onMouseOut, true);
+      editorRoot.removeEventListener('mouseover', onMouseOver, true);
+      editorRoot.removeEventListener('mouseout', onMouseOut, true);
       if (tickHandle != null) clearInterval(tickHandle);
       styleEl.remove();
     };
-  }, [awareness, doc.clientID]);
+  }, [awareness, doc.clientID, editorRoot]);
 
   return (
     <Editor
