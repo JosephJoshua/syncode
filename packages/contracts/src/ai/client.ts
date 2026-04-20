@@ -23,6 +23,9 @@ export interface IAiClient {
   getSessionReportResult(
     jobId: JobId<'ai:session-report'>,
   ): Promise<GenerateSessionReportResult | null>;
+  onSessionReportResult(
+    callback: (jobId: string, result: GenerateSessionReportResult) => Promise<void>,
+  ): void;
   getHintJobStatus(jobId: JobId<'ai:hint'>): Promise<JobStatus>;
   getReviewJobStatus(jobId: JobId<'ai:review'>): Promise<JobStatus>;
   getInterviewJobStatus(jobId: JobId<'ai:interview'>): Promise<JobStatus>;

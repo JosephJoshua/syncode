@@ -145,4 +145,6 @@ export interface GenerateSessionReportRequest {
   historicalContext: SessionReportHistoricalContext | null;
 }
 
-export type GenerateSessionReportResult = SessionReport;
+export interface GenerateSessionReportResult extends SessionReport {
+  model?: string;
+}

@@ -40,6 +40,10 @@ export class StubAiClient implements IAiClient {
   private readonly jobs = new Map<string, StubJob>();
   private readonly timers: ReturnType<typeof setTimeout>[] = [];
   private readonly delayMs: number;
+  private sessionReportResultCallback?: (
+    jobId: string,
+    result: GenerateSessionReportResult,
+  ) => Promise<void>;
 
   constructor(options: StubAiClientOptions = {}) {
     this.delayMs = options.delayMs ?? 800;
@@ -139,6 +143,12 @@ export class StubAiClient implements IAiClient {
 
   async healthCheck(): Promise<boolean> {
     return true;
+  }
+
+  onSessionReportResult(
+    callback: (jobId: string, result: GenerateSessionReportResult) => Promise<void>,
+  ): void {
+    this.sessionReportResultCallback = callback;
   }
 
   private scheduleHintCompletion(jobId: string, request: GenerateHintRequest): void {
@@ -381,7 +391,10 @@ export class StubAiClient implements IAiClient {
                 }
               : null,
           testCaseBreakdown: request.finalTestCaseBreakdown,
+          model: 'stub-ai-client',
         };
+
+        this.sessionReportResultCallback?.(jobId, job.sessionReportResult).catch(() => {});
       }, this.delayMs),
     );
   }
