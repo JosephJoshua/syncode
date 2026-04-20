@@ -150,6 +150,28 @@ describe('InternalController', () => {
     );
   });
 
+  it('GIVEN valid snapshot WHEN handleSnapshotReady THEN also persists binary state via RoomsService', async () => {
+    const mocks = createMocks();
+    mocks.db.limit.mockResolvedValueOnce([{ id: 'session-1', language: 'typescript' }]);
+    const controller = await createController(mocks);
+
+    const payload: SnapshotReadyPayload = {
+      roomId: 'room-abc',
+      snapshot: [9, 8, 7, 6],
+      code: 'let z = 3;',
+      timestamp: 1712500003000,
+      trigger: 'periodic',
+    };
+
+    await controller.handleSnapshotReady(payload);
+
+    expect(mocks.roomsService.persistDocSnapshot).toHaveBeenCalledOnce();
+    const [roomIdArg, stateArg] = mocks.roomsService.persistDocSnapshot.mock.calls[0];
+    expect(roomIdArg).toBe('room-abc');
+    expect(stateArg).toBeInstanceOf(Uint8Array);
+    expect(Array.from(stateArg as Uint8Array)).toEqual([9, 8, 7, 6]);
+  });
+
   it('GIVEN snapshot for room without session WHEN handleSnapshotReady THEN skips DB insert and still returns success', async () => {
     const mocks = createMocks();
     mocks.db.limit.mockResolvedValueOnce([]);

@@ -44,7 +44,6 @@ export class InternalController {
     try {
       const { roomId, snapshot, code, timestamp, trigger } = payload;
 
-      // S3 upload (binary for reconstruction)
       const snapshotBuffer = Buffer.from(snapshot);
       const key = `snapshots/${roomId}/${timestamp}.yjs`;
       await this.storageService.upload(key, snapshotBuffer, {
@@ -54,6 +53,8 @@ export class InternalController {
           timestamp: timestamp.toString(),
         },
       });
+
+      await this.roomsService.persistDocSnapshot(roomId, new Uint8Array(snapshot));
 
       const [session] = await this.db
         .select({ id: sessions.id, language: sessions.language })
