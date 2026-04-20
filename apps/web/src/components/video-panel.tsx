@@ -596,14 +596,11 @@ export function FloatingVideoPanel({
           ) : null}
 
           {showResize ? (
-            <div
-              role="slider"
-              aria-label="Resize video panel"
-              aria-valuemin={FLOATING_MIN_WIDTH}
-              aria-valuemax={window.innerWidth - VIEWPORT_PADDING}
-              aria-valuenow={size.width}
-              tabIndex={0}
-              className="absolute bottom-0 right-0 z-10 flex size-4 cursor-nwse-resize items-end justify-end text-muted-foreground/50 hover:text-muted-foreground"
+            <button
+              type="button"
+              tabIndex={-1}
+              aria-label="Resize panel"
+              className="absolute bottom-0 right-0 z-10 flex size-4 cursor-nwse-resize items-end justify-end bg-transparent p-0 text-muted-foreground/50 hover:text-muted-foreground"
               onPointerDown={onResizePointerDown}
               onPointerMove={onResizePointerMove}
               onPointerUp={endResize}
@@ -620,7 +617,7 @@ export function FloatingVideoPanel({
                   fill="none"
                 />
               </svg>
-            </div>
+            </button>
           ) : null}
         </div>
       </motion.div>
