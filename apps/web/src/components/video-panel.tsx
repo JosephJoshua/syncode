@@ -203,19 +203,63 @@ interface ZoomOverlayProps {
 }
 
 function ZoomOverlay({ tile, kind, onClose }: ZoomOverlayProps) {
+  const overlayRef = useRef<HTMLDivElement | null>(null);
+  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
+  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
+
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+    previouslyFocusedRef.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    closeButtonRef.current?.focus();
+    const previous = previouslyFocusedRef.current;
+    return () => {
+      if (previous && document.contains(previous)) previous.focus();
     };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  }, []);
+
+  const onKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLDivElement>) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        onClose();
+        return;
+      }
+      if (e.key !== 'Tab') return;
+      const root = overlayRef.current;
+      if (!root) return;
+      const focusable = root.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      );
+      if (focusable.length === 0) {
+        e.preventDefault();
+        root.focus();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (first === undefined || last === undefined) return;
+      const active = document.activeElement;
+      if (e.shiftKey) {
+        if (active === first || !root.contains(active)) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else {
+        if (active === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    },
+    [onClose],
+  );
 
   const isScreen = kind === 'screen' && tile.hasScreenShare && tile.screenShareTrack;
 
   return (
     <motion.div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm"
+      ref={overlayRef}
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm outline-none"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -223,6 +267,8 @@ function ZoomOverlay({ tile, kind, onClose }: ZoomOverlayProps) {
       role="dialog"
       aria-modal="true"
       aria-label="Zoomed video"
+      tabIndex={-1}
+      onKeyDown={onKeyDown}
     >
       <button
         type="button"
@@ -242,6 +288,7 @@ function ZoomOverlay({ tile, kind, onClose }: ZoomOverlayProps) {
         )}
         <div className="absolute right-2 top-2 flex items-center gap-1">
           <Button
+            ref={closeButtonRef}
             type="button"
             variant="ghost"
             size="icon-sm"
