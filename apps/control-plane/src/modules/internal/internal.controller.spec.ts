@@ -221,4 +221,19 @@ describe('InternalController', () => {
 
     expect(result).toEqual({ success: false });
   });
+
+  it('GIVEN snapshot larger than 5 MiB WHEN handlePersistDocSnapshot THEN rejects without persisting', async () => {
+    const mocks = createMocks();
+    const controller = await createController(mocks);
+
+    const sixMb = new Array<number>(6 * 1024 * 1024).fill(0);
+
+    const result = await controller.handlePersistDocSnapshot('room-big', {
+      roomId: 'room-big',
+      state: sixMb,
+    });
+
+    expect(result).toEqual({ success: false });
+    expect(mocks.roomsService.persistDocSnapshot).not.toHaveBeenCalled();
+  });
 });

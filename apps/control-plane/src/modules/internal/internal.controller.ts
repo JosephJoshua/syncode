@@ -20,6 +20,8 @@ import {
  *
  * TODO: add shared tokens
  */
+const MAX_DOC_SNAPSHOT_BYTES = 5 * 1024 * 1024;
+
 @SkipThrottle()
 @Controller()
 export class InternalController {
@@ -98,6 +100,15 @@ export class InternalController {
   ): Promise<{ success: boolean }> {
     try {
       const state = new Uint8Array(payload.state);
+      this.logger.debug(`Doc snapshot received for room ${roomId} (${state.byteLength} bytes)`);
+
+      if (state.byteLength > MAX_DOC_SNAPSHOT_BYTES) {
+        this.logger.warn(
+          `Rejecting oversized doc snapshot for room ${roomId}: ${state.byteLength} bytes exceeds ${MAX_DOC_SNAPSHOT_BYTES}`,
+        );
+        return { success: false };
+      }
+
       await this.roomsService.persistDocSnapshot(roomId, state);
       this.logger.debug(`Doc snapshot persisted for room ${roomId} (${state.byteLength} bytes)`);
       return { success: true };
