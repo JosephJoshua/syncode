@@ -1,8 +1,41 @@
-import { Card, CardContent } from '@syncode/ui';
+import type { SessionDetail, SessionReport, SessionReportDimension } from '@syncode/contracts';
+import { SUPPORTED_LANGUAGES, type SupportedLanguage } from '@syncode/shared';
+import {
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@syncode/ui';
 import { useQuery } from '@tanstack/react-query';
 import { createFileRoute } from '@tanstack/react-router';
+import { Braces, CheckCircle2, Leaf, Lightbulb, MessageSquareQuote, Sparkles } from 'lucide-react';
+import type { ReactNode } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { fetchDashboardSessionHistory } from '@/lib/dashboard-session-history.js';
+import {
+  AiFeedbackMarkdown,
+  AiFeedbackText,
+} from '@/components/session-report/ai-feedback-rich-text.js';
+import { ReportDimensionCard } from '@/components/session-report/report-dimension-card.js';
+import { ReportPageSkeleton } from '@/components/session-report/report-page-skeleton.js';
+import { ReportPendingState } from '@/components/session-report/report-pending-state.js';
+import { ReportScoreSummary } from '@/components/session-report/report-score-summary.js';
+import { ReportSessionOverview } from '@/components/session-report/report-session-overview.js';
+import { ReportSessionTimeline } from '@/components/session-report/report-session-timeline.js';
+import { ReportSnapshotCodeViewer } from '@/components/session-report/report-snapshot-code-viewer.js';
+import { ReportSnapshotHistory } from '@/components/session-report/report-snapshot-history.js';
+import { ReportTestCaseList } from '@/components/session-report/report-test-case-list.js';
+import {
+  formatSessionDateTime,
+  formatSessionDuration,
+  resolveSessionDurationSeconds,
+} from '@/lib/dashboard-session-history.js';
+import { fetchSessionDetail } from '@/lib/session-detail.js';
+import { fetchSessionReport } from '@/lib/session-report.js';
+import { fetchSessionSnapshots } from '@/lib/session-snapshots.js';
 import { useAuthStore } from '@/stores/auth.store.js';
 
 export const Route = createFileRoute('/_app/sessions/$sessionId/feedback')({
