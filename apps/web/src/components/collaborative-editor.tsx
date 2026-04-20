@@ -82,7 +82,9 @@ export function CollaborativeEditor({
 
     const getLastUpdated = (clientID: number): number => {
       const meta = awareness.meta.get(clientID);
-      return meta?.lastUpdated ?? Date.now();
+      // No meta entry yet (cold start or out-of-order update): treat as stale so the
+      // cursor fades immediately rather than appearing freshly active forever.
+      return meta?.lastUpdated ?? 0;
     };
 
     const remoteStates = () => {
