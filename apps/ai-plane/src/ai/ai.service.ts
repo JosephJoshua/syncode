@@ -14,6 +14,7 @@ import { LLM_PROVIDER } from '../llm/llm.constants.js';
 import type { ILlmProvider } from '../llm/llm.types.js';
 import { buildSessionReportPrompt } from './prompts/session-report.prompt.js';
 import { parseSessionReportJson } from './report-json.js';
+import { postprocessSessionReport } from './session-report-postprocess.js';
 
 const HINT_RESPONSES: Record<string, string> = {
   gentle: 'Consider what data structure would let you look up values efficiently.',
@@ -90,25 +91,35 @@ export class AiService {
     request: GenerateSessionReportRequest,
   ): Promise<GenerateSessionReportResult> {
     this.logger.debug(`Generating session report for session ${request.sessionId}`);
+    try {
+      const prompt = buildSessionReportPrompt(request);
+      const llmResult = await this.llmProvider.generateText({
+        messages: [
+          { role: 'system', content: prompt.systemPrompt },
+          { role: 'user', content: prompt.userPrompt },
+        ],
+        temperature: 0.1,
+        maxOutputTokens: 2500,
+        jsonMode: true,
+      });
 
-    const prompt = buildSessionReportPrompt(request);
-    const llmResult = await this.llmProvider.generateText({
-      messages: [
-        { role: 'system', content: prompt.systemPrompt },
-        { role: 'user', content: prompt.userPrompt },
-      ],
-      temperature: 0.1,
-      maxOutputTokens: 2500,
-    });
+      const parsed = parseSessionReportJson(llmResult.text);
+      const normalizedReport = postprocessSessionReport(request, parsed);
 
-    const parsed = parseSessionReportJson(llmResult.text);
-
-    return {
-      ...parsed,
-      sessionId: request.sessionId,
-      generatedAt: new Date().toISOString(),
-      testCaseBreakdown: toPublicSessionReportTestCaseBreakdown(request.finalTestCaseBreakdown),
-      model: llmResult.model,
-    };
+      return {
+        ...normalizedReport,
+        sessionId: request.sessionId,
+        generatedAt: new Date().toISOString(),
+        testCaseBreakdown: toPublicSessionReportTestCaseBreakdown(request.finalTestCaseBreakdown),
+        model: llmResult.model,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(
+        `Session report generation failed for session ${request.sessionId} participant ${request.participantId}: ${message}`,
+        error instanceof Error ? error.stack : undefined,
+      );
+      throw error;
+    }
   }
 }
