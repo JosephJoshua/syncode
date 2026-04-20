@@ -1,30 +1,172 @@
 {
-  "heading": "反馈展示",
+  "eyebrow": "会话报告",
+  "heading": "会话报告暂不可用",
+  "fallbackProblemTitle": "未命名题目",
+  "ready": {
+    "description": "查看这场已完成面试练习的结构化训练报告。"
+  },
+  "pending": {
+    "description": "会话已经结束，但 AI 报告仍在生成中。",
+    "title": "报告生成中",
+    "subtitle": "报告会在会话结束后异步生成。",
+    "body": "通常大约一分钟内完成。你可以停留在当前页面等待报告加载。",
+    "polling": "系统会每 10 秒自动检查一次报告状态。"
+  },
+  "error": {
+    "title": "报告暂不可用",
+    "description": "会话存在，但当前无法加载报告。",
+    "body": "请稍后再试。"
+  },
   "notFound": {
-    "description": "未找到此会话，因此反馈占位内容暂时无法显示。",
-    "invalidSessionId": "无效的会话 ID：{{sessionId}}"
+    "description": "无法加载此会话。",
+    "invalidSessionId": "未找到会话 {{sessionId}}。"
   },
-  "found": {
-    "description": "查看此会话特定反馈展示的当前占位布局。"
+  "actions": {
+    "retrySession": "重试会话查询",
+    "retryReport": "重试报告",
+    "checkAgain": "重新检查",
+    "showFullReview": "显示完整评审",
+    "showLessReview": "收起评审"
   },
-  "label": {
-    "sessionFeedback": "会话反馈",
-    "summary": "总结",
-    "focusAreas": "重点领域",
-    "nextIteration": "下一步改进"
+  "overview": {
+    "overallScore": "综合评分",
+    "summary": "快速总结",
+    "noSummary": "此报告未返回详细总结。"
   },
-  "placeholder": "会话 {{sessionId}} 目前使用针对 {{problemName}} 的占位评语。最终版本将以结构化的会话专属反馈内容替换此区块。",
-  "focusItems": {
-    "clarify": "明确问题定义和边界情况的沟通。",
-    "pacing": "改善推理解题路径时的节奏把控。",
-    "explanation": "加强权衡讨论中的解释质量。"
+  "sections": {
+    "dimensions": "维度评估",
+    "dimensionsDescription": "每个维度都基于实际会话证据评分。",
+    "detailedFeedback": "详细反馈",
+    "detailedFeedbackDescription": "基于会话时间线、代码行为和同伴上下文生成的长篇反馈。",
+    "noDetailedFeedback": "此报告未返回详细反馈。",
+    "testCaseBreakdown": "测试用例结果",
+    "testCaseBreakdownDescription": "按测试用例展示最终结果，敏感输入和期望输出已隐藏。",
+    "snapshotHistory": "代码快照历史",
+    "snapshotHistoryDescription": "按时间顺序展示会话期间捕获的代码状态。",
+    "finalCode": "最终代码",
+    "finalCodeDescription": "会话编辑器中最近一次保存的代码状态。",
+    "noFinalCode": "此会话没有可用的最终代码快照。",
+    "aiReview": "AI 评审",
+    "aiReviewDescription": "基于最终代码、执行历史和会话证据生成的结构化反馈。",
+    "timeline": "会话时间线",
+    "timelineDescription": "展示本次会话中的关键编码节点，不包含定时自动保存。",
+    "strengths": "优势",
+    "areasForImprovement": "待改进点",
+    "comparison": "与历史表现对比",
+    "peerFeedback": "同伴反馈摘要"
   },
-  "nextIteration": "此区域后续将用于具体的会话建议、代码审查意见和沟通反馈。",
+  "dimensions": {
+    "correctness": {
+      "title": "正确性"
+    },
+    "efficiency": {
+      "title": "效率"
+    },
+    "codeQuality": {
+      "title": "代码质量"
+    },
+    "communication": {
+      "title": "沟通"
+    },
+    "problemSolving": {
+      "title": "解题能力"
+    }
+  },
   "details": {
     "heading": "会话详情",
+    "description": "展示这场已完成会话中的参与者、元数据和活动信息。",
     "sessionId": "会话 ID",
     "role": "角色",
-    "date": "日期",
-    "duration": "时长"
+    "mode": "模式",
+    "language": "语言",
+    "difficulty": "难度",
+    "date": "完成时间",
+    "duration": "时长",
+    "generatedAt": "报告生成时间",
+    "activity": "会话活动",
+    "runs": "运行次数",
+    "submissions": "提交次数",
+    "report": "报告",
+    "feedbackStatus": "同伴反馈",
+    "recording": "录制",
+    "available": "可用",
+    "unavailable": "不可用",
+    "pending": "仍在生成",
+    "unknown": "未知"
+  },
+  "participants": {
+    "heading": "参与者",
+    "description": "本次会话共有 {{count}} 位参与者。",
+    "you": "你",
+    "joinedAt": "加入时间",
+    "leftAt": "离开时间",
+    "leftAtMissing": "没有离开时间"
+  },
+  "comparison": {
+    "trend": "趋势",
+    "sessionsCompared": "比较场次",
+    "averageScore": "平均分"
+  },
+  "trend": {
+    "improving": "在提升",
+    "stable": "稳定",
+    "declining": "下降"
+  },
+  "peerFeedback": {
+    "averageRating": "平均评分",
+    "wouldPairAgain": "愿意再次配对",
+    "themes": "主题",
+    "none": "无主题"
+  },
+  "breakdown": {
+    "emptyDescription": "此会话没有可用的最终测试用例结果。",
+    "caseLabel": "测试用例 {{index}}",
+    "pass": "通过",
+    "failed": "未通过",
+    "timeout": "超时",
+    "error": "执行错误",
+    "passDescription": "最终提交通过了这个测试用例。",
+    "failDescription": "最终提交未完全满足这个测试用例。"
+  },
+  "snapshots": {
+    "emptyDescription": "此会话暂时没有可用的代码快照。",
+    "errorDescription": "报告已加载，但当前无法获取代码快照历史。",
+    "retry": "重试快照",
+    "snapshotLabel": "快照 {{index}}",
+    "showAll": "显示全部 {{count}} 个快照",
+    "showLatest": "只显示最新 3 个",
+    "hiddenCount": "默认隐藏了更早的 {{count}} 个快照。",
+    "showHistory": "显示全部 {{count}} 个快照",
+    "hideHistory": "隐藏快照历史",
+    "collapsedDescription": "为了保持报告简洁，代码快照历史默认折叠。",
+    "loc": "{{count}} 行",
+    "noCode": "// 此快照没有捕获到代码。",
+    "trigger": {
+      "periodic": "定时",
+      "phase_change": "阶段切换",
+      "submission": "提交",
+      "manual": "手动",
+      "session_end": "会话结束"
+    }
+  },
+  "role": {
+    "candidate": "候选人",
+    "interviewer": "面试官",
+    "observer": "观察者"
+  },
+  "mode": {
+    "peer": "同伴面试",
+    "ai": "AI 面试"
+  },
+  "timeline": {
+    "showCode": "查看代码",
+    "hideCode": "收起代码",
+    "events": {
+      "sessionStart": "会话开始",
+      "phase_change": "阶段切换",
+      "submission": "代码已提交",
+      "manual": "手动快照",
+      "session_end": "会话结束"
+    }
   }
 }

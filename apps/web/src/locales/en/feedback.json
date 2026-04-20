@@ -1,30 +1,172 @@
 {
-  "heading": "Feedback Display",
+  "eyebrow": "Session Report",
+  "heading": "Session report unavailable",
+  "fallbackProblemTitle": "Untitled Problem",
+  "ready": {
+    "description": "Review the structured training report for this finished interview session."
+  },
+  "pending": {
+    "description": "The session finished successfully, but the AI report is still being generated.",
+    "title": "Report in progress",
+    "subtitle": "Reports are generated asynchronously after the session ends.",
+    "body": "This usually finishes within about a minute. You can stay on this page while the report loads.",
+    "polling": "Checking for the report automatically every 10 seconds."
+  },
+  "error": {
+    "title": "Report unavailable",
+    "description": "The session exists, but the report could not be loaded right now.",
+    "body": "Try fetching the report again in a moment."
+  },
   "notFound": {
-    "description": "This session could not be found, so the feedback placeholder cannot be displayed yet.",
-    "invalidSessionId": "Invalid session id: {{sessionId}}"
+    "description": "This session could not be loaded.",
+    "invalidSessionId": "We could not find session {{sessionId}}."
   },
-  "found": {
-    "description": "Review the current placeholder layout for this session-specific feedback display."
+  "actions": {
+    "retrySession": "Retry session lookup",
+    "retryReport": "Retry report",
+    "checkAgain": "Check again",
+    "showFullReview": "Show full review",
+    "showLessReview": "Show less"
   },
-  "label": {
-    "sessionFeedback": "Session Feedback",
-    "summary": "Summary",
-    "focusAreas": "Focus Areas",
-    "nextIteration": "Next Iteration"
+  "overview": {
+    "overallScore": "Overall Score",
+    "summary": "Quick Read",
+    "noSummary": "Detailed feedback was not available for this report."
   },
-  "placeholder": "Session {{sessionId}} currently uses placeholder commentary tailored to {{problemName}}. The final version will replace this block with structured, session-specific feedback content.",
-  "focusItems": {
-    "clarify": "Clarify problem framing and edge-case communication.",
-    "pacing": "Improve pacing when reasoning through the solution path.",
-    "explanation": "Strengthen explanation quality during tradeoff discussion."
+  "sections": {
+    "dimensions": "Dimension Review",
+    "dimensionsDescription": "Each dimension is scored from the actual session evidence.",
+    "detailedFeedback": "Detailed Feedback",
+    "detailedFeedbackDescription": "Long-form report generated from the session timeline, code activity, and peer context.",
+    "noDetailedFeedback": "No detailed feedback was returned for this report.",
+    "testCaseBreakdown": "Test Case Breakdown",
+    "testCaseBreakdownDescription": "Per-test-case outcome summary with sensitive inputs and expected outputs redacted.",
+    "snapshotHistory": "Code Snapshot History",
+    "snapshotHistoryDescription": "Saved code states captured during the session in chronological order.",
+    "finalCode": "Final Code",
+    "finalCodeDescription": "The most recent saved code state from the session editor.",
+    "noFinalCode": "No final code snapshot was available for this session.",
+    "aiReview": "AI Review",
+    "aiReviewDescription": "Structured feedback generated from the final code, execution history, and session evidence.",
+    "timeline": "Session Timeline",
+    "timelineDescription": "Important coding milestones from the session, excluding periodic autosaves.",
+    "strengths": "Strengths",
+    "areasForImprovement": "Areas for Improvement",
+    "comparison": "Comparison to History",
+    "peerFeedback": "Peer Feedback Summary"
   },
-  "nextIteration": "Use this space later for concrete, session-bound recommendations, code review notes, and communication feedback.",
+  "dimensions": {
+    "correctness": {
+      "title": "Correctness"
+    },
+    "efficiency": {
+      "title": "Efficiency"
+    },
+    "codeQuality": {
+      "title": "Code Quality"
+    },
+    "communication": {
+      "title": "Communication"
+    },
+    "problemSolving": {
+      "title": "Problem Solving"
+    }
+  },
   "details": {
     "heading": "Session Details",
+    "description": "Participants, metadata, and activity from this finished session.",
     "sessionId": "Session ID",
     "role": "Role",
-    "date": "Date",
-    "duration": "Duration"
+    "mode": "Mode",
+    "language": "Language",
+    "difficulty": "Difficulty",
+    "date": "Completed At",
+    "duration": "Duration",
+    "generatedAt": "Report Generated",
+    "activity": "Session Activity",
+    "runs": "Runs",
+    "submissions": "Submissions",
+    "report": "Report",
+    "feedbackStatus": "Peer Feedback",
+    "recording": "Recording",
+    "available": "Available",
+    "unavailable": "Unavailable",
+    "pending": "Still generating",
+    "unknown": "Unknown"
+  },
+  "participants": {
+    "heading": "Participants",
+    "description": "{{count}} participants were involved in this session.",
+    "you": "You",
+    "joinedAt": "Joined",
+    "leftAt": "Left",
+    "leftAtMissing": "No leave timestamp"
+  },
+  "comparison": {
+    "trend": "Trend",
+    "sessionsCompared": "Sessions Compared",
+    "averageScore": "Average Score"
+  },
+  "trend": {
+    "improving": "Improving",
+    "stable": "Stable",
+    "declining": "Declining"
+  },
+  "peerFeedback": {
+    "averageRating": "Average Rating",
+    "wouldPairAgain": "Would Pair Again",
+    "themes": "Themes",
+    "none": "No themes"
+  },
+  "breakdown": {
+    "emptyDescription": "No final test-case breakdown was available for this session.",
+    "caseLabel": "Test Case {{index}}",
+    "pass": "Passed",
+    "failed": "Did not pass",
+    "timeout": "Timed out",
+    "error": "Execution error",
+    "passDescription": "The final submission passed this test case.",
+    "failDescription": "The final submission did not fully satisfy this test case."
+  },
+  "snapshots": {
+    "emptyDescription": "No code snapshots were available for this session yet.",
+    "errorDescription": "The report loaded, but the code snapshot history could not be fetched right now.",
+    "retry": "Retry snapshots",
+    "snapshotLabel": "Snapshot {{index}}",
+    "showAll": "Show all {{count}} snapshots",
+    "showLatest": "Show latest 3 only",
+    "hiddenCount": "{{count}} earlier snapshots are hidden by default.",
+    "showHistory": "Show all {{count}} snapshots",
+    "hideHistory": "Hide snapshot history",
+    "collapsedDescription": "Snapshot history is collapsed by default to keep the report focused.",
+    "loc": "{{count}} LOC",
+    "noCode": "// No code captured in this snapshot.",
+    "trigger": {
+      "periodic": "Periodic",
+      "phase_change": "Phase change",
+      "submission": "Submission",
+      "manual": "Manual",
+      "session_end": "Session end"
+    }
+  },
+  "role": {
+    "candidate": "Candidate",
+    "interviewer": "Interviewer",
+    "observer": "Observer"
+  },
+  "mode": {
+    "peer": "Peer Interview",
+    "ai": "AI Interview"
+  },
+  "timeline": {
+    "showCode": "Show code",
+    "hideCode": "Hide code",
+    "events": {
+      "sessionStart": "Session started",
+      "phase_change": "Phase changed",
+      "submission": "Code submitted",
+      "manual": "Manual snapshot",
+      "session_end": "Session ended"
+    }
   }
 }
