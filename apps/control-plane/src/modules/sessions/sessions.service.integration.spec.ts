@@ -86,7 +86,7 @@ describe('listSessions', () => {
     });
     await insertSessionParticipant(db, session.id, user.id, 'interviewer');
     await insertSessionParticipant(db, session.id, otherUser.id, 'candidate');
-    await insertSessionReport(db, session.id, { overallScore: 85 });
+    await insertSessionReport(db, session.id, { userId: user.id, overallScore: 85 });
 
     const result = await service.listSessions(user.id, BASE_QUERY, false);
 
@@ -307,6 +307,33 @@ describe('listSessions', () => {
     const result = await service.listSessions(user1.id, BASE_QUERY, false);
     expect(result.data[0].hasFeedback).toBe(true);
   });
+
+  it('GIVEN one session with multiple participant reports WHEN listing THEN returns one row with the current user score', async () => {
+    const interviewer = await insertUser(db);
+    const candidate = await insertUser(db);
+
+    const room = await insertRoom(db, interviewer.id);
+    const session = await insertSession(db, room.id);
+    await insertSessionParticipant(db, session.id, interviewer.id, 'interviewer');
+    await insertSessionParticipant(db, session.id, candidate.id, 'candidate');
+    await insertSessionReport(db, session.id, {
+      userId: interviewer.id,
+      overallScore: 91,
+      status: 'completed',
+    });
+    await insertSessionReport(db, session.id, {
+      userId: candidate.id,
+      overallScore: 78,
+      status: 'completed',
+    });
+
+    const result = await service.listSessions(candidate.id, BASE_QUERY, false);
+
+    expect(result.data).toHaveLength(1);
+    expect(result.data[0].sessionId).toBe(session.id);
+    expect(result.data[0].overallScore).toBe(78);
+    expect(result.data[0].hasReport).toBe(true);
+  });
 });
 
 describe('getSession', () => {
@@ -323,7 +350,7 @@ describe('getSession', () => {
     });
     await insertSessionParticipant(db, session.id, user1.id, 'interviewer');
     await insertSessionParticipant(db, session.id, user2.id, 'candidate');
-    await insertSessionReport(db, session.id);
+    await insertSessionReport(db, session.id, { userId: user1.id });
     await insertSessionRecording(db, session.id);
     await insertPeerFeedbackRow(db, {
       sessionId: session.id,
@@ -357,6 +384,25 @@ describe('getSession', () => {
     expect(result.runs[0].jobId).toBe(completedRun.jobId);
     expect(result.submissions).toHaveLength(1);
     expect(result.submissions[0].submissionId).toBe(completedSub.id);
+  });
+
+  it('GIVEN another participant has a report WHEN getting detail for current user THEN hasReport reflects only the current user', async () => {
+    const interviewer = await insertUser(db);
+    const candidate = await insertUser(db);
+
+    const room = await insertRoom(db, interviewer.id);
+    const session = await insertSession(db, room.id);
+    await insertSessionParticipant(db, session.id, interviewer.id, 'interviewer');
+    await insertSessionParticipant(db, session.id, candidate.id, 'candidate');
+    await insertSessionReport(db, session.id, {
+      userId: interviewer.id,
+      overallScore: 88,
+      status: 'completed',
+    });
+
+    const result = await service.getSession(session.id, candidate.id, false);
+
+    expect(result.hasReport).toBe(false);
   });
 
   it('GIVEN non-participant WHEN getSession THEN throws ForbiddenException', async () => {
