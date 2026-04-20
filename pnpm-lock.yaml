@@ -247,6 +247,9 @@ importers:
       '@types/node':
         specifier: ^25.3.3
         version: 25.3.3
+      '@types/supertest':
+        specifier: ^7.2.0
+        version: 7.2.0
       '@types/ws':
         specifier: ^8.18.1
         version: 8.18.1
@@ -256,6 +259,9 @@ importers:
       pino-pretty:
         specifier: ^13.1.3
         version: 13.1.3
+      supertest:
+        specifier: ^7.2.2
+        version: 7.2.2
       tsx:
         specifier: ^4.21.0
         version: 4.21.0

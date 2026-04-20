@@ -2,6 +2,7 @@ import { ConflictException, NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { describe, expect, it, vi } from 'vitest';
 import { CollaborationService } from '../collaboration/collaboration.service.js';
+import { InternalCallbackGuard } from '../common/guards/internal-callback.guard.js';
 import { InternalController } from './internal.controller.js';
 
 function createMocks() {
@@ -20,7 +21,10 @@ async function createController(mocks: ReturnType<typeof createMocks>) {
   const module = await Test.createTestingModule({
     controllers: [InternalController],
     providers: [{ provide: CollaborationService, useValue: mocks.collaborationService }],
-  }).compile();
+  })
+    .overrideGuard(InternalCallbackGuard)
+    .useValue({ canActivate: () => true })
+    .compile();
 
   return module.get(InternalController);
 }
@@ -130,15 +134,6 @@ describe('InternalController', () => {
       });
 
       expect(result).toEqual({ success: false });
-    });
-  });
-
-  describe('health', () => {
-    it('WHEN checking health THEN returns ok', async () => {
-      const mocks = createMocks();
-      const controller = await createController(mocks);
-
-      expect(controller.health()).toEqual({ status: 'ok' });
     });
   });
 });

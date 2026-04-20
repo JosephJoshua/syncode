@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Param, Post, UseGuards } from '@nestjs/common';
 import {
   type BroadcastParticipantReadyRequest,
   type ChangeLanguageRequest,
@@ -8,7 +8,14 @@ import {
   type UpdateRoomStateRequest,
 } from '@syncode/contracts';
 import { CollaborationService } from '../collaboration/collaboration.service.js';
+import { InternalCallbackGuard } from '../common/guards/internal-callback.guard.js';
 
+/**
+ * Receives HTTP callbacks FROM other planes.
+ * These endpoints are NOT exposed via nginx and require the shared
+ * `X-Internal-Secret` header enforced by `InternalCallbackGuard`.
+ */
+@UseGuards(InternalCallbackGuard)
 @Controller()
 export class InternalController {
   constructor(private readonly collaborationService: CollaborationService) {}
@@ -45,10 +52,5 @@ export class InternalController {
   @Post(COLLAB_INTERNAL.CHANGE_LANGUAGE.route)
   changeLanguage(@Param('roomId') roomId: string, @Body() body: ChangeLanguageRequest) {
     return this.collaborationService.changeLanguage({ ...body, roomId });
-  }
-
-  @Get(COLLAB_INTERNAL.HEALTH.route)
-  health() {
-    return { status: 'ok' as const };
   }
 }
