@@ -5,6 +5,7 @@ import {
   type ParticipantReadyEventData,
   type PhaseChangeEventData,
   type RoomStateEventData,
+  WsCloseCode,
   WsMessageType,
 } from '@syncode/contracts';
 import * as decoding from 'lib0/decoding';
@@ -15,7 +16,6 @@ import * as Y from 'yjs';
 
 export type CollabConnectionStatus = 'connecting' | 'connected' | 'reconnecting' | 'disconnected';
 
-/** Y.Text key used by the collab-plane's YjsDocumentStore. Must match server's CODE_KEY. */
 export const CODE_TEXT_KEY = 'code';
 
 export interface YjsCollabProviderOptions {
@@ -28,14 +28,22 @@ export interface YjsCollabProviderOptions {
   onParticipantReady: (userId: string, isReady: boolean) => void;
   onPhaseChange: (phase: string, previousPhase: string) => void;
   onEditorLock: (locked: boolean, lockedBy: string | null) => void;
+  onRoomNotFound?: () => Promise<void>;
 }
 
 const INITIAL_BACKOFF_MS = 1_000;
 const MAX_BACKOFF_MS = 30_000;
 
-function shouldReconnect(code: number): boolean {
-  if (code === 1000) return false;
-  return code < 4000;
+const TERMINAL_CLOSE_CODES: ReadonlySet<number> = new Set([
+  WsCloseCode.UNAUTHORIZED,
+  WsCloseCode.KICKED,
+  WsCloseCode.ALREADY_CONNECTED,
+  WsCloseCode.ROOM_CLOSED,
+]);
+
+function isTerminalClose(code: number): boolean {
+  if (code === 1000) return true;
+  return TERMINAL_CLOSE_CODES.has(code);
 }
 
 export class YjsCollabProvider {
@@ -91,22 +99,51 @@ export class YjsCollabProvider {
       this.ws = null;
       if (this.disposed) return;
 
-      if (!shouldReconnect(event.code)) {
+      if (isTerminalClose(event.code)) {
         this.setStatus('disconnected');
         return;
       }
 
       this.setStatus('reconnecting');
-      this.reconnectTimer = setTimeout(() => {
-        this.reconnectTimer = null;
-        this.connect();
-      }, this.backoffMs);
-      this.backoffMs = Math.min(this.backoffMs * 2, MAX_BACKOFF_MS);
+
+      if (event.code === WsCloseCode.ROOM_NOT_FOUND && this.options.onRoomNotFound) {
+        this.scheduleRoomNotFoundRecovery();
+        return;
+      }
+
+      this.scheduleReconnect();
     };
 
-    ws.onerror = () => {
-      // close event fires after onerror; reconnection handled there
-    };
+    ws.onerror = () => {};
+  }
+
+  private scheduleReconnect(): void {
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      this.connect();
+    }, this.backoffMs);
+    this.backoffMs = Math.min(this.backoffMs * 2, MAX_BACKOFF_MS);
+  }
+
+  private scheduleRoomNotFoundRecovery(): void {
+    const callback = this.options.onRoomNotFound;
+    if (!callback) {
+      this.scheduleReconnect();
+      return;
+    }
+
+    callback().then(
+      () => {
+        if (this.disposed) return;
+        this.backoffMs = INITIAL_BACKOFF_MS;
+        this.connect();
+      },
+      (error) => {
+        if (this.disposed) return;
+        console.warn('[collab] onRoomNotFound callback rejected, retrying with backoff', error);
+        this.scheduleReconnect();
+      },
+    );
   }
 
   destroy(): void {

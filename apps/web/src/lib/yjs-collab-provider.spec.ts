@@ -406,18 +406,67 @@ describe('YjsCollabProvider', () => {
       provider.destroy();
     });
 
-    it('GIVEN connected WHEN WS closes with 4xxx code THEN does not reconnect', () => {
+    it('GIVEN connected WHEN WS closes with terminal 4xxx code THEN does not reconnect', () => {
       const onStatus = vi.fn();
       const { provider, ws } = connectProvider(
         defaultOptions({ onConnectionStatusChange: onStatus }),
       );
 
-      ws.simulateClose(4001); // server rejection
+      ws.simulateClose(4001); // UNAUTHORIZED
       expect(onStatus).toHaveBeenCalledWith('disconnected');
 
       const wsBefore = MockWebSocket.instances.length;
       vi.advanceTimersByTime(60_000);
       expect(MockWebSocket.instances.length).toBe(wsBefore);
+
+      provider.destroy();
+    });
+
+    it('GIVEN connected WHEN WS closes with ROOM_NOT_FOUND THEN invokes onRoomNotFound then reconnects', async () => {
+      const onRoomNotFound = vi.fn().mockResolvedValue(undefined);
+      const { provider, ws } = connectProvider(defaultOptions({ onRoomNotFound }));
+
+      ws.simulateClose(4004); // ROOM_NOT_FOUND
+      expect(onRoomNotFound).toHaveBeenCalledTimes(1);
+
+      const wsBefore = MockWebSocket.instances.length;
+      await vi.waitFor(() => {
+        expect(MockWebSocket.instances.length).toBe(wsBefore + 1);
+      });
+
+      provider.destroy();
+    });
+
+    it('GIVEN onRoomNotFound rejects WHEN WS closes with ROOM_NOT_FOUND THEN reconnects after backoff anyway', async () => {
+      const onRoomNotFound = vi.fn().mockRejectedValue(new Error('ensure failed'));
+      const { provider, ws } = connectProvider(defaultOptions({ onRoomNotFound }));
+
+      ws.simulateClose(4004);
+      expect(onRoomNotFound).toHaveBeenCalledTimes(1);
+
+      await Promise.resolve();
+      const wsBefore = MockWebSocket.instances.length;
+      vi.advanceTimersByTime(1_000);
+      expect(MockWebSocket.instances.length).toBe(wsBefore + 1);
+
+      provider.destroy();
+    });
+
+    it('GIVEN repeated transient closes THEN keeps reconnecting indefinitely', () => {
+      const { provider, ws: firstWs } = connectProvider();
+
+      firstWs.simulateClose(1006);
+      vi.advanceTimersByTime(1_000);
+      const afterFirst = MockWebSocket.instances.length;
+      expect(afterFirst).toBeGreaterThan(1);
+
+      for (let i = 0; i < 20; i++) {
+        const latest = MockWebSocket.instances[MockWebSocket.instances.length - 1]!;
+        latest.simulateClose(1006);
+        vi.advanceTimersByTime(30_000);
+      }
+
+      expect(MockWebSocket.instances.length).toBeGreaterThan(afterFirst + 10);
 
       provider.destroy();
     });

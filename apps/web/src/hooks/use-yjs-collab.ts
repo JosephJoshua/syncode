@@ -18,6 +18,7 @@ export interface UseYjsCollabOptions {
   onRoomStatePatch: (patch: { status?: RoomStatus; editorLocked?: boolean }) => void;
   onParticipantReady: (userId: string, isReady: boolean) => void;
   onPhaseChange?: () => void;
+  onRoomNotFound?: () => Promise<void>;
 }
 
 interface CollabState {
@@ -40,6 +41,7 @@ export function useYjsCollab({
   onRoomStatePatch,
   onParticipantReady,
   onPhaseChange,
+  onRoomNotFound,
 }: UseYjsCollabOptions): YjsCollabResult {
   const [status, setStatus] = useState<CollabConnectionStatus>(
     collabUrl && collabToken ? 'connecting' : 'disconnected',
@@ -53,6 +55,8 @@ export function useYjsCollab({
   participantReadyRef.current = onParticipantReady;
   const phaseChangeRef = useRef(onPhaseChange);
   phaseChangeRef.current = onPhaseChange;
+  const roomNotFoundRef = useRef(onRoomNotFound);
+  roomNotFoundRef.current = onRoomNotFound;
   const tRef = useRef(t);
   tRef.current = t;
 
@@ -103,6 +107,11 @@ export function useYjsCollab({
         } else {
           toast.info(tRef.current('lobby.editorUnlocked'));
         }
+      },
+      onRoomNotFound: async () => {
+        const handler = roomNotFoundRef.current;
+        if (!handler) return;
+        await handler();
       },
     });
 

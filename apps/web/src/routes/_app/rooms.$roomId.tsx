@@ -237,6 +237,9 @@ function RoomPage() {
     onRoomStatePatch: handleRoomStatePatch,
     onParticipantReady: handleParticipantReady,
     onPhaseChange: () => void refreshRoomDetail(),
+    onRoomNotFound: async () => {
+      await api(CONTROL_API.ROOMS.ENSURE_COLLAB, { params: { id: roomId } });
+    },
   });
 
   const mediaCredsRef = useRef<{ token: string; url: string } | null>(null);
