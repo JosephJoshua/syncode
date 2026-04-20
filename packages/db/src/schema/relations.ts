@@ -46,6 +46,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   matchedRequests: many(matchRequests, { relationName: 'matchedWith' }),
   userWeaknesses: many(userWeaknesses),
   sessionParticipations: many(sessionParticipants),
+  sessionReports: many(sessionReports),
   sessionDeletions: many(sessionDeletions),
   sessionEvents: many(sessionEvents),
   recordingConsents: many(recordingConsents),
@@ -150,7 +151,7 @@ export const sessionsRelations = relations(sessions, ({ one, many }) => ({
     fields: [sessions.problemId],
     references: [problems.id],
   }),
-  report: one(sessionReports),
+  reports: many(sessionReports),
   participants: many(sessionParticipants),
   events: many(sessionEvents),
   recordings: many(sessionRecordings),
@@ -187,6 +188,10 @@ export const sessionReportsRelations = relations(sessionReports, ({ one }) => ({
   session: one(sessions, {
     fields: [sessionReports.sessionId],
     references: [sessions.id],
+  }),
+  user: one(users, {
+    fields: [sessionReports.userId],
+    references: [users.id],
   }),
 }));
 

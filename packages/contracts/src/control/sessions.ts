@@ -1,5 +1,6 @@
 import { ROOM_MODES, ROOM_ROLES, SUPPORTED_LANGUAGES } from '@syncode/shared';
 import { z } from 'zod';
+import { executionTestCaseDetailSchema } from './execution.js';
 import { paginationQuerySchema, paginationSchema } from './pagination.js';
 
 export const SESSIONS_SORT_BY_OPTIONS = [
@@ -118,6 +119,70 @@ export const codeSnapshotsResponseSchema = z.object({
   data: z.array(codeSnapshotSchema).default([]),
 });
 
+export const sessionReportEvidenceSchema = z.object({
+  type: z.string(),
+  reference: z.string(),
+  description: z.string(),
+});
+
+export const sessionReportDimensionSchema = z.object({
+  score: z.number().min(0).max(100),
+  feedback: z.string(),
+  evidence: z.array(sessionReportEvidenceSchema).default([]),
+});
+
+export const SESSION_REPORT_TREND_OPTIONS = ['improving', 'stable', 'declining'] as const;
+
+export const sessionReportComparisonSchema = z.object({
+  trend: z.enum(SESSION_REPORT_TREND_OPTIONS),
+  sessionsCompared: z.number().int().nonnegative(),
+  averageScore: z.number().min(0).max(100),
+});
+
+export const sessionReportPeerFeedbackSummarySchema = z.object({
+  averageRating: z.number().min(0).max(5),
+  wouldPairAgain: z.number().min(0).max(100),
+  themes: z.array(z.string()).default([]),
+});
+
+export const sessionReportTestCaseBreakdownSchema = executionTestCaseDetailSchema.extend({
+  input: z
+    .string()
+    .nullable()
+    .describe('Original test case input. Can be null if the case is intentionally redacted.')
+    .meta({ examples: ['nums = [2,7,11,15], target = 9'] }),
+  description: z
+    .string()
+    .nullable()
+    .describe('Optional human-readable label for the test case')
+    .meta({ examples: ['Basic happy path'] }),
+  isHidden: z
+    .boolean()
+    .describe('Whether this test case was hidden from the participant during the session')
+    .meta({ examples: [false] }),
+});
+
+export const sessionReportSchema = z.object({
+  sessionId: z.uuid().optional(),
+  generatedAt: z.iso.datetime().optional(),
+  overallScore: z.number().min(0).max(100).optional(),
+  dimensions: z
+    .object({
+      correctness: sessionReportDimensionSchema.optional(),
+      efficiency: sessionReportDimensionSchema.optional(),
+      codeQuality: sessionReportDimensionSchema.optional(),
+      communication: sessionReportDimensionSchema.optional(),
+      problemSolving: sessionReportDimensionSchema.optional(),
+    })
+    .optional(),
+  strengths: z.array(z.string()).optional(),
+  areasForImprovement: z.array(z.string()).optional(),
+  detailedFeedback: z.string().optional(),
+  comparisonToHistory: sessionReportComparisonSchema.nullable().optional(),
+  peerFeedbackSummary: sessionReportPeerFeedbackSummarySchema.nullable().optional(),
+  testCaseBreakdown: z.array(sessionReportTestCaseBreakdownSchema).optional(),
+});
+
 export type SessionHistoryParticipant = z.infer<typeof sessionHistoryParticipantSchema>;
 export type SessionSummary = z.infer<typeof sessionSummarySchema>;
 export type SessionHistoryResponse = z.infer<typeof sessionHistoryResponseSchema>;
@@ -126,3 +191,14 @@ export type SessionDetail = z.infer<typeof sessionDetailSchema>;
 export type CodeSnapshotTrigger = (typeof CODE_SNAPSHOT_TRIGGERS)[number];
 export type CodeSnapshot = z.infer<typeof codeSnapshotSchema>;
 export type CodeSnapshotsResponse = z.infer<typeof codeSnapshotsResponseSchema>;
+export type SessionReportEvidence = z.infer<typeof sessionReportEvidenceSchema>;
+export type SessionReportDimension = z.infer<typeof sessionReportDimensionSchema>;
+export type SessionReportComparison = z.infer<typeof sessionReportComparisonSchema>;
+export type SessionReportPeerFeedbackSummary = z.infer<
+  typeof sessionReportPeerFeedbackSummarySchema
+>;
+export type SessionReportTestCaseBreakdownItem = z.infer<
+  typeof sessionReportTestCaseBreakdownSchema
+>;
+export type SessionReportTrend = (typeof SESSION_REPORT_TREND_OPTIONS)[number];
+export type SessionReport = z.infer<typeof sessionReportSchema>;

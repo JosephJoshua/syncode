@@ -45,6 +45,7 @@ import type {
   listSessionsQuerySchema,
   sessionDetailSchema,
   sessionHistoryResponseSchema,
+  sessionReportSchema,
 } from './sessions.js';
 import type {
   avatarUploadUrlResponseSchema,
@@ -166,6 +167,10 @@ export const CONTROL_API = {
     >()('sessions', 'GET'),
     SNAPSHOTS: defineRoute<void, z.infer<typeof codeSnapshotsResponseSchema>>()(
       'sessions/:sessionId/snapshots',
+      'GET',
+    ),
+    REPORT: defineRoute<void, z.infer<typeof sessionReportSchema>>()(
+      'sessions/:sessionId/report',
       'GET',
     ),
     GET: defineRoute<void, z.infer<typeof sessionDetailSchema>>()('sessions/:id', 'GET'),

@@ -6,8 +6,12 @@ import {
   AI_INTERVIEW_RESULT_QUEUE,
   AI_REVIEW_QUEUE,
   AI_REVIEW_RESULT_QUEUE,
+  AI_SESSION_REPORT_QUEUE,
+  AI_SESSION_REPORT_RESULT_QUEUE,
   type GenerateHintRequest,
   type GenerateHintResult,
+  type GenerateSessionReportRequest,
+  type GenerateSessionReportResult,
   type IAiClient,
   type InterviewResponseRequest,
   type InterviewResponseResult,
@@ -44,6 +48,10 @@ export class QueueAiClient implements IAiClient, OnModuleInit {
     this.helper.processResultQueue<GenerateHintResult>(AI_HINT_RESULT_QUEUE, 'hint');
     this.helper.processResultQueue<ReviewCodeResult>(AI_REVIEW_RESULT_QUEUE, 'review');
     this.helper.processResultQueue<InterviewResponseResult>(AI_INTERVIEW_RESULT_QUEUE, 'interview');
+    this.helper.processResultQueue<GenerateSessionReportResult>(
+      AI_SESSION_REPORT_RESULT_QUEUE,
+      'session-report',
+    );
   }
 
   async submitHintRequest(request: GenerateHintRequest): Promise<SubmitResult<'ai:hint'>> {
@@ -98,6 +106,30 @@ export class QueueAiClient implements IAiClient, OnModuleInit {
     return this.helper.getResult<InterviewResponseResult>(jobId);
   }
 
+  async submitSessionReportRequest(
+    request: GenerateSessionReportRequest,
+  ): Promise<SubmitResult<'ai:session-report'>> {
+    const jobId = await this.queueService.enqueue(
+      AI_SESSION_REPORT_QUEUE,
+      'generate-session-report',
+      request,
+      {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 1500 },
+        removeOnComplete: 100,
+        removeOnFail: false,
+      },
+    );
+
+    return { jobId: jobId as JobId<'ai:session-report'> };
+  }
+
+  async getSessionReportResult(
+    jobId: JobId<'ai:session-report'>,
+  ): Promise<GenerateSessionReportResult | null> {
+    return this.helper.getResult<GenerateSessionReportResult>(jobId);
+  }
+
   async getHintJobStatus(jobId: JobId<'ai:hint'>): Promise<JobStatus> {
     return this.helper.getJobStatus(AI_HINT_QUEUE, jobId);
   }
@@ -110,15 +142,25 @@ export class QueueAiClient implements IAiClient, OnModuleInit {
     return this.helper.getJobStatus(AI_INTERVIEW_QUEUE, jobId);
   }
 
+  async getSessionReportJobStatus(jobId: JobId<'ai:session-report'>): Promise<JobStatus> {
+    return this.helper.getJobStatus(AI_SESSION_REPORT_QUEUE, jobId);
+  }
+
   async healthCheck(): Promise<boolean> {
     try {
-      const [hintStats, reviewStats, interviewStats] = await Promise.all([
+      const [hintStats, reviewStats, interviewStats, sessionReportStats] = await Promise.all([
         this.queueService.getQueueStats(AI_HINT_QUEUE),
         this.queueService.getQueueStats(AI_REVIEW_QUEUE),
         this.queueService.getQueueStats(AI_INTERVIEW_QUEUE),
+        this.queueService.getQueueStats(AI_SESSION_REPORT_QUEUE),
       ]);
 
-      return hintStats != null && reviewStats != null && interviewStats != null;
+      return (
+        hintStats != null &&
+        reviewStats != null &&
+        interviewStats != null &&
+        sessionReportStats != null
+      );
     } catch (error) {
       this.logger.error('Health check failed', error);
       return false;

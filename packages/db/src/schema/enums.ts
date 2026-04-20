@@ -29,6 +29,12 @@ export const roomRoleEnum = pgEnum('room_role', ['interviewer', 'candidate', 'ob
 
 export const sessionStatusEnum = pgEnum('session_status', ['ongoing', 'finished']);
 
+export const sessionReportStatusEnum = pgEnum('session_report_status', [
+  'pending',
+  'completed',
+  'failed',
+]);
+
 export const submissionStatusEnum = pgEnum('submission_status', [
   'pending',
   'running',
