@@ -11,6 +11,7 @@ import request from 'supertest';
 import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard.js';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
 import { ExecutionService } from '@/modules/execution/execution.service.js';
+import { SessionReportsService } from '@/modules/sessions/session-reports.service.js';
 import { InMemoryCacheService } from '@/test/in-memory-cache.service.js';
 import {
   createTestDb,
@@ -27,6 +28,7 @@ import {
   createMockExecutionClient,
   createMockJwtService,
   createMockMediaService,
+  createMockSessionReportsService,
   createMockStorageService,
   TestAuthGuard,
 } from '@/test/mock-factories.js';
@@ -59,6 +61,7 @@ beforeEach(async () => {
       { provide: STORAGE_SERVICE, useValue: createMockStorageService() },
       { provide: JwtService, useValue: createMockJwtService() },
       { provide: ConfigService, useValue: createMockConfigService() },
+      { provide: SessionReportsService, useValue: createMockSessionReportsService() },
       Reflector,
     ],
   })

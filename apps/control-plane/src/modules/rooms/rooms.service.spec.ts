@@ -6,11 +6,13 @@ import { COLLAB_CLIENT } from '@syncode/contracts';
 import { MEDIA_SERVICE, STORAGE_SERVICE } from '@syncode/shared/ports';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
 import { ExecutionService } from '@/modules/execution/execution.service.js';
+import { SessionReportsService } from '@/modules/sessions/session-reports.service.js';
 import {
   createMockCollabClient,
   createMockConfigService,
   createMockJwtService,
   createMockMediaService,
+  createMockSessionReportsService,
   createMockStorageService,
 } from '@/test/mock-factories.js';
 import { RoomsService } from './rooms.service.js';
@@ -97,6 +99,7 @@ describe('RoomsService', () => {
         { provide: STORAGE_SERVICE, useValue: createMockStorageService() },
         { provide: JwtService, useValue: createMockJwtService('mock-collab-token') },
         { provide: ConfigService, useValue: createMockConfigService() },
+        { provide: SessionReportsService, useValue: createMockSessionReportsService() },
       ],
     }).compile();
 
