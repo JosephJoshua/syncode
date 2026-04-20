@@ -47,6 +47,32 @@ describe('YjsDocumentStore', () => {
       expect(doc.getText('code').toString()).toBe('from-snapshot');
     });
 
+    it('GIVEN corrupt snapshot WHEN creating THEN does not throw and returns a usable Y.Doc', () => {
+      const store = new YjsDocumentStore();
+      const corrupt = new Uint8Array([0xff, 0x00]);
+
+      const result = store.createDoc('room-1', { snapshot: corrupt });
+
+      expect(result.created).toBe(true);
+      expect(result.doc).toBeInstanceOf(Y.Doc);
+      // doc is still usable
+      result.doc.getText('code').insert(0, 'after-recovery');
+      expect(result.doc.getText('code').toString()).toBe('after-recovery');
+    });
+
+    it('GIVEN corrupt snapshot with initialContent WHEN creating THEN seeds the initialContent', () => {
+      const store = new YjsDocumentStore();
+      const corrupt = new Uint8Array([0xff, 0x00]);
+
+      const { doc, created } = store.createDoc('room-1', {
+        snapshot: corrupt,
+        initialContent: 'fallback-starter',
+      });
+
+      expect(created).toBe(true);
+      expect(doc.getText('code').toString()).toBe('fallback-starter');
+    });
+
     it('GIVEN existing doc WHEN creating duplicate THEN returns existing doc with created=false', () => {
       const store = new YjsDocumentStore();
       const first = store.createDoc('room-1', { initialContent: 'first' });

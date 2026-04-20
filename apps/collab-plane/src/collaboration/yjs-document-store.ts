@@ -25,10 +25,29 @@ export class YjsDocumentStore implements OnModuleDestroy {
     }
 
     const doc = new Y.Doc();
+    let snapshotApplied = false;
 
     if (options.snapshot) {
-      Y.applyUpdate(doc, options.snapshot);
-    } else if (options.initialContent) {
+      try {
+        Y.applyUpdate(doc, options.snapshot);
+        snapshotApplied = true;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.logger.warn(
+          `Failed to apply snapshot for room ${roomId} (${options.snapshot.byteLength} bytes): ${message}. Falling back to empty doc.`,
+        );
+        doc.destroy();
+        const fresh = new Y.Doc();
+        this.docs.set(roomId, fresh);
+        if (options.initialContent) {
+          fresh.getText(YjsDocumentStore.CODE_KEY).insert(0, options.initialContent);
+        }
+        this.logger.log(`Y.Doc created for room ${roomId}`);
+        return { doc: fresh, created: true };
+      }
+    }
+
+    if (!snapshotApplied && options.initialContent) {
       doc.getText(YjsDocumentStore.CODE_KEY).insert(0, options.initialContent);
     }
 
