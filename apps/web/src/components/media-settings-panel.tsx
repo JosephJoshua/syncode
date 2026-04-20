@@ -83,15 +83,29 @@ async function queryPermission(name: 'camera' | 'microphone'): Promise<Permissio
   }
 }
 
-async function enumerateByKind(): Promise<LocalDevices> {
+interface EnumerationResult {
+  devices: LocalDevices;
+  audioHasNativeLabels: boolean;
+  videoHasNativeLabels: boolean;
+}
+
+async function enumerateByKind(): Promise<EnumerationResult> {
   const devices = await navigator.mediaDevices.enumerateDevices();
+  const rawAudio = devices.filter((d) => d.kind === 'audioinput' && d.deviceId);
+  const rawVideo = devices.filter((d) => d.kind === 'videoinput' && d.deviceId);
   return {
-    audio: devices
-      .filter((d) => d.kind === 'audioinput' && d.deviceId)
-      .map((d, i) => ({ deviceId: d.deviceId, label: d.label || `Microphone ${i + 1}` })),
-    video: devices
-      .filter((d) => d.kind === 'videoinput' && d.deviceId)
-      .map((d, i) => ({ deviceId: d.deviceId, label: d.label || `Camera ${i + 1}` })),
+    devices: {
+      audio: rawAudio.map((d, i) => ({
+        deviceId: d.deviceId,
+        label: d.label || `Microphone ${i + 1}`,
+      })),
+      video: rawVideo.map((d, i) => ({
+        deviceId: d.deviceId,
+        label: d.label || `Camera ${i + 1}`,
+      })),
+    },
+    audioHasNativeLabels: rawAudio.some((d) => d.label.length > 0),
+    videoHasNativeLabels: rawVideo.some((d) => d.label.length > 0),
   };
 }
 
@@ -113,20 +127,26 @@ function useMediaPermissions(
   const cancelledRef = useRef(false);
 
   const detect = useCallback(async (cancelled: { current: boolean }) => {
-    const [camPerm, micPerm, devices] = await Promise.all([
+    const emptyEnum: EnumerationResult = {
+      devices: { audio: [], video: [] },
+      audioHasNativeLabels: false,
+      videoHasNativeLabels: false,
+    };
+    const [camPerm, micPerm, enumeration] = await Promise.all([
       queryPermission('camera'),
       queryPermission('microphone'),
-      enumerateByKind().catch(() => ({ audio: [], video: [] }) as LocalDevices),
+      enumerateByKind().catch(() => emptyEnum),
     ]);
     if (cancelled.current) return;
 
-    // Non-placeholder labels indicate the browser has already granted access this session.
-    const audioHasLabels = devices.audio.some((d) => d.label && !/^Microphone \d+$/.test(d.label));
-    const videoHasLabels = devices.video.some((d) => d.label && !/^Camera \d+$/.test(d.label));
-
-    setAudioGranted(micPerm === 'granted' || (micPerm === 'unknown' && audioHasLabels));
-    setVideoGranted(camPerm === 'granted' || (camPerm === 'unknown' && videoHasLabels));
-    setProbed(devices);
+    // Native browsers return empty labels until permission has been granted this session.
+    setAudioGranted(
+      micPerm === 'granted' || (micPerm === 'unknown' && enumeration.audioHasNativeLabels),
+    );
+    setVideoGranted(
+      camPerm === 'granted' || (camPerm === 'unknown' && enumeration.videoHasNativeLabels),
+    );
+    setProbed(enumeration.devices);
   }, []);
 
   useEffect(() => {
