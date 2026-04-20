@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HttpControlPlaneCallbackClient } from './http-control-plane-callback.client.js';
 
 const CONTROL_PLANE_URL = 'http://localhost:3000';
+const INTERNAL_SECRET = 'x'.repeat(32);
 
 const PAYLOAD: UserDisconnectedPayload = {
   roomId: 'room-1',
@@ -36,7 +37,7 @@ describe('HttpControlPlaneCallbackClient', () => {
   let client: HttpControlPlaneCallbackClient;
 
   beforeEach(() => {
-    client = new HttpControlPlaneCallbackClient(CONTROL_PLANE_URL);
+    client = new HttpControlPlaneCallbackClient(CONTROL_PLANE_URL, INTERNAL_SECRET);
     mockPost.mockReset();
   });
 

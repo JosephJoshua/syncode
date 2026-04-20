@@ -14,10 +14,13 @@ export class HttpControlPlaneCallbackClient implements IControlPlaneCallbackClie
   private readonly logger = new Logger(HttpControlPlaneCallbackClient.name);
   private readonly client: KyInstance;
 
-  constructor(controlPlaneUrl: string) {
+  constructor(controlPlaneUrl: string, internalSecret: string) {
     this.client = ky.create({
       prefixUrl: controlPlaneUrl,
       timeout: 5_000,
+      headers: {
+        'X-Internal-Secret': internalSecret,
+      },
       retry: {
         limit: 3,
         methods: ['post'],
