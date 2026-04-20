@@ -1,13 +1,54 @@
 import type {
   GenerateHintRequest,
+  GenerateSessionReportRequest,
   InterviewResponseRequest,
   ReviewCodeRequest,
 } from '@syncode/contracts';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { AiService } from './ai.service.js';
 
 describe('AiService', () => {
-  const service = new AiService();
+  const llmProvider = {
+    generateText: vi.fn().mockResolvedValue({
+      text: JSON.stringify({
+        overallScore: 82,
+        dimensions: {
+          correctness: {
+            score: 84,
+            feedback: 'Correctness feedback',
+            evidence: [],
+          },
+          efficiency: {
+            score: 78,
+            feedback: 'Efficiency feedback',
+            evidence: [],
+          },
+          codeQuality: {
+            score: 80,
+            feedback: 'Code quality feedback',
+            evidence: [],
+          },
+          communication: {
+            score: 76,
+            feedback: 'Communication feedback',
+            evidence: [],
+          },
+          problemSolving: {
+            score: 83,
+            feedback: 'Problem solving feedback',
+            evidence: [],
+          },
+        },
+        strengths: ['Strong iteration'],
+        areasForImprovement: ['Explain tradeoffs earlier'],
+        detailedFeedback: 'Detailed feedback',
+        comparisonToHistory: null,
+        peerFeedbackSummary: null,
+      }),
+      model: 'qwen3.5-mini',
+    }),
+  };
+  const service = new AiService(llmProvider);
 
   const baseHintRequest: GenerateHintRequest = {
     roomId: 'room-1',
@@ -114,6 +155,67 @@ describe('AiService', () => {
         expect(typeof annotation.line).toBe('number');
         expect(typeof annotation.comment).toBe('string');
       }
+    });
+  });
+
+  describe('generateSessionReport', () => {
+    it('GIVEN report request WHEN generateSessionReport THEN returns validated report with injected deterministic fields', async () => {
+      const request: GenerateSessionReportRequest = {
+        sessionId: '550e8400-e29b-41d4-a716-446655440000',
+        roomId: '660e8400-e29b-41d4-a716-446655440000',
+        participantId: '770e8400-e29b-41d4-a716-446655440000',
+        participantRole: 'candidate',
+        participants: [
+          {
+            userId: '770e8400-e29b-41d4-a716-446655440000',
+            username: 'alice',
+            displayName: 'Alice',
+            role: 'candidate',
+          },
+        ],
+        problem: {
+          id: '880e8400-e29b-41d4-a716-446655440000',
+          title: 'Two Sum',
+          description: 'Find two numbers.',
+          difficulty: 'easy',
+          constraints: null,
+        },
+        language: 'typescript',
+        durationMs: 120000,
+        startedAt: '2026-04-20T01:00:00.000Z',
+        finishedAt: '2026-04-20T01:02:00.000Z',
+        snapshots: [],
+        runs: [],
+        submissions: [],
+        finalTestCaseBreakdown: [
+          {
+            testCaseIndex: 0,
+            input: 'nums = [2,7,11,15], target = 9',
+            description: 'Basic case',
+            isHidden: false,
+            passed: true,
+            expectedOutput: '[0,1]',
+            actualOutput: '[0,1]',
+            stdout: '[0,1]\\n',
+            stderr: '',
+            exitCode: 0,
+            durationMs: 12,
+            memoryUsageMb: 8.5,
+            timedOut: false,
+            errorMessage: null,
+          },
+        ],
+        peerFeedback: [],
+        aiMessages: [],
+        historicalContext: null,
+      };
+
+      const result = await service.generateSessionReport(request);
+
+      expect(result.sessionId).toBe(request.sessionId);
+      expect(result.testCaseBreakdown).toEqual(request.finalTestCaseBreakdown);
+      expect(result.overallScore).toBe(82);
+      expect(result.generatedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     });
   });
 });
