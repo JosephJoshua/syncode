@@ -166,21 +166,28 @@ function ScreenShareTile({
   );
 }
 
-type ZoomTarget = { identity: string; kind: 'camera' | 'screen' };
+export type ZoomTarget = { identity: string; kind: 'camera' | 'screen' };
 
-function useClearZoomWhenMissing(
+export function shouldClearZoomTarget(
+  zoomTarget: ZoomTarget | null,
+  tiles: VideoPanelParticipant[],
+): boolean {
+  if (zoomTarget === null) return false;
+  const stillPresent = tiles.some((t) => {
+    if (t.identity !== zoomTarget.identity) return false;
+    if (zoomTarget.kind === 'screen') return t.hasScreenShare && t.screenShareTrack !== null;
+    return true;
+  });
+  return !stillPresent;
+}
+
+export function useClearZoomWhenMissing(
   zoomTarget: ZoomTarget | null,
   tiles: VideoPanelParticipant[],
   setZoomTarget: (target: ZoomTarget | null) => void,
 ) {
   useEffect(() => {
-    if (zoomTarget === null) return;
-    const stillPresent = tiles.some((t) => {
-      if (t.identity !== zoomTarget.identity) return false;
-      if (zoomTarget.kind === 'screen') return t.hasScreenShare && t.screenShareTrack !== null;
-      return true;
-    });
-    if (!stillPresent) setZoomTarget(null);
+    if (shouldClearZoomTarget(zoomTarget, tiles)) setZoomTarget(null);
   }, [tiles, zoomTarget, setZoomTarget]);
 }
 
