@@ -429,7 +429,7 @@ export function FloatingVideoPanel({
     [clampSize],
   );
 
-  const onResizePointerUp = useCallback(() => {
+  const endResize = useCallback((e?: React.PointerEvent) => {
     resizeRef.current = null;
     if (resizeRafRef.current !== null) {
       cancelAnimationFrame(resizeRafRef.current);
@@ -438,6 +438,12 @@ export function FloatingVideoPanel({
     if (pendingSizeRef.current) {
       setSize(pendingSizeRef.current);
       pendingSizeRef.current = null;
+    }
+    if (e) {
+      const target = e.target as HTMLElement;
+      if (target.hasPointerCapture?.(e.pointerId)) {
+        target.releasePointerCapture(e.pointerId);
+      }
     }
   }, []);
 
@@ -553,8 +559,9 @@ export function FloatingVideoPanel({
               className="absolute bottom-0 right-0 z-10 flex size-4 cursor-nwse-resize items-end justify-end text-muted-foreground/50 hover:text-muted-foreground"
               onPointerDown={onResizePointerDown}
               onPointerMove={onResizePointerMove}
-              onPointerUp={onResizePointerUp}
-              onPointerCancel={onResizePointerUp}
+              onPointerUp={endResize}
+              onPointerCancel={endResize}
+              onLostPointerCapture={endResize}
             >
               <svg viewBox="0 0 10 10" className="size-2.5 pointer-events-none">
                 <title>Resize</title>
