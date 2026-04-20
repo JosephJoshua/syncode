@@ -1127,6 +1127,8 @@ export class RoomsService {
     const requiredRoles: RoomRole[] =
       mode === 'peer' ? [RoomRole.INTERVIEWER, RoomRole.CANDIDATE] : [RoomRole.CANDIDATE];
 
+    // role is the mode-resolved runtime role (see fetchActiveParticipants), not the raw DB value,
+    // so host-as-candidate in AI mode lands on CANDIDATE here as expected.
     const required = activeParticipants.filter((participant) =>
       requiredRoles.includes(participant.role),
     );
