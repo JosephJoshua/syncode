@@ -631,6 +631,13 @@ export class RoomsService {
         });
       }
 
+      if (lockedRoom.status !== RoomStatus.WAITING) {
+        throw new BadRequestException({
+          message: 'Participant roles are locked once the session has started',
+          code: ERROR_CODES.ROOM_ROLES_LOCKED,
+        });
+      }
+
       this.assertRoleAllowedForMode(lockedRoom.mode, nextRole);
 
       const participants = await tx

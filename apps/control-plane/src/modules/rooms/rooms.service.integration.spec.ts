@@ -548,16 +548,46 @@ describe('updateParticipantRole', () => {
     );
   });
 
-  it('GIVEN started peer room WHEN reassignment breaks required role balance THEN throws ConflictException', async () => {
+  it('GIVEN waiting peer room WHEN reassignment breaks required role balance THEN throws ConflictException', async () => {
     const host = await insertUser(db);
     const candidate = await insertUser(db);
-    const room = await insertRoom(db, host.id, { status: 'warmup' });
+    const extra = await insertUser(db);
+    const room = await insertRoom(db, host.id);
     await insertParticipant(db, room.id, host.id, 'interviewer');
     await insertParticipant(db, room.id, candidate.id, 'candidate');
+    await insertParticipant(db, room.id, extra.id, 'observer');
 
     await expect(
-      service.updateParticipantRole(room.id, host.id, candidate.id, 'observer'),
+      service.updateParticipantRole(room.id, host.id, extra.id, 'interviewer'),
     ).rejects.toThrow(ConflictException);
+  });
+
+  it('GIVEN room in warmup WHEN host updates role THEN throws BadRequestException with ROOM_ROLES_LOCKED', async () => {
+    const host = await insertUser(db);
+    const participant = await insertUser(db);
+    const room = await insertRoom(db, host.id, { status: 'warmup' });
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+    await insertParticipant(db, room.id, participant.id, 'candidate');
+
+    await expect(
+      service.updateParticipantRole(room.id, host.id, participant.id, 'observer'),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({ code: ERROR_CODES.ROOM_ROLES_LOCKED }),
+    });
+  });
+
+  it('GIVEN room in coding WHEN host updates role THEN throws BadRequestException with ROOM_ROLES_LOCKED', async () => {
+    const host = await insertUser(db);
+    const participant = await insertUser(db);
+    const room = await insertRoom(db, host.id, { status: 'coding' });
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+    await insertParticipant(db, room.id, participant.id, 'candidate');
+
+    await expect(
+      service.updateParticipantRole(room.id, host.id, participant.id, 'observer'),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({ code: ERROR_CODES.ROOM_ROLES_LOCKED }),
+    });
   });
 });
 
