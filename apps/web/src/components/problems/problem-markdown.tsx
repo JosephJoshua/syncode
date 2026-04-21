@@ -1,6 +1,7 @@
 import { cn } from '@syncode/ui';
 import type { ComponentPropsWithoutRef } from 'react';
 import Markdown from 'react-markdown';
+import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
 
 type ProblemMarkdownProps = {
@@ -36,7 +37,7 @@ export function ProblemMarkdown({ content, className, compact = false }: Problem
         className,
       )}
     >
-      <Markdown remarkPlugins={[remarkGfm]} components={components}>
+      <Markdown remarkPlugins={[remarkGfm, remarkBreaks]} components={components}>
         {content}
       </Markdown>
     </div>
