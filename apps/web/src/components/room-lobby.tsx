@@ -37,6 +37,7 @@ interface RoomLobbyProps {
   onToggleReady: () => void;
   onTransition: (targetStatus: RoomStatus) => void;
   onRoomUpdated?: (room: RoomDetail) => void;
+  mediaControls?: React.ReactNode;
   speakingMap?: ReadonlyMap<string, boolean>;
   mediaConnectedSet?: ReadonlySet<string>;
   mediaMutedMap?: ReadonlyMap<string, boolean>;
@@ -72,6 +73,7 @@ export function RoomLobby({
   onToggleReady,
   onTransition,
   onRoomUpdated,
+  mediaControls,
   speakingMap,
   mediaConnectedSet,
   mediaMutedMap,
@@ -98,6 +100,7 @@ export function RoomLobby({
     currentUserId && activeParticipants.find((p) => p.userId === currentUserId)?.isReady,
   );
   const canEnterWorkspace = status === 'waiting' && canChangePhase && isRoomValid && myReady;
+  const rolesLocked = status !== 'waiting';
 
   const inviteLink = buildInviteLink(roomId, roomCode);
 
@@ -148,6 +151,7 @@ export function RoomLobby({
                   currentUserId={currentUserId}
                   roomHostId={hostId}
                   canManageParticipants={canManageParticipants}
+                  rolesLocked={rolesLocked}
                   isUpdatingRole={isUpdatingRole === participant.userId}
                   isTransferringOwnership={isTransferringOwnership === participant.userId}
                   isSpeaking={speakingMap?.get(participant.userId) ?? false}
@@ -254,6 +258,13 @@ export function RoomLobby({
                     </div>
                   </div>
                 </div>
+
+                {/* Media controls */}
+                {mediaControls ? (
+                  <div className="flex items-center justify-center rounded-md border border-border/60 bg-background/70 px-2 py-2">
+                    {mediaControls}
+                  </div>
+                ) : null}
 
                 {/* Ready toggle */}
                 <Button

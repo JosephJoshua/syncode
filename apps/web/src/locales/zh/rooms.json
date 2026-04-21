@@ -293,6 +293,7 @@
     "languagePickerLabel": "语言",
     "languagePickerPlaceholder": "选择语言",
     "languageChangeFailed": "切换语言失败。",
-    "noStarterForLanguage": "{{language}} 没有起始代码——编辑器已清空。"
+    "noStarterForLanguage": "{{language}} 没有起始代码——编辑器已清空。",
+    "rolesLocked": "会话开始后角色已锁定。"
   }
 }

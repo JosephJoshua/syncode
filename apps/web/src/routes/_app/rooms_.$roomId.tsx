@@ -779,6 +779,7 @@ function RoomPage() {
         onToggleReady={handleToggleReady}
         onTransition={handleTransition}
         onRoomUpdated={setRoom}
+        mediaControls={mediaControlsElement}
         speakingMap={speakingMap}
         mediaConnectedSet={mediaConnectedSet}
         mediaMutedMap={mediaMutedMap}
@@ -820,6 +821,7 @@ const TRANSITION_ERROR_KEYS: Partial<Record<string, string>> = {
 
 const ROLE_UPDATE_ERROR_KEYS: Partial<Record<string, string>> = {
   [ERROR_CODES.ROOM_ROLE_CONSTRAINT_VIOLATION]: 'lobby.roleConstraintViolation',
+  [ERROR_CODES.ROOM_ROLES_LOCKED]: 'workspace.rolesLocked',
   [ERROR_CODES.PARTICIPANT_NOT_FOUND]: 'lobby.participantNotFound',
   [ERROR_CODES.ROOM_PERMISSION_DENIED]: 'lobby.accessDenied',
   [ERROR_CODES.ROOM_NOT_PEER_MODE]: 'lobby.notPeerMode',

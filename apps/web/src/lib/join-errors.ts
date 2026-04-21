@@ -14,6 +14,7 @@ export const JOIN_ERROR_KEYS: ErrorKeyMap = {
   [ERROR_CODES.ROOM_PERMISSION_DENIED]: 'lobby.accessDenied',
   [ERROR_CODES.ROOM_INVITE_CODE_EXHAUSTED]: 'lobby.invalidCode',
   [ERROR_CODES.ROOM_ROLE_UNAVAILABLE]: 'lobby.roleUnavailable',
+  [ERROR_CODES.ROOM_ROLES_LOCKED]: 'workspace.rolesLocked',
   [ERROR_CODES.ROOM_PARTICIPANT_REMOVED]: 'browse.joinRemoved',
 };
 

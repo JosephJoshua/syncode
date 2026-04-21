@@ -293,6 +293,7 @@
     "languagePickerLabel": "Language",
     "languagePickerPlaceholder": "Select a language",
     "languageChangeFailed": "Failed to change the language.",
-    "noStarterForLanguage": "No starter code for {{language}} — starting with a blank editor."
+    "noStarterForLanguage": "No starter code for {{language}} — starting with a blank editor.",
+    "rolesLocked": "Roles are locked once the session starts."
   }
 }
