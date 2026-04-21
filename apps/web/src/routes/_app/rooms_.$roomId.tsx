@@ -774,6 +774,7 @@ function RoomPage() {
         isUpdatingRole={isUpdatingRole}
         isTransferringOwnership={isTransferringOwnership}
         joinNotice={joinNotice}
+        collabStatus={collabStatus}
         onParticipantRoleChange={handleParticipantRoleChange}
         onTransferOwnership={handleTransferOwnership}
         onToggleReady={handleToggleReady}

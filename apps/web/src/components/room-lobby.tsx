@@ -1,11 +1,12 @@
 import type { RoomDetail } from '@syncode/contracts';
 import type { RoomMode, RoomRole, RoomStatus, SupportedLanguage } from '@syncode/shared';
-import { Badge, Button, Card } from '@syncode/ui';
+import { Badge, Button, Card, cn } from '@syncode/ui';
 import { AlertTriangle, Check, Copy, Crown, Loader2, Play } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useClipboard } from '@/hooks/use-clipboard.js';
+import type { CollabConnectionStatus } from '@/hooks/use-yjs-collab.js';
 import {
   buildInviteLink,
   countActiveRoleConfiguration,
@@ -32,6 +33,7 @@ interface RoomLobbyProps {
   isUpdatingRole: string | null;
   isTransferringOwnership: string | null;
   joinNotice: string | null;
+  collabStatus: CollabConnectionStatus;
   onParticipantRoleChange: (userId: string, role: RoomRole) => void;
   onTransferOwnership: (userId: string, displayName: string) => void;
   onToggleReady: () => void;
@@ -51,6 +53,20 @@ interface RoomLobbyProps {
   };
 }
 
+const COLLAB_STATUS_DOT: Record<CollabConnectionStatus, string> = {
+  connected: 'bg-success live-pulse',
+  connecting: 'bg-warning animate-pulse',
+  reconnecting: 'bg-warning animate-pulse',
+  disconnected: 'bg-destructive',
+};
+
+const COLLAB_STATUS_LABEL_KEY: Record<CollabConnectionStatus, string> = {
+  connected: 'statusBar.connected',
+  connecting: 'statusBar.connecting',
+  reconnecting: 'statusBar.reconnecting',
+  disconnected: 'statusBar.disconnected',
+};
+
 export function RoomLobby({
   roomName,
   roomCode,
@@ -68,6 +84,7 @@ export function RoomLobby({
   isUpdatingRole,
   isTransferringOwnership,
   joinNotice,
+  collabStatus,
   onParticipantRoleChange,
   onTransferOwnership,
   onToggleReady,
@@ -101,6 +118,7 @@ export function RoomLobby({
   );
   const canEnterWorkspace = status === 'waiting' && canChangePhase && isRoomValid && myReady;
   const rolesLocked = status !== 'waiting';
+  const collabStatusLabel = t(COLLAB_STATUS_LABEL_KEY[collabStatus]);
 
   const inviteLink = buildInviteLink(roomId, roomCode);
 
@@ -127,6 +145,13 @@ export function RoomLobby({
               : t('systemStatus.awaitingPeers')}
           </p>
           <p className="mt-1 text-sm text-muted-foreground">{t('lobby.sub')}</p>
+          <output
+            aria-label={collabStatusLabel}
+            className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-background/70 px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest text-muted-foreground"
+          >
+            <span className={cn('size-1.5 rounded-full', COLLAB_STATUS_DOT[collabStatus])} />
+            {collabStatusLabel}
+          </output>
           {joinNotice ? <p className="mt-2 text-sm text-primary">{joinNotice}</p> : null}
         </div>
       </motion.div>
