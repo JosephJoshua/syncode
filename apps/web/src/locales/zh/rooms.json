@@ -211,6 +211,8 @@
     "cannotTransferOwnership": "无法将所有权转移给该参与者。",
     "cancel": "取消",
     "roleUpdated": "参与者角色已更新。",
+    "submissionPreviewTitle": "确认提交",
+    "submissionPreviewDescription": "请在正式提交前检查你的代码。",
     "submitCode": "提交",
     "submitFailed": "提交启动失败。",
     "submitting": "正在提交解答……",
