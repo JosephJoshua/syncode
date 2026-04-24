@@ -61,12 +61,32 @@ const DIFFICULTY_KEYS: Record<string, string> = {
   hard: 'problems:detail.hard',
 };
 
+const MOCK_PROBLEM_PREFIX = 'mock-problem:';
+const MOCK_PROBLEMS = [
+  { id: `${MOCK_PROBLEM_PREFIX}two-sum`, title: 'Two Sum', difficulty: 'easy' },
+  { id: `${MOCK_PROBLEM_PREFIX}valid-parentheses`, title: 'Valid Parentheses', difficulty: 'easy' },
+  {
+    id: `${MOCK_PROBLEM_PREFIX}longest-substring`,
+    title: 'Longest Substring Without Repeating Characters',
+    difficulty: 'medium',
+  },
+  {
+    id: `${MOCK_PROBLEM_PREFIX}merge-k-lists`,
+    title: 'Merge k Sorted Lists',
+    difficulty: 'hard',
+  },
+] as const;
+
 const createRoomFormSchema = z.object({
   problemId: z.string().min(1),
   language: z.enum(SUPPORTED_LANGUAGES),
   isPublic: z.boolean(),
 });
 type CreateRoomFormData = z.infer<typeof createRoomFormSchema>;
+
+function isMockProblemId(problemId: string): boolean {
+  return problemId.startsWith(MOCK_PROBLEM_PREFIX);
+}
 
 function CreateRoomPage() {
   const { t } = useTranslation('rooms');
@@ -86,15 +106,32 @@ function CreateRoomPage() {
   });
 
   const availableProblems = useMemo(() => {
-    return (problemsQuery.data?.data ?? []).map((p) => {
+    const realProblems = (problemsQuery.data?.data ?? []).map((p) => {
       const difficultyKey = DIFFICULTY_KEYS[p.difficulty];
       const difficultyLabel = difficultyKey ? i18n.t(difficultyKey) : p.difficulty;
       return {
         value: p.id,
         label: `${p.title} (${difficultyLabel})`,
+        isMock: false,
+      };
+    });
+
+    if (realProblems.length > 0) {
+      return realProblems;
+    }
+
+    return MOCK_PROBLEMS.map((problem) => {
+      const difficultyKey = DIFFICULTY_KEYS[problem.difficulty];
+      const difficultyLabel = difficultyKey ? i18n.t(difficultyKey) : problem.difficulty;
+      return {
+        value: problem.id,
+        label: `${problem.title} (${difficultyLabel})`,
+        isMock: true,
       };
     });
   }, [problemsQuery.data]);
+
+  const usingMockProblems = availableProblems.length > 0 && availableProblems.every((p) => p.isMock);
 
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [createdRoomId, setCreatedRoomId] = useState<string | null>(null);
@@ -125,7 +162,7 @@ function CreateRoomPage() {
         body: {
           mode: 'peer',
           name: `${availableProblems.find((problem) => problem.value === data.problemId)?.label ?? 'Interview'} Room`,
-          problemId: data.problemId,
+          ...(isMockProblemId(data.problemId) ? {} : { problemId: data.problemId }),
           language: data.language,
           config: {
             maxParticipants: 2,
@@ -215,6 +252,11 @@ function CreateRoomPage() {
                 <Label className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   {t('create.problemLabel')}
                 </Label>
+                {usingMockProblems ? (
+                  <p className="mb-2 pl-1 text-xs text-amber-400">
+                    {t('create.mockProblemNotice')}
+                  </p>
+                ) : null}
                 <Popover open={isProblemOpen} onOpenChange={setIsProblemOpen}>
                   <PopoverTrigger asChild>
                     <button
@@ -255,7 +297,14 @@ function CreateRoomPage() {
                                   problem.value === selectedProblemId ? 'opacity-100' : 'opacity-0',
                                 )}
                               />
-                              {problem.label}
+                              <span className="flex flex-1 items-center justify-between gap-3">
+                                <span className="truncate">{problem.label}</span>
+                                {problem.isMock ? (
+                                  <Badge variant="outline" className="px-1.5 py-0 text-[10px]">
+                                    {t('create.mockBadge')}
+                                  </Badge>
+                                ) : null}
+                              </span>
                             </CommandItem>
                           ))}
                         </CommandGroup>

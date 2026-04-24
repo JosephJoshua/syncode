@@ -61,6 +61,7 @@ function RoomPage() {
   const [isJoining, setIsJoining] = useState(true);
   const [joinError, setJoinError] = useState<string | null>(null);
   const [joinNotice, setJoinNotice] = useState<string | null>(null);
+  const [mockWorkspacePreview, setMockWorkspacePreview] = useState(false);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [isUpdatingRole, setIsUpdatingRole] = useState<string | null>(null);
   const [isTransferringOwnership, setIsTransferringOwnership] = useState<string | null>(null);
@@ -230,6 +231,10 @@ function RoomPage() {
   const canChangePhase = room?.myCapabilities.includes('room:change-phase') ?? false;
   const canManageParticipants = room?.myCapabilities.includes('participant:assign-role') ?? false;
   const isWorkspace = room ? isWorkspaceStage(room.status) : false;
+  const canPreviewWorkspace =
+    room?.status === 'waiting' && room.participants.filter((participant) => participant.isActive).length === 1;
+  const shouldShowMockWorkspace = !isWorkspace && mockWorkspacePreview;
+  const workspaceRoom = shouldShowMockWorkspace ? { ...room, status: 'warmup' as const } : room;
   const elapsedMs = useMemo(
     () =>
       computeRoomElapsedMs({
@@ -435,13 +440,13 @@ function RoomPage() {
     </AlertDialog>
   );
 
-  if (isWorkspace) {
+  if (workspaceRoom && (isWorkspace || shouldShowMockWorkspace)) {
     return (
       <>
         {transferDialog}
         {removeParticipantDialog}
         <RoomWorkspace
-          room={room}
+          room={workspaceRoom}
           currentUserId={currentUserId}
           roomId={roomId}
           elapsedMs={elapsedMs}
@@ -461,6 +466,7 @@ function RoomPage() {
           doc={doc}
           awareness={awareness}
           currentUserName={currentUser?.displayName ?? currentUser?.username ?? 'Anonymous'}
+          isMockPreview={shouldShowMockWorkspace}
         />
       </>
     );
@@ -485,10 +491,12 @@ function RoomPage() {
         isUpdatingRole={isUpdatingRole}
         isTransferringOwnership={isTransferringOwnership}
         joinNotice={joinNotice}
+        canPreviewWorkspace={canPreviewWorkspace}
         onParticipantRoleChange={handleParticipantRoleChange}
         onTransferOwnership={handleTransferOwnership}
         onToggleReady={handleToggleReady}
         onTransition={handleTransition}
+        onPreviewWorkspace={() => setMockWorkspacePreview(true)}
       />
     </>
   );

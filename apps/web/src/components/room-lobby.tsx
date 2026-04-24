@@ -28,10 +28,12 @@ interface RoomLobbyProps {
   isUpdatingRole: string | null;
   isTransferringOwnership: string | null;
   joinNotice: string | null;
+  canPreviewWorkspace?: boolean;
   onParticipantRoleChange: (userId: string, role: RoomRole) => void;
   onTransferOwnership: (userId: string, displayName: string) => void;
   onToggleReady: () => void;
   onTransition: (targetStatus: RoomStatus) => void;
+  onPreviewWorkspace?: () => void;
 }
 
 export function RoomLobby({
@@ -49,10 +51,12 @@ export function RoomLobby({
   isUpdatingRole,
   isTransferringOwnership,
   joinNotice,
+  canPreviewWorkspace = false,
   onParticipantRoleChange,
   onTransferOwnership,
   onToggleReady,
   onTransition,
+  onPreviewWorkspace,
 }: RoomLobbyProps) {
   const { t } = useTranslation('rooms');
   const { copied, copy } = useClipboard();
@@ -230,6 +234,16 @@ export function RoomLobby({
                   {!canChangePhase ? (
                     <p className="text-[11px] text-muted-foreground">
                       {t('lobby.awaitingController')}
+                    </p>
+                  ) : null}
+                  {canPreviewWorkspace && onPreviewWorkspace ? (
+                    <Button type="button" variant="outline" className="w-full" onClick={onPreviewWorkspace}>
+                      {t('readyButton.previewWorkspace')}
+                    </Button>
+                  ) : null}
+                  {canPreviewWorkspace ? (
+                    <p className="text-[11px] text-muted-foreground">
+                      {t('lobby.previewWorkspaceHelp')}
                     </p>
                   ) : null}
                 </div>
