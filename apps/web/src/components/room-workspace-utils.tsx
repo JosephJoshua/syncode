@@ -161,6 +161,7 @@ export const EDITOR_OPTIONS_BASE = {
   fontSize: 14,
   fontFamily: "'Geist Mono', 'IBM Plex Mono', 'Fira Code', monospace",
   minimap: { enabled: false },
+  glyphMargin: true,
   scrollBeyondLastLine: false,
   padding: { top: 12, bottom: 12 },
   lineNumbers: 'on' as const,

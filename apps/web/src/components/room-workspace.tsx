@@ -33,11 +33,18 @@ import type * as Y from 'yjs';
 import { useSharedExecution } from '@/hooks/use-shared-execution.js';
 import type { CollabConnectionStatus } from '@/hooks/use-yjs-collab.js';
 import { api, readApiError, resolveErrorMessage } from '@/lib/api-client.js';
+import {
+  MOCK_INLINE_COMMENTS,
+  MOCK_WORKSPACE_CODE,
+  MOCK_WORKSPACE_PROBLEM,
+  MOCK_WORKSPACE_TEST_CASES,
+} from '@/lib/mock-workspace.js';
 import { buildInviteLink } from '@/lib/room-stage.js';
 import { CODE_TEXT_KEY } from '@/lib/yjs-collab-provider.js';
 import { CollaborativeEditor } from './collaborative-editor.js';
 import { ExecutionDetailsPanel } from './execution-details-panel.js';
 import { HostControlPanel } from './host-control-panel.js';
+import { InlineCommentsPanel } from './inline-comments-panel.js';
 import { InviteLinkInline } from './invite-link-inline.js';
 import { RoomHeaderBar } from './room-header-bar.js';
 import { type Participant, RoomParticipantCard } from './room-participant-card.js';
@@ -59,6 +66,7 @@ import {
 import { RunResultsPanel } from './run-results-panel.js';
 import { StageTransitionOverlay } from './stage-transition-overlay.js';
 import { TestCaseEditor } from './testcase-editor.js';
+import { useInlineComments } from '@/hooks/use-inline-comments.js';
 
 interface RoomWorkspaceProps {
   room: RoomDetail;
@@ -77,6 +85,7 @@ interface RoomWorkspaceProps {
   isRemovingParticipant: string | null;
   collabStatus: CollabConnectionStatus;
   currentUserName: string;
+  isMockPreview?: boolean;
 }
 
 export function RoomWorkspace({
@@ -96,6 +105,7 @@ export function RoomWorkspace({
   isRemovingParticipant,
   collabStatus,
   currentUserName,
+  isMockPreview = false,
 }: RoomWorkspaceProps) {
   const { t } = useTranslation('rooms');
 
@@ -142,6 +152,7 @@ export function RoomWorkspace({
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
   const [bottomCollapsed, setBottomCollapsed] = useState(false);
+  const [activeCommentLine, setActiveCommentLine] = useState(1);
   const rightMountedRef = useRef(false);
   const cancelSubmitPollRef = useRef<(() => void) | null>(null);
 
@@ -152,8 +163,10 @@ export function RoomWorkspace({
   const nextCustomId = useRef(1);
 
   useEffect(() => {
-    if (!problem) return;
-    const entries: TestCaseEntry[] = problem.testCases.map((tc, i) => ({
+    const sourceCases = problem?.testCases ?? (isMockPreview ? MOCK_WORKSPACE_TEST_CASES : null);
+    if (!sourceCases) return;
+
+    const entries: TestCaseEntry[] = sourceCases.map((tc, i) => ({
       id: `problem-${i}`,
       input: tc.input,
       expectedOutput: tc.expectedOutput,
@@ -162,7 +175,7 @@ export function RoomWorkspace({
     }));
     setTestCases(entries);
     if (entries.length > 0) setActiveCaseId(entries[0]?.id ?? '');
-  }, [problem, t]);
+  }, [isMockPreview, problem, t]);
 
   useEffect(() => {
     return () => {
@@ -171,8 +184,45 @@ export function RoomWorkspace({
     };
   }, []);
 
+  const { comments, commentLineNumbers, addComment, updateComment, deleteComment } =
+    useInlineComments(doc);
+  const seededMockCodeRef = useRef(false);
+  const seededMockCommentsRef = useRef(false);
+
+  useEffect(() => {
+    if (!doc || !isMockPreview || seededMockCodeRef.current) {
+      return;
+    }
+
+    const codeText = doc.getText(CODE_TEXT_KEY);
+    if (codeText.length === 0) {
+      doc.transact(() => {
+        codeText.insert(0, MOCK_WORKSPACE_CODE);
+      });
+    }
+
+    seededMockCodeRef.current = true;
+  }, [doc, isMockPreview]);
+
+  useEffect(() => {
+    if (!doc || !isMockPreview || seededMockCommentsRef.current || comments.length > 0) {
+      return;
+    }
+
+    for (const comment of MOCK_INLINE_COMMENTS) {
+      addComment({
+        authorId: 'mock-reviewer',
+        authorName: 'Mock Interviewer',
+        content: comment.content,
+        lineNumber: comment.lineNumber,
+      });
+    }
+
+    seededMockCommentsRef.current = true;
+  }, [addComment, comments.length, doc, isMockPreview]);
+
   const amHost = Boolean(currentUserId && room.hostId === currentUserId);
-  const canRunCode = room.myCapabilities.includes('code:run');
+  const canRunCode = !isMockPreview && room.myCapabilities.includes('code:run');
   const canEditCode = room.myCapabilities.includes('code:edit');
   const canManageParticipants = room.myCapabilities.includes('participant:assign-role');
   const isEditorReadOnly = !canEditCode || room.editorLocked || room.status === 'finished';
@@ -183,7 +233,7 @@ export function RoomWorkspace({
   );
   const inviteLink = room.roomCode ? buildInviteLink(roomId, room.roomCode) : window.location.href;
 
-  const canSubmitCode = room.myCapabilities.includes('code:submit') && !!room.problemId;
+  const canSubmitCode = !isMockPreview && room.myCapabilities.includes('code:submit') && !!room.problemId;
 
   const handleAddCase = useCallback(() => {
     const idx = nextCustomId.current++;
@@ -511,6 +561,8 @@ export function RoomWorkspace({
         : null,
     [problem],
   );
+  const displayProblemPanelData = problemPanelData ?? (isMockPreview ? MOCK_WORKSPACE_PROBLEM : null);
+  const showProblemPanel = Boolean(displayProblemPanelData);
 
   return (
     <div className="fixed inset-0 z-40 flex flex-col overflow-hidden bg-background">
@@ -528,7 +580,7 @@ export function RoomWorkspace({
       {/* Main resizable 3-panel area */}
       <ResizablePanelGroup orientation="horizontal" style={{ flex: 1 }}>
         {/* Left: Problem Panel */}
-        {room.problemId ? (
+        {showProblemPanel ? (
           <>
             <ResizablePanel
               panelRef={leftPanelRef}
@@ -551,10 +603,10 @@ export function RoomWorkspace({
                 </button>
               ) : (
                 <RoomProblemPanel
-                  problem={problemPanelData}
+                  problem={displayProblemPanelData}
                   loading={problemLoading}
                   error={problemError}
-                  hasProblem
+                  hasProblem={showProblemPanel}
                 />
               )}
             </ResizablePanel>
@@ -573,11 +625,16 @@ export function RoomWorkspace({
         ) : null}
 
         {/* Center: Editor + Output (vertically resizable) */}
-        <ResizablePanel defaultSize={room.problemId ? 50 : 75} minSize={20}>
+        <ResizablePanel defaultSize={showProblemPanel ? 50 : 75} minSize={20}>
           <ResizablePanelGroup orientation="vertical">
             {/* Editor panel */}
             <ResizablePanel defaultSize={55} minSize={20}>
               <div className="flex h-full flex-col">
+                {isMockPreview ? (
+                  <div className="flex h-7 shrink-0 items-center border-b border-border bg-primary/5 px-3 font-mono text-[10px] uppercase tracking-widest text-primary/80">
+                    {t('workspace.mockPreviewBanner')}
+                  </div>
+                ) : null}
                 {/* Editor toolbar */}
                 <div className="flex h-9 shrink-0 items-center justify-between border-b border-border bg-card px-3">
                   <div className="flex items-center gap-2.5">
@@ -654,8 +711,11 @@ export function RoomWorkspace({
                       awareness={awareness}
                       language={monacoLanguage}
                       readOnly={isEditorReadOnly}
+                      commentLineNumbers={commentLineNumbers}
+                      activeCommentLine={activeCommentLine}
                       onRunCode={() => void handleRunCodeRef.current()}
                       onSubmitCode={() => void handleSubmitCodeRef.current()}
+                      onActiveLineChange={setActiveCommentLine}
                     />
                   ) : (
                     EDITOR_LOADING
@@ -814,7 +874,7 @@ export function RoomWorkspace({
                     elapsedMs={elapsedMs}
                     timerPaused={room.timerPaused}
                     editorLocked={room.editorLocked}
-                    canChangePhase={room.myCapabilities.includes('room:change-phase')}
+                    canChangePhase={!isMockPreview && room.myCapabilities.includes('room:change-phase')}
                     isPending={isTransitioning}
                     onTransition={(targetStatus) => {
                       void onTransition(targetStatus);
@@ -862,10 +922,36 @@ export function RoomWorkspace({
 
               {/* Invite link */}
               <motion.div
-                className="p-3"
+                className=""
                 initial={rightMountedRef.current ? false : { opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.35, delay: 0.3, ease: [0.22, 1, 0.36, 1] }}
+              >
+                <InlineCommentsPanel
+                  comments={comments}
+                  activeLineNumber={activeCommentLine}
+                  disabled={!doc}
+                  onActiveLineChange={setActiveCommentLine}
+                  onAddComment={(content) =>
+                    addComment({
+                      authorId: currentUserId ?? 'mock-user',
+                      authorName: currentUserName || 'Mock User',
+                      content,
+                      lineNumber: activeCommentLine,
+                    })
+                  }
+                  onUpdateComment={(commentId, content) => {
+                    updateComment(commentId, { content });
+                  }}
+                  onDeleteComment={deleteComment}
+                />
+              </motion.div>
+
+              <motion.div
+                className="border-t border-border p-3"
+                initial={rightMountedRef.current ? false : { opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.35, delay: 0.35, ease: [0.22, 1, 0.36, 1] }}
               >
                 <InviteLinkInline inviteLink={inviteLink} />
               </motion.div>
