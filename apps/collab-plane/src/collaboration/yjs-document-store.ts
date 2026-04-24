@@ -1,4 +1,5 @@
 import { ConflictException, Injectable, Logger, type OnModuleDestroy } from '@nestjs/common';
+import { INLINE_COMMENTS_KEY } from '@syncode/shared';
 import * as Y from 'yjs';
 
 @Injectable()
@@ -18,6 +19,10 @@ export class YjsDocumentStore implements OnModuleDestroy {
     if (initialContent) {
       doc.getText(YjsDocumentStore.CODE_KEY).insert(0, initialContent);
     }
+
+    // Initialize the comments map so every room snapshot has a stable CRDT root
+    // for inline discussions even before the first comment is created.
+    doc.getMap(INLINE_COMMENTS_KEY);
 
     this.docs.set(roomId, doc);
     this.logger.log(`Y.Doc created for room ${roomId}`);
