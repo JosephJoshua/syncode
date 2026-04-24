@@ -30,6 +30,7 @@ import {
 import { toast } from 'sonner';
 import type { Awareness } from 'y-protocols/awareness';
 import type * as Y from 'yjs';
+import { useInlineComments } from '@/hooks/use-inline-comments.js';
 import { useSharedExecution } from '@/hooks/use-shared-execution.js';
 import type { CollabConnectionStatus } from '@/hooks/use-yjs-collab.js';
 import { api, readApiError, resolveErrorMessage } from '@/lib/api-client.js';
@@ -66,7 +67,6 @@ import {
 import { RunResultsPanel } from './run-results-panel.js';
 import { StageTransitionOverlay } from './stage-transition-overlay.js';
 import { TestCaseEditor } from './testcase-editor.js';
-import { useInlineComments } from '@/hooks/use-inline-comments.js';
 
 interface RoomWorkspaceProps {
   room: RoomDetail;
@@ -267,7 +267,8 @@ export function RoomWorkspace({
   );
   const inviteLink = room.roomCode ? buildInviteLink(roomId, room.roomCode) : window.location.href;
 
-  const canSubmitCode = !isMockPreview && room.myCapabilities.includes('code:submit') && !!room.problemId;
+  const canSubmitCode =
+    !isMockPreview && room.myCapabilities.includes('code:submit') && !!room.problemId;
 
   const handleAddCase = useCallback(() => {
     const idx = nextCustomId.current++;
@@ -595,7 +596,8 @@ export function RoomWorkspace({
         : null,
     [problem],
   );
-  const displayProblemPanelData = problemPanelData ?? (isMockPreview ? MOCK_WORKSPACE_PROBLEM : null);
+  const displayProblemPanelData =
+    problemPanelData ?? (isMockPreview ? MOCK_WORKSPACE_PROBLEM : null);
   const showProblemPanel = Boolean(displayProblemPanelData);
 
   return (
@@ -912,7 +914,9 @@ export function RoomWorkspace({
                     elapsedMs={elapsedMs}
                     timerPaused={room.timerPaused}
                     editorLocked={room.editorLocked}
-                    canChangePhase={!isMockPreview && room.myCapabilities.includes('room:change-phase')}
+                    canChangePhase={
+                      !isMockPreview && room.myCapabilities.includes('room:change-phase')
+                    }
                     isPending={isTransitioning}
                     onTransition={(targetStatus) => {
                       void onTransition(targetStatus);

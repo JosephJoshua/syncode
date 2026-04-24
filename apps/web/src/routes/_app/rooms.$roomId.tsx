@@ -59,9 +59,9 @@ const CURSOR_COLORS = [
 ];
 
 function userCursorColor(participants: { userId: string }[], currentUserId: string | null): string {
-  if (!currentUserId) return CURSOR_COLORS[0]!;
+  if (!currentUserId) return CURSOR_COLORS[0] ?? '#00e599';
   const index = participants.findIndex((p) => p.userId === currentUserId);
-  return CURSOR_COLORS[index >= 0 ? index % CURSOR_COLORS.length : 0]!;
+  return CURSOR_COLORS[index >= 0 ? index % CURSOR_COLORS.length : 0] ?? '#00e599';
 }
 
 function RoomPage() {
@@ -450,9 +450,14 @@ function RoomPage() {
   const canManageParticipants = room?.myCapabilities.includes('participant:assign-role') ?? false;
   const isWorkspace = room ? isWorkspaceStage(room.status) : false;
   const canPreviewWorkspace =
-    room?.status === 'waiting' && room.participants.filter((participant) => participant.isActive).length === 1;
+    room?.status === 'waiting' &&
+    (room?.participants.filter((participant) => participant.isActive).length ?? 0) === 1;
   const shouldShowMockWorkspace = !isWorkspace && mockWorkspacePreview;
-  const workspaceRoom = shouldShowMockWorkspace ? { ...room, status: 'warmup' as const } : room;
+  const workspaceRoom: RoomDetail | null = room
+    ? shouldShowMockWorkspace
+      ? { ...room, status: 'warmup' as const }
+      : room
+    : null;
   const elapsedMs = useMemo(
     () =>
       computeRoomElapsedMs({
