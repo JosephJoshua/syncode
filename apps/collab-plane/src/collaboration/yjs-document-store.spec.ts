@@ -79,8 +79,7 @@ describe('YjsDocumentStore', () => {
 
       const reconstructed = new Y.Doc();
       Y.applyUpdate(reconstructed, snapshot!);
-      const reconstructedComments =
-        reconstructed.getMap<Y.Map<unknown>>(INLINE_COMMENTS_KEY);
+      const reconstructedComments = reconstructed.getMap<Y.Map<unknown>>(INLINE_COMMENTS_KEY);
       expect(reconstructedComments.get('comment-1')?.get('content')).toBe(
         'Consider the edge case on this line.',
       );
