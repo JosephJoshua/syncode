@@ -463,7 +463,7 @@ export class RoomsService {
     const updatedAt = new Date();
     let previousRole!: RoomRole;
 
-    const room = await this.db.transaction(async (tx) => {
+    await this.db.transaction(async (tx) => {
       const [lockedRoom] = await tx.select().from(rooms).where(eq(rooms.id, roomId)).for('update');
 
       if (!lockedRoom) {
