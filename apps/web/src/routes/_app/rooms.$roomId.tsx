@@ -16,8 +16,20 @@ import { AlertTriangle, Loader2 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
+import { MediaControls } from '@/components/media-controls.js';
+import type {
+  AudioProcessingSettings,
+  VideoQualityPreset,
+} from '@/components/media-settings-panel.js';
 import { RoomLobby } from '@/components/room-lobby.js';
 import { RoomWorkspace } from '@/components/room-workspace.js';
+import {
+  DockedVideoPanel,
+  FloatingVideoPanel,
+  type VideoPanelParticipant,
+} from '@/components/video-panel.js';
+import { useLiveKit } from '@/hooks/use-livekit.js';
+import { useMediaShortcuts } from '@/hooks/use-media-shortcuts.js';
 import { useYjsCollab } from '@/hooks/use-yjs-collab.js';
 import { type ApiErrorResult, api, readApiError, resolveErrorMessage } from '@/lib/api-client.js';
 import { computeRoomElapsedMs, isWorkspaceStage, ROLE_LABEL_KEYS } from '@/lib/room-stage.js';
@@ -227,6 +239,212 @@ function RoomPage() {
     onParticipantReady: handleParticipantReady,
     onPhaseChange: () => void refreshRoomDetail(),
   });
+
+  const mediaCredsRef = useRef<{ token: string; url: string } | null>(null);
+  const [mediaReady, setMediaReady] = useState(false);
+  const [videoPanelMode, setVideoPanelMode] = useState<'floating' | 'docked'>('docked');
+  const [isVideoMinimized, setIsVideoMinimized] = useState(false);
+
+  const hasMediaCapability =
+    room?.myCapabilities.some(
+      (c) => c === 'media:audio' || c === 'media:video' || c === 'media:screenshare',
+    ) ?? false;
+
+  const mediaTokenTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!room || !hasMediaCapability) return;
+    if (room.status === 'finished') return;
+    if (mediaCredsRef.current) return;
+
+    let disposed = false;
+
+    const fetchToken = () => {
+      api(CONTROL_API.ROOMS.MEDIA_TOKEN, { params: { id: roomId } })
+        .then((result) => {
+          if (disposed) return;
+          mediaCredsRef.current = { token: result.token, url: result.url };
+          setMediaReady(true);
+
+          const expiresAt = new Date(result.expiresAt).getTime();
+          const refreshIn = Math.max(expiresAt - Date.now() - 5 * 60 * 1000, 60_000);
+          if (mediaTokenTimerRef.current) clearTimeout(mediaTokenTimerRef.current);
+          mediaTokenTimerRef.current = setTimeout(() => {
+            if (disposed) return;
+            mediaCredsRef.current = null;
+            setMediaReady(false);
+            fetchToken();
+          }, refreshIn);
+        })
+        .catch((err) => {
+          if (disposed) return;
+          console.warn('[LiveKit] Failed to fetch media token:', err);
+        });
+    };
+
+    fetchToken();
+
+    return () => {
+      disposed = true;
+      if (mediaTokenTimerRef.current) {
+        clearTimeout(mediaTokenTimerRef.current);
+        mediaTokenTimerRef.current = null;
+      }
+    };
+  }, [room, hasMediaCapability, roomId]);
+
+  const [audioProcessing, setAudioProcessing] = useState<AudioProcessingSettings>({
+    noiseSuppression: true,
+    echoCancellation: true,
+    autoGainControl: false,
+  });
+  const [videoQuality, setVideoQuality] = useState<VideoQualityPreset>('medium');
+
+  const {
+    connectionState: mediaConnectionState,
+    isMicrophoneEnabled,
+    isCameraEnabled,
+    isScreenShareEnabled,
+    toggleMicrophone,
+    toggleCamera,
+    toggleScreenShare,
+    switchDevice,
+    audioInputDevices,
+    videoInputDevices,
+    activeAudioDeviceId,
+    activeVideoDeviceId,
+    setOutputVolume,
+    setParticipantVolume,
+    setParticipantMuted,
+    setParticipantVideoHidden,
+    participantVolumeMap,
+    localMuteSet,
+    videoHiddenSet,
+    setVideoFilter,
+    setAudioProcessing: applyAudioProcessing,
+    connectionQualityMap,
+    isPushToTalkMode,
+    togglePushToTalkMode,
+    handlePushToTalk,
+    speakingMap,
+    remoteParticipants: mediaRemoteParticipants,
+    localParticipant: mediaLocalParticipant,
+  } = useLiveKit({
+    url: mediaCredsRef.current?.url ?? null,
+    token: mediaCredsRef.current?.token ?? null,
+    connect: mediaReady && hasMediaCapability && room?.status !== 'finished',
+    audioProcessing,
+  });
+
+  const mediaConnectedSet = useMemo(() => {
+    const set = new Set<string>();
+    if (mediaLocalParticipant) set.add(mediaLocalParticipant.identity);
+    for (const p of mediaRemoteParticipants) set.add(p.identity);
+    return set;
+  }, [mediaLocalParticipant, mediaRemoteParticipants]);
+
+  const mediaMutedMap = useMemo(() => {
+    const map = new Map<string, boolean>();
+    if (mediaLocalParticipant)
+      map.set(mediaLocalParticipant.identity, mediaLocalParticipant.isMuted);
+    for (const p of mediaRemoteParticipants) map.set(p.identity, p.isMuted);
+    return map;
+  }, [mediaLocalParticipant, mediaRemoteParticipants]);
+
+  const [outputVolume, setOutputVolumeState] = useState(1);
+
+  const handleOutputVolumeChange = useCallback(
+    (vol: number) => {
+      setOutputVolumeState(vol);
+      setOutputVolume(vol);
+    },
+    [setOutputVolume],
+  );
+
+  const mediaControlsElement = hasMediaCapability ? (
+    <MediaControls
+      connectionState={mediaConnectionState}
+      isMicrophoneEnabled={isMicrophoneEnabled}
+      isCameraEnabled={isCameraEnabled}
+      isScreenShareEnabled={isScreenShareEnabled}
+      canScreenShare={room?.myCapabilities.includes('media:screenshare') ?? false}
+      onToggleMicrophone={() => void toggleMicrophone()}
+      onToggleCamera={() => void toggleCamera()}
+      onToggleScreenShare={() => void toggleScreenShare()}
+      audioInputDevices={audioInputDevices}
+      videoInputDevices={videoInputDevices}
+      activeAudioDeviceId={activeAudioDeviceId}
+      activeVideoDeviceId={activeVideoDeviceId}
+      onSwitchDevice={(kind, id) => void switchDevice(kind, id)}
+      outputVolume={outputVolume}
+      onOutputVolumeChange={handleOutputVolumeChange}
+      audioProcessing={audioProcessing}
+      onAudioProcessingChange={(settings) => {
+        setAudioProcessing(settings);
+        void applyAudioProcessing(settings);
+      }}
+      onVideoFilterChange={(settings) => void setVideoFilter(settings)}
+      videoQuality={videoQuality}
+      onVideoQualityChange={setVideoQuality}
+      isPushToTalkMode={isPushToTalkMode}
+      onTogglePushToTalkMode={togglePushToTalkMode}
+    />
+  ) : null;
+
+  useMediaShortcuts({
+    toggleMicrophone: () => void toggleMicrophone(),
+    toggleCamera: () => void toggleCamera(),
+    toggleScreenShare: () => void toggleScreenShare(),
+    togglePushToTalk: isPushToTalkMode ? handlePushToTalk : undefined,
+    enabled: hasMediaCapability && mediaConnectionState === 'connected',
+  });
+
+  const videoTiles = useMemo(() => {
+    const tiles: VideoPanelParticipant[] = [];
+
+    if (mediaLocalParticipant && currentUserId) {
+      const me = room?.participants.find((p) => p.userId === currentUserId);
+      tiles.push({
+        identity: currentUserId,
+        displayName: me?.displayName ?? me?.username ?? 'You',
+        avatarUrl: me?.avatarUrl ?? null,
+        hasVideo: mediaLocalParticipant.hasVideo,
+        videoTrack: mediaLocalParticipant.videoTrack,
+        hasScreenShare: mediaLocalParticipant.hasScreenShare,
+        screenShareTrack: mediaLocalParticipant.screenShareTrack,
+        isSpeaking: speakingMap.get(currentUserId) ?? false,
+        isLocal: true,
+      });
+    }
+
+    for (const mp of mediaRemoteParticipants) {
+      const p = room?.participants.find((rp) => rp.userId === mp.identity);
+      const hidden = videoHiddenSet.has(mp.identity);
+      tiles.push({
+        identity: mp.identity,
+        displayName: p?.displayName ?? p?.username ?? mp.identity,
+        avatarUrl: p?.avatarUrl ?? null,
+        hasVideo: hidden ? false : mp.hasVideo,
+        videoTrack: hidden ? null : mp.videoTrack,
+        hasScreenShare: mp.hasScreenShare,
+        screenShareTrack: mp.screenShareTrack,
+        isSpeaking: speakingMap.get(mp.identity) ?? false,
+        isLocal: false,
+      });
+    }
+
+    return tiles;
+  }, [
+    mediaLocalParticipant,
+    mediaRemoteParticipants,
+    speakingMap,
+    currentUserId,
+    room?.participants,
+    videoHiddenSet,
+  ]);
+
+  const showMediaPanel =
+    mediaConnectionState === 'connected' || mediaConnectionState === 'reconnecting';
 
   const canChangePhase = room?.myCapabilities.includes('room:change-phase') ?? false;
   const canManageParticipants = room?.myCapabilities.includes('participant:assign-role') ?? false;
@@ -467,7 +685,33 @@ function RoomPage() {
           awareness={awareness}
           currentUserName={currentUser?.displayName ?? currentUser?.username ?? 'Anonymous'}
           isMockPreview={shouldShowMockWorkspace}
+          speakingMap={speakingMap}
+          mediaControls={mediaControlsElement}
+          mediaConnectedSet={mediaConnectedSet}
+          mediaMutedMap={mediaMutedMap}
+          connectionQualityMap={connectionQualityMap}
+          participantMediaControls={{
+            setVolume: setParticipantVolume,
+            setMuted: setParticipantMuted,
+            setVideoHidden: setParticipantVideoHidden,
+            volumeMap: participantVolumeMap,
+            muteSet: localMuteSet,
+            videoHiddenSet,
+          }}
+          dockedVideoPanel={
+            showMediaPanel && videoPanelMode === 'docked' ? (
+              <DockedVideoPanel tiles={videoTiles} onUndock={() => setVideoPanelMode('floating')} />
+            ) : null
+          }
         />
+        {showMediaPanel && videoPanelMode === 'floating' ? (
+          <FloatingVideoPanel
+            tiles={videoTiles}
+            isMinimized={isVideoMinimized}
+            onToggleMinimize={() => setIsVideoMinimized((v) => !v)}
+            onDock={() => setVideoPanelMode('docked')}
+          />
+        ) : null}
       </>
     );
   }
@@ -497,6 +741,17 @@ function RoomPage() {
         onToggleReady={handleToggleReady}
         onTransition={handleTransition}
         onPreviewWorkspace={() => setMockWorkspacePreview(true)}
+        speakingMap={speakingMap}
+        mediaConnectedSet={mediaConnectedSet}
+        mediaMutedMap={mediaMutedMap}
+        participantMediaControls={{
+          setVolume: setParticipantVolume,
+          setMuted: setParticipantMuted,
+          setVideoHidden: setParticipantVideoHidden,
+          volumeMap: participantVolumeMap,
+          muteSet: localMuteSet,
+          videoHiddenSet,
+        }}
       />
     </>
   );

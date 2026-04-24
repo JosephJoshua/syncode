@@ -307,3 +307,13 @@ export const transitionRoomPhaseResponseSchema = z.object({
 });
 
 export type TransitionRoomPhaseResponse = z.infer<typeof transitionRoomPhaseResponseSchema>;
+
+// ── Media token ──────────────────────────────────────────────────────
+
+export const mediaTokenResponseSchema = z.object({
+  token: z.string().describe('LiveKit JWT'),
+  url: z.string().describe('LiveKit WebSocket URL'),
+  expiresAt: z.iso.datetime().describe('Token expiry (ISO 8601)'),
+});
+
+export type MediaTokenResponse = z.infer<typeof mediaTokenResponseSchema>;

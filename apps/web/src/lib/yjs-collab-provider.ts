@@ -129,7 +129,7 @@ export class YjsCollabProvider {
   }
 
   private send(data: Uint8Array): void {
-    if (this.ws?.readyState === WebSocket.OPEN) {
+    if (!this.disposed && this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(data);
     }
   }
@@ -217,7 +217,7 @@ export class YjsCollabProvider {
   }
 
   private handleDocUpdate = (update: Uint8Array, origin: unknown): void => {
-    if (origin === this) return;
+    if (this.disposed || origin === this) return;
 
     const encoder = encoding.createEncoder();
     encoding.writeVarUint(encoder, WsMessageType.SYNC);
@@ -229,7 +229,7 @@ export class YjsCollabProvider {
     { added, updated, removed }: { added: number[]; updated: number[]; removed: number[] },
     origin: unknown,
   ): void => {
-    if (origin !== 'local') return;
+    if (this.disposed || origin !== 'local') return;
 
     const changedClients = added.concat(updated, removed);
     const encoder = encoding.createEncoder();
