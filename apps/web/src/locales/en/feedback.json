@@ -53,7 +53,9 @@
     "strengths": "Strengths",
     "areasForImprovement": "Areas for Improvement",
     "comparison": "Comparison to History",
-    "peerFeedback": "Peer Feedback Summary"
+    "peerFeedback": "Peer Feedback Summary",
+    "peerFeedbackSection": "Peer Feedback",
+    "peerFeedbackSectionDescription": "Feedback submitted by session participants after the interview ends."
   },
   "dimensions": {
     "correctness": {
@@ -117,6 +119,17 @@
     "wouldPairAgain": "Would Pair Again",
     "themes": "Themes",
     "none": "No themes"
+  },
+  "peerFeedbackSection": {
+    "loading": "Loading peer feedback…",
+    "error": "Peer feedback could not be loaded right now.",
+    "retry": "Retry peer feedback",
+    "statusHeading": "Status",
+    "entriesHeading": "Feedback Entries",
+    "entryLabel": "Entry {{index}}",
+    "noDisplayName": "No display name",
+    "hiddenUntilSubmitted": "Peer feedback will be available once all participants submit.",
+    "empty": "No peer feedback available for this session."
   },
   "breakdown": {
     "emptyDescription": "No final test-case breakdown was available for this session.",
