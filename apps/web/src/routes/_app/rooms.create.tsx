@@ -131,7 +131,8 @@ function CreateRoomPage() {
     });
   }, [problemsQuery.data]);
 
-  const usingMockProblems = availableProblems.length > 0 && availableProblems.every((p) => p.isMock);
+  const usingMockProblems =
+    availableProblems.length > 0 && availableProblems.every((p) => p.isMock);
 
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [createdRoomId, setCreatedRoomId] = useState<string | null>(null);

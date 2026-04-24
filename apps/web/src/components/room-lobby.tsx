@@ -278,7 +278,12 @@ export function RoomLobby({
                     </p>
                   ) : null}
                   {canPreviewWorkspace && onPreviewWorkspace ? (
-                    <Button type="button" variant="outline" className="w-full" onClick={onPreviewWorkspace}>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full"
+                      onClick={onPreviewWorkspace}
+                    >
                       {t('readyButton.previewWorkspace')}
                     </Button>
                   ) : null}

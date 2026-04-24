@@ -32,8 +32,9 @@ interface EditorLike {
   }) => void;
   getModel: () => object | null;
   getPosition: () => { lineNumber: number } | null;
-  onDidChangeCursorPosition: (listener: (event: { position: { lineNumber: number } }) => void) =>
-    void;
+  onDidChangeCursorPosition: (
+    listener: (event: { position: { lineNumber: number } }) => void,
+  ) => void;
   deltaDecorations: (
     oldDecorations: string[],
     newDecorations: Array<{
@@ -97,9 +98,7 @@ export function CollaborativeEditor({
     editorInstance.addAction({
       id: 'syncode-submit',
       label: 'Submit Code',
-      keybindings: [
-        monacoApi.KeyMod.CtrlCmd | monacoApi.KeyMod.Shift | monacoApi.KeyCode.Enter,
-      ],
+      keybindings: [monacoApi.KeyMod.CtrlCmd | monacoApi.KeyMod.Shift | monacoApi.KeyCode.Enter],
       run: () => void onSubmitCodeRef.current(),
     });
 
@@ -153,13 +152,9 @@ export function CollaborativeEditor({
       options: {
         isWholeLine: true,
         className:
-          lineNumber === activeCommentLine
-            ? 'inline-comment-line-active'
-            : 'inline-comment-line',
+          lineNumber === activeCommentLine ? 'inline-comment-line-active' : 'inline-comment-line',
         glyphMarginClassName:
-          lineNumber === activeCommentLine
-            ? 'inline-comment-glyph-active'
-            : 'inline-comment-glyph',
+          lineNumber === activeCommentLine ? 'inline-comment-glyph-active' : 'inline-comment-glyph',
         stickiness: 1,
       },
     }));

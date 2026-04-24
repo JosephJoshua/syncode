@@ -231,7 +231,7 @@ html[lang^="zh"] {
 .monaco-editor .glyph-margin .inline-comment-glyph,
 .monaco-editor .glyph-margin .inline-comment-glyph-active {
   margin-left: 6px;
-  width: 8px !important;
+  width: 8px;
   border-radius: 999px;
 }
 
@@ -242,6 +242,8 @@ html[lang^="zh"] {
 .monaco-editor .glyph-margin .inline-comment-glyph-active {
   background: rgb(0 229 153 / 0.95);
   box-shadow: 0 0 0 2px rgb(0 229 153 / 0.18);
+}
+
 @keyframes speaking-ring {
   0%,
   100% {

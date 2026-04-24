@@ -16,7 +16,7 @@ function SessionFeedbackPage() {
   const sessionHistoryQuery = useQuery({
     queryKey: ['dashboard', 'session-history', userId],
     enabled: Boolean(userId),
-    queryFn: () => fetchDashboardSessionHistory(userId!),
+    queryFn: () => fetchDashboardSessionHistory(userId ?? ''),
   });
   const session = sessionHistoryQuery.data?.rows.find((item) => item.id === sessionId);
 

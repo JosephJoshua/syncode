@@ -196,7 +196,13 @@ export function useLiveKit({
       });
     }
     setRemoteParticipants((prev) => {
-      if (prev.length === remotes.length && prev.every((p, i) => participantEqual(p, remotes[i]!)))
+      if (
+        prev.length === remotes.length &&
+        prev.every((p, i) => {
+          const remote = remotes[i];
+          return remote ? participantEqual(p, remote) : false;
+        })
+      )
         return prev;
       return remotes;
     });

@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as awarenessProtocol from 'y-protocols/awareness';
 import * as syncProtocol from 'y-protocols/sync';
 import * as Y from 'yjs';
-import { type CollabConnectionStatus, YjsCollabProvider } from './yjs-collab-provider.js';
+import { YjsCollabProvider } from './yjs-collab-provider.js';
 
 // ── Mock WebSocket ──────────────────────────────────────────────────────────
 
@@ -79,7 +79,11 @@ function defaultOptions(
 }
 
 function latestWs(): MockWebSocket {
-  return MockWebSocket.instances[MockWebSocket.instances.length - 1]!;
+  const ws = MockWebSocket.instances[MockWebSocket.instances.length - 1];
+  if (!ws) {
+    throw new Error('Expected at least one WebSocket instance');
+  }
+  return ws;
 }
 
 function connectProvider(opts = defaultOptions()) {
@@ -299,7 +303,10 @@ describe('YjsCollabProvider', () => {
       remoteDoc.getText('code').insert(0, 'remote edit');
 
       const sentBefore = ws.sent.length;
-      ws.simulateBinaryMessage(buildSyncUpdate(capturedUpdate!));
+      if (!capturedUpdate) {
+        throw new Error('Expected captured update from remote doc');
+      }
+      ws.simulateBinaryMessage(buildSyncUpdate(capturedUpdate));
 
       // Local doc should have the content
       expect(provider.doc.getText('code').toString()).toBe('remote edit');

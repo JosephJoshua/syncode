@@ -1,4 +1,4 @@
-import type { INestApplication } from '@nestjs/common';
+import type { ExecutionContext } from '@nestjs/common';
 import type request from 'supertest';
 import { vi } from 'vitest';
 
@@ -20,7 +20,7 @@ export function createMockConfigService(overrides: Record<string, unknown> = {})
  * without shared mutable state.
  */
 export class TestAuthGuard {
-  canActivate(context: any) {
+  canActivate(context: ExecutionContext) {
     const req = context.switchToHttp().getRequest();
     req.user = {
       id: req.headers['x-test-user-id'],

@@ -66,7 +66,7 @@ describe('inline comments', () => {
     });
 
     updateInlineComment(doc, commentId, { content: 'Updated note', lineNumber: 2 });
-    let [comment] = listInlineComments(doc);
+    const [comment] = listInlineComments(doc);
     expect(comment?.content).toBe('Updated note');
     expect(comment?.lineNumber).toBe(2);
 

@@ -1,13 +1,13 @@
-import { useEffect, useMemo, useState } from 'react';
 import { INLINE_COMMENTS_KEY } from '@syncode/shared';
+import { useEffect, useState } from 'react';
 import type * as Y from 'yjs';
 import {
   addInlineComment,
   deleteInlineComment,
   getInlineCommentLineNumbers,
+  type InlineComment,
   listInlineComments,
   updateInlineComment,
-  type InlineComment,
 } from '@/lib/inline-comments.js';
 import { CODE_TEXT_KEY } from '@/lib/yjs-collab-provider.js';
 
@@ -49,13 +49,7 @@ export function useInlineComments(doc: Y.Doc | null): UseInlineCommentsResult {
     };
   }, [doc]);
 
-  const commentLineNumbers = useMemo(() => {
-    if (!doc) {
-      return [];
-    }
-
-    return getInlineCommentLineNumbers(doc);
-  }, [doc, comments]);
+  const commentLineNumbers = doc ? getInlineCommentLineNumbers(doc) : [];
 
   return {
     comments,

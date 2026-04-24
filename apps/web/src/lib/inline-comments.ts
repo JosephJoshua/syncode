@@ -200,5 +200,13 @@ function generateInlineCommentId(): string {
     return crypto.randomUUID();
   }
 
-  return `comment-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+    const bytes = new Uint8Array(8);
+    crypto.getRandomValues(bytes);
+    const suffix = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+    return `comment-${Date.now()}-${suffix}`;
+  }
+
+  // Final fallback for environments without Web Crypto.
+  return `comment-${Date.now()}-${Date.now().toString(36)}`;
 }
