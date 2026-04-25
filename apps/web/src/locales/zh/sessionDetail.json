@@ -1,0 +1,76 @@
+{
+  "heading": "会话详情",
+  "subheading": "查看本次练习的报告、代码快照、测试结果和同伴反馈。",
+  "backToDashboard": "返回仪表盘",
+  "loading": {
+    "title": "正在加载会话",
+    "description": "正在获取本次会话的报告、代码快照和反馈。"
+  },
+  "error": {
+    "title": "无法加载会话",
+    "description": "当前暂时无法获取会话详情。",
+    "retry": "重试"
+  },
+  "notFound": {
+    "title": "未找到会话",
+    "description": "该会话可能已被移除，或当前账号无权查看。"
+  },
+  "overview": {
+    "title": "概览",
+    "problem": "题目",
+    "difficulty": "难度",
+    "mode": "模式",
+    "language": "语言",
+    "duration": "时长",
+    "started": "开始时间",
+    "finished": "结束时间",
+    "unknown": "未知",
+    "seconds": "{{count}} 秒"
+  },
+  "report": {
+    "title": "会话报告",
+    "overallScore": "总分",
+    "generatedAt": "生成时间",
+    "summary": "总结",
+    "categoryScores": "分项得分",
+    "strengths": "亮点",
+    "improvements": "改进方向",
+    "empty": "本次会话尚未生成 AI 报告。"
+  },
+  "tests": {
+    "title": "测试结果",
+    "empty": "本次会话没有已完成的提交记录。",
+    "submission": "提交",
+    "passed": "通过 {{passed}}/{{total}}",
+    "completed": "已完成",
+    "failed": "失败"
+  },
+  "code": {
+    "title": "代码快照",
+    "empty": "本次会话暂无代码快照。",
+    "capturedAt": "捕获时间",
+    "trigger": "触发方式",
+    "lines": "{{count}} 行"
+  },
+  "feedback": {
+    "title": "同伴反馈",
+    "empty": "本次会话尚未提交同伴反馈。",
+    "reviewerToCandidate": "{{reviewer}} 给 {{candidate}}",
+    "wouldPairAgain": "愿意再次结对",
+    "wouldNotPairAgain": "暂不愿再次结对",
+    "strengths": "亮点",
+    "improvements": "改进建议",
+    "ratings": {
+      "problemSolving": "解题能力",
+      "communication": "沟通表达",
+      "codeQuality": "代码质量",
+      "debugging": "调试能力",
+      "overall": "综合评价"
+    }
+  },
+  "participants": {
+    "title": "参与者",
+    "joined": "加入时间",
+    "left": "离开时间"
+  }
+}

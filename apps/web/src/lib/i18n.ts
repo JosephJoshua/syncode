@@ -12,6 +12,7 @@ import enProblems from '../locales/en/problems.json';
 import enProfile from '../locales/en/profile.json';
 import enRegister from '../locales/en/register.json';
 import enRooms from '../locales/en/rooms.json';
+import enSessionDetail from '../locales/en/sessionDetail.json';
 
 import zhBookmarks from '../locales/zh/bookmarks.json';
 import zhCommon from '../locales/zh/common.json';
@@ -23,6 +24,7 @@ import zhProblems from '../locales/zh/problems.json';
 import zhProfile from '../locales/zh/profile.json';
 import zhRegister from '../locales/zh/register.json';
 import zhRooms from '../locales/zh/rooms.json';
+import zhSessionDetail from '../locales/zh/sessionDetail.json';
 
 export const supportedLngs = ['en', 'zh'] as const;
 
@@ -37,6 +39,7 @@ const namespaces = [
   'bookmarks',
   'profile',
   'feedback',
+  'sessionDetail',
 ] as const;
 
 i18n
@@ -67,6 +70,7 @@ i18n
         bookmarks: enBookmarks,
         profile: enProfile,
         feedback: enFeedback,
+        sessionDetail: enSessionDetail,
       },
       zh: {
         common: zhCommon,
@@ -79,6 +83,7 @@ i18n
         bookmarks: zhBookmarks,
         profile: zhProfile,
         feedback: zhFeedback,
+        sessionDetail: zhSessionDetail,
       },
     },
   });

@@ -1,0 +1,76 @@
+{
+  "heading": "Session Detail",
+  "subheading": "Review the session report, submitted code, test outcomes, and peer feedback.",
+  "backToDashboard": "Back to dashboard",
+  "loading": {
+    "title": "Loading session",
+    "description": "Gathering the report, code snapshot, and feedback for this session."
+  },
+  "error": {
+    "title": "Session could not be loaded",
+    "description": "The session details are unavailable right now.",
+    "retry": "Retry"
+  },
+  "notFound": {
+    "title": "Session not found",
+    "description": "This session may have been removed or is not visible to your account."
+  },
+  "overview": {
+    "title": "Overview",
+    "problem": "Problem",
+    "difficulty": "Difficulty",
+    "mode": "Mode",
+    "language": "Language",
+    "duration": "Duration",
+    "started": "Started",
+    "finished": "Finished",
+    "unknown": "Unknown",
+    "seconds": "{{count}}s"
+  },
+  "report": {
+    "title": "Session Report",
+    "overallScore": "Overall score",
+    "generatedAt": "Generated",
+    "summary": "Summary",
+    "categoryScores": "Score breakdown",
+    "strengths": "Strengths",
+    "improvements": "Areas for improvement",
+    "empty": "No AI report has been generated for this session yet."
+  },
+  "tests": {
+    "title": "Test Results",
+    "empty": "No completed submissions were recorded for this session.",
+    "submission": "Submission",
+    "passed": "{{passed}}/{{total}} passed",
+    "completed": "Completed",
+    "failed": "Failed"
+  },
+  "code": {
+    "title": "Code Snapshot",
+    "empty": "No code snapshot is available for this session.",
+    "capturedAt": "Captured",
+    "trigger": "Trigger",
+    "lines": "{{count}} lines"
+  },
+  "feedback": {
+    "title": "Peer Feedback",
+    "empty": "Peer feedback has not been submitted for this session.",
+    "reviewerToCandidate": "{{reviewer}} for {{candidate}}",
+    "wouldPairAgain": "Would pair again",
+    "wouldNotPairAgain": "Would not pair again",
+    "strengths": "Strengths",
+    "improvements": "Improvements",
+    "ratings": {
+      "problemSolving": "Problem solving",
+      "communication": "Communication",
+      "codeQuality": "Code quality",
+      "debugging": "Debugging",
+      "overall": "Overall"
+    }
+  },
+  "participants": {
+    "title": "Participants",
+    "joined": "Joined",
+    "left": "Left"
+  }
+}
