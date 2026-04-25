@@ -316,6 +316,26 @@ export class SessionsService {
         : Promise.resolve([]),
     ]);
 
+    const reviewParticipantIds = new Set(
+      participantRows
+        .filter((participant) => this.isReviewParticipantRole(participant.role))
+        .map((participant) => participant.userId),
+    );
+    const reviewFeedbackRows = feedbackRows.filter(
+      (feedback) =>
+        reviewParticipantIds.has(feedback.reviewerId) &&
+        reviewParticipantIds.has(feedback.candidateId),
+    );
+    const expectedFeedbackCount =
+      reviewParticipantIds.size * Math.max(reviewParticipantIds.size - 1, 0);
+    const allReviewFeedbackSubmitted =
+      expectedFeedbackCount > 0 && reviewFeedbackRows.length >= expectedFeedbackCount;
+    const visibleFeedbackRows = isAdmin
+      ? feedbackRows
+      : reviewFeedbackRows.filter(
+          (feedback) => allReviewFeedbackSubmitted || feedback.reviewerId === userId,
+        );
+
     return {
       sessionId: session.id,
       roomId: session.roomId,
@@ -354,7 +374,7 @@ export class SessionsService {
           }
         : null,
       latestCodeSnapshot: latestCodeSnapshot[0] ?? null,
-      peerFeedback: feedbackRows.map((feedback) => ({
+      peerFeedback: visibleFeedbackRows.map((feedback) => ({
         id: feedback.id,
         reviewerId: feedback.reviewerId,
         reviewerName: feedback.reviewerDisplayName ?? feedback.reviewerUsername,
@@ -528,5 +548,9 @@ export class SessionsService {
   ): string {
     const participant = participants.find((item) => item.userId === userId);
     return participant?.displayName ?? participant?.username ?? userId;
+  }
+
+  private isReviewParticipantRole(role: string): role is 'candidate' | 'interviewer' {
+    return role === 'candidate' || role === 'interviewer';
   }
 }

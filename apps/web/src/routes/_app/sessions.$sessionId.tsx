@@ -176,7 +176,11 @@ function ReportPanel({ session }: { session: SessionDetail }) {
               {Object.entries(report.categoryScores).map(([category, score]) => (
                 <div className="space-y-2" key={category}>
                   <div className="flex items-center justify-between gap-3 text-sm">
-                    <span className="font-medium text-foreground">{formatCategory(category)}</span>
+                    <span className="font-medium text-foreground">
+                      {t(`report.categories.${category}`, {
+                        defaultValue: formatCategory(category),
+                      })}
+                    </span>
                     <span className="font-mono text-xs text-muted-foreground">{score}</span>
                   </div>
                   <Progress value={score} />
@@ -377,7 +381,9 @@ function FeedbackCard({ feedback }: { feedback: SessionPeerFeedback }) {
         {ratings.map(([label, value]) => (
           <div className="flex items-center justify-between gap-3 text-sm" key={label}>
             <span className="text-muted-foreground">{label}</span>
-            <span className="font-mono text-foreground">{value}/5</span>
+            <span className="font-mono text-foreground">
+              {t('feedback.ratingValue', { value, max: 5 })}
+            </span>
           </div>
         ))}
       </div>

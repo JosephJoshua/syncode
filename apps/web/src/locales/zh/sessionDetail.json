@@ -33,6 +33,14 @@
     "generatedAt": "生成时间",
     "summary": "总结",
     "categoryScores": "分项得分",
+    "categories": {
+      "problemSolving": "解题能力",
+      "communication": "沟通表达",
+      "codeQuality": "代码质量",
+      "debugging": "调试能力",
+      "correctness": "正确性",
+      "efficiency": "效率"
+    },
     "strengths": "亮点",
     "improvements": "改进方向",
     "empty": "本次会话尚未生成 AI 报告。"
@@ -58,6 +66,7 @@
     "reviewerToCandidate": "{{reviewer}} 给 {{candidate}}",
     "wouldPairAgain": "愿意再次结对",
     "wouldNotPairAgain": "暂不愿再次结对",
+    "ratingValue": "{{value}}/{{max}}",
     "strengths": "亮点",
     "improvements": "改进建议",
     "ratings": {

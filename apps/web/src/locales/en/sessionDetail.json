@@ -33,6 +33,14 @@
     "generatedAt": "Generated",
     "summary": "Summary",
     "categoryScores": "Score breakdown",
+    "categories": {
+      "problemSolving": "Problem solving",
+      "communication": "Communication",
+      "codeQuality": "Code quality",
+      "debugging": "Debugging",
+      "correctness": "Correctness",
+      "efficiency": "Efficiency"
+    },
     "strengths": "Strengths",
     "improvements": "Areas for improvement",
     "empty": "No AI report has been generated for this session yet."
@@ -58,6 +66,7 @@
     "reviewerToCandidate": "{{reviewer}} for {{candidate}}",
     "wouldPairAgain": "Would pair again",
     "wouldNotPairAgain": "Would not pair again",
+    "ratingValue": "{{value}}/{{max}}",
     "strengths": "Strengths",
     "improvements": "Improvements",
     "ratings": {
