@@ -130,7 +130,7 @@
     "empty": "No peer feedback available for this session.",
     "feedbackFrom": "Feedback from {{name}}",
     "ratingsPanel": "Ratings",
-    "summaryPanel": "Summary",
+    "summaryPanel": "Overall",
     "wouldPairAgain": "Would Pair Again",
     "wouldNotPairAgain": "Would Not Pair Again",
     "strengths": "Strengths",

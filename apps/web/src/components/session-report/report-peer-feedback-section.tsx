@@ -120,43 +120,38 @@ function PeerFeedbackEntryCard({ entry }: { entry: PeerFeedbackEntry }) {
         </div>
       </div>
 
-      <div className="mt-5 grid gap-4 lg:grid-cols-[max-content_minmax(0,1fr)] lg:items-center">
-        <div data-slot="peer-feedback-ratings-layout" className="space-y-3 lg:pr-2">
-          <RatingRow
-            label={t('peerFeedbackSection.ratings.problemSolving')}
-            score={entry.ratings.problemSolving}
-          />
-          <RatingRow
-            label={t('peerFeedbackSection.ratings.communication')}
-            score={entry.ratings.communication}
-          />
-          <RatingRow
-            label={t('peerFeedbackSection.ratings.codeQuality')}
-            score={entry.ratings.codeQuality}
-          />
-          <RatingRow
-            label={t('peerFeedbackSection.ratings.debugging')}
-            score={entry.ratings.debugging}
-          />
+      <div className="mt-5 grid gap-3 lg:grid-cols-2 lg:items-center">
+        <div className="lg:w-fit">
+          <div data-slot="peer-feedback-ratings-layout" className="space-y-3">
+            <RatingRow
+              label={t('peerFeedbackSection.ratings.problemSolving')}
+              score={entry.ratings.problemSolving}
+            />
+            <RatingRow
+              label={t('peerFeedbackSection.ratings.communication')}
+              score={entry.ratings.communication}
+            />
+            <RatingRow
+              label={t('peerFeedbackSection.ratings.codeQuality')}
+              score={entry.ratings.codeQuality}
+            />
+            <RatingRow
+              label={t('peerFeedbackSection.ratings.debugging')}
+              score={entry.ratings.debugging}
+            />
+          </div>
         </div>
 
-        <div className="lg:flex lg:justify-center">
+        <div className="lg:flex lg:justify-start">
           <div
             data-slot="peer-feedback-summary-panel"
-            className="rounded-xl border border-border/50 bg-background/40 px-4 py-4 lg:w-full lg:max-w-[340px]"
+            className="rounded-xl border border-border/50 bg-background/40 px-5 py-5 lg:w-full"
           >
             <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
               {t('peerFeedbackSection.summaryPanel')}
             </p>
-
-            <div
-              data-slot="peer-feedback-summary-card"
-              className="mt-3 rounded-xl border border-border/50 bg-background/60 px-4 py-4"
-            >
-              <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-                {t('peerFeedbackSection.ratings.overall')}
-              </p>
-              <p className="mt-3 ml-6 font-mono text-3xl font-semibold text-foreground">
+            <div className="mt-4 border-t border-border/40 pt-4 pl-4">
+              <p className="mt-1 ml-5 font-mono text-4xl font-semibold text-foreground">
                 {entry.ratings.overall}/5
               </p>
             </div>
