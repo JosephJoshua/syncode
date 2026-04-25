@@ -40,6 +40,7 @@ export interface SessionDetailResult {
   participants: SessionDetailParticipantResult[];
   runs: SessionRunResult[];
   submissions: SessionSubmissionResult[];
+  report: SessionReportResult | null;
   hasReport: boolean;
   hasFeedback: boolean;
   hasRecording: boolean;
@@ -68,4 +69,13 @@ export interface SessionSubmissionResult {
   passed: number;
   total: number;
   createdAt: Date;
+}
+
+export interface SessionReportResult {
+  overallScore: number;
+  categoryScores: Record<string, number>;
+  strengths: string[];
+  areasForImprovement: string[];
+  feedback: string;
+  generatedAt: Date;
 }

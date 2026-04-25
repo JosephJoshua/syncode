@@ -226,7 +226,14 @@ export class SessionsService {
         .innerJoin(users, eq(users.id, sessionParticipants.userId))
         .where(eq(sessionParticipants.sessionId, sessionId)),
       this.db.query.sessionReports.findFirst({
-        columns: { id: true },
+        columns: {
+          overallScore: true,
+          categoryScores: true,
+          strengths: true,
+          areasForImprovement: true,
+          feedback: true,
+          generatedAt: true,
+        },
         where: (table, { eq }) => eq(table.sessionId, sessionId),
       }),
       this.db
@@ -299,6 +306,16 @@ export class SessionsService {
         total: s.total,
         createdAt: s.createdAt,
       })),
+      report: report
+        ? {
+            overallScore: report.overallScore,
+            categoryScores: this.normalizeScoreMap(report.categoryScores),
+            strengths: this.normalizeStringArray(report.strengths),
+            areasForImprovement: this.normalizeStringArray(report.areasForImprovement),
+            feedback: report.feedback,
+            generatedAt: report.generatedAt,
+          }
+        : null,
       hasReport: report != null,
       hasFeedback: feedbackExists.length > 0,
       hasRecording: recordingExists.length > 0,
@@ -429,5 +446,25 @@ export class SessionsService {
 
   private isNullableSortColumn(sortBy: SortBy): boolean {
     return sortBy === 'overallScore' || sortBy === 'finishedAt' || sortBy === 'duration';
+  }
+
+  private normalizeScoreMap(value: unknown): Record<string, number> {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return {};
+    }
+
+    return Object.fromEntries(
+      Object.entries(value).filter(
+        (entry): entry is [string, number] => typeof entry[1] === 'number',
+      ),
+    );
+  }
+
+  private normalizeStringArray(value: unknown): string[] {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+
+    return value.filter((item): item is string => typeof item === 'string');
   }
 }

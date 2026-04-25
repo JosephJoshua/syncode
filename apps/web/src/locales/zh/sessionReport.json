@@ -1,0 +1,38 @@
+{
+  "heading": "会话报告",
+  "subheading": "查看分项得分、正确性结果和详细反馈。",
+  "backToDashboard": "返回仪表盘",
+  "loading": {
+    "title": "正在加载报告",
+    "description": "正在获取本次会话的最新报告和提交结果。"
+  },
+  "error": {
+    "title": "无法加载报告",
+    "description": "当前暂时无法获取报告。",
+    "retry": "重试"
+  },
+  "empty": {
+    "title": "报告尚未生成",
+    "description": "本次会话还没有生成报告。"
+  },
+  "score": {
+    "overall": "总分",
+    "generatedAt": "生成时间",
+    "breakdown": "分项得分"
+  },
+  "correctness": {
+    "title": "正确性",
+    "summary": "通过 {{passed}}/{{total}} 个测试",
+    "empty": "本次会话没有已完成的提交记录。",
+    "submission": "提交",
+    "completed": "已完成",
+    "failed": "失败"
+  },
+  "details": {
+    "title": "详细信息",
+    "feedback": "文字反馈",
+    "strengths": "亮点",
+    "improvements": "改进方向",
+    "none": "暂无详细内容。"
+  }
+}

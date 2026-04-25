@@ -1,0 +1,38 @@
+{
+  "heading": "Session Report",
+  "subheading": "Review the score breakdown, correctness results, and detailed feedback sections.",
+  "backToDashboard": "Back to dashboard",
+  "loading": {
+    "title": "Loading report",
+    "description": "Collecting the latest report and submission results for this session."
+  },
+  "error": {
+    "title": "Report could not be loaded",
+    "description": "The report is unavailable right now.",
+    "retry": "Retry"
+  },
+  "empty": {
+    "title": "Report not ready",
+    "description": "This session does not have a generated report yet."
+  },
+  "score": {
+    "overall": "Overall score",
+    "generatedAt": "Generated",
+    "breakdown": "Score breakdown"
+  },
+  "correctness": {
+    "title": "Correctness",
+    "summary": "{{passed}}/{{total}} tests passed",
+    "empty": "No completed submissions are available for this session.",
+    "submission": "Submission",
+    "completed": "Completed",
+    "failed": "Failed"
+  },
+  "details": {
+    "title": "Details",
+    "feedback": "Narrative feedback",
+    "strengths": "Strengths",
+    "improvements": "Areas for improvement",
+    "none": "No details were provided."
+  }
+}
