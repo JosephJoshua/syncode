@@ -131,7 +131,9 @@ function ScorePanel({ session }: { session: SessionDetail }) {
           {Object.entries(report.categoryScores).map(([category, score]) => (
             <div className="space-y-2" key={category}>
               <div className="flex items-center justify-between gap-3 text-sm">
-                <span className="font-medium text-foreground">{formatCategory(category)}</span>
+                <span className="font-medium text-foreground">
+                  {t(`score.categories.${category}`, { defaultValue: formatCategory(category) })}
+                </span>
                 <span className="font-mono text-xs text-muted-foreground">{score}</span>
               </div>
               <Progress value={score} />
@@ -241,10 +243,13 @@ function DetailsPanel({ session }: { session: SessionDetail }) {
         <div className="mt-5 divide-y divide-border/50 rounded-md border border-border/60">
           {sections.map((section) => {
             const isOpen = openSections[section.id] ?? false;
+            const panelId = `report-section-${section.id}`;
             return (
               <div key={section.id}>
                 <button
                   type="button"
+                  aria-controls={panelId}
+                  aria-expanded={isOpen}
                   className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-sm font-semibold text-foreground transition-colors hover:bg-muted/40"
                   onClick={() =>
                     setOpenSections((current) => ({
@@ -261,7 +266,7 @@ function DetailsPanel({ session }: { session: SessionDetail }) {
                   )}
                 </button>
                 {isOpen ? (
-                  <div className="px-4 pb-4 text-sm leading-6 text-muted-foreground">
+                  <div id={panelId} className="px-4 pb-4 text-sm leading-6 text-muted-foreground">
                     {'content' in section ? (
                       <p>{section.content || t('details.none')}</p>
                     ) : section.items.length > 0 ? (

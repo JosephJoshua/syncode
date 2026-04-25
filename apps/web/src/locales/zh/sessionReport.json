@@ -18,7 +18,15 @@
   "score": {
     "overall": "总分",
     "generatedAt": "生成时间",
-    "breakdown": "分项得分"
+    "breakdown": "分项得分",
+    "categories": {
+      "problemSolving": "解题能力",
+      "communication": "沟通表达",
+      "codeQuality": "代码质量",
+      "debugging": "调试能力",
+      "correctness": "正确性",
+      "efficiency": "效率"
+    }
   },
   "correctness": {
     "title": "正确性",

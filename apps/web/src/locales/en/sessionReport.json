@@ -18,7 +18,15 @@
   "score": {
     "overall": "Overall score",
     "generatedAt": "Generated",
-    "breakdown": "Score breakdown"
+    "breakdown": "Score breakdown",
+    "categories": {
+      "problemSolving": "Problem solving",
+      "communication": "Communication",
+      "codeQuality": "Code quality",
+      "debugging": "Debugging",
+      "correctness": "Correctness",
+      "efficiency": "Efficiency"
+    }
   },
   "correctness": {
     "title": "Correctness",
