@@ -9,7 +9,7 @@ import {
 import { ERROR_CODES, type SubmitSessionFeedbackInput } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
 import { peerFeedback, sessionParticipants, sessions, users } from '@syncode/db';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, asc, eq, inArray } from 'drizzle-orm';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
 import type { SessionFeedbackEntryResult, SessionFeedbackResult } from './feedback.types.js';
 
@@ -25,9 +25,7 @@ export class FeedbackService {
   ): Promise<SessionFeedbackResult> {
     const session = await this.getFinishedSession(sessionId);
 
-    if (!isAdmin) {
-      await this.assertParticipant(sessionId, reviewerId);
-    }
+    await this.assertReviewParticipant(sessionId, reviewerId);
 
     if (reviewerId === input.candidateId) {
       throw new BadRequestException({
@@ -36,7 +34,7 @@ export class FeedbackService {
       });
     }
 
-    await this.assertParticipant(sessionId, input.candidateId);
+    await this.assertReviewParticipant(sessionId, input.candidateId);
 
     try {
       await this.db.insert(peerFeedback).values({
@@ -83,10 +81,16 @@ export class FeedbackService {
       this.getFeedbackRows(sessionId),
     ]);
 
-    const expectedCount = participants.length * Math.max(participants.length - 1, 0);
-    const allSubmitted = expectedCount > 0 && feedback.length >= expectedCount;
-    const visibleFeedback =
-      isAdmin || allSubmitted ? feedback : feedback.filter((entry) => entry.reviewerId === userId);
+    const reviewParticipantIds = new Set(participants.map((participant) => participant.userId));
+    const reviewFeedback = feedback.filter(
+      (entry) =>
+        reviewParticipantIds.has(entry.reviewerId) && reviewParticipantIds.has(entry.candidateId),
+    );
+    const expectedCount = reviewParticipantIds.size * Math.max(reviewParticipantIds.size - 1, 0);
+    const allSubmitted = expectedCount > 0 && reviewFeedback.length >= expectedCount;
+    const visibleFeedback = isAdmin
+      ? feedback
+      : reviewFeedback.filter((entry) => allSubmitted || entry.reviewerId === userId);
 
     return { allSubmitted, data: visibleFeedback };
   }
@@ -129,6 +133,25 @@ export class FeedbackService {
     }
   }
 
+  private async assertReviewParticipant(sessionId: string, userId: string): Promise<void> {
+    const participant = await this.db.query.sessionParticipants.findFirst({
+      columns: { userId: true },
+      where: (table, { and, eq, inArray }) =>
+        and(
+          eq(table.sessionId, sessionId),
+          eq(table.userId, userId),
+          inArray(table.role, ['candidate', 'interviewer']),
+        ),
+    });
+
+    if (!participant) {
+      throw new ForbiddenException({
+        message: 'Only candidates and interviewers can submit peer feedback',
+        code: ERROR_CODES.FORBIDDEN,
+      });
+    }
+  }
+
   private async getReviewParticipants(sessionId: string) {
     return this.db
       .select({ userId: sessionParticipants.userId })
@@ -163,7 +186,8 @@ export class FeedbackService {
       })
       .from(peerFeedback)
       .innerJoin(users, eq(users.id, peerFeedback.reviewerId))
-      .where(eq(peerFeedback.sessionId, sessionId));
+      .where(eq(peerFeedback.sessionId, sessionId))
+      .orderBy(asc(peerFeedback.createdAt));
 
     const candidateNames = await this.getUserNames(rows.map((row) => row.candidateId));
 

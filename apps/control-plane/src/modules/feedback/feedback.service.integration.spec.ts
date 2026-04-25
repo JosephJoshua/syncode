@@ -146,12 +146,31 @@ describe('FeedbackService', () => {
     );
   });
 
+  it('GIVEN observer WHEN submitting feedback THEN throws forbidden', async () => {
+    const { observer, candidate, session } = await seedPeerSession();
+
+    await expect(
+      service.submitSessionFeedback(
+        session.id,
+        observer.id,
+        { ...FEEDBACK_INPUT, candidateId: candidate.id },
+        false,
+      ),
+    ).rejects.toThrow(ForbiddenException);
+  });
+
   it('GIVEN partial submissions WHEN reading feedback THEN hides other reviewers until all expected feedback is submitted', async () => {
-    const { reviewer, candidate, session, room } = await seedPeerSession();
+    const { reviewer, candidate, observer, session, room } = await seedPeerSession();
     await insertPeerFeedbackRow(db, {
       sessionId: session.id,
       roomId: room.id,
       reviewerId: reviewer.id,
+      candidateId: candidate.id,
+    });
+    await insertPeerFeedbackRow(db, {
+      sessionId: session.id,
+      roomId: room.id,
+      reviewerId: observer.id,
       candidateId: candidate.id,
     });
 
