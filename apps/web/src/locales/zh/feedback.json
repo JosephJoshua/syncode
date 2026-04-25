@@ -55,7 +55,7 @@
     "comparison": "与历史表现对比",
     "peerFeedback": "同伴反馈摘要",
     "peerFeedbackSection": "同伴反馈",
-    "peerFeedbackSectionDescription": "展示会话结束后参与者提交的反馈内容。"
+    "peerFeedbackSectionDescription": "展示会话结束后同伴提交的结构化反馈。"
   },
   "dimensions": {
     "correctness": {
@@ -125,11 +125,24 @@
     "error": "当前无法加载同伴反馈。",
     "retry": "重试同伴反馈",
     "statusHeading": "状态",
-    "entriesHeading": "反馈条目",
-    "entryLabel": "第 {{index}} 条",
-    "noDisplayName": "无显示名称",
+    "awaitingResponses": "正在等待所有人提交",
     "hiddenUntilSubmitted": "所有参与者提交后，才会显示同伴反馈。",
-    "empty": "此会话暂无可用的同伴反馈。"
+    "empty": "此会话暂无可用的同伴反馈。",
+    "feedbackFrom": "来自 {{name}} 的反馈",
+    "ratingsPanel": "评分",
+    "summaryPanel": "摘要",
+    "wouldPairAgain": "愿意再次配对",
+    "wouldNotPairAgain": "不愿再次配对",
+    "strengths": "优势",
+    "improvements": "待改进点",
+    "submittedAt": "提交时间",
+    "ratings": {
+      "problemSolving": "解题能力",
+      "communication": "沟通",
+      "codeQuality": "代码质量",
+      "debugging": "调试",
+      "overall": "整体"
+    }
   },
   "breakdown": {
     "emptyDescription": "此会话没有可用的最终测试用例结果。",

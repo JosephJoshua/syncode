@@ -55,7 +55,7 @@
     "comparison": "Comparison to History",
     "peerFeedback": "Peer Feedback Summary",
     "peerFeedbackSection": "Peer Feedback",
-    "peerFeedbackSectionDescription": "Feedback submitted by session participants after the interview ends."
+    "peerFeedbackSectionDescription": "Structured feedback from your peer after the session."
   },
   "dimensions": {
     "correctness": {
@@ -125,11 +125,24 @@
     "error": "Peer feedback could not be loaded right now.",
     "retry": "Retry peer feedback",
     "statusHeading": "Status",
-    "entriesHeading": "Feedback Entries",
-    "entryLabel": "Entry {{index}}",
-    "noDisplayName": "No display name",
+    "awaitingResponses": "Waiting for all responses",
     "hiddenUntilSubmitted": "Peer feedback will be available once all participants submit.",
-    "empty": "No peer feedback available for this session."
+    "empty": "No peer feedback available for this session.",
+    "feedbackFrom": "Feedback from {{name}}",
+    "ratingsPanel": "Ratings",
+    "summaryPanel": "Summary",
+    "wouldPairAgain": "Would Pair Again",
+    "wouldNotPairAgain": "Would Not Pair Again",
+    "strengths": "Strengths",
+    "improvements": "Areas for Improvement",
+    "submittedAt": "Submitted",
+    "ratings": {
+      "problemSolving": "Problem Solving",
+      "communication": "Communication",
+      "codeQuality": "Code Quality",
+      "debugging": "Debugging",
+      "overall": "Overall"
+    }
   },
   "breakdown": {
     "emptyDescription": "No final test-case breakdown was available for this session.",
