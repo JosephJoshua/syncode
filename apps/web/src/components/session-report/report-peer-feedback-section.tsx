@@ -140,24 +140,26 @@ function PeerFeedbackEntryCard({ entry }: { entry: PeerFeedbackEntry }) {
           />
         </div>
 
-        <div
-          data-slot="peer-feedback-summary-panel"
-          className="rounded-xl border border-border/50 bg-background/40 px-4 py-4 lg:w-full lg:max-w-[360px] lg:justify-self-center"
-        >
-          <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-            {t('peerFeedbackSection.summaryPanel')}
-          </p>
-
+        <div className="lg:flex lg:justify-center">
           <div
-            data-slot="peer-feedback-summary-card"
-            className="mt-3 rounded-xl border border-border/50 bg-background/60 px-4 py-4"
+            data-slot="peer-feedback-summary-panel"
+            className="rounded-xl border border-border/50 bg-background/40 px-4 py-4 lg:w-full lg:max-w-[340px]"
           >
             <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-              {t('peerFeedbackSection.ratings.overall')}
+              {t('peerFeedbackSection.summaryPanel')}
             </p>
-            <p className="mt-3 ml-6 font-mono text-3xl font-semibold text-foreground">
-              {entry.ratings.overall}/5
-            </p>
+
+            <div
+              data-slot="peer-feedback-summary-card"
+              className="mt-3 rounded-xl border border-border/50 bg-background/60 px-4 py-4"
+            >
+              <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+                {t('peerFeedbackSection.ratings.overall')}
+              </p>
+              <p className="mt-3 ml-6 font-mono text-3xl font-semibold text-foreground">
+                {entry.ratings.overall}/5
+              </p>
+            </div>
           </div>
         </div>
       </div>
