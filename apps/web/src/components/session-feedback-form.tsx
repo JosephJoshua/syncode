@@ -15,7 +15,7 @@ import {
   SelectValue,
 } from '@syncode/ui';
 import { Check, LoaderCircle } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { type ReactNode, useEffect } from 'react';
 import { type Control, Controller, useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import {
@@ -51,8 +51,10 @@ export function SessionFeedbackForm({
   const {
     control,
     formState: { errors, isValid },
+    getValues,
     handleSubmit,
     register,
+    setValue,
   } = useForm<SessionFeedbackFormValues>({
     resolver: zodResolver(sessionFeedbackFormSchema),
     defaultValues: {
@@ -61,6 +63,19 @@ export function SessionFeedbackForm({
     },
     mode: 'onChange',
   });
+  const singleCandidateId = candidates.length === 1 ? (candidates[0]?.userId ?? null) : null;
+
+  useEffect(() => {
+    if (!singleCandidateId || getValues('candidateId')) {
+      return;
+    }
+
+    setValue('candidateId', singleCandidateId, {
+      shouldDirty: false,
+      shouldTouch: false,
+      shouldValidate: true,
+    });
+  }, [getValues, setValue, singleCandidateId]);
 
   return (
     <Card className="border border-border/50 bg-card/80 py-0 backdrop-blur-sm">
@@ -87,6 +102,7 @@ export function SessionFeedbackForm({
                 >
                   <SelectTrigger
                     id="candidateId"
+                    aria-invalid={Boolean(errors.candidateId)}
                     className={getInputClassName(Boolean(errors.candidateId))}
                   >
                     <SelectValue placeholder={t('form.placeholder.candidate')} />
@@ -145,6 +161,7 @@ export function SessionFeedbackForm({
           >
             <textarea
               id="strengths"
+              aria-invalid={Boolean(errors.strengths)}
               rows={4}
               {...register('strengths')}
               className={getTextareaClassName(Boolean(errors.strengths))}
@@ -160,6 +177,7 @@ export function SessionFeedbackForm({
           >
             <textarea
               id="improvements"
+              aria-invalid={Boolean(errors.improvements)}
               rows={4}
               {...register('improvements')}
               className={getTextareaClassName(Boolean(errors.improvements))}
@@ -184,6 +202,7 @@ export function SessionFeedbackForm({
                           : 'border-border/70 bg-muted/45 text-muted-foreground hover:text-foreground',
                       )}
                       onClick={() => field.onChange(value)}
+                      aria-pressed={field.value === value}
                       disabled={isSubmitting}
                       key={String(value)}
                     >
@@ -255,6 +274,7 @@ function RatingField({
                     : 'border-border/70 bg-muted/45 text-muted-foreground hover:text-foreground',
                 )}
                 aria-label={t('form.ratingAria', { label, rating })}
+                aria-pressed={field.value === rating}
                 onClick={() => field.onChange(rating)}
                 key={rating}
               >
