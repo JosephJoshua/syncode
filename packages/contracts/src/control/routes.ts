@@ -13,6 +13,7 @@ import type {
   executionResultResponseSchema,
   jobStatusResponseSchema,
 } from './execution.js';
+import type { sessionFeedbackResponseSchema, submitSessionFeedbackSchema } from './feedback.js';
 import type { healthCheckResponseSchema } from './health.js';
 import type {
   problemDetailSchema,
@@ -170,6 +171,16 @@ export const CONTROL_API = {
     >()('sessions', 'GET'),
     GET: defineRoute<void, z.infer<typeof sessionDetailSchema>>()('sessions/:id', 'GET'),
     DELETE: defineRoute<void, void>()('sessions/:id', 'DELETE'),
+  },
+  FEEDBACK: {
+    SUBMIT_SESSION: defineRoute<
+      z.infer<typeof submitSessionFeedbackSchema>,
+      z.infer<typeof sessionFeedbackResponseSchema>
+    >()('sessions/:id/feedback', 'POST'),
+    GET_SESSION: defineRoute<void, z.infer<typeof sessionFeedbackResponseSchema>>()(
+      'sessions/:id/feedback',
+      'GET',
+    ),
   },
   HEALTH: defineRoute<void, z.infer<typeof healthCheckResponseSchema>>()('health', 'GET'),
 };

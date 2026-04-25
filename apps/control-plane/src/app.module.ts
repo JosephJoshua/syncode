@@ -11,6 +11,7 @@ import { InfrastructureModule } from './infrastructure/infrastructure.module.js'
 import { AuthModule } from './modules/auth/auth.module.js';
 import { DbModule } from './modules/db/db.module.js';
 import { ExecutionModule } from './modules/execution/execution.module.js';
+import { FeedbackModule } from './modules/feedback/feedback.module.js';
 import { InternalModule } from './modules/internal/internal.module.js';
 import { ProblemsModule } from './modules/problems/problems.module.js';
 import { RoomsModule } from './modules/rooms/rooms.module.js';
@@ -117,6 +118,7 @@ if (!isProd) {
     RoomsModule,
     SessionsModule,
     ProblemsModule,
+    FeedbackModule,
     ExecutionModule,
     InternalModule,
   ],
