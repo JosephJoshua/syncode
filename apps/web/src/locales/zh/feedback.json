@@ -1,22 +1,22 @@
 {
   "heading": "反馈展示",
   "notFound": {
-    "description": "未找到此会话，因此反馈占位内容暂时无法显示。",
+    "description": "未找到此会话，因此暂时无法展示反馈占位内容。",
     "invalidSessionId": "无效的会话 ID：{{sessionId}}"
   },
   "found": {
-    "description": "查看此会话特定反馈展示的当前占位布局。"
+    "description": "查看此会话反馈展示的当前占位布局。"
   },
   "label": {
     "sessionFeedback": "会话反馈",
     "summary": "总结",
-    "focusAreas": "重点领域",
-    "nextIteration": "下一步改进"
+    "focusAreas": "重点方向",
+    "nextIteration": "下一轮改进"
   },
-  "placeholder": "会话 {{sessionId}} 目前使用针对 {{problemName}} 的占位评语。最终版本将以结构化的会话专属反馈内容替换此区块。",
+  "placeholder": "会话 {{sessionId}} 目前使用针对 {{problemName}} 的占位评价。最终版本会替换为结构化的会话反馈内容。",
   "focusItems": {
-    "clarify": "明确问题定义和边界情况的沟通。",
-    "pacing": "改善推理解题路径时的节奏把控。",
+    "clarify": "明确题目边界和边缘情况沟通。",
+    "pacing": "改善推理解题路径时的节奏控制。",
     "explanation": "加强权衡讨论中的解释质量。"
   },
   "nextIteration": "此区域后续将用于具体的会话建议、代码审查意见和沟通反馈。",
@@ -26,5 +26,54 @@
     "role": "角色",
     "date": "日期",
     "duration": "时长"
+  },
+  "form": {
+    "title": "同伴评价",
+    "description": "为搭档的面试表现打分，并留下可执行的文字反馈。",
+    "field": {
+      "candidate": "反馈对象",
+      "strengths": "表现亮点",
+      "improvements": "改进建议",
+      "wouldPairAgain": "结对意愿"
+    },
+    "hint": {
+      "candidate": "选择这份评价对应的参与者。",
+      "strengths": "指出具体有帮助的行为、解释或实现选择。",
+      "improvements": "给出下一次面试练习可以立即尝试的建议。"
+    },
+    "placeholder": {
+      "candidate": "选择参与者",
+      "strengths": "对方在编码前澄清了假设，并清晰解释了权衡。",
+      "improvements": "可以更早说明边缘情况，并保持变量命名更一致。"
+    },
+    "rating": {
+      "problemSolving": "解题能力",
+      "communication": "沟通表达",
+      "codeQuality": "代码质量",
+      "debugging": "调试能力",
+      "overall": "综合评价"
+    },
+    "ratingHint": {
+      "problemSolving": "思路、拆解和边缘情况推理。",
+      "communication": "表达清晰度、协作和面试叙述。",
+      "codeQuality": "可读性、结构和可维护性。",
+      "debugging": "检查失败并快速调整的能力。",
+      "overall": "你对本次会话的整体评价。"
+    },
+    "ratingAria": "{{label}} 评分 {{rating}} / 5",
+    "option": {
+      "pairAgainYes": "愿意再次结对",
+      "pairAgainNo": "暂不愿再次结对"
+    },
+    "button": {
+      "submit": "提交反馈",
+      "submitting": "提交中..."
+    },
+    "validation": {
+      "candidateRequired": "请选择反馈对象。",
+      "strengthsRequired": "请至少填写一个亮点。",
+      "improvementsRequired": "请至少填写一条改进建议。",
+      "textMaxLength": "反馈内容请控制在 2000 字以内。"
+    }
   }
 }
