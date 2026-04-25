@@ -202,10 +202,13 @@ export class FeedbackService {
 }
 
 function isUniqueViolation(error: unknown): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    (error as { code?: unknown }).code === '23505'
-  );
+  if (typeof error !== 'object' || error === null) {
+    return false;
+  }
+
+  if ('code' in error && (error as { code?: unknown }).code === '23505') {
+    return true;
+  }
+
+  return 'cause' in error && isUniqueViolation((error as { cause?: unknown }).cause);
 }
