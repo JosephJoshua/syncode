@@ -40,6 +40,9 @@ export interface SessionDetailResult {
   participants: SessionDetailParticipantResult[];
   runs: SessionRunResult[];
   submissions: SessionSubmissionResult[];
+  report: SessionReportResult | null;
+  latestCodeSnapshot: SessionCodeSnapshotResult | null;
+  peerFeedback: SessionPeerFeedbackResult[];
   hasReport: boolean;
   hasFeedback: boolean;
   hasRecording: boolean;
@@ -67,5 +70,40 @@ export interface SessionSubmissionResult {
   status: 'completed' | 'failed';
   passed: number;
   total: number;
+  createdAt: Date;
+}
+
+export interface SessionReportResult {
+  overallScore: number;
+  categoryScores: Record<string, number>;
+  strengths: string[];
+  areasForImprovement: string[];
+  feedback: string;
+  generatedAt: Date;
+}
+
+export interface SessionCodeSnapshotResult {
+  id: string;
+  code: string;
+  language: SupportedLanguage;
+  trigger: string;
+  linesOfCode: number | null;
+  createdAt: Date;
+}
+
+export interface SessionPeerFeedbackResult {
+  id: string;
+  reviewerId: string;
+  reviewerName: string;
+  candidateId: string;
+  candidateName: string;
+  problemSolvingRating: number;
+  communicationRating: number;
+  codeQualityRating: number;
+  debuggingRating: number;
+  overallRating: number;
+  strengths: string;
+  improvements: string;
+  wouldPairAgain: boolean;
   createdAt: Date;
 }

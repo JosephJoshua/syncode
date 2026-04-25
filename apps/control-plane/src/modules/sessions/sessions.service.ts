@@ -2,6 +2,7 @@ import { ForbiddenException, Inject, Injectable, Logger, NotFoundException } fro
 import { ERROR_CODES, type ListSessionsQuery, SESSIONS_SORT_BY_OPTIONS } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
 import {
+  codeSnapshots,
   peerFeedback,
   problems,
   runs,
@@ -207,6 +208,8 @@ export class SessionsService {
     const [
       participantRows,
       report,
+      latestCodeSnapshot,
+      feedbackRows,
       feedbackExists,
       recordingExists,
       runRows,
@@ -226,9 +229,50 @@ export class SessionsService {
         .innerJoin(users, eq(users.id, sessionParticipants.userId))
         .where(eq(sessionParticipants.sessionId, sessionId)),
       this.db.query.sessionReports.findFirst({
-        columns: { id: true },
+        columns: {
+          overallScore: true,
+          categoryScores: true,
+          strengths: true,
+          areasForImprovement: true,
+          feedback: true,
+          generatedAt: true,
+        },
         where: (table, { eq }) => eq(table.sessionId, sessionId),
       }),
+      this.db
+        .select({
+          id: codeSnapshots.id,
+          code: codeSnapshots.code,
+          language: codeSnapshots.language,
+          trigger: codeSnapshots.trigger,
+          linesOfCode: codeSnapshots.linesOfCode,
+          createdAt: codeSnapshots.createdAt,
+        })
+        .from(codeSnapshots)
+        .where(eq(codeSnapshots.sessionId, sessionId))
+        .orderBy(desc(codeSnapshots.createdAt))
+        .limit(1),
+      this.db
+        .select({
+          id: peerFeedback.id,
+          reviewerId: peerFeedback.reviewerId,
+          reviewerUsername: users.username,
+          reviewerDisplayName: users.displayName,
+          candidateId: peerFeedback.candidateId,
+          problemSolvingRating: peerFeedback.problemSolvingRating,
+          communicationRating: peerFeedback.communicationRating,
+          codeQualityRating: peerFeedback.codeQualityRating,
+          debuggingRating: peerFeedback.debuggingRating,
+          overallRating: peerFeedback.overallRating,
+          strengths: peerFeedback.strengths,
+          improvements: peerFeedback.improvements,
+          wouldPairAgain: peerFeedback.wouldPairAgain,
+          createdAt: peerFeedback.createdAt,
+        })
+        .from(peerFeedback)
+        .innerJoin(users, eq(users.id, peerFeedback.reviewerId))
+        .where(eq(peerFeedback.sessionId, sessionId))
+        .orderBy(asc(peerFeedback.createdAt)),
       this.db
         .select({ id: peerFeedback.id })
         .from(peerFeedback)
@@ -298,6 +342,33 @@ export class SessionsService {
         passed: s.passed,
         total: s.total,
         createdAt: s.createdAt,
+      })),
+      report: report
+        ? {
+            overallScore: report.overallScore,
+            categoryScores: this.normalizeScoreMap(report.categoryScores),
+            strengths: this.normalizeStringArray(report.strengths),
+            areasForImprovement: this.normalizeStringArray(report.areasForImprovement),
+            feedback: report.feedback,
+            generatedAt: report.generatedAt,
+          }
+        : null,
+      latestCodeSnapshot: latestCodeSnapshot[0] ?? null,
+      peerFeedback: feedbackRows.map((feedback) => ({
+        id: feedback.id,
+        reviewerId: feedback.reviewerId,
+        reviewerName: feedback.reviewerDisplayName ?? feedback.reviewerUsername,
+        candidateId: feedback.candidateId,
+        candidateName: this.getParticipantName(participantRows, feedback.candidateId),
+        problemSolvingRating: feedback.problemSolvingRating,
+        communicationRating: feedback.communicationRating,
+        codeQualityRating: feedback.codeQualityRating,
+        debuggingRating: feedback.debuggingRating,
+        overallRating: feedback.overallRating,
+        strengths: feedback.strengths,
+        improvements: feedback.improvements,
+        wouldPairAgain: feedback.wouldPairAgain,
+        createdAt: feedback.createdAt,
       })),
       hasReport: report != null,
       hasFeedback: feedbackExists.length > 0,
@@ -429,5 +500,33 @@ export class SessionsService {
 
   private isNullableSortColumn(sortBy: SortBy): boolean {
     return sortBy === 'overallScore' || sortBy === 'finishedAt' || sortBy === 'duration';
+  }
+
+  private normalizeScoreMap(value: unknown): Record<string, number> {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return {};
+    }
+
+    return Object.fromEntries(
+      Object.entries(value).filter(
+        (entry): entry is [string, number] => typeof entry[1] === 'number',
+      ),
+    );
+  }
+
+  private normalizeStringArray(value: unknown): string[] {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+
+    return value.filter((item): item is string => typeof item === 'string');
+  }
+
+  private getParticipantName(
+    participants: Array<{ userId: string; username: string; displayName: string | null }>,
+    userId: string,
+  ): string {
+    const participant = participants.find((item) => item.userId === userId);
+    return participant?.displayName ?? participant?.username ?? userId;
   }
 }

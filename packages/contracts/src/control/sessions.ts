@@ -74,6 +74,41 @@ export const sessionSubmissionSchema = z.object({
   createdAt: z.iso.datetime(),
 });
 
+export const sessionReportSchema = z.object({
+  overallScore: z.number().int().min(0).max(100),
+  categoryScores: z.record(z.string(), z.number().int().min(0).max(100)),
+  strengths: z.array(z.string()).default([]),
+  areasForImprovement: z.array(z.string()).default([]),
+  feedback: z.string(),
+  generatedAt: z.iso.datetime(),
+});
+
+export const sessionCodeSnapshotSchema = z.object({
+  id: z.uuid(),
+  code: z.string(),
+  language: z.string(),
+  trigger: z.string(),
+  linesOfCode: z.number().int().nullable(),
+  createdAt: z.iso.datetime(),
+});
+
+export const sessionPeerFeedbackSchema = z.object({
+  id: z.uuid(),
+  reviewerId: z.uuid(),
+  reviewerName: z.string(),
+  candidateId: z.uuid(),
+  candidateName: z.string(),
+  problemSolvingRating: z.number().int().min(1).max(5),
+  communicationRating: z.number().int().min(1).max(5),
+  codeQualityRating: z.number().int().min(1).max(5),
+  debuggingRating: z.number().int().min(1).max(5),
+  overallRating: z.number().int().min(1).max(5),
+  strengths: z.string(),
+  improvements: z.string(),
+  wouldPairAgain: z.boolean(),
+  createdAt: z.iso.datetime(),
+});
+
 export const sessionDetailSchema = z.object({
   sessionId: z.uuid(),
   roomId: z.uuid(),
@@ -90,6 +125,9 @@ export const sessionDetailSchema = z.object({
   participants: z.array(sessionParticipantSchema),
   runs: z.array(sessionRunSchema),
   submissions: z.array(sessionSubmissionSchema),
+  report: sessionReportSchema.nullable(),
+  latestCodeSnapshot: sessionCodeSnapshotSchema.nullable(),
+  peerFeedback: z.array(sessionPeerFeedbackSchema).default([]),
   hasReport: z.boolean(),
   hasFeedback: z.boolean(),
   hasRecording: z.boolean(),
@@ -101,4 +139,7 @@ export type SessionHistoryParticipant = z.infer<typeof sessionHistoryParticipant
 export type SessionSummary = z.infer<typeof sessionSummarySchema>;
 export type SessionHistoryResponse = z.infer<typeof sessionHistoryResponseSchema>;
 export type SessionParticipant = z.infer<typeof sessionParticipantSchema>;
+export type SessionReport = z.infer<typeof sessionReportSchema>;
+export type SessionCodeSnapshot = z.infer<typeof sessionCodeSnapshotSchema>;
+export type SessionPeerFeedback = z.infer<typeof sessionPeerFeedbackSchema>;
 export type SessionDetail = z.infer<typeof sessionDetailSchema>;
