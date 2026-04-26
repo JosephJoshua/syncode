@@ -36,7 +36,8 @@ export class ProblemsController {
     name: 'difficulty',
     required: false,
     enum: [...PROBLEM_DIFFICULTIES],
-    description: 'Filter by difficulty',
+    isArray: true,
+    description: 'Filter by difficulties; repeat the query param or pass a comma-separated list',
   })
   @ApiQuery({
     name: 'tags',
