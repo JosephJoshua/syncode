@@ -781,8 +781,13 @@ function RoomPage() {
           muteSet: localMuteSet,
           videoHiddenSet,
         }}
+<<<<<<< HEAD
         selfMicrophoneEnabled={isMicrophoneEnabled}
         onSelfMicrophoneToggle={() => void toggleMicrophone()}
+=======
+        mediaControls={mediaControlsElement}
+        collabStatus={collabStatus}
+>>>>>>> c0bc762 (feat(web): show media controls and ws status in room lobby)
       />
     </>
   );

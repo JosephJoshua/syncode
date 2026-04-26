@@ -5,6 +5,7 @@ import { motion } from 'motion/react';
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useClipboard } from '@/hooks/use-clipboard.js';
+import type { CollabConnectionStatus } from '@/hooks/use-yjs-collab.js';
 import { allRequiredPeersReady } from '@/lib/participant-readiness.js';
 import {
   buildInviteLink,
@@ -47,7 +48,35 @@ interface RoomLobbyProps {
   };
   selfMicrophoneEnabled?: boolean;
   onSelfMicrophoneToggle?: () => void;
+  mediaControls?: React.ReactNode;
+  collabStatus?: CollabConnectionStatus;
 }
+
+const COLLAB_STATUS_INDICATOR: Record<
+  CollabConnectionStatus,
+  { dotClass: string; labelKey: string; fallback: string }
+> = {
+  connected: {
+    dotClass: 'bg-success live-pulse',
+    labelKey: 'statusBar.connected',
+    fallback: 'Connected',
+  },
+  connecting: {
+    dotClass: 'bg-warning animate-pulse',
+    labelKey: 'statusBar.connecting',
+    fallback: 'Connecting',
+  },
+  reconnecting: {
+    dotClass: 'bg-warning animate-pulse',
+    labelKey: 'statusBar.reconnecting',
+    fallback: 'Reconnecting',
+  },
+  disconnected: {
+    dotClass: 'bg-destructive',
+    labelKey: 'statusBar.disconnected',
+    fallback: 'Disconnected',
+  },
+};
 
 export function RoomLobby({
   roomName,
@@ -74,8 +103,14 @@ export function RoomLobby({
   participantMediaControls,
   selfMicrophoneEnabled,
   onSelfMicrophoneToggle,
+  mediaControls,
+  collabStatus,
 }: RoomLobbyProps) {
   const { t } = useTranslation('rooms');
+  const collabIndicator = collabStatus ? COLLAB_STATUS_INDICATOR[collabStatus] : null;
+  const collabLabel = collabIndicator
+    ? t(collabIndicator.labelKey, { defaultValue: collabIndicator.fallback })
+    : null;
   const { copied, copy } = useClipboard();
 
   const activeParticipants = useMemo(() => participants.filter((p) => p.isActive), [participants]);
@@ -121,6 +156,15 @@ export function RoomLobby({
           <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
             {roomName ?? t('card.untitledRoom')}
           </h1>
+          {collabIndicator && collabLabel ? (
+            <output
+              aria-live="polite"
+              className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-muted/30 px-2.5 py-0.5 font-mono text-[11px] text-muted-foreground"
+            >
+              <span className={`size-1.5 rounded-full ${collabIndicator.dotClass}`} />
+              <span>{collabLabel}</span>
+            </output>
+          ) : null}
           <p className="mt-1 font-mono text-sm tracking-widest text-primary">
             {activeParticipants.length > 0
               ? `${readyCount} / ${activeParticipants.length} ${t('lobby.ready')}`
@@ -134,6 +178,11 @@ export function RoomLobby({
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-12">
         {/* Participant grid */}
         <div className="lg:col-span-8 space-y-4">
+          {mediaControls ? (
+            <div className="sticky top-0 z-10 flex justify-center rounded-lg border border-border/60 bg-background/80 p-2 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+              {mediaControls}
+            </div>
+          ) : null}
           <LobbyMediaPreview />
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             {activeParticipants.map((participant, index) => (
