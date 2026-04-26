@@ -348,6 +348,7 @@ export function FloatingVideoPanel({
   const springY = useMotionValue(16);
   const animatedX = useSpring(springX, SPRING_CONFIG);
   const animatedY = useSpring(springY, SPRING_CONFIG);
+  const didInitPosRef = useRef(false);
 
   const dragRef = useRef<{
     startX: number;
@@ -369,6 +370,7 @@ export function FloatingVideoPanel({
   const resizeRafRef = useRef<number | null>(null);
 
   const panelWidth = isMinimized ? 160 : size.width;
+  const panelHeight = isMinimized ? 28 : size.height;
   const activeTile = pickActiveTile(tiles);
 
   const clampPositionRef = useRef<((x: number, y: number) => { x: number; y: number }) | null>(
@@ -377,14 +379,14 @@ export function FloatingVideoPanel({
 
   const clampPosition = useCallback(
     (x: number, y: number) => {
-      const maxRight = window.innerWidth - panelWidth - EDGE_PADDING;
-      const maxBottom = window.innerHeight - 48 - EDGE_PADDING;
+      const maxX = Math.max(EDGE_PADDING, window.innerWidth - panelWidth - EDGE_PADDING);
+      const maxY = Math.max(EDGE_PADDING, window.innerHeight - panelHeight - EDGE_PADDING);
       return {
-        x: Math.max(EDGE_PADDING, Math.min(maxRight, x)),
-        y: Math.max(EDGE_PADDING, Math.min(maxBottom, y)),
+        x: Math.max(EDGE_PADDING, Math.min(maxX, x)),
+        y: Math.max(EDGE_PADDING, Math.min(maxY, y)),
       };
     },
-    [panelWidth],
+    [panelWidth, panelHeight],
   );
   clampPositionRef.current = clampPosition;
 
@@ -396,6 +398,19 @@ export function FloatingVideoPanel({
       height: Math.max(FLOATING_MIN_HEIGHT, Math.min(maxH, height)),
     };
   }, []);
+
+  useEffect(() => {
+    if (didInitPosRef.current) return;
+    didInitPosRef.current = true;
+    const initialX = Math.max(EDGE_PADDING, window.innerWidth - FLOATING_WIDTH - EDGE_PADDING);
+    const initialY = Math.max(
+      EDGE_PADDING,
+      window.innerHeight - FLOATING_DEFAULT_HEIGHT - EDGE_PADDING,
+    );
+    posRef.current = { x: initialX, y: initialY };
+    springX.jump(initialX);
+    springY.jump(initialY);
+  }, [springX, springY]);
 
   useEffect(() => {
     const onResize = () => {
@@ -430,8 +445,8 @@ export function FloatingVideoPanel({
       const dx = e.clientX - dragRef.current.startX;
       const dy = e.clientY - dragRef.current.startY;
       const raw = {
-        x: dragRef.current.originX - dx,
-        y: dragRef.current.originY - dy,
+        x: dragRef.current.originX + dx,
+        y: dragRef.current.originY + dy,
       };
       const clamped = clampPosition(raw.x, raw.y);
       posRef.current = clamped;
@@ -515,8 +530,8 @@ export function FloatingVideoPanel({
       <motion.div
         className="fixed z-50 select-none"
         style={{
-          right: animatedX,
-          bottom: animatedY,
+          left: animatedX,
+          top: animatedY,
           width: panelWidth,
         }}
         initial={{ opacity: 0, y: 12 }}
