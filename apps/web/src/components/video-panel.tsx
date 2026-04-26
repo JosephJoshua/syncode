@@ -337,6 +337,8 @@ const FLOATING_MIN_WIDTH = 200;
 const FLOATING_MIN_HEIGHT = 150;
 const VIEWPORT_PADDING = 32;
 
+type ResizeCorner = 'tl' | 'tr' | 'bl' | 'br';
+
 export function FloatingVideoPanel({
   tiles,
   isMinimized,
@@ -361,12 +363,20 @@ export function FloatingVideoPanel({
   const [zoomTarget, setZoomTarget] = useState<ZoomTarget | null>(null);
 
   const resizeRef = useRef<{
+    corner: ResizeCorner;
     startX: number;
     startY: number;
     originWidth: number;
     originHeight: number;
+    originPosX: number;
+    originPosY: number;
   } | null>(null);
-  const pendingSizeRef = useRef<{ width: number; height: number } | null>(null);
+  const pendingResizeRef = useRef<{
+    width: number;
+    height: number;
+    x: number;
+    y: number;
+  } | null>(null);
   const resizeRafRef = useRef<number | null>(null);
 
   const panelWidth = isMinimized ? 160 : size.width;
@@ -465,15 +475,18 @@ export function FloatingVideoPanel({
     springY.set(snapped.y);
   }, [clampPosition, springX, springY]);
 
-  const onResizePointerDown = useCallback(
-    (e: React.PointerEvent) => {
+  const startResize = useCallback(
+    (corner: ResizeCorner) => (e: React.PointerEvent) => {
       e.preventDefault();
       e.stopPropagation();
       resizeRef.current = {
+        corner,
         startX: e.clientX,
         startY: e.clientY,
         originWidth: size.width,
         originHeight: size.height,
+        originPosX: posRef.current.x,
+        originPosY: posRef.current.y,
       };
       (e.target as HTMLElement).setPointerCapture(e.pointerId);
     },
@@ -482,39 +495,94 @@ export function FloatingVideoPanel({
 
   const onResizePointerMove = useCallback(
     (e: React.PointerEvent) => {
-      if (!resizeRef.current) return;
-      const dx = e.clientX - resizeRef.current.startX;
-      const dy = e.clientY - resizeRef.current.startY;
-      pendingSizeRef.current = clampSize(
-        resizeRef.current.originWidth + dx,
-        resizeRef.current.originHeight + dy,
-      );
+      const r = resizeRef.current;
+      if (!r) return;
+      const dx = e.clientX - r.startX;
+      const dy = e.clientY - r.startY;
+
+      // Compute requested size and position from the dragged corner.
+      let rawWidth = r.originWidth;
+      let rawHeight = r.originHeight;
+      let rawX = r.originPosX;
+      let rawY = r.originPosY;
+
+      if (r.corner === 'br') {
+        rawWidth = r.originWidth + dx;
+        rawHeight = r.originHeight + dy;
+      } else if (r.corner === 'tr') {
+        rawWidth = r.originWidth + dx;
+        rawHeight = r.originHeight - dy;
+        rawY = r.originPosY + dy;
+      } else if (r.corner === 'bl') {
+        rawWidth = r.originWidth - dx;
+        rawHeight = r.originHeight + dy;
+        rawX = r.originPosX + dx;
+      } else {
+        rawWidth = r.originWidth - dx;
+        rawHeight = r.originHeight - dy;
+        rawX = r.originPosX + dx;
+        rawY = r.originPosY + dy;
+      }
+
+      const clampedSize = clampSize(rawWidth, rawHeight);
+
+      // For top/left corners, the position must reflect the actual width/height
+      // we ended up with after clamping, otherwise the pinned edge drifts.
+      let nextX = rawX;
+      let nextY = rawY;
+      if (r.corner === 'tr' || r.corner === 'tl') {
+        nextY = r.originPosY + (r.originHeight - clampedSize.height);
+      }
+      if (r.corner === 'bl' || r.corner === 'tl') {
+        nextX = r.originPosX + (r.originWidth - clampedSize.width);
+      }
+
+      const clampedPos = clampPosition(nextX, nextY);
+
+      pendingResizeRef.current = {
+        width: clampedSize.width,
+        height: clampedSize.height,
+        x: clampedPos.x,
+        y: clampedPos.y,
+      };
       if (resizeRafRef.current !== null) return;
       resizeRafRef.current = requestAnimationFrame(() => {
         resizeRafRef.current = null;
-        if (pendingSizeRef.current) setSize(pendingSizeRef.current);
+        const pending = pendingResizeRef.current;
+        if (!pending) return;
+        setSize({ width: pending.width, height: pending.height });
+        posRef.current = { x: pending.x, y: pending.y };
+        springX.set(pending.x);
+        springY.set(pending.y);
       });
     },
-    [clampSize],
+    [clampSize, clampPosition, springX, springY],
   );
 
-  const endResize = useCallback((e?: React.PointerEvent) => {
-    resizeRef.current = null;
-    if (resizeRafRef.current !== null) {
-      cancelAnimationFrame(resizeRafRef.current);
-      resizeRafRef.current = null;
-    }
-    if (pendingSizeRef.current) {
-      setSize(pendingSizeRef.current);
-      pendingSizeRef.current = null;
-    }
-    if (e) {
-      const target = e.target as HTMLElement;
-      if (target.hasPointerCapture?.(e.pointerId)) {
-        target.releasePointerCapture(e.pointerId);
+  const endResize = useCallback(
+    (e?: React.PointerEvent) => {
+      resizeRef.current = null;
+      if (resizeRafRef.current !== null) {
+        cancelAnimationFrame(resizeRafRef.current);
+        resizeRafRef.current = null;
       }
-    }
-  }, []);
+      const pending = pendingResizeRef.current;
+      if (pending) {
+        setSize({ width: pending.width, height: pending.height });
+        posRef.current = { x: pending.x, y: pending.y };
+        springX.set(pending.x);
+        springY.set(pending.y);
+        pendingResizeRef.current = null;
+      }
+      if (e) {
+        const target = e.target as HTMLElement;
+        if (target.hasPointerCapture?.(e.pointerId)) {
+          target.releasePointerCapture(e.pointerId);
+        }
+      }
+    },
+    [springX, springY],
+  );
 
   useEffect(() => {
     return () => {
@@ -618,28 +686,69 @@ export function FloatingVideoPanel({
           ) : null}
 
           {showResize ? (
-            <button
-              type="button"
-              tabIndex={-1}
-              aria-label="Resize panel"
-              className="absolute bottom-0 right-0 z-10 flex size-4 cursor-nwse-resize items-end justify-end bg-transparent p-0 text-muted-foreground/50 hover:text-muted-foreground"
-              onPointerDown={onResizePointerDown}
-              onPointerMove={onResizePointerMove}
-              onPointerUp={endResize}
-              onPointerCancel={endResize}
-              onLostPointerCapture={endResize}
-            >
-              <svg viewBox="0 0 10 10" className="size-2.5 pointer-events-none">
-                <title>Resize</title>
-                <path
-                  d="M1 9 L9 9 M4 9 L9 4 M7 9 L9 7"
-                  stroke="currentColor"
-                  strokeWidth="1.2"
-                  strokeLinecap="round"
-                  fill="none"
-                />
-              </svg>
-            </button>
+            <>
+              <button
+                type="button"
+                tabIndex={-1}
+                aria-label="Resize panel from top left"
+                className="group/resize absolute left-0 top-0 z-10 size-3 cursor-nwse-resize bg-transparent p-0"
+                onPointerDown={startResize('tl')}
+                onPointerMove={onResizePointerMove}
+                onPointerUp={endResize}
+                onPointerCancel={endResize}
+                onLostPointerCapture={endResize}
+              >
+                <span className="pointer-events-none absolute left-0.5 top-0.5 block size-1.5 rounded-sm bg-muted-foreground/0 transition-colors group-hover/resize:bg-muted-foreground/40" />
+              </button>
+              <button
+                type="button"
+                tabIndex={-1}
+                aria-label="Resize panel from top right"
+                className="group/resize absolute right-0 top-0 z-10 size-3 cursor-nesw-resize bg-transparent p-0"
+                onPointerDown={startResize('tr')}
+                onPointerMove={onResizePointerMove}
+                onPointerUp={endResize}
+                onPointerCancel={endResize}
+                onLostPointerCapture={endResize}
+              >
+                <span className="pointer-events-none absolute right-0.5 top-0.5 block size-1.5 rounded-sm bg-muted-foreground/0 transition-colors group-hover/resize:bg-muted-foreground/40" />
+              </button>
+              <button
+                type="button"
+                tabIndex={-1}
+                aria-label="Resize panel from bottom left"
+                className="group/resize absolute bottom-0 left-0 z-10 size-3 cursor-nesw-resize bg-transparent p-0"
+                onPointerDown={startResize('bl')}
+                onPointerMove={onResizePointerMove}
+                onPointerUp={endResize}
+                onPointerCancel={endResize}
+                onLostPointerCapture={endResize}
+              >
+                <span className="pointer-events-none absolute bottom-0.5 left-0.5 block size-1.5 rounded-sm bg-muted-foreground/0 transition-colors group-hover/resize:bg-muted-foreground/40" />
+              </button>
+              <button
+                type="button"
+                tabIndex={-1}
+                aria-label="Resize panel from bottom right"
+                className="group/resize absolute bottom-0 right-0 z-10 flex size-4 cursor-nwse-resize items-end justify-end bg-transparent p-0 text-muted-foreground/50 hover:text-muted-foreground"
+                onPointerDown={startResize('br')}
+                onPointerMove={onResizePointerMove}
+                onPointerUp={endResize}
+                onPointerCancel={endResize}
+                onLostPointerCapture={endResize}
+              >
+                <svg viewBox="0 0 10 10" className="size-2.5 pointer-events-none">
+                  <title>Resize</title>
+                  <path
+                    d="M1 9 L9 9 M4 9 L9 4 M7 9 L9 7"
+                    stroke="currentColor"
+                    strokeWidth="1.2"
+                    strokeLinecap="round"
+                    fill="none"
+                  />
+                </svg>
+              </button>
+            </>
           ) : null}
         </div>
       </motion.div>
