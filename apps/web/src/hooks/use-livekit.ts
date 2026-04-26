@@ -497,7 +497,7 @@ export function useLiveKit({
           }
         }
       })
-      .catch((err) => {
+      .catch((err: unknown) => {
         if (disposed) return;
         console.error('[LiveKit] Connection failed:', err);
         setConnectionState('failed');
