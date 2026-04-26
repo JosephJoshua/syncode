@@ -283,7 +283,7 @@ function ZoomOverlay({ tile, kind, onClose }: ZoomOverlayProps) {
         className="absolute inset-0 cursor-default bg-transparent"
         onClick={onClose}
       />
-      <div className="relative flex h-[min(88vh,calc(88vw*9/16))] w-[min(92vw,calc(88vh*16/9))] items-center justify-center">
+      <div className="relative flex h-[96vh] w-[96vw] items-center justify-center">
         {isScreen && tile.screenShareTrack ? (
           <ScreenShareTile
             displayName={tile.displayName}
