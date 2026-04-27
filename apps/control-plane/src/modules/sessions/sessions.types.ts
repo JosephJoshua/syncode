@@ -76,6 +76,6 @@ export interface SessionReportResult {
   categoryScores: Record<string, number>;
   strengths: string[];
   areasForImprovement: string[];
-  feedback: string;
+  feedback: string | null;
   generatedAt: Date;
 }

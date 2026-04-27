@@ -18,6 +18,10 @@ import { type PaginatedResult, paginate } from '@syncode/shared/server';
 import { and, asc, type Column, desc, eq, gt, gte, inArray, lt, lte, or, sql } from 'drizzle-orm';
 import { resolveAvatarUrls } from '@/common/resolve-avatar-urls.js';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
+import {
+  normalizeReportScoreMap,
+  normalizeReportStringArray,
+} from './session-report-normalizers.js';
 import type { SessionDetailResult, SessionSummaryResult } from './sessions.types.js';
 
 type SortBy = (typeof SESSIONS_SORT_BY_OPTIONS)[number];
@@ -468,31 +472,12 @@ export class SessionsService {
     }
     return {
       overallScore,
-      categoryScores: this.normalizeScoreMap(report.categoryScores),
-      strengths: this.normalizeStringArray(report.strengths),
-      areasForImprovement: this.normalizeStringArray(report.areasForImprovement),
+      categoryScores: normalizeReportScoreMap(report.categoryScores),
+      strengths: normalizeReportStringArray(report.strengths),
+      areasForImprovement: normalizeReportStringArray(report.areasForImprovement),
       feedback: report.feedback,
       generatedAt: report.generatedAt,
     };
-  }
-
-  private normalizeScoreMap(value: unknown): Record<string, number> {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) {
-      return {};
-    }
-
-    return Object.fromEntries(
-      Object.entries(value).filter((entry): entry is [string, number] => {
-        const score = entry[1];
-        return (
-          typeof score === 'number' &&
-          Number.isFinite(score) &&
-          Number.isInteger(score) &&
-          score >= 0 &&
-          score <= 100
-        );
-      }),
-    );
   }
 
   private normalizeOverallScore(value: number | null | undefined): number | null {
@@ -505,13 +490,5 @@ export class SessionsService {
       return null;
     }
     return rounded;
-  }
-
-  private normalizeStringArray(value: unknown): string[] {
-    if (!Array.isArray(value)) {
-      return [];
-    }
-
-    return value.filter((item): item is string => typeof item === 'string');
   }
 }

@@ -95,6 +95,7 @@ export class SessionsController {
       report: result.report
         ? {
             ...result.report,
+            feedback: result.report.feedback ?? '',
             generatedAt: result.report.generatedAt.toISOString(),
           }
         : null,
