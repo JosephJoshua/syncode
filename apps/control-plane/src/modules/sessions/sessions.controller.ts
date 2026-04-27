@@ -139,7 +139,6 @@ export class SessionsController {
     return this.sessionReportsService.getReport(sessionId, user.id, isAdmin);
   }
 
-
   @Get(CONTROL_API.SESSIONS.GET.route)
   @ApiOperation({ summary: 'Get session details' })
   @ApiParam({ name: 'id', description: 'Session ID (UUID)' })
