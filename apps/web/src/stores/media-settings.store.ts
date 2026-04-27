@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { createJSONStorage, persist } from 'zustand/middleware';
 import type { VideoQualityPreset } from '@/components/media-settings-panel.js';
 
 export interface AudioProcessingSettings {
@@ -31,6 +31,15 @@ interface MediaSettingsState {
     audioOutputIds: ReadonlySet<string>;
   }) => void;
 }
+
+const NOOP_STORAGE: Storage = {
+  length: 0,
+  clear: () => {},
+  getItem: () => null,
+  key: () => null,
+  removeItem: () => {},
+  setItem: () => {},
+};
 
 const DEFAULT_AUDIO_PROCESSING: AudioProcessingSettings = {
   noiseSuppression: true,
@@ -73,6 +82,9 @@ export const useMediaSettingsStore = create<MediaSettingsState>()(
     {
       name: 'syncode.media-settings.v1',
       version: 1,
+      storage: createJSONStorage(() =>
+        typeof window === 'undefined' ? NOOP_STORAGE : window.localStorage,
+      ),
       partialize: (state) => ({
         audioInputDeviceId: state.audioInputDeviceId,
         videoInputDeviceId: state.videoInputDeviceId,
