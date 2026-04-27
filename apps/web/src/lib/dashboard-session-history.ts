@@ -5,7 +5,7 @@ import {
   type SessionSummary,
   sessionHistoryResponseSchema,
 } from '@syncode/contracts';
-import { api } from '@/lib/api-client.js';
+import { ApiError, api, readApiError } from '@/lib/api-client.js';
 import i18n from '@/lib/i18n.js';
 
 export type SessionRole = 'candidate' | 'interviewer' | 'observer';
@@ -82,6 +82,10 @@ export const EMPTY_DASHBOARD_STATS: DashboardStats = {
 
 const MAX_PAGES = 10;
 
+export function getDashboardSessionHistoryQueryKey(viewerId: string | null) {
+  return ['dashboard', 'session-history', viewerId] as const;
+}
+
 export async function fetchAllSessionHistory(query?: Omit<SessionHistoryQuery, 'cursor'>) {
   const allSessions: SessionSummary[] = [];
   let cursor: string | undefined;
@@ -120,6 +124,22 @@ export async function fetchDashboardSessionHistory(currentUserId: string) {
   return buildDashboardSessionHistory(response, currentUserId);
 }
 
+export async function deleteSession(sessionId: string): Promise<void> {
+  try {
+    await api(CONTROL_API.SESSIONS.DELETE, {
+      params: { id: sessionId },
+    });
+  } catch (error) {
+    const apiError = await readApiError(error);
+
+    if (apiError) {
+      throw new ApiError(apiError);
+    }
+
+    throw error;
+  }
+}
+
 export function buildDashboardSessionHistory(
   response: SessionHistoryResponse,
   currentUserId: string | null,
@@ -129,11 +149,28 @@ export function buildDashboardSessionHistory(
     normalizeSessionSummary(session, currentUserId),
   );
 
+  return createDashboardSessionHistory(records);
+}
+
+export function createDashboardSessionHistory(
+  records: DashboardSessionRecord[],
+): DashboardSessionHistory {
+  const normalizedRecords = [...records];
+
   return {
-    records,
-    rows: records.map(toSessionRow),
-    stats: buildDashboardStats(records),
+    records: normalizedRecords,
+    rows: normalizedRecords.map(toSessionRow),
+    stats: buildDashboardStats(normalizedRecords),
   };
+}
+
+export function removeSessionFromDashboardHistory(
+  history: DashboardSessionHistory,
+  sessionId: string,
+): DashboardSessionHistory {
+  const records = history.records.filter((record) => record.id !== sessionId);
+
+  return createDashboardSessionHistory(records);
 }
 
 export function parseSessionHistoryResponse(response: unknown) {

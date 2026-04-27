@@ -1,4 +1,13 @@
+import { ERROR_CODES } from '@syncode/contracts';
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
   Avatar,
   AvatarFallback,
   Badge,
@@ -18,15 +27,24 @@ import {
   TableHeader,
   TableRow,
 } from '@syncode/ui';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { Search } from 'lucide-react';
+import { Loader2, Search, Trash2 } from 'lucide-react';
 import { useDeferredValue, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { toast } from 'sonner';
+import { ApiError } from '@/lib/api-client.js';
 import type {
+  DashboardSessionHistory,
   SessionParticipant,
   SessionRole,
   SessionRow,
   SessionStatus,
+} from '@/lib/dashboard-session-history.js';
+import {
+  deleteSession,
+  getDashboardSessionHistoryQueryKey,
+  removeSessionFromDashboardHistory,
 } from '@/lib/dashboard-session-history.js';
 import { getUserInitial } from '@/lib/user-utils.js';
 import { useAuthStore } from '@/stores/auth.store.js';
@@ -124,12 +142,14 @@ function ParticipantAvatar({
 }
 
 export function DashboardRecentSessions({
+  viewerId,
   rows,
   isLoading = false,
   isError = false,
   isUnavailable = false,
   onRetry,
 }: {
+  viewerId: string | null;
   rows: SessionRow[];
   isLoading?: boolean;
   isError?: boolean;
@@ -137,12 +157,15 @@ export function DashboardRecentSessions({
   onRetry?: () => void;
 }) {
   const { t } = useTranslation('dashboard');
+  const queryClient = useQueryClient();
   const user = useAuthStore((state) => state.user);
   const currentUserInitial = getUserInitial(user) || 'U';
   const [searchQuery, setSearchQuery] = useState('');
   const deferredSearchQuery = useDeferredValue(searchQuery);
   const [filter, setFilter] = useState<SessionFilter>('all');
   const [sortBy, setSortBy] = useState<SessionSort>('date-desc');
+  const [pendingDeleteSessionId, setPendingDeleteSessionId] = useState<string | null>(null);
+  const sessionHistoryQueryKey = getDashboardSessionHistoryQueryKey(viewerId);
 
   const normalizedQuery = deferredSearchQuery.trim().toLowerCase();
   const baseRows = rows.map((row) => {
@@ -176,6 +199,60 @@ export function DashboardRecentSessions({
 
   const hasBaseRows = baseRows.length > 0;
   const hasVisibleRows = filteredRows.length > 0;
+
+  const deleteSessionMutation = useMutation<
+    void,
+    unknown,
+    { sessionId: string },
+    { previousHistory?: DashboardSessionHistory }
+  >({
+    mutationFn: async ({ sessionId }) => {
+      await deleteSession(sessionId);
+    },
+    onMutate: async ({ sessionId }) => {
+      await queryClient.cancelQueries({ queryKey: sessionHistoryQueryKey });
+
+      const previousHistory =
+        queryClient.getQueryData<DashboardSessionHistory>(sessionHistoryQueryKey);
+
+      queryClient.setQueryData<DashboardSessionHistory>(sessionHistoryQueryKey, (currentHistory) =>
+        currentHistory
+          ? removeSessionFromDashboardHistory(currentHistory, sessionId)
+          : currentHistory,
+      );
+      setPendingDeleteSessionId(null);
+
+      return { previousHistory };
+    },
+    onError: (error, _variables, context) => {
+      if (context?.previousHistory) {
+        queryClient.setQueryData(sessionHistoryQueryKey, context.previousHistory);
+      }
+
+      toast.error(getDeleteSessionErrorMessage(error, t));
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: sessionHistoryQueryKey });
+    },
+  });
+
+  const handleDeleteSessionClick = (sessionId: string) => {
+    setPendingDeleteSessionId(sessionId);
+  };
+
+  const handleDeleteDialogOpenChange = (open: boolean) => {
+    if (!open) {
+      setPendingDeleteSessionId(null);
+    }
+  };
+
+  const confirmDeleteSession = () => {
+    if (!pendingDeleteSessionId || !viewerId || deleteSessionMutation.isPending) {
+      return;
+    }
+
+    deleteSessionMutation.mutate({ sessionId: pendingDeleteSessionId });
+  };
 
   return (
     <section className="mt-10 sm:mt-12">
@@ -272,6 +349,7 @@ export function DashboardRecentSessions({
                 <TableHead className="w-30 text-center">{t('table.status')}</TableHead>
                 <TableHead className="w-22.5 text-center">{t('table.score')}</TableHead>
                 <TableHead className="w-25 text-center">{t('table.duration')}</TableHead>
+                <TableHead className="w-20 text-center">{t('table.actions')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -331,6 +409,19 @@ export function DashboardRecentSessions({
                   <TableCell className="text-center text-muted-foreground">
                     {row.durationMinutes}m
                   </TableCell>
+                  <TableCell className="text-center">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-xs"
+                      aria-label={t('actions.deleteSessionAriaLabel')}
+                      disabled={deleteSessionMutation.isPending || !viewerId}
+                      className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive focus-visible:text-destructive focus-visible:ring-destructive/20"
+                      onClick={() => handleDeleteSessionClick(row.id)}
+                    >
+                      <Trash2 className="size-3.5" />
+                    </Button>
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -345,7 +436,58 @@ export function DashboardRecentSessions({
             </p>
           </div>
         )}
+
+        <AlertDialog
+          open={pendingDeleteSessionId !== null}
+          onOpenChange={handleDeleteDialogOpenChange}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>{t('deleteDialog.title')}</AlertDialogTitle>
+              <AlertDialogDescription>{t('deleteDialog.description')}</AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={deleteSessionMutation.isPending}>
+                {t('deleteDialog.cancel')}
+              </AlertDialogCancel>
+              <AlertDialogAction
+                variant="destructive"
+                disabled={deleteSessionMutation.isPending || !viewerId}
+                onClick={confirmDeleteSession}
+              >
+                {deleteSessionMutation.isPending ? (
+                  <span className="inline-flex items-center gap-2">
+                    <Loader2 className="size-4 animate-spin" />
+                    {t('deleteDialog.deleting')}
+                  </span>
+                ) : (
+                  t('deleteDialog.confirm')
+                )}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </Card>
     </section>
   );
+}
+
+function getDeleteSessionErrorMessage(error: unknown, t: (key: string) => string) {
+  if (error instanceof ApiError) {
+    if (error.response.code === ERROR_CODES.SESSION_NOT_FOUND) {
+      return t('deleteToast.sessionNotFound');
+    }
+
+    if (error.response.code === ERROR_CODES.SESSION_NOT_PARTICIPANT) {
+      return t('deleteToast.notParticipant');
+    }
+
+    if (error.response.statusCode === 401) {
+      return t('deleteToast.unauthorized');
+    }
+
+    return error.response.message || t('deleteToast.deleteFailed');
+  }
+
+  return t('deleteToast.deleteFailed');
 }

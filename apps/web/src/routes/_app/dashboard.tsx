@@ -8,6 +8,7 @@ import { DashboardRecentSessions } from '@/components/dashboard-recent-sessions.
 import {
   EMPTY_DASHBOARD_STATS,
   fetchDashboardSessionHistory,
+  getDashboardSessionHistoryQueryKey,
 } from '@/lib/dashboard-session-history.js';
 import { getUserDisplayName } from '@/lib/user-utils.js';
 import { useAuthStore } from '@/stores/auth.store.js';
@@ -24,7 +25,7 @@ function DashboardPage() {
   const viewerId = user?.id ?? null;
   const isQueryEnabled = isAuthenticated && Boolean(viewerId);
   const sessionHistoryQuery = useQuery({
-    queryKey: ['dashboard', 'session-history', viewerId],
+    queryKey: getDashboardSessionHistoryQueryKey(viewerId),
     enabled: isQueryEnabled,
     queryFn: () => {
       if (!viewerId) {
@@ -97,6 +98,7 @@ function DashboardPage() {
       </section>
 
       <DashboardRecentSessions
+        viewerId={viewerId}
         rows={sessionHistory?.rows ?? []}
         isLoading={sessionHistoryQuery.isLoading}
         isUnavailable={isUnavailable}
