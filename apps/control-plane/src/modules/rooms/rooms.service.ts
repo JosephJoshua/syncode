@@ -253,7 +253,19 @@ export class RoomsService {
       throw new NotFoundException({ message: 'Room not found', code: ERROR_CODES.ROOM_NOT_FOUND });
     }
 
-    if (room.inviteCode !== input.roomCode.toUpperCase()) {
+    if (input.roomCode === undefined) {
+      // Code-less reactivation: only an existing participant can rejoin without the code.
+      const [existing] = await this.db
+        .select({ id: roomParticipants.id })
+        .from(roomParticipants)
+        .where(and(eq(roomParticipants.roomId, roomId), eq(roomParticipants.userId, userId)));
+      if (!existing) {
+        throw new BadRequestException({
+          message: 'Room code is required for first-time join',
+          code: ERROR_CODES.ROOM_INVALID_CODE,
+        });
+      }
+    } else if (room.inviteCode !== input.roomCode.toUpperCase()) {
       throw new BadRequestException({
         message: 'Invalid room code',
         code: ERROR_CODES.ROOM_INVALID_CODE,
