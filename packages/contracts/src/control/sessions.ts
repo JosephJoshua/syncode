@@ -1,4 +1,4 @@
-import { ROOM_MODES, ROOM_ROLES } from '@syncode/shared';
+import { ROOM_MODES, ROOM_ROLES, SUPPORTED_LANGUAGES } from '@syncode/shared';
 import { z } from 'zod';
 import { paginationQuerySchema, paginationSchema } from './pagination.js';
 
@@ -97,8 +97,39 @@ export const sessionDetailSchema = z.object({
   finishedAt: z.iso.datetime().nullable(),
 });
 
+export const CODE_SNAPSHOT_TRIGGERS = [
+  'periodic',
+  'phase_change',
+  'submission',
+  'manual',
+  'session_end',
+] as const;
+
+export const codeSnapshotSchema = z.object({
+  snapshotId: z.uuid(),
+  timestamp: z.iso.datetime(),
+  trigger: z.enum(CODE_SNAPSHOT_TRIGGERS),
+  language: z.enum(SUPPORTED_LANGUAGES),
+  code: z.string(),
+  linesOfCode: z.number().int().nonnegative(),
+});
+
+export const listCodeSnapshotsQuerySchema = paginationQuerySchema.pick({
+  cursor: true,
+  limit: true,
+});
+
+export const codeSnapshotsResponseSchema = z.object({
+  data: z.array(codeSnapshotSchema).default([]),
+  pagination: paginationSchema,
+});
+
 export type SessionHistoryParticipant = z.infer<typeof sessionHistoryParticipantSchema>;
 export type SessionSummary = z.infer<typeof sessionSummarySchema>;
 export type SessionHistoryResponse = z.infer<typeof sessionHistoryResponseSchema>;
 export type SessionParticipant = z.infer<typeof sessionParticipantSchema>;
 export type SessionDetail = z.infer<typeof sessionDetailSchema>;
+export type CodeSnapshotTrigger = (typeof CODE_SNAPSHOT_TRIGGERS)[number];
+export type CodeSnapshot = z.infer<typeof codeSnapshotSchema>;
+export type CodeSnapshotsResponse = z.infer<typeof codeSnapshotsResponseSchema>;
+export type ListCodeSnapshotsQuery = z.infer<typeof listCodeSnapshotsQuerySchema>;

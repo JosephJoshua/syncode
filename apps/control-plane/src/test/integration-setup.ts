@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import * as schema from '@syncode/db';
 import {
   bookmarks,
+  codeSnapshots,
   type Database,
   peerFeedback,
   problems,
@@ -214,6 +215,21 @@ export async function insertSessionParticipant(
   const [row] = await db
     .insert(sessionParticipants)
     .values({ sessionId, userId, role })
+    .returning();
+  return row;
+}
+
+export async function insertCodeSnapshot(
+  db: Database,
+  overrides: Omit<typeof codeSnapshots.$inferInsert, 'id'> &
+    Partial<Pick<typeof codeSnapshots.$inferInsert, 'id'>>,
+) {
+  const [row] = await db
+    .insert(codeSnapshots)
+    .values({
+      linesOfCode: overrides.code ? overrides.code.split('\n').length : 0,
+      ...overrides,
+    })
     .returning();
   return row;
 }

@@ -1,3 +1,4 @@
+import type { CodeSnapshotTrigger } from '@syncode/contracts';
 import type { RoomMode, RoomRole, SupportedLanguage } from '@syncode/shared';
 
 export interface SessionSummaryResult {
@@ -68,4 +69,13 @@ export interface SessionSubmissionResult {
   passed: number;
   total: number;
   createdAt: Date;
+}
+
+export interface SessionCodeSnapshotResult {
+  snapshotId: string;
+  timestamp: Date;
+  trigger: CodeSnapshotTrigger;
+  language: SupportedLanguage;
+  code: string;
+  linesOfCode: number;
 }
