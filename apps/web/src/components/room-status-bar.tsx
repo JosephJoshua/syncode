@@ -1,5 +1,5 @@
 import type { RoomRole, RoomStatus } from '@syncode/shared';
-import { Command, Lock, WifiOff } from 'lucide-react';
+import { Command, Lock, LockOpen, WifiOff } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { CollabConnectionStatus } from '@/hooks/use-yjs-collab.js';
 import { formatTimer, STAGE_THEME } from '@/lib/room-stage.js';
@@ -52,12 +52,16 @@ export function RoomStatusBar({
         </div>
 
         <div className="ml-auto flex items-center gap-3">
-          {editorLocked ? (
-            <span className="flex items-center gap-1 font-mono text-warning">
-              <Lock size={10} />
-              {t('lobby.editorLocked')}
-            </span>
-          ) : null}
+          <span
+            className={
+              editorLocked
+                ? 'flex items-center gap-1 font-mono text-warning'
+                : 'flex items-center gap-1 font-mono text-muted-foreground/70'
+            }
+          >
+            {editorLocked ? <Lock size={10} /> : <LockOpen size={10} />}
+            {editorLocked ? t('lobby.editorLocked') : t('lobby.editorUnlocked')}
+          </span>
           <span className="font-mono text-muted-foreground">
             {t(`status.${status}`)} &middot; {formatTimer(elapsedMs)} {t('statusBar.elapsed')}
           </span>
