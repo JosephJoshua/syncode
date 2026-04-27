@@ -19,10 +19,7 @@ import { type PaginatedResult, paginate } from '@syncode/shared/server';
 import { and, asc, type Column, desc, eq, gt, gte, inArray, lt, lte, or, sql } from 'drizzle-orm';
 import { resolveAvatarUrls } from '@/common/resolve-avatar-urls.js';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
-import {
-  filterReviewFeedback,
-  isAllReviewFeedbackSubmitted,
-} from './session-feedback-utils.js';
+import { filterReviewFeedback, isAllReviewFeedbackSubmitted } from './session-feedback-utils.js';
 import {
   normalizeReportScoreMap,
   normalizeReportStringArray,

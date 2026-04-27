@@ -404,8 +404,8 @@ function ListSection({ title, items }: { title: string; items: string[] }) {
     <section>
       <h3 className="text-sm font-semibold text-foreground">{title}</h3>
       <ul className="mt-2 list-disc space-y-1 pl-5 text-sm leading-6 text-muted-foreground">
-        {items.map((item, index) => (
-          <li key={`${item}-${index}`}>{item}</li>
+        {items.map((item) => (
+          <li key={item}>{item}</li>
         ))}
       </ul>
     </section>
