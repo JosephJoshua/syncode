@@ -51,7 +51,7 @@ export function SubmissionPreviewModal({
 
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent className="gap-5 sm:max-w-4xl">
+      <AlertDialogContent className="flex max-h-[90vh] flex-col gap-5 overflow-y-auto sm:max-w-4xl">
         <AlertDialogHeader>
           <AlertDialogTitle>{t('workspace.submissionPreviewTitle')}</AlertDialogTitle>
           <AlertDialogDescription>
@@ -72,7 +72,10 @@ export function SubmissionPreviewModal({
             </span>
           </div>
 
-          <div className="h-[420px] overflow-hidden" data-testid="submission-preview-editor">
+          <div
+            className="h-[min(420px,55vh)] overflow-hidden"
+            data-testid="submission-preview-editor"
+          >
             <Editor
               height="100%"
               language={language}

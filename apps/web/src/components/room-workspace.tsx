@@ -403,7 +403,7 @@ export function RoomWorkspace({
             return;
           }
 
-          // Still pending/running — update with latest partial results and keep polling
+          // Still pending/running — keep polling until the submission reaches a terminal state
           setSubmitState({ status: 'polling', submissionId });
           setTimeout(() => {
             if (!cancelled) void poll();
