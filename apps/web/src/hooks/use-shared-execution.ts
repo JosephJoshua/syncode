@@ -100,7 +100,6 @@ export function useSharedExecution(awareness: Awareness | null, doc: Y.Doc | nul
     awareness?.setLocalStateField('execution', null);
   }, [awareness]);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: polling helpers are defined inside the effect to avoid stale closure issues; they only use stable refs (setRemoteRun, setRemoteSubmit) and effect-scoped variables.
   useEffect(() => {
     if (!awareness || !doc) return;
 
