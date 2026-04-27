@@ -161,7 +161,9 @@ function CorrectnessPanel({ session }: { session: SessionDetail }) {
               {t('correctness.title')}
             </p>
             <h2 className="mt-3 text-2xl font-semibold tracking-tight text-foreground">
-              {total > 0 ? t('correctness.summary', { passed, total }) : t('correctness.empty')}
+              {session.submissions.length === 0
+                ? t('correctness.empty')
+                : t('correctness.summary', { passed, total })}
             </h2>
           </div>
           <p className="text-4xl font-semibold tracking-tight text-primary">{correctnessScore}</p>

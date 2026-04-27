@@ -279,6 +279,8 @@ export class SessionsService {
         : Promise.resolve([]),
     ]);
 
+    const normalizedReport = this.buildReport(report);
+
     return {
       sessionId: session.id,
       roomId: session.roomId,
@@ -306,17 +308,8 @@ export class SessionsService {
         total: s.total,
         createdAt: s.createdAt,
       })),
-      report: report
-        ? {
-            overallScore: report.overallScore,
-            categoryScores: this.normalizeScoreMap(report.categoryScores),
-            strengths: this.normalizeStringArray(report.strengths),
-            areasForImprovement: this.normalizeStringArray(report.areasForImprovement),
-            feedback: report.feedback,
-            generatedAt: report.generatedAt,
-          }
-        : null,
-      hasReport: report != null,
+      report: normalizedReport,
+      hasReport: normalizedReport != null,
       hasFeedback: feedbackExists.length > 0,
       hasRecording: recordingExists.length > 0,
       createdAt: session.startedAt,
@@ -448,16 +441,70 @@ export class SessionsService {
     return sortBy === 'overallScore' || sortBy === 'finishedAt' || sortBy === 'duration';
   }
 
+  private buildReport(
+    report:
+      | {
+          overallScore: number | null;
+          categoryScores: unknown;
+          strengths: unknown;
+          areasForImprovement: unknown;
+          feedback: string | null;
+          generatedAt: Date;
+        }
+      | null
+      | undefined,
+  ): {
+    overallScore: number;
+    categoryScores: Record<string, number>;
+    strengths: string[];
+    areasForImprovement: string[];
+    feedback: string | null;
+    generatedAt: Date;
+  } | null {
+    if (!report) return null;
+    const overallScore = this.normalizeOverallScore(report.overallScore);
+    if (overallScore === null) {
+      return null;
+    }
+    return {
+      overallScore,
+      categoryScores: this.normalizeScoreMap(report.categoryScores),
+      strengths: this.normalizeStringArray(report.strengths),
+      areasForImprovement: this.normalizeStringArray(report.areasForImprovement),
+      feedback: report.feedback,
+      generatedAt: report.generatedAt,
+    };
+  }
+
   private normalizeScoreMap(value: unknown): Record<string, number> {
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
       return {};
     }
 
     return Object.fromEntries(
-      Object.entries(value).filter(
-        (entry): entry is [string, number] => typeof entry[1] === 'number',
-      ),
+      Object.entries(value).filter((entry): entry is [string, number] => {
+        const score = entry[1];
+        return (
+          typeof score === 'number' &&
+          Number.isFinite(score) &&
+          Number.isInteger(score) &&
+          score >= 0 &&
+          score <= 100
+        );
+      }),
     );
+  }
+
+  private normalizeOverallScore(value: number | null | undefined): number | null {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+      return null;
+    }
+    const rounded = Math.round(value);
+    if (rounded < 0 || rounded > 100) {
+      this.logger.warn(`Discarding overallScore outside 0-100 range: ${value}`);
+      return null;
+    }
+    return rounded;
   }
 
   private normalizeStringArray(value: unknown): string[] {
