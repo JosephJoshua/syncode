@@ -74,16 +74,19 @@ const LIST_RESULT = {
   pagination: { nextCursor: null, hasMore: false },
 };
 
-const SNAPSHOTS_RESULT = [
-  {
-    snapshotId: 'snapshot-1',
-    timestamp: new Date('2026-04-01T00:10:00Z'),
-    trigger: 'phase_change' as const,
-    language: 'python' as const,
-    code: 'print("hello")',
-    linesOfCode: 1,
-  },
-];
+const SNAPSHOTS_RESULT = {
+  data: [
+    {
+      snapshotId: 'snapshot-1',
+      timestamp: new Date('2026-04-01T00:10:00Z'),
+      trigger: 'phase_change' as const,
+      language: 'python' as const,
+      code: 'print("hello")',
+      linesOfCode: 1,
+    },
+  ],
+  pagination: { nextCursor: null, hasMore: false },
+};
 
 function createFixture() {
   const sessionsService: Pick<
@@ -151,10 +154,13 @@ describe('SessionsController', () => {
   });
 
   describe('listSnapshots', () => {
-    it('GIVEN code snapshots WHEN listing THEN serializes timestamps to ISO strings', async () => {
+    it('GIVEN code snapshots WHEN listing THEN serializes timestamps and includes pagination', async () => {
       const { controller } = createFixture();
 
-      const result = await controller.listSnapshots(AUTH_USER, 'session-1');
+      const result = await controller.listSnapshots(AUTH_USER, 'session-1', {
+        limit: 50,
+        sortOrder: 'asc',
+      });
 
       expect(result).toEqual({
         data: [
@@ -167,6 +173,7 @@ describe('SessionsController', () => {
             linesOfCode: 1,
           },
         ],
+        pagination: { nextCursor: null, hasMore: false },
       });
     });
   });

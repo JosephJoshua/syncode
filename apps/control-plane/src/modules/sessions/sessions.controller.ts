@@ -24,6 +24,7 @@ import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard.js';
 import type { AuthUser } from '@/modules/auth/auth.types.js';
 import {
   CodeSnapshotsResponseDto,
+  ListCodeSnapshotsQueryDto,
   ListSessionsQueryDto,
   SessionDetailDto,
   SessionHistoryResponseDto,
@@ -73,10 +74,12 @@ export class SessionsController {
   @Get(CONTROL_API.SESSIONS.SNAPSHOTS.route)
   @ApiOperation({ summary: 'Get code snapshots for a session' })
   @ApiParam({ name: 'sessionId', description: 'Session ID (UUID)' })
+  @ApiQuery({ name: 'cursor', required: false, description: 'Pagination cursor' })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Page size (1-100)' })
   @ApiResponse({
     status: 200,
     type: CodeSnapshotsResponseDto,
-    description: 'Code snapshot list',
+    description: 'Paginated code snapshot list',
   })
   @ApiResponse({ status: 400, type: ErrorResponseDto, description: 'Validation error' })
   @ApiResponse({ status: 401, type: ErrorResponseDto, description: 'Unauthorized' })
@@ -89,15 +92,17 @@ export class SessionsController {
   async listSnapshots(
     @CurrentUser() user: AuthUser,
     @Param('sessionId', new ParseUUIDPipe()) sessionId: string,
+    @Query() query: ListCodeSnapshotsQueryDto,
   ): Promise<CodeSnapshotsResponseDto> {
     const isAdmin = await this.sessionsService.isAdmin(user.id);
-    const snapshots = await this.sessionsService.listSnapshots(sessionId, user.id, isAdmin);
+    const result = await this.sessionsService.listSnapshots(sessionId, user.id, isAdmin, query);
 
     return {
-      data: snapshots.map((snapshot) => ({
+      data: result.data.map((snapshot) => ({
         ...snapshot,
         timestamp: snapshot.timestamp.toISOString(),
       })),
+      pagination: result.pagination,
     };
   }
 
