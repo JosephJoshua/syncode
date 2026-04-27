@@ -1,7 +1,13 @@
 import { motion, useSpring } from 'motion/react';
 import { type MouseEvent as ReactMouseEvent, type ReactNode, useCallback, useRef } from 'react';
 
-export function TiltCard({ children, className }: { children: ReactNode; className?: string }) {
+export function TiltCard({
+  children,
+  className,
+}: {
+  readonly children: ReactNode;
+  readonly className?: string;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const rotateX = useSpring(0, { stiffness: 200, damping: 30 });
   const rotateY = useSpring(0, { stiffness: 200, damping: 30 });

@@ -77,9 +77,9 @@ export function LobbyBot({
   totalCount,
   className,
 }: {
-  readyCount: number;
-  totalCount: number;
-  className?: string;
+  readonly readyCount: number;
+  readonly totalCount: number;
+  readonly className?: string;
 }) {
   const mood = resolveMood(readyCount, totalCount);
   const progress = totalCount > 0 ? readyCount / totalCount : 0;

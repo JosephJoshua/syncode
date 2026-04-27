@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { ROOM_STATUS_KEYS, STAGE_THEME } from '@/lib/room-stage.js';
 
 interface StageTransitionOverlayProps {
-  status: RoomStatus;
+  readonly status: RoomStatus;
 }
 
 export function StageTransitionOverlay({ status }: StageTransitionOverlayProps) {

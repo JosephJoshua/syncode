@@ -15,16 +15,16 @@ const STAGE_ACCENT_CLASSES: Record<RoomStatus, string> = {
 };
 
 interface RoomHeaderBarProps {
-  roomName: string | null;
-  status: RoomStatus;
-  myRole: RoomRole;
-  isHost: boolean;
-  elapsedMs: number;
-  participants: Participant[];
-  speakingMap?: ReadonlyMap<string, boolean>;
-  mediaControls?: React.ReactNode;
-  mediaConnectedSet?: ReadonlySet<string>;
-  mediaMutedMap?: ReadonlyMap<string, boolean>;
+  readonly roomName: string | null;
+  readonly status: RoomStatus;
+  readonly myRole: RoomRole;
+  readonly isHost: boolean;
+  readonly elapsedMs: number;
+  readonly participants: Participant[];
+  readonly speakingMap?: ReadonlyMap<string, boolean>;
+  readonly mediaControls?: React.ReactNode;
+  readonly mediaConnectedSet?: ReadonlySet<string>;
+  readonly mediaMutedMap?: ReadonlyMap<string, boolean>;
 }
 
 export function RoomHeaderBar({

@@ -21,28 +21,30 @@ import type { VideoFilterSettings } from '@/lib/video-filter-processor.js';
 import { type AudioProcessingSettings, MediaSettingsPanel } from './media-settings-panel.js';
 
 interface MediaControlsProps {
-  connectionState: LiveKitConnectionState;
-  isMicrophoneEnabled: boolean;
-  isCameraEnabled: boolean;
-  isScreenShareEnabled: boolean;
-  canScreenShare: boolean;
-  onToggleMicrophone: () => void;
-  onToggleCamera: () => void;
-  onToggleScreenShare: () => void;
-  audioInputDevices: MediaDeviceOption[];
-  videoInputDevices: MediaDeviceOption[];
-  activeAudioDeviceId: string | null;
-  activeVideoDeviceId: string | null;
-  onSwitchDevice: (kind: MediaDeviceKind, deviceId: string) => void;
-  outputVolume: number;
-  onOutputVolumeChange: (volume: number) => void;
-  audioProcessing: AudioProcessingSettings;
-  onAudioProcessingChange: (settings: AudioProcessingSettings) => void;
-  onVideoFilterChange: (settings: VideoFilterSettings) => void;
-  videoQuality: import('./media-settings-panel.js').VideoQualityPreset;
-  onVideoQualityChange: (quality: import('./media-settings-panel.js').VideoQualityPreset) => void;
-  isPushToTalkMode: boolean;
-  onTogglePushToTalkMode: () => void;
+  readonly connectionState: LiveKitConnectionState;
+  readonly isMicrophoneEnabled: boolean;
+  readonly isCameraEnabled: boolean;
+  readonly isScreenShareEnabled: boolean;
+  readonly canScreenShare: boolean;
+  readonly onToggleMicrophone: () => void;
+  readonly onToggleCamera: () => void;
+  readonly onToggleScreenShare: () => void;
+  readonly audioInputDevices: MediaDeviceOption[];
+  readonly videoInputDevices: MediaDeviceOption[];
+  readonly activeAudioDeviceId: string | null;
+  readonly activeVideoDeviceId: string | null;
+  readonly onSwitchDevice: (kind: MediaDeviceKind, deviceId: string) => void;
+  readonly outputVolume: number;
+  readonly onOutputVolumeChange: (volume: number) => void;
+  readonly audioProcessing: AudioProcessingSettings;
+  readonly onAudioProcessingChange: (settings: AudioProcessingSettings) => void;
+  readonly onVideoFilterChange: (settings: VideoFilterSettings) => void;
+  readonly videoQuality: import('./media-settings-panel.js').VideoQualityPreset;
+  readonly onVideoQualityChange: (
+    quality: import('./media-settings-panel.js').VideoQualityPreset,
+  ) => void;
+  readonly isPushToTalkMode: boolean;
+  readonly onTogglePushToTalkMode: () => void;
 }
 
 function micButtonClass(isConnected: boolean, isEnabled: boolean): string {
@@ -199,9 +201,9 @@ function DeviceDropdown({
   activeDeviceId,
   onSelect,
 }: {
-  devices: MediaDeviceOption[];
-  activeDeviceId: string | null;
-  onSelect: (deviceId: string) => void;
+  readonly devices: MediaDeviceOption[];
+  readonly activeDeviceId: string | null;
+  readonly onSelect: (deviceId: string) => void;
 }) {
   return (
     <DropdownMenu>

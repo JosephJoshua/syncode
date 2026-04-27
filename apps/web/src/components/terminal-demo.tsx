@@ -265,9 +265,9 @@ function AnimatedItem({
   index,
   visibleCount,
 }: {
-  item: Item;
-  index: number;
-  visibleCount: MotionValue<number>;
+  readonly item: Item;
+  readonly index: number;
+  readonly visibleCount: MotionValue<number>;
 }) {
   const opacity = useTransform(visibleCount, [index, index + 0.6], [0, 1]);
   const y = useTransform(visibleCount, [index, index + 0.6], [8, 0]);

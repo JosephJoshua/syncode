@@ -100,8 +100,8 @@ export function LineDiffBlock({
   expected,
   actual,
 }: {
-  expected: string | null;
-  actual: string | null;
+  readonly expected: string | null;
+  readonly actual: string | null;
 }) {
   const lines = buildLineDiff(expected, actual);
 

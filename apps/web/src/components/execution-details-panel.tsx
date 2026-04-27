@@ -44,8 +44,8 @@ const VERDICT_STYLE: Record<SubmissionVerdict, { i18nKey: string; className: str
 };
 
 interface ExecutionDetailsPanelProps {
-  details: ExecutionDetailsResponse;
-  className?: string;
+  readonly details: ExecutionDetailsResponse;
+  readonly className?: string;
 }
 
 export function ExecutionDetailsPanel({ details, className = '' }: ExecutionDetailsPanelProps) {

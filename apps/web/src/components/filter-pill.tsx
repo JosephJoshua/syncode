@@ -2,10 +2,10 @@ import { cn } from '@syncode/ui';
 import type React from 'react';
 
 export type FilterPillProps = {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-  className?: string;
+  readonly active: boolean;
+  readonly onClick: () => void;
+  readonly children: React.ReactNode;
+  readonly className?: string;
 };
 
 export function FilterPill({ active, onClick, children, className }: FilterPillProps) {

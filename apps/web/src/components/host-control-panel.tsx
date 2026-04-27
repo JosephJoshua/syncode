@@ -21,7 +21,7 @@ const TRANSITION_ICONS = {
   finished: <CheckCircle2 className="size-3.5" />,
 } as const satisfies Partial<Record<RoomStatus, ReactNode>>;
 
-function PhaseProgressBar({ currentStatus }: { currentStatus: RoomStatus }) {
+function PhaseProgressBar({ currentStatus }: { readonly currentStatus: RoomStatus }) {
   const { t } = useTranslation('rooms');
   const currentIndex = ROOM_STATUSES.indexOf(currentStatus);
 
@@ -57,19 +57,19 @@ function PhaseProgressBar({ currentStatus }: { currentStatus: RoomStatus }) {
 }
 
 interface HostControlPanelProps {
-  currentStatus: RoomStatus;
-  elapsedMs: number;
-  timerPaused: boolean;
-  editorLocked: boolean;
-  canChangePhase: boolean;
-  canControlEditorLock: boolean;
-  isPending: boolean;
-  isLockingEditor: boolean;
-  isUnlockingEditor: boolean;
-  allRequiredReady: boolean;
-  onTransition: (targetStatus: RoomStatus) => void;
-  onLockEditor: () => void;
-  onUnlockEditor: () => void;
+  readonly currentStatus: RoomStatus;
+  readonly elapsedMs: number;
+  readonly timerPaused: boolean;
+  readonly editorLocked: boolean;
+  readonly canChangePhase: boolean;
+  readonly canControlEditorLock: boolean;
+  readonly isPending: boolean;
+  readonly isLockingEditor: boolean;
+  readonly isUnlockingEditor: boolean;
+  readonly allRequiredReady: boolean;
+  readonly onTransition: (targetStatus: RoomStatus) => void;
+  readonly onLockEditor: () => void;
+  readonly onUnlockEditor: () => void;
 }
 
 export function HostControlPanel({

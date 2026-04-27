@@ -106,8 +106,8 @@ function ParticipantAvatar({
   participant,
   currentUserInitial,
 }: {
-  participant: SessionParticipant | null;
-  currentUserInitial: string;
+  readonly participant: SessionParticipant | null;
+  readonly currentUserInitial: string;
 }) {
   if (!participant) {
     return <span className="text-muted-foreground">-</span>;
@@ -134,15 +134,15 @@ function renderRecentSessionsBody({
   currentUserInitial,
   t,
 }: {
-  isLoading: boolean;
-  isUnavailable: boolean;
-  isError: boolean;
-  hasVisibleRows: boolean;
-  hasBaseRows: boolean;
-  onRetry?: () => void;
-  filteredRows: SessionRow[];
-  currentUserInitial: string;
-  t: (key: string) => string;
+  readonly isLoading: boolean;
+  readonly isUnavailable: boolean;
+  readonly isError: boolean;
+  readonly hasVisibleRows: boolean;
+  readonly hasBaseRows: boolean;
+  readonly onRetry?: () => void;
+  readonly filteredRows: SessionRow[];
+  readonly currentUserInitial: string;
+  readonly t: (key: string) => string;
 }) {
   if (isLoading) {
     return (
@@ -208,9 +208,9 @@ function RecentSessionRow({
   currentUserInitial,
   t,
 }: {
-  row: SessionRow;
-  currentUserInitial: string;
-  t: (key: string) => string;
+  readonly row: SessionRow;
+  readonly currentUserInitial: string;
+  readonly t: (key: string) => string;
 }) {
   return (
     <TableRow key={row.id}>
@@ -267,9 +267,9 @@ function StateMessage({
   description,
   action,
 }: {
-  title: string;
-  description: string;
-  action?: React.ReactNode;
+  readonly title: string;
+  readonly description: string;
+  readonly action?: React.ReactNode;
 }) {
   return (
     <div className="flex min-h-64 flex-col items-center justify-center px-6 py-12 text-center">
@@ -287,11 +287,11 @@ export function DashboardRecentSessions({
   isUnavailable = false,
   onRetry,
 }: {
-  rows: SessionRow[];
-  isLoading?: boolean;
-  isError?: boolean;
-  isUnavailable?: boolean;
-  onRetry?: () => void;
+  readonly rows: SessionRow[];
+  readonly isLoading?: boolean;
+  readonly isError?: boolean;
+  readonly isUnavailable?: boolean;
+  readonly onRetry?: () => void;
 }) {
   const { t } = useTranslation('dashboard');
   const user = useAuthStore((state) => state.user);

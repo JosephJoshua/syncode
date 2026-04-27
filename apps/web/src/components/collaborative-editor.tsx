@@ -13,12 +13,12 @@ import {
 } from './room-workspace-utils.js';
 
 interface CollaborativeEditorProps {
-  doc: Y.Doc;
-  awareness: Awareness;
-  language: string;
-  readOnly: boolean;
-  onRunCode: () => void;
-  onSubmitCode: () => void;
+  readonly doc: Y.Doc;
+  readonly awareness: Awareness;
+  readonly language: string;
+  readonly readOnly: boolean;
+  readonly onRunCode: () => void;
+  readonly onSubmitCode: () => void;
 }
 
 export function CollaborativeEditor({
