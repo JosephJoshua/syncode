@@ -2,6 +2,8 @@ import type { ICollabClient } from './client.js';
 import type {
   BroadcastParticipantReadyRequest,
   BroadcastParticipantReadyResponse,
+  ChangeLanguageRequest,
+  ChangeLanguageResponse,
   CreateDocumentRequest,
   CreateDocumentResponse,
   DestroyDocumentResponse,
@@ -35,13 +37,18 @@ export class StubCollabClient implements ICollabClient {
     await this.delay();
     this.maybeThrow('createDocument');
 
+    const existing = this.documents.get(request.roomId);
+    if (existing) {
+      return { roomId: request.roomId, createdAt: existing.createdAt, created: false };
+    }
+
     const createdAt = Date.now();
     this.documents.set(request.roomId, {
       createdAt,
       phase: request.initialPhase,
       editorLocked: request.editorLocked,
     });
-    return { roomId: request.roomId, createdAt };
+    return { roomId: request.roomId, createdAt, created: true };
   }
 
   async destroyDocument(roomId: string): Promise<DestroyDocumentResponse> {
@@ -81,6 +88,13 @@ export class StubCollabClient implements ICollabClient {
   ): Promise<BroadcastParticipantReadyResponse> {
     await this.delay();
     this.maybeThrow('broadcastParticipantReady');
+
+    return { success: true };
+  }
+
+  async changeLanguage(_request: ChangeLanguageRequest): Promise<ChangeLanguageResponse> {
+    await this.delay();
+    this.maybeThrow('changeLanguage');
 
     return { success: true };
   }

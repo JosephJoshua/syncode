@@ -2,6 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import type {
   BroadcastParticipantReadyRequest,
   BroadcastParticipantReadyResponse,
+  ChangeLanguageRequest,
+  ChangeLanguageResponse,
   CreateDocumentRequest,
   CreateDocumentResponse,
   DestroyDocumentResponse,
@@ -22,8 +24,15 @@ export class HttpCollabClient implements ICollabClient {
   private readonly logger = new Logger(HttpCollabClient.name);
   private readonly client: KyInstance;
 
-  constructor(collabUrl: string) {
-    this.client = ky.create({ prefixUrl: collabUrl, timeout: 10_000, retry: 0 });
+  constructor(collabUrl: string, internalSecret: string) {
+    this.client = ky.create({
+      prefixUrl: collabUrl,
+      timeout: 10_000,
+      retry: 0,
+      headers: {
+        'X-Internal-Secret': internalSecret,
+      },
+    });
   }
 
   async createDocument(request: CreateDocumentRequest): Promise<CreateDocumentResponse> {
@@ -61,6 +70,14 @@ export class HttpCollabClient implements ICollabClient {
         json: request,
       })
       .json<BroadcastParticipantReadyResponse>();
+  }
+
+  async changeLanguage(request: ChangeLanguageRequest): Promise<ChangeLanguageResponse> {
+    return this.client
+      .post(buildUrl(COLLAB_INTERNAL.CHANGE_LANGUAGE.route, { roomId: request.roomId }), {
+        json: request,
+      })
+      .json<ChangeLanguageResponse>();
   }
 
   async healthCheck(): Promise<boolean> {

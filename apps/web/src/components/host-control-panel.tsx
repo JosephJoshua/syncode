@@ -64,6 +64,7 @@ interface HostControlPanelProps {
   editorLocked: boolean;
   canChangePhase: boolean;
   isPending: boolean;
+  allRequiredReady: boolean;
   onTransition: (targetStatus: RoomStatus) => void;
 }
 
@@ -74,6 +75,7 @@ export function HostControlPanel({
   editorLocked,
   canChangePhase,
   isPending,
+  allRequiredReady,
   onTransition,
 }: HostControlPanelProps) {
   const { t } = useTranslation('rooms');
@@ -119,28 +121,40 @@ export function HostControlPanel({
         </div>
       ) : canChangePhase ? (
         <div className="space-y-1.5">
-          {nextStages.map((stage) => (
-            <Button
-              key={stage}
-              type="button"
-              variant={stage === 'finished' ? 'destructive' : 'default'}
-              size="sm"
-              className={`w-full justify-start gap-1.5 ${
-                stage !== 'finished' && !isPending ? 'shimmer-sweep' : ''
-              }`}
-              disabled={isPending}
-              onClick={() => onTransition(stage)}
-            >
-              {isPending ? (
-                <Loader2 className="size-3.5 animate-spin" />
-              ) : (
-                TRANSITION_ICONS[stage as keyof typeof TRANSITION_ICONS]
-              )}
-              {stage === 'finished'
-                ? t('hostControl.endSession')
-                : t('hostControl.advanceTo', { stageName: t(ROOM_STATUS_KEYS[stage]) })}
-            </Button>
-          ))}
+          {nextStages.map((stage) => {
+            const readyGate = stage === 'warmup' && !allRequiredReady;
+            const disabled = isPending || readyGate;
+
+            return (
+              <div key={stage} className="space-y-1">
+                <Button
+                  type="button"
+                  variant={stage === 'finished' ? 'destructive' : 'default'}
+                  size="sm"
+                  className={`w-full justify-start gap-1.5 ${
+                    stage !== 'finished' && !disabled ? 'shimmer-sweep' : ''
+                  }`}
+                  disabled={disabled}
+                  title={readyGate ? t('hostControl.awaitingReady') : undefined}
+                  onClick={() => onTransition(stage)}
+                >
+                  {isPending ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : (
+                    TRANSITION_ICONS[stage as keyof typeof TRANSITION_ICONS]
+                  )}
+                  {stage === 'finished'
+                    ? t('hostControl.endSession')
+                    : t('hostControl.advanceTo', { stageName: t(ROOM_STATUS_KEYS[stage]) })}
+                </Button>
+                {readyGate ? (
+                  <p className="text-[10px] text-muted-foreground">
+                    {t('hostControl.awaitingReady')}
+                  </p>
+                ) : null}
+              </div>
+            );
+          })}
         </div>
       ) : (
         <p className="text-[10px] text-muted-foreground">{t('hostControl.awaitingController')}</p>

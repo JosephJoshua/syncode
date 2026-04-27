@@ -1,7 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
 import {
+  type AuthorizeJoinRequest,
+  type AuthorizeJoinResponse,
+  buildUrl,
   CONTROL_INTERNAL,
   type IControlPlaneCallbackClient,
+  type ParticipantHeartbeatRequest,
+  type ParticipantHeartbeatResponse,
+  type PersistDocSnapshotPayload,
   type SnapshotReadyPayload,
   type UserDisconnectedPayload,
 } from '@syncode/contracts';
@@ -12,10 +18,13 @@ export class HttpControlPlaneCallbackClient implements IControlPlaneCallbackClie
   private readonly logger = new Logger(HttpControlPlaneCallbackClient.name);
   private readonly client: KyInstance;
 
-  constructor(controlPlaneUrl: string) {
+  constructor(controlPlaneUrl: string, internalSecret: string) {
     this.client = ky.create({
       prefixUrl: controlPlaneUrl,
       timeout: 5_000,
+      headers: {
+        'X-Internal-Secret': internalSecret,
+      },
       retry: {
         limit: 3,
         methods: ['post'],
@@ -46,6 +55,56 @@ export class HttpControlPlaneCallbackClient implements IControlPlaneCallbackClie
     } catch (error) {
       this.logger.warn(
         `Failed to notify user disconnect (userId=${payload.userId}, roomId=${payload.roomId}): ${(error as Error).message}`,
+      );
+    }
+  }
+
+  async heartbeatParticipants(
+    request: ParticipantHeartbeatRequest,
+  ): Promise<ParticipantHeartbeatResponse | null> {
+    try {
+      const response = await this.client
+        .post(CONTROL_INTERNAL.PARTICIPANT_HEARTBEAT.route, { json: request })
+        .json<ParticipantHeartbeatResponse>();
+      this.logger.debug(
+        `Participant heartbeat delivered (batch=${request.participants.length}, updated=${response.updated})`,
+      );
+      return response;
+    } catch (error) {
+      this.logger.warn(
+        `Failed to deliver participant heartbeat (batch=${request.participants.length}): ${(error as Error).message}`,
+      );
+      return null;
+    }
+  }
+
+  async authorizeJoin(roomId: string, userId: string): Promise<AuthorizeJoinResponse> {
+    const url = buildUrl(CONTROL_INTERNAL.AUTHORIZE_JOIN.route, { roomId });
+    const body: AuthorizeJoinRequest = { userId };
+    try {
+      return await this.client.post(url, { json: body }).json<AuthorizeJoinResponse>();
+    } catch (error) {
+      this.logger.warn(
+        `Failed to authorize join (roomId=${roomId}, userId=${userId}): ${(error as Error).message}`,
+      );
+      // Fail closed: deny the join if we cannot reach control-plane.
+      return { authorized: false };
+    }
+  }
+
+  async persistDocSnapshot(roomId: string, payload: PersistDocSnapshotPayload): Promise<void> {
+    try {
+      const path = CONTROL_INTERNAL.PERSIST_DOC_SNAPSHOT.route.replace(
+        ':roomId',
+        encodeURIComponent(roomId),
+      );
+      await this.client.post(path, { json: payload });
+      this.logger.debug(
+        `Persisted doc snapshot for room ${roomId} (${payload.state.length} bytes)`,
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Failed to persist doc snapshot (roomId=${roomId}): ${(error as Error).message}`,
       );
     }
   }

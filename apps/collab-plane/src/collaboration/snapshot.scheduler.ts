@@ -4,6 +4,8 @@ import {
   type IControlPlaneCallbackClient,
   type SnapshotTrigger,
 } from '@syncode/contracts';
+import type { SupportedLanguage } from '@syncode/shared';
+import { RoomRegistry } from './room-registry.js';
 import { YjsDocumentStore } from './yjs-document-store.js';
 
 @Injectable()
@@ -15,6 +17,7 @@ export class SnapshotScheduler implements OnModuleDestroy {
     private readonly docStore: YjsDocumentStore,
     @Inject(CONTROL_PLANE_CALLBACK)
     private readonly callbackClient: IControlPlaneCallbackClient,
+    private readonly roomRegistry: RoomRegistry,
   ) {}
 
   startPeriodicSnapshots(roomId: string): void {
@@ -37,16 +40,25 @@ export class SnapshotScheduler implements OnModuleDestroy {
   }
 
   async takeSnapshot(roomId: string, trigger: SnapshotTrigger): Promise<void> {
+    const language = this.roomRegistry.getRoom(roomId)?.language ?? null;
+    if (!language) {
+      this.logger.debug(
+        `Skipping snapshot for room ${roomId} (trigger=${trigger}): no active language`,
+      );
+      return;
+    }
+
     const snapshot = this.docStore.encodeSnapshot(roomId);
     if (!snapshot) return;
 
-    const code = this.docStore.getCodeText(roomId);
+    const code = this.docStore.getCodeText(roomId, language);
 
     try {
       await this.callbackClient.notifySnapshotReady({
         roomId,
         snapshot: Array.from(snapshot),
         code,
+        language: language as SupportedLanguage,
         timestamp: Date.now(),
         trigger,
       });
