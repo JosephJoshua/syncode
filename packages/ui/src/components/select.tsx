@@ -48,12 +48,7 @@ function SelectContent({
         )}
         style={{
           backgroundColor: 'rgb(11 13 13 / 0.985)',
-          ...(position === 'popper'
-            ? {
-                width: 'var(--radix-select-trigger-width)',
-                minWidth: 'var(--radix-select-trigger-width)',
-              }
-            : {}),
+          ...(position === 'popper' ? { minWidth: 'var(--radix-select-trigger-width)' } : {}),
         }}
         {...props}
       >
@@ -84,25 +79,28 @@ function SelectLabel({ className, ...props }: React.ComponentProps<typeof Select
   );
 }
 
-function SelectItem({
-  className,
-  children,
-  ...props
-}: React.ComponentProps<typeof SelectPrimitive.Item>) {
+type SelectItemProps = React.ComponentProps<typeof SelectPrimitive.Item> & {
+  hideIndicator?: boolean;
+};
+
+function SelectItem({ className, children, hideIndicator = false, ...props }: SelectItemProps) {
   return (
     <SelectPrimitive.Item
       data-slot="select-item"
       className={cn(
-        'relative flex min-h-9 w-full cursor-default select-none items-center whitespace-normal break-words rounded-md border border-transparent py-2 pl-9 pr-3 text-sm font-medium text-foreground/88 shadow-none outline-none transition-colors focus:outline-none focus-visible:outline-none focus-visible:ring-0 data-disabled:pointer-events-none data-highlighted:border-transparent data-highlighted:bg-muted data-highlighted:text-foreground data-[state=checked]:border-transparent data-[state=checked]:bg-primary/10 data-[state=checked]:text-foreground data-disabled:opacity-50',
+        'relative flex min-h-9 w-full cursor-default select-none items-center whitespace-normal break-words rounded-md border border-transparent py-2 pr-3 text-sm font-medium text-foreground/88 shadow-none outline-none transition-colors focus:outline-none focus-visible:outline-none focus-visible:ring-0 data-disabled:pointer-events-none data-highlighted:border-transparent data-highlighted:bg-muted data-highlighted:text-foreground data-[state=checked]:border-transparent data-[state=checked]:bg-primary/10 data-[state=checked]:text-foreground data-disabled:opacity-50',
+        hideIndicator ? 'pl-3' : 'pl-9',
         className,
       )}
       {...props}
     >
-      <span className="absolute left-2.5 flex size-4 items-center justify-center">
-        <SelectPrimitive.ItemIndicator>
-          <Check className="size-3.5 text-primary" />
-        </SelectPrimitive.ItemIndicator>
-      </span>
+      {!hideIndicator && (
+        <span className="absolute left-2.5 flex size-4 items-center justify-center">
+          <SelectPrimitive.ItemIndicator>
+            <Check className="size-3.5 text-primary" />
+          </SelectPrimitive.ItemIndicator>
+        </span>
+      )}
       <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
     </SelectPrimitive.Item>
   );

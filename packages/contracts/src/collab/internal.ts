@@ -2,7 +2,8 @@ import { defineRoute } from '../route-utils.js';
 
 export interface CreateDocumentRequest {
   roomId: string;
-  initialContent?: string;
+  initialContentByLanguage?: Record<string, string>;
+  initialLanguage?: string;
   initialPhase?: string;
   editorLocked?: boolean;
   /**
@@ -51,6 +52,16 @@ export interface BroadcastParticipantReadyResponse {
   success: boolean;
 }
 
+export interface ChangeLanguageRequest {
+  roomId: string;
+  language: string;
+  changedBy?: string;
+}
+
+export interface ChangeLanguageResponse {
+  success: boolean;
+}
+
 export const COLLAB_INTERNAL = {
   CREATE_DOCUMENT: defineRoute<CreateDocumentRequest, CreateDocumentResponse>()(
     'internal/documents',
@@ -72,5 +83,9 @@ export const COLLAB_INTERNAL = {
     BroadcastParticipantReadyRequest,
     BroadcastParticipantReadyResponse
   >()('internal/documents/:roomId/participant-ready', 'POST'),
+  CHANGE_LANGUAGE: defineRoute<ChangeLanguageRequest, ChangeLanguageResponse>()(
+    'internal/documents/:roomId/language',
+    'POST',
+  ),
   HEALTH: defineRoute<void, { status: 'ok' }>()('internal/health', 'GET'),
 };

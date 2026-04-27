@@ -168,6 +168,7 @@ interface RoomParticipantCardProps {
   isUpdatingRole: boolean;
   isTransferringOwnership: boolean;
   isRemovingParticipant?: boolean;
+  rolesLocked?: boolean;
   isSpeaking?: boolean;
   isMediaConnected?: boolean;
   isMediaMuted?: boolean;
@@ -194,6 +195,7 @@ export function RoomParticipantCard({
   isUpdatingRole,
   isTransferringOwnership,
   isRemovingParticipant = false,
+  rolesLocked = false,
   isSpeaking = false,
   isMediaConnected = false,
   isMediaMuted = false,
@@ -390,7 +392,7 @@ export function RoomParticipantCard({
           </div>
 
           <div className="mt-1.5 flex items-center gap-2">
-            {canManageParticipants && (!isHost || isMe) ? (
+            {canManageParticipants && (!isHost || isMe) && !rolesLocked ? (
               <Select
                 value={participant.role}
                 onValueChange={(value) => onRoleChange?.(participant.userId, value as RoomRole)}
@@ -407,7 +409,12 @@ export function RoomParticipantCard({
                 </SelectContent>
               </Select>
             ) : (
-              <Badge variant={participant.role}>{t(ROLE_LABEL_KEYS[participant.role])}</Badge>
+              <Badge
+                variant={participant.role}
+                title={rolesLocked ? t('workspace.rolesLocked') : undefined}
+              >
+                {t(ROLE_LABEL_KEYS[participant.role])}
+              </Badge>
             )}
 
             {isUpdatingRole ? <Loader2 className="size-3.5 animate-spin text-primary" /> : null}
