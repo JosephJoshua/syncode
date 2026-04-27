@@ -52,6 +52,7 @@ let service: RoomsService;
 let mockExecutionClient: ReturnType<typeof createMockExecutionClient>;
 let mockCollabClient: ReturnType<typeof createMockCollabClient>;
 let mockSessionReportsService: ReturnType<typeof createMockSessionReportsService>;
+let mockStorageService: ReturnType<typeof createMockStorageService>;
 
 beforeEach(async () => {
   vi.clearAllMocks();
@@ -62,6 +63,7 @@ beforeEach(async () => {
   mockExecutionClient = createMockExecutionClient();
   mockCollabClient = createMockCollabClient();
   mockSessionReportsService = createMockSessionReportsService();
+  mockStorageService = createMockStorageService();
 
   const module = await Test.createTestingModule({
     providers: [
@@ -72,7 +74,7 @@ beforeEach(async () => {
       { provide: CACHE_SERVICE, useValue: new InMemoryCacheService() },
       { provide: COLLAB_CLIENT, useValue: mockCollabClient },
       { provide: MEDIA_SERVICE, useValue: createMockMediaService() },
-      { provide: STORAGE_SERVICE, useValue: createMockStorageService() },
+      { provide: STORAGE_SERVICE, useValue: mockStorageService },
       { provide: JwtService, useValue: createMockJwtService() },
       { provide: ConfigService, useValue: createMockConfigService() },
       { provide: SessionReportsService, useValue: mockSessionReportsService },
@@ -884,6 +886,72 @@ describe('destroyRoom', () => {
     await insertParticipant(db, room.id, host.id, 'interviewer');
 
     await expect(service.destroyRoom(room.id, host.id)).rejects.toThrow(ConflictException);
+  });
+
+  it('GIVEN whiteboard assets exist WHEN destroying THEN lists and deletes them under the room prefix', async () => {
+    const host = await insertUser(db);
+    const room = await insertRoom(db, host.id);
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+
+    const keys = [`whiteboard/${room.id}/abc-foo.png`, `whiteboard/${room.id}/def-bar.png`];
+    mockStorageService.list.mockResolvedValueOnce({ keys, isTruncated: false });
+    mockStorageService.deleteMany.mockResolvedValueOnce({ deleted: keys, failed: [] });
+
+    await service.destroyRoom(room.id, host.id);
+
+    expect(mockStorageService.list).toHaveBeenCalledWith(
+      expect.objectContaining({ prefix: `whiteboard/${room.id}/` }),
+    );
+    expect(mockStorageService.deleteMany).toHaveBeenCalledWith(keys);
+  });
+
+  it('GIVEN no whiteboard assets WHEN destroying THEN does not call deleteMany', async () => {
+    const host = await insertUser(db);
+    const room = await insertRoom(db, host.id);
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+
+    mockStorageService.list.mockResolvedValueOnce({ keys: [], isTruncated: false });
+
+    await service.destroyRoom(room.id, host.id);
+
+    expect(mockStorageService.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it('GIVEN paginated listing WHEN destroying THEN follows continuation tokens until exhaustion', async () => {
+    const host = await insertUser(db);
+    const room = await insertRoom(db, host.id);
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+
+    const page1 = [`whiteboard/${room.id}/a.png`];
+    const page2 = [`whiteboard/${room.id}/b.png`];
+    mockStorageService.list
+      .mockResolvedValueOnce({ keys: page1, isTruncated: true, continuationToken: 'cursor-1' })
+      .mockResolvedValueOnce({ keys: page2, isTruncated: false });
+    mockStorageService.deleteMany.mockResolvedValueOnce({
+      deleted: [...page1, ...page2],
+      failed: [],
+    });
+
+    await service.destroyRoom(room.id, host.id);
+
+    expect(mockStorageService.list).toHaveBeenCalledTimes(2);
+    expect(mockStorageService.list).toHaveBeenLastCalledWith(
+      expect.objectContaining({ continuationToken: 'cursor-1' }),
+    );
+    expect(mockStorageService.deleteMany).toHaveBeenCalledWith([...page1, ...page2]);
+  });
+
+  it('GIVEN storage list throws WHEN destroying THEN room is still destroyed (asset cleanup is best-effort)', async () => {
+    const host = await insertUser(db);
+    const room = await insertRoom(db, host.id);
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+
+    mockStorageService.list.mockRejectedValueOnce(new Error('S3 unavailable'));
+
+    await expect(service.destroyRoom(room.id, host.id)).resolves.toBeDefined();
+
+    const [deletedRoom] = await db.select().from(rooms).where(eq(rooms.id, room.id));
+    expect(deletedRoom).toBeUndefined();
   });
 });
 
