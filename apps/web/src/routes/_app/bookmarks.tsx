@@ -168,7 +168,7 @@ function BookmarksPage() {
                       onClick={() => {
                         if (!hasPreviousPage || isFetching) return;
                         setPaginationState((current) => ({
-                          currentCursor: current.cursorHistory[current.cursorHistory.length - 1],
+                          currentCursor: current.cursorHistory.at(-1),
                           cursorHistory: current.cursorHistory.slice(0, -1),
                         }));
                       }}

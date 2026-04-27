@@ -183,8 +183,8 @@ function RoomPage() {
     room?.status === 'coding' && !room?.timerPaused && !!room?.currentPhaseStartedAt;
   useEffect(() => {
     if (!timerActive) return;
-    const interval = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(interval);
+    const interval = globalThis.window.setInterval(() => setNow(Date.now()), 1000);
+    return () => globalThis.window.clearInterval(interval);
   }, [timerActive]);
 
   const refreshRoomDetail = useCallback(async () => {
@@ -214,7 +214,9 @@ function RoomPage() {
       };
 
       try {
-        const roomCode = new URL(window.location.href).searchParams.get('code')?.toUpperCase();
+        const roomCode = new URL(globalThis.window.location.href).searchParams
+          .get('code')
+          ?.toUpperCase();
         if (roomCode) {
           await performJoinWithCode(roomCode, deps);
         } else if (!cancelled) {
@@ -242,12 +244,12 @@ function RoomPage() {
   useEffect(() => {
     if (!roomStatus || roomStatus === 'finished') return;
 
-    const interval = window.setInterval(() => {
+    const interval = globalThis.window.setInterval(() => {
       if (document.hidden) return;
       void refreshRoomDetail().catch(() => undefined);
     }, ROOM_REFRESH_INTERVAL_MS);
 
-    return () => window.clearInterval(interval);
+    return () => globalThis.window.clearInterval(interval);
   }, [refreshRoomDetail, roomStatus]);
 
   const handleRoomStatePatch = useCallback(

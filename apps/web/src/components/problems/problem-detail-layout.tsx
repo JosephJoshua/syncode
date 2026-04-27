@@ -13,7 +13,7 @@ import { ProblemMarkdown } from './problem-markdown.js';
 import { StarterCodeBlock } from './starter-code-block.js';
 import { formatStarterLanguageLabel } from './starter-code-language.js';
 
-export function ProblemDetailLayout({ problem }: { problem: ProblemDetail }) {
+export function ProblemDetailLayout({ problem }: { readonly problem: ProblemDetail }) {
   const { t } = useTranslation('problems');
   const starterLanguages = getStarterLanguages(problem.starterCode);
   const firstLanguage = starterLanguages[0] ?? null;
@@ -136,10 +136,10 @@ function ProblemHeader({
   isBookmarkPending,
   onToggleBookmark,
 }: {
-  problem: ProblemDetail;
-  canToggleBookmark: boolean;
-  isBookmarkPending: boolean;
-  onToggleBookmark: () => void;
+  readonly problem: ProblemDetail;
+  readonly canToggleBookmark: boolean;
+  readonly isBookmarkPending: boolean;
+  readonly onToggleBookmark: () => void;
 }) {
   const { t } = useTranslation('problems');
   return (
@@ -185,7 +185,7 @@ function ProblemHeader({
   );
 }
 
-function SummaryRail({ problem }: { problem: ProblemDetail }) {
+function SummaryRail({ problem }: { readonly problem: ProblemDetail }) {
   const { t } = useTranslation('problems');
   return (
     <div className="rounded-2xl border border-border/60 bg-card/70 p-3">
@@ -222,7 +222,7 @@ function SummaryRail({ problem }: { problem: ProblemDetail }) {
   );
 }
 
-function SummaryStat({ label, value }: { label: string; value: string }) {
+function SummaryStat({ label, value }: { readonly label: string; readonly value: string }) {
   return (
     <div className="py-2.5 first:pt-2.5 last:pb-0">
       <dt className="text-xs font-medium tracking-[0.16em] text-muted-foreground uppercase">
@@ -233,7 +233,13 @@ function SummaryStat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function SectionSurface({ title, children }: { title: string; children: ReactNode }) {
+function SectionSurface({
+  title,
+  children,
+}: {
+  readonly title: string;
+  readonly children: ReactNode;
+}) {
   return (
     <section className="rounded-2xl border border-border/60 bg-card/60">
       <div className="border-b border-border/60 px-4 py-2.5">
@@ -244,7 +250,13 @@ function SectionSurface({ title, children }: { title: string; children: ReactNod
   );
 }
 
-function ExamplePanel({ example, index }: { example: ProblemExample; index: number }) {
+function ExamplePanel({
+  example,
+  index,
+}: {
+  readonly example: ProblemExample;
+  readonly index: number;
+}) {
   const { t } = useTranslation('problems');
   return (
     <div className="rounded-xl border border-border/60 bg-background/70 p-3">
@@ -262,7 +274,13 @@ function ExamplePanel({ example, index }: { example: ProblemExample; index: numb
   );
 }
 
-function PublicTestCasePanel({ testCase, index }: { testCase: ProblemTestCase; index: number }) {
+function PublicTestCasePanel({
+  testCase,
+  index,
+}: {
+  readonly testCase: ProblemTestCase;
+  readonly index: number;
+}) {
   const { t } = useTranslation('problems');
   return (
     <div className="rounded-xl border border-border/60 bg-background/70 p-3">
@@ -290,7 +308,7 @@ function PublicTestCasePanel({ testCase, index }: { testCase: ProblemTestCase; i
   );
 }
 
-function LabeledCodeBlock({ label, value }: { label: string; value: string }) {
+function LabeledCodeBlock({ label, value }: { readonly label: string; readonly value: string }) {
   return (
     <div>
       <p className="text-xs font-medium tracking-[0.16em] text-muted-foreground uppercase">
@@ -303,7 +321,13 @@ function LabeledCodeBlock({ label, value }: { label: string; value: string }) {
   );
 }
 
-function LabeledMarkdownBlock({ label, value }: { label: string; value: string }) {
+function LabeledMarkdownBlock({
+  label,
+  value,
+}: {
+  readonly label: string;
+  readonly value: string;
+}) {
   return (
     <div>
       <p className="text-xs font-medium tracking-[0.16em] text-muted-foreground uppercase">
@@ -316,7 +340,7 @@ function LabeledMarkdownBlock({ label, value }: { label: string; value: string }
   );
 }
 
-function InlineStat({ label, value }: { label: string; value: string }) {
+function InlineStat({ label, value }: { readonly label: string; readonly value: string }) {
   return (
     <div className="rounded-lg border border-border/60 bg-background/70 px-3.5 py-2">
       <p className="text-xs font-medium tracking-[0.16em] text-muted-foreground uppercase">
@@ -327,11 +351,11 @@ function InlineStat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function EmptySurfaceCopy({ message }: { message: string }) {
+function EmptySurfaceCopy({ message }: { readonly message: string }) {
   return <p className="text-sm text-muted-foreground">{message}</p>;
 }
 
-function MetaChip({ children }: { children: ReactNode }) {
+function MetaChip({ children }: { readonly children: ReactNode }) {
   return (
     <span className="inline-flex rounded-full border border-border/60 bg-background/70 px-3 py-1.5 text-xs font-medium text-muted-foreground">
       {children}
@@ -339,7 +363,7 @@ function MetaChip({ children }: { children: ReactNode }) {
   );
 }
 
-function TagChip({ children }: { children: ReactNode }) {
+function TagChip({ children }: { readonly children: ReactNode }) {
   return (
     <span className="inline-flex rounded-full border border-cyan-400/45 bg-cyan-400/14 px-3 py-1.5 text-xs font-semibold text-cyan-300 ring-1 ring-cyan-400/12">
       {children}
@@ -353,18 +377,18 @@ function BookmarkToggleButton({
   isPending,
   onToggle,
 }: {
-  isBookmarked: boolean;
-  canToggleBookmark: boolean;
-  isPending: boolean;
-  onToggle: () => void;
+  readonly isBookmarked: boolean;
+  readonly canToggleBookmark: boolean;
+  readonly isPending: boolean;
+  readonly onToggle: () => void;
 }) {
   const { t } = useTranslation('problems');
   const isDisabled = !canToggleBookmark || isPending;
-  const label = !canToggleBookmark
-    ? t('detail.signInBookmarks')
-    : isBookmarked
+  const label = canToggleBookmark
+    ? isBookmarked
       ? t('detail.removeBookmark')
-      : t('detail.addBookmark');
+      : t('detail.addBookmark')
+    : t('detail.signInBookmarks');
 
   return (
     <Button
@@ -391,7 +415,7 @@ function BookmarkToggleButton({
   );
 }
 
-function DifficultyBadge({ difficulty }: { difficulty: ProblemDetail['difficulty'] }) {
+function DifficultyBadge({ difficulty }: { readonly difficulty: ProblemDetail['difficulty'] }) {
   const { t } = useTranslation('problems');
   if (difficulty === 'easy') {
     return (
@@ -416,7 +440,11 @@ function DifficultyBadge({ difficulty }: { difficulty: ProblemDetail['difficulty
   );
 }
 
-function AttemptStatusBadge({ attemptStatus }: { attemptStatus: ProblemDetail['attemptStatus'] }) {
+function AttemptStatusBadge({
+  attemptStatus,
+}: {
+  readonly attemptStatus: ProblemDetail['attemptStatus'];
+}) {
   if (attemptStatus) {
     return (
       <span className="inline-flex rounded-full border border-violet-400/34 bg-violet-500/16 px-3 py-1.5 text-xs font-semibold text-violet-300 ring-1 ring-violet-400/12">

@@ -407,8 +407,7 @@ function ProblemsLibraryPage() {
                             }
 
                             setPaginationState((current) => {
-                              const previousCursor =
-                                current.cursorHistory[current.cursorHistory.length - 1];
+                              const previousCursor = current.cursorHistory.at(-1);
 
                               return {
                                 currentCursor: previousCursor,

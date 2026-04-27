@@ -114,9 +114,9 @@ function StatCard({
   title,
   value,
 }: {
-  icon: LucideIcon;
-  title: string;
-  value: string;
+  readonly icon: LucideIcon;
+  readonly title: string;
+  readonly value: string;
 }) {
   return (
     <Card className="border border-border/50 bg-card/80 py-2.5 backdrop-blur-sm transition-colors hover:border-primary/20 sm:py-3">

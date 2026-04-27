@@ -10,7 +10,13 @@ import 'prismjs/components/prism-typescript';
 import { type ReactNode, useMemo } from 'react';
 import { resolvePrismLanguage } from './starter-code-language.js';
 
-export function StarterCodeBlock({ code, language }: { code: string; language: string }) {
+export function StarterCodeBlock({
+  code,
+  language,
+}: {
+  readonly code: string;
+  readonly language: string;
+}) {
   const prismLanguage = resolvePrismLanguage(language);
   const grammar = prismLanguage ? Prism.languages[prismLanguage] : null;
   const tokens = useMemo(() => (grammar ? Prism.tokenize(code, grammar) : [code]), [code, grammar]);

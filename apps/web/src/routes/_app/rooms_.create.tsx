@@ -162,8 +162,8 @@ function CreateRoomPage() {
       setCreatedRoomCode(room.roomCode);
       setInviteLink(
         data.isPublic
-          ? `${window.location.origin}/rooms/${room.roomId}`
-          : `${window.location.origin}/rooms/${room.roomId}?code=${room.roomCode}`,
+          ? `${globalThis.window.location.origin}/rooms/${room.roomId}`
+          : `${globalThis.window.location.origin}/rooms/${room.roomId}?code=${room.roomCode}`,
       );
     } catch (error) {
       setSubmissionError(await resolveCreateRoomError(error, t, setValue));
@@ -602,7 +602,9 @@ function CreateRoomPage() {
                         const isPublic = submittedData?.isPublic ?? false;
 
                         if (!isPublic && createdRoomCode) {
-                          window.location.assign(`/rooms/${createdRoomId}?code=${createdRoomCode}`);
+                          globalThis.window.location.assign(
+                            `/rooms/${createdRoomId}?code=${createdRoomCode}`,
+                          );
                           return;
                         }
 

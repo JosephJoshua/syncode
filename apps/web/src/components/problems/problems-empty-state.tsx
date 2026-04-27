@@ -3,8 +3,8 @@ import { SearchX } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 export interface ProblemsEmptyStateProps {
-  variant: 'library' | 'filtered';
-  onReset?: () => void;
+  readonly variant: 'library' | 'filtered';
+  readonly onReset?: () => void;
 }
 
 export function ProblemsEmptyState({ variant, onReset }: ProblemsEmptyStateProps) {

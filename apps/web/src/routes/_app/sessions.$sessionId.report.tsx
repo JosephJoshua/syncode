@@ -94,9 +94,9 @@ function StateView({
   description,
   children,
 }: {
-  title: string;
-  description: string;
-  children?: ReactNode;
+  readonly title: string;
+  readonly description: string;
+  readonly children?: ReactNode;
 }) {
   return (
     <div className="mx-auto flex min-h-[calc(100vh-8rem)] max-w-3xl flex-col items-center justify-center px-4 py-12 text-center">
@@ -107,7 +107,7 @@ function StateView({
   );
 }
 
-function ScorePanel({ session }: { session: SessionDetail }) {
+function ScorePanel({ session }: { readonly session: SessionDetail }) {
   const { t } = useTranslation('sessionReport');
   const report = session.report;
   if (!report) return null;
@@ -150,7 +150,7 @@ function ScorePanel({ session }: { session: SessionDetail }) {
   );
 }
 
-function CorrectnessPanel({ session }: { session: SessionDetail }) {
+function CorrectnessPanel({ session }: { readonly session: SessionDetail }) {
   const { t } = useTranslation('sessionReport');
   const latest = session.submissions.at(-1);
   const passed = latest?.passed ?? 0;
@@ -221,7 +221,7 @@ function CorrectnessPanel({ session }: { session: SessionDetail }) {
   );
 }
 
-function DetailsPanel({ session }: { session: SessionDetail }) {
+function DetailsPanel({ session }: { readonly session: SessionDetail }) {
   const { t } = useTranslation('sessionReport');
   const report = session.report;
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
@@ -303,7 +303,7 @@ function formatDate(value: string) {
 
 function formatCategory(value: string) {
   return value
-    .replace(/[_-]+/g, ' ')
-    .replace(/([a-z])([A-Z])/g, '$1 $2')
-    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+    .replaceAll(/[_-]+/g, ' ')
+    .replaceAll(/([a-z])([A-Z])/g, '$1 $2')
+    .replaceAll(/\b\w/g, (letter) => letter.toUpperCase());
 }

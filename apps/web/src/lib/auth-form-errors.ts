@@ -188,7 +188,7 @@ function getDetailMessage(details: unknown) {
 }
 
 function hasFieldErrors<TField extends string>(fieldErrors: Partial<Record<TField, string>>) {
-  return Object.values(fieldErrors).some((message) => Boolean(message));
+  return Object.values(fieldErrors).some(Boolean);
 }
 
 function normalizeText(value: unknown) {

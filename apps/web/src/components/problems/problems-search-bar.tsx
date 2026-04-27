@@ -2,8 +2,8 @@ import { Search } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 export interface ProblemsSearchBarProps {
-  value: string;
-  onChange: (value: string) => void;
+  readonly value: string;
+  readonly onChange: (value: string) => void;
 }
 
 export function ProblemsSearchBar({ value, onChange }: ProblemsSearchBarProps) {

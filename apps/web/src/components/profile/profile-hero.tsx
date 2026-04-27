@@ -8,13 +8,13 @@ import { useImageDominantColor } from '@/lib/use-image-color.js';
 import { getUserDisplayName, getUserInitial } from '@/lib/user-utils.js';
 
 interface ProfileHeroProps {
-  profile: UserProfileResponse | null;
-  isEditing: boolean;
-  isLoading: boolean;
-  isUploadPending: boolean;
-  onEditToggle: () => void;
-  onAvatarFileSelect: (file: File) => void;
-  onAvatarRemove: () => void;
+  readonly profile: UserProfileResponse | null;
+  readonly isEditing: boolean;
+  readonly isLoading: boolean;
+  readonly isUploadPending: boolean;
+  readonly onEditToggle: () => void;
+  readonly onAvatarFileSelect: (file: File) => void;
+  readonly onAvatarRemove: () => void;
 }
 
 export function ProfileHero({

@@ -86,8 +86,8 @@ export const useMediaSettingsStore = create<MediaSettingsState>()(
       // localStorage stub that lacks setItem. Probe for the real method
       // before handing it to zustand.
       storage: createJSONStorage(() => {
-        if (typeof window === 'undefined') return NOOP_STORAGE;
-        const ls = window.localStorage;
+        if (typeof globalThis.window === 'undefined') return NOOP_STORAGE;
+        const ls = globalThis.window.localStorage;
         if (!ls || typeof ls.setItem !== 'function') return NOOP_STORAGE;
         return ls;
       }),

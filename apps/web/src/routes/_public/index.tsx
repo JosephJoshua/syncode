@@ -102,7 +102,7 @@ function LanguageMarquee() {
   );
 }
 
-function AnimatedNumber({ to }: { to: number }) {
+function AnimatedNumber({ to }: { readonly to: number }) {
   const ref = useRef<HTMLSpanElement>(null);
   const isInView = useInView(ref, { once: true });
   const val = useMotionValue(0);
@@ -561,12 +561,12 @@ function FeatureCard({
   index,
   accent,
 }: {
-  icon: ReactNode;
-  title: string;
-  description: string;
-  decorator: string;
-  index: number;
-  accent: ReactNode;
+  readonly icon: ReactNode;
+  readonly title: string;
+  readonly description: string;
+  readonly decorator: string;
+  readonly index: number;
+  readonly accent: ReactNode;
 }) {
   return (
     <motion.div
@@ -598,11 +598,11 @@ function StepCard({
   description,
   index,
 }: {
-  num: number;
-  icon: ReactNode;
-  title: string;
-  description: string;
-  index: number;
+  readonly num: number;
+  readonly icon: ReactNode;
+  readonly title: string;
+  readonly description: string;
+  readonly index: number;
 }) {
   return (
     <motion.div

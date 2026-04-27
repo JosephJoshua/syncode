@@ -7,11 +7,11 @@ import { useTranslation } from 'react-i18next';
 import { cropImage } from '@/lib/crop-image.js';
 
 interface AvatarCropModalProps {
-  imageSrc: string | null;
-  open: boolean;
-  isPending: boolean;
-  onClose: () => void;
-  onConfirm: (blob: Blob) => void;
+  readonly imageSrc: string | null;
+  readonly open: boolean;
+  readonly isPending: boolean;
+  readonly onClose: () => void;
+  readonly onConfirm: (blob: Blob) => void;
 }
 
 export function AvatarCropModal({
