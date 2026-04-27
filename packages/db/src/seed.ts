@@ -4,7 +4,7 @@
 
 import { randomBytes, scrypt } from 'node:crypto';
 import { promisify } from 'node:util';
-import { inArray } from 'drizzle-orm';
+import { and, inArray, notLike } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from './schema/index.js';
@@ -632,15 +632,20 @@ async function seed() {
     .returning({ id: schema.users.id, username: schema.users.username });
   console.log(`  Users:    ${insertedUsers.length} inserted`);
 
-  // Refresh the password hash for every demo user so stale rows from earlier
-  // seed runs (when the hash format differed) can still log in.
+  // Heal demo users seeded with the legacy SHA-256 format so they can log in.
+  // Scrypt hashes always contain a `:` separator; legacy hex digests do not.
+  // This narrow predicate avoids clobbering passwords that were updated through
+  // the auth service (e.g. a developer changed alice's password manually).
   await db
     .update(schema.users)
     .set({ passwordHash: demoPassword })
     .where(
-      inArray(
-        schema.users.email,
-        usersData.map((u) => u.email),
+      and(
+        inArray(
+          schema.users.email,
+          usersData.map((u) => u.email),
+        ),
+        notLike(schema.users.passwordHash, '%:%'),
       ),
     );
 
