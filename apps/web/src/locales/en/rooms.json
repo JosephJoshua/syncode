@@ -194,6 +194,8 @@
     "emptyStderr": "(no stderr)",
     "participantsHeading": "Participants",
     "participantActions": "Participant actions",
+    "muteMyMicrophone": "Mute my microphone",
+    "unmuteMyMicrophone": "Unmute my microphone",
     "transferOwnership": "Make host",
     "removeParticipant": "Remove participant",
     "removeParticipantTitle": "Remove Participant",

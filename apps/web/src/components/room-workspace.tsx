@@ -91,6 +91,8 @@ interface RoomWorkspaceProps {
     muteSet: ReadonlySet<string>;
     videoHiddenSet: ReadonlySet<string>;
   };
+  selfMicrophoneEnabled?: boolean;
+  onSelfMicrophoneToggle?: () => void;
   dockedVideoPanel?: React.ReactNode;
 }
 
@@ -117,6 +119,8 @@ export function RoomWorkspace({
   mediaMutedMap,
   connectionQualityMap,
   participantMediaControls,
+  selfMicrophoneEnabled,
+  onSelfMicrophoneToggle,
   dockedVideoPanel,
 }: RoomWorkspaceProps) {
   const { t } = useTranslation('rooms');
@@ -910,6 +914,8 @@ export function RoomWorkspace({
                         participantMediaControls?.videoHiddenSet.has(participant.userId) ?? false
                       }
                       localVolume={participantMediaControls?.volumeMap.get(participant.userId)}
+                      isSelfMicrophoneEnabled={selfMicrophoneEnabled}
+                      onSelfMicrophoneToggle={onSelfMicrophoneToggle}
                       onLocalMuteToggle={
                         participantMediaControls
                           ? (muted) => participantMediaControls.setMuted(participant.userId, muted)

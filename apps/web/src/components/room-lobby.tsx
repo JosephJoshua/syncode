@@ -44,6 +44,8 @@ interface RoomLobbyProps {
     muteSet: ReadonlySet<string>;
     videoHiddenSet: ReadonlySet<string>;
   };
+  selfMicrophoneEnabled?: boolean;
+  onSelfMicrophoneToggle?: () => void;
 }
 
 export function RoomLobby({
@@ -69,6 +71,8 @@ export function RoomLobby({
   mediaConnectedSet,
   mediaMutedMap,
   participantMediaControls,
+  selfMicrophoneEnabled,
+  onSelfMicrophoneToggle,
 }: RoomLobbyProps) {
   const { t } = useTranslation('rooms');
   const { copied, copy } = useClipboard();
@@ -158,6 +162,8 @@ export function RoomLobby({
                     participantMediaControls?.videoHiddenSet.has(participant.userId) ?? false
                   }
                   localVolume={participantMediaControls?.volumeMap.get(participant.userId)}
+                  isSelfMicrophoneEnabled={selfMicrophoneEnabled}
+                  onSelfMicrophoneToggle={onSelfMicrophoneToggle}
                   onLocalMuteToggle={
                     participantMediaControls
                       ? (muted) => participantMediaControls.setMuted(participant.userId, muted)

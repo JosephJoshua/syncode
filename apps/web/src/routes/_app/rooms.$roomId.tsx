@@ -713,6 +713,8 @@ function RoomPage() {
             muteSet: localMuteSet,
             videoHiddenSet,
           }}
+          selfMicrophoneEnabled={isMicrophoneEnabled}
+          onSelfMicrophoneToggle={() => void toggleMicrophone()}
           dockedVideoPanel={
             showMediaPanel && videoPanelMode === 'docked' ? (
               <DockedVideoPanel tiles={videoTiles} onUndock={() => setVideoPanelMode('floating')} />
@@ -765,6 +767,8 @@ function RoomPage() {
           muteSet: localMuteSet,
           videoHiddenSet,
         }}
+        selfMicrophoneEnabled={isMicrophoneEnabled}
+        onSelfMicrophoneToggle={() => void toggleMicrophone()}
       />
     </>
   );
