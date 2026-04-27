@@ -4,6 +4,7 @@ import { JwtModule } from '@nestjs/jwt';
 import type { EnvConfig } from '@/config/env.config.js';
 import { ExecutionModule } from '@/modules/execution/execution.module.js';
 import { SessionsModule } from '@/modules/sessions/sessions.module.js';
+import { ParticipantSweepService } from './participant-sweep.service.js';
 import { RoomsController } from './rooms.controller.js';
 import { RoomsService } from './rooms.service.js';
 
@@ -23,7 +24,7 @@ import { RoomsService } from './rooms.service.js';
     }),
   ],
   controllers: [RoomsController],
-  providers: [RoomsService],
+  providers: [RoomsService, ParticipantSweepService],
   exports: [RoomsService],
 })
 export class RoomsModule {}

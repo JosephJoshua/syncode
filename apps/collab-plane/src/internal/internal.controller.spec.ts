@@ -2,6 +2,7 @@ import { ConflictException, NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { describe, expect, it, vi } from 'vitest';
 import { CollaborationService } from '../collaboration/collaboration.service.js';
+import { InternalCallbackGuard } from '../common/guards/internal-callback.guard.js';
 import { InternalController } from './internal.controller.js';
 
 function createMocks() {
@@ -11,6 +12,7 @@ function createMocks() {
       destroyDocument: vi.fn(),
       kickUser: vi.fn(),
       updateRoomState: vi.fn(),
+      changeLanguage: vi.fn(),
     },
   };
 }
@@ -19,7 +21,10 @@ async function createController(mocks: ReturnType<typeof createMocks>) {
   const module = await Test.createTestingModule({
     controllers: [InternalController],
     providers: [{ provide: CollaborationService, useValue: mocks.collaborationService }],
-  }).compile();
+  })
+    .overrideGuard(InternalCallbackGuard)
+    .useValue({ canActivate: () => true })
+    .compile();
 
   return module.get(InternalController);
 }
@@ -98,12 +103,37 @@ describe('InternalController', () => {
     });
   });
 
-  describe('health', () => {
-    it('WHEN checking health THEN returns ok', async () => {
+  describe('changeLanguage', () => {
+    it('GIVEN valid request WHEN changing language THEN delegates to service with merged roomId', async () => {
       const mocks = createMocks();
+      mocks.collaborationService.changeLanguage.mockResolvedValue({ success: true });
       const controller = await createController(mocks);
 
-      expect(controller.health()).toEqual({ status: 'ok' });
+      const result = await controller.changeLanguage('room-1', {
+        roomId: 'room-1',
+        language: 'python',
+        changedBy: 'user-1',
+      });
+
+      expect(result).toEqual({ success: true });
+      expect(mocks.collaborationService.changeLanguage).toHaveBeenCalledWith({
+        roomId: 'room-1',
+        language: 'python',
+        changedBy: 'user-1',
+      });
+    });
+
+    it('GIVEN unknown room WHEN changing language THEN returns success=false from service', async () => {
+      const mocks = createMocks();
+      mocks.collaborationService.changeLanguage.mockResolvedValue({ success: false });
+      const controller = await createController(mocks);
+
+      const result = await controller.changeLanguage('room-1', {
+        roomId: 'room-1',
+        language: 'python',
+      });
+
+      expect(result).toEqual({ success: false });
     });
   });
 });

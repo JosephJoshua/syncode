@@ -4,11 +4,24 @@ interface CursorUser {
   colorLight?: string;
 }
 
+export interface CursorStyleOptions {
+  idleClientIds?: ReadonlySet<number>;
+  transparentClientIds?: ReadonlySet<number>;
+}
+
+// Threshold at which a remote cursor fades out after no awareness updates.
+export const IDLE_HIDE_MS = 8_000;
+// Opacity applied when the local user hovers a remote cursor so it stops blocking the view.
+export const HOVER_TRANSPARENT_OPACITY = 0.25;
+
 export function buildCursorCssRules(
   states: Map<number, Record<string, unknown>>,
   localClientID: number,
+  options: CursorStyleOptions = {},
 ): string[] {
   const rules: string[] = [];
+  const idle = options.idleClientIds ?? new Set<number>();
+  const transparent = options.transparentClientIds ?? new Set<number>();
   states.forEach((state, clientID) => {
     if (clientID === localClientID) return;
     const user = state.user as CursorUser | undefined;
@@ -24,10 +37,12 @@ export function buildCursorCssRules(
       `.yRemoteSelection-${clientID} {
         background-color: ${light};
         border-radius: 1px;
+        transition: opacity 300ms ease-out;
       }`,
       `.yRemoteSelectionHead-${clientID} {
         position: relative;
         border-left: 2px solid ${user.color};
+        transition: opacity 300ms ease-out;
       }`,
       `.yRemoteSelectionHead-${clientID}::after {
         content: "${name}";
@@ -48,6 +63,7 @@ export function buildCursorCssRules(
         z-index: 10;
         opacity: 0.9;
         box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+        transition: opacity 300ms ease-out;
       }`,
       `.yRemoteSelectionHead-${clientID}::before {
         content: "";
@@ -61,8 +77,29 @@ export function buildCursorCssRules(
         transform: translateY(-50%);
         pointer-events: none;
         z-index: 10;
+        transition: opacity 300ms ease-out;
       }`,
     );
+
+    if (idle.has(clientID)) {
+      rules.push(
+        `.yRemoteSelection-${clientID},
+        .yRemoteSelectionHead-${clientID},
+        .yRemoteSelectionHead-${clientID}::before,
+        .yRemoteSelectionHead-${clientID}::after {
+          opacity: 0;
+        }`,
+      );
+    } else if (transparent.has(clientID)) {
+      rules.push(
+        `.yRemoteSelection-${clientID},
+        .yRemoteSelectionHead-${clientID},
+        .yRemoteSelectionHead-${clientID}::before,
+        .yRemoteSelectionHead-${clientID}::after {
+          opacity: ${HOVER_TRANSPARENT_OPACITY};
+        }`,
+      );
+    }
   });
   return rules;
 }

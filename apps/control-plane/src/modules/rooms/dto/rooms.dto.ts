@@ -1,7 +1,11 @@
 import {
+  browseRoomsQuerySchema,
+  browseRoomsResponseSchema,
+  changeRoomLanguageSchema,
   createRoomResponseSchema,
   createRoomSchema,
   destroyRoomResponseSchema,
+  ensureCollabResponseSchema,
   joinRoomResponseSchema,
   joinRoomSchema,
   listRoomsQuerySchema,
@@ -23,6 +27,9 @@ import { createZodDto } from 'nestjs-zod';
 
 export class CreateRoomDto extends createZodDto(createRoomSchema) {}
 export class ListRoomsQueryDto extends createZodDto(listRoomsQuerySchema) {}
+export class BrowseRoomsQueryDto extends createZodDto(browseRoomsQuerySchema) {}
+export class BrowseRoomsResponseDto extends createZodDto(browseRoomsResponseSchema) {}
+export class ChangeRoomLanguageDto extends createZodDto(changeRoomLanguageSchema) {}
 export class RunCodeDto extends createZodDto(runCodeSchema) {}
 export class SubmitProblemDto extends createZodDto(submitProblemSchema) {}
 export class JoinRoomDto extends createZodDto(joinRoomSchema) {}
@@ -46,3 +53,4 @@ export class TransitionRoomPhaseResponseDto extends createZodDto(
   transitionRoomPhaseResponseSchema,
 ) {}
 export class MediaTokenResponseDto extends createZodDto(mediaTokenResponseSchema) {}
+export class EnsureCollabResponseDto extends createZodDto(ensureCollabResponseSchema) {}

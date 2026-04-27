@@ -58,7 +58,14 @@ function createMockDb() {
   });
   const mockInsert = vi.fn().mockReturnValue({ values: mockValues });
 
-  const mockSelectWhere = vi.fn().mockResolvedValue([]);
+  const mockSelectLimit = vi.fn().mockResolvedValue([]);
+  const mockSelectWhere = vi.fn().mockImplementation(() => {
+    const thenable = Promise.resolve([]) as Promise<unknown[]> & {
+      limit: typeof mockSelectLimit;
+    };
+    thenable.limit = mockSelectLimit;
+    return thenable;
+  });
   const mockSelectInnerJoin = vi.fn().mockReturnValue({ where: mockSelectWhere });
   const mockSelectFrom = vi.fn().mockReturnValue({
     where: mockSelectWhere,
