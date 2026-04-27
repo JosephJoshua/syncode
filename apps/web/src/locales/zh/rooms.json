@@ -112,7 +112,9 @@
     "provisioning": "正在配置工作区...",
     "noMatchingProblems": "没有匹配的题目",
     "problemRequired": "请选择一道题目",
-    "createFailed": "创建房间失败，请重试。"
+    "createFailed": "创建房间失败，请重试。",
+    "mockProblemNotice": "当前 API 没有返回真实题目，已切换为 mock 题目列表。使用这些选项创建房间时，会跳过后端题目绑定，仅用于本地 UI 测试。",
+    "mockBadge": "Mock"
   },
   "success": {
     "details": "工作区详情",
@@ -156,6 +158,7 @@
     "editorUnlocked": "编辑器未锁定",
     "awaitingController": "等待主持人或当前面试官打开工作区。",
     "readyFailed": "更新准备状态失败。",
+    "previewWorkspaceHelp": "本地预览会跳过角色校验，并注入 mock 题目与评论数据，仅用于 UI 测试。",
     "removedFromRoom": "您已被房主移出此房间。",
     "participantsNotReady": "需所有参与者准备就绪后才能开始。"
   },
@@ -191,7 +194,8 @@
     "ready": "我已准备好",
     "cancelReady": "取消准备",
     "enterWorkspace": "进入工作区",
-    "readyFirst": "请先点击「我已准备好」再进入工作区。"
+    "readyFirst": "请先点击「我已准备好」再进入工作区。",
+    "previewWorkspace": "预览工作区"
   },
   "warning": "开始前需要且只能有一名候选人和一名面试官。",
   "warningAi": "开始前需要且只能有一名候选人（无需面试官）。",
@@ -320,6 +324,15 @@
     "sessionHeading": "会话",
     "remoteRunning": "{{name}} 正在运行代码...",
     "remoteSubmitting": "{{name}} 正在提交...",
+    "mockPreviewBanner": "当前为 mock 工作区预览：运行与提交已禁用，题目和行内评论均为本地示例数据。",
+    "inlineCommentsHeading": "行内评论",
+    "selectedLine": "第 {{line}} 行",
+    "lineBadge": "第{{line}}行",
+    "inlineCommentsPlaceholder": "为第 {{line}} 行添加评论",
+    "inlineCommentsOnLine": "第 {{line}} 行共有 {{count}} 条评论",
+    "inlineCommentsEmptyLine": "第 {{line}} 行还没有评论。",
+    "inlineCommentsEmpty": "还没有行内评论。可为当前选中行添加一条。",
+    "addComment": "添加评论",
     "languagePickerLabel": "语言",
     "languagePickerPlaceholder": "选择语言",
     "languageChangeFailed": "切换语言失败。",

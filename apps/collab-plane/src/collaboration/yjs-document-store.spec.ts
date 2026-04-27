@@ -1,3 +1,4 @@
+import { INLINE_COMMENTS_KEY } from '@syncode/shared';
 import { describe, expect, it } from 'vitest';
 import * as Y from 'yjs';
 import { YjsDocumentStore } from './yjs-document-store.js';
@@ -23,6 +24,13 @@ describe('YjsDocumentStore', () => {
 
       expect(doc.getText('code:python').toString()).toBe('# py starter');
       expect(doc.getText('code:javascript').toString()).toBe('// js starter');
+    });
+
+    it('GIVEN a new doc WHEN creating THEN inline comments root map exists', () => {
+      const store = new YjsDocumentStore();
+      const { doc } = store.createDoc('room-1');
+
+      expect(doc.getMap(INLINE_COMMENTS_KEY).size).toBe(0);
     });
 
     it('GIVEN no initialContentByLanguage WHEN creating THEN all language Y.Texts are empty', () => {
@@ -160,6 +168,28 @@ describe('YjsDocumentStore', () => {
       const reconstructed = new Y.Doc();
       Y.applyUpdate(reconstructed, snapshot!);
       expect(reconstructed.getText('code:python').toString()).toBe('function solve() {}');
+      reconstructed.destroy();
+    });
+
+    it('GIVEN doc with inline comments WHEN destroying THEN snapshot preserves the comment map', () => {
+      const store = new YjsDocumentStore();
+      const { doc } = store.createDoc('room-1', {
+        initialContentByLanguage: { python: 'function solve() {}' },
+      });
+      const comments = doc.getMap<Y.Map<unknown>>(INLINE_COMMENTS_KEY);
+      const comment = new Y.Map<unknown>();
+      comment.set('content', 'Consider the edge case on this line.');
+      comment.set('lineNumber', 1);
+      comments.set('comment-1', comment);
+
+      const snapshot = store.destroyDoc('room-1');
+
+      const reconstructed = new Y.Doc();
+      Y.applyUpdate(reconstructed, snapshot!);
+      const reconstructedComments = reconstructed.getMap<Y.Map<unknown>>(INLINE_COMMENTS_KEY);
+      expect(reconstructedComments.get('comment-1')?.get('content')).toBe(
+        'Consider the edge case on this line.',
+      );
       reconstructed.destroy();
     });
 

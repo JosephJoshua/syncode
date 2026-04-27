@@ -220,6 +220,30 @@ html[lang^="zh"] {
   color: #d16969;
 }
 
+.monaco-editor .inline-comment-line {
+  background: linear-gradient(90deg, rgb(0 229 153 / 0.07), transparent 45%);
+}
+
+.monaco-editor .inline-comment-line-active {
+  background: linear-gradient(90deg, rgb(0 229 153 / 0.16), transparent 55%);
+}
+
+.monaco-editor .glyph-margin .inline-comment-glyph,
+.monaco-editor .glyph-margin .inline-comment-glyph-active {
+  margin-left: 6px;
+  width: 8px;
+  border-radius: 999px;
+}
+
+.monaco-editor .glyph-margin .inline-comment-glyph {
+  background: rgb(0 229 153 / 0.55);
+}
+
+.monaco-editor .glyph-margin .inline-comment-glyph-active {
+  background: rgb(0 229 153 / 0.95);
+  box-shadow: 0 0 0 2px rgb(0 229 153 / 0.18);
+}
+
 @keyframes speaking-ring {
   0%,
   100% {

@@ -17,8 +17,47 @@ interface CollaborativeEditorProps {
   awareness: Awareness;
   language: string;
   readOnly: boolean;
+  commentLineNumbers: number[];
+  activeCommentLine: number | null;
   onRunCode: () => void;
   onSubmitCode: () => void;
+  onActiveLineChange: (lineNumber: number) => void;
+}
+
+interface EditorLike {
+  addAction: (action: {
+    id: string;
+    label: string;
+    keybindings: number[];
+    run: () => void;
+  }) => void;
+  getModel: () => object | null;
+  getPosition: () => { lineNumber: number } | null;
+  onDidChangeCursorPosition: (
+    listener: (event: { position: { lineNumber: number } }) => void,
+  ) => void;
+  deltaDecorations: (
+    oldDecorations: string[],
+    newDecorations: Array<{
+      range: {
+        startLineNumber: number;
+        startColumn: number;
+        endLineNumber: number;
+        endColumn: number;
+      };
+      options: Record<string, unknown>;
+    }>,
+  ) => string[];
+}
+
+interface MonacoLike {
+  KeyMod: {
+    CtrlCmd: number;
+    Shift: number;
+  };
+  KeyCode: {
+    Enter: number;
+  };
 }
 
 export function CollaborativeEditor({
@@ -26,34 +65,47 @@ export function CollaborativeEditor({
   awareness,
   language,
   readOnly,
+  commentLineNumbers,
+  activeCommentLine,
   onRunCode,
   onSubmitCode,
+  onActiveLineChange,
 }: CollaborativeEditorProps) {
   const bindingRef = useRef<MonacoBinding | null>(null);
   type EditorInstance = Parameters<OnMount>[0];
   const [editor, setEditor] = useState<EditorInstance | null>(null);
   const [editorRoot, setEditorRoot] = useState<HTMLElement | null>(null);
+  const decorationIdsRef = useRef<string[]>([]);
   const onRunCodeRef = useRef(onRunCode);
   onRunCodeRef.current = onRunCode;
   const onSubmitCodeRef = useRef(onSubmitCode);
   onSubmitCodeRef.current = onSubmitCode;
+  const onActiveLineChangeRef = useRef(onActiveLineChange);
+  onActiveLineChangeRef.current = onActiveLineChange;
 
   const editorOptions = useMemo(() => ({ ...EDITOR_OPTIONS_BASE, readOnly }), [readOnly]);
 
   const handleMount: OnMount = (editorInstance, monaco) => {
+    const monacoApi = monaco as unknown as MonacoLike;
+
     // Register keyboard shortcuts
     editorInstance.addAction({
       id: 'syncode-run',
       label: 'Run Code',
-      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter],
+      keybindings: [monacoApi.KeyMod.CtrlCmd | monacoApi.KeyCode.Enter],
       run: () => void onRunCodeRef.current(),
     });
 
     editorInstance.addAction({
       id: 'syncode-submit',
       label: 'Submit Code',
-      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.Enter],
+      keybindings: [monacoApi.KeyMod.CtrlCmd | monacoApi.KeyMod.Shift | monacoApi.KeyCode.Enter],
       run: () => void onSubmitCodeRef.current(),
+    });
+
+    onActiveLineChangeRef.current(editorInstance.getPosition()?.lineNumber ?? 1);
+    editorInstance.onDidChangeCursorPosition((event) => {
+      onActiveLineChangeRef.current(event.position.lineNumber);
     });
 
     setEditor(editorInstance);
@@ -73,9 +125,43 @@ export function CollaborativeEditor({
     return () => {
       bindingRef.current?.destroy();
       bindingRef.current = null;
+      decorationIdsRef.current = editor.deltaDecorations(decorationIdsRef.current, []);
     };
   }, [editor, doc, awareness, language]);
 
+  useEffect(() => {
+    if (!editor) {
+      return;
+    }
+
+    const uniqueLines = [...new Set(commentLineNumbers)]
+      .filter((lineNumber) => Number.isFinite(lineNumber) && lineNumber > 0)
+      .sort((left, right) => left - right);
+
+    const decorations = uniqueLines.map((lineNumber) => ({
+      range: {
+        startLineNumber: lineNumber,
+        startColumn: 1,
+        endLineNumber: lineNumber,
+        endColumn: 1,
+      },
+      options: {
+        isWholeLine: true,
+        className:
+          lineNumber === activeCommentLine ? 'inline-comment-line-active' : 'inline-comment-line',
+        glyphMarginClassName:
+          lineNumber === activeCommentLine ? 'inline-comment-glyph-active' : 'inline-comment-glyph',
+        stickiness: 1,
+      },
+    }));
+
+    decorationIdsRef.current = (editor as unknown as EditorLike).deltaDecorations(
+      decorationIdsRef.current,
+      decorations,
+    );
+  }, [editor, activeCommentLine, commentLineNumbers]);
+
+  // Inject dynamic CSS for remote cursor colors from awareness state.
   useEffect(() => {
     if (!editorRoot) return;
 
