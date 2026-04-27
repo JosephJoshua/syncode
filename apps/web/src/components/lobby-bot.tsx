@@ -4,6 +4,67 @@ import { useCallback, useEffect, useRef } from 'react';
 
 type BotMood = 'sleeping' | 'waiting' | 'alert' | 'excited';
 
+interface MoodVisuals {
+  eyeRx: number;
+  eyeRy: number;
+  eyeBaseY: number;
+  eyeColor: string;
+  mouthScaleY: number;
+  mouthColor: string;
+  ledColor: string;
+  screenFill: string;
+}
+
+const NEUTRAL_EYE_COLOR = 'oklch(0.82 0.01 286)';
+const NEUTRAL_MOUTH_COLOR = 'oklch(0.50 0.01 286)';
+const ACCENT_COLOR = 'oklch(0.82 0.18 165)';
+const NEUTRAL_LED_COLOR = 'oklch(0.35 0.01 286)';
+const NEUTRAL_SCREEN_FILL = 'oklch(0.17 0.005 286)';
+const EXCITED_SCREEN_FILL = 'oklch(0.18 0.01 165)';
+
+const MOOD_VISUALS: Record<BotMood, MoodVisuals> = {
+  sleeping: {
+    eyeRx: 5.5,
+    eyeRy: 1,
+    eyeBaseY: 50,
+    eyeColor: NEUTRAL_EYE_COLOR,
+    mouthScaleY: 0,
+    mouthColor: NEUTRAL_MOUTH_COLOR,
+    ledColor: NEUTRAL_LED_COLOR,
+    screenFill: NEUTRAL_SCREEN_FILL,
+  },
+  waiting: {
+    eyeRx: 4,
+    eyeRy: 4.5,
+    eyeBaseY: 47,
+    eyeColor: NEUTRAL_EYE_COLOR,
+    mouthScaleY: 0.2,
+    mouthColor: NEUTRAL_MOUTH_COLOR,
+    ledColor: NEUTRAL_LED_COLOR,
+    screenFill: NEUTRAL_SCREEN_FILL,
+  },
+  alert: {
+    eyeRx: 4,
+    eyeRy: 4.5,
+    eyeBaseY: 47,
+    eyeColor: NEUTRAL_EYE_COLOR,
+    mouthScaleY: 0.6,
+    mouthColor: NEUTRAL_MOUTH_COLOR,
+    ledColor: 'oklch(0.82 0.18 165 / 0.6)',
+    screenFill: NEUTRAL_SCREEN_FILL,
+  },
+  excited: {
+    eyeRx: 3.5,
+    eyeRy: 4,
+    eyeBaseY: 47,
+    eyeColor: ACCENT_COLOR,
+    mouthScaleY: 1,
+    mouthColor: ACCENT_COLOR,
+    ledColor: ACCENT_COLOR,
+    screenFill: EXCITED_SCREEN_FILL,
+  },
+};
+
 function resolveMood(readyCount: number, totalCount: number): BotMood {
   if (totalCount === 0) return 'sleeping';
   if (readyCount === totalCount) return 'excited';
@@ -78,23 +139,8 @@ export function LobbyBot({
     }
   }, [mood, gazeX, gazeY]);
 
-  const eyeRy = mood === 'sleeping' ? 1 : mood === 'excited' ? 4 : 4.5;
-  const eyeRx = mood === 'sleeping' ? 5.5 : mood === 'excited' ? 3.5 : 4;
-  const eyeBaseY = mood === 'sleeping' ? 50 : 47;
-  const eyeColor = mood === 'excited' ? 'oklch(0.82 0.18 165)' : 'oklch(0.82 0.01 286)';
-
-  const mouthScaleY =
-    mood === 'sleeping' ? 0 : mood === 'waiting' ? 0.2 : mood === 'alert' ? 0.6 : 1;
-  const mouthColor = mood === 'excited' ? 'oklch(0.82 0.18 165)' : 'oklch(0.50 0.01 286)';
-
-  const ledColor =
-    mood === 'excited'
-      ? 'oklch(0.82 0.18 165)'
-      : mood === 'alert'
-        ? 'oklch(0.82 0.18 165 / 0.6)'
-        : 'oklch(0.35 0.01 286)';
-
-  const screenFill = mood === 'excited' ? 'oklch(0.18 0.01 165)' : 'oklch(0.17 0.005 286)';
+  const { eyeRx, eyeRy, eyeBaseY, eyeColor, mouthScaleY, mouthColor, ledColor, screenFill } =
+    MOOD_VISUALS[mood];
 
   return (
     <div className={cn('relative flex flex-col items-center', className)}>
