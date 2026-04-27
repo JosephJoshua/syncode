@@ -58,6 +58,29 @@ const createRoomFormSchema = z.object({
 });
 type CreateRoomFormData = z.infer<typeof createRoomFormSchema>;
 
+type CreateRoomFormSetValue = ReturnType<typeof useForm<CreateRoomFormData>>['setValue'];
+
+async function resolveCreateRoomError(
+  error: unknown,
+  t: (key: string) => string,
+  setValue: CreateRoomFormSetValue,
+): Promise<string> {
+  const apiError = await readApiError(error);
+  if (!apiError) return t('create.createFailed');
+
+  if (apiError.details && typeof apiError.details === 'object') {
+    const details = apiError.details as Record<string, unknown>;
+    const problemError = getFieldErrorMessage(details, 'problemId');
+    const languageError = getFieldErrorMessage(details, 'language');
+    if (problemError) {
+      setValue('problemId', '', { shouldValidate: false });
+    }
+    if (languageError) return languageError;
+  }
+
+  return apiError.message ?? t('create.createFailed');
+}
+
 function CreateRoomPage() {
   const { t } = useTranslation('rooms');
   const queryClient = useQueryClient();
@@ -143,29 +166,7 @@ function CreateRoomPage() {
           : `${window.location.origin}/rooms/${room.roomId}?code=${room.roomCode}`,
       );
     } catch (error) {
-      const apiError = await readApiError(error);
-
-      if (!apiError) {
-        setSubmissionError(t('create.createFailed'));
-        return;
-      }
-
-      if (apiError.details && typeof apiError.details === 'object') {
-        const details = apiError.details as Record<string, unknown>;
-        const problemError = getFieldErrorMessage(details, 'problemId');
-        const languageError = getFieldErrorMessage(details, 'language');
-
-        if (problemError) {
-          setValue('problemId', '', { shouldValidate: false });
-        }
-
-        if (languageError) {
-          setSubmissionError(languageError);
-          return;
-        }
-      }
-
-      setSubmissionError(apiError.message ?? t('create.createFailed'));
+      setSubmissionError(await resolveCreateRoomError(error, t, setValue));
     }
   };
 
