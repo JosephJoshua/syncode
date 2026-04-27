@@ -568,65 +568,184 @@ export class AiService {
 
     return normalized;
   }
+
   private normalizeHintText(
     value: string | undefined,
-    _field: 'hint' | 'suggestedApproach' | 'reflectionPrompt',
+    field: 'hint' | 'suggestedApproach' | 'reflectionPrompt',
   ): string | undefined {
-    return value?.trim();
+    if (!value) {
+      return undefined;
+    }
+
+    let normalized = value
+      .trim()
+      .replaceAll('\\n', '\n')
+      .replaceAll('\\t', '\t')
+      .replaceAll('\\"', '"')
+      .replaceAll(/\r\n?/g, '\n');
+
+    normalized = this.stripCodeFence(normalized).trim();
+    normalized = this.stripJsonKeyPrefix(normalized, field);
+    normalized = normalized.replace(/^["'`]+|["'`]+$/g, '').trim();
+
+    if (field === 'hint') {
+      normalized =
+        normalized.split(/\n\s*(?:suggested approach|reflection prompt)\b/i)[0]?.trim() ??
+        normalized;
+    }
+
+    if (field === 'suggestedApproach') {
+      normalized = normalized.split(/\n\s*(?:reflection prompt)\b/i)[0]?.trim() ?? normalized;
+    }
+
+    normalized = this.compactHintText(normalized);
+    normalized = this.truncateHintText(normalized, this.maxLengthForField(field));
+
+    if (!this.isMeaningfulHintLine(normalized)) {
+      return undefined;
+    }
+
+    return normalized;
   }
 
-  private stripJsonKeyPrefix(value: string): string {
+  private stripJsonKeyPrefix(
+    value: string,
+    field: 'hint' | 'suggestedApproach' | 'reflectionPrompt',
+  ): string {
+    const patterns =
+      field === 'hint'
+        ? [/^\s*["'`]?hint["'`]?\s*:\s*/i]
+        : field === 'suggestedApproach'
+          ? [
+              /^\s*["'`]?suggestedApproach["'`]?\s*:\s*/i,
+              /^\s*["'`]?suggested approach["'`]?\s*:\s*/i,
+            ]
+          : [
+              /^\s*["'`]?reflectionPrompt["'`]?\s*:\s*/i,
+              /^\s*["'`]?reflection prompt["'`]?\s*:\s*/i,
+            ];
+
+    for (const pattern of patterns) {
+      if (pattern.test(value)) {
+        return value.replace(pattern, '').trim();
+      }
+    }
+
     return value;
   }
 
   private compactHintText(value: string): string {
-    return value.trim();
+    return value
+      .replaceAll(/\n{3,}/g, '\n\n')
+      .replaceAll(/[ \t]{2,}/g, ' ')
+      .trim();
   }
 
-  private maxLengthForField(_field: 'hint' | 'suggestedApproach' | 'reflectionPrompt'): number {
-    return MAX_HINT_TEXT_LENGTH;
+  private maxLengthForField(field: 'hint' | 'suggestedApproach' | 'reflectionPrompt'): number {
+    switch (field) {
+      case 'hint':
+        return MAX_HINT_TEXT_LENGTH;
+      case 'suggestedApproach':
+        return MAX_SUGGESTED_APPROACH_LENGTH;
+      default:
+        return MAX_REFLECTION_PROMPT_LENGTH;
+    }
   }
 
-  private truncateHintText(value: string, _maxLength: number): string {
-    return value;
+  private truncateHintText(value: string, maxLength: number): string {
+    if (value.length <= maxLength) {
+      return value;
+    }
+
+    const candidate = value.slice(0, maxLength);
+    const sentenceEnd = Math.max(candidate.lastIndexOf('. '), candidate.lastIndexOf('\n'));
+    if (sentenceEnd > Math.floor(maxLength * 0.55)) {
+      return `${candidate.slice(0, sentenceEnd + 1).trim()}…`;
+    }
+
+    return `${candidate.trim()}…`;
   }
 
-  private isUnsafeModelText(_value: string): boolean {
-    return false;
+  private isUnsafeModelText(value: string): boolean {
+    if (PROMPT_INJECTION_PATTERNS.some((pattern) => pattern.test(value))) {
+      return true;
+    }
+
+    if (PROFANITY_PATTERN.test(value)) {
+      return true;
+    }
+
+    return META_REASONING_PATTERNS.some((pattern) => pattern.test(value));
   }
 
-  private hasIncorrectnessClaim(_value: string): boolean {
-    return false;
+  private hasIncorrectnessClaim(value: string): boolean {
+    return INCORRECTNESS_CLAIM_PATTERNS.some((pattern) => pattern.test(value));
   }
 
   private isMeaningfulHintLine(line: string): boolean {
-    return line.trim().length > 0;
+    if (line.length < 4) {
+      return false;
+    }
+
+    return /[a-z0-9]/i.test(line);
   }
 
-  private shouldIncludeReflectionPrompt(_context: {
+  private shouldIncludeReflectionPrompt(context: {
     hintStage: 'initial' | 'follow_up';
     hintIteration: number;
   }): boolean {
-    return false;
+    if (context.hintStage !== 'initial') {
+      return false;
+    }
+
+    // Show reflection on roughly one out of three hints (~33%).
+    return context.hintIteration % 3 === 0;
   }
 
-  private buildFallbackSuggestedApproach(_context: HintProcessingContext): string {
-    return FIRST_HINT_SUGGESTED_APPROACH;
+  private buildFallbackSuggestedApproach(context: HintProcessingContext): string {
+    if (context.latestAllTestsPassed) {
+      return this.buildSolvedSuggestedApproach();
+    }
+
+    if (context.hintStage === 'initial' && context.hintIteration === 1) {
+      return FIRST_HINT_SUGGESTED_APPROACH;
+    }
+
+    return (
+      HINT_FALLBACK_APPROACHES[context.hintLevel] ??
+      'Break the problem into smaller checks and validate each step with a small example.'
+    );
   }
 
-  private buildFallbackHint(_context: HintProcessingContext): string {
-    return 'Focus on one step at a time and verify with a small example.';
+  private buildFallbackHint(context: HintProcessingContext): string {
+    if (context.latestAllTestsPassed) {
+      return this.buildSolvedHint();
+    }
+
+    if (context.hintStage === 'follow_up') {
+      return 'Good reflection. Now test one concrete example step-by-step and verify each lookup/update decision.';
+    }
+
+    if (context.hintIteration === 1) {
+      return 'You are close. Focus on reducing repeated work by preserving the right information while scanning.';
+    }
+
+    return 'You are making progress. Validate each step with a tiny example and adjust the next operation accordingly.';
   }
 
   private buildSolvedHint(): string {
-    return 'All tests passed. Focus on readability and communication.';
+    return 'Great work. Your latest submission passed all available tests. Focus now on readability, robustness, and explaining your approach clearly.';
   }
 
   private buildSolvedSuggestedApproach(): string {
-    return 'Keep current logic and tighten explanation plus edge-case checks.';
+    return 'Keep the current core logic; refine naming/comments and validate a couple of additional edge cases to build confidence.';
   }
 
   private resolveHintModel(): string {
-    return this.configService?.get('AI_HINT_MODEL', { infer: true }) ?? 'qwen3.5-mini';
+    return (
+      this.configService?.get('AI_HINT_MODEL', { infer: true }) ??
+      this.configService?.get('AI_PLATFORM_MODEL', { infer: true }) ??
+      'qwen3.5-mini'
+    );
   }
 }
