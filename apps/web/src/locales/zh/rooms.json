@@ -160,6 +160,26 @@
     "removedFromRoom": "您已被房主移出此房间。",
     "participantsNotReady": "需所有参与者准备就绪后才能开始。"
   },
+  "lobbyPreview": {
+    "title": "检查摄像头和麦克风",
+    "devices": "设备",
+    "camera": "摄像头",
+    "microphone": "麦克风",
+    "cameraOff": "摄像头已关闭",
+    "cameraOffAction": "打开摄像头",
+    "cameraOnAction": "关闭摄像头",
+    "micOffAction": "打开麦克风",
+    "micOnAction": "关闭麦克风",
+    "cameraDenied": "摄像头访问被拒绝。",
+    "cameraUnavailable": "摄像头不可用。",
+    "micDenied": "麦克风访问被拒绝。",
+    "micUnavailable": "麦克风不可用。",
+    "noCameras": "未检测到摄像头。",
+    "noMicrophones": "未检测到麦克风。",
+    "noiseSuppression": "降噪",
+    "echoCancel": "回声消除",
+    "permissionHelp": "请在浏览器设置中允许摄像头和麦克风访问，然后重试。"
+  },
   "roleSelect": {
     "heading": "你的角色",
     "placeholder": "选择角色...",

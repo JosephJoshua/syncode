@@ -160,6 +160,26 @@
     "removedFromRoom": "You have been removed from this room by the host.",
     "participantsNotReady": "All participants must be ready before starting."
   },
+  "lobbyPreview": {
+    "title": "Check your camera and mic",
+    "devices": "Devices",
+    "camera": "Camera",
+    "microphone": "Microphone",
+    "cameraOff": "Camera is off",
+    "cameraOffAction": "Turn on camera",
+    "cameraOnAction": "Turn off camera",
+    "micOffAction": "Turn on mic",
+    "micOnAction": "Turn off mic",
+    "cameraDenied": "Camera access was denied.",
+    "cameraUnavailable": "Camera unavailable.",
+    "micDenied": "Microphone access was denied.",
+    "micUnavailable": "Microphone unavailable.",
+    "noCameras": "No cameras detected.",
+    "noMicrophones": "No microphones detected.",
+    "noiseSuppression": "Noise suppression",
+    "echoCancel": "Echo cancel",
+    "permissionHelp": "Enable camera and microphone in your browser settings, then try again."
+  },
   "roleSelect": {
     "heading": "Your Role",
     "placeholder": "Pick a role...",

@@ -17,10 +17,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { MediaControls } from '@/components/media-controls.js';
-import type {
-  AudioProcessingSettings,
-  VideoQualityPreset,
-} from '@/components/media-settings-panel.js';
 import { RoomLobby } from '@/components/room-lobby.js';
 import { RoomWorkspace } from '@/components/room-workspace.js';
 import {
@@ -35,6 +31,7 @@ import { api, readApiError, resolveErrorMessage } from '@/lib/api-client.js';
 import { resolveJoinError } from '@/lib/join-errors.js';
 import { computeRoomElapsedMs, isWorkspaceStage, ROLE_LABEL_KEYS } from '@/lib/room-stage.js';
 import { useAuthStore } from '@/stores/auth.store.js';
+import { useMediaSettingsStore } from '@/stores/media-settings.store.js';
 
 export const Route = createFileRoute('/_app/rooms_/$roomId')({
   component: RoomPage,
@@ -286,7 +283,8 @@ function RoomPage() {
 
   const mediaCredsRef = useRef<{ token: string; url: string } | null>(null);
   const [mediaReady, setMediaReady] = useState(false);
-  const [videoPanelMode, setVideoPanelMode] = useState<'floating' | 'docked'>('docked');
+  const videoPanelMode = useMediaSettingsStore((s) => s.videoPanelMode);
+  const setVideoPanelMode = useMediaSettingsStore((s) => s.setVideoPanelMode);
   const [isVideoMinimized, setIsVideoMinimized] = useState(false);
 
   const hasMediaCapability =
@@ -337,12 +335,17 @@ function RoomPage() {
     };
   }, [room, hasMediaCapability, roomId]);
 
-  const [audioProcessing, setAudioProcessing] = useState<AudioProcessingSettings>({
-    noiseSuppression: true,
-    echoCancellation: true,
-    autoGainControl: false,
-  });
-  const [videoQuality, setVideoQuality] = useState<VideoQualityPreset>('medium');
+  const audioProcessing = useMediaSettingsStore((s) => s.audioProcessing);
+  const setAudioProcessingStored = useMediaSettingsStore((s) => s.setAudioProcessing);
+  const videoQuality = useMediaSettingsStore((s) => s.videoQuality);
+  const setVideoQuality = useMediaSettingsStore((s) => s.setVideoQuality);
+  const preferredAudioDeviceId = useMediaSettingsStore((s) => s.audioInputDeviceId);
+  const preferredVideoDeviceId = useMediaSettingsStore((s) => s.videoInputDeviceId);
+  const setAudioInputDeviceId = useMediaSettingsStore((s) => s.setAudioInputDeviceId);
+  const setVideoInputDeviceId = useMediaSettingsStore((s) => s.setVideoInputDeviceId);
+  const reconcileDevices = useMediaSettingsStore((s) => s.reconcileDevices);
+  const outputVolume = useMediaSettingsStore((s) => s.outputVolume);
+  const setOutputVolumeStored = useMediaSettingsStore((s) => s.setOutputVolume);
 
   const {
     connectionState: mediaConnectionState,
@@ -378,6 +381,9 @@ function RoomPage() {
     token: mediaCredsRef.current?.token ?? null,
     connect: mediaReady && hasMediaCapability && room?.status !== 'finished',
     audioProcessing,
+    preferredAudioDeviceId,
+    preferredVideoDeviceId,
+    onDevicesDiscovered: reconcileDevices,
   });
 
   const mediaConnectedSet = useMemo(() => {
@@ -395,15 +401,19 @@ function RoomPage() {
     return map;
   }, [mediaLocalParticipant, mediaRemoteParticipants]);
 
-  const [outputVolume, setOutputVolumeState] = useState(1);
-
   const handleOutputVolumeChange = useCallback(
     (vol: number) => {
-      setOutputVolumeState(vol);
+      setOutputVolumeStored(vol);
       setOutputVolume(vol);
     },
-    [setOutputVolume],
+    [setOutputVolume, setOutputVolumeStored],
   );
+
+  // Replay the persisted volume onto any attached audio elements whenever it
+  // changes (including right after connect, once elements exist).
+  useEffect(() => {
+    setOutputVolume(outputVolume);
+  }, [outputVolume, setOutputVolume]);
 
   const mediaControlsElement = hasMediaCapability ? (
     <MediaControls
@@ -419,12 +429,16 @@ function RoomPage() {
       videoInputDevices={videoInputDevices}
       activeAudioDeviceId={activeAudioDeviceId}
       activeVideoDeviceId={activeVideoDeviceId}
-      onSwitchDevice={(kind, id) => void switchDevice(kind, id)}
+      onSwitchDevice={(kind, id) => {
+        if (kind === 'audioinput') setAudioInputDeviceId(id);
+        else if (kind === 'videoinput') setVideoInputDeviceId(id);
+        void switchDevice(kind, id);
+      }}
       outputVolume={outputVolume}
       onOutputVolumeChange={handleOutputVolumeChange}
       audioProcessing={audioProcessing}
       onAudioProcessingChange={(settings) => {
-        setAudioProcessing(settings);
+        setAudioProcessingStored(settings);
         void applyAudioProcessing(settings);
       }}
       onVideoFilterChange={(settings) => void setVideoFilter(settings)}
