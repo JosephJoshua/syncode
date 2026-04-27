@@ -10,6 +10,7 @@ function createMocks() {
   return {
     roomsService: {
       markParticipantInactive: vi.fn().mockResolvedValue(undefined),
+      persistDocSnapshot: vi.fn().mockResolvedValue(undefined),
     },
     storageService: {
       upload: vi.fn().mockResolvedValue(undefined),
@@ -149,6 +150,28 @@ describe('InternalController', () => {
     );
   });
 
+  it('GIVEN valid snapshot WHEN handleSnapshotReady THEN also persists binary state via RoomsService', async () => {
+    const mocks = createMocks();
+    mocks.db.limit.mockResolvedValueOnce([{ id: 'session-1', language: 'typescript' }]);
+    const controller = await createController(mocks);
+
+    const payload: SnapshotReadyPayload = {
+      roomId: 'room-abc',
+      snapshot: [9, 8, 7, 6],
+      code: 'let z = 3;',
+      timestamp: 1712500003000,
+      trigger: 'periodic',
+    };
+
+    await controller.handleSnapshotReady(payload);
+
+    expect(mocks.roomsService.persistDocSnapshot).toHaveBeenCalledOnce();
+    const [roomIdArg, stateArg] = mocks.roomsService.persistDocSnapshot.mock.calls[0];
+    expect(roomIdArg).toBe('room-abc');
+    expect(stateArg).toBeInstanceOf(Uint8Array);
+    expect(Array.from(stateArg as Uint8Array)).toEqual([9, 8, 7, 6]);
+  });
+
   it('GIVEN snapshot for room without session WHEN handleSnapshotReady THEN skips DB insert and still returns success', async () => {
     const mocks = createMocks();
     mocks.db.limit.mockResolvedValueOnce([]);
@@ -167,5 +190,47 @@ describe('InternalController', () => {
     expect(result).toEqual({ success: true });
     expect(mocks.storageService.upload).toHaveBeenCalled();
     expect(mocks.db.insert).not.toHaveBeenCalled();
+  });
+
+  it('GIVEN valid doc snapshot payload WHEN handlePersistDocSnapshot THEN calls RoomsService.persistDocSnapshot and returns success', async () => {
+    const mocks = createMocks();
+    const controller = await createController(mocks);
+
+    const result = await controller.handlePersistDocSnapshot('room-42', {
+      state: [5, 6, 7],
+    });
+
+    expect(result).toEqual({ success: true });
+    expect(mocks.roomsService.persistDocSnapshot).toHaveBeenCalledOnce();
+    const [passedRoomId, passedState] = mocks.roomsService.persistDocSnapshot.mock.calls[0];
+    expect(passedRoomId).toBe('room-42');
+    expect(passedState).toBeInstanceOf(Uint8Array);
+    expect(Array.from(passedState)).toEqual([5, 6, 7]);
+  });
+
+  it('GIVEN service failure WHEN handlePersistDocSnapshot THEN returns success false and does not throw', async () => {
+    const mocks = createMocks();
+    mocks.roomsService.persistDocSnapshot.mockRejectedValueOnce(new Error('db down'));
+    const controller = await createController(mocks);
+
+    const result = await controller.handlePersistDocSnapshot('room-42', {
+      state: [1],
+    });
+
+    expect(result).toEqual({ success: false });
+  });
+
+  it('GIVEN snapshot larger than 5 MiB WHEN handlePersistDocSnapshot THEN rejects without persisting', async () => {
+    const mocks = createMocks();
+    const controller = await createController(mocks);
+
+    const sixMb = new Array<number>(6 * 1024 * 1024).fill(0);
+
+    const result = await controller.handlePersistDocSnapshot('room-big', {
+      state: sixMb,
+    });
+
+    expect(result).toEqual({ success: false });
+    expect(mocks.roomsService.persistDocSnapshot).not.toHaveBeenCalled();
   });
 });

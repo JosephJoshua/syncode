@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import {
   CONTROL_INTERNAL,
   type IControlPlaneCallbackClient,
+  type PersistDocSnapshotPayload,
   type SnapshotReadyPayload,
   type UserDisconnectedPayload,
 } from '@syncode/contracts';
@@ -46,6 +47,23 @@ export class HttpControlPlaneCallbackClient implements IControlPlaneCallbackClie
     } catch (error) {
       this.logger.warn(
         `Failed to notify user disconnect (userId=${payload.userId}, roomId=${payload.roomId}): ${(error as Error).message}`,
+      );
+    }
+  }
+
+  async persistDocSnapshot(roomId: string, payload: PersistDocSnapshotPayload): Promise<void> {
+    try {
+      const path = CONTROL_INTERNAL.PERSIST_DOC_SNAPSHOT.route.replace(
+        ':roomId',
+        encodeURIComponent(roomId),
+      );
+      await this.client.post(path, { json: payload });
+      this.logger.debug(
+        `Persisted doc snapshot for room ${roomId} (${payload.state.length} bytes)`,
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Failed to persist doc snapshot (roomId=${roomId}): ${(error as Error).message}`,
       );
     }
   }

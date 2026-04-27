@@ -8,6 +8,7 @@ import {
   InternalServerErrorException,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
@@ -35,6 +36,7 @@ import {
   matchRequests,
   peerFeedback,
   problems,
+  roomDocSnapshots,
   roomParticipants,
   rooms,
   runs,
@@ -107,16 +109,7 @@ export class RoomsService {
       return inserted;
     });
 
-    let initialContent: string | undefined;
-    if (room.problemId && room.language) {
-      const problem = await this.db
-        .select({ starterCode: problems.starterCode })
-        .from(problems)
-        .where(eq(problems.id, room.problemId))
-        .then((rows) => rows[0]);
-      const starterMap = problem?.starterCode as Record<string, string> | null;
-      initialContent = starterMap?.[room.language] ?? undefined;
-    }
+    const initialContent = await this.resolveStarterContent(room);
 
     const [collabCreated, mediaCreated] = await Promise.all([
       this.createCollabDocument(room.id, room.status, room.editorLocked, initialContent),
@@ -260,7 +253,19 @@ export class RoomsService {
       throw new NotFoundException({ message: 'Room not found', code: ERROR_CODES.ROOM_NOT_FOUND });
     }
 
-    if (room.inviteCode !== input.roomCode.toUpperCase()) {
+    if (input.roomCode === undefined) {
+      // Code-less reactivation: only an existing participant can rejoin without the code.
+      const [existing] = await this.db
+        .select({ id: roomParticipants.id })
+        .from(roomParticipants)
+        .where(and(eq(roomParticipants.roomId, roomId), eq(roomParticipants.userId, userId)));
+      if (!existing) {
+        throw new BadRequestException({
+          message: 'Room code is required for first-time join',
+          code: ERROR_CODES.ROOM_INVALID_CODE,
+        });
+      }
+    } else if (room.inviteCode !== input.roomCode.toUpperCase()) {
       throw new BadRequestException({
         message: 'Invalid room code',
         code: ERROR_CODES.ROOM_INVALID_CODE,
@@ -1321,17 +1326,108 @@ export class RoomsService {
     initialContent?: string,
   ): Promise<boolean> {
     try {
-      await this.collabClient.createDocument({
-        roomId,
-        initialPhase,
-        editorLocked,
-        initialContent,
-      });
+      const snapshot = await this.loadDocSnapshot(roomId);
+      // A stored snapshot takes precedence: it represents the latest known state from
+      // a previous TTL teardown. Starter code has already been seeded into it.
+      await this.collabClient.createDocument(
+        snapshot
+          ? { roomId, initialPhase, editorLocked, snapshot: Array.from(snapshot) }
+          : { roomId, initialPhase, editorLocked, initialContent },
+      );
       return true;
     } catch (error) {
       this.logger.warn(`Collab document creation failed for ${roomId}`, error);
       return false;
     }
+  }
+
+  private async loadDocSnapshot(roomId: string): Promise<Uint8Array | null> {
+    const [row] = await this.db
+      .select({ state: roomDocSnapshots.state })
+      .from(roomDocSnapshots)
+      .where(eq(roomDocSnapshots.roomId, roomId))
+      .limit(1);
+    return row?.state ?? null;
+  }
+
+  async persistDocSnapshot(roomId: string, state: Uint8Array): Promise<void> {
+    await this.db
+      .insert(roomDocSnapshots)
+      .values({ roomId, state, updatedAt: new Date() })
+      .onConflictDoUpdate({
+        target: roomDocSnapshots.roomId,
+        set: { state, updatedAt: new Date() },
+      });
+  }
+
+  async ensureCollab(roomId: string, userId: string): Promise<{ recreated: boolean }> {
+    const [room] = await this.db.select().from(rooms).where(eq(rooms.id, roomId)).limit(1);
+    if (!room) {
+      throw new NotFoundException({ message: 'Room not found', code: ERROR_CODES.ROOM_NOT_FOUND });
+    }
+
+    if (room.status === RoomStatus.FINISHED) {
+      throw new ConflictException({
+        message: 'Room has already finished',
+        code: ERROR_CODES.ROOM_FINISHED,
+      });
+    }
+
+    // Allow any prior participant (active or inactive) so a disconnected user
+    // can recover their collab session. Presence of a row is sufficient proof
+    // of prior membership.
+    const [participant] = await this.db
+      .select({ isActive: roomParticipants.isActive })
+      .from(roomParticipants)
+      .where(and(eq(roomParticipants.roomId, roomId), eq(roomParticipants.userId, userId)))
+      .limit(1);
+
+    if (!participant) {
+      throw new ForbiddenException({
+        message: 'Not a participant of this room',
+        code: ERROR_CODES.ROOM_ACCESS_DENIED,
+      });
+    }
+
+    const healthy = await this.collabClient.healthCheck().catch(() => false);
+    if (!healthy) {
+      throw new ServiceUnavailableException({
+        message: 'Collab plane is currently unavailable',
+        code: ERROR_CODES.COLLAB_SERVICE_UNAVAILABLE,
+      });
+    }
+
+    const snapshot = await this.loadDocSnapshot(roomId);
+    const response = await this.collabClient.createDocument(
+      snapshot
+        ? {
+            roomId,
+            initialPhase: room.status,
+            editorLocked: room.editorLocked,
+            snapshot: Array.from(snapshot),
+          }
+        : {
+            roomId,
+            initialPhase: room.status,
+            editorLocked: room.editorLocked,
+            initialContent: await this.resolveStarterContent(room),
+          },
+    );
+
+    return { recreated: response.created };
+  }
+
+  private async resolveStarterContent(
+    room: typeof rooms.$inferSelect,
+  ): Promise<string | undefined> {
+    if (!room.problemId || !room.language) return undefined;
+    const [problem] = await this.db
+      .select({ starterCode: problems.starterCode })
+      .from(problems)
+      .where(eq(problems.id, room.problemId))
+      .limit(1);
+    const starterMap = problem?.starterCode as Record<string, string> | null;
+    return starterMap?.[room.language] ?? undefined;
   }
 
   private async destroyCollabDocument(roomId: string): Promise<DestroyDocumentResponse | null> {

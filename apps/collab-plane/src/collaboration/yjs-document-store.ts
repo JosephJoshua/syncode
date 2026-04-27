@@ -1,5 +1,15 @@
-import { ConflictException, Injectable, Logger, type OnModuleDestroy } from '@nestjs/common';
+import { Injectable, Logger, type OnModuleDestroy } from '@nestjs/common';
 import * as Y from 'yjs';
+
+export interface CreateDocOptions {
+  initialContent?: string;
+  snapshot?: Uint8Array;
+}
+
+export interface CreateDocResult {
+  doc: Y.Doc;
+  created: boolean;
+}
 
 @Injectable()
 export class YjsDocumentStore implements OnModuleDestroy {
@@ -8,20 +18,42 @@ export class YjsDocumentStore implements OnModuleDestroy {
   private readonly logger = new Logger(YjsDocumentStore.name);
   private readonly docs = new Map<string, Y.Doc>();
 
-  createDoc(roomId: string, initialContent?: string): Y.Doc {
-    if (this.docs.has(roomId)) {
-      throw new ConflictException(`Room ${roomId} already exists`);
+  createDoc(roomId: string, options: CreateDocOptions = {}): CreateDocResult {
+    const existing = this.docs.get(roomId);
+    if (existing) {
+      return { doc: existing, created: false };
     }
 
     const doc = new Y.Doc();
+    let snapshotApplied = false;
 
-    if (initialContent) {
-      doc.getText(YjsDocumentStore.CODE_KEY).insert(0, initialContent);
+    if (options.snapshot) {
+      try {
+        Y.applyUpdate(doc, options.snapshot);
+        snapshotApplied = true;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.logger.warn(
+          `Failed to apply snapshot for room ${roomId} (${options.snapshot.byteLength} bytes): ${message}. Falling back to empty doc.`,
+        );
+        doc.destroy();
+        const fresh = new Y.Doc();
+        this.docs.set(roomId, fresh);
+        if (options.initialContent) {
+          fresh.getText(YjsDocumentStore.CODE_KEY).insert(0, options.initialContent);
+        }
+        this.logger.log(`Y.Doc created for room ${roomId}`);
+        return { doc: fresh, created: true };
+      }
+    }
+
+    if (!snapshotApplied && options.initialContent) {
+      doc.getText(YjsDocumentStore.CODE_KEY).insert(0, options.initialContent);
     }
 
     this.docs.set(roomId, doc);
     this.logger.log(`Y.Doc created for room ${roomId}`);
-    return doc;
+    return { doc, created: true };
   }
 
   getDoc(roomId: string): Y.Doc | undefined {

@@ -23,6 +23,7 @@ import type {
   createRoomResponseSchema,
   createRoomSchema,
   destroyRoomResponseSchema,
+  ensureCollabResponseSchema,
   joinRoomResponseSchema,
   joinRoomSchema,
   listRoomsQuerySchema,
@@ -126,6 +127,10 @@ export const CONTROL_API = {
     TOGGLE_READY: defineRoute<void, z.infer<typeof roomDetailSchema>>()('rooms/:id/ready', 'POST'),
     MEDIA_TOKEN: defineRoute<void, z.infer<typeof mediaTokenResponseSchema>>()(
       'rooms/:id/media/token',
+      'POST',
+    ),
+    ENSURE_COLLAB: defineRoute<void, z.infer<typeof ensureCollabResponseSchema>>()(
+      'rooms/:id/collab/ensure',
       'POST',
     ),
   },

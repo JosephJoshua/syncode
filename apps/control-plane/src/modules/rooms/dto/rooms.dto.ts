@@ -2,6 +2,7 @@ import {
   createRoomResponseSchema,
   createRoomSchema,
   destroyRoomResponseSchema,
+  ensureCollabResponseSchema,
   joinRoomResponseSchema,
   joinRoomSchema,
   listRoomsQuerySchema,
@@ -46,3 +47,4 @@ export class TransitionRoomPhaseResponseDto extends createZodDto(
   transitionRoomPhaseResponseSchema,
 ) {}
 export class MediaTokenResponseDto extends createZodDto(mediaTokenResponseSchema) {}
+export class EnsureCollabResponseDto extends createZodDto(ensureCollabResponseSchema) {}

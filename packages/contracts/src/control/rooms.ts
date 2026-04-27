@@ -242,7 +242,8 @@ export const joinRoomSchema = z
     roomCode: z
       .string()
       .length(6)
-      .describe('6-char invite code')
+      .optional()
+      .describe('6-char invite code (required for first-time join, optional when reactivating)')
       .meta({ examples: ['A3K7M2'] }),
     requestedRole: z.enum(JOINABLE_ROLES).optional().describe('Requested role in the room'),
   })
@@ -307,6 +308,16 @@ export const transitionRoomPhaseResponseSchema = z.object({
 });
 
 export type TransitionRoomPhaseResponse = z.infer<typeof transitionRoomPhaseResponseSchema>;
+
+// ── Collab recovery ──────────────────────────────────────────────────
+
+export const ensureCollabResponseSchema = z.object({
+  recreated: z
+    .boolean()
+    .describe('True if the collab doc was missing and has been recreated from the stored snapshot'),
+});
+
+export type EnsureCollabResponse = z.infer<typeof ensureCollabResponseSchema>;
 
 // ── Media token ──────────────────────────────────────────────────────
 

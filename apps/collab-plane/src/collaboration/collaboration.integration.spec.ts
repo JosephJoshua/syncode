@@ -20,6 +20,7 @@ const JWT_SECRET = 'integration-test-secret-at-least-32-characters-long';
 const mockCallbackClient = {
   notifyUserDisconnected: vi.fn().mockResolvedValue(undefined),
   notifySnapshotReady: vi.fn().mockResolvedValue(undefined),
+  persistDocSnapshot: vi.fn().mockResolvedValue(undefined),
 };
 
 @Global()
