@@ -1107,17 +1107,9 @@ export function RoomWorkspace({
                 />
               </motion.div>
 
-              <motion.div
-                className="border-t border-border p-3"
-                initial={rightMountedRef.current ? false : { opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.35, delay: 0.35, ease: [0.22, 1, 0.36, 1] }}
-              >
-                <InviteLinkInline inviteLink={inviteLink} />
-              </motion.div>
               {!rightNarrow ? (
                 <motion.div
-                  className="p-3"
+                  className="border-t border-border p-3"
                   initial={rightMountedRef.current ? false : { opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.35, delay: 0.3, ease: [0.22, 1, 0.36, 1] }}
