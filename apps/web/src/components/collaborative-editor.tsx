@@ -36,6 +36,7 @@ interface EditorLike {
   onDidChangeCursorPosition: (
     listener: (event: { position: { lineNumber: number } }) => void,
   ) => void;
+  onMouseDown: (listener: (event: EditorMouseEvent) => void) => void;
   deltaDecorations: (
     oldDecorations: string[],
     newDecorations: Array<{
@@ -48,6 +49,13 @@ interface EditorLike {
       options: Record<string, unknown>;
     }>,
   ) => string[];
+}
+
+interface EditorMouseEvent {
+  target: {
+    type: number;
+    position: { lineNumber: number } | null;
+  };
 }
 
 interface MonacoLike {
@@ -106,6 +114,15 @@ export function CollaborativeEditor({
     onActiveLineChangeRef.current(editorInstance.getPosition()?.lineNumber ?? 1);
     editorInstance.onDidChangeCursorPosition((event) => {
       onActiveLineChangeRef.current(event.position.lineNumber);
+    });
+
+    // MouseTargetType.GUTTER_GLYPH_MARGIN === 2 in Monaco's enum.
+    // Clicking the glyph icon sets the active comment line directly so the
+    // panel jumps to that line's thread even when the cursor hasn't moved.
+    editorInstance.onMouseDown((event) => {
+      if (event.target.type === 2 && event.target.position) {
+        onActiveLineChangeRef.current(event.target.position.lineNumber);
+      }
     });
 
     setEditor(editorInstance);
