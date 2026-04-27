@@ -40,6 +40,33 @@ const ASSIGNABLE_ROLES: Array<{ value: RoomRole; labelKey: string }> = [
   { value: 'observer', labelKey: 'roleSelect.observer' },
 ];
 
+function getBadgeTranslateClass({
+  isHost,
+  showParticipantActions,
+  isParticipantMenuOpen,
+}: {
+  isHost: boolean;
+  showParticipantActions: boolean;
+  isParticipantMenuOpen: boolean;
+}): string | undefined {
+  // No actions slot rendered: no extra gap-1.5 space, so no offset needed.
+  if (!showParticipantActions) {
+    return undefined;
+  }
+
+  if (isHost) {
+    return isParticipantMenuOpen
+      ? '-translate-x-0.5'
+      : 'group-hover:-translate-x-0.5 group-focus-within:-translate-x-0.5';
+  }
+
+  // Non-host: shift right by 6px to keep role badge aligned with host's badge,
+  // then nudge to +4px when the actions slot becomes visible.
+  return isParticipantMenuOpen
+    ? 'translate-x-[4px]'
+    : 'translate-x-[6px] group-hover:translate-x-[4px] group-focus-within:translate-x-[4px]';
+}
+
 function PresenceDot({
   isMediaConnected,
   isMediaMuted,
@@ -255,15 +282,11 @@ export function RoomParticipantCard({
           <div
             className={cn(
               'flex items-center gap-1.5 transition-transform duration-200 ease-out',
-              !isHost && 'translate-x-[6px]',
-              showParticipantActions &&
-                (isParticipantMenuOpen
-                  ? isHost
-                    ? '-translate-x-0.5'
-                    : 'translate-x-[4px]'
-                  : isHost
-                    ? 'group-hover:-translate-x-0.5 group-focus-within:-translate-x-0.5'
-                    : 'group-hover:translate-x-[4px] group-focus-within:translate-x-[4px]'),
+              getBadgeTranslateClass({
+                isHost,
+                showParticipantActions,
+                isParticipantMenuOpen,
+              }),
             )}
           >
             <Badge variant={participant.role} className="text-[10px]">
