@@ -1,5 +1,6 @@
 import {
   JOINABLE_ROLES,
+  PROBLEM_DIFFICULTIES,
   ROOM_MODES,
   ROOM_ROLES,
   ROOM_STATUSES,
@@ -242,7 +243,10 @@ export const joinRoomSchema = z
     roomCode: z
       .string()
       .length(6)
-      .describe('6-char invite code')
+      .optional()
+      .describe(
+        '6-char invite code (required for private rooms / first-time join, optional for public rooms or when reactivating)',
+      )
       .meta({ examples: ['A3K7M2'] }),
     requestedRole: z.enum(JOINABLE_ROLES).optional().describe('Requested role in the room'),
   })
@@ -307,6 +311,91 @@ export const transitionRoomPhaseResponseSchema = z.object({
 });
 
 export type TransitionRoomPhaseResponse = z.infer<typeof transitionRoomPhaseResponseSchema>;
+
+// ── Browse public rooms ──────────────────────────────────────────────
+
+export const BROWSEABLE_ROOM_STATUSES = ['waiting', 'warmup', 'coding', 'wrapup'] as const;
+
+export type BrowseableRoomStatus = (typeof BROWSEABLE_ROOM_STATUSES)[number];
+
+export const browseRoomsQuerySchema = paginationQuerySchema.extend({
+  status: z
+    .enum(BROWSEABLE_ROOM_STATUSES)
+    .optional()
+    .describe('Filter by high-level browseable room status bucket')
+    .meta({ examples: ['waiting'] }),
+  language: z
+    .enum(SUPPORTED_LANGUAGES)
+    .optional()
+    .describe('Filter by programming language')
+    .meta({ examples: ['python'] }),
+  difficulty: z
+    .enum(PROBLEM_DIFFICULTIES)
+    .optional()
+    .describe('Filter by problem difficulty')
+    .meta({ examples: ['easy'] }),
+  search: z
+    .string()
+    .trim()
+    .min(1)
+    .max(100)
+    .optional()
+    .describe('Case-insensitive substring match on problem title')
+    .meta({ examples: ['two sum'] }),
+});
+
+export type BrowseRoomsQuery = z.infer<typeof browseRoomsQuerySchema>;
+
+export const publicRoomSummarySchema = z.object({
+  roomId: z.uuid().describe('Room identifier'),
+  name: z.string().nullable().describe('Room name'),
+  status: z.enum(ROOM_STATUSES).describe('Room status'),
+  mode: z.enum(ROOM_MODES).describe('Room mode'),
+  hostId: z.uuid().describe('Host user ID'),
+  hostName: z.string().describe('Host username'),
+  hostAvatarUrl: z.string().nullable().describe('Host avatar URL'),
+  language: z.enum(SUPPORTED_LANGUAGES).nullable().describe('Programming language'),
+  problemTitle: z.string().nullable().describe('Problem title'),
+  problemDifficulty: z.enum(PROBLEM_DIFFICULTIES).nullable().describe('Problem difficulty'),
+  participantCount: z.number().int().describe('Number of active participants'),
+  isParticipant: z
+    .boolean()
+    .describe('Whether the requesting user is an active participant in this room.'),
+  maxParticipants: z.number().int().describe('Maximum participants allowed'),
+  createdAt: z.iso.datetime().describe('ISO 8601 creation timestamp'),
+});
+
+export type PublicRoomSummary = z.infer<typeof publicRoomSummarySchema>;
+
+export const browseRoomsResponseSchema = z.object({
+  data: z.array(publicRoomSummarySchema),
+  pagination: paginationSchema,
+});
+
+export type BrowseRoomsResponse = z.infer<typeof browseRoomsResponseSchema>;
+
+// ── Change room language ────────────────────────────────────────────
+
+export const changeRoomLanguageSchema = z
+  .object({
+    language: z
+      .enum(SUPPORTED_LANGUAGES)
+      .describe('Programming language to switch the room to')
+      .meta({ examples: ['python'] }),
+  })
+  .strict();
+
+export type ChangeRoomLanguageInput = z.infer<typeof changeRoomLanguageSchema>;
+
+// ── Collab recovery ──────────────────────────────────────────────────
+
+export const ensureCollabResponseSchema = z.object({
+  recreated: z
+    .boolean()
+    .describe('True if the collab doc was missing and has been recreated from the stored snapshot'),
+});
+
+export type EnsureCollabResponse = z.infer<typeof ensureCollabResponseSchema>;
 
 // ── Media token ──────────────────────────────────────────────────────
 

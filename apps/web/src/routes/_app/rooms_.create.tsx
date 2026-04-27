@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { CONTROL_API } from '@syncode/contracts';
-import { SUPPORTED_LANGUAGES, type SupportedLanguage } from '@syncode/shared';
+import { ROOM_MODES, SUPPORTED_LANGUAGES } from '@syncode/shared';
 import {
   Badge,
   Button,
@@ -21,7 +21,7 @@ import {
 } from '@syncode/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { Check, Code2, Copy, FileCode2, Globe, Lock } from 'lucide-react';
+import { Bot, Check, Code2, Copy, FileCode2, Globe, Lock, Minus, Plus, Users } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useEffect, useMemo, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
@@ -29,31 +29,19 @@ import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
 import { ConfettiBurst } from '@/components/confetti-burst.js';
 import { FormErrorAlert } from '@/components/form-error-alert.js';
+import { LANGUAGE_VERSIONED_LABELS } from '@/components/language-selector.data.js';
 import { LanguageSelector } from '@/components/language-selector.js';
 import { useClipboard } from '@/hooks/use-clipboard.js';
 import { api, getFieldErrorMessage, readApiError } from '@/lib/api-client.js';
 import i18n from '@/lib/i18n.js';
 import { useAuthStore } from '@/stores/auth.store.js';
 
-export const Route = createFileRoute('/_app/rooms/create')({
+export const Route = createFileRoute('/_app/rooms_/create')({
   component: CreateRoomPage,
 });
 
-const LANGUAGE_LABELS: Record<SupportedLanguage, string> = {
-  python: 'Python 3.12',
-  javascript: 'JavaScript (Node.js 20)',
-  typescript: 'TypeScript (TSX)',
-  java: 'Java 21',
-  cpp: 'C++ (GCC 13)',
-  c: 'C (GCC 13)',
-  go: 'Go 1.22',
-  rust: 'Rust 1.77',
-};
-
-const LANGUAGE_OPTIONS = SUPPORTED_LANGUAGES.map((lang) => ({
-  value: lang,
-  label: LANGUAGE_LABELS[lang],
-}));
+const MIN_PARTICIPANTS = 2;
+const MAX_PARTICIPANTS = 8;
 
 const DIFFICULTY_KEYS: Record<string, string> = {
   easy: 'problems:detail.easy',
@@ -81,6 +69,8 @@ const createRoomFormSchema = z.object({
   problemId: z.string().min(1),
   language: z.enum(SUPPORTED_LANGUAGES),
   isPublic: z.boolean(),
+  maxParticipants: z.number().int().min(MIN_PARTICIPANTS).max(MAX_PARTICIPANTS),
+  mode: z.enum(ROOM_MODES),
 });
 type CreateRoomFormData = z.infer<typeof createRoomFormSchema>;
 
@@ -151,7 +141,7 @@ function CreateRoomPage() {
     formState: { errors, isSubmitting },
   } = useForm<CreateRoomFormData>({
     resolver: zodResolver(createRoomFormSchema),
-    defaultValues: { isPublic: true },
+    defaultValues: { isPublic: true, maxParticipants: MIN_PARTICIPANTS, mode: 'peer' },
   });
 
   const selectedProblemId = watch('problemId');
@@ -161,12 +151,12 @@ function CreateRoomPage() {
     mutationFn: (data: CreateRoomFormData) =>
       api(CONTROL_API.ROOMS.CREATE, {
         body: {
-          mode: 'peer',
+          mode: data.mode,
           name: `${availableProblems.find((problem) => problem.value === data.problemId)?.label ?? 'Interview'} Room`,
           ...(isMockProblemId(data.problemId) ? {} : { problemId: data.problemId }),
           language: data.language,
           config: {
-            maxParticipants: 2,
+            maxParticipants: data.maxParticipants,
             maxDuration: 120,
             isPrivate: !data.isPublic,
           },
@@ -185,7 +175,11 @@ function CreateRoomPage() {
       setSubmittedData(data);
       setCreatedRoomId(room.roomId);
       setCreatedRoomCode(room.roomCode);
-      setInviteLink(`${window.location.origin}/rooms/${room.roomId}?code=${room.roomCode}`);
+      setInviteLink(
+        data.isPublic
+          ? `${window.location.origin}/rooms/${room.roomId}`
+          : `${window.location.origin}/rooms/${room.roomId}?code=${room.roomCode}`,
+      );
     } catch (error) {
       const apiError = await readApiError(error);
 
@@ -335,7 +329,7 @@ function CreateRoomPage() {
                     <LanguageSelector
                       value={field.value}
                       onValueChange={field.onChange}
-                      labelOverrides={LANGUAGE_LABELS}
+                      labelOverrides={LANGUAGE_VERSIONED_LABELS}
                       placeholder={t('create.languagePlaceholder')}
                       emptyPlaceholder={t('create.noLanguagesAvailable')}
                       className={cn(errors.language && 'border-destructive ring-destructive/20')}
@@ -387,10 +381,146 @@ function CreateRoomPage() {
               </motion.div>
 
               <motion.div
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.45, delay: 0.17, ease: [0.22, 1, 0.36, 1] }}
+              >
+                <Label className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  {t('create.modeLabel')}
+                </Label>
+                <Controller
+                  name="mode"
+                  control={control}
+                  render={({ field }) => (
+                    <div className="grid grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        aria-pressed={field.value === 'peer'}
+                        onClick={() => field.onChange('peer')}
+                        className={cn(
+                          'flex cursor-pointer flex-col gap-2 rounded-lg border p-4 text-left transition-colors',
+                          field.value === 'peer'
+                            ? 'border-primary bg-primary/5 ring-1 ring-primary/30'
+                            : 'border-border hover:bg-muted/30',
+                        )}
+                      >
+                        <div className="flex items-center gap-2">
+                          <Users
+                            size={18}
+                            className={
+                              field.value === 'peer' ? 'text-primary' : 'text-muted-foreground/70'
+                            }
+                          />
+                          <span className="text-sm font-semibold text-foreground">
+                            {t('create.modePeer')}
+                          </span>
+                        </div>
+                        <span className="text-xs text-muted-foreground">
+                          {t('create.modePeerDesc')}
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        aria-pressed={field.value === 'ai'}
+                        aria-disabled="true"
+                        disabled
+                        className="flex cursor-not-allowed flex-col gap-2 rounded-lg border border-border bg-muted/20 p-4 text-left opacity-70"
+                      >
+                        <div className="flex items-center gap-2">
+                          <Bot size={18} className="text-muted-foreground/60" />
+                          <span className="text-sm font-semibold text-foreground">
+                            {t('create.modeAi')}
+                          </span>
+                          <Badge
+                            variant="outline"
+                            className="ml-auto px-1.5 py-0 text-[10px] font-medium"
+                          >
+                            {t('create.modeAiUnavailable')}
+                          </Badge>
+                        </div>
+                        <span className="text-xs text-muted-foreground">
+                          {t('create.modeAiDesc')}
+                        </span>
+                      </button>
+                    </div>
+                  )}
+                />
+              </motion.div>
+
+              <motion.div
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.45, delay: 0.19, ease: [0.22, 1, 0.36, 1] }}
+              >
+                <Label
+                  htmlFor="maxParticipants"
+                  className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground"
+                >
+                  {t('create.maxParticipantsLabel')}
+                </Label>
+                <Controller
+                  name="maxParticipants"
+                  control={control}
+                  render={({ field }) => {
+                    const value = typeof field.value === 'number' ? field.value : MIN_PARTICIPANTS;
+                    const clamp = (next: number) =>
+                      Math.min(MAX_PARTICIPANTS, Math.max(MIN_PARTICIPANTS, next));
+                    return (
+                      <div className="flex items-center gap-3">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          aria-label="Decrease max participants"
+                          disabled={value <= MIN_PARTICIPANTS}
+                          onClick={() => field.onChange(clamp(value - 1))}
+                          className="h-11 w-11 shrink-0"
+                        >
+                          <Minus size={14} />
+                        </Button>
+                        <Input
+                          id="maxParticipants"
+                          type="number"
+                          min={MIN_PARTICIPANTS}
+                          max={MAX_PARTICIPANTS}
+                          step={1}
+                          inputMode="numeric"
+                          value={value}
+                          onChange={(event) => {
+                            const parsed = Number.parseInt(event.target.value, 10);
+                            if (Number.isNaN(parsed)) {
+                              field.onChange(MIN_PARTICIPANTS);
+                              return;
+                            }
+                            field.onChange(clamp(parsed));
+                          }}
+                          className="h-11 w-20 text-center font-medium"
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          aria-label="Increase max participants"
+                          disabled={value >= MAX_PARTICIPANTS}
+                          onClick={() => field.onChange(clamp(value + 1))}
+                          className="h-11 w-11 shrink-0"
+                        >
+                          <Plus size={14} />
+                        </Button>
+                        <p className="text-xs text-muted-foreground">
+                          {t('create.maxParticipantsHelp')}
+                        </p>
+                      </div>
+                    );
+                  }}
+                />
+              </motion.div>
+
+              <motion.div
                 className="pt-2"
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.45, delay: 0.2, ease: [0.22, 1, 0.36, 1] }}
+                transition={{ duration: 0.45, delay: 0.22, ease: [0.22, 1, 0.36, 1] }}
               >
                 <Button
                   type="submit"
@@ -434,9 +564,9 @@ function CreateRoomPage() {
                       </Badge>
                       <Badge variant="outline" className="gap-2 px-4 py-1.5 text-sm">
                         <Code2 size={16} className="text-primary" />
-                        {LANGUAGE_OPTIONS.find(
-                          (language) => language.value === submittedData?.language,
-                        )?.label ?? submittedData?.language}
+                        {submittedData?.language
+                          ? LANGUAGE_VERSIONED_LABELS[submittedData.language]
+                          : ''}
                       </Badge>
                       <Badge variant="outline" className="gap-2 px-4 py-1.5 text-sm">
                         {submittedData?.isPublic ? (
@@ -456,8 +586,15 @@ function CreateRoomPage() {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.45, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
                   >
-                    <p className="mb-3 text-sm font-medium text-foreground">
-                      {t('success.shareLink')}
+                    <p className="text-sm font-semibold text-foreground">
+                      {submittedData?.isPublic
+                        ? t('success.publicShareHeading')
+                        : t('success.privateShareHeading')}
+                    </p>
+                    <p className="mt-1 mb-3 text-xs text-muted-foreground">
+                      {submittedData?.isPublic
+                        ? t('success.publicShareBody')
+                        : t('success.privateShareBody')}
                     </p>
 
                     <div className="relative flex items-center gap-2">
@@ -511,7 +648,9 @@ function CreateRoomPage() {
                           return;
                         }
 
-                        if (createdRoomCode) {
+                        const isPublic = submittedData?.isPublic ?? false;
+
+                        if (!isPublic && createdRoomCode) {
                           window.location.assign(`/rooms/${createdRoomId}?code=${createdRoomCode}`);
                           return;
                         }

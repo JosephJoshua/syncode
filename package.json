@@ -24,6 +24,7 @@
     "infra:down": "docker compose down",
     "infra:full": "docker compose up -d",
     "infra:logs": "docker compose logs -f",
+    "clean": "node scripts/clean.mjs",
     "prepare": "husky"
   },
   "devDependencies": {

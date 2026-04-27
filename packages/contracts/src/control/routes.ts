@@ -20,9 +20,13 @@ import type {
   problemsTagsResponseSchema,
 } from './problems.js';
 import type {
+  browseRoomsQuerySchema,
+  browseRoomsResponseSchema,
+  changeRoomLanguageSchema,
   createRoomResponseSchema,
   createRoomSchema,
   destroyRoomResponseSchema,
+  ensureCollabResponseSchema,
   joinRoomResponseSchema,
   joinRoomSchema,
   listRoomsQuerySchema,
@@ -97,6 +101,10 @@ export const CONTROL_API = {
       z.infer<typeof listRoomsQuerySchema>,
       z.infer<typeof listRoomsResponseSchema>
     >()('rooms', 'GET'),
+    BROWSE_PUBLIC: defineRoute<
+      z.infer<typeof browseRoomsQuerySchema>,
+      z.infer<typeof browseRoomsResponseSchema>
+    >()('rooms/public', 'GET'),
     GET: defineRoute<void, z.infer<typeof roomDetailSchema>>()('rooms/:id', 'GET'),
     JOIN: defineRoute<z.infer<typeof joinRoomSchema>, z.infer<typeof joinRoomResponseSchema>>()(
       'rooms/:id/join',
@@ -110,6 +118,7 @@ export const CONTROL_API = {
       z.infer<typeof updateRoomParticipantSchema>,
       z.infer<typeof updateRoomParticipantResponseSchema>
     >()('rooms/:id/participants/:participantUserId', 'PATCH'),
+    REMOVE_PARTICIPANT: defineRoute<void, void>()('rooms/:id/participants/:userId', 'DELETE'),
     DESTROY: defineRoute<void, z.infer<typeof destroyRoomResponseSchema>>()('rooms/:id', 'DELETE'),
     RUN: defineRoute<z.infer<typeof runCodeSchema>, z.infer<typeof runCodeResponseSchema>>()(
       'rooms/:id/run',
@@ -124,8 +133,16 @@ export const CONTROL_API = {
       z.infer<typeof transitionRoomPhaseResponseSchema>
     >()('rooms/:id/control/transition', 'POST'),
     TOGGLE_READY: defineRoute<void, z.infer<typeof roomDetailSchema>>()('rooms/:id/ready', 'POST'),
+    CHANGE_LANGUAGE: defineRoute<
+      z.infer<typeof changeRoomLanguageSchema>,
+      z.infer<typeof roomDetailSchema>
+    >()('rooms/:id/language', 'PATCH'),
     MEDIA_TOKEN: defineRoute<void, z.infer<typeof mediaTokenResponseSchema>>()(
       'rooms/:id/media/token',
+      'POST',
+    ),
+    ENSURE_COLLAB: defineRoute<void, z.infer<typeof ensureCollabResponseSchema>>()(
+      'rooms/:id/collab/ensure',
       'POST',
     ),
   },

@@ -1,10 +1,11 @@
 import Editor, { type OnMount } from '@monaco-editor/react';
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { MonacoBinding } from 'y-monaco';
 import type { Awareness } from 'y-protocols/awareness';
 import type * as Y from 'yjs';
-import { CODE_TEXT_KEY } from '@/lib/yjs-collab-provider.js';
-import { buildCursorCssRules } from './cursor-styles.js';
+import { clientIdFromElement, remoteCursorSelector } from '@/lib/remote-cursor-dom.js';
+import { codeTextKey } from '@/lib/yjs-collab-provider.js';
+import { buildCursorCssRules, IDLE_HIDE_MS } from './cursor-styles.js';
 import {
   EDITOR_LOADING,
   EDITOR_OPTIONS_BASE,
@@ -71,7 +72,9 @@ export function CollaborativeEditor({
   onActiveLineChange,
 }: CollaborativeEditorProps) {
   const bindingRef = useRef<MonacoBinding | null>(null);
-  const editorRef = useRef<EditorLike | null>(null);
+  type EditorInstance = Parameters<OnMount>[0];
+  const [editor, setEditor] = useState<EditorInstance | null>(null);
+  const [editorRoot, setEditorRoot] = useState<HTMLElement | null>(null);
   const decorationIdsRef = useRef<string[]>([]);
   const onRunCodeRef = useRef(onRunCode);
   onRunCodeRef.current = onRunCode;
@@ -82,10 +85,8 @@ export function CollaborativeEditor({
 
   const editorOptions = useMemo(() => ({ ...EDITOR_OPTIONS_BASE, readOnly }), [readOnly]);
 
-  const handleMount: OnMount = (editor, monaco) => {
-    const editorInstance = editor as unknown as EditorLike;
+  const handleMount: OnMount = (editorInstance, monaco) => {
     const monacoApi = monaco as unknown as MonacoLike;
-    editorRef.current = editorInstance;
 
     // Register keyboard shortcuts
     editorInstance.addAction({
@@ -102,39 +103,34 @@ export function CollaborativeEditor({
       run: () => void onSubmitCodeRef.current(),
     });
 
-    // Bind Monaco model to Y.Text via y-monaco
-    const model = editorInstance.getModel();
-    if (model == null) return;
-
-    const yText = doc.getText(CODE_TEXT_KEY);
-    bindingRef.current = new MonacoBinding(
-      yText,
-      model as never,
-      new Set([editor as never]),
-      awareness,
-    );
-
     onActiveLineChangeRef.current(editorInstance.getPosition()?.lineNumber ?? 1);
     editorInstance.onDidChangeCursorPosition((event) => {
       onActiveLineChangeRef.current(event.position.lineNumber);
     });
+
+    setEditor(editorInstance);
+    setEditorRoot(editorInstance.getDomNode());
   };
 
-  // Clean up binding when component unmounts or doc/awareness changes.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: doc and awareness are intentional deps — when they change the old binding must be destroyed so handleMount can create a fresh one.
   useEffect(() => {
+    if (!editor) return;
+
+    const model = editor.getModel();
+    if (model == null) return;
+
+    bindingRef.current?.destroy();
+    const yText = doc.getText(codeTextKey(language));
+    bindingRef.current = new MonacoBinding(yText, model, new Set([editor]), awareness);
+
     return () => {
       bindingRef.current?.destroy();
       bindingRef.current = null;
-      if (editorRef.current) {
-        decorationIdsRef.current = editorRef.current.deltaDecorations(decorationIdsRef.current, []);
-      }
-      editorRef.current = null;
+      decorationIdsRef.current = editor.deltaDecorations(decorationIdsRef.current, []);
     };
-  }, [doc, awareness]);
+  }, [editor, doc, awareness, language]);
 
   useEffect(() => {
-    if (!editorRef.current) {
+    if (!editor) {
       return;
     }
 
@@ -159,20 +155,113 @@ export function CollaborativeEditor({
       },
     }));
 
-    decorationIdsRef.current = editorRef.current.deltaDecorations(
+    decorationIdsRef.current = (editor as unknown as EditorLike).deltaDecorations(
       decorationIdsRef.current,
       decorations,
     );
-  }, [activeCommentLine, commentLineNumbers]);
+  }, [editor, activeCommentLine, commentLineNumbers]);
 
   // Inject dynamic CSS for remote cursor colors from awareness state.
   useEffect(() => {
+    if (!editorRoot) return;
+
     const styleEl = document.createElement('style');
     document.head.appendChild(styleEl);
 
+    const idleIds = new Set<number>();
+    const hoverIds = new Set<number>();
+    let tickHandle: ReturnType<typeof setInterval> | null = null;
+
+    const getLastUpdated = (clientID: number): number => {
+      const meta = awareness.meta.get(clientID);
+      // No meta entry yet (cold start or out-of-order update): treat as stale so the
+      // cursor fades immediately rather than appearing freshly active forever.
+      return meta?.lastUpdated ?? 0;
+    };
+
+    const remoteStates = () => {
+      const states = awareness.getStates();
+      const filtered = new Map<number, Record<string, unknown>>();
+      states.forEach((state, id) => {
+        if (id !== doc.clientID) filtered.set(id, state);
+      });
+      return filtered;
+    };
+
     const updateStyles = () => {
-      const rules = buildCursorCssRules(awareness.getStates(), doc.clientID);
+      const rules = buildCursorCssRules(awareness.getStates(), doc.clientID, {
+        idleClientIds: idleIds,
+        transparentClientIds: hoverIds,
+      });
       styleEl.textContent = rules.join('\n');
+    };
+
+    const findRemoteCursor = (event: Event): Element | null => {
+      const target = event.target as Element | null;
+      if (!target) return null;
+      if (typeof target.closest !== 'function') return null;
+      return target.closest(remoteCursorSelector());
+    };
+
+    const onMouseOver = (event: Event) => {
+      const el = findRemoteCursor(event);
+      if (!el) return;
+      const id = clientIdFromElement(el);
+      if (id == null || id === doc.clientID) return;
+      if (!hoverIds.has(id)) {
+        hoverIds.add(id);
+        updateStyles();
+      }
+    };
+
+    const onMouseOut = (event: Event) => {
+      const el = findRemoteCursor(event);
+      if (!el) return;
+      const id = clientIdFromElement(el);
+      if (id == null) return;
+      if (hoverIds.delete(id)) updateStyles();
+    };
+
+    editorRoot.addEventListener('mouseover', onMouseOver, true);
+    editorRoot.addEventListener('mouseout', onMouseOut, true);
+
+    const recomputeIdle = () => {
+      const now = Date.now();
+      let changed = false;
+      const present = new Set<number>();
+      awareness.getStates().forEach((_, id) => {
+        if (id === doc.clientID) return;
+        present.add(id);
+        const stamp = getLastUpdated(id);
+        const shouldBeIdle = now - stamp >= IDLE_HIDE_MS;
+        if (shouldBeIdle && !idleIds.has(id)) {
+          idleIds.add(id);
+          // Hidden cursors can't receive mouseout, so drop any stale hover
+          // mark to avoid them reappearing transparent on the next update.
+          hoverIds.delete(id);
+          changed = true;
+        } else if (!shouldBeIdle && idleIds.has(id)) {
+          idleIds.delete(id);
+          changed = true;
+        }
+      });
+      idleIds.forEach((id) => {
+        if (!present.has(id)) {
+          idleIds.delete(id);
+          changed = true;
+        }
+      });
+      if (changed) updateStyles();
+    };
+
+    const ensureTicking = () => {
+      const hasRemote = remoteStates().size > 0;
+      if (hasRemote && tickHandle == null) {
+        tickHandle = setInterval(recomputeIdle, 1_000);
+      } else if (!hasRemote && tickHandle != null) {
+        clearInterval(tickHandle);
+        tickHandle = null;
+      }
     };
 
     const onAwarenessChange = ({
@@ -184,16 +273,31 @@ export function CollaborativeEditor({
       updated: number[];
       removed: number[];
     }) => {
-      if (added.length > 0 || updated.length > 0 || removed.length > 0) updateStyles();
+      if (added.length === 0 && updated.length === 0 && removed.length === 0) return;
+      for (const id of [...added, ...updated]) {
+        if (id === doc.clientID) continue;
+        idleIds.delete(id);
+      }
+      for (const id of removed) {
+        idleIds.delete(id);
+        hoverIds.delete(id);
+      }
+      updateStyles();
+      ensureTicking();
     };
+
     awareness.on('change', onAwarenessChange);
     updateStyles();
+    ensureTicking();
 
     return () => {
       awareness.off('change', onAwarenessChange);
+      editorRoot.removeEventListener('mouseover', onMouseOver, true);
+      editorRoot.removeEventListener('mouseout', onMouseOut, true);
+      if (tickHandle != null) clearInterval(tickHandle);
       styleEl.remove();
     };
-  }, [awareness, doc.clientID]);
+  }, [awareness, doc.clientID, editorRoot]);
 
   return (
     <Editor

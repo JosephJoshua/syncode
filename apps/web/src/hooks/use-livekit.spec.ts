@@ -301,7 +301,12 @@ describe('useLiveKit', () => {
     expect(result.current.isCameraEnabled).toBe(false);
 
     const room = getRoom();
-    room.localParticipant.isCameraEnabled = false;
+    // Mirror real LiveKit behavior: setCameraEnabled flips the authoritative flag.
+    room.localParticipant.setCameraEnabled = vi
+      .fn()
+      .mockImplementation(async (enabled: boolean) => {
+        room.localParticipant.isCameraEnabled = enabled;
+      });
 
     await act(async () => {
       await result.current.toggleCamera();
@@ -312,9 +317,6 @@ describe('useLiveKit', () => {
     // The local participant should be refreshed (non-null after camera toggle)
     expect(result.current.localParticipant).not.toBeNull();
     expect(result.current.localParticipant?.identity).toBe('local-user');
-
-    // Disable camera
-    room.localParticipant.isCameraEnabled = true;
 
     await act(async () => {
       await result.current.toggleCamera();

@@ -40,13 +40,16 @@ import {
   MOCK_WORKSPACE_PROBLEM,
   MOCK_WORKSPACE_TEST_CASES,
 } from '@/lib/mock-workspace.js';
+import { allRequiredPeersReady } from '@/lib/participant-readiness.js';
 import { buildInviteLink } from '@/lib/room-stage.js';
-import { CODE_TEXT_KEY } from '@/lib/yjs-collab-provider.js';
+import { codeTextKey } from '@/lib/yjs-collab-provider.js';
 import { CollaborativeEditor } from './collaborative-editor.js';
 import { ExecutionDetailsPanel } from './execution-details-panel.js';
 import { HostControlPanel } from './host-control-panel.js';
 import { InlineCommentsPanel } from './inline-comments-panel.js';
 import { InviteLinkInline } from './invite-link-inline.js';
+import { LanguagePicker } from './language-picker.js';
+import { LANGUAGE_VERSIONED_LABELS } from './language-selector.data.js';
 import { RoomHeaderBar } from './room-header-bar.js';
 import { type Participant, RoomParticipantCard } from './room-participant-card.js';
 import { type ProblemData, RoomProblemPanel } from './room-problem-panel.js';
@@ -77,6 +80,7 @@ interface RoomWorkspaceProps {
   elapsedMs: number;
   isTransitioning: boolean;
   onTransition: (targetStatus: RoomStatus) => Promise<void>;
+  onRoomUpdated: (room: RoomDetail) => void;
   onParticipantRoleChange: (userId: string, role: RoomRole) => Promise<void>;
   onTransferOwnership: (userId: string, displayName: string) => void;
   onRemoveParticipant: (userId: string, displayName: string) => void;
@@ -99,6 +103,8 @@ interface RoomWorkspaceProps {
     muteSet: ReadonlySet<string>;
     videoHiddenSet: ReadonlySet<string>;
   };
+  selfMicrophoneEnabled?: boolean;
+  onSelfMicrophoneToggle?: () => void;
   dockedVideoPanel?: React.ReactNode;
 }
 
@@ -111,6 +117,7 @@ export function RoomWorkspace({
   elapsedMs,
   isTransitioning,
   onTransition,
+  onRoomUpdated,
   onParticipantRoleChange,
   onTransferOwnership,
   onRemoveParticipant,
@@ -126,6 +133,8 @@ export function RoomWorkspace({
   mediaMutedMap,
   connectionQualityMap,
   participantMediaControls,
+  selfMicrophoneEnabled,
+  onSelfMicrophoneToggle,
   dockedVideoPanel,
 }: RoomWorkspaceProps) {
   const { t } = useTranslation('rooms');
@@ -133,6 +142,11 @@ export function RoomWorkspace({
   const { remoteRun, remoteSubmit, broadcastRun, broadcastSubmit } = useSharedExecution(
     awareness,
     doc,
+  );
+
+  const allRequiredReady = useMemo(
+    () => allRequiredPeersReady(room.participants, room.mode),
+    [room.participants, room.mode],
   );
 
   const [problem, setProblem] = useState<ProblemDetail | null>(null);
@@ -219,7 +233,7 @@ export function RoomWorkspace({
   }, []);
 
   const { comments, commentLineNumbers, addComment, updateComment, deleteComment } =
-    useInlineComments(doc);
+    useInlineComments(doc, language);
   const seededMockCodeRef = useRef(false);
   const seededMockCommentsRef = useRef(false);
 
@@ -228,7 +242,7 @@ export function RoomWorkspace({
       return;
     }
 
-    const codeText = doc.getText(CODE_TEXT_KEY);
+    const codeText = doc.getText(codeTextKey(language));
     if (codeText.length === 0) {
       doc.transact(() => {
         codeText.insert(0, MOCK_WORKSPACE_CODE);
@@ -236,7 +250,7 @@ export function RoomWorkspace({
     }
 
     seededMockCodeRef.current = true;
-  }, [doc, isMockPreview]);
+  }, [doc, isMockPreview, language]);
 
   useEffect(() => {
     if (!doc || !isMockPreview || seededMockCommentsRef.current || comments.length > 0) {
@@ -254,6 +268,27 @@ export function RoomWorkspace({
 
     seededMockCommentsRef.current = true;
   }, [addComment, comments.length, doc, isMockPreview]);
+
+  const handleLanguageChanged = useCallback(
+    (updated: RoomDetail) => {
+      const previousLanguage = room.language;
+      const nextLanguage = updated.language;
+      if (
+        nextLanguage &&
+        nextLanguage !== previousLanguage &&
+        problem &&
+        !problem.starterCode?.[nextLanguage]
+      ) {
+        toast.info(
+          t('workspace.noStarterForLanguage', {
+            language: LANGUAGE_VERSIONED_LABELS[nextLanguage],
+          }),
+        );
+      }
+      onRoomUpdated(updated);
+    },
+    [onRoomUpdated, problem, room.language, t],
+  );
 
   const amHost = Boolean(currentUserId && room.hostId === currentUserId);
   const canRunCode = !isMockPreview && room.myCapabilities.includes('code:run');
@@ -308,8 +343,8 @@ export function RoomWorkspace({
   const submitDisabled = !canSubmitCode || isEditorReadOnly || isSubmitBusy || isRemoteSubmitActive;
 
   const getCode = useCallback(() => {
-    return doc?.getText(CODE_TEXT_KEY).toString() ?? '';
-  }, [doc]);
+    return doc?.getText(codeTextKey(language)).toString() ?? '';
+  }, [doc, language]);
 
   const handleRunCode = async () => {
     if (testCases.length === 0) return;
@@ -691,9 +726,13 @@ export function RoomWorkspace({
                     ) : null}
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground/50">
-                      {language}
-                    </span>
+                    <LanguagePicker
+                      roomId={roomId}
+                      currentLanguage={room.language}
+                      myCapabilities={room.myCapabilities}
+                      onLanguageChanged={handleLanguageChanged}
+                      className="h-7 min-w-[8rem]"
+                    />
                     <Button
                       type="button"
                       size="sm"
@@ -918,6 +957,7 @@ export function RoomWorkspace({
                       !isMockPreview && room.myCapabilities.includes('room:change-phase')
                     }
                     isPending={isTransitioning}
+                    allRequiredReady={allRequiredReady}
                     onTransition={(targetStatus) => {
                       void onTransition(targetStatus);
                     }}
@@ -967,6 +1007,8 @@ export function RoomWorkspace({
                         participantMediaControls?.videoHiddenSet.has(participant.userId) ?? false
                       }
                       localVolume={participantMediaControls?.volumeMap.get(participant.userId)}
+                      isSelfMicrophoneEnabled={selfMicrophoneEnabled}
+                      onSelfMicrophoneToggle={onSelfMicrophoneToggle}
                       onLocalMuteToggle={
                         participantMediaControls
                           ? (muted) => participantMediaControls.setMuted(participant.userId, muted)

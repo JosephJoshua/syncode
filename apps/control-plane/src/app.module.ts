@@ -98,12 +98,15 @@ if (!isProd) {
     // Rate limiting
     ThrottlerModule.forRootAsync({
       inject: [ConfigService],
-      useFactory: (config: ConfigService<EnvConfig>) => [
-        {
-          ttl: (config.get('THROTTLE_TTL_SECS', { infer: true }) ?? 60) * 1_000, // seconds -> ms
-          limit: config.get('THROTTLE_LIMIT', { infer: true }) ?? 10,
-        },
-      ],
+      useFactory: (config: ConfigService<EnvConfig>) => ({
+        throttlers: [
+          {
+            ttl: (config.get('THROTTLE_TTL_SECS', { infer: true }) ?? 60) * 1_000, // seconds -> ms
+            limit: config.get('THROTTLE_LIMIT', { infer: true }) ?? 10,
+          },
+        ],
+        skipIf: () => config.get('NODE_ENV', { infer: true }) === 'development',
+      }),
     }),
 
     // Global modules

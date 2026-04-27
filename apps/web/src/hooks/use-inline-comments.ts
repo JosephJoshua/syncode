@@ -9,7 +9,7 @@ import {
   listInlineComments,
   updateInlineComment,
 } from '@/lib/inline-comments.js';
-import { CODE_TEXT_KEY } from '@/lib/yjs-collab-provider.js';
+import { codeTextKey } from '@/lib/yjs-collab-provider.js';
 
 export interface UseInlineCommentsResult {
   comments: InlineComment[];
@@ -24,7 +24,10 @@ export interface UseInlineCommentsResult {
   deleteComment: (commentId: string) => void;
 }
 
-export function useInlineComments(doc: Y.Doc | null): UseInlineCommentsResult {
+export function useInlineComments(
+  doc: Y.Doc | null,
+  language: string = 'python',
+): UseInlineCommentsResult {
   const [comments, setComments] = useState<InlineComment[]>([]);
 
   useEffect(() => {
@@ -34,9 +37,9 @@ export function useInlineComments(doc: Y.Doc | null): UseInlineCommentsResult {
     }
 
     const commentsMap = doc.getMap(INLINE_COMMENTS_KEY);
-    const codeText = doc.getText(CODE_TEXT_KEY);
+    const codeText = doc.getText(codeTextKey(language));
     const syncComments = () => {
-      setComments(listInlineComments(doc));
+      setComments(listInlineComments(doc, language));
     };
 
     syncComments();
@@ -47,9 +50,9 @@ export function useInlineComments(doc: Y.Doc | null): UseInlineCommentsResult {
       commentsMap.unobserveDeep(syncComments);
       codeText.unobserve(syncComments);
     };
-  }, [doc]);
+  }, [doc, language]);
 
-  const commentLineNumbers = doc ? getInlineCommentLineNumbers(doc) : [];
+  const commentLineNumbers = doc ? getInlineCommentLineNumbers(doc, language) : [];
 
   return {
     comments,
@@ -59,14 +62,14 @@ export function useInlineComments(doc: Y.Doc | null): UseInlineCommentsResult {
         return;
       }
 
-      addInlineComment(doc, input);
+      addInlineComment(doc, input, language);
     },
     updateComment: (commentId, patch) => {
       if (!doc) {
         return;
       }
 
-      updateInlineComment(doc, commentId, patch);
+      updateInlineComment(doc, commentId, patch, language);
     },
     deleteComment: (commentId) => {
       if (!doc) {

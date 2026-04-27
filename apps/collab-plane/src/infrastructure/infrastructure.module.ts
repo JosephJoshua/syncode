@@ -11,7 +11,8 @@ import { HttpControlPlaneCallbackClient } from './clients/http-control-plane-cal
       provide: CONTROL_PLANE_CALLBACK,
       useFactory: (config: ConfigService<EnvConfig>) => {
         const controlPlaneUrl = config.get('CONTROL_PLANE_URL', { infer: true })!;
-        return new HttpControlPlaneCallbackClient(controlPlaneUrl);
+        const internalSecret = config.get('INTERNAL_CALLBACK_SECRET', { infer: true })!;
+        return new HttpControlPlaneCallbackClient(controlPlaneUrl, internalSecret);
       },
       inject: [ConfigService],
     },

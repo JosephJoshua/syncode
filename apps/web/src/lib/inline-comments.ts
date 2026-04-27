@@ -1,6 +1,6 @@
 import { INLINE_COMMENTS_KEY } from '@syncode/shared';
 import * as Y from 'yjs';
-import { CODE_TEXT_KEY } from './yjs-collab-provider.js';
+import { codeTextKey } from './yjs-collab-provider.js';
 
 const INLINE_COMMENT_MAX_LENGTH = 500;
 
@@ -28,13 +28,18 @@ export function ensureInlineCommentsMap(doc: Y.Doc): InlineCommentsRoot {
   return doc.getMap<InlineCommentMap>(INLINE_COMMENTS_KEY);
 }
 
-export function listInlineComments(doc: Y.Doc): InlineComment[] {
+const DEFAULT_INLINE_COMMENT_LANGUAGE = 'python';
+
+export function listInlineComments(
+  doc: Y.Doc,
+  language: string = DEFAULT_INLINE_COMMENT_LANGUAGE,
+): InlineComment[] {
   const comments = ensureInlineCommentsMap(doc);
-  const code = doc.getText(CODE_TEXT_KEY).toString();
+  const code = doc.getText(codeTextKey(language)).toString();
   const mappedComments: InlineComment[] = [];
 
   comments.forEach((entry, id) => {
-    const comment = toInlineComment(doc, code, id, entry);
+    const comment = toInlineComment(doc, language, code, id, entry);
     if (comment) {
       mappedComments.push(comment);
     }
@@ -49,11 +54,18 @@ export function listInlineComments(doc: Y.Doc): InlineComment[] {
   });
 }
 
-export function getInlineCommentLineNumbers(doc: Y.Doc): number[] {
-  return [...new Set(listInlineComments(doc).map((comment) => comment.lineNumber))];
+export function getInlineCommentLineNumbers(
+  doc: Y.Doc,
+  language: string = DEFAULT_INLINE_COMMENT_LANGUAGE,
+): number[] {
+  return [...new Set(listInlineComments(doc, language).map((comment) => comment.lineNumber))];
 }
 
-export function addInlineComment(doc: Y.Doc, input: CreateInlineCommentInput): string {
+export function addInlineComment(
+  doc: Y.Doc,
+  input: CreateInlineCommentInput,
+  language: string = DEFAULT_INLINE_COMMENT_LANGUAGE,
+): string {
   const comments = ensureInlineCommentsMap(doc);
   const id = generateInlineCommentId();
   const now = new Date().toISOString();
@@ -65,7 +77,7 @@ export function addInlineComment(doc: Y.Doc, input: CreateInlineCommentInput): s
     comment.set('content', normalizeCommentContent(input.content));
     comment.set('createdAt', now);
     comment.set('updatedAt', now);
-    comment.set('anchor', createEncodedRelativePosition(doc, input.lineNumber));
+    comment.set('anchor', createEncodedRelativePosition(doc, language, input.lineNumber));
     comment.set('lineNumber', input.lineNumber);
     comments.set(id, comment);
   });
@@ -77,6 +89,7 @@ export function updateInlineComment(
   doc: Y.Doc,
   commentId: string,
   patch: { content?: string; lineNumber?: number },
+  language: string = DEFAULT_INLINE_COMMENT_LANGUAGE,
 ): void {
   const comment = ensureInlineCommentsMap(doc).get(commentId);
   if (!comment) {
@@ -89,7 +102,7 @@ export function updateInlineComment(
     }
 
     if (patch.lineNumber !== undefined) {
-      comment.set('anchor', createEncodedRelativePosition(doc, patch.lineNumber));
+      comment.set('anchor', createEncodedRelativePosition(doc, language, patch.lineNumber));
       comment.set('lineNumber', patch.lineNumber);
     }
 
@@ -103,6 +116,7 @@ export function deleteInlineComment(doc: Y.Doc, commentId: string): void {
 
 function toInlineComment(
   doc: Y.Doc,
+  language: string,
   code: string,
   id: string,
   entry: InlineCommentMap,
@@ -130,16 +144,21 @@ function toInlineComment(
     content,
     createdAt,
     updatedAt,
-    lineNumber: resolveInlineCommentLineNumber(doc, code, entry),
+    lineNumber: resolveInlineCommentLineNumber(doc, language, code, entry),
   };
 }
 
-function resolveInlineCommentLineNumber(doc: Y.Doc, code: string, entry: InlineCommentMap): number {
+function resolveInlineCommentLineNumber(
+  doc: Y.Doc,
+  language: string,
+  code: string,
+  entry: InlineCommentMap,
+): number {
   const anchor = entry.get('anchor');
   if (Array.isArray(anchor) && anchor.every((item) => typeof item === 'number')) {
     const decoded = Y.decodeRelativePosition(Uint8Array.from(anchor));
     const absolute = Y.createAbsolutePositionFromRelativePosition(decoded, doc);
-    if (absolute?.type === doc.getText(CODE_TEXT_KEY)) {
+    if (absolute?.type === doc.getText(codeTextKey(language))) {
       return offsetToLineNumber(code, absolute.index);
     }
   }
@@ -150,8 +169,12 @@ function resolveInlineCommentLineNumber(doc: Y.Doc, code: string, entry: InlineC
     : 1;
 }
 
-function createEncodedRelativePosition(doc: Y.Doc, lineNumber: number): number[] {
-  const codeText = doc.getText(CODE_TEXT_KEY);
+function createEncodedRelativePosition(
+  doc: Y.Doc,
+  language: string,
+  lineNumber: number,
+): number[] {
+  const codeText = doc.getText(codeTextKey(language));
   const code = codeText.toString();
   const offset = lineNumberToOffset(code, lineNumber);
   const relativePosition = Y.createRelativePositionFromTypeIndex(codeText, offset);

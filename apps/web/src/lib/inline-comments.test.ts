@@ -7,7 +7,9 @@ import {
   listInlineComments,
   updateInlineComment,
 } from './inline-comments.js';
-import { CODE_TEXT_KEY } from './yjs-collab-provider.js';
+import { codeTextKey } from './yjs-collab-provider.js';
+
+const CODE_TEXT_KEY = codeTextKey('python');
 
 describe('inline comments', () => {
   it('GIVEN a comment on a line WHEN code is edited above it THEN the resolved line moves with the code', () => {
