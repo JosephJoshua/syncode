@@ -1,4 +1,4 @@
-import { CONTROL_API, ERROR_CODES } from '@syncode/contracts';
+import { CONTROL_API, defineRoute, ERROR_CODES } from '@syncode/contracts';
 import type { RoomRole, RoomStatus } from '@syncode/shared';
 import {
   AlertDialog,
@@ -41,6 +41,27 @@ export const Route = createFileRoute('/_app/rooms_/$roomId')({
 import type { JoinRoomResponse, RoomDetail } from '@syncode/contracts';
 
 const ROOM_REFRESH_INTERVAL_MS = 15_000;
+type LockEditorResponse = {
+  roomId?: string;
+  editorLocked?: boolean;
+  lockedAt?: string;
+  lockedBy?: string;
+};
+type UnlockEditorResponse = {
+  roomId?: string;
+  editorLocked?: boolean;
+  unlockedAt?: string;
+  unlockedBy?: string;
+};
+
+const LOCK_EDITOR_ROUTE = defineRoute<void, LockEditorResponse>()(
+  'rooms/:roomId/control/lock-editor',
+  'POST',
+);
+const UNLOCK_EDITOR_ROUTE = defineRoute<void, UnlockEditorResponse>()(
+  'rooms/:roomId/control/unlock-editor',
+  'POST',
+);
 
 const CURSOR_COLORS = [
   '#00e599',
@@ -637,6 +658,68 @@ function RoomPage() {
     },
   });
 
+  const lockEditorMutation = useMutation({
+    mutationFn: async () =>
+      api(LOCK_EDITOR_ROUTE, {
+        params: { roomId },
+      }),
+    onSuccess: () => {
+      setRoom((prev) => (prev ? { ...prev, editorLocked: true } : prev));
+      void refreshRoomDetail().catch(() => undefined);
+    },
+    onError: async (error) => {
+      const apiError = await readApiError(error);
+
+      if (apiError?.statusCode === 401) {
+        return;
+      }
+
+      if (apiError?.statusCode === 409 || apiError?.code === ERROR_CODES.ROOM_EDITOR_LOCKED) {
+        setRoom((prev) => (prev ? { ...prev, editorLocked: true } : prev));
+        void refreshRoomDetail().catch(() => undefined);
+      }
+
+      toast.error(
+        resolveErrorMessage(apiError, LOCK_EDITOR_ERROR_KEYS, 'workspace.editorLockedError', t),
+      );
+    },
+  });
+  const unlockEditorMutation = useMutation({
+    mutationFn: async () =>
+      api(UNLOCK_EDITOR_ROUTE, {
+        params: { roomId },
+      }),
+    onSuccess: () => {
+      setRoom((prev) => (prev ? { ...prev, editorLocked: false } : prev));
+      void refreshRoomDetail().catch(() => undefined);
+    },
+    onError: async (error) => {
+      const apiError = await readApiError(error);
+
+      if (apiError?.statusCode === 401) {
+        return;
+      }
+
+      if (apiError?.statusCode === 409 || apiError?.code === ERROR_CODES.ROOM_EDITOR_NOT_LOCKED) {
+        setRoom((prev) => (prev ? { ...prev, editorLocked: false } : prev));
+        void refreshRoomDetail().catch(() => undefined);
+      }
+
+      toast.error(
+        resolveErrorMessage(apiError, UNLOCK_EDITOR_ERROR_KEYS, 'workspace.editorUnlockFailed', t),
+      );
+    },
+  });
+
+  const handleLockEditor = useCallback(() => {
+    if (room?.editorLocked || lockEditorMutation.isPending) return;
+    lockEditorMutation.mutate();
+  }, [lockEditorMutation, room?.editorLocked]);
+  const handleUnlockEditor = useCallback(() => {
+    if (!room?.editorLocked || unlockEditorMutation.isPending) return;
+    unlockEditorMutation.mutate();
+  }, [room?.editorLocked, unlockEditorMutation]);
+
   const handleToggleReady = useCallback(async () => {
     try {
       const updated = await api(CONTROL_API.ROOMS.TOGGLE_READY, { params: { id: roomId } });
@@ -756,7 +839,11 @@ function RoomPage() {
           roomId={roomId}
           elapsedMs={elapsedMs}
           isTransitioning={isTransitioning}
+          isLockingEditor={lockEditorMutation.isPending}
+          isUnlockingEditor={unlockEditorMutation.isPending}
           onTransition={handleTransition}
+          onLockEditor={handleLockEditor}
+          onUnlockEditor={handleUnlockEditor}
           onRoomUpdated={setRoom}
           onParticipantRoleChange={handleParticipantRoleChange}
           onTransferOwnership={handleTransferOwnership}
@@ -887,4 +974,19 @@ const TRANSFER_ERROR_KEYS: Partial<Record<string, string>> = {
   [ERROR_CODES.PARTICIPANT_CANNOT_TRANSFER_OWNERSHIP]: 'workspace.cannotTransferOwnership',
   [ERROR_CODES.PARTICIPANT_NOT_FOUND]: 'lobby.participantNotFound',
   [ERROR_CODES.ROOM_PERMISSION_DENIED]: 'lobby.accessDenied',
+};
+
+const LOCK_EDITOR_ERROR_KEYS: Partial<Record<string, string>> = {
+  [ERROR_CODES.ROOM_EDITOR_LOCKED]: 'workspace.editorLockedError',
+  [ERROR_CODES.ROOM_NOT_FOUND]: 'lobby.roomNotFound',
+  [ERROR_CODES.ROOM_PERMISSION_DENIED]: 'lobby.accessDenied',
+  [ERROR_CODES.ROOM_ACCESS_DENIED]: 'lobby.accessDenied',
+  [ERROR_CODES.FORBIDDEN]: 'lobby.accessDenied',
+};
+
+const UNLOCK_EDITOR_ERROR_KEYS: Partial<Record<string, string>> = {
+  [ERROR_CODES.ROOM_NOT_FOUND]: 'lobby.roomNotFound',
+  [ERROR_CODES.ROOM_PERMISSION_DENIED]: 'lobby.accessDenied',
+  [ERROR_CODES.ROOM_ACCESS_DENIED]: 'lobby.accessDenied',
+  [ERROR_CODES.FORBIDDEN]: 'lobby.accessDenied',
 };
