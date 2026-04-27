@@ -169,11 +169,7 @@ function resolveInlineCommentLineNumber(
     : 1;
 }
 
-function createEncodedRelativePosition(
-  doc: Y.Doc,
-  language: string,
-  lineNumber: number,
-): number[] {
+function createEncodedRelativePosition(doc: Y.Doc, language: string, lineNumber: number): number[] {
   const codeText = doc.getText(codeTextKey(language));
   const code = codeText.toString();
   const offset = lineNumberToOffset(code, lineNumber);

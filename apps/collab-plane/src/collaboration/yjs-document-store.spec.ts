@@ -173,7 +173,9 @@ describe('YjsDocumentStore', () => {
 
     it('GIVEN doc with inline comments WHEN destroying THEN snapshot preserves the comment map', () => {
       const store = new YjsDocumentStore();
-      const doc = store.createDoc('room-1', 'function solve() {}');
+      const { doc } = store.createDoc('room-1', {
+        initialContentByLanguage: { python: 'function solve() {}' },
+      });
       const comments = doc.getMap<Y.Map<unknown>>(INLINE_COMMENTS_KEY);
       const comment = new Y.Map<unknown>();
       comment.set('content', 'Consider the edge case on this line.');
