@@ -128,6 +128,7 @@ export const sessionReportSchema = z.object({
   sessionId: z.uuid().optional(),
   generatedAt: z.iso.datetime().optional(),
   overallScore: z.number().min(0).max(100).optional(),
+  categoryScores: z.record(z.string(), z.number().int().min(0).max(100)).optional(),
   dimensions: z
     .object({
       correctness: sessionReportDimensionSchema.optional(),
@@ -139,6 +140,7 @@ export const sessionReportSchema = z.object({
     .optional(),
   strengths: z.array(z.string()).optional(),
   areasForImprovement: z.array(z.string()).optional(),
+  feedback: z.string().optional(),
   detailedFeedback: z.string().optional(),
   comparisonToHistory: sessionReportComparisonSchema.nullable().optional(),
   peerFeedbackSummary: sessionReportPeerFeedbackSummarySchema.nullable().optional(),
