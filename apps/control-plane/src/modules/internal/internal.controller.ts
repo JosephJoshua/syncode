@@ -71,7 +71,6 @@ export class InternalController {
       // Prefer the payload language (reflects mid-session switches); fall back to
       // the session's initial language only if the payload omitted it.
       const persistedLanguage = language ?? session?.language ?? null;
-      let persistedToDatabase = false;
 
       if (session && persistedLanguage) {
         if (!language) {
@@ -88,12 +87,16 @@ export class InternalController {
           linesOfCode: code ? code.split('\n').length : 0,
           createdAt: new Date(timestamp),
         });
-        persistedToDatabase = true;
       } else {
         this.logger.warn(
           `Skipping DB insert for room ${roomId}: ${!session ? 'no session' : 'no language'}`,
         );
       }
+
+      // Persist the canonical Y.Doc state to the DB first — this is what room
+      // recovery relies on. The S3 blob is a recoverable mirror, so a transient
+      // S3 failure should not block the DB write.
+      await this.roomsService.persistDocSnapshot(roomId, new Uint8Array(snapshot));
 
       const snapshotBuffer = Buffer.from(snapshot);
       const key = `snapshots/${roomId}/${timestamp}.yjs`;
@@ -106,15 +109,9 @@ export class InternalController {
             timestamp: timestamp.toString(),
           },
         });
-
-        await this.roomsService.persistDocSnapshot(roomId, new Uint8Array(snapshot));
       } catch (error) {
-        if (!persistedToDatabase) {
-          throw error;
-        }
-
         this.logger.warn(
-          `Snapshot blob upload failed for room ${roomId}, but code history was stored: ${
+          `Snapshot blob upload to S3 failed for room ${roomId}, but doc state and code history were stored in DB: ${
             error instanceof Error ? error.message : String(error)
           }`,
         );
