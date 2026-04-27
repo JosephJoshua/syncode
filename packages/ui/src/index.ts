@@ -14,5 +14,6 @@ export * from './components/progress.js';
 export * from './components/resizable.js';
 export * from './components/select.js';
 export * from './components/separator.js';
+export * from './components/switch.js';
 export * from './components/table.js';
 export * from './lib/cn.js';

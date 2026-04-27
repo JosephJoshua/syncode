@@ -210,6 +210,10 @@
     "advanceStage": "推进面试阶段：",
     "endSession": "结束会话",
     "advanceTo": "推进至 {{stageName}}",
+    "locked": "已锁定",
+    "readOnly": "只读",
+    "unlocked": "未锁定",
+    "lockToggle": "切换编辑器锁定",
     "viewOnly": "只有主持人或当前面试官可以推进阶段。",
     "awaitingController": "你可以查看当前阶段，但只有主持人或当前面试官可以推进。",
     "awaitingReady": "等待所有必需的参与者准备就绪。"
@@ -258,6 +262,7 @@
     "runCode": "运行代码",
     "runFailed": "启动代码执行失败。",
     "editorLockedError": "编辑器当前已锁定。",
+    "editorUnlockFailed": "解锁编辑器失败。",
     "permissionDenied": "你没有执行此操作的权限。",
     "problemNotFound": "该房间未选择题目。",
     "noProblemTestCases": "该题目暂无测试用例。",

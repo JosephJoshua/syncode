@@ -37,6 +37,14 @@ const SESSION_DETAIL_RESULT = {
       createdAt: new Date('2026-04-01T00:45:00Z'),
     },
   ],
+  report: {
+    overallScore: 85,
+    categoryScores: { problemSolving: 85 },
+    strengths: ['Clear reasoning'],
+    areasForImprovement: ['Cover edge cases earlier'],
+    feedback: 'Good job',
+    generatedAt: new Date('2026-04-01T00:50:00Z'),
+  },
   hasReport: true,
   hasFeedback: false,
   hasRecording: false,
@@ -74,13 +82,28 @@ const LIST_RESULT = {
   pagination: { nextCursor: null, hasMore: false },
 };
 
+const SNAPSHOTS_RESULT = {
+  data: [
+    {
+      snapshotId: 'snapshot-1',
+      timestamp: new Date('2026-04-01T00:10:00Z'),
+      trigger: 'phase_change' as const,
+      language: 'python' as const,
+      code: 'print("hello")',
+      linesOfCode: 1,
+    },
+  ],
+  pagination: { nextCursor: null, hasMore: false },
+};
+
 function createFixture() {
   const sessionsService: Pick<
     SessionsService,
-    'listSessions' | 'getSession' | 'deleteSession' | 'isAdmin'
+    'listSessions' | 'listSnapshots' | 'getSession' | 'deleteSession' | 'isAdmin'
   > = {
     isAdmin: vi.fn(async () => false),
     listSessions: vi.fn(async () => LIST_RESULT),
+    listSnapshots: vi.fn(async () => SNAPSHOTS_RESULT),
     getSession: vi.fn(async () => SESSION_DETAIL_RESULT),
     deleteSession: vi.fn(async () => undefined),
   };
@@ -135,6 +158,32 @@ describe('SessionsController', () => {
       expect(result.participants[0].leftAt).toBeNull();
       expect(result.runs[0].createdAt).toBe('2026-04-01T00:30:00.000Z');
       expect(result.submissions[0].createdAt).toBe('2026-04-01T00:45:00.000Z');
+      expect(result.report?.generatedAt).toBe('2026-04-01T00:50:00.000Z');
+    });
+  });
+
+  describe('listSnapshots', () => {
+    it('GIVEN code snapshots WHEN listing THEN serializes timestamps and includes pagination', async () => {
+      const { controller } = createFixture();
+
+      const result = await controller.listSnapshots(AUTH_USER, 'session-1', {
+        limit: 50,
+        sortOrder: 'asc',
+      });
+
+      expect(result).toEqual({
+        data: [
+          {
+            snapshotId: 'snapshot-1',
+            timestamp: '2026-04-01T00:10:00.000Z',
+            trigger: 'phase_change',
+            language: 'python',
+            code: 'print("hello")',
+            linesOfCode: 1,
+          },
+        ],
+        pagination: { nextCursor: null, hasMore: false },
+      });
     });
   });
 });

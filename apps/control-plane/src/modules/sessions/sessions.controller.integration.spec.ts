@@ -9,6 +9,7 @@ import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard.js';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
 import {
   createTestDb,
+  insertCodeSnapshot,
   insertProblem,
   insertRoom,
   insertRun,
@@ -78,6 +79,92 @@ describe('GET /sessions', () => {
 
     expect(res.body.data).toHaveLength(0);
     expect(res.body.pagination).toEqual({ nextCursor: null, hasMore: false });
+  });
+});
+
+describe('GET /sessions/:sessionId/snapshots', () => {
+  it('GIVEN participant WHEN getting snapshots THEN returns stored triggers and ISO timestamps', async () => {
+    const user = await insertUser(db);
+    const room = await insertRoom(db, user.id);
+    const session = await insertSession(db, room.id, {
+      status: 'ongoing',
+      language: 'python',
+    });
+    await insertSessionParticipant(db, session.id, user.id);
+
+    await insertCodeSnapshot(db, {
+      sessionId: session.id,
+      roomId: room.id,
+      code: 'print("first")',
+      language: 'python',
+      trigger: 'submission',
+      linesOfCode: 1,
+      createdAt: new Date('2026-04-18T10:00:00.000Z'),
+    });
+    await insertCodeSnapshot(db, {
+      sessionId: session.id,
+      roomId: room.id,
+      code: 'print("second")',
+      language: 'python',
+      trigger: 'periodic',
+      linesOfCode: 1,
+      createdAt: new Date('2026-04-18T10:01:00.000Z'),
+    });
+
+    const res = await asUser(
+      request(app.getHttpServer()).get(`/sessions/${session.id}/snapshots`),
+      user,
+    ).expect(200);
+
+    expect(res.body).toEqual({
+      data: [
+        expect.objectContaining({
+          trigger: 'submission',
+          language: 'python',
+          code: 'print("first")',
+          linesOfCode: 1,
+          timestamp: '2026-04-18T10:00:00.000Z',
+        }),
+        expect.objectContaining({
+          trigger: 'periodic',
+          language: 'python',
+          code: 'print("second")',
+          linesOfCode: 1,
+          timestamp: '2026-04-18T10:01:00.000Z',
+        }),
+      ],
+      pagination: { nextCursor: null, hasMore: false },
+    });
+  });
+
+  it('GIVEN non-participant WHEN getting snapshots THEN returns 403', async () => {
+    const owner = await insertUser(db);
+    const stranger = await insertUser(db);
+    const room = await insertRoom(db, owner.id);
+    const session = await insertSession(db, room.id, { language: 'python' });
+    await insertSessionParticipant(db, session.id, owner.id);
+
+    await asUser(
+      request(app.getHttpServer()).get(`/sessions/${session.id}/snapshots`),
+      stranger,
+    ).expect(403);
+  });
+
+  it('GIVEN non-existent session WHEN getting snapshots THEN returns 404', async () => {
+    const user = await insertUser(db);
+
+    await asUser(
+      request(app.getHttpServer()).get('/sessions/00000000-0000-0000-0000-000000000000/snapshots'),
+      user,
+    ).expect(404);
+  });
+
+  it('GIVEN malformed session id WHEN getting snapshots THEN returns 400', async () => {
+    const user = await insertUser(db);
+
+    await asUser(request(app.getHttpServer()).get('/sessions/{sessionId}/snapshots'), user).expect(
+      400,
+    );
   });
 });
 

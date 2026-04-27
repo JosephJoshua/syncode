@@ -1,7 +1,13 @@
 import { ForbiddenException, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { ERROR_CODES, type ListSessionsQuery, SESSIONS_SORT_BY_OPTIONS } from '@syncode/contracts';
+import {
+  ERROR_CODES,
+  type ListCodeSnapshotsQuery,
+  type ListSessionsQuery,
+  SESSIONS_SORT_BY_OPTIONS,
+} from '@syncode/contracts';
 import type { Database } from '@syncode/db';
 import {
+  codeSnapshots,
   peerFeedback,
   problems,
   runs,
@@ -18,7 +24,15 @@ import { type PaginatedResult, paginate } from '@syncode/shared/server';
 import { and, asc, type Column, desc, eq, gt, gte, inArray, lt, lte, or, sql } from 'drizzle-orm';
 import { resolveAvatarUrls } from '@/common/resolve-avatar-urls.js';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
-import type { SessionDetailResult, SessionSummaryResult } from './sessions.types.js';
+import {
+  normalizeReportScoreMap,
+  normalizeReportStringArray,
+} from './session-report-normalizers.js';
+import type {
+  SessionCodeSnapshotResult,
+  SessionDetailResult,
+  SessionSummaryResult,
+} from './sessions.types.js';
 
 type SortBy = (typeof SESSIONS_SORT_BY_OPTIONS)[number];
 
@@ -226,7 +240,14 @@ export class SessionsService {
         .innerJoin(users, eq(users.id, sessionParticipants.userId))
         .where(eq(sessionParticipants.sessionId, sessionId)),
       this.db.query.sessionReports.findFirst({
-        columns: { id: true },
+        columns: {
+          overallScore: true,
+          categoryScores: true,
+          strengths: true,
+          areasForImprovement: true,
+          feedback: true,
+          generatedAt: true,
+        },
         where: (table, { eq }) => eq(table.sessionId, sessionId),
       }),
       this.db
@@ -272,6 +293,8 @@ export class SessionsService {
         : Promise.resolve([]),
     ]);
 
+    const normalizedReport = this.buildReport(report);
+
     return {
       sessionId: session.id,
       roomId: session.roomId,
@@ -299,12 +322,85 @@ export class SessionsService {
         total: s.total,
         createdAt: s.createdAt,
       })),
-      hasReport: report != null,
+      report: normalizedReport,
+      hasReport: normalizedReport != null,
       hasFeedback: feedbackExists.length > 0,
       hasRecording: recordingExists.length > 0,
       createdAt: session.startedAt,
       finishedAt: session.finishedAt,
     };
+  }
+
+  async listSnapshots(
+    sessionId: string,
+    userId: string,
+    isAdmin: boolean,
+    query: ListCodeSnapshotsQuery,
+  ): Promise<PaginatedResult<SessionCodeSnapshotResult>> {
+    const [session] = await this.db
+      .select({ id: sessions.id })
+      .from(sessions)
+      .where(eq(sessions.id, sessionId))
+      .limit(1);
+
+    if (!session) {
+      throw new NotFoundException({
+        message: 'Session not found',
+        code: ERROR_CODES.SESSION_NOT_FOUND,
+      });
+    }
+
+    if (!isAdmin) {
+      await Promise.all([
+        this.assertParticipant(sessionId, userId),
+        this.assertNotSoftDeleted(sessionId, userId),
+      ]);
+    }
+
+    return paginate<SessionCodeSnapshotResult>({
+      cursor: query.cursor,
+      limit: query.limit,
+      getCursorValues: (row) => [row.timestamp.toISOString(), row.snapshotId],
+      fetchPage: async (decoded, fetchLimit) => {
+        const conditions = [eq(codeSnapshots.sessionId, sessionId)];
+
+        if (decoded?.length === 2 && decoded[0] && decoded[1]) {
+          const [cursorTs, cursorId] = decoded;
+          const cursorDate = new Date(cursorTs);
+          if (!Number.isNaN(cursorDate.getTime())) {
+            conditions.push(
+              or(
+                gt(codeSnapshots.createdAt, cursorDate),
+                and(eq(codeSnapshots.createdAt, cursorDate), gt(codeSnapshots.id, cursorId)),
+              )!,
+            );
+          }
+        }
+
+        const rows = await this.db
+          .select({
+            snapshotId: codeSnapshots.id,
+            timestamp: codeSnapshots.createdAt,
+            trigger: codeSnapshots.trigger,
+            language: codeSnapshots.language,
+            code: codeSnapshots.code,
+            linesOfCode: codeSnapshots.linesOfCode,
+          })
+          .from(codeSnapshots)
+          .where(and(...conditions))
+          .orderBy(asc(codeSnapshots.createdAt), asc(codeSnapshots.id))
+          .limit(fetchLimit);
+
+        return rows.map((snapshot) => ({
+          snapshotId: snapshot.snapshotId,
+          timestamp: snapshot.timestamp,
+          trigger: snapshot.trigger,
+          language: snapshot.language,
+          code: snapshot.code,
+          linesOfCode: snapshot.linesOfCode ?? this.countLinesOfCode(snapshot.code),
+        }));
+      },
+    });
   }
 
   async deleteSession(sessionId: string, userId: string, isAdmin: boolean): Promise<void> {
@@ -429,5 +525,56 @@ export class SessionsService {
 
   private isNullableSortColumn(sortBy: SortBy): boolean {
     return sortBy === 'overallScore' || sortBy === 'finishedAt' || sortBy === 'duration';
+  }
+
+  private countLinesOfCode(code: string): number {
+    return code ? code.split('\n').length : 0;
+  }
+
+  private buildReport(
+    report:
+      | {
+          overallScore: number | null;
+          categoryScores: unknown;
+          strengths: unknown;
+          areasForImprovement: unknown;
+          feedback: string | null;
+          generatedAt: Date;
+        }
+      | null
+      | undefined,
+  ): {
+    overallScore: number;
+    categoryScores: Record<string, number>;
+    strengths: string[];
+    areasForImprovement: string[];
+    feedback: string | null;
+    generatedAt: Date;
+  } | null {
+    if (!report) return null;
+    const overallScore = this.normalizeOverallScore(report.overallScore);
+    if (overallScore === null) {
+      return null;
+    }
+    return {
+      overallScore,
+      categoryScores: normalizeReportScoreMap(report.categoryScores),
+      strengths: normalizeReportStringArray(report.strengths),
+      areasForImprovement: normalizeReportStringArray(report.areasForImprovement),
+      feedback: report.feedback,
+      generatedAt: report.generatedAt,
+    };
+  }
+
+  private normalizeOverallScore(value: number | null | undefined): number | null {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+      return null;
+    }
+    const rounded = Math.round(value);
+    if (rounded < 0 || rounded > 100) {
+      this.logger.warn(`Discarding overallScore outside 0-100 range: ${value}`);
+      return null;
+    }
+    return rounded;
   }
 }
