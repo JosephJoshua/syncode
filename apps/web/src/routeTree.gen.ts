@@ -105,12 +105,6 @@ const AppProblemsProblemIdRoute = AppProblemsProblemIdRouteImport.update({
   path: '/problems/$problemId',
   getParentRoute: () => AppRouteRoute,
 } as any)
-const AppSessionsSessionIdReportRoute =
-  AppSessionsSessionIdReportRouteImport.update({
-    id: '/report',
-    path: '/report',
-    getParentRoute: () => AppSessionsSessionIdRoute,
-  } as any)
 const AppSessionsSessionIdFeedbackRoute =
   AppSessionsSessionIdFeedbackRouteImport.update({
     id: '/feedback',
@@ -345,13 +339,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppProblemsProblemIdRouteImport
       parentRoute: typeof AppRouteRoute
     }
-    '/_app/sessions/$sessionId/report': {
-      id: '/_app/sessions/$sessionId/report'
-      path: '/report'
-      fullPath: '/sessions/$sessionId/report'
-      preLoaderRoute: typeof AppSessionsSessionIdReportRouteImport
-      parentRoute: typeof AppSessionsSessionIdRoute
-    }
     '/_app/sessions/$sessionId/feedback': {
       id: '/_app/sessions/$sessionId/feedback'
       path: '/feedback'
@@ -378,12 +365,10 @@ const AppRoomsRouteRouteWithChildren = AppRoomsRouteRoute._addFileChildren(
 
 interface AppSessionsSessionIdRouteChildren {
   AppSessionsSessionIdFeedbackRoute: typeof AppSessionsSessionIdFeedbackRoute
-  AppSessionsSessionIdReportRoute: typeof AppSessionsSessionIdReportRoute
 }
 
 const AppSessionsSessionIdRouteChildren: AppSessionsSessionIdRouteChildren = {
   AppSessionsSessionIdFeedbackRoute: AppSessionsSessionIdFeedbackRoute,
-  AppSessionsSessionIdReportRoute: AppSessionsSessionIdReportRoute,
 }
 
 const AppSessionsSessionIdRouteWithChildren =
