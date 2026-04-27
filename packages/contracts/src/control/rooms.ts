@@ -93,6 +93,106 @@ export const submitProblemSchema = runCodeSchema
 
 export type SubmitProblemInput = z.infer<typeof submitProblemSchema>;
 
+export const hintLevelSchema = z.enum(['subtle', 'moderate', 'direct']);
+export type HintLevel = z.infer<typeof hintLevelSchema>;
+
+export const requestRoomAiHintSchema = z
+  .object({
+    code: z
+      .string()
+      .min(1)
+      .describe('Current code snapshot in the editor')
+      .meta({ examples: ['def two_sum(nums, target): ...'] }),
+    language: z
+      .enum(SUPPORTED_LANGUAGES)
+      .describe('Programming language')
+      .meta({ examples: ['python'] }),
+    hintLevel: hintLevelSchema.describe('Hint intensity level'),
+    followUpToHintId: z
+      .uuid()
+      .optional()
+      .describe('Existing hint ID to continue as a stage-2 follow-up'),
+    reflectionResponse: z
+      .string()
+      .max(2000)
+      .optional()
+      .describe('Optional learner reflection response for stage-2 follow-up'),
+    noReply: z
+      .boolean()
+      .optional()
+      .describe('Set true to continue follow-up without user reflection text'),
+  })
+  .refine(
+    (value) => {
+      const hasFollowUpTarget = Boolean(value.followUpToHintId);
+      const hasReflection = Boolean(value.reflectionResponse?.trim());
+
+      if (!hasFollowUpTarget) {
+        return !hasReflection && value.noReply !== true;
+      }
+
+      return hasReflection || value.noReply === true;
+    },
+    {
+      message:
+        'Follow-up hints require followUpToHintId and either reflectionResponse or noReply=true',
+      path: ['followUpToHintId'],
+    },
+  )
+  .strict();
+
+export type RequestRoomAiHintInput = z.infer<typeof requestRoomAiHintSchema>;
+
+export const requestRoomAiHintResponseSchema = z.object({
+  jobId: z.string().describe('AI hint job ID'),
+  hintId: z.uuid().describe('Persistent hint identifier'),
+  phase: z.enum(['initial', 'follow_up']).describe('Hint stage'),
+  hint: z.string().describe('Generated hint content'),
+  suggestedApproach: z.string().optional().describe('Optional follow-up approach guidance'),
+  reflectionPrompt: z
+    .string()
+    .optional()
+    .describe('Optional reflective question for stage-2 continuation'),
+});
+
+export type RequestRoomAiHintResponse = z.infer<typeof requestRoomAiHintResponseSchema>;
+
+export const roomChatMediaUploadRequestSchema = z
+  .object({
+    fileName: z
+      .string()
+      .min(1)
+      .max(255)
+      .describe('Original file name')
+      .meta({ examples: ['debug-output.png'] }),
+    contentType: z
+      .string()
+      .min(1)
+      .max(255)
+      .describe('MIME type')
+      .meta({ examples: ['image/png'] }),
+    sizeBytes: z
+      .number()
+      .int()
+      .positive()
+      .describe('File size in bytes')
+      .meta({ examples: [204_800] }),
+  })
+  .strict();
+
+export type RoomChatMediaUploadInput = z.infer<typeof roomChatMediaUploadRequestSchema>;
+
+export const roomChatMediaUploadResponseSchema = z.object({
+  key: z.string().describe('Storage object key'),
+  uploadUrl: z.string().describe('Presigned PUT upload URL'),
+  downloadUrl: z.string().describe('Download URL for rendering in chat'),
+  fileName: z.string().describe('Original file name'),
+  contentType: z.string().describe('MIME type'),
+  sizeBytes: z.number().int().positive().describe('File size in bytes'),
+});
+
+export type RoomChatMediaUploadResponse = z.infer<typeof roomChatMediaUploadResponseSchema>;
+
 export const submitResponseSchema = z.object({
   submissionId: z
     .uuid()

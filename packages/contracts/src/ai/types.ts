@@ -1,6 +1,16 @@
 import type { RoomRole, SupportedLanguage } from '@syncode/shared';
 import type { CodeSnapshotTrigger, SessionReport } from '../control/sessions.js';
 
+export interface HintSubmissionSummary {
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  passedTestCases: number;
+  totalTestCases: number;
+  failedTestCases: number;
+  errorTestCases: number;
+  allTestsPassed: boolean;
+  submittedAt: string;
+}
+
 export interface GenerateHintRequest {
   roomId: string;
   participantId: string;
@@ -8,11 +18,18 @@ export interface GenerateHintRequest {
   currentCode: string;
   language: SupportedLanguage;
   hintLevel: 'gentle' | 'moderate' | 'direct';
+  conversationHistory?: Array<{ role: string; content: string }>;
+  latestSubmissionSummary?: HintSubmissionSummary | null;
+  hintStage?: 'initial' | 'follow_up';
+  hintIteration?: number;
+  previousHint?: string;
+  reflectionResponse?: string;
 }
 
 export interface GenerateHintResult {
   hint: string;
   suggestedApproach?: string;
+  reflectionPrompt?: string;
 }
 
 export interface ReviewCodeRequest {
