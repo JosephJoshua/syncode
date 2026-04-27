@@ -24,6 +24,7 @@
     "infra:down": "docker compose down",
     "infra:full": "docker compose up -d",
     "infra:logs": "docker compose logs -f",
+    "clean": "rm -rf packages/*/dist packages/*/.turbo packages/*/tsconfig*.tsbuildinfo apps/*/dist apps/*/.turbo apps/*/tsconfig*.tsbuildinfo .turbo",
     "prepare": "husky"
   },
   "devDependencies": {
