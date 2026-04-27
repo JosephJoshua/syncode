@@ -202,17 +202,24 @@ export class YjsCollabProvider {
     }
 
     this.backoffMs = INITIAL_BACKOFF_MS;
-    if (!this.hasConnected) {
+    // On the very first connect we gate the 'connected' status on the
+    // initial sync round-trip (handled in handleSyncMessage when
+    // isAwaitingConnectionSync is true). On reconnect, hasConnected is
+    // already true and a text frame is sufficient evidence that the new WS
+    // is healthy, so we transition reconnecting → connected here and fire
+    // onReconnected. We mark hasConnected on the first text frame so future
+    // opens after a transient close are treated as reconnects.
+    if (this.hasConnected) {
+      const wasReconnecting = this.currentStatus === 'reconnecting';
+      this.isAwaitingConnectionSync = false;
+      this.setStatus('connected');
+      if (wasReconnecting) {
+        // Fire AFTER the status change so subscribers observe the final state.
+        this.options.onReconnected?.();
+      }
+    } else {
       this.hasConnected = true;
-      // Re-broadcast awareness so remote clients receive user metadata
-      // that was set in the constructor before the WS was open.
       this.awareness.setLocalStateField('user', this.options.user);
-    }
-    const wasReconnecting = this.currentStatus === 'reconnecting';
-    this.setStatus('connected');
-    if (wasReconnecting) {
-      // Fire AFTER the status change so subscribers observe the final state.
-      this.options.onReconnected?.();
     }
 
     switch (message.type) {
