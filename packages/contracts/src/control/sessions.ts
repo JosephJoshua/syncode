@@ -1,4 +1,4 @@
-import { ROOM_MODES, ROOM_ROLES } from '@syncode/shared';
+import { ROOM_MODES, ROOM_ROLES, SUPPORTED_LANGUAGES } from '@syncode/shared';
 import { z } from 'zod';
 import { paginationQuerySchema, paginationSchema } from './pagination.js';
 
@@ -86,7 +86,7 @@ export const sessionReportSchema = z.object({
 export const sessionCodeSnapshotSchema = z.object({
   id: z.uuid(),
   code: z.string(),
-  language: z.string(),
+  language: z.enum(SUPPORTED_LANGUAGES),
   trigger: z.string(),
   linesOfCode: z.number().int().nullable(),
   createdAt: z.iso.datetime(),
