@@ -36,17 +36,20 @@ const apiDifficultyToUiDifficulty: Record<'easy' | 'medium' | 'hard', ProblemDif
   hard: 'Hard',
 };
 
+function getStatusFromAttempt(
+  attemptStatus: ProblemSummary['attemptStatus'],
+): ProblemItem['status'] {
+  if (attemptStatus === 'solved') return 'Solved';
+  if (attemptStatus === 'attempted') return 'Attempted';
+  return 'Todo';
+}
+
 function normalizeProblemSummary(problem: ProblemSummary): ProblemItem {
   return {
     id: problem.id,
     title: problem.title,
     difficulty: apiDifficultyToUiDifficulty[problem.difficulty],
-    status:
-      problem.attemptStatus === 'solved'
-        ? 'Solved'
-        : problem.attemptStatus === 'attempted'
-          ? 'Attempted'
-          : 'Todo',
+    status: getStatusFromAttempt(problem.attemptStatus),
     acceptanceRate: problem.acceptanceRate ?? 0,
     tags: problem.tags,
     addedAt: problem.updatedAt ? Date.parse(problem.updatedAt) || 0 : 0,
@@ -168,7 +171,7 @@ function BookmarksPage() {
                       onClick={() => {
                         if (!hasPreviousPage || isFetching) return;
                         setPaginationState((current) => ({
-                          currentCursor: current.cursorHistory[current.cursorHistory.length - 1],
+                          currentCursor: current.cursorHistory.at(-1),
                           cursorHistory: current.cursorHistory.slice(0, -1),
                         }));
                       }}

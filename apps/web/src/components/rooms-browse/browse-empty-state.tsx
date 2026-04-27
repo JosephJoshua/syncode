@@ -5,8 +5,8 @@ import { motion } from 'motion/react';
 import { useTranslation } from 'react-i18next';
 
 type Props = {
-  isFiltered: boolean;
-  onClearFilters: () => void;
+  readonly isFiltered: boolean;
+  readonly onClearFilters: () => void;
 };
 
 export function BrowseEmptyState({ isFiltered, onClearFilters }: Props) {

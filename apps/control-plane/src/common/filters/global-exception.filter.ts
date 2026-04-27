@@ -11,6 +11,13 @@ import { CircuitBreakerOpenError, CircuitBreakerTimeoutError } from '@syncode/sh
 import type { Response } from 'express';
 import { ZodValidationException } from 'nestjs-zod';
 
+interface ErrorContext {
+  status: number;
+  message: string;
+  code?: string;
+  details?: unknown;
+}
+
 /**
  * Handles all uncaught exceptions and transforms them into proper HTTP responses.
  */
@@ -19,85 +26,8 @@ export class GlobalExceptionFilter implements ExceptionFilter {
   private readonly logger = new Logger(GlobalExceptionFilter.name);
 
   catch(exception: unknown, host: ArgumentsHost): void {
-    const ctx = host.switchToHttp();
-    const response = ctx.getResponse<Response>();
-
-    let status = HttpStatus.INTERNAL_SERVER_ERROR;
-    let message = 'Internal server error';
-    let code: string | undefined;
-    let details: unknown;
-
-    (() => {
-      if (exception instanceof ZodValidationException) {
-        status = HttpStatus.BAD_REQUEST;
-        message = 'Validation failed';
-        code = ERROR_CODES.VALIDATION_FAILED;
-        details = this.mapValidationDetails(exception.getZodError());
-        return;
-      }
-
-      if (exception instanceof CircuitBreakerOpenError) {
-        status = HttpStatus.SERVICE_UNAVAILABLE;
-        message = 'Service temporarily unavailable';
-        details = {
-          circuit: exception.circuitName,
-          retryAfter: exception.nextRetryAt,
-        };
-
-        this.logger.warn(
-          `Circuit breaker open for ${exception.circuitName}, retry at ${exception.nextRetryAt}`,
-        );
-        return;
-      }
-
-      if (exception instanceof CircuitBreakerTimeoutError) {
-        status = HttpStatus.GATEWAY_TIMEOUT;
-        message = 'Operation timed out';
-        details = {
-          circuit: exception.circuitName,
-          timeout: exception.timeoutMs,
-        };
-
-        this.logger.warn(
-          `Circuit breaker timeout for ${exception.circuitName} (${exception.timeoutMs}ms)`,
-        );
-        return;
-      }
-
-      if (exception instanceof HttpException) {
-        status = exception.getStatus();
-        const exceptionResponse = exception.getResponse();
-
-        if (typeof exceptionResponse === 'string') {
-          message = exceptionResponse;
-        } else {
-          const res = exceptionResponse as Record<string, unknown>;
-          message =
-            typeof res.message === 'string'
-              ? res.message
-              : Array.isArray(res.message)
-                ? res.message.join(', ')
-                : exception.message;
-          code = typeof res.code === 'string' ? res.code : undefined;
-          details = res;
-        }
-
-        if (status >= 500) {
-          this.logger.error(`HTTP ${status}: ${message}`, exception.stack);
-        }
-
-        return;
-      }
-
-      if (exception instanceof Error) {
-        message = exception.message;
-
-        this.logger.error(`Unhandled error: ${exception.message}`, exception.stack);
-        return;
-      }
-
-      this.logger.error('Unknown exception type', exception);
-    })();
+    const response = host.switchToHttp().getResponse<Response>();
+    const { status, message, code, details } = this.resolveError(exception);
 
     response.status(status).json({
       statusCode: status,
@@ -106,6 +36,79 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       timestamp: new Date().toISOString(),
       ...(details ? { details } : {}),
     });
+  }
+
+  private resolveError(exception: unknown): ErrorContext {
+    if (exception instanceof ZodValidationException) {
+      return {
+        status: HttpStatus.BAD_REQUEST,
+        message: 'Validation failed',
+        code: ERROR_CODES.VALIDATION_FAILED,
+        details: this.mapValidationDetails(exception.getZodError()),
+      };
+    }
+    if (exception instanceof CircuitBreakerOpenError) {
+      this.logger.warn(
+        `Circuit breaker open for ${exception.circuitName}, retry at ${exception.nextRetryAt}`,
+      );
+      return {
+        status: HttpStatus.SERVICE_UNAVAILABLE,
+        message: 'Service temporarily unavailable',
+        details: { circuit: exception.circuitName, retryAfter: exception.nextRetryAt },
+      };
+    }
+    if (exception instanceof CircuitBreakerTimeoutError) {
+      this.logger.warn(
+        `Circuit breaker timeout for ${exception.circuitName} (${exception.timeoutMs}ms)`,
+      );
+      return {
+        status: HttpStatus.GATEWAY_TIMEOUT,
+        message: 'Operation timed out',
+        details: { circuit: exception.circuitName, timeout: exception.timeoutMs },
+      };
+    }
+    if (exception instanceof HttpException) {
+      return this.handleHttpException(exception);
+    }
+    if (exception instanceof Error) {
+      this.logger.error(`Unhandled error: ${exception.message}`, exception.stack);
+      return { status: HttpStatus.INTERNAL_SERVER_ERROR, message: exception.message };
+    }
+    this.logger.error('Unknown exception type', exception);
+    return { status: HttpStatus.INTERNAL_SERVER_ERROR, message: 'Internal server error' };
+  }
+
+  private handleHttpException(exception: HttpException): ErrorContext {
+    const status = exception.getStatus();
+    const exceptionResponse = exception.getResponse();
+    const ctx = this.extractHttpContext(exceptionResponse, exception.message);
+
+    if (status >= 500) {
+      this.logger.error(`HTTP ${status}: ${ctx.message}`, exception.stack);
+    }
+
+    return { status, ...ctx };
+  }
+
+  private extractHttpContext(
+    exceptionResponse: unknown,
+    fallbackMessage: string,
+  ): { message: string; code?: string; details?: unknown } {
+    if (typeof exceptionResponse === 'string') {
+      return { message: exceptionResponse };
+    }
+    const res = exceptionResponse as Record<string, unknown>;
+    return {
+      message: this.extractMessage(res, fallbackMessage),
+      code: typeof res.code === 'string' ? res.code : undefined,
+      details: res,
+    };
+  }
+
+  private extractMessage(res: Record<string, unknown>, fallback: string): string {
+    if (typeof res.message === 'string') return res.message;
+    if (Array.isArray(res.message)) return res.message.join(', ');
+    return fallback;
   }
 
   private mapValidationDetails(error: unknown): Record<string, string> {

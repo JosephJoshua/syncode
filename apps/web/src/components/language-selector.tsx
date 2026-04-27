@@ -3,15 +3,15 @@ import { cn, Select, SelectContent, SelectItem, SelectTrigger } from '@syncode/u
 import { getLanguageSelectorOptions } from './language-selector.data.js';
 
 export interface LanguageSelectorProps {
-  value?: SupportedLanguage;
-  onValueChange: (value: SupportedLanguage) => void;
-  languages?: readonly SupportedLanguage[];
-  labelOverrides?: Partial<Record<SupportedLanguage, string>>;
-  disabled?: boolean;
-  placeholder?: string;
-  emptyPlaceholder?: string;
-  className?: string;
-  ariaLabel?: string;
+  readonly value?: SupportedLanguage;
+  readonly onValueChange: (value: SupportedLanguage) => void;
+  readonly languages?: readonly SupportedLanguage[];
+  readonly labelOverrides?: Partial<Record<SupportedLanguage, string>>;
+  readonly disabled?: boolean;
+  readonly placeholder?: string;
+  readonly emptyPlaceholder?: string;
+  readonly className?: string;
+  readonly ariaLabel?: string;
 }
 
 export function LanguageSelector({
@@ -89,12 +89,12 @@ function LanguageSelectorValue({
   mutedBadge = false,
   compact = false,
 }: {
-  iconSrc: string;
-  iconClassName?: string;
-  badgeText: string;
-  label: string;
-  mutedBadge?: boolean;
-  compact?: boolean;
+  readonly iconSrc: string;
+  readonly iconClassName?: string;
+  readonly badgeText: string;
+  readonly label: string;
+  readonly mutedBadge?: boolean;
+  readonly compact?: boolean;
 }) {
   return (
     <span className="flex min-w-0 items-center gap-2">
@@ -117,11 +117,11 @@ function LanguageIcon({
   muted = false,
   compact = false,
 }: {
-  iconSrc: string;
-  iconClassName?: string;
-  fallbackText: string;
-  muted?: boolean;
-  compact?: boolean;
+  readonly iconSrc: string;
+  readonly iconClassName?: string;
+  readonly fallbackText: string;
+  readonly muted?: boolean;
+  readonly compact?: boolean;
 }) {
   return (
     <span

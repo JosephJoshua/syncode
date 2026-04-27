@@ -122,8 +122,7 @@ export const errorResponseSchema = z.object({
     .string()
     .describe('Human-readable error message')
     .meta({ examples: ['Internal server error'] }),
-  timestamp: z
-    .string()
+  timestamp: z.iso
     .datetime()
     .describe('ISO 8601 timestamp')
     .meta({ examples: ['2026-03-03T12:00:00.000Z'] }),

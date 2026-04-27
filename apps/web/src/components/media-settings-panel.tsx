@@ -205,7 +205,14 @@ function useMediaPermissions(
   };
 }
 
-function AudioLevelMeter({ deviceId }: { deviceId: string | null }) {
+function getLevelBarColor(active: boolean, index: number, bars: number): string {
+  if (!active) return 'bg-muted';
+  if (index < bars * 0.6) return 'bg-emerald-400';
+  if (index < bars * 0.85) return 'bg-amber-400';
+  return 'bg-destructive';
+}
+
+function AudioLevelMeter({ deviceId }: { readonly deviceId: string | null }) {
   const [level, setLevel] = useState(0);
   const cleanupRef = useRef<(() => void) | null>(null);
 
@@ -234,7 +241,7 @@ function AudioLevelMeter({ deviceId }: { deviceId: string | null }) {
           if (cancelled) return;
           analyser.getByteFrequencyData(data);
           let sum = 0;
-          for (let i = 0; i < data.length; i++) sum += data[i] ?? 0;
+          for (const v of data) sum += v;
           setLevel(sum / data.length / 255);
           animFrame = requestAnimationFrame(tick);
         };
@@ -271,13 +278,7 @@ function AudioLevelMeter({ deviceId }: { deviceId: string | null }) {
             key={key}
             className={cn(
               'h-2.5 w-1 rounded-full transition-colors duration-75',
-              active
-                ? i < bars * 0.6
-                  ? 'bg-emerald-400'
-                  : i < bars * 0.85
-                    ? 'bg-amber-400'
-                    : 'bg-destructive'
-                : 'bg-muted',
+              getLevelBarColor(active, i, bars),
             )}
           />
         );
@@ -291,9 +292,9 @@ function VideoPreview({
   brightness,
   contrast,
 }: {
-  deviceId: string | null;
-  brightness: number;
-  contrast: number;
+  readonly deviceId: string | null;
+  readonly brightness: number;
+  readonly contrast: number;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [error, setError] = useState(false);
@@ -371,10 +372,10 @@ function NoDevicesPrompt({
   onRefresh,
   refreshing,
 }: {
-  kind: 'audio' | 'video';
-  icon: React.ComponentType<{ className?: string }>;
-  onRefresh: () => void;
-  refreshing: boolean;
+  readonly kind: 'audio' | 'video';
+  readonly icon: React.ComponentType<{ className?: string }>;
+  readonly onRefresh: () => void;
+  readonly refreshing: boolean;
 }) {
   const device = kind === 'audio' ? 'microphone' : 'camera';
   return (
@@ -404,13 +405,15 @@ function GrantPermissionPrompt({
   requesting,
   error,
 }: {
-  kind: 'audio' | 'video';
-  icon: React.ComponentType<{ className?: string }>;
-  onRequest: () => void;
-  requesting: boolean;
-  error: string | null;
+  readonly kind: 'audio' | 'video';
+  readonly icon: React.ComponentType<{ className?: string }>;
+  readonly onRequest: () => void;
+  readonly requesting: boolean;
+  readonly error: string | null;
 }) {
   const isAudio = kind === 'audio';
+  const grantLabel = isAudio ? 'Grant Microphone Permission' : 'Grant Camera Permission';
+  const buttonLabel = requesting ? 'Requesting...' : grantLabel;
   return (
     <div className="space-y-2">
       <p className="text-[11px] text-muted-foreground">
@@ -427,11 +430,7 @@ function GrantPermissionPrompt({
         disabled={requesting}
       >
         <Icon className="size-3" />
-        {requesting
-          ? 'Requesting...'
-          : isAudio
-            ? 'Grant Microphone Permission'
-            : 'Grant Camera Permission'}
+        {buttonLabel}
       </Button>
       {error ? <p className="text-[10px] text-destructive">{error}</p> : null}
     </div>
@@ -444,10 +443,10 @@ function ToggleChip({
   active,
   onClick,
 }: {
-  label: string;
-  icon: React.ComponentType<{ className?: string }>;
-  active: boolean;
-  onClick: () => void;
+  readonly label: string;
+  readonly icon: React.ComponentType<{ className?: string }>;
+  readonly active: boolean;
+  readonly onClick: () => void;
 }) {
   return (
     <button
@@ -463,6 +462,282 @@ function ToggleChip({
       <Icon className="size-3" />
       {label}
     </button>
+  );
+}
+
+function VideoFilterControls({
+  brightness,
+  contrast,
+  setBrightness,
+  setContrast,
+  onVideoFilterChange,
+}: {
+  readonly brightness: number;
+  readonly contrast: number;
+  readonly setBrightness: (v: number) => void;
+  readonly setContrast: (v: number) => void;
+  readonly onVideoFilterChange: (settings: { brightness: number; contrast: number }) => void;
+}) {
+  return (
+    <>
+      <div className="space-y-1.5 pt-1">
+        <div className="flex items-center justify-between">
+          <Label className="text-[11px] text-muted-foreground">Brightness</Label>
+          <span className="font-mono text-[10px] text-muted-foreground/60">
+            {Math.round(brightness * 100)}%
+          </span>
+        </div>
+        <input
+          type="range"
+          min="0.5"
+          max="1.5"
+          step="0.05"
+          value={brightness}
+          onChange={(e) => {
+            const v = Number(e.target.value);
+            setBrightness(v);
+            onVideoFilterChange({ brightness: v, contrast });
+          }}
+          className="h-1 w-full cursor-pointer appearance-none rounded-full bg-muted accent-primary"
+        />
+      </div>
+
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between">
+          <Label className="text-[11px] text-muted-foreground">Contrast</Label>
+          <span className="font-mono text-[10px] text-muted-foreground/60">
+            {Math.round(contrast * 100)}%
+          </span>
+        </div>
+        <input
+          type="range"
+          min="0.5"
+          max="1.5"
+          step="0.05"
+          value={contrast}
+          onChange={(e) => {
+            const v = Number(e.target.value);
+            setContrast(v);
+            onVideoFilterChange({ brightness, contrast: v });
+          }}
+          className="h-1 w-full cursor-pointer appearance-none rounded-full bg-muted accent-primary"
+        />
+      </div>
+
+      {brightness !== 1 || contrast !== 1 ? (
+        <button
+          type="button"
+          onClick={() => {
+            setBrightness(1);
+            setContrast(1);
+            onVideoFilterChange({ brightness: 1, contrast: 1 });
+          }}
+          className="text-[10px] text-muted-foreground hover:text-foreground"
+        >
+          Reset adjustments
+        </button>
+      ) : null}
+    </>
+  );
+}
+
+function renderCameraSection({
+  videoGranted,
+  videoDevices,
+  effectiveVideoId,
+  brightness,
+  contrast,
+  setBrightness,
+  setContrast,
+  setSelectedVideoId,
+  onSwitchDevice,
+  onVideoFilterChange,
+  request,
+  requestingVideo,
+  videoError,
+}: {
+  videoGranted: boolean;
+  videoDevices: MediaDeviceOption[];
+  effectiveVideoId: string | null;
+  brightness: number;
+  contrast: number;
+  setBrightness: (n: number) => void;
+  setContrast: (n: number) => void;
+  setSelectedVideoId: (id: string) => void;
+  onSwitchDevice: (kind: MediaDeviceKind, deviceId: string) => void;
+  onVideoFilterChange: (settings: { brightness: number; contrast: number }) => void;
+  request: (kind: 'audio' | 'video') => Promise<void>;
+  requestingVideo: boolean;
+  videoError: string | null;
+}) {
+  if (videoGranted && videoDevices.length > 0) {
+    return (
+      <>
+        <VideoPreview deviceId={effectiveVideoId} brightness={brightness} contrast={contrast} />
+        {videoDevices.length > 1 ? (
+          <Select
+            value={effectiveVideoId ?? undefined}
+            onValueChange={(v) => {
+              setSelectedVideoId(v);
+              onSwitchDevice('videoinput', v);
+            }}
+          >
+            <SelectTrigger className="h-7 text-[11px]">
+              {videoDevices.find((d) => d.deviceId === effectiveVideoId)?.label ?? 'Select camera'}
+            </SelectTrigger>
+            <SelectContent>
+              {videoDevices.map((d) => (
+                <SelectItem key={d.deviceId} value={d.deviceId} className="text-xs">
+                  {d.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : null}
+
+        <VideoFilterControls
+          brightness={brightness}
+          contrast={contrast}
+          setBrightness={setBrightness}
+          setContrast={setContrast}
+          onVideoFilterChange={onVideoFilterChange}
+        />
+      </>
+    );
+  }
+
+  if (videoGranted) {
+    return (
+      <NoDevicesPrompt
+        kind="video"
+        icon={Camera}
+        onRefresh={() => void request('video')}
+        refreshing={requestingVideo}
+      />
+    );
+  }
+
+  return (
+    <GrantPermissionPrompt
+      kind="video"
+      icon={Camera}
+      onRequest={() => void request('video')}
+      requesting={requestingVideo}
+      error={videoError}
+    />
+  );
+}
+
+function renderMicrophoneSection({
+  audioGranted,
+  audioDevices,
+  effectiveAudioId,
+  audioProcessing,
+  setSelectedAudioId,
+  onSwitchDevice,
+  onAudioProcessingChange,
+  request,
+  requestingAudio,
+  audioError,
+}: {
+  audioGranted: boolean;
+  audioDevices: MediaDeviceOption[];
+  effectiveAudioId: string | null;
+  audioProcessing: AudioProcessingSettings;
+  setSelectedAudioId: (id: string) => void;
+  onSwitchDevice: (kind: MediaDeviceKind, deviceId: string) => void;
+  onAudioProcessingChange: (settings: AudioProcessingSettings) => void;
+  request: (kind: 'audio' | 'video') => Promise<void>;
+  requestingAudio: boolean;
+  audioError: string | null;
+}) {
+  if (audioGranted && audioDevices.length > 0) {
+    return (
+      <>
+        <AudioLevelMeter deviceId={effectiveAudioId} />
+
+        {audioDevices.length > 1 ? (
+          <Select
+            value={effectiveAudioId ?? undefined}
+            onValueChange={(v) => {
+              setSelectedAudioId(v);
+              onSwitchDevice('audioinput', v);
+            }}
+          >
+            <SelectTrigger className="h-7 text-[11px]">
+              {audioDevices.find((d) => d.deviceId === effectiveAudioId)?.label ??
+                'Select microphone'}
+            </SelectTrigger>
+            <SelectContent>
+              {audioDevices.map((d) => (
+                <SelectItem key={d.deviceId} value={d.deviceId} className="text-xs">
+                  {d.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : null}
+
+        <Separator className="my-1" />
+
+        <div className="flex flex-wrap gap-1.5">
+          <ToggleChip
+            label="Noise suppression"
+            icon={Shield}
+            active={audioProcessing.noiseSuppression}
+            onClick={() =>
+              onAudioProcessingChange({
+                ...audioProcessing,
+                noiseSuppression: !audioProcessing.noiseSuppression,
+              })
+            }
+          />
+          <ToggleChip
+            label="Echo cancel"
+            icon={Sparkles}
+            active={audioProcessing.echoCancellation}
+            onClick={() =>
+              onAudioProcessingChange({
+                ...audioProcessing,
+                echoCancellation: !audioProcessing.echoCancellation,
+              })
+            }
+          />
+          <ToggleChip
+            label="Auto gain"
+            icon={SlidersHorizontal}
+            active={audioProcessing.autoGainControl}
+            onClick={() =>
+              onAudioProcessingChange({
+                ...audioProcessing,
+                autoGainControl: !audioProcessing.autoGainControl,
+              })
+            }
+          />
+        </div>
+      </>
+    );
+  }
+
+  if (audioGranted) {
+    return (
+      <NoDevicesPrompt
+        kind="audio"
+        icon={Mic}
+        onRefresh={() => void request('audio')}
+        refreshing={requestingAudio}
+      />
+    );
+  }
+
+  return (
+    <GrantPermissionPrompt
+      kind="audio"
+      icon={Mic}
+      onRequest={() => void request('audio')}
+      requesting={requestingAudio}
+      error={audioError}
+    />
   );
 }
 
@@ -532,109 +807,21 @@ export function MediaSettingsPanel({
               <span className="text-xs font-medium text-foreground">Camera</span>
             </div>
 
-            {videoGranted && videoDevices.length > 0 ? (
-              <>
-                <VideoPreview
-                  deviceId={effectiveVideoId}
-                  brightness={brightness}
-                  contrast={contrast}
-                />
-                {videoDevices.length > 1 ? (
-                  <Select
-                    value={effectiveVideoId ?? undefined}
-                    onValueChange={(v) => {
-                      setSelectedVideoId(v);
-                      onSwitchDevice('videoinput', v);
-                    }}
-                  >
-                    <SelectTrigger className="h-7 text-[11px]">
-                      {videoDevices.find((d) => d.deviceId === effectiveVideoId)?.label ??
-                        'Select camera'}
-                    </SelectTrigger>
-                    <SelectContent>
-                      {videoDevices.map((d) => (
-                        <SelectItem key={d.deviceId} value={d.deviceId} className="text-xs">
-                          {d.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                ) : null}
-
-                <div className="space-y-1.5 pt-1">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-[11px] text-muted-foreground">Brightness</Label>
-                    <span className="font-mono text-[10px] text-muted-foreground/60">
-                      {Math.round(brightness * 100)}%
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min="0.5"
-                    max="1.5"
-                    step="0.05"
-                    value={brightness}
-                    onChange={(e) => {
-                      const v = Number(e.target.value);
-                      setBrightness(v);
-                      onVideoFilterChange({ brightness: v, contrast });
-                    }}
-                    className="h-1 w-full cursor-pointer appearance-none rounded-full bg-muted accent-primary"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-[11px] text-muted-foreground">Contrast</Label>
-                    <span className="font-mono text-[10px] text-muted-foreground/60">
-                      {Math.round(contrast * 100)}%
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min="0.5"
-                    max="1.5"
-                    step="0.05"
-                    value={contrast}
-                    onChange={(e) => {
-                      const v = Number(e.target.value);
-                      setContrast(v);
-                      onVideoFilterChange({ brightness, contrast: v });
-                    }}
-                    className="h-1 w-full cursor-pointer appearance-none rounded-full bg-muted accent-primary"
-                  />
-                </div>
-
-                {brightness !== 1 || contrast !== 1 ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setBrightness(1);
-                      setContrast(1);
-                      onVideoFilterChange({ brightness: 1, contrast: 1 });
-                    }}
-                    className="text-[10px] text-muted-foreground hover:text-foreground"
-                  >
-                    Reset adjustments
-                  </button>
-                ) : null}
-              </>
-            ) : !videoGranted ? (
-              <GrantPermissionPrompt
-                kind="video"
-                icon={Camera}
-                onRequest={() => void request('video')}
-                requesting={requestingVideo}
-                error={videoError}
-              />
-            ) : (
-              <NoDevicesPrompt
-                kind="video"
-                icon={Camera}
-                onRefresh={() => void request('video')}
-                refreshing={requestingVideo}
-              />
-            )}
+            {renderCameraSection({
+              videoGranted,
+              videoDevices,
+              effectiveVideoId,
+              brightness,
+              contrast,
+              setBrightness,
+              setContrast,
+              setSelectedVideoId,
+              onSwitchDevice,
+              onVideoFilterChange,
+              request,
+              requestingVideo,
+              videoError,
+            })}
           </div>
 
           <div className="space-y-2 rounded-lg bg-muted/20 p-2.5">
@@ -643,86 +830,18 @@ export function MediaSettingsPanel({
               <span className="text-xs font-medium text-foreground">Microphone</span>
             </div>
 
-            {audioGranted && audioDevices.length > 0 ? (
-              <>
-                <AudioLevelMeter deviceId={effectiveAudioId} />
-
-                {audioDevices.length > 1 ? (
-                  <Select
-                    value={effectiveAudioId ?? undefined}
-                    onValueChange={(v) => {
-                      setSelectedAudioId(v);
-                      onSwitchDevice('audioinput', v);
-                    }}
-                  >
-                    <SelectTrigger className="h-7 text-[11px]">
-                      {audioDevices.find((d) => d.deviceId === effectiveAudioId)?.label ??
-                        'Select microphone'}
-                    </SelectTrigger>
-                    <SelectContent>
-                      {audioDevices.map((d) => (
-                        <SelectItem key={d.deviceId} value={d.deviceId} className="text-xs">
-                          {d.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                ) : null}
-
-                <Separator className="my-1" />
-
-                <div className="flex flex-wrap gap-1.5">
-                  <ToggleChip
-                    label="Noise suppression"
-                    icon={Shield}
-                    active={audioProcessing.noiseSuppression}
-                    onClick={() =>
-                      onAudioProcessingChange({
-                        ...audioProcessing,
-                        noiseSuppression: !audioProcessing.noiseSuppression,
-                      })
-                    }
-                  />
-                  <ToggleChip
-                    label="Echo cancel"
-                    icon={Sparkles}
-                    active={audioProcessing.echoCancellation}
-                    onClick={() =>
-                      onAudioProcessingChange({
-                        ...audioProcessing,
-                        echoCancellation: !audioProcessing.echoCancellation,
-                      })
-                    }
-                  />
-                  <ToggleChip
-                    label="Auto gain"
-                    icon={SlidersHorizontal}
-                    active={audioProcessing.autoGainControl}
-                    onClick={() =>
-                      onAudioProcessingChange({
-                        ...audioProcessing,
-                        autoGainControl: !audioProcessing.autoGainControl,
-                      })
-                    }
-                  />
-                </div>
-              </>
-            ) : !audioGranted ? (
-              <GrantPermissionPrompt
-                kind="audio"
-                icon={Mic}
-                onRequest={() => void request('audio')}
-                requesting={requestingAudio}
-                error={audioError}
-              />
-            ) : (
-              <NoDevicesPrompt
-                kind="audio"
-                icon={Mic}
-                onRefresh={() => void request('audio')}
-                refreshing={requestingAudio}
-              />
-            )}
+            {renderMicrophoneSection({
+              audioGranted,
+              audioDevices,
+              effectiveAudioId,
+              audioProcessing,
+              setSelectedAudioId,
+              onSwitchDevice,
+              onAudioProcessingChange,
+              request,
+              requestingAudio,
+              audioError,
+            })}
           </div>
 
           <div className="space-y-2 rounded-lg bg-muted/20 p-2.5">

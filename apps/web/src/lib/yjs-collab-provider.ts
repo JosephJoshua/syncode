@@ -307,7 +307,7 @@ export class YjsCollabProvider {
     awarenessProtocol.applyAwarenessUpdate(this.awareness, payload, null);
   }
 
-  private handleDocUpdate = (update: Uint8Array, origin: unknown): void => {
+  private readonly handleDocUpdate = (update: Uint8Array, origin: unknown): void => {
     if (this.disposed || origin === this) return;
 
     const encoder = encoding.createEncoder();
@@ -316,7 +316,7 @@ export class YjsCollabProvider {
     this.send(encoding.toUint8Array(encoder));
   };
 
-  private handleAwarenessUpdate = (
+  private readonly handleAwarenessUpdate = (
     { added, updated, removed }: { added: number[]; updated: number[]; removed: number[] },
     origin: unknown,
   ): void => {

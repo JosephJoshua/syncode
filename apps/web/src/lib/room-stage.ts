@@ -61,7 +61,7 @@ export function formatTimer(ms: number): string {
 }
 
 export function buildInviteLink(roomId: string, roomCode: string): string {
-  return `${window.location.origin}/rooms/${roomId}?code=${roomCode}`;
+  return `${globalThis.window.location.origin}/rooms/${roomId}?code=${roomCode}`;
 }
 
 export function computeRoomElapsedMs({

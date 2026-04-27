@@ -4,14 +4,14 @@ import { Dialog } from 'radix-ui';
 import { useTranslation } from 'react-i18next';
 
 interface DeleteAccountDialogProps {
-  confirmationEmail: string;
-  isPending: boolean;
-  isValid: boolean;
-  open: boolean;
-  profileEmail: string | null | undefined;
-  onConfirmationEmailChange: (value: string) => void;
-  onDelete: () => void;
-  onOpenChange: (open: boolean) => void;
+  readonly confirmationEmail: string;
+  readonly isPending: boolean;
+  readonly isValid: boolean;
+  readonly open: boolean;
+  readonly profileEmail: string | null | undefined;
+  readonly onConfirmationEmailChange: (value: string) => void;
+  readonly onDelete: () => void;
+  readonly onOpenChange: (open: boolean) => void;
 }
 
 export function DeleteAccountDialog({

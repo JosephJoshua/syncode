@@ -115,18 +115,23 @@ describe('PUT /users/me/bookmarks/:problemId', () => {
   it('GIVEN non-existent problem WHEN adding bookmark THEN returns 404', async () => {
     const user = await insertUser(db);
 
-    await asUser(
+    const res = await asUser(
       request(app.getHttpServer()).put('/users/me/bookmarks/00000000-0000-0000-0000-000000000000'),
       user,
-    ).expect(404);
+    );
+
+    expect(res.status).toBe(404);
   });
 
   it('GIVEN invalid UUID WHEN adding bookmark THEN returns 400', async () => {
     const user = await insertUser(db);
 
-    await asUser(request(app.getHttpServer()).put('/users/me/bookmarks/not-a-uuid'), user).expect(
-      400,
+    const res = await asUser(
+      request(app.getHttpServer()).put('/users/me/bookmarks/not-a-uuid'),
+      user,
     );
+
+    expect(res.status).toBe(400);
   });
 });
 
@@ -152,11 +157,13 @@ describe('DELETE /users/me/bookmarks/:problemId', () => {
   it('GIVEN no existing bookmark WHEN removing THEN returns 204 (idempotent)', async () => {
     const user = await insertUser(db);
 
-    await asUser(
+    const res = await asUser(
       request(app.getHttpServer()).delete(
         '/users/me/bookmarks/00000000-0000-0000-0000-000000000000',
       ),
       user,
-    ).expect(204);
+    );
+
+    expect(res.status).toBe(204);
   });
 });

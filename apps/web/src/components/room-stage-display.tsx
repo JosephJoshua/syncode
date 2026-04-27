@@ -2,8 +2,8 @@ import type { RoomStatus } from '@syncode/shared';
 import { useTranslation } from 'react-i18next';
 
 interface RoomStageIndicatorProps {
-  phase: RoomStatus;
-  className?: string;
+  readonly phase: RoomStatus;
+  readonly className?: string;
 }
 
 const phaseConfig: Record<

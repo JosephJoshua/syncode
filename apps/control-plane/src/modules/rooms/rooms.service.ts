@@ -234,7 +234,7 @@ export class RoomsService {
     query: BrowseRoomsQuery,
   ): Promise<PaginatedResult<PublicRoomSummaryResult>> {
     const escapedSearch = query.search
-      ? query.search.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_')
+      ? query.search.replaceAll('\\', '\\\\').replaceAll('%', '\\%').replaceAll('_', '\\_')
       : null;
 
     const result = await paginate<PublicRoomSummaryResult>({
@@ -253,7 +253,8 @@ export class RoomsService {
         if (query.language) conditions.push(eq(rooms.language, query.language));
         if (query.difficulty) conditions.push(eq(problems.difficulty, query.difficulty));
         if (escapedSearch) {
-          conditions.push(sql`${problems.title} ILIKE ${`%${escapedSearch}%`} ESCAPE '\\'`);
+          const searchPattern = `%${escapedSearch}%`;
+          conditions.push(sql`${problems.title} ILIKE ${searchPattern} ESCAPE '\\'`);
         }
 
         if (decoded?.length === 2 && decoded[0] && decoded[1]) {
@@ -403,25 +404,7 @@ export class RoomsService {
       // would break WS reconnect reactivation, which re-calls this endpoint with
       // an empty body.
       if (!existing) {
-        if (room.isPrivate) {
-          if (!input.roomCode) {
-            throw new BadRequestException({
-              message: 'Room code required for private rooms',
-              code: ERROR_CODES.ROOM_INVALID_CODE,
-            });
-          }
-          if (room.inviteCode !== input.roomCode.toUpperCase()) {
-            throw new BadRequestException({
-              message: 'Invalid room code',
-              code: ERROR_CODES.ROOM_INVALID_CODE,
-            });
-          }
-        } else if (input.roomCode && room.inviteCode !== input.roomCode.toUpperCase()) {
-          throw new BadRequestException({
-            message: 'Invalid room code',
-            code: ERROR_CODES.ROOM_INVALID_CODE,
-          });
-        }
+        this.assertJoinCode(room.isPrivate, room.inviteCode, input.roomCode);
       }
 
       if (existing?.isActive) {
@@ -703,8 +686,6 @@ export class RoomsService {
             ),
           );
       }
-
-      return lockedRoom;
     });
 
     const [updatedRoom, participantRows] = await Promise.all([
@@ -766,7 +747,7 @@ export class RoomsService {
         .where(and(eq(roomParticipants.roomId, roomId), eq(roomParticipants.userId, targetUserId)))
         .for('update');
 
-      if (!targetParticipant || !targetParticipant.isActive) {
+      if (!targetParticipant?.isActive) {
         throw new NotFoundException({
           message: 'Participant not found',
           code: ERROR_CODES.PARTICIPANT_NOT_FOUND,
@@ -888,12 +869,7 @@ export class RoomsService {
         });
       }
 
-      const role = this.normalizeParticipantRole(
-        room.mode as RoomMode,
-        participant.role,
-        room.hostId,
-        userId,
-      );
+      const role = this.normalizeParticipantRole(room.mode, participant.role, room.hostId, userId);
       const isHost = room.hostId === userId;
 
       if (!hasResolvedRoomPermission(role, 'code:change-language', { isHost })) {
@@ -1121,7 +1097,7 @@ export class RoomsService {
       });
     }
 
-    const myRole = myParticipation.role as RoomRole;
+    const myRole = myParticipation.role;
     const myCapabilities = resolveRoomPermissions(myRole, {
       isHost: room.hostId === userId,
     });
@@ -1190,7 +1166,7 @@ export class RoomsService {
           });
         }
 
-        const lockedStatus = lockedRoom.status as RoomStatus;
+        const lockedStatus = lockedRoom.status;
 
         if (!isValidStatusTransition(lockedStatus, targetStatus)) {
           throw new BadRequestException({
@@ -1208,12 +1184,12 @@ export class RoomsService {
         if (lockedStatus === RoomStatus.WAITING && targetStatus === RoomStatus.WARMUP) {
           const activeParticipants = await this.fetchActiveParticipants(tx, lockedRoom);
           this.assertActiveRoleConfiguration(
-            lockedRoom.mode as RoomMode,
+            lockedRoom.mode,
             RoomStatus.WARMUP,
             activeParticipants,
             { strict: true },
           );
-          this.assertRequiredParticipantsReady(lockedRoom.mode as RoomMode, activeParticipants);
+          this.assertRequiredParticipantsReady(lockedRoom.mode, activeParticipants);
         }
 
         const roomUpdate: Partial<typeof rooms.$inferInsert> = {
@@ -1251,42 +1227,7 @@ export class RoomsService {
         }
 
         if (lockedStatus === RoomStatus.WAITING && targetStatus === RoomStatus.WARMUP) {
-          const [session] = await tx
-            .insert(sessions)
-            .values({
-              roomId,
-              problemId: lockedRoom.problemId,
-              mode: lockedRoom.mode,
-              language: lockedRoom.language,
-              status: 'ongoing',
-              startedAt: now,
-            })
-            .returning();
-
-          const participantRows = await tx
-            .select({
-              userId: roomParticipants.userId,
-              role: roomParticipants.role,
-              joinedAt: roomParticipants.joinedAt,
-            })
-            .from(roomParticipants)
-            .where(and(eq(roomParticipants.roomId, roomId), eq(roomParticipants.isActive, true)));
-
-          if (participantRows.length > 0) {
-            await tx.insert(sessionParticipants).values(
-              participantRows.map((participantRow) => ({
-                sessionId: session!.id,
-                userId: participantRow.userId,
-                role: this.normalizeParticipantRole(
-                  lockedRoom.mode as RoomMode,
-                  participantRow.role,
-                  lockedRoom.hostId,
-                  participantRow.userId,
-                ),
-                joinedAt: participantRow.joinedAt,
-              })),
-            );
-          }
+          await this.startSessionForRoom(tx, lockedRoom, now);
         }
 
         let completedSessionId: string | null = null;
@@ -1338,6 +1279,68 @@ export class RoomsService {
       transitionedAt: now,
       transitionedBy: userId,
     };
+  }
+
+  private async startSessionForRoom(
+    tx: Parameters<Parameters<Database['transaction']>[0]>[0],
+    lockedRoom: typeof rooms.$inferSelect,
+    now: Date,
+  ): Promise<void> {
+    const [session] = await tx
+      .insert(sessions)
+      .values({
+        roomId: lockedRoom.id,
+        problemId: lockedRoom.problemId,
+        mode: lockedRoom.mode,
+        language: lockedRoom.language,
+        status: 'ongoing',
+        startedAt: now,
+      })
+      .returning();
+
+    const participantRows = await tx
+      .select({
+        userId: roomParticipants.userId,
+        role: roomParticipants.role,
+        joinedAt: roomParticipants.joinedAt,
+      })
+      .from(roomParticipants)
+      .where(and(eq(roomParticipants.roomId, lockedRoom.id), eq(roomParticipants.isActive, true)));
+
+    if (participantRows.length === 0) return;
+
+    await tx.insert(sessionParticipants).values(
+      participantRows.map((participantRow) => ({
+        sessionId: session!.id,
+        userId: participantRow.userId,
+        role: this.normalizeParticipantRole(
+          lockedRoom.mode,
+          participantRow.role,
+          lockedRoom.hostId,
+          participantRow.userId,
+        ),
+        joinedAt: participantRow.joinedAt,
+      })),
+    );
+  }
+
+  private assertJoinCode(
+    isPrivate: boolean,
+    inviteCode: string,
+    suppliedCode: string | undefined,
+  ): void {
+    if (isPrivate && !suppliedCode) {
+      throw new BadRequestException({
+        message: 'Room code required for private rooms',
+        code: ERROR_CODES.ROOM_INVALID_CODE,
+      });
+    }
+    if (suppliedCode && inviteCode !== suppliedCode.toUpperCase()) {
+      throw new BadRequestException({
+        message: 'Invalid room code',
+        code: ERROR_CODES.ROOM_INVALID_CODE,
+      });
+    }
   }
 
   private getInitialHostRole(mode: RoomMode): RoomRole {

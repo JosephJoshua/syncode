@@ -12,7 +12,7 @@ function createImage(url: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const image = new Image();
     image.addEventListener('load', () => resolve(image));
-    image.addEventListener('error', (error) => reject(error));
+    image.addEventListener('error', () => reject(new Error('Failed to load image')));
     image.crossOrigin = 'anonymous';
     image.src = url;
   });
@@ -61,10 +61,10 @@ export async function cropImage(imageSrc: string, cropArea: CropArea): Promise<B
 }
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
-const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+const ALLOWED_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
 export function validateImageFile(file: File): string | null {
-  if (!ALLOWED_TYPES.includes(file.type)) {
+  if (!ALLOWED_TYPES.has(file.type)) {
     return 'Only JPEG, PNG, and WebP images are allowed.';
   }
 

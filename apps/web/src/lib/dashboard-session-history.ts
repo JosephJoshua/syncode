@@ -246,12 +246,7 @@ export function normalizeSessionSummary(
     viewerRole,
     role: displayRole,
     status: getSessionStatus(viewerRole, session.overallScore),
-    partner:
-      viewerRole === 'candidate'
-        ? toSessionParticipant(interviewer, currentUserId)
-        : viewerRole === 'interviewer'
-          ? toSessionParticipant(candidate, currentUserId)
-          : null,
+    partner: getPartnerParticipant(viewerRole, interviewer, candidate, currentUserId),
     observer:
       viewerRole === 'observer'
         ? toSessionParticipant(viewerParticipant, currentUserId)
@@ -361,6 +356,17 @@ function toDashboardRole(role: string | null | undefined): SessionRole | null {
 
 function findParticipantByRole(participants: SessionHistoryParticipant[], role: SessionRole) {
   return participants.find((participant) => participant.role === role) ?? null;
+}
+
+function getPartnerParticipant(
+  viewerRole: SessionRole | null,
+  interviewer: SessionHistoryParticipant | null,
+  candidate: SessionHistoryParticipant | null,
+  currentUserId: string | null,
+): SessionParticipant | null {
+  if (viewerRole === 'candidate') return toSessionParticipant(interviewer, currentUserId);
+  if (viewerRole === 'interviewer') return toSessionParticipant(candidate, currentUserId);
+  return null;
 }
 
 function toSessionParticipant(

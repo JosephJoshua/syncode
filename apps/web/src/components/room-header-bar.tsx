@@ -14,17 +14,23 @@ const STAGE_ACCENT_CLASSES: Record<RoomStatus, string> = {
   finished: 'stage-accent-finished',
 };
 
+function getPresenceDotColor(isMediaConnected: boolean, isActive: boolean): string {
+  if (isMediaConnected) return 'bg-emerald-400';
+  if (isActive) return 'bg-muted-foreground/50';
+  return 'bg-muted-foreground/20';
+}
+
 interface RoomHeaderBarProps {
-  roomName: string | null;
-  status: RoomStatus;
-  myRole: RoomRole;
-  isHost: boolean;
-  elapsedMs: number;
-  participants: Participant[];
-  speakingMap?: ReadonlyMap<string, boolean>;
-  mediaControls?: React.ReactNode;
-  mediaConnectedSet?: ReadonlySet<string>;
-  mediaMutedMap?: ReadonlyMap<string, boolean>;
+  readonly roomName: string | null;
+  readonly status: RoomStatus;
+  readonly myRole: RoomRole;
+  readonly isHost: boolean;
+  readonly elapsedMs: number;
+  readonly participants: Participant[];
+  readonly speakingMap?: ReadonlyMap<string, boolean>;
+  readonly mediaControls?: React.ReactNode;
+  readonly mediaConnectedSet?: ReadonlySet<string>;
+  readonly mediaMutedMap?: ReadonlyMap<string, boolean>;
 }
 
 export function RoomHeaderBar({
@@ -110,11 +116,7 @@ export function RoomHeaderBar({
                 <span
                   className={cn(
                     'absolute -bottom-0.5 -right-0.5 size-1.5 rounded-full border border-background',
-                    mediaConnectedSet?.has(p.userId)
-                      ? 'bg-emerald-400'
-                      : p.isActive
-                        ? 'bg-muted-foreground/50'
-                        : 'bg-muted-foreground/20',
+                    getPresenceDotColor(mediaConnectedSet?.has(p.userId) ?? false, p.isActive),
                   )}
                 />
               )}

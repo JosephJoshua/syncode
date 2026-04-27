@@ -11,22 +11,22 @@ import {
   Label,
 } from '@syncode/ui';
 import { LoaderCircle } from 'lucide-react';
-import type { ReactNode } from 'react';
+import type { FormEvent, ReactNode } from 'react';
 import type { FieldErrors, UseFormRegister, UseFormReset } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { Skeleton } from '@/components/ui/skeleton.js';
 import type { ProfileFormValues } from './profile-form.js';
 
 interface ProfileFormCardProps {
-  errors: FieldErrors<ProfileFormValues>;
-  isDirty: boolean;
-  isLoading: boolean;
-  isPending: boolean;
-  profile: UserProfileResponse | null;
-  register: UseFormRegister<ProfileFormValues>;
-  reset: UseFormReset<ProfileFormValues>;
-  onCancel: () => void;
-  onSubmit: React.FormEventHandler<HTMLFormElement>;
+  readonly errors: FieldErrors<ProfileFormValues>;
+  readonly isDirty: boolean;
+  readonly isLoading: boolean;
+  readonly isPending: boolean;
+  readonly profile: UserProfileResponse | null;
+  readonly register: UseFormRegister<ProfileFormValues>;
+  readonly reset: UseFormReset<ProfileFormValues>;
+  readonly onCancel: () => void;
+  readonly onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }
 
 export function ProfileFormCard({
@@ -151,11 +151,11 @@ function Field({
   error,
   children,
 }: {
-  id: string;
-  label: string;
-  hint: string;
-  error?: string;
-  children: ReactNode;
+  readonly id: string;
+  readonly label: string;
+  readonly hint: string;
+  readonly error?: string;
+  readonly children: ReactNode;
 }) {
   return (
     <div className="space-y-2.5">

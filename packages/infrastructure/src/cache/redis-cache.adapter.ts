@@ -60,10 +60,10 @@ export class RedisCacheAdapter implements ICacheService, OnModuleDestroy {
   async set<T = unknown>(key: string, value: T, ttlSeconds?: number): Promise<void> {
     const serialized = JSON.stringify(value);
 
-    if (ttlSeconds !== undefined) {
-      await this.client.setex(key, ttlSeconds, serialized);
-    } else {
+    if (ttlSeconds === undefined) {
       await this.client.set(key, serialized);
+    } else {
+      await this.client.setex(key, ttlSeconds, serialized);
     }
   }
 
@@ -117,7 +117,7 @@ export class RedisCacheAdapter implements ICacheService, OnModuleDestroy {
 
   async incrBy(key: string, amount = 1, ttlSeconds?: number): Promise<number> {
     if (!Number.isInteger(amount)) {
-      throw new Error(`incrBy amount must be an integer, got: ${amount}`);
+      throw new TypeError(`incrBy amount must be an integer, got: ${amount}`);
     }
 
     if (ttlSeconds !== undefined) {

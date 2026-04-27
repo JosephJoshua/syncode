@@ -9,8 +9,8 @@ const difficultyBadgeVariant: Record<ProblemDifficulty, 'success' | 'warning' | 
 };
 
 export interface ProblemCardProps {
-  problem: ProblemItem;
-  tagNames: string[];
+  readonly problem: ProblemItem;
+  readonly tagNames: string[];
 }
 
 export function ProblemCard({ problem, tagNames }: ProblemCardProps) {

@@ -14,20 +14,20 @@ import { useTranslation } from 'react-i18next';
 import { useVideoTrack } from '@/hooks/use-video-track.js';
 
 export interface VideoPanelParticipant {
-  identity: string;
-  displayName: string;
-  avatarUrl: string | null;
-  hasVideo: boolean;
-  videoTrack: MediaStreamTrack | null;
-  hasScreenShare: boolean;
-  screenShareTrack: MediaStreamTrack | null;
-  isSpeaking: boolean;
-  isLocal: boolean;
+  readonly identity: string;
+  readonly displayName: string;
+  readonly avatarUrl: string | null;
+  readonly hasVideo: boolean;
+  readonly videoTrack: MediaStreamTrack | null;
+  readonly hasScreenShare: boolean;
+  readonly screenShareTrack: MediaStreamTrack | null;
+  readonly isSpeaking: boolean;
+  readonly isLocal: boolean;
 }
 
 interface ParticipantTileProps extends Omit<VideoPanelParticipant, 'identity'> {
-  onZoom?: () => void;
-  fit?: 'cover' | 'contain';
+  readonly onZoom?: () => void;
+  readonly fit?: 'cover' | 'contain';
 }
 
 function ParticipantTile({
@@ -108,10 +108,10 @@ function ParticipantTile({
 }
 
 interface ScreenShareTileProps {
-  displayName: string;
-  screenShareTrack: MediaStreamTrack;
-  onZoom?: () => void;
-  fill?: boolean;
+  readonly displayName: string;
+  readonly screenShareTrack: MediaStreamTrack;
+  readonly onZoom?: () => void;
+  readonly fill?: boolean;
 }
 
 function ScreenShareTile({
@@ -204,9 +204,9 @@ function useZoomInteractiveProps(onZoom: (() => void) | undefined) {
 }
 
 interface ZoomOverlayProps {
-  tile: VideoPanelParticipant;
-  kind: 'camera' | 'screen';
-  onClose: () => void;
+  readonly tile: VideoPanelParticipant;
+  readonly kind: 'camera' | 'screen';
+  readonly onClose: () => void;
 }
 
 function ZoomOverlay({ tile, kind, onClose }: ZoomOverlayProps) {
@@ -251,11 +251,9 @@ function ZoomOverlay({ tile, kind, onClose }: ZoomOverlayProps) {
           e.preventDefault();
           last.focus();
         }
-      } else {
-        if (active === last) {
-          e.preventDefault();
-          first.focus();
-        }
+      } else if (active === last) {
+        e.preventDefault();
+        first.focus();
       }
     },
     [onClose],
@@ -323,10 +321,10 @@ function pickActiveTile(tiles: VideoPanelParticipant[]): VideoPanelParticipant |
 }
 
 interface FloatingVideoPanelProps {
-  tiles: VideoPanelParticipant[];
-  isMinimized: boolean;
-  onToggleMinimize: () => void;
-  onDock: () => void;
+  readonly tiles: VideoPanelParticipant[];
+  readonly isMinimized: boolean;
+  readonly onToggleMinimize: () => void;
+  readonly onDock: () => void;
 }
 
 const SPRING_CONFIG = { stiffness: 300, damping: 30 };
@@ -338,6 +336,44 @@ const FLOATING_MIN_HEIGHT = 150;
 const VIEWPORT_PADDING = 32;
 
 type ResizeCorner = 'tl' | 'tr' | 'bl' | 'br';
+
+function computeResizeFromCorner(
+  corner: ResizeCorner,
+  origin: { width: number; height: number; x: number; y: number },
+  dx: number,
+  dy: number,
+): { rawWidth: number; rawHeight: number; rawX: number; rawY: number } {
+  switch (corner) {
+    case 'br':
+      return {
+        rawWidth: origin.width + dx,
+        rawHeight: origin.height + dy,
+        rawX: origin.x,
+        rawY: origin.y,
+      };
+    case 'tr':
+      return {
+        rawWidth: origin.width + dx,
+        rawHeight: origin.height - dy,
+        rawX: origin.x,
+        rawY: origin.y + dy,
+      };
+    case 'bl':
+      return {
+        rawWidth: origin.width - dx,
+        rawHeight: origin.height + dy,
+        rawX: origin.x + dx,
+        rawY: origin.y,
+      };
+    default:
+      return {
+        rawWidth: origin.width - dx,
+        rawHeight: origin.height - dy,
+        rawX: origin.x + dx,
+        rawY: origin.y + dy,
+      };
+  }
+}
 
 export function FloatingVideoPanel({
   tiles,
@@ -501,28 +537,12 @@ export function FloatingVideoPanel({
       const dy = e.clientY - r.startY;
 
       // Compute requested size and position from the dragged corner.
-      let rawWidth = r.originWidth;
-      let rawHeight = r.originHeight;
-      let rawX = r.originPosX;
-      let rawY = r.originPosY;
-
-      if (r.corner === 'br') {
-        rawWidth = r.originWidth + dx;
-        rawHeight = r.originHeight + dy;
-      } else if (r.corner === 'tr') {
-        rawWidth = r.originWidth + dx;
-        rawHeight = r.originHeight - dy;
-        rawY = r.originPosY + dy;
-      } else if (r.corner === 'bl') {
-        rawWidth = r.originWidth - dx;
-        rawHeight = r.originHeight + dy;
-        rawX = r.originPosX + dx;
-      } else {
-        rawWidth = r.originWidth - dx;
-        rawHeight = r.originHeight - dy;
-        rawX = r.originPosX + dx;
-        rawY = r.originPosY + dy;
-      }
+      const { rawWidth, rawHeight, rawX, rawY } = computeResizeFromCorner(
+        r.corner,
+        { width: r.originWidth, height: r.originHeight, x: r.originPosX, y: r.originPosY },
+        dx,
+        dy,
+      );
 
       const clampedSize = clampSize(rawWidth, rawHeight);
 
@@ -647,7 +667,7 @@ export function FloatingVideoPanel({
             </div>
           </div>
 
-          {!isMinimized ? (
+          {isMinimized ? null : (
             <div className="relative overflow-hidden p-1" style={{ height: size.height - 28 }}>
               <AnimatePresence mode="popLayout">
                 {activeTile ? (
@@ -683,7 +703,7 @@ export function FloatingVideoPanel({
                 ) : null}
               </AnimatePresence>
             </div>
-          ) : null}
+          )}
 
           {showResize ? (
             <>
@@ -767,8 +787,8 @@ export function FloatingVideoPanel({
 }
 
 interface DockedVideoPanelProps {
-  tiles: VideoPanelParticipant[];
-  onUndock: () => void;
+  readonly tiles: VideoPanelParticipant[];
+  readonly onUndock: () => void;
 }
 
 export function DockedVideoPanel({ tiles, onUndock }: DockedVideoPanelProps) {

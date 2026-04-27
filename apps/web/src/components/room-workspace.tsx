@@ -113,6 +113,84 @@ interface RoomWorkspaceProps {
   dockedVideoPanel?: React.ReactNode;
 }
 
+interface CasePollDeps {
+  readonly caseId: string;
+  readonly jobId: string;
+  readonly expectedOutput: string | null;
+  readonly token: { cancelled: boolean };
+  readonly setMultiRunState: React.Dispatch<React.SetStateAction<MultiRunState>>;
+  readonly t: (key: string) => string;
+}
+
+async function executeCasePoll(deps: CasePollDeps): Promise<void> {
+  const { caseId, jobId, expectedOutput, token, setMultiRunState, t } = deps;
+  try {
+    const response = await api(CONTROL_API.EXECUTION.GET_RESULT, { params: { jobId } });
+    if (token.cancelled) return;
+
+    if (isExecutionResultPayload(response)) {
+      const passed =
+        expectedOutput != null ? response.stdout.trim() === expectedOutput.trim() : null;
+
+      setMultiRunState((prev) => {
+        if (prev.status !== 'running' && prev.status !== 'completed') return prev;
+        const next = new Map(prev.results);
+        next.set(caseId, {
+          status: response.status,
+          jobId,
+          stdout: response.stdout,
+          stderr: response.stderr,
+          exitCode: response.exitCode,
+          durationMs: response.durationMs,
+          memoryUsageMb: response.memoryUsageMb,
+          timedOut: response.timedOut,
+          error: response.error,
+          passed,
+        });
+        let allDone = true;
+        for (const s of next.values()) {
+          if (s.status === 'queued' || s.status === 'running') {
+            allDone = false;
+            break;
+          }
+        }
+        return { status: allDone ? 'completed' : 'running', results: next } as MultiRunState;
+      });
+      return;
+    }
+
+    if (response.status === 'queued' || response.status === 'running') {
+      setMultiRunState((prev) => {
+        if (prev.status !== 'running' && prev.status !== 'completed') return prev;
+        const current = prev.results.get(caseId);
+        if (current?.status === response.status) return prev;
+        const next = new Map(prev.results);
+        next.set(
+          caseId,
+          response.status === 'queued' ? { status: 'queued' } : { status: 'running', jobId },
+        );
+        return { ...prev, results: next };
+      });
+      setTimeout(() => {
+        if (!token.cancelled) executeCasePoll(deps).catch(() => undefined);
+      }, EXECUTION_POLL_INTERVAL_MS);
+    }
+  } catch (error) {
+    const apiError = await readApiError(error);
+    if (!token.cancelled) {
+      setMultiRunState((prev) => {
+        if (prev.status !== 'running' && prev.status !== 'completed') return prev;
+        const next = new Map(prev.results);
+        next.set(caseId, {
+          status: 'request-error',
+          message: apiError?.message ?? t('workspace.runFailed'),
+        });
+        return { ...prev, results: next };
+      });
+    }
+  }
+}
+
 export function RoomWorkspace({
   room,
   currentUserId,
@@ -312,7 +390,9 @@ export function RoomWorkspace({
     () => room.participants.filter((p: Participant) => p.isActive),
     [room.participants],
   );
-  const inviteLink = room.roomCode ? buildInviteLink(roomId, room.roomCode) : window.location.href;
+  const inviteLink = room.roomCode
+    ? buildInviteLink(roomId, room.roomCode)
+    : globalThis.window.location.href;
 
   const canSubmitCode =
     !isMockPreview && room.myCapabilities.includes('code:submit') && !!room.problemId;
@@ -397,78 +477,9 @@ export function RoomWorkspace({
     expectedOutput: string | null,
     token: { cancelled: boolean },
   ) => {
-    const poll = async () => {
-      try {
-        const response = await api(CONTROL_API.EXECUTION.GET_RESULT, { params: { jobId } });
-        if (token.cancelled) return;
-
-        if (isExecutionResultPayload(response)) {
-          const passed =
-            expectedOutput != null ? response.stdout.trim() === expectedOutput.trim() : null;
-
-          setMultiRunState((prev) => {
-            if (prev.status !== 'running' && prev.status !== 'completed') return prev;
-            const next = new Map(prev.results);
-            next.set(caseId, {
-              status: response.status,
-              jobId,
-              stdout: response.stdout,
-              stderr: response.stderr,
-              exitCode: response.exitCode,
-              durationMs: response.durationMs,
-              memoryUsageMb: response.memoryUsageMb,
-              timedOut: response.timedOut,
-              error: response.error,
-              passed,
-            });
-
-            let allDone = true;
-            for (const s of next.values()) {
-              if (s.status === 'queued' || s.status === 'running') {
-                allDone = false;
-                break;
-              }
-            }
-
-            return { status: allDone ? 'completed' : 'running', results: next } as MultiRunState;
-          });
-          return;
-        }
-
-        if (response.status === 'queued' || response.status === 'running') {
-          setMultiRunState((prev) => {
-            if (prev.status !== 'running' && prev.status !== 'completed') return prev;
-            const current = prev.results.get(caseId);
-            if (current?.status === response.status) return prev;
-            const next = new Map(prev.results);
-            next.set(
-              caseId,
-              response.status === 'queued' ? { status: 'queued' } : { status: 'running', jobId },
-            );
-            return { ...prev, results: next };
-          });
-          setTimeout(() => {
-            if (!token.cancelled) void poll();
-          }, EXECUTION_POLL_INTERVAL_MS);
-          return;
-        }
-      } catch (error) {
-        const apiError = await readApiError(error);
-        if (!token.cancelled) {
-          setMultiRunState((prev) => {
-            if (prev.status !== 'running' && prev.status !== 'completed') return prev;
-            const next = new Map(prev.results);
-            next.set(caseId, {
-              status: 'request-error',
-              message: apiError?.message ?? t('workspace.runFailed'),
-            });
-            return { ...prev, results: next };
-          });
-        }
-      }
-    };
-
-    void poll();
+    executeCasePoll({ caseId, jobId, expectedOutput, token, setMultiRunState, t }).catch(
+      () => undefined,
+    );
   };
 
   const pollSubmission = useCallback(
@@ -623,13 +634,7 @@ export function RoomWorkspace({
   requestSubmitCodeRef.current = requestSubmitCode;
 
   // Show remote results when local user is idle
-  const multiRunResults =
-    multiRunState.status === 'running' || multiRunState.status === 'completed'
-      ? multiRunState.results
-      : remoteRun?.multiRunState.status === 'running' ||
-          remoteRun?.multiRunState.status === 'completed'
-        ? remoteRun.multiRunState.results
-        : null;
+  const multiRunResults = pickMultiRunResults(multiRunState, remoteRun?.multiRunState);
 
   // Auto-switch tabs when remote execution starts
   const prevRemoteRunRef = useRef(isRemoteRunActive);
@@ -859,80 +864,25 @@ export function RoomWorkspace({
             {/* Thin drag handle between editor and bottom panel */}
             <ResizableHandle className="h-1 bg-border transition-colors hover:bg-primary/40 active:bg-primary/60" />
 
-            {/* Bottom panel: test cases + output + results */}
-            <ResizablePanel
-              panelRef={bottomPanelRef}
-              defaultSize={35}
-              minSize={8}
-              collapsible
-              collapsedSize={0}
-              onResize={() => setBottomCollapsed(bottomPanelRef.current?.isCollapsed() ?? false)}
-            >
-              <div className="flex h-full flex-col bg-card">
-                {/* Integrated tab bar */}
-                <div className="flex h-8 shrink-0 items-center border-b border-border">
-                  <button
-                    type="button"
-                    onClick={() => setActiveBottomTab('testcases')}
-                    className={tabClassName(activeBottomTab === 'testcases')}
-                  >
-                    <TerminalSquare className="size-3" />
-                    {t('workspace.inputLabel')}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActiveBottomTab('output')}
-                    className={tabClassName(activeBottomTab === 'output')}
-                  >
-                    <TerminalSquare className="size-3" />
-                    {t('workspace.outputTab')}
-                  </button>
-                  {canSubmitCode ? (
-                    <button
-                      type="button"
-                      onClick={() => setActiveBottomTab('results')}
-                      className={tabClassName(activeBottomTab === 'results')}
-                    >
-                      <CheckCircle2 className="size-3" />
-                      {t('workspace.resultsTab')}
-                      {isSubmitBusy ? (
-                        <Loader2 className="size-2.5 animate-spin text-primary" />
-                      ) : null}
-                    </button>
-                  ) : null}
-                  <button
-                    type="button"
-                    onClick={() => bottomPanelRef.current?.collapse()}
-                    className="ml-auto mr-2 flex items-center text-muted-foreground/40 transition-colors hover:text-foreground"
-                  >
-                    <ChevronDown size={14} />
-                  </button>
-                </div>
-
-                {/* Tab content */}
-                <div className="relative flex-1 overflow-auto bg-background p-3">
-                  {activeBottomTab === 'testcases' ? (
-                    <TestCaseEditor
-                      cases={testCases}
-                      activeCaseId={activeCaseId}
-                      onActiveCaseChange={setActiveCaseId}
-                      onCaseInputChange={handleCaseInputChange}
-                      onAddCase={handleAddCase}
-                      onRemoveCase={handleRemoveCase}
-                      readOnly={isEditorReadOnly}
-                    />
-                  ) : activeBottomTab === 'output' ? (
-                    <RunResultsPanel
-                      multiRunState={multiRunState}
-                      cases={testCases}
-                      onRunCase={handleRunSingleCase}
-                    />
-                  ) : (
-                    <SubmissionOutput submitState={submitState} />
-                  )}
-                </div>
-              </div>
-            </ResizablePanel>
+            <WorkspaceBottomPanel
+              bottomPanelRef={bottomPanelRef}
+              setBottomCollapsed={setBottomCollapsed}
+              activeBottomTab={activeBottomTab}
+              setActiveBottomTab={setActiveBottomTab}
+              testCases={testCases}
+              activeCaseId={activeCaseId}
+              setActiveCaseId={setActiveCaseId}
+              handleCaseInputChange={handleCaseInputChange}
+              handleAddCase={handleAddCase}
+              handleRemoveCase={handleRemoveCase}
+              isEditorReadOnly={isEditorReadOnly}
+              multiRunState={multiRunState}
+              handleRunSingleCase={handleRunSingleCase}
+              submitState={submitState}
+              canSubmitCode={canSubmitCode}
+              isSubmitBusy={isSubmitBusy}
+              t={t}
+            />
           </ResizablePanelGroup>
         </ResizablePanel>
 
@@ -1021,11 +971,11 @@ export function RoomWorkspace({
                   <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
                     {rightNarrow ? `${participants.length}` : t('workspace.participantsHeading')}
                   </span>
-                  {!rightNarrow ? (
+                  {rightNarrow ? null : (
                     <span className="font-mono text-[10px] text-muted-foreground/60">
                       {participants.length}
                     </span>
-                  ) : null}
+                  )}
                 </div>
                 <div className="mt-2 space-y-0.5">
                   {participants.map((participant: Participant) => (
@@ -1080,7 +1030,6 @@ export function RoomWorkspace({
                 </div>
               </motion.div>
 
-              {/* Invite link */}
               <motion.div
                 className=""
                 initial={rightMountedRef.current ? false : { opacity: 0, y: 8 }}
@@ -1107,7 +1056,8 @@ export function RoomWorkspace({
                 />
               </motion.div>
 
-              {!rightNarrow ? (
+              {/* Invite link */}
+              {rightNarrow ? null : (
                 <motion.div
                   className="border-t border-border p-3"
                   initial={rightMountedRef.current ? false : { opacity: 0, y: 8 }}
@@ -1116,7 +1066,7 @@ export function RoomWorkspace({
                 >
                   <InviteLinkInline inviteLink={inviteLink} />
                 </motion.div>
-              ) : null}
+              )}
             </motion.div>
           )}
         </ResizablePanel>
@@ -1149,10 +1099,177 @@ export function RoomWorkspace({
 
 type ExecutionPollResponse = ExecutionResultResponse | JobStatusResponse;
 
+function WorkspaceBottomPanel({
+  bottomPanelRef,
+  setBottomCollapsed,
+  activeBottomTab,
+  setActiveBottomTab,
+  testCases,
+  activeCaseId,
+  setActiveCaseId,
+  handleCaseInputChange,
+  handleAddCase,
+  handleRemoveCase,
+  isEditorReadOnly,
+  multiRunState,
+  handleRunSingleCase,
+  submitState,
+  canSubmitCode,
+  isSubmitBusy,
+  t,
+}: {
+  readonly bottomPanelRef: ReturnType<typeof usePanelRef>;
+  readonly setBottomCollapsed: (collapsed: boolean) => void;
+  readonly activeBottomTab: 'testcases' | 'output' | 'results';
+  readonly setActiveBottomTab: (tab: 'testcases' | 'output' | 'results') => void;
+  readonly testCases: TestCaseEntry[];
+  readonly activeCaseId: string;
+  readonly setActiveCaseId: (id: string) => void;
+  readonly handleCaseInputChange: (id: string, input: string) => void;
+  readonly handleAddCase: () => void;
+  readonly handleRemoveCase: (id: string) => void;
+  readonly isEditorReadOnly: boolean;
+  readonly multiRunState: MultiRunState;
+  readonly handleRunSingleCase: (id: string) => void;
+  readonly submitState: SubmitState;
+  readonly canSubmitCode: boolean;
+  readonly isSubmitBusy: boolean;
+  readonly t: (key: string) => string;
+}) {
+  return (
+    <ResizablePanel
+      panelRef={bottomPanelRef}
+      defaultSize={35}
+      minSize={8}
+      collapsible
+      collapsedSize={0}
+      onResize={() => setBottomCollapsed(bottomPanelRef.current?.isCollapsed() ?? false)}
+    >
+      <div className="flex h-full flex-col bg-card">
+        <div className="flex h-8 shrink-0 items-center border-b border-border">
+          <button
+            type="button"
+            onClick={() => setActiveBottomTab('testcases')}
+            className={tabClassName(activeBottomTab === 'testcases')}
+          >
+            <TerminalSquare className="size-3" />
+            {t('workspace.inputLabel')}
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveBottomTab('output')}
+            className={tabClassName(activeBottomTab === 'output')}
+          >
+            <TerminalSquare className="size-3" />
+            {t('workspace.outputTab')}
+          </button>
+          {canSubmitCode ? (
+            <button
+              type="button"
+              onClick={() => setActiveBottomTab('results')}
+              className={tabClassName(activeBottomTab === 'results')}
+            >
+              <CheckCircle2 className="size-3" />
+              {t('workspace.resultsTab')}
+              {isSubmitBusy ? <Loader2 className="size-2.5 animate-spin text-primary" /> : null}
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => bottomPanelRef.current?.collapse()}
+            className="ml-auto mr-2 flex items-center text-muted-foreground/40 transition-colors hover:text-foreground"
+          >
+            <ChevronDown size={14} />
+          </button>
+        </div>
+
+        <div className="relative flex-1 overflow-auto bg-background p-3">
+          <BottomTabContent
+            activeBottomTab={activeBottomTab}
+            testCases={testCases}
+            activeCaseId={activeCaseId}
+            setActiveCaseId={setActiveCaseId}
+            handleCaseInputChange={handleCaseInputChange}
+            handleAddCase={handleAddCase}
+            handleRemoveCase={handleRemoveCase}
+            isEditorReadOnly={isEditorReadOnly}
+            multiRunState={multiRunState}
+            handleRunSingleCase={handleRunSingleCase}
+            submitState={submitState}
+          />
+        </div>
+      </div>
+    </ResizablePanel>
+  );
+}
+
 function isExecutionResultPayload(
   response: ExecutionPollResponse,
 ): response is ExecutionResultResponse {
   return 'stdout' in response;
+}
+
+function pickMultiRunResults(
+  localState: MultiRunState,
+  remoteState: MultiRunState | undefined,
+): Map<string, CaseRunState> | null {
+  if (localState.status === 'running' || localState.status === 'completed') {
+    return localState.results;
+  }
+  if (remoteState?.status === 'running' || remoteState?.status === 'completed') {
+    return remoteState.results;
+  }
+  return null;
+}
+
+function BottomTabContent({
+  activeBottomTab,
+  testCases,
+  activeCaseId,
+  setActiveCaseId,
+  handleCaseInputChange,
+  handleAddCase,
+  handleRemoveCase,
+  isEditorReadOnly,
+  multiRunState,
+  handleRunSingleCase,
+  submitState,
+}: {
+  readonly activeBottomTab: 'testcases' | 'output' | 'results';
+  readonly testCases: TestCaseEntry[];
+  readonly activeCaseId: string;
+  readonly setActiveCaseId: (id: string) => void;
+  readonly handleCaseInputChange: (id: string, input: string) => void;
+  readonly handleAddCase: () => void;
+  readonly handleRemoveCase: (id: string) => void;
+  readonly isEditorReadOnly: boolean;
+  readonly multiRunState: MultiRunState;
+  readonly handleRunSingleCase: (id: string) => void;
+  readonly submitState: SubmitState;
+}) {
+  if (activeBottomTab === 'testcases') {
+    return (
+      <TestCaseEditor
+        cases={testCases}
+        activeCaseId={activeCaseId}
+        onActiveCaseChange={setActiveCaseId}
+        onCaseInputChange={handleCaseInputChange}
+        onAddCase={handleAddCase}
+        onRemoveCase={handleRemoveCase}
+        readOnly={isEditorReadOnly}
+      />
+    );
+  }
+  if (activeBottomTab === 'output') {
+    return (
+      <RunResultsPanel
+        multiRunState={multiRunState}
+        cases={testCases}
+        onRunCase={handleRunSingleCase}
+      />
+    );
+  }
+  return <SubmissionOutput submitState={submitState} />;
 }
 
 function SubmissionOutput({ submitState }: { submitState: SubmitState }) {

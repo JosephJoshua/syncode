@@ -226,35 +226,47 @@ function ProblemsLibraryPage() {
     });
   };
 
+  const removeDifficulty = (difficulty: string) => {
+    startTransition(() => {
+      setSelectedDifficulties((current) => current.filter((item) => item !== difficulty));
+      resetCursorPagination();
+    });
+  };
+
+  const removeStatus = (status: string) => {
+    startTransition(() => {
+      setSelectedStatuses((current) => current.filter((item) => item !== status));
+      resetCursorPagination();
+    });
+  };
+
+  const removeTag = (tag: string) => {
+    startTransition(() => {
+      setSelectedTags((current) => current.filter((item) => item !== tag));
+      resetCursorPagination();
+    });
+  };
+
   const activeFilters = [
     ...selectedDifficulties.map((difficulty) => ({
       id: `difficulty-${difficulty}`,
       label: t(`filter.${difficulty.toLowerCase()}`),
       onRemove: () => {
-        startTransition(() => {
-          setSelectedDifficulties((current) => current.filter((item) => item !== difficulty));
-          resetCursorPagination();
-        });
+        removeDifficulty(difficulty);
       },
     })),
     ...selectedStatuses.map((status) => ({
       id: `status-${status}`,
       label: status === 'Todo' ? t('filter.todoNotDone') : t(`filter.${status.toLowerCase()}`),
       onRemove: () => {
-        startTransition(() => {
-          setSelectedStatuses((current) => current.filter((item) => item !== status));
-          resetCursorPagination();
-        });
+        removeStatus(status);
       },
     })),
     ...selectedTags.map((tag) => ({
       id: `tag-${tag}`,
       label: popularTags.find((t) => t.slug === tag)?.name ?? formatTagSlug(tag),
       onRemove: () => {
-        startTransition(() => {
-          setSelectedTags((current) => current.filter((item) => item !== tag));
-          resetCursorPagination();
-        });
+        removeTag(tag);
       },
     })),
   ];
@@ -395,8 +407,7 @@ function ProblemsLibraryPage() {
                             }
 
                             setPaginationState((current) => {
-                              const previousCursor =
-                                current.cursorHistory[current.cursorHistory.length - 1];
+                              const previousCursor = current.cursorHistory.at(-1);
 
                               return {
                                 currentCursor: previousCursor,

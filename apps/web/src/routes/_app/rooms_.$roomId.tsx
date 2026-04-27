@@ -82,6 +82,73 @@ function userCursorColor(participants: { userId: string }[], currentUserId: stri
   return CURSOR_COLORS[index >= 0 ? index % CURSOR_COLORS.length : 0] ?? defaultColor;
 }
 
+interface JoinDeps {
+  roomId: string;
+  refreshRoomDetail: () => Promise<RoomDetail>;
+  setRoom: (detail: RoomDetail) => void;
+  setJoinNotice: (msg: string) => void;
+  collabCredsRef: React.RefObject<{ collabToken: string; collabUrl: string } | null>;
+  joinPromiseRef: React.RefObject<Promise<void> | null>;
+  t: (key: string, opts?: Record<string, unknown>) => string;
+  isCancelled: () => boolean;
+}
+
+async function performJoinWithCode(roomCode: string, deps: JoinDeps): Promise<void> {
+  if (deps.joinPromiseRef.current) {
+    await deps.joinPromiseRef.current.catch(() => {});
+    if (!deps.isCancelled()) await deps.refreshRoomDetail();
+    return;
+  }
+
+  const joinPromise = (async () => {
+    const joined = await api(CONTROL_API.ROOMS.JOIN, {
+      params: { id: deps.roomId },
+      body: { roomCode },
+    });
+    if (deps.isCancelled()) return;
+    deps.setRoom(joined.room);
+    deps.collabCredsRef.current = {
+      collabToken: joined.collabToken,
+      collabUrl: joined.collabUrl,
+    };
+    const notice = buildJoinNotice(joined, deps.t);
+    deps.setJoinNotice(notice);
+    toast.success(notice);
+  })();
+
+  deps.joinPromiseRef.current = joinPromise;
+
+  try {
+    await joinPromise;
+  } catch (error) {
+    const apiError = await readApiError(error);
+    if (apiError?.code === ERROR_CODES.ROOM_ALREADY_JOINED) {
+      if (!deps.isCancelled()) await deps.refreshRoomDetail();
+      return;
+    }
+    throw error;
+  }
+}
+
+async function performLoadOrRecover(deps: JoinDeps): Promise<void> {
+  try {
+    await deps.refreshRoomDetail();
+  } catch (error) {
+    const apiError = await readApiError(error);
+    if (apiError?.code !== ERROR_CODES.ROOM_ACCESS_DENIED) throw error;
+    const joined = await api(CONTROL_API.ROOMS.JOIN, {
+      params: { id: deps.roomId },
+      body: {},
+    });
+    if (deps.isCancelled()) return;
+    deps.setRoom(joined.room);
+    deps.collabCredsRef.current = {
+      collabToken: joined.collabToken,
+      collabUrl: joined.collabUrl,
+    };
+  }
+}
+
 function RoomPage() {
   const { t } = useTranslation('rooms');
   const { roomId } = Route.useParams();
@@ -122,8 +189,8 @@ function RoomPage() {
     room?.status === 'coding' && !room?.timerPaused && !!room?.currentPhaseStartedAt;
   useEffect(() => {
     if (!timerActive) return;
-    const interval = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(interval);
+    const interval = globalThis.window.setInterval(() => setNow(Date.now()), 1000);
+    return () => globalThis.window.clearInterval(interval);
   }, [timerActive]);
 
   const refreshRoomDetail = useCallback(async () => {
@@ -134,83 +201,37 @@ function RoomPage() {
 
   useEffect(() => {
     let cancelled = false;
+    const isCancelled = () => cancelled;
 
     const loadRoom = async () => {
       setIsJoining(true);
       setJoinError(null);
       setJoinNotice(null);
 
+      const deps: JoinDeps = {
+        roomId,
+        refreshRoomDetail,
+        setRoom,
+        setJoinNotice,
+        collabCredsRef,
+        joinPromiseRef,
+        t,
+        isCancelled,
+      };
+
       try {
-        const url = new URL(window.location.href);
-        const roomCode = url.searchParams.get('code')?.toUpperCase();
-
+        const roomCode = new URL(globalThis.window.location.href).searchParams
+          .get('code')
+          ?.toUpperCase();
         if (roomCode) {
-          // StrictMode guard: if a prior mount already started the JOIN,
-          // await that promise instead of calling refreshRoomDetail() too early.
-          if (joinPromiseRef.current) {
-            await joinPromiseRef.current.catch(() => {});
-            if (!cancelled) await refreshRoomDetail();
-            return;
-          }
-
-          const joinPromise = (async () => {
-            const joined = await api(CONTROL_API.ROOMS.JOIN, {
-              params: { id: roomId },
-              body: { roomCode },
-            });
-
-            if (cancelled) return;
-
-            setRoom(joined.room);
-            collabCredsRef.current = {
-              collabToken: joined.collabToken,
-              collabUrl: joined.collabUrl,
-            };
-            const notice = buildJoinNotice(joined, t);
-            setJoinNotice(notice);
-            toast.success(notice);
-          })();
-
-          joinPromiseRef.current = joinPromise;
-
-          try {
-            await joinPromise;
-          } catch (error) {
-            const apiError = await readApiError(error);
-
-            if (apiError?.code === ERROR_CODES.ROOM_ALREADY_JOINED) {
-              if (!cancelled) await refreshRoomDetail();
-              return;
-            }
-
-            throw error;
-          }
+          await performJoinWithCode(roomCode, deps);
         } else if (!cancelled) {
-          try {
-            await refreshRoomDetail();
-          } catch (error) {
-            const apiError = await readApiError(error);
-            if (apiError?.code === ERROR_CODES.ROOM_ACCESS_DENIED) {
-              const joined = await api(CONTROL_API.ROOMS.JOIN, {
-                params: { id: roomId },
-                body: {},
-              });
-              if (cancelled) return;
-              setRoom(joined.room);
-              collabCredsRef.current = {
-                collabToken: joined.collabToken,
-                collabUrl: joined.collabUrl,
-              };
-            } else {
-              throw error;
-            }
-          }
+          await performLoadOrRecover(deps);
         }
       } catch (error) {
         if (!cancelled) {
           const apiError = await readApiError(error);
-          const errorMsg = resolveJoinError(apiError, t);
-          setJoinError(errorMsg);
+          setJoinError(resolveJoinError(apiError, t));
         }
       } finally {
         if (!cancelled) setIsJoining(false);
@@ -257,12 +278,12 @@ function RoomPage() {
   useEffect(() => {
     if (!roomStatus || roomStatus === 'finished') return;
 
-    const interval = window.setInterval(() => {
+    const interval = globalThis.window.setInterval(() => {
       if (document.hidden) return;
       void refreshRoomDetail().catch(() => undefined);
     }, ROOM_REFRESH_INTERVAL_MS);
 
-    return () => window.clearInterval(interval);
+    return () => globalThis.window.clearInterval(interval);
   }, [refreshRoomDetail, roomStatus]);
 
   const handleRoomStatePatch = useCallback(
@@ -324,7 +345,7 @@ function RoomPage() {
           if (apiError?.code === ERROR_CODES.ROOM_PARTICIPANT_REMOVED) {
             kickedRef.current = true;
             toast.error(apiError.message ?? t('lobby.removedFromRoom'));
-            void navigate({ to: '/rooms' });
+            navigate({ to: '/rooms' }).catch(() => undefined);
             return;
           }
           // Other errors are non-fatal — the participant sweep will reconcile.
@@ -356,6 +377,16 @@ function RoomPage() {
 
     let disposed = false;
 
+    const scheduleTokenRefresh = (refreshIn: number) => {
+      if (mediaTokenTimerRef.current) clearTimeout(mediaTokenTimerRef.current);
+      mediaTokenTimerRef.current = setTimeout(() => {
+        if (disposed) return;
+        mediaCredsRef.current = null;
+        setMediaReady(false);
+        fetchToken();
+      }, refreshIn);
+    };
+
     const fetchToken = () => {
       api(CONTROL_API.ROOMS.MEDIA_TOKEN, { params: { id: roomId } })
         .then((result) => {
@@ -365,13 +396,7 @@ function RoomPage() {
 
           const expiresAt = new Date(result.expiresAt).getTime();
           const refreshIn = Math.max(expiresAt - Date.now() - 5 * 60 * 1000, 60_000);
-          if (mediaTokenTimerRef.current) clearTimeout(mediaTokenTimerRef.current);
-          mediaTokenTimerRef.current = setTimeout(() => {
-            if (disposed) return;
-            mediaCredsRef.current = null;
-            setMediaReady(false);
-            fetchToken();
-          }, refreshIn);
+          scheduleTokenRefresh(refreshIn);
         })
         .catch((err) => {
           if (disposed) return;
@@ -659,7 +684,7 @@ function RoomPage() {
     onSuccess: async (_, variables) => {
       setPendingRemoval(null);
       await refreshRoomDetail();
-      void queryClient.invalidateQueries({ queryKey: ['rooms'] });
+      queryClient.invalidateQueries({ queryKey: ['rooms'] }).catch(() => undefined);
       toast.success(t('workspace.removeParticipantSuccess', { name: variables.displayName }));
     },
     onError: async (error) => {

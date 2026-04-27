@@ -71,8 +71,8 @@ export function useToggleProblemBookmarkMutation(problemId: string) {
       };
     },
     onSettled: () => {
-      void queryClient.invalidateQueries({ queryKey: ['bookmarks'] });
-      void queryClient.invalidateQueries({ queryKey: ['problems', 'list'] });
+      queryClient.invalidateQueries({ queryKey: ['bookmarks'] }).catch(() => undefined);
+      queryClient.invalidateQueries({ queryKey: ['problems', 'list'] }).catch(() => undefined);
     },
     onError: (error, _variables, context) => {
       if (context?.previousProblemDetail) {

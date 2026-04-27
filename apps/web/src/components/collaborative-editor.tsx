@@ -13,15 +13,15 @@ import {
 } from './room-workspace-utils.js';
 
 interface CollaborativeEditorProps {
-  doc: Y.Doc;
-  awareness: Awareness;
-  language: string;
-  readOnly: boolean;
-  commentLineNumbers: number[];
-  activeCommentLine: number | null;
-  onRunCode: () => void;
-  onSubmitCode: () => void;
-  onActiveLineChange: (lineNumber: number) => void;
+  readonly doc: Y.Doc;
+  readonly awareness: Awareness;
+  readonly language: string;
+  readonly readOnly: boolean;
+  readonly commentLineNumbers: number[];
+  readonly activeCommentLine: number | null;
+  readonly onRunCode: () => void;
+  readonly onSubmitCode: () => void;
+  readonly onActiveLineChange: (lineNumber: number) => void;
 }
 
 interface EditorLike {
@@ -101,14 +101,18 @@ export function CollaborativeEditor({
       id: 'syncode-run',
       label: 'Run Code',
       keybindings: [monacoApi.KeyMod.CtrlCmd | monacoApi.KeyCode.Enter],
-      run: () => void onRunCodeRef.current(),
+      run: () => {
+        onRunCodeRef.current();
+      },
     });
 
     editorInstance.addAction({
       id: 'syncode-submit',
       label: 'Submit Code',
       keybindings: [monacoApi.KeyMod.CtrlCmd | monacoApi.KeyMod.Shift | monacoApi.KeyCode.Enter],
-      run: () => void onSubmitCodeRef.current(),
+      run: () => {
+        onSubmitCodeRef.current();
+      },
     });
 
     onActiveLineChangeRef.current(editorInstance.getPosition()?.lineNumber ?? 1);
