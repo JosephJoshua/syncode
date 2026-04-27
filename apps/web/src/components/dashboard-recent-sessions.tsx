@@ -1,7 +1,6 @@
 import { ERROR_CODES } from '@syncode/contracts';
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -220,19 +219,23 @@ export function DashboardRecentSessions({
           ? removeSessionFromDashboardHistory(currentHistory, sessionId)
           : currentHistory,
       );
-      setPendingDeleteSessionId(null);
 
       return { previousHistory };
+    },
+    onSuccess: () => {
+      // Close the dialog only after the request lands so the in-dialog
+      // pending UI ('Deleting...') is actually visible.
+      setPendingDeleteSessionId(null);
     },
     onError: (error, _variables, context) => {
       if (context?.previousHistory) {
         queryClient.setQueryData(sessionHistoryQueryKey, context.previousHistory);
       }
 
-      toast.error(getDeleteSessionErrorMessage(error, t));
-    },
-    onSettled: () => {
+      // Refetch only on error so the optimistic update is reconciled with
+      // server truth. The success path already removed the row optimistically.
       void queryClient.invalidateQueries({ queryKey: sessionHistoryQueryKey });
+      toast.error(getDeleteSessionErrorMessage(error, t));
     },
   });
 
@@ -450,7 +453,14 @@ export function DashboardRecentSessions({
               <AlertDialogCancel disabled={deleteSessionMutation.isPending}>
                 {t('deleteDialog.cancel')}
               </AlertDialogCancel>
-              <AlertDialogAction
+              {/*
+                Use a plain Button instead of AlertDialogAction: AlertDialogAction
+                triggers Radix's close-on-click, which would unmount the dialog
+                before the pending UI ('Deleting...') becomes visible. We close
+                explicitly in the mutation's onSuccess.
+              */}
+              <Button
+                type="button"
                 variant="destructive"
                 disabled={deleteSessionMutation.isPending || !viewerId}
                 onClick={confirmDeleteSession}
@@ -463,7 +473,7 @@ export function DashboardRecentSessions({
                 ) : (
                   t('deleteDialog.confirm')
                 )}
-              </AlertDialogAction>
+              </Button>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
