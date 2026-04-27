@@ -2,7 +2,9 @@
  * ONLY FOR DEMO PURPOSES — DO NOT USE AS A PRODUCTION SEED
  */
 
-import { createHash } from 'node:crypto';
+import { randomBytes, scrypt } from 'node:crypto';
+import { promisify } from 'node:util';
+import { and, inArray, notLike } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from './schema/index.js';
@@ -17,15 +19,16 @@ if (!databaseUrl) {
 const client = postgres(databaseUrl, { max: 1 });
 const db = drizzle(client, { schema });
 
-// Simple hash for demo passwords — NOT for production use.
-function hashPassword(password: string): string {
-  return createHash('sha256').update(password).digest('hex');
+const scryptAsync = promisify(scrypt);
+
+// Matches the runtime format used by auth.service.ts so seeded users can log in.
+async function hashPassword(password: string): Promise<string> {
+  const salt = randomBytes(16).toString('hex');
+  const derivedKey = (await scryptAsync(password, salt, 64)) as Buffer;
+  return `${salt}:${derivedKey.toString('hex')}`;
 }
 
-// ---------------------------------------------------------------------------
-// Users
-// ---------------------------------------------------------------------------
-const demoPassword = hashPassword('password123');
+const demoPassword = await hashPassword('password123');
 
 const usersData = [
   {
@@ -628,6 +631,23 @@ async function seed() {
     .onConflictDoNothing()
     .returning({ id: schema.users.id, username: schema.users.username });
   console.log(`  Users:    ${insertedUsers.length} inserted`);
+
+  // Heal demo users seeded with the legacy SHA-256 format so they can log in.
+  // Scrypt hashes always contain a `:` separator; legacy hex digests do not.
+  // This narrow predicate avoids clobbering passwords that were updated through
+  // the auth service (e.g. a developer changed alice's password manually).
+  await db
+    .update(schema.users)
+    .set({ passwordHash: demoPassword })
+    .where(
+      and(
+        inArray(
+          schema.users.email,
+          usersData.map((u) => u.email),
+        ),
+        notLike(schema.users.passwordHash, '%:%'),
+      ),
+    );
 
   // 2. Tags
   const insertedTags = await db
