@@ -36,3 +36,22 @@ export {
   VALID_STATUS_TRANSITIONS,
 } from './room.js';
 export { UserRole } from './user.js';
+export type {
+  WhiteboardAllowedContentType,
+  WhiteboardAllowedImageType,
+  WhiteboardAllowedVideoType,
+  WhiteboardAssetMeta,
+  WhiteboardLayer,
+  WhiteboardShapeMeta,
+} from './whiteboard.js';
+export {
+  isWhiteboardContentType,
+  isWhiteboardImageType,
+  isWhiteboardLayer,
+  isWhiteboardVideoType,
+  maxBytesForContentType,
+  WHITEBOARD_ALLOWED_IMAGE_TYPES,
+  WHITEBOARD_ALLOWED_VIDEO_TYPES,
+  WHITEBOARD_ASSET_LIMITS,
+  WHITEBOARD_LAYERS,
+} from './whiteboard.js';

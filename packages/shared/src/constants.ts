@@ -19,6 +19,7 @@ export const INVITE_CODE_LENGTH = 6;
 export const INVITE_CODE_MAX_RETRIES = 5;
 export const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1_000;
 export const INLINE_COMMENTS_KEY = 'inlineComments';
+export const WHITEBOARD_KEY = 'whiteboard';
 
 export const SUPPORTED_LANGUAGES = [
   'python',
