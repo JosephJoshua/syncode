@@ -6,6 +6,7 @@ import { type UseYjsCollabOptions, useYjsCollab } from './use-yjs-collab.js';
 const mockConnect = vi.fn();
 const mockDestroy = vi.fn();
 const mockSetLocalStateField = vi.fn();
+const mockMarkChatRead = vi.fn();
 
 vi.mock('@/lib/yjs-collab-provider.js', async () => {
   const Y = await import('yjs');
@@ -21,6 +22,7 @@ vi.mock('@/lib/yjs-collab-provider.js', async () => {
         awareness,
         connect: mockConnect,
         destroy: mockDestroy,
+        markChatRead: mockMarkChatRead,
       };
     }),
     codeTextKey: (language: string) => `code:${language}`,

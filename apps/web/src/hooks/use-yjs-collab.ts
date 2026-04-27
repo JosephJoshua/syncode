@@ -1,6 +1,7 @@
+import type { ChatMessage, ChatReactToggleEventData, ChatSendEventData } from '@syncode/contracts';
 import type { RoomStatus } from '@syncode/shared';
 import { ROOM_STATUS_LABELS } from '@syncode/shared';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import type { Awareness } from 'y-protocols/awareness';
@@ -32,6 +33,11 @@ export interface YjsCollabResult {
   status: CollabConnectionStatus;
   doc: Y.Doc | null;
   awareness: Awareness | null;
+  chatMessages: ChatMessage[];
+  chatReadAtByUserId: Record<string, number>;
+  sendChatMessage: (data: ChatSendEventData) => void;
+  toggleChatReaction: (data: ChatReactToggleEventData) => void;
+  markChatRead: (upTo?: number) => void;
 }
 
 export function useYjsCollab({
@@ -51,6 +57,8 @@ export function useYjsCollab({
     collabUrl && collabToken ? 'connecting' : 'disconnected',
   );
   const [collab, setCollab] = useState<CollabState | null>(null);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatReadAtByUserId, setChatReadAtByUserId] = useState<Record<string, number>>({});
   const { t } = useTranslation('rooms');
 
   const patchRef = useRef(onRoomStatePatch);
@@ -76,6 +84,8 @@ export function useYjsCollab({
     if (!collabUrl || !collabToken) {
       setStatus('disconnected');
       setCollab(null);
+      setChatMessages([]);
+      setChatReadAtByUserId({});
       return;
     }
 
@@ -129,6 +139,49 @@ export function useYjsCollab({
         if (!handler) return;
         await handler();
       },
+      onChatHistory: (data) => {
+        if (disposed) return;
+        setChatMessages(data.messages);
+        setChatReadAtByUserId(
+          Object.fromEntries(data.readStates.map((state) => [state.userId, state.lastReadAt])),
+        );
+      },
+      onChatMessageCreated: (data) => {
+        if (disposed) return;
+        setChatMessages((prev) => {
+          if (prev.some((item) => item.messageId === data.message.messageId)) {
+            return prev;
+          }
+          return [...prev, data.message];
+        });
+      },
+      onChatReactionUpdated: (data) => {
+        if (disposed) return;
+        setChatMessages((prev) =>
+          prev.map((message) =>
+            message.messageId === data.messageId
+              ? {
+                  ...message,
+                  reactions: data.reactions,
+                  updatedAt: data.updatedAt,
+                }
+              : message,
+          ),
+        );
+      },
+      onChatReadUpdated: (data) => {
+        if (disposed) return;
+        setChatReadAtByUserId((prev) => {
+          const previous = prev[data.userId] ?? 0;
+          if (previous >= data.lastReadAt) {
+            return prev;
+          }
+          return {
+            ...prev,
+            [data.userId]: data.lastReadAt,
+          };
+        });
+      },
     });
 
     providerRef.current = provider;
@@ -153,5 +206,31 @@ export function useYjsCollab({
     });
   }, [userName, userColor]);
 
-  return { status, doc: collab?.doc ?? null, awareness: collab?.awareness ?? null };
+  const sendChatMessage = useCallback((data: ChatSendEventData) => {
+    providerRef.current?.sendChatMessage({
+      text: data.text,
+      replyToMessageId: data.replyToMessageId ?? null,
+      mentions: data.mentions ?? [],
+      attachments: data.attachments ?? [],
+    });
+  }, []);
+
+  const toggleChatReaction = useCallback((data: ChatReactToggleEventData) => {
+    providerRef.current?.toggleChatReaction(data);
+  }, []);
+
+  const markChatRead = useCallback((upTo?: number) => {
+    providerRef.current?.markChatRead(typeof upTo === 'number' ? { upTo } : {});
+  }, []);
+
+  return {
+    status,
+    doc: collab?.doc ?? null,
+    awareness: collab?.awareness ?? null,
+    chatMessages,
+    chatReadAtByUserId,
+    sendChatMessage,
+    toggleChatReaction,
+    markChatRead,
+  };
 }
