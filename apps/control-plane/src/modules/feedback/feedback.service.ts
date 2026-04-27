@@ -11,6 +11,10 @@ import type { Database } from '@syncode/db';
 import { peerFeedback, sessionParticipants, sessions, users } from '@syncode/db';
 import { and, asc, eq, inArray } from 'drizzle-orm';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
+import {
+  filterReviewFeedback,
+  isAllReviewFeedbackSubmitted,
+} from '@/modules/sessions/session-feedback-utils.js';
 import type { SessionFeedbackEntryResult, SessionFeedbackResult } from './feedback.types.js';
 
 @Injectable()
@@ -82,12 +86,11 @@ export class FeedbackService {
     ]);
 
     const reviewParticipantIds = new Set(participants.map((participant) => participant.userId));
-    const reviewFeedback = feedback.filter(
-      (entry) =>
-        reviewParticipantIds.has(entry.reviewerId) && reviewParticipantIds.has(entry.candidateId),
+    const reviewFeedback = filterReviewFeedback(feedback, reviewParticipantIds);
+    const allSubmitted = isAllReviewFeedbackSubmitted(
+      reviewParticipantIds.size,
+      reviewFeedback.length,
     );
-    const expectedCount = reviewParticipantIds.size * Math.max(reviewParticipantIds.size - 1, 0);
-    const allSubmitted = expectedCount > 0 && reviewFeedback.length >= expectedCount;
     const visibleFeedback = isAdmin
       ? feedback
       : reviewFeedback.filter((entry) => allSubmitted || entry.reviewerId === userId);
