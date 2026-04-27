@@ -401,25 +401,7 @@ export class RoomsService {
       // would break WS reconnect reactivation, which re-calls this endpoint with
       // an empty body.
       if (!existing) {
-        if (room.isPrivate) {
-          if (!input.roomCode) {
-            throw new BadRequestException({
-              message: 'Room code required for private rooms',
-              code: ERROR_CODES.ROOM_INVALID_CODE,
-            });
-          }
-          if (room.inviteCode !== input.roomCode.toUpperCase()) {
-            throw new BadRequestException({
-              message: 'Invalid room code',
-              code: ERROR_CODES.ROOM_INVALID_CODE,
-            });
-          }
-        } else if (input.roomCode && room.inviteCode !== input.roomCode.toUpperCase()) {
-          throw new BadRequestException({
-            message: 'Invalid room code',
-            code: ERROR_CODES.ROOM_INVALID_CODE,
-          });
-        }
+        this.assertJoinCode(room.isPrivate, room.inviteCode, input.roomCode);
       }
 
       if (existing?.isActive) {
@@ -1236,42 +1218,7 @@ export class RoomsService {
       }
 
       if (lockedStatus === RoomStatus.WAITING && targetStatus === RoomStatus.WARMUP) {
-        const [session] = await tx
-          .insert(sessions)
-          .values({
-            roomId,
-            problemId: lockedRoom.problemId,
-            mode: lockedRoom.mode,
-            language: lockedRoom.language,
-            status: 'ongoing',
-            startedAt: now,
-          })
-          .returning();
-
-        const participantRows = await tx
-          .select({
-            userId: roomParticipants.userId,
-            role: roomParticipants.role,
-            joinedAt: roomParticipants.joinedAt,
-          })
-          .from(roomParticipants)
-          .where(and(eq(roomParticipants.roomId, roomId), eq(roomParticipants.isActive, true)));
-
-        if (participantRows.length > 0) {
-          await tx.insert(sessionParticipants).values(
-            participantRows.map((participantRow) => ({
-              sessionId: session!.id,
-              userId: participantRow.userId,
-              role: this.normalizeParticipantRole(
-                lockedRoom.mode as RoomMode,
-                participantRow.role,
-                lockedRoom.hostId,
-                participantRow.userId,
-              ),
-              joinedAt: participantRow.joinedAt,
-            })),
-          );
-        }
+        await this.startSessionForRoom(tx, lockedRoom, now);
       }
 
       if (targetStatus === RoomStatus.FINISHED && lockedStatus !== RoomStatus.WAITING) {
@@ -1305,6 +1252,68 @@ export class RoomsService {
       transitionedAt: now,
       transitionedBy: userId,
     };
+  }
+
+  private async startSessionForRoom(
+    tx: Parameters<Parameters<Database['transaction']>[0]>[0],
+    lockedRoom: typeof rooms.$inferSelect,
+    now: Date,
+  ): Promise<void> {
+    const [session] = await tx
+      .insert(sessions)
+      .values({
+        roomId: lockedRoom.id,
+        problemId: lockedRoom.problemId,
+        mode: lockedRoom.mode,
+        language: lockedRoom.language,
+        status: 'ongoing',
+        startedAt: now,
+      })
+      .returning();
+
+    const participantRows = await tx
+      .select({
+        userId: roomParticipants.userId,
+        role: roomParticipants.role,
+        joinedAt: roomParticipants.joinedAt,
+      })
+      .from(roomParticipants)
+      .where(and(eq(roomParticipants.roomId, lockedRoom.id), eq(roomParticipants.isActive, true)));
+
+    if (participantRows.length === 0) return;
+
+    await tx.insert(sessionParticipants).values(
+      participantRows.map((participantRow) => ({
+        sessionId: session!.id,
+        userId: participantRow.userId,
+        role: this.normalizeParticipantRole(
+          lockedRoom.mode as RoomMode,
+          participantRow.role,
+          lockedRoom.hostId,
+          participantRow.userId,
+        ),
+        joinedAt: participantRow.joinedAt,
+      })),
+    );
+  }
+
+  private assertJoinCode(
+    isPrivate: boolean,
+    inviteCode: string,
+    suppliedCode: string | undefined,
+  ): void {
+    if (isPrivate && !suppliedCode) {
+      throw new BadRequestException({
+        message: 'Room code required for private rooms',
+        code: ERROR_CODES.ROOM_INVALID_CODE,
+      });
+    }
+    if (suppliedCode && inviteCode !== suppliedCode.toUpperCase()) {
+      throw new BadRequestException({
+        message: 'Invalid room code',
+        code: ERROR_CODES.ROOM_INVALID_CODE,
+      });
+    }
   }
 
   private getInitialHostRole(mode: RoomMode): RoomRole {
