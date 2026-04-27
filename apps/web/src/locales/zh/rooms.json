@@ -1,11 +1,10 @@
 {
   "heading": "房间",
   "subtitle": {
-    "activeCount_one": "{{count}} 个活跃房间",
-    "activeCount_other": "{{count}} 个活跃房间",
-    "totalCount_one": "{{count}} 个房间",
-    "totalCount_other": "{{count}} 个房间",
-    "totalLabel": "共 {{totalCount}} 个",
+    "pageCount_one": "当前页 {{count}} 个房间",
+    "pageCount_other": "当前页 {{count}} 个房间",
+    "pageCountWithStatus_one": "当前页 {{status}} 房间 {{count}} 个",
+    "pageCountWithStatus_other": "当前页 {{status}} 房间 {{count}} 个",
     "noActive": "无活跃房间"
   },
   "button": {
@@ -292,6 +291,8 @@
     "cannotTransferOwnership": "无法将所有权转移给该参与者。",
     "cancel": "取消",
     "roleUpdated": "参与者角色已更新。",
+    "submissionPreviewTitle": "确认提交",
+    "submissionPreviewDescription": "请在正式提交前检查你的代码。",
     "submitCode": "提交",
     "submitFailed": "提交启动失败。",
     "submitting": "正在提交解答……",
