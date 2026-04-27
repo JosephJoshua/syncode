@@ -19,6 +19,7 @@ import { toast } from 'sonner';
 import { MediaControls } from '@/components/media-controls.js';
 import { RoomLobby } from '@/components/room-lobby.js';
 import { RoomWorkspace } from '@/components/room-workspace.js';
+import { STAGE_TRANSITION_OVERLAY_DURATION_MS } from '@/components/stage-transition-overlay.js';
 import {
   DockedVideoPanel,
   FloatingVideoPanel,
@@ -74,16 +75,18 @@ const CURSOR_COLORS = [
 ];
 
 function userCursorColor(participants: { userId: string }[], currentUserId: string | null): string {
-  if (!currentUserId) return CURSOR_COLORS[0] ?? '#00e599';
+  const defaultColor = CURSOR_COLORS[0] ?? '#00e599';
+
+  if (!currentUserId) return defaultColor;
   const index = participants.findIndex((p) => p.userId === currentUserId);
-  return CURSOR_COLORS[index >= 0 ? index % CURSOR_COLORS.length : 0] ?? '#00e599';
+  return CURSOR_COLORS[index >= 0 ? index % CURSOR_COLORS.length : 0] ?? defaultColor;
 }
 
 function RoomPage() {
   const { t } = useTranslation('rooms');
   const { roomId } = Route.useParams();
-  const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const currentUserId = useAuthStore((state) => state.user?.id ?? null);
   const [room, setRoom] = useState<RoomDetail | null>(null);
   const [isJoining, setIsJoining] = useState(true);
@@ -103,6 +106,8 @@ function RoomPage() {
   } | null>(null);
   const [now, setNow] = useState(Date.now());
   const joinPromiseRef = useRef<Promise<void> | null>(null);
+  const previousStatusRef = useRef<RoomStatus | null>(null);
+  const shouldRedirectToSessionRef = useRef(false);
   // Capture collab credentials once — subsequent polls generate fresh JWTs which would
   // cause the WebSocket to reconnect on every poll if used directly. The collab JWT has
   // a 24h lifetime, so the first token is valid for the entire session.
@@ -219,6 +224,34 @@ function RoomPage() {
       joinPromiseRef.current = null;
     };
   }, [refreshRoomDetail, roomId, t]);
+
+  useEffect(() => {
+    const currentStatus = room?.status ?? null;
+    const previousStatus = previousStatusRef.current;
+
+    if (currentStatus === 'finished' && previousStatus && previousStatus !== 'finished') {
+      shouldRedirectToSessionRef.current = true;
+    }
+
+    previousStatusRef.current = currentStatus;
+  }, [room?.status]);
+
+  useEffect(() => {
+    if (!shouldRedirectToSessionRef.current || room?.status !== 'finished' || !room.sessionId) {
+      return;
+    }
+
+    const finishedSessionId = room.sessionId;
+    const redirectTimer = window.setTimeout(() => {
+      shouldRedirectToSessionRef.current = false;
+      navigate({
+        to: '/sessions/$sessionId/feedback',
+        params: { sessionId: finishedSessionId },
+      }).catch(() => {});
+    }, STAGE_TRANSITION_OVERLAY_DURATION_MS + 2000);
+
+    return () => window.clearTimeout(redirectTimer);
+  }, [navigate, room?.sessionId, room?.status]);
 
   const roomStatus = room?.status;
   useEffect(() => {

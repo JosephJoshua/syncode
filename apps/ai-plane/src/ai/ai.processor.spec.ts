@@ -6,10 +6,13 @@ import {
   AI_INTERVIEW_RESULT_QUEUE,
   AI_REVIEW_QUEUE,
   AI_REVIEW_RESULT_QUEUE,
+  AI_SESSION_REPORT_QUEUE,
+  AI_SESSION_REPORT_RESULT_QUEUE,
 } from '@syncode/contracts';
 import type { IQueueService, QueueJob } from '@syncode/shared/ports';
 import { QUEUE_SERVICE } from '@syncode/shared/ports';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { LLM_PROVIDER } from '../llm/llm.constants.js';
 import { AiProcessor } from './ai.processor.js';
 import { AiService } from './ai.service.js';
 
@@ -63,20 +66,54 @@ describe('AiProcessor', () => {
 
   beforeAll(async () => {
     const module = await Test.createTestingModule({
-      providers: [AiProcessor, AiService, { provide: QUEUE_SERVICE, useValue: mockQueueService }],
+      providers: [
+        AiProcessor,
+        AiService,
+        { provide: QUEUE_SERVICE, useValue: mockQueueService },
+        {
+          provide: LLM_PROVIDER,
+          useValue: {
+            generateText: vi.fn().mockResolvedValue({
+              text: JSON.stringify({
+                overallScore: 82,
+                dimensions: {
+                  correctness: { score: 84, feedback: 'Correctness', evidence: [] },
+                  efficiency: { score: 78, feedback: 'Efficiency', evidence: [] },
+                  codeQuality: { score: 80, feedback: 'Code quality', evidence: [] },
+                  communication: { score: 76, feedback: 'Communication', evidence: [] },
+                  problemSolving: { score: 83, feedback: 'Problem solving', evidence: [] },
+                },
+                strengths: ['Strong iteration'],
+                areasForImprovement: ['Explain tradeoffs earlier'],
+                detailedFeedback: 'Detailed feedback',
+                comparisonToHistory: null,
+                peerFeedbackSummary: null,
+              }),
+              model: 'qwen3.5-mini',
+            }),
+          },
+        },
+      ],
     }).compile();
 
     processor = module.get(AiProcessor);
   });
 
   describe('onModuleInit', () => {
-    it('GIVEN the processor WHEN onModuleInit is called THEN registers handlers on all 3 queues', () => {
+    it('GIVEN the processor WHEN onModuleInit is called THEN registers handlers on all 4 queues', () => {
       processor.onModuleInit();
 
-      expect(mockQueueService.process).toHaveBeenCalledTimes(3);
+      expect(mockQueueService.process).toHaveBeenCalledTimes(4);
       expect(handlers.has(AI_HINT_QUEUE)).toBe(true);
       expect(handlers.has(AI_REVIEW_QUEUE)).toBe(true);
       expect(handlers.has(AI_INTERVIEW_QUEUE)).toBe(true);
+      expect(handlers.has(AI_SESSION_REPORT_QUEUE)).toBe(true);
+
+      const sessionReportProcessCall = mockQueueService.process.mock.calls.find(
+        ([queueName]) => queueName === AI_SESSION_REPORT_QUEUE,
+      );
+
+      expect(sessionReportProcessCall?.[2]).toEqual({ concurrency: 1 });
     });
   });
 
@@ -165,6 +202,87 @@ describe('AiProcessor', () => {
         expect.objectContaining({
           jobId: 'interview-job-1',
           message: expect.any(String),
+        }),
+      );
+    });
+  });
+
+  describe('session report job processing', () => {
+    it('GIVEN a session report job WHEN the handler processes it THEN enqueues result to AI_SESSION_REPORT_RESULT_QUEUE with jobId', async () => {
+      processor.onModuleInit();
+      mockQueueService.enqueue.mockClear();
+
+      const handler = handlers.get(AI_SESSION_REPORT_QUEUE)!;
+      const job = createFakeJob(
+        {
+          sessionId: '550e8400-e29b-41d4-a716-446655440000',
+          roomId: '660e8400-e29b-41d4-a716-446655440000',
+          participantId: '770e8400-e29b-41d4-a716-446655440000',
+          participantRole: 'candidate',
+          participants: [
+            {
+              userId: '770e8400-e29b-41d4-a716-446655440000',
+              username: 'alice',
+              displayName: 'Alice',
+              role: 'candidate',
+            },
+          ],
+          problem: {
+            id: '880e8400-e29b-41d4-a716-446655440000',
+            title: 'Two Sum',
+            description: 'Find two numbers.',
+            difficulty: 'easy',
+            constraints: null,
+          },
+          language: 'typescript',
+          durationMs: 120000,
+          startedAt: '2026-04-20T01:00:00.000Z',
+          finishedAt: '2026-04-20T01:02:00.000Z',
+          snapshots: [],
+          runs: [],
+          submissions: [],
+          finalTestCaseBreakdown: [
+            {
+              testCaseIndex: 0,
+              input: 'nums = [2,7,11,15], target = 9',
+              description: 'Basic case',
+              isHidden: false,
+              passed: true,
+              expectedOutput: '[0,1]',
+              actualOutput: '[0,1]',
+              stdout: '[0,1]\\n',
+              stderr: '',
+              exitCode: 0,
+              durationMs: 12,
+              memoryUsageMb: 8.5,
+              timedOut: false,
+              errorMessage: null,
+            },
+          ],
+          peerFeedback: [],
+          aiMessages: [],
+          historicalContext: null,
+        },
+        'session-report-job-1',
+      );
+
+      await handler(job);
+
+      expect(mockQueueService.enqueue).toHaveBeenCalledWith(
+        AI_SESSION_REPORT_RESULT_QUEUE,
+        'session-report-result',
+        expect.objectContaining({
+          jobId: 'session-report-job-1',
+          sessionId: '550e8400-e29b-41d4-a716-446655440000',
+          overallScore: expect.any(Number),
+          testCaseBreakdown: [
+            expect.objectContaining({
+              testCaseIndex: 0,
+              passed: true,
+              timedOut: false,
+              errorMessage: null,
+            }),
+          ],
         }),
       );
     });

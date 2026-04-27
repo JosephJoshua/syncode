@@ -20,6 +20,12 @@
   },
   "copyLink": "Copy link",
   "switchLanguage": "Switch language to {{language}}",
+  "pagination": {
+    "previous": "Previous",
+    "next": "Next",
+    "previousAria": "Go to previous page",
+    "nextAria": "Go to next page"
+  },
   "untitledProblem": "Untitled Problem",
   "retry": "Retry",
   "cancel": "Cancel",

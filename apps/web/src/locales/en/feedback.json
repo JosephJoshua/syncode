@@ -1,30 +1,135 @@
 {
-  "heading": "Feedback Display",
+  "eyebrow": "Session Report",
+  "heading": "Session report unavailable",
+  "fallbackProblemTitle": "Untitled Problem",
+  "ready": {
+    "description": "Review the structured training report for this finished interview session."
+  },
+  "pending": {
+    "description": "The session finished successfully, but the AI report is still being generated.",
+    "title": "Report in progress",
+    "subtitle": "Reports are generated asynchronously after the session ends.",
+    "body": "This usually finishes within about a minute. You can stay on this page while the report loads.",
+    "polling": "Checking for the report automatically every 10 seconds."
+  },
+  "error": {
+    "title": "Report unavailable",
+    "description": "The session exists, but the report could not be loaded right now.",
+    "body": "Try fetching the report again in a moment."
+  },
   "notFound": {
-    "description": "This session could not be found, so the feedback placeholder cannot be displayed yet.",
-    "invalidSessionId": "Invalid session id: {{sessionId}}"
+    "description": "This session could not be loaded.",
+    "invalidSessionId": "We could not find session {{sessionId}}."
   },
-  "found": {
-    "description": "Review the current placeholder layout for this session-specific feedback display."
+  "actions": {
+    "retrySession": "Retry session lookup",
+    "retryReport": "Retry report",
+    "checkAgain": "Check again",
+    "showFullReview": "Show full review",
+    "showLessReview": "Show less"
   },
-  "label": {
-    "sessionFeedback": "Session Feedback",
-    "summary": "Summary",
-    "focusAreas": "Focus Areas",
-    "nextIteration": "Next Iteration"
+  "overview": {
+    "overallScore": "Overall Score",
+    "summary": "Quick Read",
+    "noSummary": "Detailed feedback was not available for this report."
   },
-  "placeholder": "Session {{sessionId}} currently uses placeholder commentary tailored to {{problemName}}. The final version will replace this block with structured, session-specific feedback content.",
-  "focusItems": {
-    "clarify": "Clarify problem framing and edge-case communication.",
-    "pacing": "Improve pacing when reasoning through the solution path.",
-    "explanation": "Strengthen explanation quality during tradeoff discussion."
+  "sections": {
+    "dimensions": "Dimension Review",
+    "dimensionsDescription": "Each dimension is scored from the actual session evidence.",
+    "detailedFeedback": "Detailed Feedback",
+    "detailedFeedbackDescription": "Long-form report generated from the session timeline, code activity, and peer context.",
+    "noDetailedFeedback": "No detailed feedback was returned for this report.",
+    "testCaseBreakdown": "Test Case Breakdown",
+    "testCaseBreakdownDescription": "Per-test-case outcome summary with sensitive inputs and expected outputs redacted.",
+    "snapshotHistory": "Code Snapshot History",
+    "snapshotHistoryDescription": "Saved code states captured during the session in chronological order.",
+    "finalCode": "Final Code",
+    "finalCodeDescription": "The most recent saved code state from the session editor.",
+    "noFinalCode": "No final code snapshot was available for this session.",
+    "aiReview": "AI Review",
+    "aiReviewDescription": "Structured feedback generated from the final code, execution history, and session evidence.",
+    "timeline": "Session Timeline",
+    "timelineDescription": "Important coding milestones from the session, excluding periodic autosaves.",
+    "strengths": "Strengths",
+    "areasForImprovement": "Areas for Improvement",
+    "comparison": "Comparison to History",
+    "peerFeedback": "Peer Feedback Summary",
+    "peerFeedbackSection": "Peer Feedback",
+    "peerFeedbackSectionDescription": "Structured feedback from your peer after the session."
   },
-  "nextIteration": "Use this space later for concrete, session-bound recommendations, code review notes, and communication feedback.",
+  "dimensions": {
+    "correctness": {
+      "title": "Correctness"
+    },
+    "efficiency": {
+      "title": "Efficiency"
+    },
+    "codeQuality": {
+      "title": "Code Quality"
+    },
+    "communication": {
+      "title": "Communication"
+    },
+    "problemSolving": {
+      "title": "Problem Solving"
+    }
+  },
   "details": {
     "heading": "Session Details",
+    "description": "Participants, metadata, and activity from this finished session.",
     "sessionId": "Session ID",
     "role": "Role",
     "date": "Date",
     "duration": "Duration"
+  },
+  "form": {
+    "title": "Peer Evaluation",
+    "description": "Score your partner's interview performance and leave actionable written feedback.",
+    "field": {
+      "candidate": "Feedback target",
+      "strengths": "What went well",
+      "improvements": "What to improve",
+      "wouldPairAgain": "Pairing preference"
+    },
+    "hint": {
+      "candidate": "Choose the participant this evaluation is for.",
+      "strengths": "Call out concrete behaviors, explanations, or implementation choices that helped.",
+      "improvements": "Share specific next steps for the next interview practice."
+    },
+    "placeholder": {
+      "candidate": "Select a participant",
+      "strengths": "They clarified assumptions before coding and explained tradeoffs clearly.",
+      "improvements": "They could narrate edge cases earlier and keep variable names more consistent."
+    },
+    "rating": {
+      "problemSolving": "Problem-solving",
+      "communication": "Communication",
+      "codeQuality": "Code quality",
+      "debugging": "Debugging",
+      "overall": "Overall"
+    },
+    "ratingHint": {
+      "problemSolving": "Approach, decomposition, and edge-case reasoning.",
+      "communication": "Clarity, collaboration, and interview narration.",
+      "codeQuality": "Readability, structure, and maintainability.",
+      "debugging": "Ability to inspect failures and adapt quickly.",
+      "overall": "Your holistic evaluation of the session."
+    },
+    "ratingAria": "{{label}} rating {{rating}} out of 5",
+    "option": {
+      "pairAgainYes": "Would pair again",
+      "pairAgainNo": "Would not pair again"
+    },
+    "button": {
+      "submit": "Submit feedback",
+      "submitting": "Submitting..."
+    },
+    "validation": {
+      "candidateRequired": "Choose who this feedback is for.",
+      "ratingRequired": "Pick a rating from 1 to 5.",
+      "strengthsRequired": "Add at least one strength.",
+      "improvementsRequired": "Add at least one improvement.",
+      "textMaxLength": "Keep feedback under 2000 characters."
+    }
   }
 }

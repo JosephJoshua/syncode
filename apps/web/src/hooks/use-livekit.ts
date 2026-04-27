@@ -219,12 +219,14 @@ export function useLiveKit({
     setRemoteParticipants((prev) => {
       if (
         prev.length === remotes.length &&
-        prev.every((p, i) => {
-          const remote = remotes[i];
-          return remote ? participantEqual(p, remote) : false;
+        prev.every((participant, index) => {
+          const next = remotes[index];
+          return next !== undefined && participantEqual(participant, next);
         })
-      )
+      ) {
         return prev;
+      }
+
       return remotes;
     });
   }, []);

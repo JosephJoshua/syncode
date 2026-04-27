@@ -4,13 +4,16 @@ import type { IAiClient } from './client.js';
 import type {
   GenerateHintRequest,
   GenerateHintResult,
+  GenerateSessionReportRequest,
+  GenerateSessionReportResult,
   InterviewResponseRequest,
   InterviewResponseResult,
   ReviewCodeRequest,
   ReviewCodeResult,
 } from './types.js';
+import { toPublicSessionReportTestCaseBreakdown } from './types.js';
 
-type AiJobType = 'hint' | 'review' | 'interview';
+type AiJobType = 'hint' | 'review' | 'interview' | 'session-report';
 
 interface StubJob {
   status: JobStatus;
@@ -18,6 +21,7 @@ interface StubJob {
   hintResult?: GenerateHintResult;
   reviewResult?: ReviewCodeResult;
   interviewResult?: InterviewResponseResult;
+  sessionReportResult?: GenerateSessionReportResult;
 }
 
 interface StubAiClientOptions {
@@ -37,6 +41,10 @@ export class StubAiClient implements IAiClient {
   private readonly jobs = new Map<string, StubJob>();
   private readonly timers: ReturnType<typeof setTimeout>[] = [];
   private readonly delayMs: number;
+  private sessionReportResultCallback?: (
+    jobId: string,
+    result: GenerateSessionReportResult,
+  ) => Promise<void>;
 
   constructor(options: StubAiClientOptions = {}) {
     this.delayMs = options.delayMs ?? 800;
@@ -92,6 +100,24 @@ export class StubAiClient implements IAiClient {
     return job.interviewResult ?? null;
   }
 
+  async submitSessionReportRequest(
+    request: GenerateSessionReportRequest,
+  ): Promise<SubmitResult<'ai:session-report'>> {
+    const jobId = randomUUID() as JobId<'ai:session-report'>;
+    this.jobs.set(jobId, { status: 'queued', type: 'session-report' });
+
+    this.scheduleSessionReportCompletion(jobId, request);
+    return { jobId };
+  }
+
+  async getSessionReportResult(
+    jobId: JobId<'ai:session-report'>,
+  ): Promise<GenerateSessionReportResult | null> {
+    const job = this.jobs.get(jobId);
+    if (!job || job.type !== 'session-report') return null;
+    return job.sessionReportResult ?? null;
+  }
+
   async getHintJobStatus(jobId: JobId<'ai:hint'>): Promise<JobStatus> {
     const job = this.jobs.get(jobId);
     if (!job || job.type !== 'hint') return 'failed';
@@ -110,8 +136,20 @@ export class StubAiClient implements IAiClient {
     return job.status;
   }
 
+  async getSessionReportJobStatus(jobId: JobId<'ai:session-report'>): Promise<JobStatus> {
+    const job = this.jobs.get(jobId);
+    if (!job || job.type !== 'session-report') return 'failed';
+    return job.status;
+  }
+
   async healthCheck(): Promise<boolean> {
     return true;
+  }
+
+  onSessionReportResult(
+    callback: (jobId: string, result: GenerateSessionReportResult) => Promise<void>,
+  ): void {
+    this.sessionReportResultCallback = callback;
   }
 
   private scheduleHintCompletion(jobId: string, request: GenerateHintRequest): void {
@@ -200,6 +238,164 @@ export class StubAiClient implements IAiClient {
             },
           ],
         };
+      }, this.delayMs),
+    );
+  }
+
+  private scheduleSessionReportCompletion(
+    jobId: string,
+    request: GenerateSessionReportRequest,
+  ): void {
+    this.timers.push(
+      setTimeout(() => {
+        const job = this.jobs.get(jobId);
+        if (job) job.status = 'running';
+      }, this.delayMs / 4),
+    );
+
+    this.timers.push(
+      setTimeout(() => {
+        const job = this.jobs.get(jobId);
+        if (!job) return;
+
+        const latestSubmission = request.submissions.at(-1);
+        const correctnessScore = latestSubmission
+          ? Math.round((latestSubmission.passed / Math.max(latestSubmission.total, 1)) * 100)
+          : 70;
+        const peerAverage =
+          request.peerFeedback.length > 0
+            ? request.peerFeedback.reduce((sum, item) => sum + item.overallRating, 0) /
+              request.peerFeedback.length
+            : null;
+        const peerAveragePct =
+          peerAverage == null ? null : Math.round((peerAverage / 5) * 100 * 10) / 10;
+        const overallScore = Math.max(
+          0,
+          Math.min(
+            100,
+            Math.round(
+              [
+                correctnessScore,
+                request.runs.length > 0 ? 76 : 70,
+                request.snapshots.length > 0 ? 78 : 70,
+                peerAveragePct ?? 75,
+                request.aiMessages.length > 0 ? 80 : 72,
+              ].reduce((sum, score) => sum + score, 0) / 5,
+            ),
+          ),
+        );
+
+        job.status = 'completed';
+        job.sessionReportResult = {
+          sessionId: request.sessionId,
+          generatedAt: new Date().toISOString(),
+          overallScore,
+          dimensions: {
+            correctness: {
+              score: correctnessScore,
+              feedback: 'Final submission passes the observed portion of the test suite.',
+              evidence: latestSubmission
+                ? [
+                    {
+                      type: 'submission',
+                      reference: latestSubmission.submissionId,
+                      description: `Passed ${latestSubmission.passed}/${latestSubmission.total} test cases.`,
+                    },
+                  ]
+                : [],
+            },
+            efficiency: {
+              score: 76,
+              feedback: 'Execution attempts show workable performance with room for optimization.',
+              evidence: request.runs.slice(-1).map((run) => ({
+                type: 'run',
+                reference: run.jobId,
+                description: `Completed run in ${run.durationMs ?? 0} ms.`,
+              })),
+            },
+            codeQuality: {
+              score: 78,
+              feedback: 'Code snapshots show a solution that became more structured over time.',
+              evidence: request.snapshots.slice(-1).map((snapshot) => ({
+                type: 'snapshot',
+                reference: snapshot.snapshotId,
+                description: `Latest snapshot has ${snapshot.linesOfCode} lines of code.`,
+              })),
+            },
+            communication: {
+              score: peerAveragePct ?? 75,
+              feedback:
+                request.peerFeedback.length > 0
+                  ? 'Peer feedback indicates clear collaboration overall.'
+                  : 'No peer feedback was captured, so this score is inferred conservatively.',
+              evidence: request.peerFeedback.slice(0, 1).map((feedback) => ({
+                type: 'peer_feedback',
+                reference: feedback.reviewerId,
+                description: feedback.strengths,
+              })),
+            },
+            problemSolving: {
+              score: 80,
+              feedback:
+                'The participant iterated through runs and submissions toward a working solution.',
+              evidence: [
+                {
+                  type: 'summary',
+                  reference: request.sessionId,
+                  description: `${request.runs.length} runs and ${request.submissions.length} submissions were captured.`,
+                },
+              ],
+            },
+          },
+          strengths: [
+            'Iterated actively with multiple code revisions.',
+            'Reached a final solution with measurable correctness signals.',
+          ],
+          areasForImprovement: [
+            'Explain tradeoffs and edge cases more explicitly during the session.',
+            'Reduce unnecessary intermediate run attempts before final submission.',
+          ],
+          detailedFeedback:
+            'The participant made steady progress through the session and converged on a workable solution. Future sessions should focus on surfacing complexity analysis and edge-case reasoning earlier.',
+          comparisonToHistory:
+            request.historicalContext && request.historicalContext.sessionsCompared > 0
+              ? {
+                  trend:
+                    request.historicalContext.averageScore != null &&
+                    overallScore > request.historicalContext.averageScore + 3
+                      ? 'improving'
+                      : request.historicalContext.averageScore != null &&
+                          overallScore < request.historicalContext.averageScore - 3
+                        ? 'declining'
+                        : 'stable',
+                  sessionsCompared: request.historicalContext.sessionsCompared,
+                  averageScore: request.historicalContext.averageScore ?? overallScore,
+                }
+              : null,
+          peerFeedbackSummary:
+            request.peerFeedback.length > 0
+              ? {
+                  averageRating:
+                    Math.round(
+                      (request.peerFeedback.reduce((sum, item) => sum + item.overallRating, 0) /
+                        request.peerFeedback.length) *
+                        10,
+                    ) / 10,
+                  wouldPairAgain: Math.round(
+                    (request.peerFeedback.filter((item) => item.wouldPairAgain).length /
+                      request.peerFeedback.length) *
+                      100,
+                  ),
+                  themes: request.peerFeedback
+                    .flatMap((item) => [item.strengths, item.improvements])
+                    .slice(0, 3),
+                }
+              : null,
+          testCaseBreakdown: toPublicSessionReportTestCaseBreakdown(request.finalTestCaseBreakdown),
+          model: 'stub-ai-client',
+        };
+
+        this.sessionReportResultCallback?.(jobId, job.sessionReportResult).catch(() => {});
       }, this.delayMs),
     );
   }
