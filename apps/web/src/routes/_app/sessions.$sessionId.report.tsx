@@ -274,17 +274,7 @@ function DetailsPanel({ session }: { readonly session: SessionDetail }) {
                 </button>
                 {isOpen ? (
                   <div id={panelId} className="px-4 pb-4 text-sm leading-6 text-muted-foreground">
-                    {'content' in section ? (
-                      <p>{section.content || t('details.none')}</p>
-                    ) : section.items.length > 0 ? (
-                      <ul className="list-disc space-y-1 pl-5">
-                        {section.items.map((item) => (
-                          <li key={item}>{item}</li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p>{t('details.none')}</p>
-                    )}
+                    <SectionBody section={section} emptyLabel={t('details.none')} />
                   </div>
                 ) : null}
               </div>
@@ -294,6 +284,28 @@ function DetailsPanel({ session }: { readonly session: SessionDetail }) {
       </CardContent>
     </Card>
   );
+}
+
+type ReportSection =
+  | { id: string; title: string; content: string }
+  | { id: string; title: string; items: string[] };
+
+function SectionBody({ section, emptyLabel }: { section: ReportSection; emptyLabel: string }) {
+  if ('content' in section) {
+    return <p>{section.content || emptyLabel}</p>;
+  }
+
+  if (section.items.length > 0) {
+    return (
+      <ul className="list-disc space-y-1 pl-5">
+        {section.items.map((item) => (
+          <li key={item}>{item}</li>
+        ))}
+      </ul>
+    );
+  }
+
+  return <p>{emptyLabel}</p>;
 }
 
 function formatDate(value: string) {

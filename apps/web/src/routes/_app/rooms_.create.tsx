@@ -23,7 +23,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { Bot, Check, Code2, Copy, FileCode2, Globe, Lock, Minus, Plus, Users } from 'lucide-react';
 import { motion } from 'motion/react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
@@ -114,6 +114,7 @@ function CreateRoomPage() {
   const [createdRoomCode, setCreatedRoomCode] = useState<string | null>(null);
   const { copied, copy } = useClipboard();
   const [isProblemOpen, setIsProblemOpen] = useState(false);
+  const problemListboxId = useId();
   const [submissionError, setSubmissionError] = useState<string | null>(null);
   const [submittedData, setSubmittedData] = useState<CreateRoomFormData | null>(null);
 
@@ -216,6 +217,8 @@ function CreateRoomPage() {
                       type="button"
                       role="combobox"
                       aria-expanded={isProblemOpen}
+                      aria-controls={problemListboxId}
+                      aria-haspopup="listbox"
                       className={cn(
                         'flex h-11 w-full items-center gap-2 rounded-lg border border-input bg-background px-3.5 text-left text-sm font-medium outline-none transition-[border-color,background-color,box-shadow] focus-visible:border-ring/60 focus-visible:ring-3 focus-visible:ring-ring/40',
                         !selectedProblemLabel && 'text-muted-foreground',
@@ -231,7 +234,7 @@ function CreateRoomPage() {
                   <PopoverContent className="p-0">
                     <Command>
                       <CommandInput placeholder={t('create.problemPlaceholder')} />
-                      <CommandList>
+                      <CommandList id={problemListboxId}>
                         <CommandEmpty>{t('create.noMatchingProblems')}</CommandEmpty>
                         <CommandGroup>
                           {availableProblems.map((problem) => (

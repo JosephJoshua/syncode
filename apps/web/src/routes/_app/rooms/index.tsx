@@ -78,6 +78,16 @@ function RoomsPage() {
     return { activeCount: active, totalCount: rooms.length };
   }, [rooms]);
 
+  const subtitleText = (() => {
+    if (statusFilter !== 'all') {
+      return t('subtitle.totalCount', { count: totalCount });
+    }
+    if (activeCount > 0) {
+      return `${t('subtitle.activeCount', { count: activeCount })} · ${t('subtitle.totalLabel', { totalCount })}`;
+    }
+    return t('subtitle.noActive');
+  })();
+
   const handleJoin = (e: React.SubmitEvent<HTMLFormElement>) => {
     e.preventDefault();
     setJoinError(null);
@@ -103,11 +113,7 @@ function RoomsPage() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.45, delay: 0.05, ease: [0.22, 1, 0.36, 1] }}
       >
-        {statusFilter === 'all'
-          ? activeCount > 0
-            ? `${t('subtitle.activeCount', { count: activeCount })} · ${t('subtitle.totalLabel', { totalCount })}`
-            : t('subtitle.noActive')
-          : t('subtitle.totalCount', { count: totalCount })}
+        {subtitleText}
       </motion.p>
 
       <motion.div
@@ -179,118 +185,133 @@ function RoomsPage() {
         ))}
       </div>
 
-      {roomsQuery.isLoading ? (
-        <div className="flex items-center justify-center py-24">
-          <Loader2 size={32} className="animate-spin text-primary/60" />
-        </div>
-      ) : roomsQuery.isError ? (
-        <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-destructive/40 bg-card/30 px-6 py-20 text-center backdrop-blur-sm">
-          <div className="relative mb-5">
-            <div className="absolute inset-0 -z-10 rounded-full bg-destructive/15 blur-2xl" />
-            <div className="flex size-16 items-center justify-center rounded-2xl border border-destructive/40 bg-card text-destructive/70">
-              <AlertTriangle size={28} />
+      {(() => {
+        if (roomsQuery.isLoading) {
+          return (
+            <div className="flex items-center justify-center py-24">
+              <Loader2 size={32} className="animate-spin text-primary/60" />
             </div>
-          </div>
-          <h3 className="text-lg font-semibold text-foreground">{t('error.loadFailed')}</h3>
-          <p className="mt-1.5 max-w-sm text-sm text-muted-foreground">
-            {t('error.loadFailedDescription')}
-          </p>
-          <Button variant="outline" className="mt-5" onClick={() => roomsQuery.refetch()}>
-            {t('error.retry')}
-          </Button>
-        </div>
-      ) : rooms.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border/60 bg-card/30 px-6 py-20 text-center backdrop-blur-sm">
-          <div className="relative mb-5">
-            <div className="absolute inset-0 -z-10 rounded-full bg-primary/15 blur-2xl" />
-            <div className="flex size-16 items-center justify-center rounded-2xl border border-border/60 bg-card text-primary">
-              <Radio size={28} />
+          );
+        }
+
+        if (roomsQuery.isError) {
+          return (
+            <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-destructive/40 bg-card/30 px-6 py-20 text-center backdrop-blur-sm">
+              <div className="relative mb-5">
+                <div className="absolute inset-0 -z-10 rounded-full bg-destructive/15 blur-2xl" />
+                <div className="flex size-16 items-center justify-center rounded-2xl border border-destructive/40 bg-card text-destructive/70">
+                  <AlertTriangle size={28} />
+                </div>
+              </div>
+              <h3 className="text-lg font-semibold text-foreground">{t('error.loadFailed')}</h3>
+              <p className="mt-1.5 max-w-sm text-sm text-muted-foreground">
+                {t('error.loadFailedDescription')}
+              </p>
+              <Button variant="outline" className="mt-5" onClick={() => roomsQuery.refetch()}>
+                {t('error.retry')}
+              </Button>
             </div>
-          </div>
-          <h3 className="text-lg font-semibold text-foreground">{t('empty.noRooms')}</h3>
-          <p className="mt-1.5 max-w-sm text-sm text-muted-foreground">
-            {statusFilter === 'all'
+          );
+        }
+
+        if (rooms.length === 0) {
+          const emptyDescription =
+            statusFilter === 'all'
               ? t('empty.noRoomsDescription')
-              : t('empty.noRoomsWithStatus', { status: t(ROOM_STATUS_KEYS[statusFilter]) })}
-          </p>
-        </div>
-      ) : (
-        <div className="grid gap-4 md:grid-cols-2">
-          {rooms.map((room, index) => {
-            const fallback = {
-              dot: 'bg-muted-foreground/50',
-              badge: 'border-border bg-muted/30 text-muted-foreground',
-            };
-            const styles = ROOM_STATUS_STYLES[room.status] ?? fallback;
+              : t('empty.noRoomsWithStatus', { status: t(ROOM_STATUS_KEYS[statusFilter]) });
 
-            return (
-              <motion.div
-                key={room.roomId}
-                initial={{ opacity: 0, y: 16, filter: 'blur(4px)' }}
-                animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-                transition={{
-                  duration: 0.36,
-                  delay: index * 0.05,
-                  ease: [0.22, 1, 0.36, 1],
-                }}
-              >
-                <Link to="/rooms/$roomId" params={{ roomId: room.roomId }} className="block">
-                  <Card className="group h-full rounded-2xl border border-white/[0.035] bg-card/50 p-5 ring-1 ring-border/30 backdrop-blur-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/20 hover:bg-card/70 hover:shadow-[0_20px_40px_-24px_color-mix(in_oklch,var(--primary)_70%,transparent)] hover:ring-primary/20 sm:p-6">
-                    {/* Top row: status + meta */}
-                    <div className="mb-4 flex items-center justify-between">
-                      <Badge
-                        variant="outline"
-                        className={cn('gap-1.5 px-2.5 py-1 text-xs', styles.badge)}
-                      >
-                        <span className={cn('inline-block size-1.5 rounded-full', styles.dot)} />
-                        {t(ROOM_STATUS_KEYS[room.status as RoomStatusType] ?? room.status)}
-                      </Badge>
+          return (
+            <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border/60 bg-card/30 px-6 py-20 text-center backdrop-blur-sm">
+              <div className="relative mb-5">
+                <div className="absolute inset-0 -z-10 rounded-full bg-primary/15 blur-2xl" />
+                <div className="flex size-16 items-center justify-center rounded-2xl border border-border/60 bg-card text-primary">
+                  <Radio size={28} />
+                </div>
+              </div>
+              <h3 className="text-lg font-semibold text-foreground">{t('empty.noRooms')}</h3>
+              <p className="mt-1.5 max-w-sm text-sm text-muted-foreground">{emptyDescription}</p>
+            </div>
+          );
+        }
 
-                      <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                        <span className="flex items-center gap-1">
-                          <Users size={13} />
-                          {room.participantCount}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <Clock3 size={13} />
-                          {formatTimeAgo(room.createdAt)}
-                        </span>
-                      </div>
-                    </div>
+        return (
+          <div className="grid gap-4 md:grid-cols-2">
+            {rooms.map((room, index) => {
+              const fallback = {
+                dot: 'bg-muted-foreground/50',
+                badge: 'border-border bg-muted/30 text-muted-foreground',
+              };
+              const styles = ROOM_STATUS_STYLES[room.status] ?? fallback;
 
-                    {/* Room name / problem */}
-                    <h3 className="mb-1.5 text-base font-semibold tracking-tight text-foreground transition-colors group-hover:text-primary">
-                      {room.name ?? t('card.untitledRoom')}
-                    </h3>
-
-                    {room.problemTitle && (
-                      <p className="mb-4 text-sm text-muted-foreground">{room.problemTitle}</p>
-                    )}
-
-                    {/* Bottom row: role + language + code */}
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant="secondary" className="text-xs">
-                        {t(ROLE_LABEL_KEYS[room.myRole] ?? room.myRole)}
-                      </Badge>
-
-                      {room.language && (
-                        <Badge variant="outline" className="gap-1 text-xs">
-                          <Code2 size={12} />
-                          {room.language}
+              return (
+                <motion.div
+                  key={room.roomId}
+                  initial={{ opacity: 0, y: 16, filter: 'blur(4px)' }}
+                  animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+                  transition={{
+                    duration: 0.36,
+                    delay: index * 0.05,
+                    ease: [0.22, 1, 0.36, 1],
+                  }}
+                >
+                  <Link to="/rooms/$roomId" params={{ roomId: room.roomId }} className="block">
+                    <Card className="group h-full rounded-2xl border border-white/[0.035] bg-card/50 p-5 ring-1 ring-border/30 backdrop-blur-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/20 hover:bg-card/70 hover:shadow-[0_20px_40px_-24px_color-mix(in_oklch,var(--primary)_70%,transparent)] hover:ring-primary/20 sm:p-6">
+                      {/* Top row: status + meta */}
+                      <div className="mb-4 flex items-center justify-between">
+                        <Badge
+                          variant="outline"
+                          className={cn('gap-1.5 px-2.5 py-1 text-xs', styles.badge)}
+                        >
+                          <span className={cn('inline-block size-1.5 rounded-full', styles.dot)} />
+                          {t(ROOM_STATUS_KEYS[room.status as RoomStatusType] ?? room.status)}
                         </Badge>
+
+                        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                          <span className="flex items-center gap-1">
+                            <Users size={13} />
+                            {room.participantCount}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <Clock3 size={13} />
+                            {formatTimeAgo(room.createdAt)}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Room name / problem */}
+                      <h3 className="mb-1.5 text-base font-semibold tracking-tight text-foreground transition-colors group-hover:text-primary">
+                        {room.name ?? t('card.untitledRoom')}
+                      </h3>
+
+                      {room.problemTitle && (
+                        <p className="mb-4 text-sm text-muted-foreground">{room.problemTitle}</p>
                       )}
 
-                      <span className="ml-auto font-mono text-[11px] tracking-wider text-muted-foreground/60">
-                        {room.roomCode}
-                      </span>
-                    </div>
-                  </Card>
-                </Link>
-              </motion.div>
-            );
-          })}
-        </div>
-      )}
+                      {/* Bottom row: role + language + code */}
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant="secondary" className="text-xs">
+                          {t(ROLE_LABEL_KEYS[room.myRole] ?? room.myRole)}
+                        </Badge>
+
+                        {room.language && (
+                          <Badge variant="outline" className="gap-1 text-xs">
+                            <Code2 size={12} />
+                            {room.language}
+                          </Badge>
+                        )}
+
+                        <span className="ml-auto font-mono text-[11px] tracking-wider text-muted-foreground/60">
+                          {room.roomCode}
+                        </span>
+                      </div>
+                    </Card>
+                  </Link>
+                </motion.div>
+              );
+            })}
+          </div>
+        );
+      })()}
     </div>
   );
 }
