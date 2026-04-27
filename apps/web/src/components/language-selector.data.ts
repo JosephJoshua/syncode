@@ -25,6 +25,17 @@ const languageIconSources: Record<SupportedLanguage, string> = {
   rust: new URL('./icons/rust.svg', import.meta.url).href,
 };
 
+export const LANGUAGE_VERSIONED_LABELS: Record<SupportedLanguage, string> = {
+  python: 'Python 3.12',
+  javascript: 'JavaScript (Node.js 20)',
+  typescript: 'TypeScript (TSX)',
+  java: 'Java 21',
+  cpp: 'C++ (GCC 13)',
+  c: 'C (GCC 13)',
+  go: 'Go 1.22',
+  rust: 'Rust 1.77',
+};
+
 export const LANGUAGE_SELECTOR_METADATA: Record<SupportedLanguage, LanguageSelectorMetadata> = {
   python: {
     label: 'Python',

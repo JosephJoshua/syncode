@@ -1,3 +1,4 @@
+import { SUPPORTED_LANGUAGES } from '@syncode/shared';
 import { z } from 'zod';
 import { defineRoute } from '../route-utils.js';
 
@@ -6,7 +7,10 @@ export const snapshotReadyPayloadSchema = z
   .object({
     roomId: z.uuid().describe('Room identifier'),
     snapshot: z.array(z.number()).describe('Binary snapshot as JSON array of bytes'),
-    code: z.string().describe('Decoded document text content'),
+    code: z.string().describe('Decoded document text content for the active language'),
+    language: z
+      .enum(SUPPORTED_LANGUAGES)
+      .describe('Active programming language at the moment of the snapshot'),
     timestamp: z.number().int().positive().describe('Epoch timestamp (ms)'),
     trigger: z
       .enum(['periodic', 'phase_change', 'submission', 'session_end'])
@@ -27,6 +31,59 @@ export const userDisconnectedPayloadSchema = z
 
 export type UserDisconnectedPayload = z.infer<typeof userDisconnectedPayloadSchema>;
 
+export const authorizeJoinRequestSchema = z
+  .object({
+    userId: z.uuid().describe('User identifier requesting to join the room'),
+  })
+  .strict();
+
+export type AuthorizeJoinRequest = z.infer<typeof authorizeJoinRequestSchema>;
+
+export type AuthorizeJoinDenialReason =
+  | 'participant-removed'
+  | 'not-participant'
+  | 'room-finished'
+  | 'room-not-found';
+
+export interface AuthorizeJoinResponse {
+  authorized: boolean;
+  reason?: AuthorizeJoinDenialReason;
+}
+
+export const participantHeartbeatRequestSchema = z
+  .object({
+    participants: z
+      .array(
+        z
+          .object({
+            roomId: z.uuid().describe('Room identifier'),
+            userId: z.uuid().describe('User identifier'),
+          })
+          .strict(),
+      )
+      .describe('Authenticated, alive (roomId, userId) pairs currently connected to collab-plane'),
+  })
+  .strict();
+
+export type ParticipantHeartbeatRequest = z.infer<typeof participantHeartbeatRequestSchema>;
+
+export interface ParticipantHeartbeatResponse {
+  updated: number;
+}
+
+// Room identifier is carried in the path parameter; the body only needs the state.
+export const persistDocSnapshotPayloadSchema = z
+  .object({
+    state: z.array(z.number()).describe('Binary Y.Doc state as JSON array of bytes'),
+  })
+  .strict();
+
+export type PersistDocSnapshotPayload = z.infer<typeof persistDocSnapshotPayloadSchema>;
+
+export interface PersistDocSnapshotResponse {
+  success: boolean;
+}
+
 export const CONTROL_INTERNAL = {
   SNAPSHOT_READY: defineRoute<SnapshotReadyPayload, { success: boolean }>()(
     'internal/collab/snapshot',
@@ -34,6 +91,18 @@ export const CONTROL_INTERNAL = {
   ),
   USER_DISCONNECTED: defineRoute<UserDisconnectedPayload, { success: boolean }>()(
     'internal/collab/user-disconnected',
+    'POST',
+  ),
+  PARTICIPANT_HEARTBEAT: defineRoute<ParticipantHeartbeatRequest, ParticipantHeartbeatResponse>()(
+    'internal/participants/heartbeat',
+    'POST',
+  ),
+  AUTHORIZE_JOIN: defineRoute<AuthorizeJoinRequest, AuthorizeJoinResponse>()(
+    'internal/rooms/:roomId/authorize-join',
+    'POST',
+  ),
+  PERSIST_DOC_SNAPSHOT: defineRoute<PersistDocSnapshotPayload, PersistDocSnapshotResponse>()(
+    'internal/rooms/:roomId/doc-snapshot',
     'POST',
   ),
 };

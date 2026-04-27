@@ -18,6 +18,9 @@ export interface UseYjsCollabOptions {
   onRoomStatePatch: (patch: { status?: RoomStatus; editorLocked?: boolean }) => void;
   onParticipantReady: (userId: string, isReady: boolean) => void;
   onPhaseChange?: () => void;
+  onLanguageChange?: (language: string, changedBy: string | null) => void;
+  onReconnected?: () => void;
+  onRoomNotFound?: () => Promise<void>;
 }
 
 interface CollabState {
@@ -40,6 +43,9 @@ export function useYjsCollab({
   onRoomStatePatch,
   onParticipantReady,
   onPhaseChange,
+  onLanguageChange,
+  onReconnected,
+  onRoomNotFound,
 }: UseYjsCollabOptions): YjsCollabResult {
   const [status, setStatus] = useState<CollabConnectionStatus>(
     collabUrl && collabToken ? 'connecting' : 'disconnected',
@@ -53,6 +59,12 @@ export function useYjsCollab({
   participantReadyRef.current = onParticipantReady;
   const phaseChangeRef = useRef(onPhaseChange);
   phaseChangeRef.current = onPhaseChange;
+  const languageChangeRef = useRef(onLanguageChange);
+  languageChangeRef.current = onLanguageChange;
+  const reconnectedRef = useRef(onReconnected);
+  reconnectedRef.current = onReconnected;
+  const roomNotFoundRef = useRef(onRoomNotFound);
+  roomNotFoundRef.current = onRoomNotFound;
   const tRef = useRef(t);
   tRef.current = t;
 
@@ -103,6 +115,19 @@ export function useYjsCollab({
         } else {
           toast.info(tRef.current('lobby.editorUnlocked'));
         }
+      },
+      onLanguageChange: (language, changedBy) => {
+        if (disposed) return;
+        languageChangeRef.current?.(language, changedBy);
+      },
+      onReconnected: () => {
+        if (disposed) return;
+        reconnectedRef.current?.();
+      },
+      onRoomNotFound: async () => {
+        const handler = roomNotFoundRef.current;
+        if (!handler) return;
+        await handler();
       },
     });
 

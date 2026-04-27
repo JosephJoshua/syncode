@@ -8,10 +8,14 @@ import {
   InternalServerErrorException,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import {
+  type AuthorizeJoinResponse,
+  BROWSEABLE_ROOM_STATUSES,
+  type BrowseRoomsQuery,
   COLLAB_CLIENT,
   type CreateRoomInput,
   type DestroyDocumentResponse,
@@ -35,6 +39,7 @@ import {
   matchRequests,
   peerFeedback,
   problems,
+  roomDocSnapshots,
   roomParticipants,
   rooms,
   runs,
@@ -44,6 +49,7 @@ import {
   users,
 } from '@syncode/db';
 import {
+  hasResolvedRoomPermission,
   INVITE_CODE_CHARSET,
   INVITE_CODE_LENGTH,
   INVITE_CODE_MAX_RETRIES,
@@ -54,6 +60,7 @@ import {
   RoomRole,
   RoomStatus,
   resolveRoomPermissions,
+  type SupportedLanguage,
 } from '@syncode/shared';
 import {
   type IMediaService,
@@ -73,6 +80,7 @@ import type {
   DestroyRoomResult,
   JoinRoomResult,
   MediaTokenResult,
+  PublicRoomSummaryResult,
   RoomDetailResult,
   RoomSummaryResult,
   TransferOwnershipResult,
@@ -109,19 +117,16 @@ export class RoomsService {
       return inserted;
     });
 
-    let initialContent: string | undefined;
-    if (room.problemId && room.language) {
-      const problem = await this.db
-        .select({ starterCode: problems.starterCode })
-        .from(problems)
-        .where(eq(problems.id, room.problemId))
-        .then((rows) => rows[0]);
-      const starterMap = problem?.starterCode as Record<string, string> | null;
-      initialContent = starterMap?.[room.language] ?? undefined;
-    }
+    const initialContentByLanguage = await this.resolveStarterContentMap(room);
 
     const [collabCreated, mediaCreated] = await Promise.all([
-      this.createCollabDocument(room.id, room.status, room.editorLocked, initialContent),
+      this.createCollabDocument(
+        room.id,
+        room.status,
+        room.editorLocked,
+        initialContentByLanguage,
+        room.language ?? undefined,
+      ),
       this.createMediaRoom(room.id),
     ]);
 
@@ -224,6 +229,106 @@ export class RoomsService {
     });
   }
 
+  async browsePublicRooms(
+    userId: string,
+    query: BrowseRoomsQuery,
+  ): Promise<PaginatedResult<PublicRoomSummaryResult>> {
+    const escapedSearch = query.search
+      ? query.search.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_')
+      : null;
+
+    const result = await paginate<PublicRoomSummaryResult>({
+      cursor: query.cursor,
+      limit: query.limit,
+      getCursorValues: (row) => [row.createdAt.toISOString(), row.roomId],
+      fetchPage: async (decoded, fetchLimit) => {
+        const conditions = [
+          eq(rooms.isPrivate, false),
+          inArray(rooms.status, [...BROWSEABLE_ROOM_STATUSES]),
+          sql`(select count(*)::int from room_participants rp
+               where rp.room_id = ${rooms.id} and rp.is_active = true) < ${rooms.maxParticipants}`,
+        ];
+
+        if (query.status) conditions.push(eq(rooms.status, query.status));
+        if (query.language) conditions.push(eq(rooms.language, query.language));
+        if (query.difficulty) conditions.push(eq(problems.difficulty, query.difficulty));
+        if (escapedSearch) {
+          conditions.push(sql`${problems.title} ILIKE ${`%${escapedSearch}%`} ESCAPE '\\'`);
+        }
+
+        if (decoded?.length === 2 && decoded[0] && decoded[1]) {
+          const [cursorSort, cursorId] = decoded;
+          const cursorDate = new Date(cursorSort);
+          if (!Number.isNaN(cursorDate.getTime())) {
+            conditions.push(
+              or(
+                lt(rooms.createdAt, cursorDate),
+                and(eq(rooms.createdAt, cursorDate), lt(rooms.id, cursorId)),
+              )!,
+            );
+          }
+        }
+
+        const rows = await this.db
+          .select({
+            roomId: rooms.id,
+            name: rooms.name,
+            status: rooms.status,
+            mode: rooms.mode,
+            hostId: rooms.hostId,
+            hostUsername: users.username,
+            hostDisplayName: users.displayName,
+            hostAvatarUrl: users.avatarUrl,
+            language: rooms.language,
+            problemTitle: problems.title,
+            problemDifficulty: problems.difficulty,
+            maxParticipants: rooms.maxParticipants,
+            participantCount: sql<number>`(
+              select count(*)::int from room_participants rp
+              where rp.room_id = ${rooms.id} and rp.is_active = true
+            )`.as('participant_count'),
+            isParticipant: sql<boolean>`exists(
+              select 1 from room_participants rp
+              where rp.room_id = ${rooms.id}
+                and rp.user_id = ${userId}
+                and rp.is_active = true
+            )`.as('is_participant'),
+            createdAt: rooms.createdAt,
+          })
+          .from(rooms)
+          .innerJoin(users, eq(users.id, rooms.hostId))
+          .leftJoin(problems, eq(problems.id, rooms.problemId))
+          .where(and(...conditions))
+          .orderBy(desc(rooms.createdAt), desc(rooms.id))
+          .limit(fetchLimit);
+
+        const withResolvedAvatars = await resolveAvatarUrls(
+          rows.map((row) => ({ ...row, avatarUrl: row.hostAvatarUrl })),
+          this.storageService,
+        );
+
+        return withResolvedAvatars.map((row) => ({
+          roomId: row.roomId,
+          name: row.name,
+          status: row.status,
+          mode: row.mode,
+          hostId: row.hostId,
+          hostName: row.hostDisplayName ?? row.hostUsername,
+          hostAvatarUrl: row.avatarUrl,
+          language: row.language,
+          problemTitle: row.problemTitle ?? null,
+          problemDifficulty: row.problemDifficulty ?? null,
+          participantCount: row.participantCount,
+          isParticipant: row.isParticipant,
+          maxParticipants: row.maxParticipants,
+          createdAt: row.createdAt,
+        }));
+      },
+    });
+
+    return result;
+  }
+
   async getRoom(roomId: string, userId: string): Promise<RoomDetailResult> {
     const [[room], participantRows] = await Promise.all([
       this.db.select().from(rooms).where(eq(rooms.id, roomId)),
@@ -262,13 +367,6 @@ export class RoomsService {
       throw new NotFoundException({ message: 'Room not found', code: ERROR_CODES.ROOM_NOT_FOUND });
     }
 
-    if (room.inviteCode !== input.roomCode.toUpperCase()) {
-      throw new BadRequestException({
-        message: 'Invalid room code',
-        code: ERROR_CODES.ROOM_INVALID_CODE,
-      });
-    }
-
     if (room.status === RoomStatus.FINISHED) {
       throw new ConflictException({
         message: 'Room has already finished',
@@ -286,16 +384,53 @@ export class RoomsService {
           userId: roomParticipants.userId,
           role: roomParticipants.role,
           isActive: roomParticipants.isActive,
+          removedAt: roomParticipants.removedAt,
         })
         .from(roomParticipants)
         .where(eq(roomParticipants.roomId, roomId));
 
       const existing = existingParticipants.find((p) => p.userId === userId);
-      if (existing?.isActive) {
-        throw new ConflictException({
-          message: 'Already joined this room',
-          code: ERROR_CODES.ROOM_ALREADY_JOINED,
+
+      if (existing?.removedAt) {
+        throw new ForbiddenException({
+          message: 'You have been removed from this room',
+          code: ERROR_CODES.ROOM_PARTICIPANT_REMOVED,
         });
+      }
+
+      // Code check applies only to NEW joiners. Existing participants (active or
+      // inactive) were already admitted once; requiring the invite code on re-join
+      // would break WS reconnect reactivation, which re-calls this endpoint with
+      // an empty body.
+      if (!existing) {
+        if (room.isPrivate) {
+          if (!input.roomCode) {
+            throw new BadRequestException({
+              message: 'Room code required for private rooms',
+              code: ERROR_CODES.ROOM_INVALID_CODE,
+            });
+          }
+          if (room.inviteCode !== input.roomCode.toUpperCase()) {
+            throw new BadRequestException({
+              message: 'Invalid room code',
+              code: ERROR_CODES.ROOM_INVALID_CODE,
+            });
+          }
+        } else if (input.roomCode && room.inviteCode !== input.roomCode.toUpperCase()) {
+          throw new BadRequestException({
+            message: 'Invalid room code',
+            code: ERROR_CODES.ROOM_INVALID_CODE,
+          });
+        }
+      }
+
+      if (existing?.isActive) {
+        // Idempotent re-join: user is already active in this room. Skip the
+        // DB write and let the post-transaction code mint a fresh collab
+        // token so the caller can (re-)enter the workspace.
+        assignedRole = this.normalizeParticipantRole(room.mode, existing.role, room.hostId, userId);
+        assignmentReason = 'auto-assigned';
+        return;
       }
 
       const activeCount = existingParticipants.filter((p) => p.isActive).length;
@@ -489,6 +624,13 @@ export class RoomsService {
         });
       }
 
+      if (lockedRoom.status !== RoomStatus.WAITING) {
+        throw new BadRequestException({
+          message: 'Participant roles are locked once the session has started',
+          code: ERROR_CODES.ROOM_ROLES_LOCKED,
+        });
+      }
+
       this.assertRoleAllowedForMode(lockedRoom.mode, nextRole);
 
       const participants = await tx
@@ -537,6 +679,7 @@ export class RoomsService {
         lockedRoom.mode,
         lockedRoom.status,
         nextActiveParticipants,
+        { strict: true },
       );
 
       await tx
@@ -583,6 +726,72 @@ export class RoomsService {
       updatedAt,
       updatedBy: actorUserId,
     };
+  }
+
+  async removeParticipant(
+    roomId: string,
+    requesterId: string,
+    targetUserId: string,
+  ): Promise<void> {
+    if (requesterId === targetUserId) {
+      throw new BadRequestException({
+        message: 'Cannot remove yourself. Use transfer-ownership or leave the room.',
+        code: ERROR_CODES.ROOM_PERMISSION_DENIED,
+      });
+    }
+
+    await this.db.transaction(async (tx) => {
+      const [room] = await tx.select().from(rooms).where(eq(rooms.id, roomId)).for('update');
+
+      if (!room) {
+        throw new NotFoundException({
+          message: 'Room not found',
+          code: ERROR_CODES.ROOM_NOT_FOUND,
+        });
+      }
+
+      if (room.hostId !== requesterId) {
+        throw new ForbiddenException({
+          message: 'Only the host can remove participants',
+          code: ERROR_CODES.ROOM_PERMISSION_DENIED,
+        });
+      }
+
+      const [targetParticipant] = await tx
+        .select({
+          id: roomParticipants.id,
+          isActive: roomParticipants.isActive,
+        })
+        .from(roomParticipants)
+        .where(and(eq(roomParticipants.roomId, roomId), eq(roomParticipants.userId, targetUserId)))
+        .for('update');
+
+      if (!targetParticipant || !targetParticipant.isActive) {
+        throw new NotFoundException({
+          message: 'Participant not found',
+          code: ERROR_CODES.PARTICIPANT_NOT_FOUND,
+        });
+      }
+
+      const now = new Date();
+      await tx
+        .update(roomParticipants)
+        .set({ isActive: false, leftAt: now, removedAt: now })
+        .where(eq(roomParticipants.id, targetParticipant.id));
+    });
+
+    // Best-effort kick: close the target's WS connection. Transaction already
+    // committed, so a failure here must not propagate.
+    try {
+      await this.collabClient.kickUser(roomId, {
+        userId: targetUserId,
+        reason: 'Removed by host',
+      });
+    } catch (err) {
+      this.logger.warn(
+        `kickUser failed for user ${targetUserId} in room ${roomId}: ${(err as Error).message}`,
+      );
+    }
   }
 
   async toggleReady(roomId: string, userId: string): Promise<RoomDetailResult> {
@@ -642,6 +851,79 @@ export class RoomsService {
     });
 
     void this.broadcastParticipantReady(roomId, userId, newReady);
+
+    return this.getRoom(roomId, userId);
+  }
+
+  async changeLanguage(
+    roomId: string,
+    userId: string,
+    language: SupportedLanguage,
+  ): Promise<RoomDetailResult> {
+    const prevLanguage = await this.db.transaction(async (tx) => {
+      const [room] = await tx.select().from(rooms).where(eq(rooms.id, roomId)).for('update');
+      if (!room) {
+        throw new NotFoundException({
+          message: 'Room not found',
+          code: ERROR_CODES.ROOM_NOT_FOUND,
+        });
+      }
+
+      if (room.status === RoomStatus.FINISHED) {
+        throw new BadRequestException({
+          message: 'Cannot change language in a finished room',
+          code: ERROR_CODES.ROOM_INVALID_STATE,
+        });
+      }
+
+      const [participant] = await tx
+        .select({ role: roomParticipants.role, isActive: roomParticipants.isActive })
+        .from(roomParticipants)
+        .where(and(eq(roomParticipants.roomId, roomId), eq(roomParticipants.userId, userId)));
+
+      if (!participant?.isActive) {
+        throw new ForbiddenException({
+          message: 'Not a participant of this room',
+          code: ERROR_CODES.ROOM_ACCESS_DENIED,
+        });
+      }
+
+      const role = this.normalizeParticipantRole(
+        room.mode as RoomMode,
+        participant.role,
+        room.hostId,
+        userId,
+      );
+      const isHost = room.hostId === userId;
+
+      if (!hasResolvedRoomPermission(role, 'code:change-language', { isHost })) {
+        throw new ForbiddenException({
+          message: 'You do not have permission to change the language',
+          code: ERROR_CODES.ROOM_PERMISSION_DENIED,
+        });
+      }
+
+      if (room.language === language) {
+        return room.language;
+      }
+
+      await tx.update(rooms).set({ language }).where(eq(rooms.id, roomId));
+      await tx
+        .update(sessions)
+        .set({ language })
+        .where(and(eq(sessions.roomId, roomId), eq(sessions.status, 'ongoing')));
+      return room.language;
+    });
+
+    if (prevLanguage !== language) {
+      try {
+        await this.collabClient.changeLanguage({ roomId, language, changedBy: userId });
+      } catch (err) {
+        this.logger.warn(
+          `changeLanguage broadcast failed for ${roomId}: ${(err as Error).message}`,
+        );
+      }
+    }
 
     return this.getRoom(roomId, userId);
   }
@@ -929,7 +1211,9 @@ export class RoomsService {
             lockedRoom.mode as RoomMode,
             RoomStatus.WARMUP,
             activeParticipants,
+            { strict: true },
           );
+          this.assertRequiredParticipantsReady(lockedRoom.mode as RoomMode, activeParticipants);
         }
 
         const roomUpdate: Partial<typeof rooms.$inferInsert> = {
@@ -947,6 +1231,16 @@ export class RoomsService {
         }
 
         await tx.update(rooms).set(roomUpdate).where(eq(rooms.id, roomId));
+
+        if (targetStatus === RoomStatus.FINISHED) {
+          // Cascade: mark any remaining active participants as inactive. They
+          // weren't kicked — the room just ended — so we set leftAt but NOT
+          // removedAt.
+          await tx
+            .update(roomParticipants)
+            .set({ isActive: false, leftAt: now })
+            .where(and(eq(roomParticipants.roomId, roomId), eq(roomParticipants.isActive, true)));
+        }
 
         // Reset all participants' ready status when leaving the lobby
         if (lockedStatus === RoomStatus.WAITING) {
@@ -1111,6 +1405,7 @@ export class RoomsService {
     mode: RoomMode,
     status: RoomStatus,
     activeParticipants: Array<{ userId: string; role: RoomRole }>,
+    options: { strict?: boolean } = {},
   ): void {
     const interviewerCount = activeParticipants.filter(
       (participant) => participant.role === RoomRole.INTERVIEWER,
@@ -1127,7 +1422,11 @@ export class RoomsService {
         });
       }
 
-      if (status !== RoomStatus.WAITING && (interviewerCount !== 1 || candidateCount !== 1)) {
+      if (
+        options.strict &&
+        status !== RoomStatus.WAITING &&
+        (interviewerCount !== 1 || candidateCount !== 1)
+      ) {
         throw new ConflictException({
           message: 'Peer rooms require exactly one active interviewer and one active candidate',
           code: ERROR_CODES.ROOM_ROLE_CONSTRAINT_VIOLATION,
@@ -1144,10 +1443,31 @@ export class RoomsService {
       });
     }
 
-    if (status !== RoomStatus.WAITING && candidateCount !== 1) {
+    if (options.strict && status !== RoomStatus.WAITING && candidateCount !== 1) {
       throw new ConflictException({
         message: 'AI rooms require exactly one active candidate after the room starts',
         code: ERROR_CODES.ROOM_ROLE_CONSTRAINT_VIOLATION,
+      });
+    }
+  }
+
+  private assertRequiredParticipantsReady(
+    mode: RoomMode,
+    activeParticipants: Array<{ userId: string; role: RoomRole; isReady: boolean }>,
+  ): void {
+    const requiredRoles: RoomRole[] =
+      mode === 'peer' ? [RoomRole.INTERVIEWER, RoomRole.CANDIDATE] : [RoomRole.CANDIDATE];
+
+    // role is the mode-resolved runtime role (see fetchActiveParticipants), not the raw DB value,
+    // so host-as-candidate in AI mode lands on CANDIDATE here as expected.
+    const required = activeParticipants.filter((participant) =>
+      requiredRoles.includes(participant.role),
+    );
+
+    if (required.length === 0 || required.some((participant) => !participant.isReady)) {
+      throw new BadRequestException({
+        message: 'All required participants must be ready to start the session.',
+        code: ERROR_CODES.ROOM_PARTICIPANTS_NOT_READY,
       });
     }
   }
@@ -1183,11 +1503,12 @@ export class RoomsService {
   private async fetchActiveParticipants(
     db: Pick<Database, 'select'>,
     room: typeof rooms.$inferSelect,
-  ): Promise<Array<{ userId: string; role: RoomRole }>> {
+  ): Promise<Array<{ userId: string; role: RoomRole; isReady: boolean }>> {
     const participants = await db
       .select({
         userId: roomParticipants.userId,
         role: roomParticipants.role,
+        isReady: roomParticipants.isReady,
       })
       .from(roomParticipants)
       .where(and(eq(roomParticipants.roomId, room.id), eq(roomParticipants.isActive, true)));
@@ -1200,6 +1521,7 @@ export class RoomsService {
         room.hostId,
         participant.userId,
       ),
+      isReady: participant.isReady,
     }));
   }
 
@@ -1347,24 +1669,199 @@ export class RoomsService {
       .where(and(eq(roomParticipants.roomId, roomId), eq(roomParticipants.userId, userId)));
   }
 
+  /**
+   * Authoritative check for collab-plane: can this user (re)join the room?
+   *
+   * Called on every WS join to defeat stale-JWT attacks where a kicked user
+   * still holds a 24h collab token. Kick durability lives here, not in the
+   * collab gateway's local registry.
+   */
+  async authorizeJoin(roomId: string, userId: string): Promise<AuthorizeJoinResponse> {
+    const [room] = await this.db
+      .select({ status: rooms.status })
+      .from(rooms)
+      .where(eq(rooms.id, roomId))
+      .limit(1);
+
+    if (!room) {
+      return { authorized: false, reason: 'room-not-found' };
+    }
+
+    if (room.status === RoomStatus.FINISHED) {
+      return { authorized: false, reason: 'room-finished' };
+    }
+
+    const [participant] = await this.db
+      .select({ removedAt: roomParticipants.removedAt })
+      .from(roomParticipants)
+      .where(and(eq(roomParticipants.roomId, roomId), eq(roomParticipants.userId, userId)))
+      .limit(1);
+
+    if (!participant) {
+      return { authorized: false, reason: 'not-participant' };
+    }
+
+    if (participant.removedAt !== null) {
+      return { authorized: false, reason: 'participant-removed' };
+    }
+
+    return { authorized: true };
+  }
+
+  /**
+   * Bulk-record participant heartbeats from collab-plane. Idempotent: only touches
+   * rows that are currently active and whose (roomId, userId) appear in the batch.
+   * Returns how many rows were actually updated.
+   */
+  async recordParticipantHeartbeats(
+    participants: Array<{ roomId: string; userId: string }>,
+  ): Promise<number> {
+    if (participants.length === 0) return 0;
+
+    const values = sql.join(
+      participants.map((p) => sql`(${p.roomId}::uuid, ${p.userId}::uuid)`),
+      sql`, `,
+    );
+    const now = new Date();
+    const updated = await this.db
+      .update(roomParticipants)
+      .set({ lastHeartbeatAt: now })
+      .where(
+        and(
+          eq(roomParticipants.isActive, true),
+          sql`(${roomParticipants.roomId}, ${roomParticipants.userId}) IN (VALUES ${values})`,
+        ),
+      )
+      .returning({ id: roomParticipants.id });
+    return updated.length;
+  }
+
   private async createCollabDocument(
     roomId: string,
     initialPhase: RoomStatus,
     editorLocked: boolean,
-    initialContent?: string,
+    initialContentByLanguage?: Record<string, string>,
+    initialLanguage?: string,
   ): Promise<boolean> {
     try {
-      await this.collabClient.createDocument({
-        roomId,
-        initialPhase,
-        editorLocked,
-        initialContent,
-      });
+      const snapshot = await this.loadDocSnapshot(roomId);
+      // A stored snapshot takes precedence: it represents the latest known state from
+      // a previous TTL teardown. Starter code has already been seeded into it.
+      await this.collabClient.createDocument(
+        snapshot
+          ? {
+              roomId,
+              initialPhase,
+              editorLocked,
+              snapshot: Array.from(snapshot),
+              initialLanguage,
+            }
+          : {
+              roomId,
+              initialPhase,
+              editorLocked,
+              initialContentByLanguage,
+              initialLanguage,
+            },
+      );
       return true;
     } catch (error) {
       this.logger.warn(`Collab document creation failed for ${roomId}`, error);
       return false;
     }
+  }
+
+  private async loadDocSnapshot(roomId: string): Promise<Uint8Array | null> {
+    const [row] = await this.db
+      .select({ state: roomDocSnapshots.state })
+      .from(roomDocSnapshots)
+      .where(eq(roomDocSnapshots.roomId, roomId))
+      .limit(1);
+    return row?.state ?? null;
+  }
+
+  async persistDocSnapshot(roomId: string, state: Uint8Array): Promise<void> {
+    await this.db
+      .insert(roomDocSnapshots)
+      .values({ roomId, state, updatedAt: new Date() })
+      .onConflictDoUpdate({
+        target: roomDocSnapshots.roomId,
+        set: { state, updatedAt: new Date() },
+      });
+  }
+
+  async ensureCollab(roomId: string, userId: string): Promise<{ recreated: boolean }> {
+    const [room] = await this.db.select().from(rooms).where(eq(rooms.id, roomId)).limit(1);
+    if (!room) {
+      throw new NotFoundException({ message: 'Room not found', code: ERROR_CODES.ROOM_NOT_FOUND });
+    }
+
+    if (room.status === RoomStatus.FINISHED) {
+      throw new ConflictException({
+        message: 'Room has already finished',
+        code: ERROR_CODES.ROOM_FINISHED,
+      });
+    }
+
+    // Allow any prior participant (active or inactive) so a disconnected user
+    // can recover their collab session. Presence of a row is sufficient proof
+    // of prior membership.
+    const [participant] = await this.db
+      .select({ isActive: roomParticipants.isActive })
+      .from(roomParticipants)
+      .where(and(eq(roomParticipants.roomId, roomId), eq(roomParticipants.userId, userId)))
+      .limit(1);
+
+    if (!participant) {
+      throw new ForbiddenException({
+        message: 'Not a participant of this room',
+        code: ERROR_CODES.ROOM_ACCESS_DENIED,
+      });
+    }
+
+    const healthy = await this.collabClient.healthCheck().catch(() => false);
+    if (!healthy) {
+      throw new ServiceUnavailableException({
+        message: 'Collab plane is currently unavailable',
+        code: ERROR_CODES.COLLAB_SERVICE_UNAVAILABLE,
+      });
+    }
+
+    const snapshot = await this.loadDocSnapshot(roomId);
+    const initialLanguage = room.language ?? undefined;
+    const response = await this.collabClient.createDocument(
+      snapshot
+        ? {
+            roomId,
+            initialPhase: room.status,
+            editorLocked: room.editorLocked,
+            snapshot: Array.from(snapshot),
+            initialLanguage,
+          }
+        : {
+            roomId,
+            initialPhase: room.status,
+            editorLocked: room.editorLocked,
+            initialContentByLanguage: await this.resolveStarterContentMap(room),
+            initialLanguage,
+          },
+    );
+
+    return { recreated: response.created };
+  }
+
+  private async resolveStarterContentMap(
+    room: typeof rooms.$inferSelect,
+  ): Promise<Record<string, string> | undefined> {
+    if (!room.problemId) return undefined;
+    const [problem] = await this.db
+      .select({ starterCode: problems.starterCode })
+      .from(problems)
+      .where(eq(problems.id, room.problemId))
+      .limit(1);
+    const starterMap = (problem?.starterCode ?? null) as Record<string, string> | null;
+    if (!starterMap || Object.keys(starterMap).length === 0) return undefined;
+    return starterMap;
   }
 
   private async destroyCollabDocument(roomId: string): Promise<DestroyDocumentResponse | null> {

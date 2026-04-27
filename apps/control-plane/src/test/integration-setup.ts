@@ -123,8 +123,12 @@ export async function insertParticipant(
   roomId: string,
   userId: string,
   role: RoomRole = 'interviewer',
+  overrides?: Partial<typeof roomParticipants.$inferInsert>,
 ) {
-  const [row] = await db.insert(roomParticipants).values({ roomId, userId, role }).returning();
+  const [row] = await db
+    .insert(roomParticipants)
+    .values({ roomId, userId, role, ...overrides })
+    .returning();
   return row;
 }
 

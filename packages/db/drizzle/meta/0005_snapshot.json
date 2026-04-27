@@ -1,5 +1,5 @@
 {
-  "id": "25001284-3c12-40a6-b405-c4939e38dc8f",
+  "id": "162ce4e2-cd69-4c42-a989-1e4b9037ed2f",
   "prevId": "7d64d5b6-6027-4379-9944-de40bf9223a4",
   "version": "7",
   "dialect": "postgresql",
@@ -1996,6 +1996,48 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.room_doc_snapshots": {
+      "name": "room_doc_snapshots",
+      "schema": "",
+      "columns": {
+        "room_id": {
+          "name": "room_id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "state": {
+          "name": "state",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "room_doc_snapshots_room_id_rooms_id_fk": {
+          "name": "room_doc_snapshots_room_id_rooms_id_fk",
+          "tableFrom": "room_doc_snapshots",
+          "tableTo": "rooms",
+          "columnsFrom": ["room_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.room_participants": {
       "name": "room_participants",
       "schema": "",
@@ -2943,121 +2985,56 @@
           "primaryKey": false,
           "notNull": true
         },
-        "user_id": {
-          "name": "user_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "status": {
-          "name": "status",
-          "type": "session_report_status",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'pending'"
-        },
         "overall_score": {
           "name": "overall_score",
           "type": "integer",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
-        "report": {
-          "name": "report",
+        "category_scores": {
+          "name": "category_scores",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "strengths": {
+          "name": "strengths",
           "type": "jsonb",
           "primaryKey": false,
           "notNull": false
         },
-        "model": {
-          "name": "model",
-          "type": "varchar(120)",
+        "areas_for_improvement": {
+          "name": "areas_for_improvement",
+          "type": "jsonb",
           "primaryKey": false,
           "notNull": false
         },
-        "error_message": {
-          "name": "error_message",
+        "feedback": {
+          "name": "feedback",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
-        },
-        "requested_at": {
-          "name": "requested_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
+          "notNull": true
         },
         "generated_at": {
           "name": "generated_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true,
+          "default": "now()"
         }
       },
       "indexes": {
-        "session_reports_session_user_unique": {
-          "name": "session_reports_session_user_unique",
+        "session_reports_session_id_unique": {
+          "name": "session_reports_session_id_unique",
           "columns": [
             {
               "expression": "session_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "user_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
             }
           ],
           "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "session_reports_session_id_idx": {
-          "name": "session_reports_session_id_idx",
-          "columns": [
-            {
-              "expression": "session_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "session_reports_user_id_idx": {
-          "name": "session_reports_user_id_idx",
-          "columns": [
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "session_reports_status_idx": {
-          "name": "session_reports_status_idx",
-          "columns": [
-            {
-              "expression": "status",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -3069,15 +3046,6 @@
           "tableFrom": "session_reports",
           "tableTo": "sessions",
           "columnsFrom": ["session_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "session_reports_user_id_users_id_fk": {
-          "name": "session_reports_user_id_users_id_fk",
-          "tableFrom": "session_reports",
-          "tableTo": "users",
-          "columnsFrom": ["user_id"],
           "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
@@ -3986,11 +3954,6 @@
       "name": "room_status",
       "schema": "public",
       "values": ["waiting", "warmup", "coding", "wrapup", "finished"]
-    },
-    "public.session_report_status": {
-      "name": "session_report_status",
-      "schema": "public",
-      "values": ["pending", "completed", "failed"]
     },
     "public.session_status": {
       "name": "session_status",

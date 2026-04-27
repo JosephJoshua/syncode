@@ -4,7 +4,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as awarenessProtocol from 'y-protocols/awareness';
 import * as syncProtocol from 'y-protocols/sync';
 import * as Y from 'yjs';
-import { YjsCollabProvider } from './yjs-collab-provider.js';
+import {
+  type CollabConnectionStatus,
+  codeTextKey,
+  YjsCollabProvider,
+} from './yjs-collab-provider.js';
 
 // ── Mock WebSocket ──────────────────────────────────────────────────────────
 
@@ -74,6 +78,8 @@ function defaultOptions(
     onParticipantReady: vi.fn(),
     onPhaseChange: vi.fn(),
     onEditorLock: vi.fn(),
+    onLanguageChange: vi.fn(),
+    onReconnected: vi.fn(),
     ...overrides,
   };
 }
@@ -151,6 +157,14 @@ beforeEach(() => {
 afterEach(() => {
   vi.restoreAllMocks();
   vi.useRealTimers();
+});
+
+describe('codeTextKey', () => {
+  it('GIVEN a language WHEN called THEN returns code:<language>', () => {
+    expect(codeTextKey('python')).toBe('code:python');
+    expect(codeTextKey('rust')).toBe('code:rust');
+    expect(codeTextKey('javascript')).toBe('code:javascript');
+  });
 });
 
 describe('YjsCollabProvider', () => {
@@ -292,6 +306,33 @@ describe('YjsCollabProvider', () => {
       );
       expect(opts.onParticipantReady).toHaveBeenCalledWith('user-2', true);
 
+      // Language change
+      ws.simulateTextMessage(
+        JSON.stringify({
+          type: COLLAB_WS_EVENTS.LANGUAGE_CHANGE,
+          data: { language: 'go', changedBy: 'user-3' },
+          timestamp: Date.now(),
+        }),
+      );
+      expect(opts.onLanguageChange).toHaveBeenCalledWith('go', 'user-3');
+
+      provider.destroy();
+    });
+
+    it('GIVEN LANGUAGE_CHANGE message WHEN received AND no onLanguageChange handler THEN does not throw', () => {
+      const opts = defaultOptions({ onLanguageChange: undefined });
+      const { provider, ws } = connectProvider(opts);
+
+      expect(() =>
+        ws.simulateTextMessage(
+          JSON.stringify({
+            type: COLLAB_WS_EVENTS.LANGUAGE_CHANGE,
+            data: { language: 'rust', changedBy: null },
+            timestamp: Date.now(),
+          }),
+        ),
+      ).not.toThrow();
+
       provider.destroy();
     });
 
@@ -308,7 +349,7 @@ describe('YjsCollabProvider', () => {
 
       // Build a server doc with content and run the full sync handshake
       const serverDoc = new Y.Doc();
-      serverDoc.getText('code').insert(0, 'hello world');
+      serverDoc.getText(codeTextKey('python')).insert(0, 'hello world');
 
       // Step 1: server sends SyncStep1 → client responds with SyncStep2
       const sentBefore = ws.sent.length;
@@ -320,7 +361,7 @@ describe('YjsCollabProvider', () => {
       ws.simulateBinaryMessage(buildSyncUpdate(serverUpdate));
 
       // Client doc should now have the server's content
-      expect(provider.doc.getText('code').toString()).toBe('hello world');
+      expect(provider.doc.getText(codeTextKey('python')).toString()).toBe('hello world');
 
       serverDoc.destroy();
       provider.destroy();
@@ -339,7 +380,7 @@ describe('YjsCollabProvider', () => {
       remoteDoc.on('update', (update: Uint8Array) => {
         capturedUpdate = update;
       });
-      remoteDoc.getText('code').insert(0, 'remote edit');
+      remoteDoc.getText(codeTextKey('python')).insert(0, 'remote edit');
 
       if (!capturedUpdate) {
         throw new Error('Expected captured Yjs update to exist');
@@ -348,7 +389,7 @@ describe('YjsCollabProvider', () => {
       ws.simulateBinaryMessage(buildSyncUpdate(capturedUpdate));
 
       // Local doc should have the content
-      expect(provider.doc.getText('code').toString()).toBe('remote edit');
+      expect(provider.doc.getText(codeTextKey('python')).toString()).toBe('remote edit');
 
       serverDoc.destroy();
       remoteDoc.destroy();
@@ -359,7 +400,7 @@ describe('YjsCollabProvider', () => {
       const { provider, ws } = connectProvider();
 
       const sentBefore = ws.sent.length;
-      provider.doc.getText('code').insert(0, 'local edit');
+      provider.doc.getText(codeTextKey('python')).insert(0, 'local edit');
 
       // Should have sent a sync update
       expect(ws.sent.length).toBeGreaterThan(sentBefore);
@@ -447,18 +488,113 @@ describe('YjsCollabProvider', () => {
       provider.destroy();
     });
 
-    it('GIVEN connected WHEN WS closes with 4xxx code THEN does not reconnect', () => {
+    it('GIVEN initial WS open WHEN onopen fires AND first text message arrives THEN onReconnected is NOT called', () => {
+      const onReconnected = vi.fn();
+      const { provider } = connectProvider(defaultOptions({ onReconnected }));
+
+      expect(onReconnected).not.toHaveBeenCalled();
+
+      provider.destroy();
+    });
+
+    it('GIVEN established WS WHEN WS drops and reopens THEN onReconnected is called exactly once per reconnect', () => {
+      const onReconnected = vi.fn();
+      const { provider, ws } = connectProvider(defaultOptions({ onReconnected }));
+
+      // Initial connect does not fire onReconnected.
+      expect(onReconnected).not.toHaveBeenCalled();
+
+      // Simulate drop and backoff-driven reconnect.
+      ws.simulateClose(1006);
+      vi.advanceTimersByTime(1000);
+
+      const ws2 = latestWs();
+      ws2.simulateOpen();
+      // First text message on the new WS transitions `reconnecting → connected`.
+      ws2.simulateTextMessage(
+        JSON.stringify({
+          type: COLLAB_WS_EVENTS.ROOM_STATE,
+          data: { phase: 'waiting', editorLocked: false },
+          timestamp: Date.now(),
+        }),
+      );
+
+      expect(onReconnected).toHaveBeenCalledTimes(1);
+
+      // Subsequent text messages do not re-fire.
+      ws2.simulateTextMessage(
+        JSON.stringify({
+          type: COLLAB_WS_EVENTS.PHASE_CHANGE,
+          data: { phase: 'coding', previousPhase: 'waiting' },
+          timestamp: Date.now(),
+        }),
+      );
+      expect(onReconnected).toHaveBeenCalledTimes(1);
+
+      provider.destroy();
+    });
+
+    it('GIVEN connected WHEN WS closes with terminal 4xxx code THEN does not reconnect', () => {
       const onStatus = vi.fn();
       const { provider, ws } = connectProvider(
         defaultOptions({ onConnectionStatusChange: onStatus }),
       );
 
-      ws.simulateClose(4001); // server rejection
+      ws.simulateClose(4001); // UNAUTHORIZED
       expect(onStatus).toHaveBeenCalledWith('disconnected');
 
       const wsBefore = MockWebSocket.instances.length;
       vi.advanceTimersByTime(60_000);
       expect(MockWebSocket.instances.length).toBe(wsBefore);
+
+      provider.destroy();
+    });
+
+    it('GIVEN connected WHEN WS closes with ROOM_NOT_FOUND THEN invokes onRoomNotFound then reconnects', async () => {
+      const onRoomNotFound = vi.fn().mockResolvedValue(undefined);
+      const { provider, ws } = connectProvider(defaultOptions({ onRoomNotFound }));
+
+      ws.simulateClose(4004); // ROOM_NOT_FOUND
+      expect(onRoomNotFound).toHaveBeenCalledTimes(1);
+
+      const wsBefore = MockWebSocket.instances.length;
+      await vi.waitFor(() => {
+        expect(MockWebSocket.instances.length).toBe(wsBefore + 1);
+      });
+
+      provider.destroy();
+    });
+
+    it('GIVEN onRoomNotFound rejects WHEN WS closes with ROOM_NOT_FOUND THEN reconnects after backoff anyway', async () => {
+      const onRoomNotFound = vi.fn().mockRejectedValue(new Error('ensure failed'));
+      const { provider, ws } = connectProvider(defaultOptions({ onRoomNotFound }));
+
+      ws.simulateClose(4004);
+      expect(onRoomNotFound).toHaveBeenCalledTimes(1);
+
+      await Promise.resolve();
+      const wsBefore = MockWebSocket.instances.length;
+      vi.advanceTimersByTime(1_000);
+      expect(MockWebSocket.instances.length).toBe(wsBefore + 1);
+
+      provider.destroy();
+    });
+
+    it('GIVEN repeated transient closes THEN keeps reconnecting indefinitely', () => {
+      const { provider, ws: firstWs } = connectProvider();
+
+      firstWs.simulateClose(1006);
+      vi.advanceTimersByTime(1_000);
+      const afterFirst = MockWebSocket.instances.length;
+      expect(afterFirst).toBeGreaterThan(1);
+
+      for (let i = 0; i < 20; i++) {
+        const latest = MockWebSocket.instances[MockWebSocket.instances.length - 1]!;
+        latest.simulateClose(1006);
+        vi.advanceTimersByTime(30_000);
+      }
+
+      expect(MockWebSocket.instances.length).toBeGreaterThan(afterFirst + 10);
 
       provider.destroy();
     });

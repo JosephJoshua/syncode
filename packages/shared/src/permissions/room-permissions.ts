@@ -6,6 +6,7 @@ const ALL_ROOM_CAPABILITIES = [
   'code:edit',
   'code:run',
   'code:submit',
+  'code:change-language',
   'whiteboard:view',
   'whiteboard:draw',
   'media:audio',
@@ -31,6 +32,7 @@ export const ALL_ROOM_CAPABILITIES_SET: ReadonlySet<RoomCapability> = new Set(
 );
 
 export const HOST_OVERRIDE_CAPABILITIES: ReadonlySet<RoomCapability> = new Set<RoomCapability>([
+  'code:change-language',
   'room:change-phase',
   'room:select-problem',
   'room:settings',
@@ -46,6 +48,7 @@ const INTERVIEWER_CAPABILITIES: ReadonlySet<RoomCapability> = new Set<RoomCapabi
   'code:edit',
   'code:run',
   'code:submit',
+  'code:change-language',
   'whiteboard:view',
   'whiteboard:draw',
   'media:audio',
@@ -63,6 +66,7 @@ const CANDIDATE_CAPABILITIES: ReadonlySet<RoomCapability> = new Set<RoomCapabili
   'code:edit',
   'code:run',
   'code:submit',
+  'code:change-language',
   'whiteboard:view',
   'whiteboard:draw',
   'media:audio',
