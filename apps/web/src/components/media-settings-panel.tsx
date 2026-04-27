@@ -153,6 +153,11 @@ function useMediaPermissions(
     if (!open) {
       setAudioError(null);
       setVideoError(null);
+      // Reset in-flight flags so a request that started before the panel
+      // closed doesn't leave the grant button stuck on "Requesting..."
+      // when the panel is reopened.
+      setRequestingAudio(false);
+      setRequestingVideo(false);
       return;
     }
     cancelledRef.current = false;
@@ -175,11 +180,13 @@ function useMediaPermissions(
         for (const t of stream.getTracks()) t.stop();
         if (cancelledRef.current) return;
         await detect(cancelledRef);
-      } catch {
+      } catch (error) {
         if (cancelledRef.current) return;
-        setError('Permission denied. Update browser settings to allow.');
+        setError(formatMediaError(error, kind));
       } finally {
-        if (!cancelledRef.current) setRequesting(false);
+        // Always clear the requesting flag, even after cancel: otherwise the
+        // panel may reopen with the button stuck disabled.
+        setRequesting(false);
       }
     },
     [detect],
@@ -338,6 +345,55 @@ function VideoPreview({
       className="aspect-video w-full rounded-lg bg-black/90 object-cover scale-x-[-1]"
       style={{ filter: `brightness(${brightness}) contrast(${contrast})` }}
     />
+  );
+}
+
+function formatMediaError(error: unknown, kind: 'audio' | 'video'): string {
+  const device = kind === 'audio' ? 'microphone' : 'camera';
+  if (error instanceof DOMException) {
+    switch (error.name) {
+      case 'NotAllowedError':
+      case 'SecurityError':
+        return 'Permission denied. Update browser settings to allow.';
+      case 'NotFoundError':
+      case 'OverconstrainedError':
+        return `No ${device} found.`;
+      case 'NotReadableError':
+        return `${device.charAt(0).toUpperCase() + device.slice(1)} is in use by another application.`;
+    }
+  }
+  return `Unable to access ${device}.`;
+}
+
+function NoDevicesPrompt({
+  kind,
+  icon: Icon,
+  onRefresh,
+  refreshing,
+}: {
+  kind: 'audio' | 'video';
+  icon: React.ComponentType<{ className?: string }>;
+  onRefresh: () => void;
+  refreshing: boolean;
+}) {
+  const device = kind === 'audio' ? 'microphone' : 'camera';
+  return (
+    <div className="space-y-2">
+      <p className="text-[11px] text-muted-foreground">
+        Permission granted, but no {device} is connected. Plug in a device and refresh.
+      </p>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="h-7 w-full gap-1.5 text-xs"
+        onClick={onRefresh}
+        disabled={refreshing}
+      >
+        <Icon className="size-3" />
+        {refreshing ? 'Refreshing...' : 'Refresh devices'}
+      </Button>
+    </div>
   );
 }
 
@@ -563,13 +619,20 @@ export function MediaSettingsPanel({
                   </button>
                 ) : null}
               </>
-            ) : (
+            ) : !videoGranted ? (
               <GrantPermissionPrompt
                 kind="video"
                 icon={Camera}
                 onRequest={() => void request('video')}
                 requesting={requestingVideo}
                 error={videoError}
+              />
+            ) : (
+              <NoDevicesPrompt
+                kind="video"
+                icon={Camera}
+                onRefresh={() => void request('video')}
+                refreshing={requestingVideo}
               />
             )}
           </div>
@@ -644,13 +707,20 @@ export function MediaSettingsPanel({
                   />
                 </div>
               </>
-            ) : (
+            ) : !audioGranted ? (
               <GrantPermissionPrompt
                 kind="audio"
                 icon={Mic}
                 onRequest={() => void request('audio')}
                 requesting={requestingAudio}
                 error={audioError}
+              />
+            ) : (
+              <NoDevicesPrompt
+                kind="audio"
+                icon={Mic}
+                onRefresh={() => void request('audio')}
+                refreshing={requestingAudio}
               />
             )}
           </div>
