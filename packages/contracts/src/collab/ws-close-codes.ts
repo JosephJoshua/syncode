@@ -7,6 +7,7 @@ export const WsCloseCode = {
   KICKED: 4002,
   ROOM_CLOSED: 4003,
   ROOM_NOT_FOUND: 4004,
+  FORBIDDEN: 4007,
   ALREADY_CONNECTED: 4009,
   RATE_LIMITED: 4029,
 } as const;

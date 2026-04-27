@@ -5,10 +5,11 @@ import { Bookmark, LoaderCircle } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import Markdown from 'react-markdown';
 import i18n from '@/lib/i18n.js';
 import { useToggleProblemBookmarkMutation } from '@/lib/problems/problem-bookmark.js';
 import { useAuthStore } from '@/stores/auth.store.js';
+import { ConstraintsBlock } from './constraints-block.js';
+import { ProblemMarkdown } from './problem-markdown.js';
 import { StarterCodeBlock } from './starter-code-block.js';
 import { formatStarterLanguageLabel } from './starter-code-language.js';
 
@@ -55,12 +56,16 @@ export function ProblemDetailLayout({ problem }: { problem: ProblemDetail }) {
         <div className="grid gap-7 xl:grid-cols-[minmax(0,1fr)_320px]">
           <div className="space-y-5">
             <SectionSurface title={t('detail.description')}>
-              <MarkdownBlock value={problem.description} />
+              <ProblemMarkdown content={problem.description} />
             </SectionSurface>
 
-            <SectionSurface title={t('detail.constraints')}>
-              <MarkdownBlock value={problem.constraints ?? t('detail.noConstraints')} />
-            </SectionSurface>
+            {problem.constraints ? (
+              <ConstraintsBlock title={t('detail.constraints')} content={problem.constraints} />
+            ) : (
+              <SectionSurface title={t('detail.constraints')}>
+                <EmptySurfaceCopy message={t('detail.noConstraints')} />
+              </SectionSurface>
+            )}
 
             <SectionSurface title={t('detail.examples', { count: problem.examples.length })}>
               <div className="space-y-3">
@@ -250,7 +255,7 @@ function ExamplePanel({ example, index }: { example: ProblemExample; index: numb
         <LabeledCodeBlock label={t('detail.input')} value={example.input} />
         <LabeledCodeBlock label={t('detail.output')} value={example.output} />
         {example.explanation ? (
-          <LabeledTextBlock label={t('detail.explanation')} value={example.explanation} />
+          <LabeledMarkdownBlock label={t('detail.explanation')} value={example.explanation} />
         ) : null}
       </div>
     </div>
@@ -268,7 +273,7 @@ function PublicTestCasePanel({ testCase, index }: { testCase: ProblemTestCase; i
         <LabeledCodeBlock label={t('detail.input')} value={testCase.input} />
         <LabeledCodeBlock label={t('detail.expectedOutput')} value={testCase.expectedOutput} />
         {testCase.description ? (
-          <LabeledTextBlock label={t('detail.explanation')} value={testCase.description} />
+          <LabeledMarkdownBlock label={t('detail.explanation')} value={testCase.description} />
         ) : null}
         <div className="grid gap-2.5 sm:grid-cols-2">
           <InlineStat
@@ -298,23 +303,15 @@ function LabeledCodeBlock({ label, value }: { label: string; value: string }) {
   );
 }
 
-function LabeledTextBlock({ label, value }: { label: string; value: string }) {
+function LabeledMarkdownBlock({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <p className="text-xs font-medium tracking-[0.16em] text-muted-foreground uppercase">
         {label}
       </p>
-      <p className="mt-1 rounded-lg border border-border/60 bg-muted/50 px-3.5 py-2 text-sm leading-[1.625rem] text-foreground">
-        {value}
-      </p>
-    </div>
-  );
-}
-
-function MarkdownBlock({ value }: { value: string }) {
-  return (
-    <div className="prose prose-sm prose-invert max-w-none text-foreground prose-headings:text-foreground prose-strong:text-foreground prose-code:rounded prose-code:bg-muted/70 prose-code:px-1.5 prose-code:py-0.5 prose-code:text-foreground prose-pre:bg-muted/70 prose-li:marker:text-muted-foreground">
-      <Markdown>{value}</Markdown>
+      <div className="mt-1 rounded-lg border border-border/60 bg-muted/50 px-3.5 py-2">
+        <ProblemMarkdown content={value} />
+      </div>
     </div>
   );
 }

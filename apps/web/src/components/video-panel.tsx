@@ -776,10 +776,13 @@ export function DockedVideoPanel({ tiles, onUndock }: DockedVideoPanelProps) {
 
   const hasAnyVideo = tiles.some((t) => t.hasVideo);
   const hasAnyScreenShare = tiles.some((t) => t.hasScreenShare);
+  const hasRemote = tiles.some((t) => !t.isLocal);
 
   useClearZoomWhenMissing(zoomTarget, tiles, setZoomTarget);
 
-  if (tiles.length === 0 || (tiles.length <= 1 && !hasAnyVideo && !hasAnyScreenShare)) return null;
+  // Hide only when there's nothing worth showing: no remote peer, no camera
+  // feed anywhere, and no screen share. A solo local camera still renders.
+  if (tiles.length === 0 || (!hasRemote && !hasAnyVideo && !hasAnyScreenShare)) return null;
 
   const screenSharers = tiles.filter(
     (t): t is VideoPanelParticipant & { screenShareTrack: MediaStreamTrack } =>

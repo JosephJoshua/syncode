@@ -2,6 +2,8 @@ import type { ICollabClient } from './client.js';
 import type {
   BroadcastParticipantReadyRequest,
   BroadcastParticipantReadyResponse,
+  ChangeLanguageRequest,
+  ChangeLanguageResponse,
   CreateDocumentRequest,
   CreateDocumentResponse,
   DestroyDocumentResponse,
@@ -86,6 +88,13 @@ export class StubCollabClient implements ICollabClient {
   ): Promise<BroadcastParticipantReadyResponse> {
     await this.delay();
     this.maybeThrow('broadcastParticipantReady');
+
+    return { success: true };
+  }
+
+  async changeLanguage(_request: ChangeLanguageRequest): Promise<ChangeLanguageResponse> {
+    await this.delay();
+    this.maybeThrow('changeLanguage');
 
     return { success: true };
   }
