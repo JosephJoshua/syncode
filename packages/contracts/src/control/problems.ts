@@ -6,8 +6,35 @@ import {
 import { z } from 'zod';
 import { paginationQuerySchema, paginationSchema } from './pagination.js';
 
+function parseEnumMultiSelect(value: unknown) {
+  if (value == null) {
+    return undefined;
+  }
+
+  const normalized = (Array.isArray(value) ? value : [value])
+    .flatMap((item) => {
+      if (typeof item !== 'string') {
+        return [item];
+      }
+
+      return item
+        .split(',')
+        .map((part) => part.trim())
+        .filter(Boolean);
+    })
+    .filter((item) => typeof item === 'string');
+
+  if (normalized.length === 0) {
+    return undefined;
+  }
+
+  return [...new Set(normalized)];
+}
+
 export const problemsListQuerySchema = paginationQuerySchema.extend({
-  difficulty: z.enum(PROBLEM_DIFFICULTIES).optional().describe('Filter by difficulty'),
+  difficulty: z
+    .preprocess(parseEnumMultiSelect, z.array(z.enum(PROBLEM_DIFFICULTIES)).optional())
+    .describe('Filter by difficulties; accepts repeated or comma-separated query params'),
   tags: z.string().optional().describe('Comma-separated tag slugs'),
   company: z.string().optional().describe('Company slug filter'),
   search: z.string().optional().describe('Full-text search on title + description'),

@@ -24,6 +24,11 @@ import { type PaginatedResult, paginate } from '@syncode/shared/server';
 import { and, asc, type Column, desc, eq, gt, gte, inArray, lt, lte, or, sql } from 'drizzle-orm';
 import { resolveAvatarUrls } from '@/common/resolve-avatar-urls.js';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
+import { filterReviewFeedback, isAllReviewFeedbackSubmitted } from './session-feedback-utils.js';
+import {
+  normalizeReportScoreMap,
+  normalizeReportStringArray,
+} from './session-report-normalizers.js';
 import type {
   SessionCodeSnapshotResult,
   SessionDetailResult,
@@ -230,6 +235,8 @@ export class SessionsService {
     const [
       participantRows,
       report,
+      latestCodeSnapshot,
+      feedbackRows,
       feedbackExists,
       recordingExists,
       runRows,
@@ -257,6 +264,40 @@ export class SessionsService {
             eq(table.status, 'completed'),
           ),
       }),
+      this.db
+        .select({
+          id: codeSnapshots.id,
+          code: codeSnapshots.code,
+          language: codeSnapshots.language,
+          trigger: codeSnapshots.trigger,
+          linesOfCode: codeSnapshots.linesOfCode,
+          createdAt: codeSnapshots.createdAt,
+        })
+        .from(codeSnapshots)
+        .where(eq(codeSnapshots.sessionId, sessionId))
+        .orderBy(desc(codeSnapshots.createdAt))
+        .limit(1),
+      this.db
+        .select({
+          id: peerFeedback.id,
+          reviewerId: peerFeedback.reviewerId,
+          reviewerUsername: users.username,
+          reviewerDisplayName: users.displayName,
+          candidateId: peerFeedback.candidateId,
+          problemSolvingRating: peerFeedback.problemSolvingRating,
+          communicationRating: peerFeedback.communicationRating,
+          codeQualityRating: peerFeedback.codeQualityRating,
+          debuggingRating: peerFeedback.debuggingRating,
+          overallRating: peerFeedback.overallRating,
+          strengths: peerFeedback.strengths,
+          improvements: peerFeedback.improvements,
+          wouldPairAgain: peerFeedback.wouldPairAgain,
+          createdAt: peerFeedback.createdAt,
+        })
+        .from(peerFeedback)
+        .innerJoin(users, eq(users.id, peerFeedback.reviewerId))
+        .where(eq(peerFeedback.sessionId, sessionId))
+        .orderBy(asc(peerFeedback.createdAt)),
       this.db
         .select({ id: peerFeedback.id })
         .from(peerFeedback)
@@ -300,6 +341,23 @@ export class SessionsService {
         : Promise.resolve([]),
     ]);
 
+    const reviewParticipantIds = new Set(
+      participantRows
+        .filter((participant) => this.isReviewParticipantRole(participant.role))
+        .map((participant) => participant.userId),
+    );
+    const reviewFeedbackRows = filterReviewFeedback(feedbackRows, reviewParticipantIds);
+    const allReviewFeedbackSubmitted = isAllReviewFeedbackSubmitted(
+      reviewParticipantIds.size,
+      reviewFeedbackRows.length,
+    );
+    const visibleFeedbackRows = isAdmin
+      ? feedbackRows
+      : reviewFeedbackRows.filter(
+          (feedback) => allReviewFeedbackSubmitted || feedback.reviewerId === userId,
+        );
+    const normalizedReport = this.buildReport(report);
+
     return {
       sessionId: session.id,
       roomId: session.roomId,
@@ -327,7 +385,25 @@ export class SessionsService {
         total: s.total,
         createdAt: s.createdAt,
       })),
-      hasReport: report != null,
+      report: normalizedReport,
+      latestCodeSnapshot: latestCodeSnapshot[0] ?? null,
+      peerFeedback: visibleFeedbackRows.map((feedback) => ({
+        id: feedback.id,
+        reviewerId: feedback.reviewerId,
+        reviewerName: feedback.reviewerDisplayName ?? feedback.reviewerUsername,
+        candidateId: feedback.candidateId,
+        candidateName: this.getParticipantName(participantRows, feedback.candidateId),
+        problemSolvingRating: feedback.problemSolvingRating,
+        communicationRating: feedback.communicationRating,
+        codeQualityRating: feedback.codeQualityRating,
+        debuggingRating: feedback.debuggingRating,
+        overallRating: feedback.overallRating,
+        strengths: feedback.strengths,
+        improvements: feedback.improvements,
+        wouldPairAgain: feedback.wouldPairAgain,
+        createdAt: feedback.createdAt,
+      })),
+      hasReport: normalizedReport != null,
       hasFeedback: feedbackExists.length > 0,
       hasRecording: recordingExists.length > 0,
       createdAt: session.startedAt,
@@ -560,6 +636,18 @@ export class SessionsService {
 
   private isNullableSortColumn(sortBy: SortBy): boolean {
     return sortBy === 'overallScore' || sortBy === 'finishedAt' || sortBy === 'duration';
+  }
+
+  private getParticipantName(
+    participants: Array<{ userId: string; username: string; displayName: string | null }>,
+    userId: string,
+  ): string {
+    const participant = participants.find((item) => item.userId === userId);
+    return participant?.displayName ?? participant?.username ?? userId;
+  }
+
+  private isReviewParticipantRole(role: string): role is 'candidate' | 'interviewer' {
+    return role === 'candidate' || role === 'interviewer';
   }
 
   private countLinesOfCode(code: string): number {

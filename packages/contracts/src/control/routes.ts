@@ -17,6 +17,7 @@ import type { sessionFeedbackResponseSchema, submitSessionFeedbackSchema } from 
 import type { healthCheckResponseSchema } from './health.js';
 import type {
   problemDetailSchema,
+  problemsListQuerySchema,
   problemsListResponseSchema,
   problemsTagsResponseSchema,
 } from './problems.js';
@@ -165,7 +166,10 @@ export const CONTROL_API = {
     ),
   },
   PROBLEMS: {
-    LIST: defineRoute<void, z.infer<typeof problemsListResponseSchema>>()('problems', 'GET'),
+    LIST: defineRoute<
+      z.infer<typeof problemsListQuerySchema>,
+      z.infer<typeof problemsListResponseSchema>
+    >()('problems', 'GET'),
     GET_BY_ID: defineRoute<void, z.infer<typeof problemDetailSchema>>()('problems/:id', 'GET'),
     TAGS: defineRoute<void, z.infer<typeof problemsTagsResponseSchema>>()('problems/tags', 'GET'),
     CREATE: defineRoute<void, void>()('problems', 'POST'),

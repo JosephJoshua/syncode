@@ -61,6 +61,7 @@ import {
 } from './room-workspace-utils.js';
 import { RunResultsPanel } from './run-results-panel.js';
 import { StageTransitionOverlay } from './stage-transition-overlay.js';
+import { SubmissionPreviewModal } from './submission-preview-modal.js';
 import { TestCaseEditor } from './testcase-editor.js';
 
 interface RoomWorkspaceProps {
@@ -179,6 +180,7 @@ export function RoomWorkspace({
   const leftPanelRef = usePanelRef();
   const rightPanelRef = usePanelRef();
   const [submitState, setSubmitState] = useState<SubmitState>({ status: 'idle' });
+  const [submissionPreviewCode, setSubmissionPreviewCode] = useState<string | null>(null);
   const [activeBottomTab, setActiveBottomTab] = useState<'testcases' | 'output' | 'results'>(
     'testcases',
   );
@@ -300,6 +302,7 @@ export function RoomWorkspace({
     !isSubmitBusy;
   const runDisabled = !canRunCode || isEditorReadOnly || isMultiRunBusy || isRemoteRunActive;
   const submitDisabled = !canSubmitCode || isEditorReadOnly || isSubmitBusy || isRemoteSubmitActive;
+  const isSubmissionPreviewOpen = submissionPreviewCode !== null;
 
   const getCode = useCallback(() => {
     return doc?.getText(codeTextKey(language)).toString() ?? '';
@@ -417,67 +420,95 @@ export function RoomWorkspace({
     void poll();
   };
 
-  const handleSubmitCode = async () => {
-    cancelSubmitPollRef.current?.();
-    setSubmitState({ status: 'submitting' });
-    setActiveBottomTab('results');
+  const pollSubmission = useCallback(
+    (submissionId: string) => {
+      let cancelled = false;
 
-    try {
-      const response = await api(CONTROL_API.ROOMS.SUBMIT, {
-        params: { id: roomId },
-        body: { language, code: getCode() },
-      });
+      const poll = async () => {
+        try {
+          const details: ExecutionDetailsResponse = await api(
+            CONTROL_API.EXECUTION.GET_SUBMISSION_DETAILS,
+            { params: { submissionId } },
+          );
 
-      setSubmitState({ status: 'polling', submissionId: response.submissionId });
-      cancelSubmitPollRef.current = pollSubmission(response.submissionId);
-      broadcastSubmit(currentUserName, response.submissionId);
-    } catch (error) {
-      const apiError = await readApiError(error);
-      const message = resolveErrorMessage(apiError, SUBMIT_ERROR_KEYS, 'workspace.submitFailed', t);
-      setSubmitState({ status: 'request-error', message });
-      toast.error(message);
-    }
-  };
+          if (cancelled) return;
 
-  const pollSubmission = (submissionId: string) => {
-    let cancelled = false;
+          if (details.status === 'completed' || details.status === 'failed') {
+            setSubmitState({ status: 'completed', submissionId, details });
+            return;
+          }
 
-    const poll = async () => {
-      try {
-        const details: ExecutionDetailsResponse = await api(
-          CONTROL_API.EXECUTION.GET_SUBMISSION_DETAILS,
-          { params: { submissionId } },
-        );
-
-        if (cancelled) return;
-
-        if (details.status === 'completed' || details.status === 'failed') {
-          setSubmitState({ status: 'completed', submissionId, details });
-          return;
+          // Still pending/running — keep polling until the submission reaches a terminal state
+          setSubmitState({ status: 'polling', submissionId });
+          setTimeout(() => {
+            if (!cancelled) void poll();
+          }, SUBMISSION_POLL_INTERVAL_MS);
+        } catch (error) {
+          const apiError = await readApiError(error);
+          if (!cancelled) {
+            setSubmitState({
+              status: 'request-error',
+              message: apiError?.message ?? t('workspace.submitFailed'),
+            });
+          }
         }
+      };
 
-        // Still pending/running — update with latest partial results and keep polling
-        setSubmitState({ status: 'polling', submissionId });
-        setTimeout(() => {
-          if (!cancelled) void poll();
-        }, SUBMISSION_POLL_INTERVAL_MS);
+      void poll();
+
+      return () => {
+        cancelled = true;
+      };
+    },
+    [t],
+  );
+
+  const handleSubmitCode = useCallback(
+    async (codeOverride?: string) => {
+      cancelSubmitPollRef.current?.();
+      setSubmitState({ status: 'submitting' });
+      setActiveBottomTab('results');
+
+      try {
+        const response = await api(CONTROL_API.ROOMS.SUBMIT, {
+          params: { id: roomId },
+          body: { language, code: codeOverride ?? getCode() },
+        });
+
+        setSubmitState({ status: 'polling', submissionId: response.submissionId });
+        cancelSubmitPollRef.current = pollSubmission(response.submissionId);
+        broadcastSubmit(currentUserName, response.submissionId);
       } catch (error) {
         const apiError = await readApiError(error);
-        if (!cancelled) {
-          setSubmitState({
-            status: 'request-error',
-            message: apiError?.message ?? t('workspace.submitFailed'),
-          });
-        }
+        const message = resolveErrorMessage(
+          apiError,
+          SUBMIT_ERROR_KEYS,
+          'workspace.submitFailed',
+          t,
+        );
+        setSubmitState({ status: 'request-error', message });
+        toast.error(message);
       }
-    };
+    },
+    [broadcastSubmit, currentUserName, getCode, language, pollSubmission, roomId, t],
+  );
 
-    void poll();
+  const requestSubmitCode = useCallback(() => {
+    if (submitDisabled) return;
+    setSubmissionPreviewCode(getCode());
+  }, [getCode, submitDisabled]);
 
-    return () => {
-      cancelled = true;
-    };
-  };
+  const closeSubmissionPreview = useCallback(() => {
+    setSubmissionPreviewCode(null);
+  }, []);
+
+  const confirmSubmitPreview = useCallback(() => {
+    if (submitDisabled || submissionPreviewCode === null) return;
+
+    const codeSnapshot = submissionPreviewCode;
+    setSubmissionPreviewCode(null);
+    void handleSubmitCode(codeSnapshot);
+  }, [submissionPreviewCode, submitDisabled, handleSubmitCode]);
 
   const runCase = async (tc: TestCaseEntry, code?: string): Promise<string | null> => {
     cancelMultiRunRef.current.get(tc.id)?.();
@@ -537,8 +568,8 @@ export function RoomWorkspace({
 
   const handleRunCodeRef = useRef(handleRunCode);
   handleRunCodeRef.current = handleRunCode;
-  const handleSubmitCodeRef = useRef(handleSubmitCode);
-  handleSubmitCodeRef.current = handleSubmitCode;
+  const requestSubmitCodeRef = useRef(requestSubmitCode);
+  requestSubmitCodeRef.current = requestSubmitCode;
 
   // Show remote results when local user is idle
   const multiRunResults =
@@ -704,7 +735,7 @@ export function RoomWorkspace({
                         size="sm"
                         variant="secondary"
                         disabled={submitDisabled}
-                        onClick={() => void handleSubmitCodeRef.current()}
+                        onClick={() => void requestSubmitCodeRef.current()}
                         className="h-7 gap-1.5 px-3 text-xs font-medium"
                       >
                         {isSubmitBusy ? (
@@ -742,7 +773,7 @@ export function RoomWorkspace({
                       language={monacoLanguage}
                       readOnly={isEditorReadOnly}
                       onRunCode={() => void handleRunCodeRef.current()}
-                      onSubmitCode={() => void handleSubmitCodeRef.current()}
+                      onSubmitCode={() => void requestSubmitCodeRef.current()}
                     />
                   ) : (
                     EDITOR_LOADING
@@ -1010,6 +1041,19 @@ export function RoomWorkspace({
         editorLocked={room.editorLocked}
         participantCount={participants.length}
         collabStatus={collabStatus}
+      />
+
+      <SubmissionPreviewModal
+        open={isSubmissionPreviewOpen}
+        code={submissionPreviewCode ?? ''}
+        language={monacoLanguage}
+        fileExtension={languageExtension(language)}
+        confirmDisabled={submitDisabled}
+        onOpenChange={(open) => {
+          if (!open) closeSubmissionPreview();
+        }}
+        onCancel={closeSubmissionPreview}
+        onConfirm={confirmSubmitPreview}
       />
     </div>
   );

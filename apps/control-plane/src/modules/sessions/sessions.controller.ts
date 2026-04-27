@@ -172,6 +172,23 @@ export class SessionsController {
         ...s,
         createdAt: s.createdAt.toISOString(),
       })),
+      report: result.report
+        ? {
+            ...result.report,
+            feedback: result.report.feedback ?? '',
+            generatedAt: result.report.generatedAt.toISOString(),
+          }
+        : null,
+      latestCodeSnapshot: result.latestCodeSnapshot
+        ? {
+            ...result.latestCodeSnapshot,
+            createdAt: result.latestCodeSnapshot.createdAt.toISOString(),
+          }
+        : null,
+      peerFeedback: (result.peerFeedback ?? []).map((feedback) => ({
+        ...feedback,
+        createdAt: feedback.createdAt.toISOString(),
+      })),
       createdAt: result.createdAt.toISOString(),
       finishedAt: result.finishedAt?.toISOString() ?? null,
     };
