@@ -1,4 +1,8 @@
 import type {
+  ChatAttachment,
+  ChatMessage,
+  ChatReactToggleEventData,
+  ChatSendEventData,
   ExecutionDetailsResponse,
   ExecutionResultResponse,
   JobStatusResponse,
@@ -7,7 +11,7 @@ import type {
 } from '@syncode/contracts';
 import { CONTROL_API, ERROR_CODES } from '@syncode/contracts';
 import type { RoomRole, RoomStatus } from '@syncode/shared';
-import { Badge, Button } from '@syncode/ui';
+import { Avatar, AvatarFallback, AvatarImage, Badge, Button, cn } from '@syncode/ui';
 import {
   CheckCircle2,
   ChevronDown,
@@ -49,9 +53,10 @@ import { HostControlPanel } from './host-control-panel.js';
 import { InviteLinkInline } from './invite-link-inline.js';
 import { LanguagePicker } from './language-picker.js';
 import { LANGUAGE_VERSIONED_LABELS } from './language-selector.data.js';
+import { RoomChatPanel } from './room-chat-panel.js';
 import { RoomHeaderBar } from './room-header-bar.js';
 import { type Participant, RoomParticipantCard } from './room-participant-card.js';
-import { type ProblemData, RoomProblemPanel } from './room-problem-panel.js';
+import { type ProblemData, type RoomHintItem, RoomProblemPanel } from './room-problem-panel.js';
 import { RoomStatusBar } from './room-status-bar.js';
 import {
   type CaseRunState,
@@ -77,6 +82,12 @@ interface RoomWorkspaceProps {
   roomId: string;
   doc: Y.Doc | null;
   awareness: Awareness | null;
+  chatMessages: ChatMessage[];
+  chatReadAtByUserId: Record<string, number>;
+  onSendChatMessage: (data: ChatSendEventData) => void;
+  onToggleChatReaction: (data: ChatReactToggleEventData) => void;
+  onMarkChatRead: (upTo?: number) => void;
+  onUploadChatMedia: (file: File) => Promise<ChatAttachment>;
   elapsedMs: number;
   isTransitioning: boolean;
   isLockingEditor: boolean;
@@ -118,6 +129,12 @@ export function RoomWorkspace({
   roomId,
   doc,
   awareness,
+  chatMessages,
+  chatReadAtByUserId,
+  onSendChatMessage,
+  onToggleChatReaction,
+  onMarkChatRead,
+  onUploadChatMedia,
   elapsedMs,
   isTransitioning,
   isLockingEditor,
@@ -160,6 +177,11 @@ export function RoomWorkspace({
   const [problem, setProblem] = useState<ProblemDetail | null>(null);
   const [problemLoading, setProblemLoading] = useState(!!room.problemId);
   const [problemError, setProblemError] = useState<string | null>(null);
+  const [activeProblemTab, setActiveProblemTab] = useState<'problem' | 'hints'>('problem');
+  const [hintHistory, setHintHistory] = useState<RoomHintItem[]>([]);
+  const [hintLoading, setHintLoading] = useState(false);
+  const [hintFollowUpLoadingHintId, setHintFollowUpLoadingHintId] = useState<string | null>(null);
+  const [hintError, setHintError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!room.problemId) return;
@@ -196,6 +218,7 @@ export function RoomWorkspace({
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
   const [rightNarrow, setRightNarrow] = useState(false);
+  const [activeRightTab, setActiveRightTab] = useState<'participants' | 'chat'>('participants');
   const [bottomCollapsed, setBottomCollapsed] = useState(false);
   const rightMountedRef = useRef(false);
   const rightContentRef = useRef<HTMLDivElement>(null);
@@ -302,6 +325,8 @@ export function RoomWorkspace({
   const canControlEditorLock = canChangePhase;
   const canRunCode = !isMockPreview && room.myCapabilities.includes('code:run');
   const canEditCode = room.myCapabilities.includes('code:edit');
+  const canSendChat = room.myCapabilities.includes('chat:send');
+  const canRequestHint = room.myCapabilities.includes('ai:request-hint');
   const canManageParticipants = room.myCapabilities.includes('participant:assign-role');
   const isEditorReadOnly = !canEditCode || room.editorLocked || room.status === 'finished';
 
@@ -309,10 +334,155 @@ export function RoomWorkspace({
     () => room.participants.filter((p: Participant) => p.isActive),
     [room.participants],
   );
+  const participantsById = useMemo(
+    () => new Map(participants.map((participant) => [participant.userId, participant])),
+    [participants],
+  );
   const inviteLink = room.roomCode ? buildInviteLink(roomId, room.roomCode) : window.location.href;
 
   const canSubmitCode =
     !isMockPreview && room.myCapabilities.includes('code:submit') && !!room.problemId;
+
+  const currentUserReadAt = currentUserId ? (chatReadAtByUserId[currentUserId] ?? 0) : 0;
+  const unreadChatCount = useMemo(
+    () =>
+      currentUserId
+        ? chatMessages.filter(
+            (message) => message.userId !== currentUserId && message.createdAt > currentUserReadAt,
+          ).length
+        : 0,
+    [chatMessages, currentUserId, currentUserReadAt],
+  );
+  const seenChatMessageIdsRef = useRef<Set<string>>(new Set());
+  const chatToastInitializedRef = useRef(false);
+  const chatDingAudioContextRef = useRef<AudioContext | null>(null);
+
+  const playIncomingChatDing = useCallback(() => {
+    const AudioContextCtor =
+      window.AudioContext ??
+      (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextCtor) {
+      return;
+    }
+
+    const context = chatDingAudioContextRef.current ?? new AudioContextCtor();
+    chatDingAudioContextRef.current = context;
+
+    if (context.state === 'suspended') {
+      void context.resume();
+    }
+
+    const now = context.currentTime;
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+
+    oscillator.type = 'sine';
+    oscillator.frequency.setValueAtTime(1046.5, now);
+    oscillator.frequency.exponentialRampToValueAtTime(880, now + 0.12);
+
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(0.09, now + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.2);
+
+    oscillator.connect(gain);
+    gain.connect(context.destination);
+    oscillator.start(now);
+    oscillator.stop(now + 0.22);
+  }, []);
+
+  useEffect(() => {
+    if (!currentUserId || activeRightTab !== 'chat') {
+      return;
+    }
+
+    const latestIncoming = chatMessages.reduce((latest, message) => {
+      if (message.userId === currentUserId) {
+        return latest;
+      }
+      return Math.max(latest, message.createdAt);
+    }, 0);
+
+    if (latestIncoming > currentUserReadAt) {
+      onMarkChatRead(latestIncoming);
+    }
+  }, [activeRightTab, chatMessages, currentUserId, currentUserReadAt, onMarkChatRead]);
+
+  useEffect(() => {
+    return () => {
+      const context = chatDingAudioContextRef.current;
+      if (!context) {
+        return;
+      }
+
+      void context.close();
+      chatDingAudioContextRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    const seen = seenChatMessageIdsRef.current;
+    if (!chatToastInitializedRef.current) {
+      for (const message of chatMessages) {
+        seen.add(message.messageId);
+      }
+      chatToastInitializedRef.current = true;
+      return;
+    }
+
+    const newMessages = chatMessages.filter((message) => {
+      if (seen.has(message.messageId)) {
+        return false;
+      }
+      seen.add(message.messageId);
+      return true;
+    });
+
+    if (newMessages.length === 0 || activeRightTab === 'chat') {
+      return;
+    }
+
+    const incomingFromOthers = newMessages.filter(
+      (message) => currentUserId && message.userId !== currentUserId,
+    );
+    if (incomingFromOthers.length > 0) {
+      playIncomingChatDing();
+    }
+
+    for (const message of incomingFromOthers) {
+      if (!currentUserId || message.userId === currentUserId) {
+        continue;
+      }
+
+      const sender = participantsById.get(message.userId);
+      const senderName =
+        sender?.displayName ?? sender?.username ?? t('workspace.chatUnknownSender');
+      const preview = message.text.trim() || t('workspace.chatAttachmentOnly');
+      toast(
+        <div className="flex min-w-0 items-start gap-2">
+          <Avatar className="size-7 shrink-0">
+            {sender?.avatarUrl ? <AvatarImage src={sender.avatarUrl} /> : null}
+            <AvatarFallback className="bg-primary/20 text-[10px] text-primary">
+              {senderName.slice(0, 1).toUpperCase()}
+            </AvatarFallback>
+          </Avatar>
+          <div className="min-w-0">
+            <p className="truncate text-xs font-semibold text-primary">{senderName}</p>
+            <p className="line-clamp-1 text-xs text-foreground">{preview}</p>
+          </div>
+        </div>,
+        {
+          duration: 3000,
+          className:
+            'chat-notification-toast !bg-muted !border-border !text-foreground !opacity-100',
+          style: {
+            background: 'var(--muted)',
+            color: 'var(--foreground)',
+            border: '1px solid var(--border)',
+          },
+        },
+      );
+    }
+  }, [activeRightTab, chatMessages, currentUserId, participantsById, playIncomingChatDing, t]);
 
   const handleAddCase = useCallback(() => {
     const idx = nextCustomId.current++;
@@ -673,6 +843,89 @@ export function RoomWorkspace({
     problemPanelData ?? (isMockPreview ? MOCK_WORKSPACE_PROBLEM : null);
   const showProblemPanel = Boolean(displayProblemPanelData);
 
+  const handleRequestHint = useCallback(async () => {
+    setHintLoading(true);
+    setHintError(null);
+    setActiveProblemTab('hints');
+
+    try {
+      const response = await api(CONTROL_API.ROOMS.AI_HINT, {
+        params: { id: roomId },
+        body: {
+          code: getCode() || ' ',
+          language,
+          hintLevel: 'subtle',
+        },
+      });
+
+      setHintHistory((prev) => [
+        {
+          id: response.hintId,
+          hint: response.hint,
+          suggestedApproach: response.suggestedApproach,
+          reflectionPrompt: response.reflectionPrompt,
+          createdAt: Date.now(),
+        },
+        ...prev,
+      ]);
+    } catch (error) {
+      const apiError = await readApiError(error);
+      const message = resolveErrorMessage(apiError, HINT_ERROR_KEYS, 'workspace.hintFailed', t);
+      setHintError(message);
+      toast.error(message);
+    } finally {
+      setHintLoading(false);
+    }
+  }, [getCode, language, roomId, t]);
+
+  const handleSubmitHintReflection = useCallback(
+    async (hintId: string, reflectionResponse: string | null) => {
+      setHintFollowUpLoadingHintId(hintId);
+      setHintError(null);
+      setActiveProblemTab('hints');
+
+      try {
+        const response = await api(CONTROL_API.ROOMS.AI_HINT, {
+          params: { id: roomId },
+          body: {
+            code: getCode() || ' ',
+            language,
+            hintLevel: 'subtle',
+            followUpToHintId: hintId,
+            reflectionResponse: reflectionResponse ?? undefined,
+            noReply: reflectionResponse == null,
+          },
+        });
+
+        setHintHistory((prev) =>
+          prev.map((hint) =>
+            hint.id === hintId
+              ? {
+                  ...hint,
+                  reflectionResponse: reflectionResponse ?? t('problem.hintNoReply'),
+                  followUpHint: response.hint,
+                  suggestedApproach: response.suggestedApproach ?? hint.suggestedApproach,
+                }
+              : hint,
+          ),
+        );
+      } catch (error) {
+        const apiError = await readApiError(error);
+        const message = resolveErrorMessage(
+          apiError,
+          HINT_ERROR_KEYS,
+          'workspace.hintFollowUpFailed',
+          t,
+        );
+        setHintError(message);
+        toast.error(message);
+      } finally {
+        setHintFollowUpLoadingHintId(null);
+      }
+    },
+    [getCode, language, roomId, t],
+  );
+
   return (
     <div className="fixed inset-0 z-40 flex flex-col overflow-hidden bg-background">
       <StageTransitionOverlay status={room.status} />
@@ -720,6 +973,19 @@ export function RoomWorkspace({
                   loading={problemLoading}
                   error={problemError}
                   hasProblem={showProblemPanel}
+                  activeTab={activeProblemTab}
+                  onTabChange={setActiveProblemTab}
+                  hints={hintHistory}
+                  hintLoading={hintLoading}
+                  hintError={hintError}
+                  onRequestHint={() => {
+                    void handleRequestHint();
+                  }}
+                  onSubmitHintReflection={(hintId, reflectionResponse) => {
+                    void handleSubmitHintReflection(hintId, reflectionResponse);
+                  }}
+                  followUpLoadingHintId={hintFollowUpLoadingHintId}
+                  canRequestHint={canRequestHint}
                 />
               )}
             </ResizablePanel>
@@ -976,7 +1242,7 @@ export function RoomWorkspace({
           ) : (
             <motion.div
               ref={rightContentRef}
-              className="flex h-full min-w-0 flex-col overflow-y-auto bg-card/80 backdrop-blur-sm"
+              className="flex h-full min-w-0 flex-col overflow-hidden bg-card/80 backdrop-blur-sm"
               initial={rightMountedRef.current ? false : { opacity: 0, x: 16 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
@@ -1017,71 +1283,137 @@ export function RoomWorkspace({
               {dockedVideoPanel}
 
               <motion.div
-                className={`shrink-0 border-b border-border ${rightNarrow ? 'p-2' : 'p-3'}`}
+                className="flex min-h-0 flex-1 flex-col"
                 initial={rightMountedRef.current ? false : { opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.35, delay: 0.2, ease: [0.22, 1, 0.36, 1] }}
               >
-                <div className="flex items-center justify-between">
-                  <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                    {rightNarrow ? `${participants.length}` : t('workspace.participantsHeading')}
-                  </span>
-                  {!rightNarrow ? (
-                    <span className="font-mono text-[10px] text-muted-foreground/60">
-                      {participants.length}
-                    </span>
-                  ) : null}
+                <div
+                  className={`border-b border-border ${rightNarrow ? 'px-2 py-2' : 'px-3 py-2.5'}`}
+                >
+                  <div className="grid grid-cols-2 gap-1 rounded-md border border-border/70 bg-background/40 p-1">
+                    <button
+                      type="button"
+                      onClick={() => setActiveRightTab('participants')}
+                      className={cn(
+                        'rounded px-2 py-1 text-xs font-medium transition-colors',
+                        activeRightTab === 'participants'
+                          ? 'bg-primary/20 text-primary'
+                          : 'text-muted-foreground hover:bg-background/70 hover:text-foreground',
+                      )}
+                    >
+                      {t('workspace.participantsHeading')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveRightTab('chat')}
+                      className={cn(
+                        'flex items-center justify-center gap-1 rounded px-2 py-1 text-xs font-medium transition-colors',
+                        activeRightTab === 'chat'
+                          ? 'bg-primary/20 text-primary'
+                          : 'text-muted-foreground hover:bg-background/70 hover:text-foreground',
+                      )}
+                    >
+                      <span>{t('workspace.chatHeading')}</span>
+                      {unreadChatCount > 0 ? (
+                        <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] text-primary-foreground">
+                          {unreadChatCount}
+                        </span>
+                      ) : null}
+                    </button>
+                  </div>
                 </div>
-                <div className="mt-2 space-y-0.5">
-                  {participants.map((participant: Participant) => (
-                    <RoomParticipantCard
-                      key={participant.userId}
-                      participant={participant}
-                      currentUserId={currentUserId}
-                      roomHostId={room.hostId}
-                      canManageParticipants={canManageParticipants}
-                      isUpdatingRole={isUpdatingRole === participant.userId}
-                      isTransferringOwnership={isTransferringOwnership === participant.userId}
-                      isRemovingParticipant={isRemovingParticipant === participant.userId}
-                      isSpeaking={speakingMap?.get(participant.userId) ?? false}
-                      isMediaConnected={mediaConnectedSet?.has(participant.userId) ?? false}
-                      isMediaMuted={mediaMutedMap?.get(participant.userId) ?? false}
-                      connectionQuality={
-                        connectionQualityMap?.get(participant.userId) as string | undefined
-                      }
-                      isLocallyMuted={
-                        participantMediaControls?.muteSet.has(participant.userId) ?? false
-                      }
-                      isVideoHidden={
-                        participantMediaControls?.videoHiddenSet.has(participant.userId) ?? false
-                      }
-                      localVolume={participantMediaControls?.volumeMap.get(participant.userId)}
-                      isSelfMicrophoneEnabled={selfMicrophoneEnabled}
-                      onSelfMicrophoneToggle={onSelfMicrophoneToggle}
-                      onLocalMuteToggle={
-                        participantMediaControls
-                          ? (muted) => participantMediaControls.setMuted(participant.userId, muted)
-                          : undefined
-                      }
-                      onLocalVolumeChange={
-                        participantMediaControls
-                          ? (vol) => participantMediaControls.setVolume(participant.userId, vol)
-                          : undefined
-                      }
-                      onVideoHiddenToggle={
-                        participantMediaControls
-                          ? (hidden) =>
-                              participantMediaControls.setVideoHidden(participant.userId, hidden)
-                          : undefined
-                      }
-                      onRoleChange={(uid, role) => {
-                        void onParticipantRoleChange(uid, role);
-                      }}
-                      onTransferOwnership={onTransferOwnership}
-                      onRemoveParticipant={onRemoveParticipant}
-                      compact
-                    />
-                  ))}
+                <div className="min-h-0 flex-1 overflow-y-auto">
+                  {activeRightTab === 'participants' ? (
+                    <div className={`space-y-2 ${rightNarrow ? 'p-2' : 'p-3'}`}>
+                      <div className="flex items-center justify-between">
+                        <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                          {rightNarrow
+                            ? `${participants.length}`
+                            : t('workspace.participantsHeading')}
+                        </span>
+                        {!rightNarrow ? (
+                          <span className="font-mono text-[10px] text-muted-foreground/60">
+                            {participants.length}
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className="space-y-0.5">
+                        {participants.map((participant: Participant) => (
+                          <RoomParticipantCard
+                            key={participant.userId}
+                            participant={participant}
+                            currentUserId={currentUserId}
+                            roomHostId={room.hostId}
+                            canManageParticipants={canManageParticipants}
+                            isUpdatingRole={isUpdatingRole === participant.userId}
+                            isTransferringOwnership={isTransferringOwnership === participant.userId}
+                            isRemovingParticipant={isRemovingParticipant === participant.userId}
+                            isSpeaking={speakingMap?.get(participant.userId) ?? false}
+                            isMediaConnected={mediaConnectedSet?.has(participant.userId) ?? false}
+                            isMediaMuted={mediaMutedMap?.get(participant.userId) ?? false}
+                            connectionQuality={
+                              connectionQualityMap?.get(participant.userId) as string | undefined
+                            }
+                            isLocallyMuted={
+                              participantMediaControls?.muteSet.has(participant.userId) ?? false
+                            }
+                            isVideoHidden={
+                              participantMediaControls?.videoHiddenSet.has(participant.userId) ??
+                              false
+                            }
+                            localVolume={participantMediaControls?.volumeMap.get(
+                              participant.userId,
+                            )}
+                            isSelfMicrophoneEnabled={selfMicrophoneEnabled}
+                            onSelfMicrophoneToggle={onSelfMicrophoneToggle}
+                            onLocalMuteToggle={
+                              participantMediaControls
+                                ? (muted) =>
+                                    participantMediaControls.setMuted(participant.userId, muted)
+                                : undefined
+                            }
+                            onLocalVolumeChange={
+                              participantMediaControls
+                                ? (vol) =>
+                                    participantMediaControls.setVolume(participant.userId, vol)
+                                : undefined
+                            }
+                            onVideoHiddenToggle={
+                              participantMediaControls
+                                ? (hidden) =>
+                                    participantMediaControls.setVideoHidden(
+                                      participant.userId,
+                                      hidden,
+                                    )
+                                : undefined
+                            }
+                            onRoleChange={(uid, role) => {
+                              void onParticipantRoleChange(uid, role);
+                            }}
+                            onTransferOwnership={onTransferOwnership}
+                            onRemoveParticipant={onRemoveParticipant}
+                            compact
+                          />
+                        ))}
+                      </div>
+                      {!rightNarrow ? <InviteLinkInline inviteLink={inviteLink} /> : null}
+                    </div>
+                  ) : (
+                    <div className="h-full p-2">
+                      <RoomChatPanel
+                        currentUserId={currentUserId}
+                        participants={participants}
+                        messages={chatMessages}
+                        onSendMessage={onSendChatMessage}
+                        onToggleReaction={onToggleChatReaction}
+                        onUploadMedia={onUploadChatMedia}
+                        disabled={!canSendChat}
+                        showHeader={false}
+                        readAt={currentUserReadAt}
+                      />
+                    </div>
+                  )}
                 </div>
               </motion.div>
               {!rightNarrow ? (
@@ -1181,4 +1513,12 @@ const SUBMIT_ERROR_KEYS: Partial<Record<string, string>> = {
   [ERROR_CODES.ROOM_ACCESS_DENIED]: 'workspace.permissionDenied',
   [ERROR_CODES.PROBLEM_NOT_FOUND]: 'workspace.problemNotFound',
   [ERROR_CODES.PROBLEM_NO_TEST_CASES]: 'workspace.noProblemTestCases',
+};
+
+const HINT_ERROR_KEYS: Partial<Record<string, string>> = {
+  [ERROR_CODES.ROOM_PERMISSION_DENIED]: 'workspace.hintPermissionDenied',
+  [ERROR_CODES.ROOM_ACCESS_DENIED]: 'workspace.hintPermissionDenied',
+  [ERROR_CODES.PROBLEM_NOT_FOUND]: 'workspace.problemNotFound',
+  [ERROR_CODES.AI_HINT_RATE_LIMIT]: 'workspace.hintRateLimited',
+  [ERROR_CODES.AI_SERVICE_UNAVAILABLE]: 'workspace.hintUnavailable',
 };
