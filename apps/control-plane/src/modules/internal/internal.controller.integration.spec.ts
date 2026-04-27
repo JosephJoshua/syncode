@@ -72,18 +72,20 @@ const VALID_HEARTBEAT_PAYLOAD: ParticipantHeartbeatRequest = {
 
 describe('InternalController auth guard', () => {
   it('GIVEN missing X-Internal-Secret header WHEN calling user-disconnected THEN returns 401', async () => {
-    await request(app.getHttpServer())
+    const res = await request(app.getHttpServer())
       .post('/internal/collab/user-disconnected')
-      .send(VALID_DISCONNECT_PAYLOAD)
-      .expect(401);
+      .send(VALID_DISCONNECT_PAYLOAD);
+
+    expect(res.status).toBe(401);
   });
 
   it('GIVEN wrong X-Internal-Secret header WHEN calling user-disconnected THEN returns 401', async () => {
-    await request(app.getHttpServer())
+    const res = await request(app.getHttpServer())
       .post('/internal/collab/user-disconnected')
       .set('X-Internal-Secret', 'wrong-secret-value')
-      .send(VALID_DISCONNECT_PAYLOAD)
-      .expect(401);
+      .send(VALID_DISCONNECT_PAYLOAD);
+
+    expect(res.status).toBe(401);
   });
 
   it('GIVEN valid X-Internal-Secret header WHEN calling user-disconnected THEN returns 201', async () => {
@@ -107,17 +109,19 @@ describe('InternalController auth guard', () => {
   });
 
   it('GIVEN missing header WHEN calling participant-heartbeat THEN returns 401', async () => {
-    await request(app.getHttpServer())
+    const res = await request(app.getHttpServer())
       .post('/internal/participants/heartbeat')
-      .send(VALID_HEARTBEAT_PAYLOAD)
-      .expect(401);
+      .send(VALID_HEARTBEAT_PAYLOAD);
+
+    expect(res.status).toBe(401);
   });
 
   it('GIVEN missing header WHEN calling authorize-join THEN returns 401', async () => {
-    await request(app.getHttpServer())
+    const res = await request(app.getHttpServer())
       .post(`/internal/rooms/${ROOM_ID}/authorize-join`)
-      .send({ userId: USER_ID })
-      .expect(401);
+      .send({ userId: USER_ID });
+
+    expect(res.status).toBe(401);
   });
 
   it('GIVEN valid header WHEN calling authorize-join THEN delegates to rooms service', async () => {

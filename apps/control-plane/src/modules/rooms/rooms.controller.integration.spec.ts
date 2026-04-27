@@ -99,7 +99,9 @@ describe('POST /rooms', () => {
   it('GIVEN missing mode WHEN creating room THEN returns 400', async () => {
     const user = await insertUser(db);
 
-    await asUser(request(app.getHttpServer()).post('/rooms'), user).send({}).expect(400);
+    const res = await asUser(request(app.getHttpServer()).post('/rooms'), user).send({});
+
+    expect(res.status).toBe(400);
   });
 });
 
@@ -205,10 +207,12 @@ describe('GET /rooms/public', () => {
   it('GIVEN invalid status filter WHEN fetching public rooms THEN returns 400', async () => {
     const caller = await insertUser(db);
 
-    await asUser(
+    const res = await asUser(
       request(app.getHttpServer()).get('/rooms/public').query({ status: 'not-a-real-status' }),
       caller,
-    ).expect(400);
+    );
+
+    expect(res.status).toBe(400);
   });
 });
 
@@ -238,16 +242,20 @@ describe('GET /rooms/:id', () => {
     const room = await insertRoom(db, otherUser.id);
     await insertParticipant(db, room.id, otherUser.id, 'interviewer');
 
-    await asUser(request(app.getHttpServer()).get(`/rooms/${room.id}`), user).expect(403);
+    const res = await asUser(request(app.getHttpServer()).get(`/rooms/${room.id}`), user);
+
+    expect(res.status).toBe(403);
   });
 
   it('GIVEN room does not exist WHEN getting room THEN returns 404', async () => {
     const user = await insertUser(db);
 
-    await asUser(
+    const res = await asUser(
       request(app.getHttpServer()).get('/rooms/00000000-0000-0000-0000-000000000000'),
       user,
-    ).expect(404);
+    );
+
+    expect(res.status).toBe(404);
   });
 });
 
@@ -276,12 +284,12 @@ describe('POST /rooms/:id/join', () => {
   it('GIVEN room does not exist WHEN joining THEN returns 404', async () => {
     const user = await insertUser(db);
 
-    await asUser(
+    const res = await asUser(
       request(app.getHttpServer()).post('/rooms/00000000-0000-0000-0000-000000000000/join'),
       user,
-    )
-      .send({ roomCode: 'ABCDEF' })
-      .expect(404);
+    ).send({ roomCode: 'ABCDEF' });
+
+    expect(res.status).toBe(404);
   });
 
   it('GIVEN user already a participant WHEN joining THEN 200 with current role (idempotent)', async () => {
@@ -353,10 +361,12 @@ describe('DELETE /rooms/:id/participants/:userId', () => {
     await insertParticipant(db, room.id, host.id, 'interviewer');
     await insertParticipant(db, room.id, target.id, 'candidate');
 
-    await asUser(
+    const res = await asUser(
       request(app.getHttpServer()).delete(`/rooms/${room.id}/participants/${target.id}`),
       host,
-    ).expect(204);
+    );
+
+    expect(res.status).toBe(204);
   });
 
   it('GIVEN non-host WHEN removing a participant THEN returns 403', async () => {
@@ -368,10 +378,12 @@ describe('DELETE /rooms/:id/participants/:userId', () => {
     await insertParticipant(db, room.id, other.id, 'observer');
     await insertParticipant(db, room.id, target.id, 'candidate');
 
-    await asUser(
+    const res = await asUser(
       request(app.getHttpServer()).delete(`/rooms/${room.id}/participants/${target.id}`),
       other,
-    ).expect(403);
+    );
+
+    expect(res.status).toBe(403);
   });
 
   it('GIVEN host removing self WHEN requesting THEN returns 400', async () => {
@@ -379,10 +391,12 @@ describe('DELETE /rooms/:id/participants/:userId', () => {
     const room = await insertRoom(db, host.id);
     await insertParticipant(db, room.id, host.id, 'interviewer');
 
-    await asUser(
+    const res = await asUser(
       request(app.getHttpServer()).delete(`/rooms/${room.id}/participants/${host.id}`),
       host,
-    ).expect(400);
+    );
+
+    expect(res.status).toBe(400);
   });
 
   it('GIVEN target participant missing WHEN removing THEN returns 404', async () => {
@@ -391,10 +405,12 @@ describe('DELETE /rooms/:id/participants/:userId', () => {
     const room = await insertRoom(db, host.id);
     await insertParticipant(db, room.id, host.id, 'interviewer');
 
-    await asUser(
+    const res = await asUser(
       request(app.getHttpServer()).delete(`/rooms/${room.id}/participants/${ghost.id}`),
       host,
-    ).expect(404);
+    );
+
+    expect(res.status).toBe(404);
   });
 });
 
@@ -442,7 +458,9 @@ describe('DELETE /rooms/:id', () => {
     await insertParticipant(db, room.id, host.id, 'interviewer');
     await insertParticipant(db, room.id, other.id, 'candidate');
 
-    await asUser(request(app.getHttpServer()).delete(`/rooms/${room.id}`), other).expect(403);
+    const res = await asUser(request(app.getHttpServer()).delete(`/rooms/${room.id}`), other);
+
+    expect(res.status).toBe(403);
   });
 });
 
@@ -468,9 +486,12 @@ describe('POST /rooms/:id/run', () => {
     await insertParticipant(db, room.id, host.id, 'interviewer');
     await insertParticipant(db, room.id, observer.id, 'observer');
 
-    await asUser(request(app.getHttpServer()).post(`/rooms/${room.id}/run`), observer)
-      .send({ language: 'python', code: 'print("hi")' })
-      .expect(403);
+    const res = await asUser(
+      request(app.getHttpServer()).post(`/rooms/${room.id}/run`),
+      observer,
+    ).send({ language: 'python', code: 'print("hi")' });
+
+    expect(res.status).toBe(403);
   });
 });
 
@@ -526,10 +547,12 @@ describe('POST /rooms/:id/media/token', () => {
     await insertParticipant(db, room.id, host.id, 'interviewer');
     await insertParticipant(db, room.id, observer.id, 'observer');
 
-    await asUser(
+    const res = await asUser(
       request(app.getHttpServer()).post(`/rooms/${room.id}/media/token`),
       observer,
-    ).expect(403);
+    );
+
+    expect(res.status).toBe(403);
   });
 
   it('GIVEN user is not a participant WHEN generating token THEN returns 403', async () => {
@@ -538,10 +561,12 @@ describe('POST /rooms/:id/media/token', () => {
     const room = await insertRoom(db, host.id, { status: 'coding' });
     await insertParticipant(db, room.id, host.id, 'interviewer');
 
-    await asUser(
+    const res = await asUser(
       request(app.getHttpServer()).post(`/rooms/${room.id}/media/token`),
       stranger,
-    ).expect(403);
+    );
+
+    expect(res.status).toBe(403);
   });
 
   it('GIVEN room is finished WHEN generating token THEN returns 403', async () => {
@@ -549,18 +574,23 @@ describe('POST /rooms/:id/media/token', () => {
     const room = await insertRoom(db, user.id, { status: 'finished' });
     await insertParticipant(db, room.id, user.id, 'interviewer');
 
-    await asUser(request(app.getHttpServer()).post(`/rooms/${room.id}/media/token`), user).expect(
-      403,
+    const res = await asUser(
+      request(app.getHttpServer()).post(`/rooms/${room.id}/media/token`),
+      user,
     );
+
+    expect(res.status).toBe(403);
   });
 
   it('GIVEN room does not exist WHEN generating token THEN returns 404', async () => {
     const user = await insertUser(db);
 
-    await asUser(
+    const res = await asUser(
       request(app.getHttpServer()).post('/rooms/00000000-0000-0000-0000-000000000000/media/token'),
       user,
-    ).expect(404);
+    );
+
+    expect(res.status).toBe(404);
   });
 
   it('GIVEN candidate role WHEN generating token THEN returns 200', async () => {
@@ -612,9 +642,12 @@ describe('PATCH /rooms/:id/language', () => {
     await insertParticipant(db, room.id, candidate.id, 'candidate');
     await insertParticipant(db, room.id, observer.id, 'observer');
 
-    await asUser(request(app.getHttpServer()).patch(`/rooms/${room.id}/language`), observer)
-      .send({ language: 'javascript' })
-      .expect(403);
+    const res = await asUser(
+      request(app.getHttpServer()).patch(`/rooms/${room.id}/language`),
+      observer,
+    ).send({ language: 'javascript' });
+
+    expect(res.status).toBe(403);
   });
 
   it('GIVEN invalid language in body WHEN PATCH THEN 400', async () => {
@@ -622,9 +655,12 @@ describe('PATCH /rooms/:id/language', () => {
     const room = await insertRoom(db, host.id, { status: 'coding', language: 'python' });
     await insertParticipant(db, room.id, host.id, 'interviewer');
 
-    await asUser(request(app.getHttpServer()).patch(`/rooms/${room.id}/language`), host)
-      .send({ language: 'brainfuck' })
-      .expect(400);
+    const res = await asUser(
+      request(app.getHttpServer()).patch(`/rooms/${room.id}/language`),
+      host,
+    ).send({ language: 'brainfuck' });
+
+    expect(res.status).toBe(400);
   });
 
   it('GIVEN non-member WHEN PATCH THEN 403', async () => {
@@ -633,9 +669,12 @@ describe('PATCH /rooms/:id/language', () => {
     const room = await insertRoom(db, host.id, { status: 'coding', language: 'python' });
     await insertParticipant(db, room.id, host.id, 'interviewer');
 
-    await asUser(request(app.getHttpServer()).patch(`/rooms/${room.id}/language`), stranger)
-      .send({ language: 'javascript' })
-      .expect(403);
+    const res = await asUser(
+      request(app.getHttpServer()).patch(`/rooms/${room.id}/language`),
+      stranger,
+    ).send({ language: 'javascript' });
+
+    expect(res.status).toBe(403);
   });
 
   it('GIVEN unauthenticated WHEN PATCH THEN 401', async () => {
@@ -643,9 +682,10 @@ describe('PATCH /rooms/:id/language', () => {
     const room = await insertRoom(db, host.id, { status: 'coding', language: 'python' });
     await insertParticipant(db, room.id, host.id, 'interviewer');
 
-    await request(app.getHttpServer())
+    const res = await request(app.getHttpServer())
       .patch(`/rooms/${room.id}/language`)
-      .send({ language: 'javascript' })
-      .expect(401);
+      .send({ language: 'javascript' });
+
+    expect(res.status).toBe(401);
   });
 });
