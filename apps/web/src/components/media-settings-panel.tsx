@@ -466,6 +466,82 @@ function ToggleChip({
   );
 }
 
+function VideoFilterControls({
+  brightness,
+  contrast,
+  setBrightness,
+  setContrast,
+  onVideoFilterChange,
+}: {
+  brightness: number;
+  contrast: number;
+  setBrightness: (v: number) => void;
+  setContrast: (v: number) => void;
+  onVideoFilterChange: (settings: { brightness: number; contrast: number }) => void;
+}) {
+  return (
+    <>
+      <div className="space-y-1.5 pt-1">
+        <div className="flex items-center justify-between">
+          <Label className="text-[11px] text-muted-foreground">Brightness</Label>
+          <span className="font-mono text-[10px] text-muted-foreground/60">
+            {Math.round(brightness * 100)}%
+          </span>
+        </div>
+        <input
+          type="range"
+          min="0.5"
+          max="1.5"
+          step="0.05"
+          value={brightness}
+          onChange={(e) => {
+            const v = Number(e.target.value);
+            setBrightness(v);
+            onVideoFilterChange({ brightness: v, contrast });
+          }}
+          className="h-1 w-full cursor-pointer appearance-none rounded-full bg-muted accent-primary"
+        />
+      </div>
+
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between">
+          <Label className="text-[11px] text-muted-foreground">Contrast</Label>
+          <span className="font-mono text-[10px] text-muted-foreground/60">
+            {Math.round(contrast * 100)}%
+          </span>
+        </div>
+        <input
+          type="range"
+          min="0.5"
+          max="1.5"
+          step="0.05"
+          value={contrast}
+          onChange={(e) => {
+            const v = Number(e.target.value);
+            setContrast(v);
+            onVideoFilterChange({ brightness, contrast: v });
+          }}
+          className="h-1 w-full cursor-pointer appearance-none rounded-full bg-muted accent-primary"
+        />
+      </div>
+
+      {brightness !== 1 || contrast !== 1 ? (
+        <button
+          type="button"
+          onClick={() => {
+            setBrightness(1);
+            setContrast(1);
+            onVideoFilterChange({ brightness: 1, contrast: 1 });
+          }}
+          className="text-[10px] text-muted-foreground hover:text-foreground"
+        >
+          Reset adjustments
+        </button>
+      ) : null}
+    </>
+  );
+}
+
 export function MediaSettingsPanel({
   audioInputDevices,
   videoInputDevices,
@@ -561,63 +637,13 @@ export function MediaSettingsPanel({
                   </Select>
                 ) : null}
 
-                <div className="space-y-1.5 pt-1">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-[11px] text-muted-foreground">Brightness</Label>
-                    <span className="font-mono text-[10px] text-muted-foreground/60">
-                      {Math.round(brightness * 100)}%
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min="0.5"
-                    max="1.5"
-                    step="0.05"
-                    value={brightness}
-                    onChange={(e) => {
-                      const v = Number(e.target.value);
-                      setBrightness(v);
-                      onVideoFilterChange({ brightness: v, contrast });
-                    }}
-                    className="h-1 w-full cursor-pointer appearance-none rounded-full bg-muted accent-primary"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-[11px] text-muted-foreground">Contrast</Label>
-                    <span className="font-mono text-[10px] text-muted-foreground/60">
-                      {Math.round(contrast * 100)}%
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min="0.5"
-                    max="1.5"
-                    step="0.05"
-                    value={contrast}
-                    onChange={(e) => {
-                      const v = Number(e.target.value);
-                      setContrast(v);
-                      onVideoFilterChange({ brightness, contrast: v });
-                    }}
-                    className="h-1 w-full cursor-pointer appearance-none rounded-full bg-muted accent-primary"
-                  />
-                </div>
-
-                {brightness !== 1 || contrast !== 1 ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setBrightness(1);
-                      setContrast(1);
-                      onVideoFilterChange({ brightness: 1, contrast: 1 });
-                    }}
-                    className="text-[10px] text-muted-foreground hover:text-foreground"
-                  >
-                    Reset adjustments
-                  </button>
-                ) : null}
+                <VideoFilterControls
+                  brightness={brightness}
+                  contrast={contrast}
+                  setBrightness={setBrightness}
+                  setContrast={setContrast}
+                  onVideoFilterChange={onVideoFilterChange}
+                />
               </>
             ) : !videoGranted ? (
               <GrantPermissionPrompt
