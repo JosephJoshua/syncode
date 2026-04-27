@@ -37,6 +37,14 @@ const SESSION_DETAIL_RESULT = {
       createdAt: new Date('2026-04-01T00:45:00Z'),
     },
   ],
+  report: {
+    overallScore: 85,
+    categoryScores: { problemSolving: 85 },
+    strengths: ['Clear reasoning'],
+    areasForImprovement: ['Cover edge cases earlier'],
+    feedback: 'Good job',
+    generatedAt: new Date('2026-04-01T00:50:00Z'),
+  },
   hasReport: true,
   hasFeedback: false,
   hasRecording: false,
@@ -150,6 +158,7 @@ describe('SessionsController', () => {
       expect(result.participants[0].leftAt).toBeNull();
       expect(result.runs[0].createdAt).toBe('2026-04-01T00:30:00.000Z');
       expect(result.submissions[0].createdAt).toBe('2026-04-01T00:45:00.000Z');
+      expect(result.report?.generatedAt).toBe('2026-04-01T00:50:00.000Z');
     });
   });
 

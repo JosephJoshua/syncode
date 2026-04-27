@@ -24,6 +24,10 @@ import { type PaginatedResult, paginate } from '@syncode/shared/server';
 import { and, asc, type Column, desc, eq, gt, gte, inArray, lt, lte, or, sql } from 'drizzle-orm';
 import { resolveAvatarUrls } from '@/common/resolve-avatar-urls.js';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
+import {
+  normalizeReportScoreMap,
+  normalizeReportStringArray,
+} from './session-report-normalizers.js';
 import type {
   SessionCodeSnapshotResult,
   SessionDetailResult,
@@ -236,7 +240,14 @@ export class SessionsService {
         .innerJoin(users, eq(users.id, sessionParticipants.userId))
         .where(eq(sessionParticipants.sessionId, sessionId)),
       this.db.query.sessionReports.findFirst({
-        columns: { id: true },
+        columns: {
+          overallScore: true,
+          categoryScores: true,
+          strengths: true,
+          areasForImprovement: true,
+          feedback: true,
+          generatedAt: true,
+        },
         where: (table, { eq }) => eq(table.sessionId, sessionId),
       }),
       this.db
@@ -282,6 +293,8 @@ export class SessionsService {
         : Promise.resolve([]),
     ]);
 
+    const normalizedReport = this.buildReport(report);
+
     return {
       sessionId: session.id,
       roomId: session.roomId,
@@ -309,7 +322,8 @@ export class SessionsService {
         total: s.total,
         createdAt: s.createdAt,
       })),
-      hasReport: report != null,
+      report: normalizedReport,
+      hasReport: normalizedReport != null,
       hasFeedback: feedbackExists.length > 0,
       hasRecording: recordingExists.length > 0,
       createdAt: session.startedAt,
@@ -515,5 +529,52 @@ export class SessionsService {
 
   private countLinesOfCode(code: string): number {
     return code ? code.split('\n').length : 0;
+  }
+
+  private buildReport(
+    report:
+      | {
+          overallScore: number | null;
+          categoryScores: unknown;
+          strengths: unknown;
+          areasForImprovement: unknown;
+          feedback: string | null;
+          generatedAt: Date;
+        }
+      | null
+      | undefined,
+  ): {
+    overallScore: number;
+    categoryScores: Record<string, number>;
+    strengths: string[];
+    areasForImprovement: string[];
+    feedback: string | null;
+    generatedAt: Date;
+  } | null {
+    if (!report) return null;
+    const overallScore = this.normalizeOverallScore(report.overallScore);
+    if (overallScore === null) {
+      return null;
+    }
+    return {
+      overallScore,
+      categoryScores: normalizeReportScoreMap(report.categoryScores),
+      strengths: normalizeReportStringArray(report.strengths),
+      areasForImprovement: normalizeReportStringArray(report.areasForImprovement),
+      feedback: report.feedback,
+      generatedAt: report.generatedAt,
+    };
+  }
+
+  private normalizeOverallScore(value: number | null | undefined): number | null {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+      return null;
+    }
+    const rounded = Math.round(value);
+    if (rounded < 0 || rounded > 100) {
+      this.logger.warn(`Discarding overallScore outside 0-100 range: ${value}`);
+      return null;
+    }
+    return rounded;
   }
 }
