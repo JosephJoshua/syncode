@@ -1,12 +1,14 @@
 import { act, renderHook } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import * as Y from 'yjs';
-import { CODE_TEXT_KEY } from '@/lib/yjs-collab-provider.js';
+import { codeTextKey } from '@/lib/yjs-collab-provider.js';
 import { useInlineComments } from './use-inline-comments.js';
+
+const TEST_LANGUAGE = 'python';
 
 function makeDoc(code = 'line1\nline2\nline3') {
   const doc = new Y.Doc();
-  doc.getText(CODE_TEXT_KEY).insert(0, code);
+  doc.getText(codeTextKey(TEST_LANGUAGE)).insert(0, code);
   return doc;
 }
 
@@ -98,7 +100,7 @@ describe('useInlineComments', () => {
     });
 
     act(() => {
-      doc.getText(CODE_TEXT_KEY).insert(0, 'prefix\n');
+      doc.getText(codeTextKey(TEST_LANGUAGE)).insert(0, 'prefix\n');
     });
 
     expect(result.current.comments[0]?.lineNumber).toBe(3);
