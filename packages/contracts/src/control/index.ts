@@ -2,6 +2,7 @@ export * from './auth.js';
 export * from './bookmarks.js';
 export * from './error.js';
 export * from './execution.js';
+export * from './feedback.js';
 export * from './health.js';
 export * from './pagination.js';
 export * from './problems.js';

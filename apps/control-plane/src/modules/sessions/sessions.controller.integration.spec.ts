@@ -146,6 +146,7 @@ describe('GET /sessions/:sessionId/snapshots', () => {
           timestamp: '2026-04-18T10:01:00.000Z',
         }),
       ],
+      pagination: { nextCursor: null, hasMore: false },
     });
   });
 

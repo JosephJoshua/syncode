@@ -7,13 +7,12 @@ import {
   Code2,
   FastForward,
   Loader2,
-  Lock,
-  LockOpen,
   PlayCircle,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { formatTimer, ROOM_STATUS_KEYS } from '@/lib/room-stage.js';
+import { EditorLockToggle } from './editor-lock-toggle.js';
 
 const TRANSITION_ICONS = {
   warmup: <PlayCircle className="size-3.5" />,
@@ -63,9 +62,14 @@ interface HostControlPanelProps {
   timerPaused: boolean;
   editorLocked: boolean;
   canChangePhase: boolean;
+  canControlEditorLock: boolean;
   isPending: boolean;
+  isLockingEditor: boolean;
+  isUnlockingEditor: boolean;
   allRequiredReady: boolean;
   onTransition: (targetStatus: RoomStatus) => void;
+  onLockEditor: () => void;
+  onUnlockEditor: () => void;
 }
 
 export function HostControlPanel({
@@ -74,9 +78,14 @@ export function HostControlPanel({
   timerPaused,
   editorLocked,
   canChangePhase,
+  canControlEditorLock,
   isPending,
+  isLockingEditor,
+  isUnlockingEditor,
   allRequiredReady,
   onTransition,
+  onLockEditor,
+  onUnlockEditor,
 }: HostControlPanelProps) {
   const { t } = useTranslation('rooms');
   const nextStages = getNextStatuses(currentStatus);
@@ -99,17 +108,13 @@ export function HostControlPanel({
           )}
         </div>
         <div className="flex items-center gap-1.5 text-[10px]">
-          {editorLocked ? (
-            <span className="flex items-center gap-1 font-mono text-warning">
-              <Lock size={10} />
-              {t('lobby.editorLocked')}
-            </span>
-          ) : (
-            <span className="flex items-center gap-1 font-mono text-muted-foreground/60">
-              <LockOpen size={10} />
-              {t('lobby.editorUnlocked')}
-            </span>
-          )}
+          <EditorLockToggle
+            locked={editorLocked}
+            interactive={canControlEditorLock && currentStatus !== 'finished'}
+            disabled={isPending || isLockingEditor || isUnlockingEditor}
+            onLock={onLockEditor}
+            onUnlock={onUnlockEditor}
+          />
         </div>
       </div>
 

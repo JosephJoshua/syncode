@@ -74,50 +74,6 @@ export const sessionSubmissionSchema = z.object({
   createdAt: z.iso.datetime(),
 });
 
-export const sessionDetailSchema = z.object({
-  sessionId: z.uuid(),
-  roomId: z.uuid(),
-  mode: z.enum(ROOM_MODES),
-  problem: z
-    .object({
-      id: z.uuid(),
-      title: z.string(),
-      difficulty: z.enum(PROBLEM_DIFFICULTIES),
-    })
-    .nullable(),
-  language: z.enum(SUPPORTED_LANGUAGES).nullable(),
-  duration: z.number().int().nonnegative(),
-  participants: z.array(sessionParticipantSchema),
-  runs: z.array(sessionRunSchema),
-  submissions: z.array(sessionSubmissionSchema),
-  hasReport: z.boolean(),
-  hasFeedback: z.boolean(),
-  hasRecording: z.boolean(),
-  createdAt: z.iso.datetime(),
-  finishedAt: z.iso.datetime().nullable(),
-});
-
-export const CODE_SNAPSHOT_TRIGGERS = [
-  'periodic',
-  'phase_change',
-  'submission',
-  'manual',
-  'session_end',
-] as const;
-
-export const codeSnapshotSchema = z.object({
-  snapshotId: z.uuid(),
-  timestamp: z.iso.datetime(),
-  trigger: z.enum(CODE_SNAPSHOT_TRIGGERS),
-  language: z.enum(SUPPORTED_LANGUAGES),
-  code: z.string(),
-  linesOfCode: z.number().int().nonnegative(),
-});
-
-export const codeSnapshotsResponseSchema = z.object({
-  data: z.array(codeSnapshotSchema).default([]),
-});
-
 export const sessionReportEvidenceSchema = z.object({
   type: z.string(),
   reference: z.string(),
@@ -189,10 +145,61 @@ export const sessionReportSchema = z.object({
   testCaseBreakdown: z.array(sessionReportTestCaseBreakdownSchema).optional(),
 });
 
+export const sessionDetailSchema = z.object({
+  sessionId: z.uuid(),
+  roomId: z.uuid(),
+  mode: z.enum(ROOM_MODES),
+  problem: z
+    .object({
+      id: z.uuid(),
+      title: z.string(),
+      difficulty: z.enum(PROBLEM_DIFFICULTIES),
+    })
+    .nullable(),
+  language: z.enum(SUPPORTED_LANGUAGES).nullable(),
+  duration: z.number().int().nonnegative(),
+  participants: z.array(sessionParticipantSchema),
+  runs: z.array(sessionRunSchema),
+  submissions: z.array(sessionSubmissionSchema),
+  hasReport: z.boolean(),
+  hasFeedback: z.boolean(),
+  hasRecording: z.boolean(),
+  createdAt: z.iso.datetime(),
+  finishedAt: z.iso.datetime().nullable(),
+});
+
+export const CODE_SNAPSHOT_TRIGGERS = [
+  'periodic',
+  'phase_change',
+  'submission',
+  'manual',
+  'session_end',
+] as const;
+
+export const codeSnapshotSchema = z.object({
+  snapshotId: z.uuid(),
+  timestamp: z.iso.datetime(),
+  trigger: z.enum(CODE_SNAPSHOT_TRIGGERS),
+  language: z.enum(SUPPORTED_LANGUAGES),
+  code: z.string(),
+  linesOfCode: z.number().int().nonnegative(),
+});
+
+export const listCodeSnapshotsQuerySchema = paginationQuerySchema.pick({
+  cursor: true,
+  limit: true,
+});
+
+export const codeSnapshotsResponseSchema = z.object({
+  data: z.array(codeSnapshotSchema).default([]),
+  pagination: paginationSchema,
+});
+
 export type SessionHistoryParticipant = z.infer<typeof sessionHistoryParticipantSchema>;
 export type SessionSummary = z.infer<typeof sessionSummarySchema>;
 export type SessionHistoryResponse = z.infer<typeof sessionHistoryResponseSchema>;
 export type SessionParticipant = z.infer<typeof sessionParticipantSchema>;
+export type SessionReport = z.infer<typeof sessionReportSchema>;
 export type SessionDetail = z.infer<typeof sessionDetailSchema>;
 export type CodeSnapshotTrigger = (typeof CODE_SNAPSHOT_TRIGGERS)[number];
 export type CodeSnapshot = z.infer<typeof codeSnapshotSchema>;
@@ -207,4 +214,4 @@ export type SessionReportTestCaseBreakdownItem = z.infer<
   typeof sessionReportTestCaseBreakdownSchema
 >;
 export type SessionReportTrend = (typeof SESSION_REPORT_TREND_OPTIONS)[number];
-export type SessionReport = z.infer<typeof sessionReportSchema>;
+export type ListCodeSnapshotsQuery = z.infer<typeof listCodeSnapshotsQuerySchema>;

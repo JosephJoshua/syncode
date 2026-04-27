@@ -206,6 +206,10 @@
     "advanceStage": "Advance interview stage:",
     "endSession": "End Session",
     "advanceTo": "Advance to {{stageName}}",
+    "locked": "Locked",
+    "readOnly": "Read-only",
+    "unlocked": "Unlocked",
+    "lockToggle": "Toggle editor lock",
     "viewOnly": "Stage ownership belongs to the host or current interviewer.",
     "awaitingController": "You can watch the stage here, but only the host or current interviewer can move it.",
     "awaitingReady": "Waiting for all required participants to be ready."
@@ -254,6 +258,7 @@
     "runCode": "Run Code",
     "runFailed": "Code execution failed to start.",
     "editorLockedError": "The editor is currently locked.",
+    "editorUnlockFailed": "Failed to unlock the editor.",
     "permissionDenied": "You don't have permission to do this.",
     "problemNotFound": "No problem is selected for this room.",
     "noProblemTestCases": "This problem doesn't have any test cases yet.",
