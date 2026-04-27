@@ -46,7 +46,6 @@ import { codeTextKey } from '@/lib/yjs-collab-provider.js';
 import { CollaborativeEditor } from './collaborative-editor.js';
 import { ExecutionDetailsPanel } from './execution-details-panel.js';
 import { HostControlPanel } from './host-control-panel.js';
-import { InlineCommentsPanel } from './inline-comments-panel.js';
 import { InviteLinkInline } from './invite-link-inline.js';
 import { LanguagePicker } from './language-picker.js';
 import { LANGUAGE_VERSIONED_LABELS } from './language-selector.data.js';
@@ -198,7 +197,6 @@ export function RoomWorkspace({
   const [rightCollapsed, setRightCollapsed] = useState(false);
   const [rightNarrow, setRightNarrow] = useState(false);
   const [bottomCollapsed, setBottomCollapsed] = useState(false);
-  const [activeCommentLine, setActiveCommentLine] = useState(1);
   const rightMountedRef = useRef(false);
   const rightContentRef = useRef<HTMLDivElement>(null);
 
@@ -242,8 +240,7 @@ export function RoomWorkspace({
     };
   }, []);
 
-  const { comments, commentLineNumbers, addComment, updateComment, deleteComment } =
-    useInlineComments(doc, language);
+  const { comments, commentLineNumbers, addComment } = useInlineComments(doc, language);
   const seededMockCodeRef = useRef(false);
   const seededMockCommentsRef = useRef(false);
 
@@ -831,9 +828,17 @@ export function RoomWorkspace({
                       awareness={awareness}
                       language={monacoLanguage}
                       readOnly={isEditorReadOnly}
+                      comments={comments}
                       commentLineNumbers={commentLineNumbers}
-                      activeCommentLine={activeCommentLine}
-                      onActiveLineChange={setActiveCommentLine}
+                      canAddComments={Boolean(currentUserId) || isMockPreview}
+                      onAddComment={(lineNumber, content) => {
+                        addComment({
+                          authorId: currentUserId ?? 'mock-user',
+                          authorName: currentUserName || 'Mock User',
+                          content,
+                          lineNumber,
+                        });
+                      }}
                       onRunCode={() => void handleRunCodeRef.current()}
                       onSubmitCode={() => void requestSubmitCodeRef.current()}
                     />
@@ -1079,34 +1084,6 @@ export function RoomWorkspace({
                   ))}
                 </div>
               </motion.div>
-
-              {/* Invite link */}
-              <motion.div
-                className=""
-                initial={rightMountedRef.current ? false : { opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.35, delay: 0.3, ease: [0.22, 1, 0.36, 1] }}
-              >
-                <InlineCommentsPanel
-                  comments={comments}
-                  activeLineNumber={activeCommentLine}
-                  disabled={!doc}
-                  onActiveLineChange={setActiveCommentLine}
-                  onAddComment={(content) =>
-                    addComment({
-                      authorId: currentUserId ?? 'mock-user',
-                      authorName: currentUserName || 'Mock User',
-                      content,
-                      lineNumber: activeCommentLine,
-                    })
-                  }
-                  onUpdateComment={(commentId, content) => {
-                    updateComment(commentId, { content });
-                  }}
-                  onDeleteComment={deleteComment}
-                />
-              </motion.div>
-
               {!rightNarrow ? (
                 <motion.div
                   className="border-t border-border p-3"
