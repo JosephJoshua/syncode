@@ -6,6 +6,7 @@ export interface RoomEntry {
   createdAt: number;
   phase: string;
   editorLocked: boolean;
+  language: string | null;
   clients: Map<string, AuthenticatedClient>;
 }
 
@@ -25,6 +26,7 @@ export class RoomRegistry {
     options?: {
       phase?: string;
       editorLocked?: boolean;
+      language?: string;
     },
   ): RoomEntry {
     if (this.rooms.has(roomId)) {
@@ -36,6 +38,7 @@ export class RoomRegistry {
       createdAt: Date.now(),
       phase: options?.phase ?? 'waiting',
       editorLocked: options?.editorLocked ?? false,
+      language: options?.language ?? null,
       clients: new Map(),
     };
 
@@ -71,6 +74,16 @@ export class RoomRegistry {
     room.editorLocked = state.editorLocked;
 
     return { room, previousPhase, previousEditorLocked };
+  }
+
+  updateLanguage(roomId: string, language: string): RoomEntry {
+    const room = this.rooms.get(roomId);
+    if (!room) {
+      throw new NotFoundException(`Room ${roomId} not found`);
+    }
+
+    room.language = language;
+    return room;
   }
 
   deleteRoom(roomId: string): boolean {

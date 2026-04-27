@@ -1,16 +1,19 @@
-import type { RoomMode, RoomRole, RoomStatus } from '@syncode/shared';
-import { Badge, Button, Card } from '@syncode/ui';
+import type { RoomDetail } from '@syncode/contracts';
+import type { RoomMode, RoomRole, RoomStatus, SupportedLanguage } from '@syncode/shared';
+import { Badge, Button, Card, cn } from '@syncode/ui';
 import { AlertTriangle, Check, Copy, Crown, Loader2, Play } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useClipboard } from '@/hooks/use-clipboard.js';
+import type { CollabConnectionStatus } from '@/hooks/use-yjs-collab.js';
 import { allRequiredPeersReady } from '@/lib/participant-readiness.js';
 import {
   buildInviteLink,
   countActiveRoleConfiguration,
   isRoomConfigurationValid,
 } from '@/lib/room-stage.js';
+import { LanguagePicker } from './language-picker.js';
 import { LobbyBot } from './lobby-bot.js';
 import { type Participant, RoomParticipantCard } from './room-participant-card.js';
 
@@ -23,16 +26,21 @@ interface RoomLobbyProps {
   hostId: string;
   currentUserId: string | null;
   participants: Participant[];
+  language: SupportedLanguage | null;
+  myCapabilities: readonly string[];
   canChangePhase: boolean;
   canManageParticipants: boolean;
   isTransitioning: boolean;
   isUpdatingRole: string | null;
   isTransferringOwnership: string | null;
   joinNotice: string | null;
+  collabStatus: CollabConnectionStatus;
   onParticipantRoleChange: (userId: string, role: RoomRole) => void;
   onTransferOwnership: (userId: string, displayName: string) => void;
   onToggleReady: () => void;
   onTransition: (targetStatus: RoomStatus) => void;
+  onRoomUpdated?: (room: RoomDetail) => void;
+  mediaControls?: React.ReactNode;
   speakingMap?: ReadonlyMap<string, boolean>;
   mediaConnectedSet?: ReadonlySet<string>;
   mediaMutedMap?: ReadonlyMap<string, boolean>;
@@ -48,6 +56,20 @@ interface RoomLobbyProps {
   onSelfMicrophoneToggle?: () => void;
 }
 
+const COLLAB_STATUS_DOT: Record<CollabConnectionStatus, string> = {
+  connected: 'bg-success live-pulse',
+  connecting: 'bg-warning animate-pulse',
+  reconnecting: 'bg-warning animate-pulse',
+  disconnected: 'bg-destructive',
+};
+
+const COLLAB_STATUS_LABEL_KEY: Record<CollabConnectionStatus, string> = {
+  connected: 'statusBar.connected',
+  connecting: 'statusBar.connecting',
+  reconnecting: 'statusBar.reconnecting',
+  disconnected: 'statusBar.disconnected',
+};
+
 export function RoomLobby({
   roomName,
   roomCode,
@@ -57,16 +79,21 @@ export function RoomLobby({
   hostId,
   currentUserId,
   participants,
+  language,
+  myCapabilities,
   canChangePhase,
   canManageParticipants,
   isTransitioning,
   isUpdatingRole,
   isTransferringOwnership,
   joinNotice,
+  collabStatus,
   onParticipantRoleChange,
   onTransferOwnership,
   onToggleReady,
   onTransition,
+  onRoomUpdated,
+  mediaControls,
   speakingMap,
   mediaConnectedSet,
   mediaMutedMap,
@@ -100,6 +127,8 @@ export function RoomLobby({
   );
   const canEnterWorkspace =
     status === 'waiting' && canChangePhase && isRoomValid && myReady && allPeersReady;
+  const rolesLocked = status !== 'waiting';
+  const collabStatusLabel = t(COLLAB_STATUS_LABEL_KEY[collabStatus]);
 
   const inviteLink = buildInviteLink(roomId, roomCode);
 
@@ -126,6 +155,13 @@ export function RoomLobby({
               : t('systemStatus.awaitingPeers')}
           </p>
           <p className="mt-1 text-sm text-muted-foreground">{t('lobby.sub')}</p>
+          <output
+            aria-label={collabStatusLabel}
+            className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-background/70 px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest text-muted-foreground"
+          >
+            <span className={cn('size-1.5 rounded-full', COLLAB_STATUS_DOT[collabStatus])} />
+            {collabStatusLabel}
+          </output>
           {joinNotice ? <p className="mt-2 text-sm text-primary">{joinNotice}</p> : null}
         </div>
       </motion.div>
@@ -150,6 +186,7 @@ export function RoomLobby({
                   currentUserId={currentUserId}
                   roomHostId={hostId}
                   canManageParticipants={canManageParticipants}
+                  rolesLocked={rolesLocked}
                   isUpdatingRole={isUpdatingRole === participant.userId}
                   isTransferringOwnership={isTransferringOwnership === participant.userId}
                   isSpeaking={speakingMap?.get(participant.userId) ?? false}
@@ -235,6 +272,18 @@ export function RoomLobby({
                       ) : null}
                     </div>
                   </div>
+                  <div className="flex items-center justify-between gap-2 border-t border-border/40 pt-1.5">
+                    <span className="shrink-0 text-xs text-muted-foreground">
+                      {t('workspace.languagePickerLabel')}
+                    </span>
+                    <LanguagePicker
+                      roomId={roomId}
+                      currentLanguage={language}
+                      myCapabilities={myCapabilities}
+                      onLanguageChanged={onRoomUpdated}
+                      className="h-8 min-w-[9rem]"
+                    />
+                  </div>
                   <div className="border-t border-border/40 pt-1.5 text-[11px] text-muted-foreground">
                     <div className="flex items-center justify-between gap-2">
                       <span className="shrink-0">{t(`status.${status}`)}</span>
@@ -246,6 +295,13 @@ export function RoomLobby({
                     </div>
                   </div>
                 </div>
+
+                {/* Media controls */}
+                {mediaControls ? (
+                  <div className="flex items-center justify-center rounded-md border border-border/60 bg-background/70 px-2 py-2">
+                    {mediaControls}
+                  </div>
+                ) : null}
 
                 {/* Ready toggle */}
                 <Button

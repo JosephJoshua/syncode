@@ -1,6 +1,8 @@
 import type {
   BroadcastParticipantReadyRequest,
   BroadcastParticipantReadyResponse,
+  ChangeLanguageRequest,
+  ChangeLanguageResponse,
   CreateDocumentRequest,
   CreateDocumentResponse,
   DestroyDocumentResponse,
@@ -20,6 +22,7 @@ export interface ICollabClient {
     roomId: string,
     request: BroadcastParticipantReadyRequest,
   ): Promise<BroadcastParticipantReadyResponse>;
+  changeLanguage(request: ChangeLanguageRequest): Promise<ChangeLanguageResponse>;
 }
 
 export const COLLAB_CLIENT = Symbol.for('COLLAB_CLIENT');

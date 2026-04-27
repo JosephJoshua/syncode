@@ -43,6 +43,20 @@
       "when": 1776618625456,
       "tag": "0005_room_doc_snapshots",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1776618625457,
+      "tag": "0006_participant_heartbeat",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1776618625458,
+      "tag": "0007_mean_ravenous",
+      "breakpoints": true
     }
   ]
 }

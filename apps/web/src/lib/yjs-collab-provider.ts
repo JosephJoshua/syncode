@@ -2,6 +2,7 @@ import {
   COLLAB_WS_EVENTS,
   type CollabWsMessage,
   type EditorLockEventData,
+  type LanguageChangeEventData,
   type ParticipantReadyEventData,
   type PhaseChangeEventData,
   type RoomStateEventData,
@@ -16,7 +17,11 @@ import * as Y from 'yjs';
 
 export type CollabConnectionStatus = 'connecting' | 'connected' | 'reconnecting' | 'disconnected';
 
-export const CODE_TEXT_KEY = 'code';
+/**
+ * Y.Text key used by the collab-plane's YjsDocumentStore for the given language.
+ * Must match the server's per-language code key format.
+ */
+export const codeTextKey = (language: string): string => `code:${language}`;
 
 export interface YjsCollabProviderOptions {
   url: string;
@@ -28,6 +33,13 @@ export interface YjsCollabProviderOptions {
   onParticipantReady: (userId: string, isReady: boolean) => void;
   onPhaseChange: (phase: string, previousPhase: string) => void;
   onEditorLock: (locked: boolean, lockedBy: string | null) => void;
+  onLanguageChange?: (language: string, changedBy: string | null) => void;
+  /**
+   * Fires AFTER status transitions to `connected` from a prior `reconnecting`
+   * state — never on the initial `connecting → connected` transition.
+   * Used to trigger idempotent backend reactivation (e.g. re-hit POST /join).
+   */
+  onReconnected?: () => void;
   onRoomNotFound?: () => Promise<void>;
 }
 
@@ -192,7 +204,12 @@ export class YjsCollabProvider {
       // that was set in the constructor before the WS was open.
       this.awareness.setLocalStateField('user', this.options.user);
     }
+    const wasReconnecting = this.currentStatus === 'reconnecting';
     this.setStatus('connected');
+    if (wasReconnecting) {
+      // Fire AFTER the status change so subscribers observe the final state.
+      this.options.onReconnected?.();
+    }
 
     switch (message.type) {
       case COLLAB_WS_EVENTS.ROOM_STATE: {
@@ -216,6 +233,11 @@ export class YjsCollabProvider {
       case COLLAB_WS_EVENTS.PARTICIPANT_READY: {
         const data = message.data as ParticipantReadyEventData;
         this.options.onParticipantReady(data.userId, data.isReady);
+        break;
+      }
+      case COLLAB_WS_EVENTS.LANGUAGE_CHANGE: {
+        const data = message.data as LanguageChangeEventData;
+        this.options.onLanguageChange?.(data.language, data.changedBy);
         break;
       }
     }
