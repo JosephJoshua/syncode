@@ -83,6 +83,107 @@ const COLLAB_STATUS_INDICATOR: Record<
   },
 };
 
+function LobbyParticipantList({
+  participants,
+  currentUserId,
+  hostId,
+  canManageParticipants,
+  rolesLocked,
+  isUpdatingRole,
+  isTransferringOwnership,
+  speakingMap,
+  mediaConnectedSet,
+  mediaMutedMap,
+  participantMediaControls,
+  selfMicrophoneEnabled,
+  onSelfMicrophoneToggle,
+  onParticipantRoleChange,
+  onTransferOwnership,
+}: {
+  participants: RoomLobbyProps['participants'];
+  currentUserId: RoomLobbyProps['currentUserId'];
+  hostId: RoomLobbyProps['hostId'];
+  canManageParticipants: RoomLobbyProps['canManageParticipants'];
+  rolesLocked: boolean;
+  isUpdatingRole: RoomLobbyProps['isUpdatingRole'];
+  isTransferringOwnership: RoomLobbyProps['isTransferringOwnership'];
+  speakingMap: RoomLobbyProps['speakingMap'];
+  mediaConnectedSet: RoomLobbyProps['mediaConnectedSet'];
+  mediaMutedMap: RoomLobbyProps['mediaMutedMap'];
+  participantMediaControls: RoomLobbyProps['participantMediaControls'];
+  selfMicrophoneEnabled: RoomLobbyProps['selfMicrophoneEnabled'];
+  onSelfMicrophoneToggle: RoomLobbyProps['onSelfMicrophoneToggle'];
+  onParticipantRoleChange: RoomLobbyProps['onParticipantRoleChange'];
+  onTransferOwnership: RoomLobbyProps['onTransferOwnership'];
+}) {
+  return (
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      {participants.map((participant, index) => (
+        <motion.div
+          key={participant.userId}
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{
+            duration: 0.36,
+            delay: 0.1 + index * 0.06,
+            ease: [0.22, 1, 0.36, 1],
+          }}
+        >
+          <RoomParticipantCard
+            participant={participant}
+            currentUserId={currentUserId}
+            roomHostId={hostId}
+            canManageParticipants={canManageParticipants}
+            rolesLocked={rolesLocked}
+            isUpdatingRole={isUpdatingRole === participant.userId}
+            isTransferringOwnership={isTransferringOwnership === participant.userId}
+            isSpeaking={speakingMap?.get(participant.userId) ?? false}
+            isMediaConnected={mediaConnectedSet?.has(participant.userId) ?? false}
+            isMediaMuted={mediaMutedMap?.get(participant.userId) ?? false}
+            isLocallyMuted={participantMediaControls?.muteSet.has(participant.userId) ?? false}
+            isVideoHidden={
+              participantMediaControls?.videoHiddenSet.has(participant.userId) ?? false
+            }
+            localVolume={participantMediaControls?.volumeMap.get(participant.userId)}
+            isSelfMicrophoneEnabled={selfMicrophoneEnabled}
+            onSelfMicrophoneToggle={onSelfMicrophoneToggle}
+            onLocalMuteToggle={
+              participantMediaControls
+                ? (muted) => participantMediaControls.setMuted(participant.userId, muted)
+                : undefined
+            }
+            onLocalVolumeChange={
+              participantMediaControls
+                ? (vol) => participantMediaControls.setVolume(participant.userId, vol)
+                : undefined
+            }
+            onVideoHiddenToggle={
+              participantMediaControls
+                ? (hidden) => participantMediaControls.setVideoHidden(participant.userId, hidden)
+                : undefined
+            }
+            onRoleChange={onParticipantRoleChange}
+            onTransferOwnership={onTransferOwnership}
+          />
+        </motion.div>
+      ))}
+    </div>
+  );
+}
+
+function getEnterWorkspaceWarningKey(
+  isRoomValid: boolean,
+  myReady: boolean,
+  allPeersReady: boolean,
+  canChangePhase: boolean,
+  mode: RoomMode,
+): string | null {
+  if (!isRoomValid) return mode === 'ai' ? 'warningAi' : 'warning';
+  if (!myReady && canChangePhase) return 'readyButton.readyFirst';
+  if (myReady && !allPeersReady && canChangePhase) return 'hostControl.awaitingReady';
+  return null;
+}
+
 export function RoomLobby({
   roomName,
   roomCode,
@@ -147,6 +248,13 @@ export function RoomLobby({
   const rolesLocked = status !== 'waiting';
 
   const inviteLink = buildInviteLink(roomId, roomCode);
+  const warningKey = getEnterWorkspaceWarningKey(
+    isRoomValid,
+    myReady,
+    allPeersReady,
+    canChangePhase,
+    mode,
+  );
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-4 sm:py-6">
@@ -193,60 +301,23 @@ export function RoomLobby({
             </div>
           ) : null}
           <LobbyMediaPreview />
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            {activeParticipants.map((participant, index) => (
-              <motion.div
-                key={participant.userId}
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{
-                  duration: 0.36,
-                  delay: 0.1 + index * 0.06,
-                  ease: [0.22, 1, 0.36, 1],
-                }}
-              >
-                <RoomParticipantCard
-                  participant={participant}
-                  currentUserId={currentUserId}
-                  roomHostId={hostId}
-                  canManageParticipants={canManageParticipants}
-                  rolesLocked={rolesLocked}
-                  isUpdatingRole={isUpdatingRole === participant.userId}
-                  isTransferringOwnership={isTransferringOwnership === participant.userId}
-                  isSpeaking={speakingMap?.get(participant.userId) ?? false}
-                  isMediaConnected={mediaConnectedSet?.has(participant.userId) ?? false}
-                  isMediaMuted={mediaMutedMap?.get(participant.userId) ?? false}
-                  isLocallyMuted={
-                    participantMediaControls?.muteSet.has(participant.userId) ?? false
-                  }
-                  isVideoHidden={
-                    participantMediaControls?.videoHiddenSet.has(participant.userId) ?? false
-                  }
-                  localVolume={participantMediaControls?.volumeMap.get(participant.userId)}
-                  isSelfMicrophoneEnabled={selfMicrophoneEnabled}
-                  onSelfMicrophoneToggle={onSelfMicrophoneToggle}
-                  onLocalMuteToggle={
-                    participantMediaControls
-                      ? (muted) => participantMediaControls.setMuted(participant.userId, muted)
-                      : undefined
-                  }
-                  onLocalVolumeChange={
-                    participantMediaControls
-                      ? (vol) => participantMediaControls.setVolume(participant.userId, vol)
-                      : undefined
-                  }
-                  onVideoHiddenToggle={
-                    participantMediaControls
-                      ? (hidden) =>
-                          participantMediaControls.setVideoHidden(participant.userId, hidden)
-                      : undefined
-                  }
-                  onRoleChange={onParticipantRoleChange}
-                  onTransferOwnership={onTransferOwnership}
-                />
-              </motion.div>
-            ))}
-          </div>
+          <LobbyParticipantList
+            participants={activeParticipants}
+            currentUserId={currentUserId}
+            hostId={hostId}
+            canManageParticipants={canManageParticipants}
+            rolesLocked={rolesLocked}
+            isUpdatingRole={isUpdatingRole}
+            isTransferringOwnership={isTransferringOwnership}
+            speakingMap={speakingMap}
+            mediaConnectedSet={mediaConnectedSet}
+            mediaMutedMap={mediaMutedMap}
+            participantMediaControls={participantMediaControls}
+            selfMicrophoneEnabled={selfMicrophoneEnabled}
+            onSelfMicrophoneToggle={onSelfMicrophoneToggle}
+            onParticipantRoleChange={onParticipantRoleChange}
+            onTransferOwnership={onTransferOwnership}
+          />
         </div>
 
         {/* Sidebar */}
@@ -338,19 +409,15 @@ export function RoomLobby({
 
                 {/* Enter workspace */}
                 <div className="space-y-2 border-t border-border/60 pt-3">
-                  {!isRoomValid ? (
-                    <p className="flex items-start gap-1.5 text-[11px] leading-tight text-muted-foreground">
-                      <AlertTriangle size={13} className="mt-0.5 shrink-0 text-warning" />
-                      {t(mode === 'ai' ? 'warningAi' : 'warning')}
-                    </p>
-                  ) : !myReady && canChangePhase ? (
-                    <p className="text-[11px] text-muted-foreground">
-                      {t('readyButton.readyFirst')}
-                    </p>
-                  ) : myReady && !allPeersReady && canChangePhase ? (
-                    <p className="text-[11px] text-muted-foreground">
-                      {t('hostControl.awaitingReady')}
-                    </p>
+                  {warningKey ? (
+                    warningKey === 'warning' || warningKey === 'warningAi' ? (
+                      <p className="flex items-start gap-1.5 text-[11px] leading-tight text-muted-foreground">
+                        <AlertTriangle size={13} className="mt-0.5 shrink-0 text-warning" />
+                        {t(warningKey)}
+                      </p>
+                    ) : (
+                      <p className="text-[11px] text-muted-foreground">{t(warningKey)}</p>
+                    )
                   ) : null}
                   <Button
                     disabled={!canEnterWorkspace || isTransitioning}
