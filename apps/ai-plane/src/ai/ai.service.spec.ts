@@ -224,6 +224,14 @@ describe('AiService', () => {
       ]);
       expect(result.overallScore).toBe(82);
       expect(result.generatedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+      expect(result.categoryScores).toEqual({
+        correctness: 84,
+        efficiency: 78,
+        codeQuality: 80,
+        communication: 76,
+        problemSolving: 83,
+      });
+      expect(result.feedback).toBe(result.detailedFeedback);
       expect(llmProvider.generateText).toHaveBeenCalledWith(
         expect.objectContaining({
           jsonMode: true,
