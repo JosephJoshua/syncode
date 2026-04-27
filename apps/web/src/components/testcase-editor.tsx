@@ -3,13 +3,13 @@ import { useTranslation } from 'react-i18next';
 import { type TestCaseEntry, tabClassName } from './room-workspace-utils.js';
 
 interface TestCaseEditorProps {
-  cases: TestCaseEntry[];
-  activeCaseId: string;
-  onActiveCaseChange: (id: string) => void;
-  onCaseInputChange: (id: string, input: string) => void;
-  onAddCase: () => void;
-  onRemoveCase: (id: string) => void;
-  readOnly: boolean;
+  readonly cases: TestCaseEntry[];
+  readonly activeCaseId: string;
+  readonly onActiveCaseChange: (id: string) => void;
+  readonly onCaseInputChange: (id: string, input: string) => void;
+  readonly onAddCase: () => void;
+  readonly onRemoveCase: (id: string) => void;
+  readonly readOnly: boolean;
 }
 
 export function TestCaseEditor({
@@ -52,7 +52,7 @@ export function TestCaseEditor({
             >
               {c.label}
             </button>
-            {!c.fromProblem && !readOnly ? (
+            {c.fromProblem || readOnly ? null : (
               <button
                 type="button"
                 onClick={(e) => {
@@ -63,10 +63,10 @@ export function TestCaseEditor({
               >
                 <X size={10} />
               </button>
-            ) : null}
+            )}
           </div>
         ))}
-        {!readOnly ? (
+        {readOnly ? null : (
           <button
             type="button"
             onClick={onAddCase}
@@ -75,7 +75,7 @@ export function TestCaseEditor({
           >
             <Plus size={12} />
           </button>
-        ) : null}
+        )}
       </div>
 
       {/* Active case content */}

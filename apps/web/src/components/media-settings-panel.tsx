@@ -205,7 +205,7 @@ function useMediaPermissions(
   };
 }
 
-function AudioLevelMeter({ deviceId }: { deviceId: string | null }) {
+function AudioLevelMeter({ deviceId }: { readonly deviceId: string | null }) {
   const [level, setLevel] = useState(0);
   const cleanupRef = useRef<(() => void) | null>(null);
 
@@ -234,7 +234,7 @@ function AudioLevelMeter({ deviceId }: { deviceId: string | null }) {
           if (cancelled) return;
           analyser.getByteFrequencyData(data);
           let sum = 0;
-          for (let i = 0; i < data.length; i++) sum += data[i] ?? 0;
+          for (const v of data) sum += v;
           setLevel(sum / data.length / 255);
           animFrame = requestAnimationFrame(tick);
         };
@@ -291,9 +291,9 @@ function VideoPreview({
   brightness,
   contrast,
 }: {
-  deviceId: string | null;
-  brightness: number;
-  contrast: number;
+  readonly deviceId: string | null;
+  readonly brightness: number;
+  readonly contrast: number;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [error, setError] = useState(false);
@@ -371,10 +371,10 @@ function NoDevicesPrompt({
   onRefresh,
   refreshing,
 }: {
-  kind: 'audio' | 'video';
-  icon: React.ComponentType<{ className?: string }>;
-  onRefresh: () => void;
-  refreshing: boolean;
+  readonly kind: 'audio' | 'video';
+  readonly icon: React.ComponentType<{ className?: string }>;
+  readonly onRefresh: () => void;
+  readonly refreshing: boolean;
 }) {
   const device = kind === 'audio' ? 'microphone' : 'camera';
   return (
@@ -404,11 +404,11 @@ function GrantPermissionPrompt({
   requesting,
   error,
 }: {
-  kind: 'audio' | 'video';
-  icon: React.ComponentType<{ className?: string }>;
-  onRequest: () => void;
-  requesting: boolean;
-  error: string | null;
+  readonly kind: 'audio' | 'video';
+  readonly icon: React.ComponentType<{ className?: string }>;
+  readonly onRequest: () => void;
+  readonly requesting: boolean;
+  readonly error: string | null;
 }) {
   const isAudio = kind === 'audio';
   return (
@@ -444,10 +444,10 @@ function ToggleChip({
   active,
   onClick,
 }: {
-  label: string;
-  icon: React.ComponentType<{ className?: string }>;
-  active: boolean;
-  onClick: () => void;
+  readonly label: string;
+  readonly icon: React.ComponentType<{ className?: string }>;
+  readonly active: boolean;
+  readonly onClick: () => void;
 }) {
   return (
     <button
@@ -473,11 +473,11 @@ function VideoFilterControls({
   setContrast,
   onVideoFilterChange,
 }: {
-  brightness: number;
-  contrast: number;
-  setBrightness: (v: number) => void;
-  setContrast: (v: number) => void;
-  onVideoFilterChange: (settings: { brightness: number; contrast: number }) => void;
+  readonly brightness: number;
+  readonly contrast: number;
+  readonly setBrightness: (v: number) => void;
+  readonly setContrast: (v: number) => void;
+  readonly onVideoFilterChange: (settings: { brightness: number; contrast: number }) => void;
 }) {
   return (
     <>
@@ -645,20 +645,20 @@ export function MediaSettingsPanel({
                   onVideoFilterChange={onVideoFilterChange}
                 />
               </>
-            ) : !videoGranted ? (
+            ) : videoGranted ? (
+              <NoDevicesPrompt
+                kind="video"
+                icon={Camera}
+                onRefresh={() => void request('video')}
+                refreshing={requestingVideo}
+              />
+            ) : (
               <GrantPermissionPrompt
                 kind="video"
                 icon={Camera}
                 onRequest={() => void request('video')}
                 requesting={requestingVideo}
                 error={videoError}
-              />
-            ) : (
-              <NoDevicesPrompt
-                kind="video"
-                icon={Camera}
-                onRefresh={() => void request('video')}
-                refreshing={requestingVideo}
               />
             )}
           </div>
@@ -733,20 +733,20 @@ export function MediaSettingsPanel({
                   />
                 </div>
               </>
-            ) : !audioGranted ? (
+            ) : audioGranted ? (
+              <NoDevicesPrompt
+                kind="audio"
+                icon={Mic}
+                onRefresh={() => void request('audio')}
+                refreshing={requestingAudio}
+              />
+            ) : (
               <GrantPermissionPrompt
                 kind="audio"
                 icon={Mic}
                 onRequest={() => void request('audio')}
                 requesting={requestingAudio}
                 error={audioError}
-              />
-            ) : (
-              <NoDevicesPrompt
-                kind="audio"
-                icon={Mic}
-                onRefresh={() => void request('audio')}
-                refreshing={requestingAudio}
               />
             )}
           </div>

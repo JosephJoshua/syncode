@@ -24,10 +24,10 @@ const DIFFICULTY_VARIANT: Record<string, 'success' | 'warning' | 'destructive'> 
 };
 
 interface RoomProblemPanelProps {
-  problem: ProblemData | null;
-  loading: boolean;
-  error: string | null;
-  hasProblem: boolean;
+  readonly problem: ProblemData | null;
+  readonly loading: boolean;
+  readonly error: string | null;
+  readonly hasProblem: boolean;
 }
 
 export function RoomProblemPanel({ problem, loading, error, hasProblem }: RoomProblemPanelProps) {
@@ -42,28 +42,30 @@ export function RoomProblemPanel({ problem, loading, error, hasProblem }: RoomPr
       </div>
 
       <div className="flex-1 overflow-y-auto p-4">
-        {!hasProblem ? (
+        {hasProblem ? (
+          loading ? (
+            <div className="flex flex-col items-center justify-center py-12">
+              <Loader2 size={20} className="animate-spin text-primary" />
+            </div>
+          ) : error ? (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <p className="text-xs text-destructive">{error}</p>
+            </div>
+          ) : problem ? (
+            <ProblemContent problem={problem} />
+          ) : null
+        ) : (
           <div className="flex flex-col items-center justify-center py-12 text-center">
             <FileText size={24} className="mb-3 text-muted-foreground/40" />
             <p className="text-xs text-muted-foreground">{t('problem.noProblem')}</p>
           </div>
-        ) : loading ? (
-          <div className="flex flex-col items-center justify-center py-12">
-            <Loader2 size={20} className="animate-spin text-primary" />
-          </div>
-        ) : error ? (
-          <div className="flex flex-col items-center justify-center py-12 text-center">
-            <p className="text-xs text-destructive">{error}</p>
-          </div>
-        ) : problem ? (
-          <ProblemContent problem={problem} />
-        ) : null}
+        )}
       </div>
     </div>
   );
 }
 
-function ProblemContent({ problem }: { problem: ProblemData }) {
+function ProblemContent({ problem }: { readonly problem: ProblemData }) {
   const { t } = useTranslation('rooms');
 
   return (

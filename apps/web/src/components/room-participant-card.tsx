@@ -46,10 +46,10 @@ function PresenceDot({
   isActive,
   size = 'sm',
 }: {
-  isMediaConnected: boolean;
-  isMediaMuted: boolean;
-  isActive: boolean;
-  size?: 'sm' | 'md';
+  readonly isMediaConnected: boolean;
+  readonly isMediaMuted: boolean;
+  readonly isActive: boolean;
+  readonly size?: 'sm' | 'md';
 }) {
   if (isMediaConnected && isMediaMuted) {
     const cls =
@@ -88,12 +88,12 @@ function MediaActionsContent({
   onLocalVolumeChange,
   onVideoHiddenToggle,
 }: {
-  isLocallyMuted: boolean;
-  isVideoHidden: boolean;
-  localVolume?: number;
-  onLocalMuteToggle?: (muted: boolean) => void;
-  onLocalVolumeChange?: (volume: number) => void;
-  onVideoHiddenToggle?: (hidden: boolean) => void;
+  readonly isLocallyMuted: boolean;
+  readonly isVideoHidden: boolean;
+  readonly localVolume?: number;
+  readonly onLocalMuteToggle?: (muted: boolean) => void;
+  readonly onLocalVolumeChange?: (volume: number) => void;
+  readonly onVideoHiddenToggle?: (hidden: boolean) => void;
 }) {
   return (
     <>
@@ -135,7 +135,7 @@ function MediaActionsContent({
   );
 }
 
-function ConnectionQualityIcon({ quality }: { quality?: string }) {
+function ConnectionQualityIcon({ quality }: { readonly quality?: string }) {
   if (!quality) return null;
   switch (quality) {
     case 'excellent':
@@ -188,14 +188,14 @@ interface RoomParticipantCardProps {
 }
 
 interface ParticipantViewState {
-  displayName: string;
-  initial: string;
-  isMe: boolean;
-  isHost: boolean;
-  hasManageActions: boolean;
-  hasMediaActions: boolean;
-  hasSelfMicAction: boolean;
-  showParticipantActions: boolean;
+  readonly displayName: string;
+  readonly initial: string;
+  readonly isMe: boolean;
+  readonly isHost: boolean;
+  readonly hasManageActions: boolean;
+  readonly hasMediaActions: boolean;
+  readonly hasSelfMicAction: boolean;
+  readonly showParticipantActions: boolean;
 }
 
 function deriveParticipantState(props: RoomParticipantCardProps): ParticipantViewState {
@@ -562,19 +562,17 @@ function FullParticipantCard({
                 />
               ) : null}
               {hasManageActions ? (
-                <>
-                  <DropdownMenuItem
-                    disabled={isTransferringOwnership}
-                    onSelect={() => onTransferOwnership?.(participant.userId, displayName)}
-                  >
-                    {isTransferringOwnership ? (
-                      <Loader2 className="size-3.5 animate-spin text-muted-foreground" />
-                    ) : (
-                      <Crown className="size-3.5 text-muted-foreground" />
-                    )}
-                    {t('workspace.transferOwnership')}
-                  </DropdownMenuItem>
-                </>
+                <DropdownMenuItem
+                  disabled={isTransferringOwnership}
+                  onSelect={() => onTransferOwnership?.(participant.userId, displayName)}
+                >
+                  {isTransferringOwnership ? (
+                    <Loader2 className="size-3.5 animate-spin text-muted-foreground" />
+                  ) : (
+                    <Crown className="size-3.5 text-muted-foreground" />
+                  )}
+                  {t('workspace.transferOwnership')}
+                </DropdownMenuItem>
               ) : null}
             </DropdownMenuContent>
           </DropdownMenu>
@@ -589,9 +587,9 @@ function SelfMicMenuItem({
   onToggle,
   t,
 }: {
-  enabled: boolean;
-  onToggle: () => void;
-  t: (key: string) => string;
+  readonly enabled: boolean;
+  readonly onToggle: () => void;
+  readonly t: (key: string) => string;
 }) {
   return (
     <DropdownMenuItem onSelect={onToggle}>

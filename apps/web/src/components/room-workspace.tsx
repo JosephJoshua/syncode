@@ -104,12 +104,12 @@ interface RoomWorkspaceProps {
 }
 
 interface CasePollDeps {
-  caseId: string;
-  jobId: string;
-  expectedOutput: string | null;
-  token: { cancelled: boolean };
-  setMultiRunState: React.Dispatch<React.SetStateAction<MultiRunState>>;
-  t: (key: string) => string;
+  readonly caseId: string;
+  readonly jobId: string;
+  readonly expectedOutput: string | null;
+  readonly token: { cancelled: boolean };
+  readonly setMultiRunState: React.Dispatch<React.SetStateAction<MultiRunState>>;
+  readonly t: (key: string) => string;
 }
 
 async function executeCasePoll(deps: CasePollDeps): Promise<void> {
@@ -375,7 +375,9 @@ export function RoomWorkspace({
     () => room.participants.filter((p: Participant) => p.isActive),
     [room.participants],
   );
-  const inviteLink = room.roomCode ? buildInviteLink(roomId, room.roomCode) : window.location.href;
+  const inviteLink = room.roomCode
+    ? buildInviteLink(roomId, room.roomCode)
+    : globalThis.window.location.href;
 
   const canSubmitCode = room.myCapabilities.includes('code:submit') && !!room.problemId;
 
@@ -887,11 +889,11 @@ export function RoomWorkspace({
                   <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
                     {rightNarrow ? `${participants.length}` : t('workspace.participantsHeading')}
                   </span>
-                  {!rightNarrow ? (
+                  {rightNarrow ? null : (
                     <span className="font-mono text-[10px] text-muted-foreground/60">
                       {participants.length}
                     </span>
-                  ) : null}
+                  )}
                 </div>
                 <div className="mt-2 space-y-0.5">
                   {participants.map((participant: Participant) => (
@@ -947,7 +949,7 @@ export function RoomWorkspace({
               </motion.div>
 
               {/* Invite link */}
-              {!rightNarrow ? (
+              {rightNarrow ? null : (
                 <motion.div
                   className="p-3"
                   initial={rightMountedRef.current ? false : { opacity: 0, y: 8 }}
@@ -956,7 +958,7 @@ export function RoomWorkspace({
                 >
                   <InviteLinkInline inviteLink={inviteLink} />
                 </motion.div>
-              ) : null}
+              )}
             </motion.div>
           )}
         </ResizablePanel>
@@ -995,23 +997,23 @@ function WorkspaceBottomPanel({
   isSubmitBusy,
   t,
 }: {
-  bottomPanelRef: ReturnType<typeof usePanelRef>;
-  setBottomCollapsed: (collapsed: boolean) => void;
-  activeBottomTab: 'testcases' | 'output' | 'results';
-  setActiveBottomTab: (tab: 'testcases' | 'output' | 'results') => void;
-  testCases: TestCaseEntry[];
-  activeCaseId: string;
-  setActiveCaseId: (id: string) => void;
-  handleCaseInputChange: (id: string, input: string) => void;
-  handleAddCase: () => void;
-  handleRemoveCase: (id: string) => void;
-  isEditorReadOnly: boolean;
-  multiRunState: MultiRunState;
-  handleRunSingleCase: (id: string) => void;
-  submitState: SubmitState;
-  canSubmitCode: boolean;
-  isSubmitBusy: boolean;
-  t: (key: string) => string;
+  readonly bottomPanelRef: ReturnType<typeof usePanelRef>;
+  readonly setBottomCollapsed: (collapsed: boolean) => void;
+  readonly activeBottomTab: 'testcases' | 'output' | 'results';
+  readonly setActiveBottomTab: (tab: 'testcases' | 'output' | 'results') => void;
+  readonly testCases: TestCaseEntry[];
+  readonly activeCaseId: string;
+  readonly setActiveCaseId: (id: string) => void;
+  readonly handleCaseInputChange: (id: string, input: string) => void;
+  readonly handleAddCase: () => void;
+  readonly handleRemoveCase: (id: string) => void;
+  readonly isEditorReadOnly: boolean;
+  readonly multiRunState: MultiRunState;
+  readonly handleRunSingleCase: (id: string) => void;
+  readonly submitState: SubmitState;
+  readonly canSubmitCode: boolean;
+  readonly isSubmitBusy: boolean;
+  readonly t: (key: string) => string;
 }) {
   return (
     <ResizablePanel

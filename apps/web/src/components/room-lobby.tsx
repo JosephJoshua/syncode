@@ -1,6 +1,6 @@
 import type { RoomDetail } from '@syncode/contracts';
 import type { RoomMode, RoomRole, RoomStatus, SupportedLanguage } from '@syncode/shared';
-import { Badge, Button, Card, cn } from '@syncode/ui';
+import { Badge, Button, Card } from '@syncode/ui';
 import { AlertTriangle, Check, Copy, Crown, Loader2, Play } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useMemo } from 'react';
@@ -100,21 +100,21 @@ function LobbyParticipantList({
   onParticipantRoleChange,
   onTransferOwnership,
 }: {
-  participants: RoomLobbyProps['participants'];
-  currentUserId: RoomLobbyProps['currentUserId'];
-  hostId: RoomLobbyProps['hostId'];
-  canManageParticipants: RoomLobbyProps['canManageParticipants'];
-  rolesLocked: boolean;
-  isUpdatingRole: RoomLobbyProps['isUpdatingRole'];
-  isTransferringOwnership: RoomLobbyProps['isTransferringOwnership'];
-  speakingMap: RoomLobbyProps['speakingMap'];
-  mediaConnectedSet: RoomLobbyProps['mediaConnectedSet'];
-  mediaMutedMap: RoomLobbyProps['mediaMutedMap'];
-  participantMediaControls: RoomLobbyProps['participantMediaControls'];
-  selfMicrophoneEnabled: RoomLobbyProps['selfMicrophoneEnabled'];
-  onSelfMicrophoneToggle: RoomLobbyProps['onSelfMicrophoneToggle'];
-  onParticipantRoleChange: RoomLobbyProps['onParticipantRoleChange'];
-  onTransferOwnership: RoomLobbyProps['onTransferOwnership'];
+  readonly participants: RoomLobbyProps['participants'];
+  readonly currentUserId: RoomLobbyProps['currentUserId'];
+  readonly hostId: RoomLobbyProps['hostId'];
+  readonly canManageParticipants: RoomLobbyProps['canManageParticipants'];
+  readonly rolesLocked: boolean;
+  readonly isUpdatingRole: RoomLobbyProps['isUpdatingRole'];
+  readonly isTransferringOwnership: RoomLobbyProps['isTransferringOwnership'];
+  readonly speakingMap: RoomLobbyProps['speakingMap'];
+  readonly mediaConnectedSet: RoomLobbyProps['mediaConnectedSet'];
+  readonly mediaMutedMap: RoomLobbyProps['mediaMutedMap'];
+  readonly participantMediaControls: RoomLobbyProps['participantMediaControls'];
+  readonly selfMicrophoneEnabled: RoomLobbyProps['selfMicrophoneEnabled'];
+  readonly onSelfMicrophoneToggle: RoomLobbyProps['onSelfMicrophoneToggle'];
+  readonly onParticipantRoleChange: RoomLobbyProps['onParticipantRoleChange'];
+  readonly onTransferOwnership: RoomLobbyProps['onTransferOwnership'];
 }) {
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -431,11 +431,11 @@ export function RoomLobby({
                     )}
                     {t('readyButton.enterWorkspace')}
                   </Button>
-                  {!canChangePhase ? (
+                  {canChangePhase ? null : (
                     <p className="text-[11px] text-muted-foreground">
                       {t('lobby.awaitingController')}
                     </p>
-                  ) : null}
+                  )}
                 </div>
               </div>
             </Card>

@@ -20,9 +20,9 @@ import {
 } from './room-workspace-utils.js';
 
 interface RunResultsPanelProps {
-  multiRunState: MultiRunState;
-  cases: TestCaseEntry[];
-  onRunCase?: (caseId: string) => void;
+  readonly multiRunState: MultiRunState;
+  readonly cases: TestCaseEntry[];
+  readonly onRunCase?: (caseId: string) => void;
 }
 
 function CaseCompletedDetails({
@@ -31,10 +31,10 @@ function CaseCompletedDetails({
   caseEntry,
   tc,
 }: {
-  state: CaseRunState & { status: 'completed' | 'failed' };
-  failed: boolean;
-  caseEntry: TestCaseEntry;
-  tc: (key: string) => string;
+  readonly state: CaseRunState & { status: 'completed' | 'failed' };
+  readonly failed: boolean;
+  readonly caseEntry: TestCaseEntry;
+  readonly tc: (key: string) => string;
 }) {
   return (
     <div className="space-y-2 border-t border-border/60 px-2.5 py-2">
@@ -79,12 +79,12 @@ function CaseStatusBadge({
   done,
   t,
 }: {
-  passed: boolean;
-  failed: boolean;
-  isError: boolean;
-  isLoading: boolean;
-  done: boolean;
-  t: (key: string) => string;
+  readonly passed: boolean;
+  readonly failed: boolean;
+  readonly isError: boolean;
+  readonly isLoading: boolean;
+  readonly done: boolean;
+  readonly t: (key: string) => string;
 }) {
   if (passed) {
     return (
@@ -130,11 +130,11 @@ function CaseRow({
   onToggle,
   onRun,
 }: {
-  caseEntry: TestCaseEntry;
-  state: CaseRunState | undefined;
-  expanded: boolean;
-  onToggle: () => void;
-  onRun?: () => void;
+  readonly caseEntry: TestCaseEntry;
+  readonly state: CaseRunState | undefined;
+  readonly expanded: boolean;
+  readonly onToggle: () => void;
+  readonly onRun?: () => void;
 }) {
   const { t } = useTranslation('rooms');
   const { t: tc } = useTranslation('common');

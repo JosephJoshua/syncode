@@ -14,20 +14,20 @@ import { useTranslation } from 'react-i18next';
 import { useVideoTrack } from '@/hooks/use-video-track.js';
 
 export interface VideoPanelParticipant {
-  identity: string;
-  displayName: string;
-  avatarUrl: string | null;
-  hasVideo: boolean;
-  videoTrack: MediaStreamTrack | null;
-  hasScreenShare: boolean;
-  screenShareTrack: MediaStreamTrack | null;
-  isSpeaking: boolean;
-  isLocal: boolean;
+  readonly identity: string;
+  readonly displayName: string;
+  readonly avatarUrl: string | null;
+  readonly hasVideo: boolean;
+  readonly videoTrack: MediaStreamTrack | null;
+  readonly hasScreenShare: boolean;
+  readonly screenShareTrack: MediaStreamTrack | null;
+  readonly isSpeaking: boolean;
+  readonly isLocal: boolean;
 }
 
 interface ParticipantTileProps extends Omit<VideoPanelParticipant, 'identity'> {
-  onZoom?: () => void;
-  fit?: 'cover' | 'contain';
+  readonly onZoom?: () => void;
+  readonly fit?: 'cover' | 'contain';
 }
 
 function ParticipantTile({
@@ -108,10 +108,10 @@ function ParticipantTile({
 }
 
 interface ScreenShareTileProps {
-  displayName: string;
-  screenShareTrack: MediaStreamTrack;
-  onZoom?: () => void;
-  fill?: boolean;
+  readonly displayName: string;
+  readonly screenShareTrack: MediaStreamTrack;
+  readonly onZoom?: () => void;
+  readonly fill?: boolean;
 }
 
 function ScreenShareTile({
@@ -204,9 +204,9 @@ function useZoomInteractiveProps(onZoom: (() => void) | undefined) {
 }
 
 interface ZoomOverlayProps {
-  tile: VideoPanelParticipant;
-  kind: 'camera' | 'screen';
-  onClose: () => void;
+  readonly tile: VideoPanelParticipant;
+  readonly kind: 'camera' | 'screen';
+  readonly onClose: () => void;
 }
 
 function ZoomOverlay({ tile, kind, onClose }: ZoomOverlayProps) {
@@ -323,10 +323,10 @@ function pickActiveTile(tiles: VideoPanelParticipant[]): VideoPanelParticipant |
 }
 
 interface FloatingVideoPanelProps {
-  tiles: VideoPanelParticipant[];
-  isMinimized: boolean;
-  onToggleMinimize: () => void;
-  onDock: () => void;
+  readonly tiles: VideoPanelParticipant[];
+  readonly isMinimized: boolean;
+  readonly onToggleMinimize: () => void;
+  readonly onDock: () => void;
 }
 
 const SPRING_CONFIG = { stiffness: 300, damping: 30 };
@@ -669,7 +669,7 @@ export function FloatingVideoPanel({
             </div>
           </div>
 
-          {!isMinimized ? (
+          {isMinimized ? null : (
             <div className="relative overflow-hidden p-1" style={{ height: size.height - 28 }}>
               <AnimatePresence mode="popLayout">
                 {activeTile ? (
@@ -705,7 +705,7 @@ export function FloatingVideoPanel({
                 ) : null}
               </AnimatePresence>
             </div>
-          ) : null}
+          )}
 
           {showResize ? (
             <>
@@ -789,8 +789,8 @@ export function FloatingVideoPanel({
 }
 
 interface DockedVideoPanelProps {
-  tiles: VideoPanelParticipant[];
-  onUndock: () => void;
+  readonly tiles: VideoPanelParticipant[];
+  readonly onUndock: () => void;
 }
 
 export function DockedVideoPanel({ tiles, onUndock }: DockedVideoPanelProps) {
