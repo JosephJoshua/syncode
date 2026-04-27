@@ -206,18 +206,16 @@ export class CollaborationService implements OnModuleDestroy {
 
   /**
    * Fire-and-forget participant-heartbeat delivery to control-plane.
-   * The callback client swallows errors per its port contract, but we wrap
-   * in a try/catch defensively in case a synchronous throw ever occurs.
+   * The callback client swallows errors per its port contract; the .catch
+   * here is a defensive fallback that logs any rejection that slips through.
    */
   heartbeatParticipants(participants: ParticipantHeartbeatRequest['participants']): void {
     if (participants.length === 0) return;
-    try {
-      void this.callbackClient.heartbeatParticipants({ participants });
-    } catch (error) {
+    this.callbackClient.heartbeatParticipants({ participants }).catch((error: unknown) => {
       this.logger.warn(
         `Failed to dispatch participant heartbeat: ${error instanceof Error ? error.message : String(error)}`,
       );
-    }
+    });
   }
 
   checkRoomEmpty(roomId: string): void {
