@@ -74,56 +74,14 @@ export class ProblemsService {
         const sortColumn = this.getSortColumn(sortField);
 
         if (decoded?.length === 2 && decoded[0] && decoded[1]) {
-          const [cursorSort, cursorId] = decoded;
-
-          if (sortField === 'title') {
-            conditions.push(
-              or(
-                compareOp(problems.title, cursorSort),
-                and(eq(problems.title, cursorSort), compareOp(problems.id, cursorId)),
-              )!,
-            );
-          } else if (sortField === 'difficulty') {
-            const cursorDifficulty = cursorSort as 'easy' | 'medium' | 'hard';
-            conditions.push(
-              or(
-                compareOp(problems.difficulty, cursorDifficulty),
-                and(eq(problems.difficulty, cursorDifficulty), compareOp(problems.id, cursorId)),
-              )!,
-            );
-          } else if (sortField === 'totalSubmissions') {
-            conditions.push(
-              or(
-                compareOp(problems.totalSubmissions, Number(cursorSort)),
-                and(
-                  eq(problems.totalSubmissions, Number(cursorSort)),
-                  compareOp(problems.id, cursorId),
-                ),
-              )!,
-            );
-          } else if (sortField === 'popularity') {
-            // popularity = acceptedSubmissions / totalSubmissions ratio
-            const popularityExpr = sql<number>`CASE
-              WHEN "problems"."total_submissions" = 0 THEN 0
-              ELSE "problems"."accepted_submissions"::float / "problems"."total_submissions"::float
-            END`;
-            conditions.push(
-              or(
-                compareOp(popularityExpr, Number(cursorSort)),
-                and(eq(popularityExpr, Number(cursorSort)), compareOp(problems.id, cursorId)),
-              )!,
-            );
-          } else {
-            // createdAt (default)
-            const cursorDate = new Date(cursorSort);
-            if (!Number.isNaN(cursorDate.getTime())) {
-              conditions.push(
-                or(
-                  compareOp(problems.createdAt, cursorDate),
-                  and(eq(problems.createdAt, cursorDate), compareOp(problems.id, cursorId)),
-                )!,
-              );
-            }
+          const cursorCondition = this.buildCursorCondition(
+            sortField,
+            decoded[0],
+            decoded[1],
+            compareOp,
+          );
+          if (cursorCondition) {
+            conditions.push(cursorCondition);
           }
         }
 
@@ -411,6 +369,49 @@ export class ProblemsService {
         )
       END
     )`.as('acceptance_rate');
+  }
+
+  private buildCursorCondition(
+    sortField: ProblemSortBy,
+    cursorSort: string,
+    cursorId: string,
+    compareOp: typeof gt,
+  ) {
+    if (sortField === 'title') {
+      return or(
+        compareOp(problems.title, cursorSort),
+        and(eq(problems.title, cursorSort), compareOp(problems.id, cursorId)),
+      );
+    }
+    if (sortField === 'difficulty') {
+      const cursorDifficulty = cursorSort as 'easy' | 'medium' | 'hard';
+      return or(
+        compareOp(problems.difficulty, cursorDifficulty),
+        and(eq(problems.difficulty, cursorDifficulty), compareOp(problems.id, cursorId)),
+      );
+    }
+    if (sortField === 'totalSubmissions') {
+      return or(
+        compareOp(problems.totalSubmissions, Number(cursorSort)),
+        and(eq(problems.totalSubmissions, Number(cursorSort)), compareOp(problems.id, cursorId)),
+      );
+    }
+    if (sortField === 'popularity') {
+      const popularityExpr = sql<number>`CASE
+        WHEN "problems"."total_submissions" = 0 THEN 0
+        ELSE "problems"."accepted_submissions"::float / "problems"."total_submissions"::float
+      END`;
+      return or(
+        compareOp(popularityExpr, Number(cursorSort)),
+        and(eq(popularityExpr, Number(cursorSort)), compareOp(problems.id, cursorId)),
+      );
+    }
+    const cursorDate = new Date(cursorSort);
+    if (Number.isNaN(cursorDate.getTime())) return undefined;
+    return or(
+      compareOp(problems.createdAt, cursorDate),
+      and(eq(problems.createdAt, cursorDate), compareOp(problems.id, cursorId)),
+    );
   }
 
   private getSortColumn(sortField: ProblemSortBy) {
