@@ -71,6 +71,7 @@
     },
     "validation": {
       "candidateRequired": "Choose who this feedback is for.",
+      "ratingRequired": "Pick a rating from 1 to 5.",
       "strengthsRequired": "Add at least one strength.",
       "improvementsRequired": "Add at least one improvement.",
       "textMaxLength": "Keep feedback under 2000 characters."

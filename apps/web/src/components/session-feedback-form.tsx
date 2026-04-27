@@ -15,13 +15,13 @@ import {
   SelectValue,
 } from '@syncode/ui';
 import { Check, LoaderCircle } from 'lucide-react';
-import { type ReactNode, useEffect } from 'react';
+import { type ReactNode, useEffect, useMemo } from 'react';
 import { type Control, Controller, useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import {
+  createSessionFeedbackFormSchema,
   type SessionFeedbackCandidate,
   type SessionFeedbackFormValues,
-  sessionFeedbackFormSchema,
 } from './session-feedback-form.schema.js';
 
 interface SessionFeedbackFormProps {
@@ -30,13 +30,15 @@ interface SessionFeedbackFormProps {
   onSubmit: (values: SessionFeedbackFormValues) => void | Promise<void>;
 }
 
+// Ratings default to 0 (invalid per schema) so reviewers must consciously
+// pick 1-5 before the submit button enables.
 const DEFAULT_VALUES: SessionFeedbackFormValues = {
   candidateId: '',
-  problemSolvingRating: 3,
-  communicationRating: 3,
-  codeQualityRating: 3,
-  debuggingRating: 3,
-  overallRating: 3,
+  problemSolvingRating: 0 as unknown as SessionFeedbackFormValues['problemSolvingRating'],
+  communicationRating: 0 as unknown as SessionFeedbackFormValues['communicationRating'],
+  codeQualityRating: 0 as unknown as SessionFeedbackFormValues['codeQualityRating'],
+  debuggingRating: 0 as unknown as SessionFeedbackFormValues['debuggingRating'],
+  overallRating: 0 as unknown as SessionFeedbackFormValues['overallRating'],
   strengths: '',
   improvements: '',
   wouldPairAgain: true,
@@ -47,7 +49,10 @@ export function SessionFeedbackForm({
   isSubmitting = false,
   onSubmit,
 }: SessionFeedbackFormProps) {
-  const { t } = useTranslation('feedback');
+  const { t, i18n } = useTranslation('feedback');
+  // Recreate the schema when the active language changes so error messages
+  // localize properly. Calling i18n.t at module init would freeze them.
+  const schema = useMemo(() => createSessionFeedbackFormSchema(), [i18n.language]);
   const {
     control,
     formState: { errors, isValid },
@@ -56,12 +61,14 @@ export function SessionFeedbackForm({
     register,
     setValue,
   } = useForm<SessionFeedbackFormValues>({
-    resolver: zodResolver(sessionFeedbackFormSchema),
+    resolver: zodResolver(schema),
     defaultValues: {
       ...DEFAULT_VALUES,
       candidateId: candidates.length === 1 ? (candidates[0]?.userId ?? '') : '',
     },
-    mode: 'onChange',
+    // onTouched ensures errors only surface once a field is touched, while
+    // still keeping isValid live so the submit button reflects the real state.
+    mode: 'onTouched',
   });
   const singleCandidateId = candidates.length === 1 ? (candidates[0]?.userId ?? null) : null;
 

@@ -71,6 +71,7 @@
     },
     "validation": {
       "candidateRequired": "请选择反馈对象。",
+      "ratingRequired": "请选择 1 到 5 之间的评分。",
       "strengthsRequired": "请至少填写一个亮点。",
       "improvementsRequired": "请至少填写一条改进建议。",
       "textMaxLength": "反馈内容请控制在 2000 字以内。"
