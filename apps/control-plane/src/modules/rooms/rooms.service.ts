@@ -74,6 +74,7 @@ import { resolveAvatarUrls } from '@/common/resolve-avatar-urls.js';
 import type { EnvConfig } from '@/config/env.config.js';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
 import { ExecutionService } from '@/modules/execution/execution.service.js';
+import { SessionReportsService } from '@/modules/sessions/session-reports.service.js';
 import type {
   CreateRoomResult,
   DestroyRoomResult,
@@ -102,6 +103,7 @@ export class RoomsService {
     private readonly storageService: IStorageService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService<EnvConfig>,
+    private readonly sessionReportsService: SessionReportsService,
   ) {}
 
   async createRoom(hostId: string, input: CreateRoomInput): Promise<CreateRoomResult> {
@@ -598,7 +600,7 @@ export class RoomsService {
     const updatedAt = new Date();
     let previousRole!: RoomRole;
 
-    const room = await this.db.transaction(async (tx) => {
+    await this.db.transaction(async (tx) => {
       const [lockedRoom] = await tx.select().from(rooms).where(eq(rooms.id, roomId)).for('update');
 
       if (!lockedRoom) {
@@ -1095,6 +1097,12 @@ export class RoomsService {
     participantRows: Awaited<ReturnType<typeof this.fetchParticipants>>,
     userId: string,
   ): Promise<RoomDetailResult> {
+    const [roomSession] = await this.db
+      .select({ id: sessions.id })
+      .from(sessions)
+      .where(eq(sessions.roomId, room.id))
+      .limit(1);
+
     participantRows = await resolveAvatarUrls(participantRows, this.storageService);
     const normalizedParticipants = participantRows.map((participant) => ({
       ...participant,
@@ -1125,6 +1133,7 @@ export class RoomsService {
       status: room.status,
       mode: room.mode,
       hostId: room.hostId,
+      sessionId: roomSession?.id ?? null,
       problemId: room.problemId,
       language: room.language,
       config: this.buildRoomConfig(room),
@@ -1146,154 +1155,178 @@ export class RoomsService {
   ): Promise<TransitionPhaseResult> {
     const now = new Date();
 
-    const { previousStatus, editorLocked } = await this.db.transaction(async (tx) => {
-      const [lockedRoom] = await tx.select().from(rooms).where(eq(rooms.id, roomId)).for('update');
+    const { previousStatus, editorLocked, finishedSessionId } = await this.db.transaction(
+      async (tx) => {
+        const [lockedRoom] = await tx
+          .select()
+          .from(rooms)
+          .where(eq(rooms.id, roomId))
+          .for('update');
 
-      if (!lockedRoom) {
-        throw new NotFoundException({
-          message: 'Room not found',
-          code: ERROR_CODES.ROOM_NOT_FOUND,
-        });
-      }
-
-      // Auth check against the locked row to prevent TOCTOU race with ownership transfer
-      const [participant] = await tx
-        .select({ role: roomParticipants.role, isActive: roomParticipants.isActive })
-        .from(roomParticipants)
-        .where(and(eq(roomParticipants.roomId, roomId), eq(roomParticipants.userId, userId)));
-
-      if (!participant?.isActive) {
-        throw new ForbiddenException({
-          message: 'Not a participant of this room',
-          code: ERROR_CODES.ROOM_ACCESS_DENIED,
-        });
-      }
-
-      if (lockedRoom.hostId !== userId && participant.role !== RoomRole.INTERVIEWER) {
-        throw new ForbiddenException({
-          message: 'You do not have permission to change the room phase',
-          code: ERROR_CODES.ROOM_PERMISSION_DENIED,
-        });
-      }
-
-      const lockedStatus = lockedRoom.status as RoomStatus;
-
-      if (!isValidStatusTransition(lockedStatus, targetStatus)) {
-        throw new BadRequestException({
-          message: `Cannot transition from '${lockedStatus}' to '${targetStatus}'`,
-          code: ERROR_CODES.ROOM_INVALID_TRANSITION,
-        });
-      }
-
-      const computedElapsedMs =
-        lockedStatus === RoomStatus.CODING && lockedRoom.phaseStartedAt && !lockedRoom.timerPaused
-          ? lockedRoom.elapsedMs + Math.max(0, now.getTime() - lockedRoom.phaseStartedAt.getTime())
-          : lockedRoom.elapsedMs;
-
-      if (lockedStatus === RoomStatus.WAITING && targetStatus === RoomStatus.WARMUP) {
-        const activeParticipants = await this.fetchActiveParticipants(tx, lockedRoom);
-        this.assertActiveRoleConfiguration(
-          lockedRoom.mode as RoomMode,
-          RoomStatus.WARMUP,
-          activeParticipants,
-          { strict: true },
-        );
-        this.assertRequiredParticipantsReady(lockedRoom.mode as RoomMode, activeParticipants);
-      }
-
-      const roomUpdate: Partial<typeof rooms.$inferInsert> = {
-        status: targetStatus,
-        phaseStartedAt: now,
-        elapsedMs: computedElapsedMs,
-      };
-
-      if (lockedStatus === RoomStatus.CODING || targetStatus === RoomStatus.CODING) {
-        roomUpdate.timerPaused = false;
-      }
-
-      if (targetStatus === RoomStatus.FINISHED) {
-        roomUpdate.endedAt = now;
-      }
-
-      await tx.update(rooms).set(roomUpdate).where(eq(rooms.id, roomId));
-
-      if (targetStatus === RoomStatus.FINISHED) {
-        // Cascade: mark any remaining active participants as inactive. They
-        // weren't kicked — the room just ended — so we set leftAt but NOT
-        // removedAt.
-        await tx
-          .update(roomParticipants)
-          .set({ isActive: false, leftAt: now })
-          .where(and(eq(roomParticipants.roomId, roomId), eq(roomParticipants.isActive, true)));
-      }
-
-      // Reset all participants' ready status when leaving the lobby
-      if (lockedStatus === RoomStatus.WAITING) {
-        await tx
-          .update(roomParticipants)
-          .set({ isReady: false })
-          .where(eq(roomParticipants.roomId, roomId));
-      }
-
-      if (lockedStatus === RoomStatus.WAITING && targetStatus === RoomStatus.WARMUP) {
-        const [session] = await tx
-          .insert(sessions)
-          .values({
-            roomId,
-            problemId: lockedRoom.problemId,
-            mode: lockedRoom.mode,
-            language: lockedRoom.language,
-            status: 'ongoing',
-            startedAt: now,
-          })
-          .returning();
-
-        const participantRows = await tx
-          .select({
-            userId: roomParticipants.userId,
-            role: roomParticipants.role,
-            joinedAt: roomParticipants.joinedAt,
-          })
-          .from(roomParticipants)
-          .where(and(eq(roomParticipants.roomId, roomId), eq(roomParticipants.isActive, true)));
-
-        if (participantRows.length > 0) {
-          await tx.insert(sessionParticipants).values(
-            participantRows.map((participantRow) => ({
-              sessionId: session!.id,
-              userId: participantRow.userId,
-              role: this.normalizeParticipantRole(
-                lockedRoom.mode as RoomMode,
-                participantRow.role,
-                lockedRoom.hostId,
-                participantRow.userId,
-              ),
-              joinedAt: participantRow.joinedAt,
-            })),
-          );
+        if (!lockedRoom) {
+          throw new NotFoundException({
+            message: 'Room not found',
+            code: ERROR_CODES.ROOM_NOT_FOUND,
+          });
         }
-      }
 
-      if (targetStatus === RoomStatus.FINISHED && lockedStatus !== RoomStatus.WAITING) {
-        await tx
-          .update(sessions)
-          .set({
-            status: 'finished',
-            finishedAt: now,
-            durationMs: computedElapsedMs,
-          })
-          .where(eq(sessions.roomId, roomId));
-      }
+        // Auth check against the locked row to prevent TOCTOU race with ownership transfer
+        const [participant] = await tx
+          .select({ role: roomParticipants.role, isActive: roomParticipants.isActive })
+          .from(roomParticipants)
+          .where(and(eq(roomParticipants.roomId, roomId), eq(roomParticipants.userId, userId)));
 
-      return {
-        previousStatus: lockedStatus,
-        editorLocked: lockedRoom.editorLocked,
-      };
-    });
+        if (!participant?.isActive) {
+          throw new ForbiddenException({
+            message: 'Not a participant of this room',
+            code: ERROR_CODES.ROOM_ACCESS_DENIED,
+          });
+        }
+
+        if (lockedRoom.hostId !== userId && participant.role !== RoomRole.INTERVIEWER) {
+          throw new ForbiddenException({
+            message: 'You do not have permission to change the room phase',
+            code: ERROR_CODES.ROOM_PERMISSION_DENIED,
+          });
+        }
+
+        const lockedStatus = lockedRoom.status as RoomStatus;
+
+        if (!isValidStatusTransition(lockedStatus, targetStatus)) {
+          throw new BadRequestException({
+            message: `Cannot transition from '${lockedStatus}' to '${targetStatus}'`,
+            code: ERROR_CODES.ROOM_INVALID_TRANSITION,
+          });
+        }
+
+        const computedElapsedMs =
+          lockedStatus === RoomStatus.CODING && lockedRoom.phaseStartedAt && !lockedRoom.timerPaused
+            ? lockedRoom.elapsedMs +
+              Math.max(0, now.getTime() - lockedRoom.phaseStartedAt.getTime())
+            : lockedRoom.elapsedMs;
+
+        if (lockedStatus === RoomStatus.WAITING && targetStatus === RoomStatus.WARMUP) {
+          const activeParticipants = await this.fetchActiveParticipants(tx, lockedRoom);
+          this.assertActiveRoleConfiguration(
+            lockedRoom.mode as RoomMode,
+            RoomStatus.WARMUP,
+            activeParticipants,
+            { strict: true },
+          );
+          this.assertRequiredParticipantsReady(lockedRoom.mode as RoomMode, activeParticipants);
+        }
+
+        const roomUpdate: Partial<typeof rooms.$inferInsert> = {
+          status: targetStatus,
+          phaseStartedAt: now,
+          elapsedMs: computedElapsedMs,
+        };
+
+        if (lockedStatus === RoomStatus.CODING || targetStatus === RoomStatus.CODING) {
+          roomUpdate.timerPaused = false;
+        }
+
+        if (targetStatus === RoomStatus.FINISHED) {
+          roomUpdate.endedAt = now;
+        }
+
+        await tx.update(rooms).set(roomUpdate).where(eq(rooms.id, roomId));
+
+        if (targetStatus === RoomStatus.FINISHED) {
+          // Cascade: mark any remaining active participants as inactive. They
+          // weren't kicked — the room just ended — so we set leftAt but NOT
+          // removedAt.
+          await tx
+            .update(roomParticipants)
+            .set({ isActive: false, leftAt: now })
+            .where(and(eq(roomParticipants.roomId, roomId), eq(roomParticipants.isActive, true)));
+        }
+
+        // Reset all participants' ready status when leaving the lobby
+        if (lockedStatus === RoomStatus.WAITING) {
+          await tx
+            .update(roomParticipants)
+            .set({ isReady: false })
+            .where(eq(roomParticipants.roomId, roomId));
+        }
+
+        if (lockedStatus === RoomStatus.WAITING && targetStatus === RoomStatus.WARMUP) {
+          const [session] = await tx
+            .insert(sessions)
+            .values({
+              roomId,
+              problemId: lockedRoom.problemId,
+              mode: lockedRoom.mode,
+              language: lockedRoom.language,
+              status: 'ongoing',
+              startedAt: now,
+            })
+            .returning();
+
+          const participantRows = await tx
+            .select({
+              userId: roomParticipants.userId,
+              role: roomParticipants.role,
+              joinedAt: roomParticipants.joinedAt,
+            })
+            .from(roomParticipants)
+            .where(and(eq(roomParticipants.roomId, roomId), eq(roomParticipants.isActive, true)));
+
+          if (participantRows.length > 0) {
+            await tx.insert(sessionParticipants).values(
+              participantRows.map((participantRow) => ({
+                sessionId: session!.id,
+                userId: participantRow.userId,
+                role: this.normalizeParticipantRole(
+                  lockedRoom.mode as RoomMode,
+                  participantRow.role,
+                  lockedRoom.hostId,
+                  participantRow.userId,
+                ),
+                joinedAt: participantRow.joinedAt,
+              })),
+            );
+          }
+        }
+
+        let completedSessionId: string | null = null;
+
+        if (targetStatus === RoomStatus.FINISHED && lockedStatus !== RoomStatus.WAITING) {
+          const [finishedSession] = await tx
+            .update(sessions)
+            .set({
+              status: 'finished',
+              finishedAt: now,
+              durationMs: computedElapsedMs,
+            })
+            .where(eq(sessions.roomId, roomId))
+            .returning({ id: sessions.id });
+
+          completedSessionId = finishedSession?.id ?? null;
+        }
+
+        return {
+          previousStatus: lockedStatus,
+          editorLocked: lockedRoom.editorLocked,
+          finishedSessionId: completedSessionId,
+        };
+      },
+    );
 
     this.logger.log(
       `Room ${roomId} transitioned from '${previousStatus}' to '${targetStatus}' by user ${userId}`,
     );
+
+    if (finishedSessionId) {
+      try {
+        await this.sessionReportsService.enqueueForFinishedSession(finishedSessionId);
+      } catch (error) {
+        this.logger.error(
+          `Failed to enqueue session reports for session ${finishedSessionId}`,
+          error,
+        );
+      }
+    }
 
     // Fire-and-forget collab notification stays outside the transaction.
     void this.updateCollabRoomState(roomId, targetStatus, editorLocked, userId);

@@ -1,5 +1,22 @@
 {
-  "heading": "反馈展示",
+  "eyebrow": "会话报告",
+  "heading": "会话报告暂不可用",
+  "fallbackProblemTitle": "未命名题目",
+  "ready": {
+    "description": "查看这场已完成面试练习的结构化训练报告。"
+  },
+  "pending": {
+    "description": "会话已经结束，但 AI 报告仍在生成中。",
+    "title": "报告生成中",
+    "subtitle": "报告会在会话结束后异步生成。",
+    "body": "通常大约一分钟内完成。你可以停留在当前页面等待报告加载。",
+    "polling": "系统会每 10 秒自动检查一次报告状态。"
+  },
+  "error": {
+    "title": "报告暂不可用",
+    "description": "会话存在，但当前无法加载报告。",
+    "body": "请稍后再试。"
+  },
   "notFound": {
     "description": "未找到此会话，因此暂时无法展示反馈占位内容。",
     "invalidSessionId": "无效的会话 ID：{{sessionId}}"
@@ -19,9 +36,9 @@
     "pacing": "改善推理解题路径时的节奏控制。",
     "explanation": "加强权衡讨论中的解释质量。"
   },
-  "nextIteration": "此区域后续将用于具体的会话建议、代码审查意见和沟通反馈。",
   "details": {
     "heading": "会话详情",
+    "description": "展示这场已完成会话中的参与者、元数据和活动信息。",
     "sessionId": "会话 ID",
     "role": "角色",
     "date": "日期",

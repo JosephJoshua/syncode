@@ -57,22 +57,6 @@ type SessionFilter = 'all' | 'passed' | 'failed';
 type SessionSort = 'date-desc' | 'date-asc' | 'score-desc' | 'score-asc' | 'duration-desc';
 const SESSION_HISTORY_PAGE_SIZE = 10;
 
-const SESSION_DATE_FORMAT = new Intl.DateTimeFormat(undefined, {
-  year: 'numeric',
-  month: 'short',
-  day: '2-digit',
-});
-
-function formatSessionDate(date: string) {
-  const parsed = new Date(date);
-
-  if (Number.isNaN(parsed.getTime())) {
-    return date;
-  }
-
-  return SESSION_DATE_FORMAT.format(parsed);
-}
-
 function getStatusBadgeVariant(status: SessionStatus) {
   if (status === 'passed') {
     return 'success';
@@ -111,7 +95,7 @@ function compareRows(a: SessionRow, b: SessionRow, sortBy: SessionSort) {
   }
 
   if (sortBy === 'duration-desc') {
-    return b.durationMinutes - a.durationMinutes;
+    return b.durationSeconds - a.durationSeconds;
   }
 
   return new Date(b.date).getTime() - new Date(a.date).getTime();

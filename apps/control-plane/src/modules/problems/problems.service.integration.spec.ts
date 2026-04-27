@@ -40,7 +40,7 @@ describe('listProblems', () => {
     expect(result.pagination.hasMore).toBe(false);
   });
 
-  it('GIVEN difficulty filter WHEN listing THEN returns only matching difficulty', async () => {
+  it('GIVEN single difficulty filter WHEN listing THEN returns only matching difficulty', async () => {
     const user = await insertUser(db);
     await insertProblem(db, { difficulty: 'easy' });
     await insertProblem(db, { difficulty: 'hard' });
@@ -48,11 +48,28 @@ describe('listProblems', () => {
     const result = await service.listProblems(user.id, {
       limit: 20,
       sortOrder: 'desc',
-      difficulty: 'easy',
+      difficulty: ['easy'],
     });
 
     expect(result.data).toHaveLength(1);
     expect(result.data[0].difficulty).toBe('easy');
+  });
+
+  it('GIVEN multiple difficulty filters WHEN listing THEN returns the union of matching difficulties', async () => {
+    const user = await insertUser(db);
+    await insertProblem(db, { title: 'Easy', difficulty: 'easy' });
+    await insertProblem(db, { title: 'Medium', difficulty: 'medium' });
+    await insertProblem(db, { title: 'Hard', difficulty: 'hard' });
+
+    const result = await service.listProblems(user.id, {
+      limit: 20,
+      sortOrder: 'asc',
+      sortBy: 'difficulty',
+      difficulty: ['easy', 'hard'],
+    });
+
+    expect(result.data).toHaveLength(2);
+    expect(result.data.map((problem) => problem.difficulty)).toEqual(['easy', 'hard']);
   });
 
   it('GIVEN search query WHEN listing THEN matches against title and description', async () => {

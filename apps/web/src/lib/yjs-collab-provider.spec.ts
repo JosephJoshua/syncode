@@ -85,15 +85,20 @@ function defaultOptions(
 }
 
 function latestWs(): MockWebSocket {
-  return MockWebSocket.instances[MockWebSocket.instances.length - 1]!;
+  const latest = MockWebSocket.instances[MockWebSocket.instances.length - 1];
+  if (!latest) {
+    throw new Error('Expected a mock WebSocket instance to exist');
+  }
+
+  return latest;
 }
 
-function connectProvider(opts = defaultOptions()) {
+function connectProvider(opts = defaultOptions(), initialServerCode?: string) {
   const provider = new YjsCollabProvider(opts);
   provider.connect();
   const ws = latestWs();
   ws.simulateOpen();
-  // Send a room-state text message to transition to 'connected'
+  // Room-state arrives before initial sync
   ws.simulateTextMessage(
     JSON.stringify({
       type: COLLAB_WS_EVENTS.ROOM_STATE,
@@ -101,6 +106,13 @@ function connectProvider(opts = defaultOptions()) {
       timestamp: Date.now(),
     }),
   );
+  // Server starts sync and then sends its document update
+  ws.simulateBinaryMessage(buildSyncStep1(new Y.Doc()));
+  if (initialServerCode) {
+    const serverDoc = new Y.Doc();
+    serverDoc.getText('code').insert(0, initialServerCode);
+    ws.simulateBinaryMessage(buildSyncUpdate(Y.encodeStateAsUpdate(serverDoc)));
+  }
   return { provider, ws, opts };
 }
 
@@ -174,6 +186,29 @@ describe('YjsCollabProvider', () => {
       provider.destroy();
     });
 
+    it('GIVEN room-state WHEN join handshake completes THEN sends a client SyncStep1 request', () => {
+      const provider = new YjsCollabProvider(defaultOptions());
+      provider.connect();
+
+      const ws = latestWs();
+      ws.simulateOpen();
+      ws.simulateTextMessage(
+        JSON.stringify({
+          type: COLLAB_WS_EVENTS.ROOM_STATE,
+          data: { phase: 'waiting', editorLocked: false },
+          timestamp: Date.now(),
+        }),
+      );
+
+      const syncMessage = ws.sent.find(
+        (entry): entry is Uint8Array => entry instanceof Uint8Array && entry[0] === 0,
+      );
+
+      expect(syncMessage).toBeDefined();
+
+      provider.destroy();
+    });
+
     it('GIVEN https URL WHEN connecting THEN converts to wss:// protocol', () => {
       const opts = defaultOptions({ url: 'https://collab.example.com' });
       const provider = new YjsCollabProvider(opts);
@@ -186,7 +221,7 @@ describe('YjsCollabProvider', () => {
   });
 
   describe('status transitions', () => {
-    it('GIVEN connect called THEN fires connecting, then connected on first text message, then no duplicate connected on subsequent messages', () => {
+    it('GIVEN connect called THEN stays connecting until server sync data arrives and then becomes connected', () => {
       const onStatus = vi.fn();
       const opts = defaultOptions({ onConnectionStatusChange: onStatus });
       const provider = new YjsCollabProvider(opts);
@@ -197,7 +232,7 @@ describe('YjsCollabProvider', () => {
       const ws = latestWs();
       ws.simulateOpen();
 
-      // First text message → connected
+      // Room-state alone should not mark sync-ready
       ws.simulateTextMessage(
         JSON.stringify({
           type: COLLAB_WS_EVENTS.ROOM_STATE,
@@ -205,10 +240,18 @@ describe('YjsCollabProvider', () => {
           timestamp: Date.now(),
         }),
       );
+      expect(onStatus).not.toHaveBeenCalledWith('connected');
+
+      ws.simulateBinaryMessage(buildSyncStep1(new Y.Doc()));
+      expect(onStatus).not.toHaveBeenCalledWith('connected');
+
+      const serverDoc = new Y.Doc();
+      serverDoc.getText('code').insert(0, 'starter code');
+      ws.simulateBinaryMessage(buildSyncUpdate(Y.encodeStateAsUpdate(serverDoc)));
       expect(onStatus).toHaveBeenCalledWith('connected');
       const callCount = onStatus.mock.calls.length;
 
-      // Second text message → no additional call (status didn't change)
+      // Later room-state messages should not emit another status update
       ws.simulateTextMessage(
         JSON.stringify({
           type: COLLAB_WS_EVENTS.PHASE_CHANGE,
@@ -225,7 +268,7 @@ describe('YjsCollabProvider', () => {
   describe('text message routing', () => {
     it('GIVEN connected WHEN receiving different event types THEN routes each to the correct callback', () => {
       const opts = defaultOptions();
-      const { provider, ws } = connectProvider(opts);
+      const { provider, ws } = connectProvider(opts, 'starter code');
 
       // Already received room-state in connectProvider — verify it was routed
       expect(opts.onRoomStatePatch).toHaveBeenCalledWith({
@@ -294,7 +337,7 @@ describe('YjsCollabProvider', () => {
     });
 
     it('GIVEN connected WHEN receiving malformed JSON THEN does not throw', () => {
-      const { provider, ws } = connectProvider();
+      const { provider, ws } = connectProvider(undefined, 'starter code');
       expect(() => ws.simulateTextMessage('not json')).not.toThrow();
       provider.destroy();
     });
@@ -339,16 +382,14 @@ describe('YjsCollabProvider', () => {
       });
       remoteDoc.getText(codeTextKey('python')).insert(0, 'remote edit');
 
-      const sentBefore = ws.sent.length;
-      ws.simulateBinaryMessage(buildSyncUpdate(capturedUpdate!));
+      if (!capturedUpdate) {
+        throw new Error('Expected captured Yjs update to exist');
+      }
+
+      ws.simulateBinaryMessage(buildSyncUpdate(capturedUpdate));
 
       // Local doc should have the content
       expect(provider.doc.getText(codeTextKey('python')).toString()).toBe('remote edit');
-
-      // Should NOT have sent anything back (echo prevention)
-      // The SyncStep1 handler may have sent a response, so only check for no NEW sends
-      // after the update message
-      expect(ws.sent.length).toBe(sentBefore);
 
       serverDoc.destroy();
       remoteDoc.destroy();

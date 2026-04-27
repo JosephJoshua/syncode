@@ -480,19 +480,17 @@ export function RoomParticipantCard({
                 />
               ) : null}
               {hasManageActions ? (
-                <>
-                  <DropdownMenuItem
-                    disabled={isTransferringOwnership}
-                    onSelect={() => onTransferOwnership?.(participant.userId, displayName)}
-                  >
-                    {isTransferringOwnership ? (
-                      <Loader2 className="size-3.5 animate-spin text-muted-foreground" />
-                    ) : (
-                      <Crown className="size-3.5 text-muted-foreground" />
-                    )}
-                    {t('workspace.transferOwnership')}
-                  </DropdownMenuItem>
-                </>
+                <DropdownMenuItem
+                  disabled={isTransferringOwnership}
+                  onSelect={() => onTransferOwnership?.(participant.userId, displayName)}
+                >
+                  {isTransferringOwnership ? (
+                    <Loader2 className="size-3.5 animate-spin text-muted-foreground" />
+                  ) : (
+                    <Crown className="size-3.5 text-muted-foreground" />
+                  )}
+                  {t('workspace.transferOwnership')}
+                </DropdownMenuItem>
               ) : null}
             </DropdownMenuContent>
           </DropdownMenu>

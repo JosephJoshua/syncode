@@ -1,4 +1,13 @@
-import { Body, Controller, Inject, Logger, Param, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Inject,
+  InternalServerErrorException,
+  Logger,
+  Param,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiExcludeEndpoint } from '@nestjs/swagger';
 import { SkipThrottle } from '@nestjs/throttler';
 import {
@@ -53,18 +62,6 @@ export class InternalController {
     try {
       const { roomId, snapshot, code, language, timestamp, trigger } = payload;
 
-      const snapshotBuffer = Buffer.from(snapshot);
-      const key = `snapshots/${roomId}/${timestamp}.yjs`;
-      await this.storageService.upload(key, snapshotBuffer, {
-        contentType: 'application/octet-stream',
-        metadata: {
-          roomId,
-          timestamp: timestamp.toString(),
-        },
-      });
-
-      await this.roomsService.persistDocSnapshot(roomId, new Uint8Array(snapshot));
-
       const [session] = await this.db
         .select({ id: sessions.id, language: sessions.language })
         .from(sessions)
@@ -74,6 +71,7 @@ export class InternalController {
       // Prefer the payload language (reflects mid-session switches); fall back to
       // the session's initial language only if the payload omitted it.
       const persistedLanguage = language ?? session?.language ?? null;
+      let persistedToDatabase = false;
 
       if (session && persistedLanguage) {
         if (!language) {
@@ -90,9 +88,35 @@ export class InternalController {
           linesOfCode: code ? code.split('\n').length : 0,
           createdAt: new Date(timestamp),
         });
+        persistedToDatabase = true;
       } else {
         this.logger.warn(
           `Skipping DB insert for room ${roomId}: ${!session ? 'no session' : 'no language'}`,
+        );
+      }
+
+      const snapshotBuffer = Buffer.from(snapshot);
+      const key = `snapshots/${roomId}/${timestamp}.yjs`;
+
+      try {
+        await this.storageService.upload(key, snapshotBuffer, {
+          contentType: 'application/octet-stream',
+          metadata: {
+            roomId,
+            timestamp: timestamp.toString(),
+          },
+        });
+
+        await this.roomsService.persistDocSnapshot(roomId, new Uint8Array(snapshot));
+      } catch (error) {
+        if (!persistedToDatabase) {
+          throw error;
+        }
+
+        this.logger.warn(
+          `Snapshot blob upload failed for room ${roomId}, but code history was stored: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
         );
       }
 
@@ -100,7 +124,7 @@ export class InternalController {
       return { success: true };
     } catch (error) {
       this.logger.error('Failed to store snapshot', error);
-      return { success: false };
+      throw new InternalServerErrorException('Failed to store snapshot');
     }
   }
 

@@ -1,4 +1,4 @@
-import { UnauthorizedException } from '@nestjs/common';
+import { type ExecutionContext, UnauthorizedException } from '@nestjs/common';
 import type request from 'supertest';
 import { vi } from 'vitest';
 
@@ -20,7 +20,7 @@ export function createMockConfigService(overrides: Record<string, unknown> = {})
  * without shared mutable state.
  */
 export class TestAuthGuard {
-  canActivate(context: any) {
+  canActivate(context: ExecutionContext) {
     const req = context.switchToHttp().getRequest();
     const id = req.headers['x-test-user-id'];
     const email = req.headers['x-test-user-email'];
@@ -68,6 +68,33 @@ export function createMockMediaService() {
 export function createMockExecutionClient() {
   return {
     submit: vi.fn().mockResolvedValue({ jobId: 'stub-job' }),
+  };
+}
+
+export function createMockAiClient() {
+  return {
+    submitHintRequest: vi.fn().mockResolvedValue({ jobId: 'hint-job' }),
+    getHintResult: vi.fn().mockResolvedValue(null),
+    submitReviewRequest: vi.fn().mockResolvedValue({ jobId: 'review-job' }),
+    getReviewResult: vi.fn().mockResolvedValue(null),
+    submitInterviewResponse: vi.fn().mockResolvedValue({ jobId: 'interview-job' }),
+    getInterviewResult: vi.fn().mockResolvedValue(null),
+    submitSessionReportRequest: vi.fn().mockResolvedValue({ jobId: 'session-report-job' }),
+    getSessionReportResult: vi.fn().mockResolvedValue(null),
+    onSessionReportResult: vi.fn(),
+    getHintJobStatus: vi.fn().mockResolvedValue('queued'),
+    getReviewJobStatus: vi.fn().mockResolvedValue('queued'),
+    getInterviewJobStatus: vi.fn().mockResolvedValue('queued'),
+    getSessionReportJobStatus: vi.fn().mockResolvedValue('queued'),
+    healthCheck: vi.fn().mockResolvedValue(true),
+  };
+}
+
+export function createMockSessionReportsService() {
+  return {
+    enqueueForFinishedSession: vi.fn().mockResolvedValue(undefined),
+    handleResult: vi.fn().mockResolvedValue(undefined),
+    getReport: vi.fn(),
   };
 }
 
