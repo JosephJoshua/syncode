@@ -53,6 +53,10 @@ import {
   ListRoomsQueryDto,
   ListRoomsResponseDto,
   MediaTokenResponseDto,
+  RequestRoomAiHintDto,
+  RequestRoomAiHintResponseDto,
+  RoomChatMediaUploadDto,
+  RoomChatMediaUploadResponseDto,
   RoomDetailDto,
   RunCodeDto,
   RunCodeResponseDto,
@@ -303,6 +307,73 @@ export class RoomsController {
     @Body() body: SubmitProblemDto,
   ): Promise<SubmitCodeResponseDto> {
     return this.roomsService.submitProblem(id, user.id, body);
+  }
+
+  @Post(CONTROL_API.ROOMS.AI_HINT.route)
+  @HttpCode(202)
+  @ApiOperation({ summary: 'Request AI hint for current code' })
+  @ApiParam({ name: 'id', description: 'Room ID (UUID)' })
+  @ApiBody({ type: RequestRoomAiHintDto })
+  @ApiResponse({
+    status: 202,
+    type: RequestRoomAiHintResponseDto,
+    description: 'Hint request accepted',
+  })
+  @ApiResponse({
+    status: 403,
+    type: ErrorResponseDto,
+    description: 'No ai:request-hint capability',
+  })
+  @ApiResponse({
+    status: 404,
+    type: ErrorResponseDto,
+    description: 'No problem selected in room',
+  })
+  @ApiResponse({
+    status: 429,
+    type: ErrorResponseDto,
+    description: 'Hint rate limit exceeded (3 per 5 minutes)',
+  })
+  @ApiResponse({
+    status: 503,
+    type: ErrorResponseDto,
+    description: 'AI service unavailable',
+  })
+  async requestAiHint(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() body: RequestRoomAiHintDto,
+  ): Promise<RequestRoomAiHintResponseDto> {
+    return this.roomsService.requestAiHint(id, user.id, body);
+  }
+
+  @Post(CONTROL_API.ROOMS.CHAT_MEDIA_UPLOAD_URL.route)
+  @HttpCode(201)
+  @ApiOperation({ summary: 'Get presigned upload URL for room chat media' })
+  @ApiParam({ name: 'id', description: 'Room ID (UUID)' })
+  @ApiBody({ type: RoomChatMediaUploadDto })
+  @ApiResponse({
+    status: 201,
+    type: RoomChatMediaUploadResponseDto,
+    description: 'Presigned upload URL and media metadata',
+  })
+  @ApiResponse({
+    status: 400,
+    type: ErrorResponseDto,
+    description: 'Unsupported file type or file too large',
+  })
+  @ApiResponse({
+    status: 403,
+    type: ErrorResponseDto,
+    description: 'Not a participant or lacks chat capability',
+  })
+  @ApiResponse({ status: 404, type: ErrorResponseDto, description: 'Room not found' })
+  async getChatMediaUploadUrl(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() body: RoomChatMediaUploadDto,
+  ): Promise<RoomChatMediaUploadResponseDto> {
+    return this.roomsService.getRoomChatMediaUploadUrl(id, user.id, body);
   }
 
   @Post(CONTROL_API.ROOMS.TOGGLE_READY.route)

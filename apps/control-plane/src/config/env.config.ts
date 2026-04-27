@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+const DEFAULT_INTERNAL_CALLBACK_SECRET = 'dev-internal-callback-secret-change-me-1234567890';
+
 /**
  * Parses an env var string into a boolean.
  */
@@ -28,7 +30,8 @@ const envSchema = z
 
     INTERNAL_CALLBACK_SECRET: z
       .string()
-      .min(32, 'INTERNAL_CALLBACK_SECRET must be at least 32 characters'),
+      .min(32, 'INTERNAL_CALLBACK_SECRET must be at least 32 characters')
+      .default(DEFAULT_INTERNAL_CALLBACK_SECRET),
 
     S3_ENDPOINT: z.url(),
     S3_PUBLIC_ENDPOINT: z.url().optional(),
@@ -78,6 +81,16 @@ const envSchema = z
     {
       message:
         'Production environment cannot use stubs. Set USE_EXECUTION_STUB=false, USE_AI_STUB=false, and USE_COLLAB_STUB=false in production.',
+    },
+  )
+  .refine(
+    (env) =>
+      env.NODE_ENV !== 'production' ||
+      env.INTERNAL_CALLBACK_SECRET !== DEFAULT_INTERNAL_CALLBACK_SECRET,
+    {
+      message:
+        'INTERNAL_CALLBACK_SECRET must be explicitly set in production and must not use the development default.',
+      path: ['INTERNAL_CALLBACK_SECRET'],
     },
   );
 
