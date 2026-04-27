@@ -102,7 +102,7 @@
     "editorUnlocked": "Editor unlocked",
     "awaitingController": "Waiting for the host or current interviewer to open the workspace.",
     "readyFailed": "Failed to update ready status.",
-    "participantsNotReady": "All peer participants must be ready before starting."
+    "participantsNotReady": "All participants must be ready before starting."
   },
   "roleSelect": {
     "heading": "Your Role",
@@ -132,7 +132,7 @@
     "advanceTo": "Advance to {{stageName}}",
     "viewOnly": "Stage ownership belongs to the host or current interviewer.",
     "awaitingController": "You can watch the stage here, but only the host or current interviewer can move it.",
-    "awaitingReady": "Waiting for all peer participants to be ready."
+    "awaitingReady": "Waiting for all required participants to be ready."
   },
   "stage": {
     "waiting": "AWAITING_PEERS",

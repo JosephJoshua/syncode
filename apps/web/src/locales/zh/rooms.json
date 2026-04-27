@@ -102,7 +102,7 @@
     "editorUnlocked": "编辑器未锁定",
     "awaitingController": "等待主持人或当前面试官打开工作区。",
     "readyFailed": "更新准备状态失败。",
-    "participantsNotReady": "所有参与者必须先准备好才能开始。"
+    "participantsNotReady": "需所有参与者准备就绪后才能开始。"
   },
   "roleSelect": {
     "heading": "你的角色",
@@ -132,7 +132,7 @@
     "advanceTo": "推进至 {{stageName}}",
     "viewOnly": "只有主持人或当前面试官可以推进阶段。",
     "awaitingController": "你可以查看当前阶段，但只有主持人或当前面试官可以推进。",
-    "awaitingReady": "等待所有参与者都准备好。"
+    "awaitingReady": "等待所有必需的参与者准备就绪。"
   },
   "stage": {
     "waiting": "等待同步",

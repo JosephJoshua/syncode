@@ -1135,7 +1135,7 @@ export class RoomsService {
 
     if (required.length === 0 || required.some((participant) => !participant.isReady)) {
       throw new BadRequestException({
-        message: 'All peer participants must be ready to start the session.',
+        message: 'All required participants must be ready to start the session.',
         code: ERROR_CODES.ROOM_PARTICIPANTS_NOT_READY,
       });
     }

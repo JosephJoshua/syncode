@@ -13,7 +13,7 @@ export function allRequiredPeersReady(
   participants: ReadonlyArray<ReadinessParticipant>,
   mode: RoomDetail['mode'],
 ): boolean {
-  const required = requiredReadyRoles(mode);
-  const relevant = participants.filter((p) => p.isActive && required.includes(p.role as never));
+  const required: ReadinessParticipant['role'][] = requiredReadyRoles(mode);
+  const relevant = participants.filter((p) => p.isActive && required.includes(p.role));
   return relevant.length > 0 && relevant.every((p) => p.isReady);
 }
