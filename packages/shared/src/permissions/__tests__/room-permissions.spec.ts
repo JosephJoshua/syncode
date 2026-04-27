@@ -73,6 +73,25 @@ describe('Room Permissions', () => {
     });
   });
 
+  describe('code:change-language capability', () => {
+    test('GIVEN interviewer role WHEN checking code:change-language THEN returns true', () => {
+      expect(hasRoomPermission(RoomRole.INTERVIEWER, 'code:change-language')).toBe(true);
+    });
+
+    test('GIVEN candidate role WHEN checking code:change-language THEN returns true', () => {
+      expect(hasRoomPermission(RoomRole.CANDIDATE, 'code:change-language')).toBe(true);
+    });
+
+    test('GIVEN observer role without host WHEN checking code:change-language THEN returns false', () => {
+      expect(hasRoomPermission(RoomRole.OBSERVER, 'code:change-language')).toBe(false);
+    });
+
+    test('GIVEN observer with isHost=true WHEN resolving permissions THEN has code:change-language', () => {
+      const resolved = resolveRoomPermissions(RoomRole.OBSERVER, { isHost: true });
+      expect(resolved.has('code:change-language')).toBe(true);
+    });
+  });
+
   describe('Role hierarchy sanity', () => {
     test('GIVEN role hierarchy WHEN comparing THEN interviewer has most base capabilities and observer has fewest', () => {
       const interviewerPermissions = getRoomPermissions(RoomRole.INTERVIEWER);

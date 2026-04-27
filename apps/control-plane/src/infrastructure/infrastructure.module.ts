@@ -153,7 +153,8 @@ import { QueueExecutionClient } from './clients/queue-execution.client.js';
         }
 
         const collabUrl = config.get('COLLAB_PLANE_URL', { infer: true })!;
-        const client = new HttpCollabClient(collabUrl);
+        const internalSecret = config.get('INTERNAL_CALLBACK_SECRET', { infer: true })!;
+        const client = new HttpCollabClient(collabUrl, internalSecret);
         return createProtectedCollabClient(client, circuitBreaker);
       },
       inject: [ConfigService, CircuitBreakerAdapter],

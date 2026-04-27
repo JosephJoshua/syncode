@@ -1,12 +1,17 @@
 import type { IncomingMessage } from 'node:http';
-import { Logger, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
+import { Inject, Logger, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
 import {
   type OnGatewayConnection,
   type OnGatewayDisconnect,
   SubscribeMessage,
   WebSocketGateway,
 } from '@nestjs/websockets';
-import { COLLAB_WS_EVENTS, WsMessageType } from '@syncode/contracts';
+import {
+  COLLAB_WS_EVENTS,
+  CONTROL_PLANE_CALLBACK,
+  type IControlPlaneCallbackClient,
+  WsMessageType,
+} from '@syncode/contracts';
 import type { WebSocket } from 'ws';
 import type { AuthenticatedClient } from '../auth/index.js';
 import { WsAuthService } from '../auth/index.js';
@@ -33,6 +38,8 @@ export class CollaborationGateway
     private readonly collaborationService: CollaborationService,
     private readonly syncHandler: YjsSyncHandler,
     private readonly awarenessHandler: AwarenessHandler,
+    @Inject(CONTROL_PLANE_CALLBACK)
+    private readonly callbackClient: IControlPlaneCallbackClient,
   ) {}
 
   onModuleInit(): void {
@@ -47,6 +54,7 @@ export class CollaborationGateway
   }
 
   private heartbeat(): void {
+    const batch: Array<{ roomId: string; userId: string }> = [];
     for (const client of this.clients) {
       if (client.readyState !== client.OPEN) {
         this.clients.delete(client);
@@ -59,9 +67,22 @@ export class CollaborationGateway
         ws.terminate();
         continue;
       }
+
+      // Collect authenticated + currently-alive clients into the heartbeat batch
+      // BEFORE we flip isAlive=false for the ping/pong round-trip.
+      const authenticated = client as AuthenticatedClient;
+      if (authenticated.user) {
+        batch.push({
+          roomId: authenticated.user.roomId,
+          userId: authenticated.user.sub,
+        });
+      }
+
       ws.isAlive = false;
       ws.ping();
     }
+
+    this.collaborationService.heartbeatParticipants(batch);
   }
 
   async handleConnection(client: WebSocket, request: IncomingMessage): Promise<void> {
@@ -129,7 +150,7 @@ export class CollaborationGateway
   }
 
   @SubscribeMessage('join')
-  handleJoin(client: WebSocket, data: JoinMessageData): void {
+  async handleJoin(client: WebSocket, data: JoinMessageData): Promise<void> {
     const authenticated = client as AuthenticatedClient;
     if (!authenticated.user) {
       client.close(WsCloseCode.UNAUTHORIZED, 'Unauthorized');
@@ -153,6 +174,18 @@ export class CollaborationGateway
 
     if (!this.roomRegistry.hasRoom(roomId)) {
       client.close(WsCloseCode.ROOM_NOT_FOUND, 'Room not found');
+      return;
+    }
+
+    // Authoritative re-check against control-plane. The collab JWT is long-lived
+    // (24h), so a kicked user may still hold a valid token. The in-memory room
+    // registry has no kick history, so without this we would let them back in.
+    const decision = await this.callbackClient.authorizeJoin(roomId, userId);
+    if (!decision.authorized) {
+      this.logger.warn(
+        `Join denied for userId=${userId}, roomId=${roomId}: reason=${decision.reason ?? 'unknown'}`,
+      );
+      client.close(WsCloseCode.FORBIDDEN, decision.reason ?? 'Join denied');
       return;
     }
 

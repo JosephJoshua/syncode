@@ -17,11 +17,13 @@ import { Route as PublicLoginRouteImport } from './routes/_public/login'
 import { Route as AppProfileRouteImport } from './routes/_app/profile'
 import { Route as AppDashboardRouteImport } from './routes/_app/dashboard'
 import { Route as AppBookmarksRouteImport } from './routes/_app/bookmarks'
-import { Route as AppRoomsIndexRouteImport } from './routes/_app/rooms.index'
+import { Route as AppRoomsRouteRouteImport } from './routes/_app/rooms/route'
+import { Route as AppRoomsIndexRouteImport } from './routes/_app/rooms/index'
 import { Route as AppProblemsIndexRouteImport } from './routes/_app/problems.index'
 import { Route as AppSessionsSessionIdRouteImport } from './routes/_app/sessions.$sessionId'
-import { Route as AppRoomsCreateRouteImport } from './routes/_app/rooms.create'
-import { Route as AppRoomsRoomIdRouteImport } from './routes/_app/rooms.$roomId'
+import { Route as AppRoomsCreateRouteImport } from './routes/_app/rooms_.create'
+import { Route as AppRoomsRoomIdRouteImport } from './routes/_app/rooms_.$roomId'
+import { Route as AppRoomsBrowseRouteImport } from './routes/_app/rooms/browse'
 import { Route as AppProblemsProblemIdRouteImport } from './routes/_app/problems.$problemId'
 import { Route as AppSessionsSessionIdFeedbackRouteImport } from './routes/_app/sessions.$sessionId.feedback'
 
@@ -63,10 +65,15 @@ const AppBookmarksRoute = AppBookmarksRouteImport.update({
   path: '/bookmarks',
   getParentRoute: () => AppRouteRoute,
 } as any)
-const AppRoomsIndexRoute = AppRoomsIndexRouteImport.update({
-  id: '/rooms/',
-  path: '/rooms/',
+const AppRoomsRouteRoute = AppRoomsRouteRouteImport.update({
+  id: '/rooms',
+  path: '/rooms',
   getParentRoute: () => AppRouteRoute,
+} as any)
+const AppRoomsIndexRoute = AppRoomsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AppRoomsRouteRoute,
 } as any)
 const AppProblemsIndexRoute = AppProblemsIndexRouteImport.update({
   id: '/problems/',
@@ -79,14 +86,19 @@ const AppSessionsSessionIdRoute = AppSessionsSessionIdRouteImport.update({
   getParentRoute: () => AppRouteRoute,
 } as any)
 const AppRoomsCreateRoute = AppRoomsCreateRouteImport.update({
-  id: '/rooms/create',
+  id: '/rooms_/create',
   path: '/rooms/create',
   getParentRoute: () => AppRouteRoute,
 } as any)
 const AppRoomsRoomIdRoute = AppRoomsRoomIdRouteImport.update({
-  id: '/rooms/$roomId',
+  id: '/rooms_/$roomId',
   path: '/rooms/$roomId',
   getParentRoute: () => AppRouteRoute,
+} as any)
+const AppRoomsBrowseRoute = AppRoomsBrowseRouteImport.update({
+  id: '/browse',
+  path: '/browse',
+  getParentRoute: () => AppRoomsRouteRoute,
 } as any)
 const AppProblemsProblemIdRoute = AppProblemsProblemIdRouteImport.update({
   id: '/problems/$problemId',
@@ -102,12 +114,14 @@ const AppSessionsSessionIdFeedbackRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof PublicIndexRoute
+  '/rooms': typeof AppRoomsRouteRouteWithChildren
   '/bookmarks': typeof AppBookmarksRoute
   '/dashboard': typeof AppDashboardRoute
   '/profile': typeof AppProfileRoute
   '/login': typeof PublicLoginRoute
   '/register': typeof PublicRegisterRoute
   '/problems/$problemId': typeof AppProblemsProblemIdRoute
+  '/rooms/browse': typeof AppRoomsBrowseRoute
   '/rooms/$roomId': typeof AppRoomsRoomIdRoute
   '/rooms/create': typeof AppRoomsCreateRoute
   '/sessions/$sessionId': typeof AppSessionsSessionIdRouteWithChildren
@@ -123,6 +137,7 @@ export interface FileRoutesByTo {
   '/login': typeof PublicLoginRoute
   '/register': typeof PublicRegisterRoute
   '/problems/$problemId': typeof AppProblemsProblemIdRoute
+  '/rooms/browse': typeof AppRoomsBrowseRoute
   '/rooms/$roomId': typeof AppRoomsRoomIdRoute
   '/rooms/create': typeof AppRoomsCreateRoute
   '/sessions/$sessionId': typeof AppSessionsSessionIdRouteWithChildren
@@ -134,6 +149,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_app': typeof AppRouteRouteWithChildren
   '/_public': typeof PublicRouteRouteWithChildren
+  '/_app/rooms': typeof AppRoomsRouteRouteWithChildren
   '/_app/bookmarks': typeof AppBookmarksRoute
   '/_app/dashboard': typeof AppDashboardRoute
   '/_app/profile': typeof AppProfileRoute
@@ -141,8 +157,9 @@ export interface FileRoutesById {
   '/_public/register': typeof PublicRegisterRoute
   '/_public/': typeof PublicIndexRoute
   '/_app/problems/$problemId': typeof AppProblemsProblemIdRoute
-  '/_app/rooms/$roomId': typeof AppRoomsRoomIdRoute
-  '/_app/rooms/create': typeof AppRoomsCreateRoute
+  '/_app/rooms/browse': typeof AppRoomsBrowseRoute
+  '/_app/rooms_/$roomId': typeof AppRoomsRoomIdRoute
+  '/_app/rooms_/create': typeof AppRoomsCreateRoute
   '/_app/sessions/$sessionId': typeof AppSessionsSessionIdRouteWithChildren
   '/_app/problems/': typeof AppProblemsIndexRoute
   '/_app/rooms/': typeof AppRoomsIndexRoute
@@ -152,12 +169,14 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/rooms'
     | '/bookmarks'
     | '/dashboard'
     | '/profile'
     | '/login'
     | '/register'
     | '/problems/$problemId'
+    | '/rooms/browse'
     | '/rooms/$roomId'
     | '/rooms/create'
     | '/sessions/$sessionId'
@@ -173,6 +192,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/register'
     | '/problems/$problemId'
+    | '/rooms/browse'
     | '/rooms/$roomId'
     | '/rooms/create'
     | '/sessions/$sessionId'
@@ -183,6 +203,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/_app'
     | '/_public'
+    | '/_app/rooms'
     | '/_app/bookmarks'
     | '/_app/dashboard'
     | '/_app/profile'
@@ -190,8 +211,9 @@ export interface FileRouteTypes {
     | '/_public/register'
     | '/_public/'
     | '/_app/problems/$problemId'
-    | '/_app/rooms/$roomId'
-    | '/_app/rooms/create'
+    | '/_app/rooms/browse'
+    | '/_app/rooms_/$roomId'
+    | '/_app/rooms_/create'
     | '/_app/sessions/$sessionId'
     | '/_app/problems/'
     | '/_app/rooms/'
@@ -261,12 +283,19 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppBookmarksRouteImport
       parentRoute: typeof AppRouteRoute
     }
+    '/_app/rooms': {
+      id: '/_app/rooms'
+      path: '/rooms'
+      fullPath: '/rooms'
+      preLoaderRoute: typeof AppRoomsRouteRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
     '/_app/rooms/': {
       id: '/_app/rooms/'
-      path: '/rooms'
+      path: '/'
       fullPath: '/rooms/'
       preLoaderRoute: typeof AppRoomsIndexRouteImport
-      parentRoute: typeof AppRouteRoute
+      parentRoute: typeof AppRoomsRouteRoute
     }
     '/_app/problems/': {
       id: '/_app/problems/'
@@ -282,19 +311,26 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppSessionsSessionIdRouteImport
       parentRoute: typeof AppRouteRoute
     }
-    '/_app/rooms/create': {
-      id: '/_app/rooms/create'
+    '/_app/rooms_/create': {
+      id: '/_app/rooms_/create'
       path: '/rooms/create'
       fullPath: '/rooms/create'
       preLoaderRoute: typeof AppRoomsCreateRouteImport
       parentRoute: typeof AppRouteRoute
     }
-    '/_app/rooms/$roomId': {
-      id: '/_app/rooms/$roomId'
+    '/_app/rooms_/$roomId': {
+      id: '/_app/rooms_/$roomId'
       path: '/rooms/$roomId'
       fullPath: '/rooms/$roomId'
       preLoaderRoute: typeof AppRoomsRoomIdRouteImport
       parentRoute: typeof AppRouteRoute
+    }
+    '/_app/rooms/browse': {
+      id: '/_app/rooms/browse'
+      path: '/browse'
+      fullPath: '/rooms/browse'
+      preLoaderRoute: typeof AppRoomsBrowseRouteImport
+      parentRoute: typeof AppRoomsRouteRoute
     }
     '/_app/problems/$problemId': {
       id: '/_app/problems/$problemId'
@@ -313,6 +349,20 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface AppRoomsRouteRouteChildren {
+  AppRoomsBrowseRoute: typeof AppRoomsBrowseRoute
+  AppRoomsIndexRoute: typeof AppRoomsIndexRoute
+}
+
+const AppRoomsRouteRouteChildren: AppRoomsRouteRouteChildren = {
+  AppRoomsBrowseRoute: AppRoomsBrowseRoute,
+  AppRoomsIndexRoute: AppRoomsIndexRoute,
+}
+
+const AppRoomsRouteRouteWithChildren = AppRoomsRouteRoute._addFileChildren(
+  AppRoomsRouteRouteChildren,
+)
+
 interface AppSessionsSessionIdRouteChildren {
   AppSessionsSessionIdFeedbackRoute: typeof AppSessionsSessionIdFeedbackRoute
 }
@@ -325,6 +375,7 @@ const AppSessionsSessionIdRouteWithChildren =
   AppSessionsSessionIdRoute._addFileChildren(AppSessionsSessionIdRouteChildren)
 
 interface AppRouteRouteChildren {
+  AppRoomsRouteRoute: typeof AppRoomsRouteRouteWithChildren
   AppBookmarksRoute: typeof AppBookmarksRoute
   AppDashboardRoute: typeof AppDashboardRoute
   AppProfileRoute: typeof AppProfileRoute
@@ -333,10 +384,10 @@ interface AppRouteRouteChildren {
   AppRoomsCreateRoute: typeof AppRoomsCreateRoute
   AppSessionsSessionIdRoute: typeof AppSessionsSessionIdRouteWithChildren
   AppProblemsIndexRoute: typeof AppProblemsIndexRoute
-  AppRoomsIndexRoute: typeof AppRoomsIndexRoute
 }
 
 const AppRouteRouteChildren: AppRouteRouteChildren = {
+  AppRoomsRouteRoute: AppRoomsRouteRouteWithChildren,
   AppBookmarksRoute: AppBookmarksRoute,
   AppDashboardRoute: AppDashboardRoute,
   AppProfileRoute: AppProfileRoute,
@@ -345,7 +396,6 @@ const AppRouteRouteChildren: AppRouteRouteChildren = {
   AppRoomsCreateRoute: AppRoomsCreateRoute,
   AppSessionsSessionIdRoute: AppSessionsSessionIdRouteWithChildren,
   AppProblemsIndexRoute: AppProblemsIndexRoute,
-  AppRoomsIndexRoute: AppRoomsIndexRoute,
 }
 
 const AppRouteRouteWithChildren = AppRouteRoute._addFileChildren(

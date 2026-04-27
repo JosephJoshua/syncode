@@ -20,7 +20,15 @@ describe('RoomRegistry', () => {
       expect(room.roomId).toBe('room-1');
       expect(room.createdAt).toBeGreaterThan(0);
       expect(room.clients.size).toBe(0);
+      expect(room.language).toBeNull();
       expect(registry.hasRoom('room-1')).toBe(true);
+    });
+
+    it('GIVEN language option WHEN creating THEN room reflects the active language', () => {
+      const registry = new RoomRegistry();
+      const room = registry.createRoom('room-1', { language: 'python' });
+
+      expect(room.language).toBe('python');
     });
 
     it('GIVEN existing room WHEN creating duplicate THEN throws ConflictException', () => {
@@ -107,6 +115,32 @@ describe('RoomRegistry', () => {
       expect(() =>
         registry.updateRoomState('room-1', { phase: 'coding', editorLocked: false }),
       ).toThrow(NotFoundException);
+    });
+  });
+
+  describe('updateLanguage', () => {
+    it('GIVEN existing room WHEN updating language THEN registry reflects new language', () => {
+      const registry = new RoomRegistry();
+      registry.createRoom('room-1', { language: 'python' });
+
+      registry.updateLanguage('room-1', 'javascript');
+
+      expect(registry.getRoom('room-1')?.language).toBe('javascript');
+    });
+
+    it('GIVEN room without initial language WHEN updating language THEN language is set', () => {
+      const registry = new RoomRegistry();
+      registry.createRoom('room-1');
+
+      registry.updateLanguage('room-1', 'python');
+
+      expect(registry.getRoom('room-1')?.language).toBe('python');
+    });
+
+    it('GIVEN non-existent room WHEN updating language THEN throws NotFoundException', () => {
+      const registry = new RoomRegistry();
+
+      expect(() => registry.updateLanguage('room-1', 'python')).toThrow(NotFoundException);
     });
   });
 

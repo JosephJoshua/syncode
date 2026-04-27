@@ -4,7 +4,7 @@ import { MonacoBinding } from 'y-monaco';
 import type { Awareness } from 'y-protocols/awareness';
 import type * as Y from 'yjs';
 import { clientIdFromElement, remoteCursorSelector } from '@/lib/remote-cursor-dom.js';
-import { CODE_TEXT_KEY } from '@/lib/yjs-collab-provider.js';
+import { codeTextKey } from '@/lib/yjs-collab-provider.js';
 import { buildCursorCssRules, IDLE_HIDE_MS } from './cursor-styles.js';
 import {
   EDITOR_LOADING,
@@ -30,6 +30,8 @@ export function CollaborativeEditor({
   onSubmitCode,
 }: CollaborativeEditorProps) {
   const bindingRef = useRef<MonacoBinding | null>(null);
+  type EditorInstance = Parameters<OnMount>[0];
+  const [editor, setEditor] = useState<EditorInstance | null>(null);
   const [editorRoot, setEditorRoot] = useState<HTMLElement | null>(null);
   const onRunCodeRef = useRef(onRunCode);
   onRunCodeRef.current = onRunCode;
@@ -38,37 +40,41 @@ export function CollaborativeEditor({
 
   const editorOptions = useMemo(() => ({ ...EDITOR_OPTIONS_BASE, readOnly }), [readOnly]);
 
-  const handleMount: OnMount = (editor, monaco) => {
-    editor.addAction({
+  const handleMount: OnMount = (editorInstance, monaco) => {
+    // Register keyboard shortcuts
+    editorInstance.addAction({
       id: 'syncode-run',
       label: 'Run Code',
       keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter],
       run: () => void onRunCodeRef.current(),
     });
 
-    editor.addAction({
+    editorInstance.addAction({
       id: 'syncode-submit',
       label: 'Submit Code',
       keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.Enter],
       run: () => void onSubmitCodeRef.current(),
     });
 
-    setEditorRoot(editor.getDomNode());
+    setEditor(editorInstance);
+    setEditorRoot(editorInstance.getDomNode());
+  };
+
+  useEffect(() => {
+    if (!editor) return;
 
     const model = editor.getModel();
     if (model == null) return;
 
-    const yText = doc.getText(CODE_TEXT_KEY);
+    bindingRef.current?.destroy();
+    const yText = doc.getText(codeTextKey(language));
     bindingRef.current = new MonacoBinding(yText, model, new Set([editor]), awareness);
-  };
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: doc and awareness are intentional deps; when they change the old binding must be destroyed so handleMount creates a fresh one.
-  useEffect(() => {
     return () => {
       bindingRef.current?.destroy();
       bindingRef.current = null;
     };
-  }, [doc, awareness]);
+  }, [editor, doc, awareness, language]);
 
   useEffect(() => {
     if (!editorRoot) return;
