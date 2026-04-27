@@ -920,6 +920,7 @@ export class RoomsService {
           RoomStatus.WARMUP,
           activeParticipants,
         );
+        this.assertRequiredParticipantsReady(lockedRoom.mode as RoomMode, activeParticipants);
       }
 
       const roomUpdate: Partial<typeof rooms.$inferInsert> = {
@@ -1124,6 +1125,27 @@ export class RoomsService {
     }
   }
 
+  private assertRequiredParticipantsReady(
+    mode: RoomMode,
+    activeParticipants: Array<{ userId: string; role: RoomRole; isReady: boolean }>,
+  ): void {
+    const requiredRoles: RoomRole[] =
+      mode === 'peer' ? [RoomRole.INTERVIEWER, RoomRole.CANDIDATE] : [RoomRole.CANDIDATE];
+
+    // role is the mode-resolved runtime role (see fetchActiveParticipants), not the raw DB value,
+    // so host-as-candidate in AI mode lands on CANDIDATE here as expected.
+    const required = activeParticipants.filter((participant) =>
+      requiredRoles.includes(participant.role),
+    );
+
+    if (required.length === 0 || required.some((participant) => !participant.isReady)) {
+      throw new BadRequestException({
+        message: 'All required participants must be ready to start the session.',
+        code: ERROR_CODES.ROOM_PARTICIPANTS_NOT_READY,
+      });
+    }
+  }
+
   private async getRoomContext(roomId: string, userId: string) {
     const [[room], [participant]] = await Promise.all([
       this.db.select().from(rooms).where(eq(rooms.id, roomId)),
@@ -1155,11 +1177,12 @@ export class RoomsService {
   private async fetchActiveParticipants(
     db: Pick<Database, 'select'>,
     room: typeof rooms.$inferSelect,
-  ): Promise<Array<{ userId: string; role: RoomRole }>> {
+  ): Promise<Array<{ userId: string; role: RoomRole; isReady: boolean }>> {
     const participants = await db
       .select({
         userId: roomParticipants.userId,
         role: roomParticipants.role,
+        isReady: roomParticipants.isReady,
       })
       .from(roomParticipants)
       .where(and(eq(roomParticipants.roomId, room.id), eq(roomParticipants.isActive, true)));
@@ -1172,6 +1195,7 @@ export class RoomsService {
         room.hostId,
         participant.userId,
       ),
+      isReady: participant.isReady,
     }));
   }
 

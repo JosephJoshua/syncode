@@ -5,6 +5,7 @@ import { motion } from 'motion/react';
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useClipboard } from '@/hooks/use-clipboard.js';
+import { allRequiredPeersReady } from '@/lib/participant-readiness.js';
 import {
   buildInviteLink,
   countActiveRoleConfiguration,
@@ -89,7 +90,12 @@ export function RoomLobby({
   const myReady = Boolean(
     currentUserId && activeParticipants.find((p) => p.userId === currentUserId)?.isReady,
   );
-  const canEnterWorkspace = status === 'waiting' && canChangePhase && isRoomValid && myReady;
+  const allPeersReady = useMemo(
+    () => allRequiredPeersReady(participants, mode),
+    [participants, mode],
+  );
+  const canEnterWorkspace =
+    status === 'waiting' && canChangePhase && isRoomValid && myReady && allPeersReady;
 
   const inviteLink = buildInviteLink(roomId, roomCode);
 
@@ -254,6 +260,10 @@ export function RoomLobby({
                   ) : !myReady && canChangePhase ? (
                     <p className="text-[11px] text-muted-foreground">
                       {t('readyButton.readyFirst')}
+                    </p>
+                  ) : myReady && !allPeersReady && canChangePhase ? (
+                    <p className="text-[11px] text-muted-foreground">
+                      {t('hostControl.awaitingReady')}
                     </p>
                   ) : null}
                   <Button
