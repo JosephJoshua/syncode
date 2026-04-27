@@ -7,6 +7,7 @@ import {
   type IControlPlaneCallbackClient,
   type ParticipantHeartbeatRequest,
   type ParticipantHeartbeatResponse,
+  type PersistDocSnapshotPayload,
   type SnapshotReadyPayload,
   type UserDisconnectedPayload,
 } from '@syncode/contracts';
@@ -88,6 +89,23 @@ export class HttpControlPlaneCallbackClient implements IControlPlaneCallbackClie
       );
       // Fail closed: deny the join if we cannot reach control-plane.
       return { authorized: false };
+    }
+  }
+
+  async persistDocSnapshot(roomId: string, payload: PersistDocSnapshotPayload): Promise<void> {
+    try {
+      const path = CONTROL_INTERNAL.PERSIST_DOC_SNAPSHOT.route.replace(
+        ':roomId',
+        encodeURIComponent(roomId),
+      );
+      await this.client.post(path, { json: payload });
+      this.logger.debug(
+        `Persisted doc snapshot for room ${roomId} (${payload.state.length} bytes)`,
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Failed to persist doc snapshot (roomId=${roomId}): ${(error as Error).message}`,
+      );
     }
   }
 }

@@ -1,6 +1,6 @@
 {
-  "id": "1be58c14-fc0a-4a9f-96a3-1f3088a883dc",
-  "prevId": "b1efd736-72e3-41ae-8ba9-ce8f7337805a",
+  "id": "fadb587f-5b79-411b-9e37-4998ef0ed7a6",
+  "prevId": "162ce4e2-cd69-4c42-a989-1e4b9037ed2f",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1996,6 +1996,48 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.room_doc_snapshots": {
+      "name": "room_doc_snapshots",
+      "schema": "",
+      "columns": {
+        "room_id": {
+          "name": "room_id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "state": {
+          "name": "state",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "room_doc_snapshots_room_id_rooms_id_fk": {
+          "name": "room_doc_snapshots_room_id_rooms_id_fk",
+          "tableFrom": "room_doc_snapshots",
+          "tableTo": "rooms",
+          "columnsFrom": ["room_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.room_participants": {
       "name": "room_participants",
       "schema": "",
@@ -2049,12 +2091,6 @@
         },
         "left_at": {
           "name": "left_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "removed_at": {
-          "name": "removed_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false

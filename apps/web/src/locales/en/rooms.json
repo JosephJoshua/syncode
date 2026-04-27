@@ -157,7 +157,8 @@
     "editorUnlocked": "Editor unlocked",
     "awaitingController": "Waiting for the host or current interviewer to open the workspace.",
     "readyFailed": "Failed to update ready status.",
-    "removedFromRoom": "You have been removed from this room by the host."
+    "removedFromRoom": "You have been removed from this room by the host.",
+    "participantsNotReady": "All participants must be ready before starting."
   },
   "roleSelect": {
     "heading": "Your Role",
@@ -186,7 +187,8 @@
     "endSession": "End Session",
     "advanceTo": "Advance to {{stageName}}",
     "viewOnly": "Stage ownership belongs to the host or current interviewer.",
-    "awaitingController": "You can watch the stage here, but only the host or current interviewer can move it."
+    "awaitingController": "You can watch the stage here, but only the host or current interviewer can move it.",
+    "awaitingReady": "Waiting for all required participants to be ready."
   },
   "stage": {
     "waiting": "AWAITING_PEERS",
@@ -248,6 +250,8 @@
     "emptyStderr": "(no stderr)",
     "participantsHeading": "Participants",
     "participantActions": "Participant actions",
+    "muteMyMicrophone": "Mute my microphone",
+    "unmuteMyMicrophone": "Unmute my microphone",
     "transferOwnership": "Make host",
     "removeParticipant": "Remove participant",
     "removeParticipantTitle": "Remove Participant",

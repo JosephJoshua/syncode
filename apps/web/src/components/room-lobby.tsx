@@ -7,6 +7,7 @@ import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useClipboard } from '@/hooks/use-clipboard.js';
 import type { CollabConnectionStatus } from '@/hooks/use-yjs-collab.js';
+import { allRequiredPeersReady } from '@/lib/participant-readiness.js';
 import {
   buildInviteLink,
   countActiveRoleConfiguration,
@@ -51,6 +52,8 @@ interface RoomLobbyProps {
     muteSet: ReadonlySet<string>;
     videoHiddenSet: ReadonlySet<string>;
   };
+  selfMicrophoneEnabled?: boolean;
+  onSelfMicrophoneToggle?: () => void;
 }
 
 const COLLAB_STATUS_DOT: Record<CollabConnectionStatus, string> = {
@@ -95,6 +98,8 @@ export function RoomLobby({
   mediaConnectedSet,
   mediaMutedMap,
   participantMediaControls,
+  selfMicrophoneEnabled,
+  onSelfMicrophoneToggle,
 }: RoomLobbyProps) {
   const { t } = useTranslation('rooms');
   const { copied, copy } = useClipboard();
@@ -116,7 +121,12 @@ export function RoomLobby({
   const myReady = Boolean(
     currentUserId && activeParticipants.find((p) => p.userId === currentUserId)?.isReady,
   );
-  const canEnterWorkspace = status === 'waiting' && canChangePhase && isRoomValid && myReady;
+  const allPeersReady = useMemo(
+    () => allRequiredPeersReady(participants, mode),
+    [participants, mode],
+  );
+  const canEnterWorkspace =
+    status === 'waiting' && canChangePhase && isRoomValid && myReady && allPeersReady;
   const rolesLocked = status !== 'waiting';
   const collabStatusLabel = t(COLLAB_STATUS_LABEL_KEY[collabStatus]);
 
@@ -189,6 +199,8 @@ export function RoomLobby({
                     participantMediaControls?.videoHiddenSet.has(participant.userId) ?? false
                   }
                   localVolume={participantMediaControls?.volumeMap.get(participant.userId)}
+                  isSelfMicrophoneEnabled={selfMicrophoneEnabled}
+                  onSelfMicrophoneToggle={onSelfMicrophoneToggle}
                   onLocalMuteToggle={
                     participantMediaControls
                       ? (muted) => participantMediaControls.setMuted(participant.userId, muted)
@@ -310,6 +322,10 @@ export function RoomLobby({
                   ) : !myReady && canChangePhase ? (
                     <p className="text-[11px] text-muted-foreground">
                       {t('readyButton.readyFirst')}
+                    </p>
+                  ) : myReady && !allPeersReady && canChangePhase ? (
+                    <p className="text-[11px] text-muted-foreground">
+                      {t('hostControl.awaitingReady')}
                     </p>
                   ) : null}
                   <Button

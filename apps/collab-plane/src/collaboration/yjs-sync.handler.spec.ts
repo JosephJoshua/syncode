@@ -142,7 +142,7 @@ describe('YjsSyncHandler', () => {
   describe('registerUpdateBroadcast', () => {
     it('GIVEN two clients WHEN a doc update is applied THEN only the other client receives the broadcast', () => {
       const { docStore, roomRegistry, handler } = setup();
-      const doc = docStore.createDoc('room-1');
+      const { doc } = docStore.createDoc('room-1');
       roomRegistry.createRoom('room-1');
       const client1 = fakeClient('user-1');
       const client2 = fakeClient('user-2');

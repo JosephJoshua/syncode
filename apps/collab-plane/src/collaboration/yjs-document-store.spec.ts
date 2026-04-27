@@ -1,20 +1,20 @@
-import { ConflictException } from '@nestjs/common';
 import { describe, expect, it } from 'vitest';
 import * as Y from 'yjs';
 import { YjsDocumentStore } from './yjs-document-store.js';
 
 describe('YjsDocumentStore', () => {
   describe('createDoc', () => {
-    it('GIVEN no existing doc WHEN creating THEN returns a Y.Doc', () => {
+    it('GIVEN no existing doc WHEN creating THEN returns a Y.Doc with created=true', () => {
       const store = new YjsDocumentStore();
-      const doc = store.createDoc('room-1');
+      const { doc, created } = store.createDoc('room-1');
 
       expect(doc).toBeInstanceOf(Y.Doc);
+      expect(created).toBe(true);
     });
 
     it('GIVEN initialContentByLanguage WHEN creating THEN each language Y.Text has its seed', () => {
       const store = new YjsDocumentStore();
-      const doc = store.createDoc('room-1', {
+      const { doc } = store.createDoc('room-1', {
         initialContentByLanguage: {
           python: '# py starter',
           javascript: '// js starter',
@@ -27,26 +27,88 @@ describe('YjsDocumentStore', () => {
 
     it('GIVEN no initialContentByLanguage WHEN creating THEN all language Y.Texts are empty', () => {
       const store = new YjsDocumentStore();
-      const doc = store.createDoc('room-1');
+      const { doc } = store.createDoc('room-1');
 
       expect(doc.getText('code:python').toString()).toBe('');
       expect(doc.getText('code:javascript').toString()).toBe('');
     });
 
-    it('GIVEN existing doc WHEN creating duplicate THEN throws ConflictException', () => {
-      const store = new YjsDocumentStore();
-      store.createDoc('room-1');
+    it('GIVEN snapshot WHEN creating THEN the doc state matches the snapshot content', () => {
+      const seed = new Y.Doc();
+      seed.getText('code').insert(0, 'from-snapshot');
+      const snapshot = Y.encodeStateAsUpdate(seed);
+      seed.destroy();
 
-      expect(() => store.createDoc('room-1')).toThrow(ConflictException);
+      const store = new YjsDocumentStore();
+      const { doc, created } = store.createDoc('room-1', { snapshot });
+
+      expect(created).toBe(true);
+      expect(doc.getText('code').toString()).toBe('from-snapshot');
+    });
+
+    it('GIVEN both snapshot and initialContentByLanguage WHEN creating THEN snapshot takes precedence', () => {
+      const seed = new Y.Doc();
+      seed.getText('code:python').insert(0, 'from-snapshot');
+      const snapshot = Y.encodeStateAsUpdate(seed);
+      seed.destroy();
+
+      const store = new YjsDocumentStore();
+      const { doc } = store.createDoc('room-1', {
+        snapshot,
+        initialContentByLanguage: { python: 'starter' },
+      });
+
+      expect(doc.getText('code:python').toString()).toBe('from-snapshot');
+    });
+
+    it('GIVEN corrupt snapshot WHEN creating THEN does not throw and returns a usable Y.Doc', () => {
+      const store = new YjsDocumentStore();
+      const corrupt = new Uint8Array([0xff, 0x00]);
+
+      const result = store.createDoc('room-1', { snapshot: corrupt });
+
+      expect(result.created).toBe(true);
+      expect(result.doc).toBeInstanceOf(Y.Doc);
+      // doc is still usable
+      result.doc.getText('code').insert(0, 'after-recovery');
+      expect(result.doc.getText('code').toString()).toBe('after-recovery');
+    });
+
+    it('GIVEN corrupt snapshot with initialContentByLanguage WHEN creating THEN seeds the starter content', () => {
+      const store = new YjsDocumentStore();
+      const corrupt = new Uint8Array([0xff, 0x00]);
+
+      const { doc, created } = store.createDoc('room-1', {
+        snapshot: corrupt,
+        initialContentByLanguage: { python: 'fallback-starter' },
+      });
+
+      expect(created).toBe(true);
+      expect(doc.getText('code:python').toString()).toBe('fallback-starter');
+    });
+
+    it('GIVEN existing doc WHEN creating duplicate THEN returns existing doc with created=false', () => {
+      const store = new YjsDocumentStore();
+      const first = store.createDoc('room-1', {
+        initialContentByLanguage: { python: 'first' },
+      });
+
+      const second = store.createDoc('room-1', {
+        initialContentByLanguage: { python: 'second' },
+      });
+
+      expect(second.created).toBe(false);
+      expect(second.doc).toBe(first.doc);
+      expect(second.doc.getText('code:python').toString()).toBe('first');
     });
   });
 
   describe('getDoc', () => {
     it('GIVEN existing doc WHEN getting THEN returns the doc', () => {
       const store = new YjsDocumentStore();
-      const created = store.createDoc('room-1');
+      const { doc } = store.createDoc('room-1');
 
-      expect(store.getDoc('room-1')).toBe(created);
+      expect(store.getDoc('room-1')).toBe(doc);
     });
 
     it('GIVEN non-existent room WHEN getting THEN returns undefined', () => {
@@ -95,7 +157,6 @@ describe('YjsDocumentStore', () => {
 
       expect(snapshot).toBeInstanceOf(Uint8Array);
 
-      // Verify the snapshot can reconstruct the document.
       const reconstructed = new Y.Doc();
       Y.applyUpdate(reconstructed, snapshot!);
       expect(reconstructed.getText('code:python').toString()).toBe('function solve() {}');
@@ -128,7 +189,6 @@ describe('YjsDocumentStore', () => {
 
       expect(snapshot).toBeInstanceOf(Uint8Array);
 
-      // Verify the snapshot can reconstruct the document.
       const reconstructed = new Y.Doc();
       Y.applyUpdate(reconstructed, snapshot!);
       expect(reconstructed.getText('code:python').toString()).toBe('const x = 42;');

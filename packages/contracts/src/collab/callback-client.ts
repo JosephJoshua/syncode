@@ -2,6 +2,7 @@ import type {
   AuthorizeJoinResponse,
   ParticipantHeartbeatRequest,
   ParticipantHeartbeatResponse,
+  PersistDocSnapshotPayload,
   SnapshotReadyPayload,
   UserDisconnectedPayload,
 } from './events.js';
@@ -21,6 +22,7 @@ export interface IControlPlaneCallbackClient {
     request: ParticipantHeartbeatRequest,
   ): Promise<ParticipantHeartbeatResponse | null>;
   authorizeJoin(roomId: string, userId: string): Promise<AuthorizeJoinResponse>;
+  persistDocSnapshot(roomId: string, payload: PersistDocSnapshotPayload): Promise<void>;
 }
 
 export const CONTROL_PLANE_CALLBACK = Symbol.for('CONTROL_PLANE_CALLBACK');

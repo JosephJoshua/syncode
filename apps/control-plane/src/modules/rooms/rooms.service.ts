@@ -8,6 +8,7 @@ import {
   InternalServerErrorException,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
@@ -38,6 +39,7 @@ import {
   matchRequests,
   peerFeedback,
   problems,
+  roomDocSnapshots,
   roomParticipants,
   rooms,
   runs,
@@ -113,18 +115,7 @@ export class RoomsService {
       return inserted;
     });
 
-    let initialContentByLanguage: Record<string, string> | undefined;
-    if (room.problemId) {
-      const problem = await this.db
-        .select({ starterCode: problems.starterCode })
-        .from(problems)
-        .where(eq(problems.id, room.problemId))
-        .then((rows) => rows[0]);
-      const starterMap = (problem?.starterCode ?? null) as Record<string, string> | null;
-      if (starterMap && Object.keys(starterMap).length > 0) {
-        initialContentByLanguage = starterMap;
-      }
-    }
+    const initialContentByLanguage = await this.resolveStarterContentMap(room);
 
     const [collabCreated, mediaCreated] = await Promise.all([
       this.createCollabDocument(
@@ -1207,6 +1198,7 @@ export class RoomsService {
           activeParticipants,
           { strict: true },
         );
+        this.assertRequiredParticipantsReady(lockedRoom.mode as RoomMode, activeParticipants);
       }
 
       const roomUpdate: Partial<typeof rooms.$inferInsert> = {
@@ -1426,6 +1418,27 @@ export class RoomsService {
     }
   }
 
+  private assertRequiredParticipantsReady(
+    mode: RoomMode,
+    activeParticipants: Array<{ userId: string; role: RoomRole; isReady: boolean }>,
+  ): void {
+    const requiredRoles: RoomRole[] =
+      mode === 'peer' ? [RoomRole.INTERVIEWER, RoomRole.CANDIDATE] : [RoomRole.CANDIDATE];
+
+    // role is the mode-resolved runtime role (see fetchActiveParticipants), not the raw DB value,
+    // so host-as-candidate in AI mode lands on CANDIDATE here as expected.
+    const required = activeParticipants.filter((participant) =>
+      requiredRoles.includes(participant.role),
+    );
+
+    if (required.length === 0 || required.some((participant) => !participant.isReady)) {
+      throw new BadRequestException({
+        message: 'All required participants must be ready to start the session.',
+        code: ERROR_CODES.ROOM_PARTICIPANTS_NOT_READY,
+      });
+    }
+  }
+
   private async getRoomContext(roomId: string, userId: string) {
     const [[room], [participant]] = await Promise.all([
       this.db.select().from(rooms).where(eq(rooms.id, roomId)),
@@ -1457,11 +1470,12 @@ export class RoomsService {
   private async fetchActiveParticipants(
     db: Pick<Database, 'select'>,
     room: typeof rooms.$inferSelect,
-  ): Promise<Array<{ userId: string; role: RoomRole }>> {
+  ): Promise<Array<{ userId: string; role: RoomRole; isReady: boolean }>> {
     const participants = await db
       .select({
         userId: roomParticipants.userId,
         role: roomParticipants.role,
+        isReady: roomParticipants.isReady,
       })
       .from(roomParticipants)
       .where(and(eq(roomParticipants.roomId, room.id), eq(roomParticipants.isActive, true)));
@@ -1474,6 +1488,7 @@ export class RoomsService {
         room.hostId,
         participant.userId,
       ),
+      isReady: participant.isReady,
     }));
   }
 
@@ -1696,18 +1711,124 @@ export class RoomsService {
     initialLanguage?: string,
   ): Promise<boolean> {
     try {
-      await this.collabClient.createDocument({
-        roomId,
-        initialPhase,
-        editorLocked,
-        initialContentByLanguage,
-        initialLanguage,
-      });
+      const snapshot = await this.loadDocSnapshot(roomId);
+      // A stored snapshot takes precedence: it represents the latest known state from
+      // a previous TTL teardown. Starter code has already been seeded into it.
+      await this.collabClient.createDocument(
+        snapshot
+          ? {
+              roomId,
+              initialPhase,
+              editorLocked,
+              snapshot: Array.from(snapshot),
+              initialLanguage,
+            }
+          : {
+              roomId,
+              initialPhase,
+              editorLocked,
+              initialContentByLanguage,
+              initialLanguage,
+            },
+      );
       return true;
     } catch (error) {
       this.logger.warn(`Collab document creation failed for ${roomId}`, error);
       return false;
     }
+  }
+
+  private async loadDocSnapshot(roomId: string): Promise<Uint8Array | null> {
+    const [row] = await this.db
+      .select({ state: roomDocSnapshots.state })
+      .from(roomDocSnapshots)
+      .where(eq(roomDocSnapshots.roomId, roomId))
+      .limit(1);
+    return row?.state ?? null;
+  }
+
+  async persistDocSnapshot(roomId: string, state: Uint8Array): Promise<void> {
+    await this.db
+      .insert(roomDocSnapshots)
+      .values({ roomId, state, updatedAt: new Date() })
+      .onConflictDoUpdate({
+        target: roomDocSnapshots.roomId,
+        set: { state, updatedAt: new Date() },
+      });
+  }
+
+  async ensureCollab(roomId: string, userId: string): Promise<{ recreated: boolean }> {
+    const [room] = await this.db.select().from(rooms).where(eq(rooms.id, roomId)).limit(1);
+    if (!room) {
+      throw new NotFoundException({ message: 'Room not found', code: ERROR_CODES.ROOM_NOT_FOUND });
+    }
+
+    if (room.status === RoomStatus.FINISHED) {
+      throw new ConflictException({
+        message: 'Room has already finished',
+        code: ERROR_CODES.ROOM_FINISHED,
+      });
+    }
+
+    // Allow any prior participant (active or inactive) so a disconnected user
+    // can recover their collab session. Presence of a row is sufficient proof
+    // of prior membership.
+    const [participant] = await this.db
+      .select({ isActive: roomParticipants.isActive })
+      .from(roomParticipants)
+      .where(and(eq(roomParticipants.roomId, roomId), eq(roomParticipants.userId, userId)))
+      .limit(1);
+
+    if (!participant) {
+      throw new ForbiddenException({
+        message: 'Not a participant of this room',
+        code: ERROR_CODES.ROOM_ACCESS_DENIED,
+      });
+    }
+
+    const healthy = await this.collabClient.healthCheck().catch(() => false);
+    if (!healthy) {
+      throw new ServiceUnavailableException({
+        message: 'Collab plane is currently unavailable',
+        code: ERROR_CODES.COLLAB_SERVICE_UNAVAILABLE,
+      });
+    }
+
+    const snapshot = await this.loadDocSnapshot(roomId);
+    const initialLanguage = room.language ?? undefined;
+    const response = await this.collabClient.createDocument(
+      snapshot
+        ? {
+            roomId,
+            initialPhase: room.status,
+            editorLocked: room.editorLocked,
+            snapshot: Array.from(snapshot),
+            initialLanguage,
+          }
+        : {
+            roomId,
+            initialPhase: room.status,
+            editorLocked: room.editorLocked,
+            initialContentByLanguage: await this.resolveStarterContentMap(room),
+            initialLanguage,
+          },
+    );
+
+    return { recreated: response.created };
+  }
+
+  private async resolveStarterContentMap(
+    room: typeof rooms.$inferSelect,
+  ): Promise<Record<string, string> | undefined> {
+    if (!room.problemId) return undefined;
+    const [problem] = await this.db
+      .select({ starterCode: problems.starterCode })
+      .from(problems)
+      .where(eq(problems.id, room.problemId))
+      .limit(1);
+    const starterMap = (problem?.starterCode ?? null) as Record<string, string> | null;
+    if (!starterMap || Object.keys(starterMap).length === 0) return undefined;
+    return starterMap;
   }
 
   private async destroyCollabDocument(roomId: string): Promise<DestroyDocumentResponse | null> {

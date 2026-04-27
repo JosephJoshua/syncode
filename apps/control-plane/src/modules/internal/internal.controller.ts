@@ -16,6 +16,7 @@ import { RoomsService } from '@/modules/rooms/rooms.service.js';
 import {
   AuthorizeJoinDto,
   ParticipantHeartbeatDto,
+  PersistDocSnapshotDto,
   SnapshotReadyDto,
   UserDisconnectedDto,
 } from './dto/internal.dto.js';
@@ -25,6 +26,8 @@ import {
  * These endpoints are NOT exposed via nginx and require the shared
  * `X-Internal-Secret` header enforced by `InternalCallbackGuard`.
  */
+const MAX_DOC_SNAPSHOT_BYTES = 5 * 1024 * 1024;
+
 @SkipThrottle()
 @UseGuards(InternalCallbackGuard)
 @Controller()
@@ -50,7 +53,6 @@ export class InternalController {
     try {
       const { roomId, snapshot, code, language, timestamp, trigger } = payload;
 
-      // S3 upload (binary for reconstruction)
       const snapshotBuffer = Buffer.from(snapshot);
       const key = `snapshots/${roomId}/${timestamp}.yjs`;
       await this.storageService.upload(key, snapshotBuffer, {
@@ -60,6 +62,8 @@ export class InternalController {
           timestamp: timestamp.toString(),
         },
       });
+
+      await this.roomsService.persistDocSnapshot(roomId, new Uint8Array(snapshot));
 
       const [session] = await this.db
         .select({ id: sessions.id, language: sessions.language })
@@ -96,6 +100,36 @@ export class InternalController {
       return { success: true };
     } catch (error) {
       this.logger.error('Failed to store snapshot', error);
+      return { success: false };
+    }
+  }
+
+  /**
+   * Called by collab-plane on TTL teardown with the binary Y.Doc state, so the same
+   * content can be restored next time the doc is recreated.
+   */
+  @Post(CONTROL_INTERNAL.PERSIST_DOC_SNAPSHOT.route)
+  @ApiExcludeEndpoint()
+  async handlePersistDocSnapshot(
+    @Param('roomId') roomId: string,
+    @Body() payload: PersistDocSnapshotDto,
+  ): Promise<{ success: boolean }> {
+    try {
+      const state = new Uint8Array(payload.state);
+      this.logger.debug(`Doc snapshot received for room ${roomId} (${state.byteLength} bytes)`);
+
+      if (state.byteLength > MAX_DOC_SNAPSHOT_BYTES) {
+        this.logger.warn(
+          `Rejecting oversized doc snapshot for room ${roomId}: ${state.byteLength} bytes exceeds ${MAX_DOC_SNAPSHOT_BYTES}`,
+        );
+        return { success: false };
+      }
+
+      await this.roomsService.persistDocSnapshot(roomId, state);
+      this.logger.debug(`Doc snapshot persisted for room ${roomId} (${state.byteLength} bytes)`);
+      return { success: true };
+    } catch (error) {
+      this.logger.error(`Failed to persist doc snapshot for room ${roomId}`, error);
       return { success: false };
     }
   }

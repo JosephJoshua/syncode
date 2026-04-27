@@ -33,6 +33,7 @@ import type * as Y from 'yjs';
 import { useSharedExecution } from '@/hooks/use-shared-execution.js';
 import type { CollabConnectionStatus } from '@/hooks/use-yjs-collab.js';
 import { api, readApiError, resolveErrorMessage } from '@/lib/api-client.js';
+import { allRequiredPeersReady } from '@/lib/participant-readiness.js';
 import { buildInviteLink } from '@/lib/room-stage.js';
 import { codeTextKey } from '@/lib/yjs-collab-provider.js';
 import { CollaborativeEditor } from './collaborative-editor.js';
@@ -93,6 +94,8 @@ interface RoomWorkspaceProps {
     muteSet: ReadonlySet<string>;
     videoHiddenSet: ReadonlySet<string>;
   };
+  selfMicrophoneEnabled?: boolean;
+  onSelfMicrophoneToggle?: () => void;
   dockedVideoPanel?: React.ReactNode;
 }
 
@@ -120,6 +123,8 @@ export function RoomWorkspace({
   mediaMutedMap,
   connectionQualityMap,
   participantMediaControls,
+  selfMicrophoneEnabled,
+  onSelfMicrophoneToggle,
   dockedVideoPanel,
 }: RoomWorkspaceProps) {
   const { t } = useTranslation('rooms');
@@ -127,6 +132,11 @@ export function RoomWorkspace({
   const { remoteRun, remoteSubmit, broadcastRun, broadcastSubmit } = useSharedExecution(
     awareness,
     doc,
+  );
+
+  const allRequiredReady = useMemo(
+    () => allRequiredPeersReady(room.participants, room.mode),
+    [room.participants, room.mode],
   );
 
   const [problem, setProblem] = useState<ProblemDetail | null>(null);
@@ -883,6 +893,7 @@ export function RoomWorkspace({
                     editorLocked={room.editorLocked}
                     canChangePhase={room.myCapabilities.includes('room:change-phase')}
                     isPending={isTransitioning}
+                    allRequiredReady={allRequiredReady}
                     onTransition={(targetStatus) => {
                       void onTransition(targetStatus);
                     }}
@@ -932,6 +943,8 @@ export function RoomWorkspace({
                         participantMediaControls?.videoHiddenSet.has(participant.userId) ?? false
                       }
                       localVolume={participantMediaControls?.volumeMap.get(participant.userId)}
+                      isSelfMicrophoneEnabled={selfMicrophoneEnabled}
+                      onSelfMicrophoneToggle={onSelfMicrophoneToggle}
                       onLocalMuteToggle={
                         participantMediaControls
                           ? (muted) => participantMediaControls.setMuted(participant.userId, muted)

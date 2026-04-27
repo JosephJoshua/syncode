@@ -403,8 +403,8 @@ describe('POST /rooms/:id/control/transition', () => {
     const host = await insertUser(db);
     const candidate = await insertUser(db);
     const room = await insertRoom(db, host.id);
-    await insertParticipant(db, room.id, host.id, 'interviewer');
-    await insertParticipant(db, room.id, candidate.id, 'candidate');
+    await insertParticipant(db, room.id, host.id, 'interviewer', { isReady: true });
+    await insertParticipant(db, room.id, candidate.id, 'candidate', { isReady: true });
 
     const res = await asUser(
       request(app.getHttpServer()).post(`/rooms/${room.id}/control/transition`),

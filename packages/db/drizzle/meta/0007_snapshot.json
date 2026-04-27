@@ -1,6 +1,6 @@
 {
-  "id": "162ce4e2-cd69-4c42-a989-1e4b9037ed2f",
-  "prevId": "7d64d5b6-6027-4379-9944-de40bf9223a4",
+  "id": "b7670971-4d03-415b-ac18-ff5480a88caf",
+  "prevId": "fadb587f-5b79-411b-9e37-4998ef0ed7a6",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -2094,6 +2094,18 @@
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
+        },
+        "last_heartbeat_at": {
+          "name": "last_heartbeat_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "removed_at": {
+          "name": "removed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {
@@ -2150,6 +2162,22 @@
             }
           ],
           "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "room_participants_active_heartbeat_idx": {
+          "name": "room_participants_active_heartbeat_idx",
+          "columns": [
+            {
+              "expression": "last_heartbeat_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"room_participants\".\"is_active\" = true",
           "concurrently": false,
           "method": "btree",
           "with": {}

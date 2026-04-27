@@ -279,6 +279,9 @@ function RoomPage() {
         }
       })();
     },
+    onRoomNotFound: async () => {
+      await api(CONTROL_API.ROOMS.ENSURE_COLLAB, { params: { id: roomId } });
+    },
   });
 
   const mediaCredsRef = useRef<{ token: string; url: string } | null>(null);
@@ -735,6 +738,8 @@ function RoomPage() {
             muteSet: localMuteSet,
             videoHiddenSet,
           }}
+          selfMicrophoneEnabled={isMicrophoneEnabled}
+          onSelfMicrophoneToggle={() => void toggleMicrophone()}
           dockedVideoPanel={
             showMediaPanel && videoPanelMode === 'docked' ? (
               <DockedVideoPanel tiles={videoTiles} onUndock={() => setVideoPanelMode('floating')} />
@@ -792,6 +797,8 @@ function RoomPage() {
           muteSet: localMuteSet,
           videoHiddenSet,
         }}
+        selfMicrophoneEnabled={isMicrophoneEnabled}
+        onSelfMicrophoneToggle={() => void toggleMicrophone()}
       />
     </>
   );
@@ -818,6 +825,7 @@ const TRANSITION_ERROR_KEYS: Partial<Record<string, string>> = {
   [ERROR_CODES.ROOM_INVALID_TRANSITION]: 'lobby.invalidTransition',
   [ERROR_CODES.ROOM_NOT_PEER_MODE]: 'lobby.notPeerMode',
   [ERROR_CODES.ROOM_PERMISSION_DENIED]: 'lobby.accessDenied',
+  [ERROR_CODES.ROOM_PARTICIPANTS_NOT_READY]: 'lobby.participantsNotReady',
 };
 
 const ROLE_UPDATE_ERROR_KEYS: Partial<Record<string, string>> = {

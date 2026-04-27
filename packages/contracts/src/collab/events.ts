@@ -71,6 +71,19 @@ export interface ParticipantHeartbeatResponse {
   updated: number;
 }
 
+// Room identifier is carried in the path parameter; the body only needs the state.
+export const persistDocSnapshotPayloadSchema = z
+  .object({
+    state: z.array(z.number()).describe('Binary Y.Doc state as JSON array of bytes'),
+  })
+  .strict();
+
+export type PersistDocSnapshotPayload = z.infer<typeof persistDocSnapshotPayloadSchema>;
+
+export interface PersistDocSnapshotResponse {
+  success: boolean;
+}
+
 export const CONTROL_INTERNAL = {
   SNAPSHOT_READY: defineRoute<SnapshotReadyPayload, { success: boolean }>()(
     'internal/collab/snapshot',
@@ -86,6 +99,10 @@ export const CONTROL_INTERNAL = {
   ),
   AUTHORIZE_JOIN: defineRoute<AuthorizeJoinRequest, AuthorizeJoinResponse>()(
     'internal/rooms/:roomId/authorize-join',
+    'POST',
+  ),
+  PERSIST_DOC_SNAPSHOT: defineRoute<PersistDocSnapshotPayload, PersistDocSnapshotResponse>()(
+    'internal/rooms/:roomId/doc-snapshot',
     'POST',
   ),
 };

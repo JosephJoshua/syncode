@@ -38,13 +38,15 @@ export function asUser(agent: request.Test, user: { id: string; email: string })
 
 export function createMockCollabClient() {
   return {
-    createDocument: vi.fn().mockResolvedValue({ roomId: 'stub', createdAt: Date.now() }),
+    createDocument: vi
+      .fn()
+      .mockResolvedValue({ roomId: 'stub', createdAt: Date.now(), created: true }),
     destroyDocument: vi.fn().mockResolvedValue({ roomId: 'stub', finalSnapshot: undefined }),
     kickUser: vi.fn(),
     updateRoomState: vi.fn().mockResolvedValue({ success: true }),
     broadcastParticipantReady: vi.fn().mockResolvedValue({ success: true }),
     changeLanguage: vi.fn().mockResolvedValue({ success: true }),
-    healthCheck: vi.fn(),
+    healthCheck: vi.fn().mockResolvedValue(true),
   };
 }
 

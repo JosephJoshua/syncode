@@ -3,13 +3,21 @@ import {
   ConflictException,
   ForbiddenException,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import { COLLAB_CLIENT, ERROR_CODES, EXECUTION_CLIENT } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
-import { roomParticipants, rooms, sessionParticipants, sessions, submissions } from '@syncode/db';
+import {
+  roomDocSnapshots,
+  roomParticipants,
+  rooms,
+  sessionParticipants,
+  sessions,
+  submissions,
+} from '@syncode/db';
 import { INVITE_CODE_LENGTH } from '@syncode/shared';
 import { CACHE_SERVICE, MEDIA_SERVICE, STORAGE_SERVICE } from '@syncode/shared/ports';
 import { and, eq } from 'drizzle-orm';
@@ -720,8 +728,8 @@ describe('transitionPhase', () => {
     const host = await insertUser(db);
     const candidate = await insertUser(db);
     const room = await insertRoom(db, host.id);
-    await insertParticipant(db, room.id, host.id, 'interviewer');
-    await insertParticipant(db, room.id, candidate.id, 'candidate');
+    await insertParticipant(db, room.id, host.id, 'interviewer', { isReady: true });
+    await insertParticipant(db, room.id, candidate.id, 'candidate', { isReady: true });
 
     const result = await service.transitionPhase(room.id, host.id, 'warmup');
 
@@ -746,6 +754,64 @@ describe('transitionPhase', () => {
     await insertParticipant(db, room.id, candidate.id, 'candidate');
 
     await expect(service.transitionPhase(room.id, host.id, 'coding')).rejects.toThrow();
+  });
+
+  it('GIVEN peer room with candidate not ready WHEN transitioning to warmup THEN throws ROOM_PARTICIPANTS_NOT_READY', async () => {
+    const host = await insertUser(db);
+    const candidate = await insertUser(db);
+    const room = await insertRoom(db, host.id);
+    await insertParticipant(db, room.id, host.id, 'interviewer', { isReady: true });
+    await insertParticipant(db, room.id, candidate.id, 'candidate', { isReady: false });
+
+    await expect(service.transitionPhase(room.id, host.id, 'warmup')).rejects.toThrow(
+      BadRequestException,
+    );
+    await expect(service.transitionPhase(room.id, host.id, 'warmup')).rejects.toMatchObject({
+      response: { code: ERROR_CODES.ROOM_PARTICIPANTS_NOT_READY },
+    });
+  });
+
+  it('GIVEN peer room with both ready WHEN transitioning to warmup THEN succeeds', async () => {
+    const host = await insertUser(db);
+    const candidate = await insertUser(db);
+    const room = await insertRoom(db, host.id);
+    await insertParticipant(db, room.id, host.id, 'interviewer', { isReady: true });
+    await insertParticipant(db, room.id, candidate.id, 'candidate', { isReady: true });
+
+    const result = await service.transitionPhase(room.id, host.id, 'warmup');
+    expect(result.currentStatus).toBe('warmup');
+  });
+
+  it('GIVEN ai room with candidate not ready WHEN transitioning to warmup THEN throws ROOM_PARTICIPANTS_NOT_READY', async () => {
+    const host = await insertUser(db);
+    const room = await insertRoom(db, host.id, { mode: 'ai' });
+    await insertParticipant(db, room.id, host.id, 'candidate', { isReady: false });
+
+    await expect(service.transitionPhase(room.id, host.id, 'warmup')).rejects.toMatchObject({
+      response: { code: ERROR_CODES.ROOM_PARTICIPANTS_NOT_READY },
+    });
+  });
+
+  it('GIVEN ai room with candidate ready WHEN transitioning to warmup THEN succeeds', async () => {
+    const host = await insertUser(db);
+    const room = await insertRoom(db, host.id, { mode: 'ai' });
+    await insertParticipant(db, room.id, host.id, 'candidate', { isReady: true });
+
+    const result = await service.transitionPhase(room.id, host.id, 'warmup');
+    expect(result.currentStatus).toBe('warmup');
+  });
+
+  it('GIVEN peer room with ready peers and not-ready observer WHEN transitioning to warmup THEN succeeds', async () => {
+    const host = await insertUser(db);
+    const candidate = await insertUser(db);
+    const observer = await insertUser(db);
+    const room = await insertRoom(db, host.id, { maxParticipants: 4 });
+    await insertParticipant(db, room.id, host.id, 'interviewer', { isReady: true });
+    await insertParticipant(db, room.id, candidate.id, 'candidate', { isReady: true });
+    await insertParticipant(db, room.id, observer.id, 'observer', { isReady: false });
+
+    const result = await service.transitionPhase(room.id, host.id, 'warmup');
+    expect(result.currentStatus).toBe('warmup');
   });
 });
 
@@ -1698,5 +1764,158 @@ describe('changeLanguage', () => {
       .where(eq(sessions.id, finishedSession!.id));
     expect(untouched!.language).toBe('python');
     expect(untouched!.status).toBe('finished');
+  });
+});
+
+describe('ensureCollab', () => {
+  it('GIVEN no stored snapshot WHEN active participant ensures collab THEN calls createDocument with starter content', async () => {
+    const host = await insertUser(db);
+    const problem = await insertProblem(db, {
+      starterCode: { python: '# starter', javascript: '// starter' },
+    });
+    const room = await insertRoom(db, host.id, { problemId: problem.id, language: 'python' });
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+
+    mockCollabClient.createDocument.mockResolvedValueOnce({
+      roomId: room.id,
+      createdAt: Date.now(),
+      created: true,
+    });
+
+    const result = await service.ensureCollab(room.id, host.id);
+
+    expect(result).toEqual({ recreated: true });
+    expect(mockCollabClient.createDocument).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        roomId: room.id,
+        initialContentByLanguage: { python: '# starter', javascript: '// starter' },
+      }),
+    );
+  });
+
+  it('GIVEN stored snapshot WHEN ensuring collab THEN passes snapshot bytes to createDocument', async () => {
+    const host = await insertUser(db);
+    const room = await insertRoom(db, host.id);
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+
+    const stateBytes = new Uint8Array([10, 20, 30]);
+    await db.insert(roomDocSnapshots).values({ roomId: room.id, state: stateBytes });
+
+    mockCollabClient.createDocument.mockResolvedValueOnce({
+      roomId: room.id,
+      createdAt: Date.now(),
+      created: true,
+    });
+
+    await service.ensureCollab(room.id, host.id);
+
+    expect(mockCollabClient.createDocument).toHaveBeenLastCalledWith(
+      expect.objectContaining({ roomId: room.id, snapshot: [10, 20, 30] }),
+    );
+  });
+
+  it('GIVEN doc already live in collab WHEN ensuring THEN returns recreated=false', async () => {
+    const host = await insertUser(db);
+    const room = await insertRoom(db, host.id);
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+
+    mockCollabClient.createDocument.mockResolvedValueOnce({
+      roomId: room.id,
+      createdAt: Date.now(),
+      created: false,
+    });
+
+    const result = await service.ensureCollab(room.id, host.id);
+    expect(result).toEqual({ recreated: false });
+  });
+
+  it('GIVEN non-participant WHEN ensuring collab THEN throws ForbiddenException', async () => {
+    const host = await insertUser(db);
+    const stranger = await insertUser(db);
+    const room = await insertRoom(db, host.id);
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+
+    await expect(service.ensureCollab(room.id, stranger.id)).rejects.toThrow(ForbiddenException);
+  });
+
+  it('GIVEN inactive (disconnected) participant WHEN ensuring collab THEN recovers without throwing', async () => {
+    const host = await insertUser(db);
+    const room = await insertRoom(db, host.id);
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+    await service.markParticipantInactive(room.id, host.id, new Date());
+
+    mockCollabClient.createDocument.mockResolvedValueOnce({
+      roomId: room.id,
+      createdAt: Date.now(),
+      created: true,
+    });
+
+    const result = await service.ensureCollab(room.id, host.id);
+    expect(result).toEqual({ recreated: true });
+  });
+
+  it('GIVEN finished room WHEN ensuring collab THEN throws ConflictException', async () => {
+    const host = await insertUser(db);
+    const room = await insertRoom(db, host.id, { status: 'finished' });
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+
+    await expect(service.ensureCollab(room.id, host.id)).rejects.toThrow(ConflictException);
+  });
+
+  it('GIVEN collab plane unhealthy WHEN ensuring THEN throws ServiceUnavailableException', async () => {
+    const host = await insertUser(db);
+    const room = await insertRoom(db, host.id);
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+
+    mockCollabClient.healthCheck.mockResolvedValueOnce(false);
+
+    await expect(service.ensureCollab(room.id, host.id)).rejects.toThrow(
+      ServiceUnavailableException,
+    );
+  });
+
+  it('GIVEN non-existent room WHEN ensuring collab THEN throws NotFoundException', async () => {
+    const host = await insertUser(db);
+    await expect(
+      service.ensureCollab('00000000-0000-0000-0000-000000000000', host.id),
+    ).rejects.toThrow(NotFoundException);
+  });
+});
+
+describe('persistDocSnapshot', () => {
+  it('GIVEN no existing row WHEN persisting THEN inserts a new row', async () => {
+    const host = await insertUser(db);
+    const room = await insertRoom(db, host.id);
+
+    await service.persistDocSnapshot(room.id, new Uint8Array([1, 2, 3]));
+
+    const [row] = await db
+      .select()
+      .from(roomDocSnapshots)
+      .where(eq(roomDocSnapshots.roomId, room.id));
+    expect(row).toBeDefined();
+    expect(Array.from(row!.state)).toEqual([1, 2, 3]);
+  });
+
+  it('GIVEN existing row WHEN persisting again THEN upserts state and refreshes updatedAt', async () => {
+    const host = await insertUser(db);
+    const room = await insertRoom(db, host.id);
+
+    await service.persistDocSnapshot(room.id, new Uint8Array([1]));
+    const [first] = await db
+      .select()
+      .from(roomDocSnapshots)
+      .where(eq(roomDocSnapshots.roomId, room.id));
+
+    await new Promise((r) => setTimeout(r, 5));
+    await service.persistDocSnapshot(room.id, new Uint8Array([9, 9, 9]));
+
+    const [second] = await db
+      .select()
+      .from(roomDocSnapshots)
+      .where(eq(roomDocSnapshots.roomId, room.id));
+
+    expect(Array.from(second!.state)).toEqual([9, 9, 9]);
+    expect(second!.updatedAt.getTime()).toBeGreaterThanOrEqual(first!.updatedAt.getTime());
   });
 });

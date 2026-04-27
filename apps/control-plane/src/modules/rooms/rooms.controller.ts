@@ -47,6 +47,7 @@ import {
   CreateRoomDto,
   CreateRoomResponseDto,
   DestroyRoomResponseDto,
+  EnsureCollabResponseDto,
   JoinRoomDto,
   JoinRoomResponseDto,
   ListRoomsQueryDto,
@@ -348,6 +349,31 @@ export class RoomsController {
   ): Promise<TransitionRoomPhaseResponseDto> {
     const result = await this.roomsService.transitionPhase(id, user.id, body.targetStatus);
     return { ...result, transitionedAt: result.transitionedAt.toISOString() };
+  }
+
+  @Post(CONTROL_API.ROOMS.ENSURE_COLLAB.route)
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Recreate the collab document if it was torn down' })
+  @ApiParam({ name: 'id', description: 'Room ID (UUID)' })
+  @ApiResponse({
+    status: 200,
+    type: EnsureCollabResponseDto,
+    description:
+      'Collab doc exists (either already running or recreated from the latest stored snapshot)',
+  })
+  @ApiResponse({ status: 403, type: ErrorResponseDto, description: 'Not a participant' })
+  @ApiResponse({ status: 404, type: ErrorResponseDto, description: 'Room not found' })
+  @ApiResponse({ status: 409, type: ErrorResponseDto, description: 'Room has already finished' })
+  @ApiResponse({
+    status: 503,
+    type: ErrorResponseDto,
+    description: 'Collab plane is unavailable',
+  })
+  async ensureCollab(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+  ): Promise<EnsureCollabResponseDto> {
+    return this.roomsService.ensureCollab(id, user.id);
   }
 
   @Post(CONTROL_API.ROOMS.MEDIA_TOKEN.route)
