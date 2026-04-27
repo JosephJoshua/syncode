@@ -37,7 +37,7 @@ let storageService: ReturnType<typeof createMockStorageService>;
 const baseRoute = (roomId: string) =>
   `/${CONTROL_API.WHITEBOARD_ASSETS.UPLOAD_URL.route.replace(':id', roomId)}`;
 
-async function bearerFor(userId: string, email: string) {
+async function bearerFor(email: string) {
   const user = await insertUser(db, { email, username: email.split('@')[0]! });
   // For controller integration, we use the real JwtAuthGuard with a real token
   const token = await jwtService.signAsync({ sub: user.id, email: user.email, type: 'access' });
@@ -90,8 +90,8 @@ afterEach(async () => {
 
 describe('POST /rooms/:id/whiteboard/assets/upload-url', () => {
   it('GIVEN authenticated candidate participant WHEN uploading an image THEN returns presigned URLs and a stable storage key', async () => {
-    const host = await bearerFor('host-asset@test.com', 'host-asset@test.com');
-    const candidate = await bearerFor('cand-asset@test.com', 'cand-asset@test.com');
+    const host = await bearerFor('host-asset@test.com');
+    const candidate = await bearerFor('cand-asset@test.com');
 
     const room = await insertRoom(db, host.user.id);
     await insertParticipant(db, room.id, candidate.user.id, 'candidate');
@@ -114,8 +114,8 @@ describe('POST /rooms/:id/whiteboard/assets/upload-url', () => {
   });
 
   it('GIVEN observer participant WHEN uploading THEN succeeds because annotate covers asset uploads', async () => {
-    const host = await bearerFor('host-obs@test.com', 'host-obs@test.com');
-    const observer = await bearerFor('obs-obs@test.com', 'obs-obs@test.com');
+    const host = await bearerFor('host-obs@test.com');
+    const observer = await bearerFor('obs-obs@test.com');
 
     const room = await insertRoom(db, host.user.id);
     await insertParticipant(db, room.id, observer.user.id, 'observer');
@@ -129,8 +129,8 @@ describe('POST /rooms/:id/whiteboard/assets/upload-url', () => {
   });
 
   it('GIVEN non-participant WHEN uploading THEN returns 403 with ROOM_ACCESS_DENIED', async () => {
-    const host = await bearerFor('host-np@test.com', 'host-np@test.com');
-    const stranger = await bearerFor('stranger@test.com', 'stranger@test.com');
+    const host = await bearerFor('host-np@test.com');
+    const stranger = await bearerFor('stranger@test.com');
 
     const room = await insertRoom(db, host.user.id);
 
@@ -144,7 +144,7 @@ describe('POST /rooms/:id/whiteboard/assets/upload-url', () => {
   });
 
   it('GIVEN missing room WHEN uploading THEN returns 404 with ROOM_NOT_FOUND', async () => {
-    const stranger = await bearerFor('stranger-missing@test.com', 'stranger-missing@test.com');
+    const stranger = await bearerFor('stranger-missing@test.com');
 
     const response = await request(app.getHttpServer())
       .post(baseRoute('00000000-0000-0000-0000-000000000000'))
@@ -156,8 +156,8 @@ describe('POST /rooms/:id/whiteboard/assets/upload-url', () => {
   });
 
   it('GIVEN image larger than the per-image limit WHEN uploading THEN returns 413 with WHITEBOARD_ASSET_TOO_LARGE', async () => {
-    const host = await bearerFor('host-big@test.com', 'host-big@test.com');
-    const candidate = await bearerFor('cand-big@test.com', 'cand-big@test.com');
+    const host = await bearerFor('host-big@test.com');
+    const candidate = await bearerFor('cand-big@test.com');
 
     const room = await insertRoom(db, host.user.id);
     await insertParticipant(db, room.id, candidate.user.id, 'candidate');
@@ -176,8 +176,8 @@ describe('POST /rooms/:id/whiteboard/assets/upload-url', () => {
   });
 
   it('GIVEN forbidden content type WHEN uploading THEN returns 400 (Zod validation)', async () => {
-    const host = await bearerFor('host-mime@test.com', 'host-mime@test.com');
-    const candidate = await bearerFor('cand-mime@test.com', 'cand-mime@test.com');
+    const host = await bearerFor('host-mime@test.com');
+    const candidate = await bearerFor('cand-mime@test.com');
 
     const room = await insertRoom(db, host.user.id);
     await insertParticipant(db, room.id, candidate.user.id, 'candidate');
@@ -195,7 +195,7 @@ describe('POST /rooms/:id/whiteboard/assets/upload-url', () => {
   });
 
   it('GIVEN no auth header WHEN uploading THEN returns 401', async () => {
-    const host = await bearerFor('host-anon@test.com', 'host-anon@test.com');
+    const host = await bearerFor('host-anon@test.com');
     const room = await insertRoom(db, host.user.id);
 
     const response = await request(app.getHttpServer())
@@ -206,8 +206,8 @@ describe('POST /rooms/:id/whiteboard/assets/upload-url', () => {
   });
 
   it('GIVEN inactive participant WHEN uploading THEN returns 403', async () => {
-    const host = await bearerFor('host-left@test.com', 'host-left@test.com');
-    const left = await bearerFor('left@test.com', 'left@test.com');
+    const host = await bearerFor('host-left@test.com');
+    const left = await bearerFor('left@test.com');
 
     const room = await insertRoom(db, host.user.id);
     await insertParticipant(db, room.id, left.user.id, 'candidate', { isActive: false });
@@ -222,8 +222,8 @@ describe('POST /rooms/:id/whiteboard/assets/upload-url', () => {
   });
 
   it('GIVEN filename containing unsafe characters WHEN uploading THEN sanitizes them in the storage key', async () => {
-    const host = await bearerFor('host-clean@test.com', 'host-clean@test.com');
-    const candidate = await bearerFor('cand-clean@test.com', 'cand-clean@test.com');
+    const host = await bearerFor('host-clean@test.com');
+    const candidate = await bearerFor('cand-clean@test.com');
 
     const room = await insertRoom(db, host.user.id);
     await insertParticipant(db, room.id, candidate.user.id, 'candidate');
