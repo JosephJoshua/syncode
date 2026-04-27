@@ -1,11 +1,22 @@
-import { CONTROL_API } from '@syncode/contracts';
+import { CONTROL_API, type ListRoomsQuery } from '@syncode/contracts';
 import {
   ROOM_STATUSES,
   RoomRole,
   RoomStatus,
   type RoomStatus as RoomStatusType,
 } from '@syncode/shared';
-import { Badge, Button, Card, cn, Input } from '@syncode/ui';
+import {
+  Badge,
+  Button,
+  Card,
+  cn,
+  Input,
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationNext,
+  PaginationPrevious,
+} from '@syncode/ui';
 import { useQuery } from '@tanstack/react-query';
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { formatDistanceToNowStrict } from 'date-fns';
@@ -32,6 +43,7 @@ export const Route = createFileRoute('/_app/rooms/')({
 });
 
 type StatusFilter = RoomStatusType | 'all';
+const ROOMS_PAGE_SIZE = 10;
 
 const ROOM_STATUS_KEYS: Record<RoomStatusType, string> = {
   [RoomStatus.WAITING]: 'status.waiting',
@@ -72,6 +84,13 @@ const STATUS_STYLES: Record<string, { dot: string; badge: string }> = {
 
 const STATUS_FILTER_VALUES: StatusFilter[] = ['all', ...ROOM_STATUSES];
 
+function createInitialPaginationState() {
+  return {
+    currentCursor: undefined as string | undefined,
+    cursorHistory: [] as Array<string | undefined>,
+  };
+}
+
 function parseInviteInput(raw: string): { roomId: string; code: string } | null {
   const trimmed = raw.trim();
 
@@ -94,30 +113,42 @@ function formatTimeAgo(iso: string): string {
   return formatDistanceToNowStrict(new Date(iso), { addSuffix: true });
 }
 
-function RoomsPage() {
+export function RoomsPage() {
   const { t } = useTranslation('rooms');
   const navigate = useNavigate();
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [paginationState, setPaginationState] = useState(createInitialPaginationState);
   const [inviteInput, setInviteInput] = useState('');
   const [joinError, setJoinError] = useState<string | null>(null);
+  const roomsListQuery = useMemo<ListRoomsQuery>(
+    () => ({
+      cursor: paginationState.currentCursor,
+      limit: ROOMS_PAGE_SIZE,
+      sortBy: 'createdAt',
+      sortOrder: 'desc',
+      ...(statusFilter === 'all' ? {} : { status: statusFilter }),
+    }),
+    [paginationState.currentCursor, statusFilter],
+  );
 
   const roomsQuery = useQuery({
-    queryKey: ['rooms', 'list', statusFilter],
+    queryKey: ['rooms', 'list', roomsListQuery],
     queryFn: () =>
       api(CONTROL_API.ROOMS.LIST, {
-        searchParams: {
-          limit: 50,
-          ...(statusFilter === 'all' ? {} : { status: statusFilter }),
-        },
+        searchParams: roomsListQuery,
       }),
+    placeholderData: (previousData) => previousData,
   });
 
   const rooms = roomsQuery.data?.data ?? [];
+  const roomsCount = rooms.length;
+  const hasPreviousPage = paginationState.cursorHistory.length > 0;
+  const nextCursor = roomsQuery.data?.pagination.nextCursor ?? null;
+  const hasNextPage = roomsQuery.data?.pagination.hasMore === true && nextCursor !== null;
 
-  const { activeCount, totalCount } = useMemo(() => {
-    const active = rooms.filter((r) => r.status !== 'finished').length;
-    return { activeCount: active, totalCount: rooms.length };
-  }, [rooms]);
+  const resetCursorPagination = () => {
+    setPaginationState(createInitialPaginationState());
+  };
 
   const handleJoin = (e: React.SubmitEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -153,10 +184,13 @@ function RoomsPage() {
           </h1>
           <p className="mt-1.5 text-sm text-muted-foreground">
             {statusFilter === 'all'
-              ? activeCount > 0
-                ? `${t('subtitle.activeCount', { count: activeCount })} · ${t('subtitle.totalLabel', { totalCount })}`
+              ? roomsCount > 0
+                ? t('subtitle.pageCount', { count: roomsCount })
                 : t('subtitle.noActive')
-              : t('subtitle.totalCount', { count: totalCount })}
+              : t('subtitle.pageCountWithStatus', {
+                  count: roomsCount,
+                  status: t(ROOM_STATUS_KEYS[statusFilter]),
+                })}
           </p>
         </div>
 
@@ -231,7 +265,10 @@ function RoomsPage() {
             key={value}
             type="button"
             aria-pressed={statusFilter === value}
-            onClick={() => setStatusFilter(value)}
+            onClick={() => {
+              setStatusFilter(value);
+              resetCursorPagination();
+            }}
             className={cn(
               'inline-flex h-8 items-center rounded-lg px-3 text-xs font-medium transition-colors',
               statusFilter === value
@@ -272,80 +309,117 @@ function RoomsPage() {
           </p>
         </div>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2">
-          {rooms.map((room, index) => {
-            const fallback = {
-              dot: 'bg-muted-foreground/50',
-              badge: 'border-border bg-muted/30 text-muted-foreground',
-            };
-            const styles = STATUS_STYLES[room.status] ?? fallback;
+        <div>
+          <div className="grid gap-4 md:grid-cols-2">
+            {rooms.map((room, index) => {
+              const fallback = {
+                dot: 'bg-muted-foreground/50',
+                badge: 'border-border bg-muted/30 text-muted-foreground',
+              };
+              const styles = STATUS_STYLES[room.status] ?? fallback;
 
-            return (
-              <motion.div
-                key={room.roomId}
-                initial={{ opacity: 0, y: 16, filter: 'blur(4px)' }}
-                animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-                transition={{
-                  duration: 0.36,
-                  delay: index * 0.05,
-                  ease: [0.22, 1, 0.36, 1],
-                }}
-              >
-                <Link to="/rooms/$roomId" params={{ roomId: room.roomId }} className="block">
-                  <Card className="group h-full rounded-xl border border-white/[0.035] bg-card/40 p-5 ring-1 ring-border/30 backdrop-blur-sm transition-all duration-200 hover:border-primary/12 hover:bg-card/60 hover:shadow-[0_10px_30px_-24px_color-mix(in_oklch,var(--primary)_80%,transparent)] hover:ring-primary/20 sm:p-6">
-                    {/* Top row: status + meta */}
-                    <div className="mb-4 flex items-center justify-between">
-                      <Badge
-                        variant="outline"
-                        className={cn('gap-1.5 px-2.5 py-1 text-xs', styles.badge)}
-                      >
-                        <span className={cn('inline-block size-1.5 rounded-full', styles.dot)} />
-                        {t(ROOM_STATUS_KEYS[room.status as RoomStatusType] ?? room.status)}
-                      </Badge>
-
-                      <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                        <span className="flex items-center gap-1">
-                          <Users size={13} />
-                          {room.participantCount}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <Clock3 size={13} />
-                          {formatTimeAgo(room.createdAt)}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Room name / problem */}
-                    <h3 className="mb-1.5 text-base font-semibold tracking-tight text-foreground transition-colors group-hover:text-primary">
-                      {room.name ?? t('card.untitledRoom')}
-                    </h3>
-
-                    {room.problemTitle && (
-                      <p className="mb-4 text-sm text-muted-foreground">{room.problemTitle}</p>
-                    )}
-
-                    {/* Bottom row: role + language + code */}
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant="secondary" className="text-xs">
-                        {t(ROLE_LABEL_KEYS[room.myRole] ?? room.myRole)}
-                      </Badge>
-
-                      {room.language && (
-                        <Badge variant="outline" className="gap-1 text-xs">
-                          <Code2 size={12} />
-                          {room.language}
+              return (
+                <motion.div
+                  key={room.roomId}
+                  initial={{ opacity: 0, y: 16, filter: 'blur(4px)' }}
+                  animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+                  transition={{
+                    duration: 0.36,
+                    delay: index * 0.05,
+                    ease: [0.22, 1, 0.36, 1],
+                  }}
+                >
+                  <Link to="/rooms/$roomId" params={{ roomId: room.roomId }} className="block">
+                    <Card className="group h-full rounded-xl border border-white/[0.035] bg-card/40 p-5 ring-1 ring-border/30 backdrop-blur-sm transition-all duration-200 hover:border-primary/12 hover:bg-card/60 hover:shadow-[0_10px_30px_-24px_color-mix(in_oklch,var(--primary)_80%,transparent)] hover:ring-primary/20 sm:p-6">
+                      {/* Top row: status + meta */}
+                      <div className="mb-4 flex items-center justify-between">
+                        <Badge
+                          variant="outline"
+                          className={cn('gap-1.5 px-2.5 py-1 text-xs', styles.badge)}
+                        >
+                          <span className={cn('inline-block size-1.5 rounded-full', styles.dot)} />
+                          {t(ROOM_STATUS_KEYS[room.status as RoomStatusType] ?? room.status)}
                         </Badge>
+
+                        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                          <span className="flex items-center gap-1">
+                            <Users size={13} />
+                            {room.participantCount}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <Clock3 size={13} />
+                            {formatTimeAgo(room.createdAt)}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Room name / problem */}
+                      <h3 className="mb-1.5 text-base font-semibold tracking-tight text-foreground transition-colors group-hover:text-primary">
+                        {room.name ?? t('card.untitledRoom')}
+                      </h3>
+
+                      {room.problemTitle && (
+                        <p className="mb-4 text-sm text-muted-foreground">{room.problemTitle}</p>
                       )}
 
-                      <span className="ml-auto font-mono text-[11px] tracking-wider text-muted-foreground/60">
-                        {room.roomCode}
-                      </span>
-                    </div>
-                  </Card>
-                </Link>
-              </motion.div>
-            );
-          })}
+                      {/* Bottom row: role + language + code */}
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant="secondary" className="text-xs">
+                          {t(ROLE_LABEL_KEYS[room.myRole] ?? room.myRole)}
+                        </Badge>
+
+                        {room.language && (
+                          <Badge variant="outline" className="gap-1 text-xs">
+                            <Code2 size={12} />
+                            {room.language}
+                          </Badge>
+                        )}
+
+                        <span className="ml-auto font-mono text-[11px] tracking-wider text-muted-foreground/60">
+                          {room.roomCode}
+                        </span>
+                      </div>
+                    </Card>
+                  </Link>
+                </motion.div>
+              );
+            })}
+          </div>
+
+          <Pagination className="pt-6">
+            <PaginationContent>
+              <PaginationItem>
+                <PaginationPrevious
+                  disabled={!hasPreviousPage || roomsQuery.isFetching}
+                  onClick={() => {
+                    if (!hasPreviousPage || roomsQuery.isFetching) {
+                      return;
+                    }
+
+                    setPaginationState((current) => ({
+                      currentCursor: current.cursorHistory[current.cursorHistory.length - 1],
+                      cursorHistory: current.cursorHistory.slice(0, -1),
+                    }));
+                  }}
+                />
+              </PaginationItem>
+              <PaginationItem>
+                <PaginationNext
+                  disabled={!hasNextPage || roomsQuery.isFetching}
+                  onClick={() => {
+                    if (!hasNextPage || !nextCursor || roomsQuery.isFetching) {
+                      return;
+                    }
+
+                    setPaginationState((current) => ({
+                      currentCursor: nextCursor,
+                      cursorHistory: [...current.cursorHistory, current.currentCursor],
+                    }));
+                  }}
+                />
+              </PaginationItem>
+            </PaginationContent>
+          </Pagination>
         </div>
       )}
     </div>

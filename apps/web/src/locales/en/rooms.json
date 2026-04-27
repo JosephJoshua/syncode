@@ -1,11 +1,10 @@
 {
   "heading": "Rooms",
   "subtitle": {
-    "activeCount_one": "{{count}} active room",
-    "activeCount_other": "{{count}} active rooms",
-    "totalCount_one": "{{count}} room",
-    "totalCount_other": "{{count}} rooms",
-    "totalLabel": "{{totalCount}} total",
+    "pageCount_one": "{{count}} room on this page",
+    "pageCount_other": "{{count}} rooms on this page",
+    "pageCountWithStatus_one": "{{count}} {{status}} room on this page",
+    "pageCountWithStatus_other": "{{count}} {{status}} rooms on this page",
     "noActive": "No active rooms"
   },
   "button": {
