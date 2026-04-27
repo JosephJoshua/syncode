@@ -84,7 +84,8 @@ export class YjsDocumentStore implements OnModuleDestroy {
   }
 
   getCodeText(roomId: string, language: string): string {
-    return this.docs.get(roomId)?.getText(YjsDocumentStore.codeKey(language)).toString() ?? '';
+    const yText = this.docs.get(roomId)?.getText(YjsDocumentStore.codeKey(language));
+    return yText ? yText.toJSON() : '';
   }
 
   encodeSnapshot(roomId: string): Uint8Array | undefined {

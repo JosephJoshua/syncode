@@ -19,7 +19,7 @@ export const updateUserSchema = z
       .string()
       .min(3)
       .max(30)
-      .regex(/^[a-zA-Z0-9_]+$/)
+      .regex(/^\w+$/)
       .optional()
       .describe('New username')
       .meta({ examples: ['syncoder_01'] }),
@@ -67,13 +67,11 @@ export const userProfileResponseSchema = z.object({
     .describe('User bio')
     .meta({ examples: ['I love algorithms.'] }),
   stats: userStatsSchema,
-  createdAt: z
-    .string()
+  createdAt: z.iso
     .datetime()
     .describe('Account creation timestamp')
     .meta({ examples: ['2019-08-24T14:15:22.123Z'] }),
-  updatedAt: z
-    .string()
+  updatedAt: z.iso
     .datetime()
     .describe('Last update timestamp')
     .meta({ examples: ['2019-08-24T14:15:22.123Z'] }),
@@ -105,8 +103,7 @@ export const publicUserProfileResponseSchema = z.object({
     .nullable()
     .describe('User bio')
     .meta({ examples: ['I love algorithms.'] }),
-  createdAt: z
-    .string()
+  createdAt: z.iso
     .datetime()
     .describe('Account creation timestamp')
     .meta({ examples: ['2019-08-24T14:15:22.123Z'] }),
@@ -117,7 +114,7 @@ export type PublicUserProfileResponse = z.infer<typeof publicUserProfileResponse
 export const dailyUsageQuotaSchema = z.object({
   used: z.number().int().nonnegative(),
   limit: z.number().int().nonnegative(),
-  resetsAt: z.string().datetime(),
+  resetsAt: z.iso.datetime(),
 });
 
 export const roomsQuotaSchema = z.object({

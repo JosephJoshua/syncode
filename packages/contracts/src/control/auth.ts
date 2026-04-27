@@ -7,7 +7,7 @@ export const registerSchema = z
       .string()
       .min(3)
       .max(30)
-      .regex(/^[a-zA-Z0-9_]+$/)
+      .regex(/^\w+$/)
       .describe('Username (3-30 chars, letters/numbers/underscore)')
       .meta({ examples: ['syncoder_01'] }),
     email: z

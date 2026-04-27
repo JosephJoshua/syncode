@@ -120,9 +120,6 @@ export class StubAiClient implements IAiClient {
         const job = this.jobs.get(jobId);
         if (job) job.status = 'running';
       }, this.delayMs / 4),
-    );
-
-    this.timers.push(
       setTimeout(() => {
         const job = this.jobs.get(jobId);
         if (!job) return;
@@ -142,9 +139,6 @@ export class StubAiClient implements IAiClient {
         const job = this.jobs.get(jobId);
         if (job) job.status = 'running';
       }, this.delayMs / 4),
-    );
-
-    this.timers.push(
       setTimeout(() => {
         const job = this.jobs.get(jobId);
         if (!job) return;
@@ -182,9 +176,6 @@ export class StubAiClient implements IAiClient {
         const job = this.jobs.get(jobId);
         if (job) job.status = 'running';
       }, this.delayMs / 4),
-    );
-
-    this.timers.push(
       setTimeout(() => {
         const job = this.jobs.get(jobId);
         if (!job) return;

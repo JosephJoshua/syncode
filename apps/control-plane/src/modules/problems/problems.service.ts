@@ -316,7 +316,7 @@ export class ProblemsService {
       difficulty: row.difficulty as ProblemSummary['difficulty'],
       tags: row.tagsAgg ? row.tagsAgg.split(',') : [],
       company: row.company ?? null,
-      acceptanceRate: row.acceptanceRate != null ? Number(row.acceptanceRate) : null,
+      acceptanceRate: row.acceptanceRate == null ? null : Number(row.acceptanceRate),
       isBookmarked,
       attemptStatus: row.attemptStatus as ProblemSummary['attemptStatus'],
     };

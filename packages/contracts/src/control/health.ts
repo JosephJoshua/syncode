@@ -42,8 +42,7 @@ export const healthCheckResponseSchema = z.object({
     )
     .meta({ examples: ['ok'] }),
   services: serviceStatusesSchema.describe('Individual service connectivity results'),
-  timestamp: z
-    .string()
+  timestamp: z.iso
     .datetime()
     .describe('ISO 8601 timestamp of when the check was performed')
     .meta({ examples: ['2026-03-03T12:00:00.000Z'] }),

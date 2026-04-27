@@ -92,7 +92,7 @@ export class InternalController {
         });
       } else {
         this.logger.warn(
-          `Skipping DB insert for room ${roomId}: ${!session ? 'no session' : 'no language'}`,
+          `Skipping DB insert for room ${roomId}: ${session ? 'no language' : 'no session'}`,
         );
       }
 

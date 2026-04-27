@@ -232,7 +232,7 @@ export class RoomsService {
     query: BrowseRoomsQuery,
   ): Promise<PaginatedResult<PublicRoomSummaryResult>> {
     const escapedSearch = query.search
-      ? query.search.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_')
+      ? query.search.replaceAll('\\', '\\\\').replaceAll('%', '\\%').replaceAll('_', '\\_')
       : null;
 
     const result = await paginate<PublicRoomSummaryResult>({
@@ -580,7 +580,7 @@ export class RoomsService {
     const updatedAt = new Date();
     let previousRole!: RoomRole;
 
-    const room = await this.db.transaction(async (tx) => {
+    await this.db.transaction(async (tx) => {
       const [lockedRoom] = await tx.select().from(rooms).where(eq(rooms.id, roomId)).for('update');
 
       if (!lockedRoom) {
@@ -868,12 +868,7 @@ export class RoomsService {
         });
       }
 
-      const role = this.normalizeParticipantRole(
-        room.mode as RoomMode,
-        participant.role,
-        room.hostId,
-        userId,
-      );
+      const role = this.normalizeParticipantRole(room.mode, participant.role, room.hostId, userId);
       const isHost = room.hostId === userId;
 
       if (!hasResolvedRoomPermission(role, 'code:change-language', { isHost })) {
@@ -1095,7 +1090,7 @@ export class RoomsService {
       });
     }
 
-    const myRole = myParticipation.role as RoomRole;
+    const myRole = myParticipation.role;
     const myCapabilities = resolveRoomPermissions(myRole, {
       isHost: room.hostId === userId,
     });
@@ -1158,7 +1153,7 @@ export class RoomsService {
         });
       }
 
-      const lockedStatus = lockedRoom.status as RoomStatus;
+      const lockedStatus = lockedRoom.status;
 
       if (!isValidStatusTransition(lockedStatus, targetStatus)) {
         throw new BadRequestException({
@@ -1174,13 +1169,10 @@ export class RoomsService {
 
       if (lockedStatus === RoomStatus.WAITING && targetStatus === RoomStatus.WARMUP) {
         const activeParticipants = await this.fetchActiveParticipants(tx, lockedRoom);
-        this.assertActiveRoleConfiguration(
-          lockedRoom.mode as RoomMode,
-          RoomStatus.WARMUP,
-          activeParticipants,
-          { strict: true },
-        );
-        this.assertRequiredParticipantsReady(lockedRoom.mode as RoomMode, activeParticipants);
+        this.assertActiveRoleConfiguration(lockedRoom.mode, RoomStatus.WARMUP, activeParticipants, {
+          strict: true,
+        });
+        this.assertRequiredParticipantsReady(lockedRoom.mode, activeParticipants);
       }
 
       const roomUpdate: Partial<typeof rooms.$inferInsert> = {
@@ -1287,7 +1279,7 @@ export class RoomsService {
         sessionId: session!.id,
         userId: participantRow.userId,
         role: this.normalizeParticipantRole(
-          lockedRoom.mode as RoomMode,
+          lockedRoom.mode,
           participantRow.role,
           lockedRoom.hostId,
           participantRow.userId,
