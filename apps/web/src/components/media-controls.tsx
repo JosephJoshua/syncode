@@ -45,6 +45,20 @@ interface MediaControlsProps {
   onTogglePushToTalkMode: () => void;
 }
 
+function micButtonClass(isConnected: boolean, isEnabled: boolean): string {
+  const base = 'size-6 rounded-md rounded-r-none transition-all duration-150';
+  if (!isConnected) return cn(base, 'text-muted-foreground/40');
+  if (!isEnabled) return cn(base, 'bg-destructive/15 text-destructive hover:bg-destructive/25');
+  return cn(base, 'text-foreground/80 hover:bg-background/80 hover:text-foreground');
+}
+
+function cameraButtonClass(isConnected: boolean, isEnabled: boolean): string {
+  const base = 'size-6 rounded-md rounded-r-none transition-all duration-150';
+  if (!isConnected) return cn(base, 'text-muted-foreground/40');
+  if (isEnabled) return cn(base, 'bg-primary/15 text-primary hover:bg-primary/25');
+  return cn(base, 'text-foreground/80 hover:bg-background/80 hover:text-foreground');
+}
+
 export function MediaControls({
   connectionState,
   isMicrophoneEnabled,
@@ -96,16 +110,7 @@ export function MediaControls({
           variant="ghost"
           size="icon-xs"
           disabled={!isConnected}
-          className={cn(
-            'size-6 rounded-md rounded-r-none transition-all duration-150',
-            isConnected &&
-              !isMicrophoneEnabled &&
-              'bg-destructive/15 text-destructive hover:bg-destructive/25',
-            isConnected &&
-              isMicrophoneEnabled &&
-              'text-foreground/80 hover:bg-background/80 hover:text-foreground',
-            !isConnected && 'text-muted-foreground/40',
-          )}
+          className={micButtonClass(isConnected, isMicrophoneEnabled)}
           onClick={onToggleMicrophone}
           aria-label={isMicrophoneEnabled ? 'Mute microphone' : 'Unmute microphone'}
         >
@@ -128,14 +133,7 @@ export function MediaControls({
           variant="ghost"
           size="icon-xs"
           disabled={!isConnected}
-          className={cn(
-            'size-6 rounded-md rounded-r-none transition-all duration-150',
-            isConnected && isCameraEnabled && 'bg-primary/15 text-primary hover:bg-primary/25',
-            isConnected &&
-              !isCameraEnabled &&
-              'text-foreground/80 hover:bg-background/80 hover:text-foreground',
-            !isConnected && 'text-muted-foreground/40',
-          )}
+          className={cameraButtonClass(isConnected, isCameraEnabled)}
           onClick={onToggleCamera}
           aria-label={isCameraEnabled ? 'Turn off camera' : 'Turn on camera'}
         >
