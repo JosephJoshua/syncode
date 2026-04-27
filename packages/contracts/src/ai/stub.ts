@@ -58,7 +58,7 @@ export class StubAiClient implements IAiClient {
 
   async getHintResult(jobId: JobId<'ai:hint'>): Promise<GenerateHintResult | null> {
     const job = this.jobs.get(jobId);
-    if (!job || job.type !== 'hint') return null;
+    if (job?.type !== 'hint') return null;
     return job.hintResult ?? null;
   }
 
@@ -72,7 +72,7 @@ export class StubAiClient implements IAiClient {
 
   async getReviewResult(jobId: JobId<'ai:review'>): Promise<ReviewCodeResult | null> {
     const job = this.jobs.get(jobId);
-    if (!job || job.type !== 'review') return null;
+    if (job?.type !== 'review') return null;
     return job.reviewResult ?? null;
   }
 
@@ -88,25 +88,25 @@ export class StubAiClient implements IAiClient {
 
   async getInterviewResult(jobId: JobId<'ai:interview'>): Promise<InterviewResponseResult | null> {
     const job = this.jobs.get(jobId);
-    if (!job || job.type !== 'interview') return null;
+    if (job?.type !== 'interview') return null;
     return job.interviewResult ?? null;
   }
 
   async getHintJobStatus(jobId: JobId<'ai:hint'>): Promise<JobStatus> {
     const job = this.jobs.get(jobId);
-    if (!job || job.type !== 'hint') return 'failed';
+    if (job?.type !== 'hint') return 'failed';
     return job.status;
   }
 
   async getReviewJobStatus(jobId: JobId<'ai:review'>): Promise<JobStatus> {
     const job = this.jobs.get(jobId);
-    if (!job || job.type !== 'review') return 'failed';
+    if (job?.type !== 'review') return 'failed';
     return job.status;
   }
 
   async getInterviewJobStatus(jobId: JobId<'ai:interview'>): Promise<JobStatus> {
     const job = this.jobs.get(jobId);
-    if (!job || job.type !== 'interview') return 'failed';
+    if (job?.type !== 'interview') return 'failed';
     return job.status;
   }
 

@@ -251,7 +251,8 @@ export class RoomsService {
         if (query.language) conditions.push(eq(rooms.language, query.language));
         if (query.difficulty) conditions.push(eq(problems.difficulty, query.difficulty));
         if (escapedSearch) {
-          conditions.push(sql`${problems.title} ILIKE ${`%${escapedSearch}%`} ESCAPE '\\'`);
+          const searchPattern = `%${escapedSearch}%`;
+          conditions.push(sql`${problems.title} ILIKE ${searchPattern} ESCAPE '\\'`);
         }
 
         if (decoded?.length === 2 && decoded[0] && decoded[1]) {
@@ -683,8 +684,6 @@ export class RoomsService {
             ),
           );
       }
-
-      return lockedRoom;
     });
 
     const [updatedRoom, participantRows] = await Promise.all([
@@ -746,7 +745,7 @@ export class RoomsService {
         .where(and(eq(roomParticipants.roomId, roomId), eq(roomParticipants.userId, targetUserId)))
         .for('update');
 
-      if (!targetParticipant || !targetParticipant.isActive) {
+      if (!targetParticipant?.isActive) {
         throw new NotFoundException({
           message: 'Participant not found',
           code: ERROR_CODES.PARTICIPANT_NOT_FOUND,

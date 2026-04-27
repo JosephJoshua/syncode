@@ -220,7 +220,7 @@ export class CollaborationService implements OnModuleDestroy {
 
   checkRoomEmpty(roomId: string): void {
     const room = this.roomRegistry.getRoom(roomId);
-    if (room && room.clients.size === 0) {
+    if (room?.clients.size === 0) {
       this.scheduleRoomCleanup(roomId);
     }
   }
