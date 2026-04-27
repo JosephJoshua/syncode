@@ -1,4 +1,4 @@
-import { INLINE_COMMENTS_KEY } from '@syncode/shared';
+import { INLINE_COMMENTS_KEY, WHITEBOARD_KEY } from '@syncode/shared';
 import { describe, expect, it } from 'vitest';
 import * as Y from 'yjs';
 import { YjsDocumentStore } from './yjs-document-store.js';
@@ -31,6 +31,23 @@ describe('YjsDocumentStore', () => {
       const { doc } = store.createDoc('room-1');
 
       expect(doc.getMap(INLINE_COMMENTS_KEY).size).toBe(0);
+    });
+
+    it('GIVEN a new doc WHEN creating THEN whiteboard root map exists', () => {
+      const store = new YjsDocumentStore();
+      const { doc } = store.createDoc('room-1');
+
+      expect(doc.getMap(WHITEBOARD_KEY).size).toBe(0);
+    });
+
+    it('GIVEN corrupt snapshot WHEN creating THEN inline comments and whiteboard roots exist on the recovered doc', () => {
+      const store = new YjsDocumentStore();
+      const corrupt = new Uint8Array([0xff, 0x00]);
+
+      const { doc } = store.createDoc('room-1', { snapshot: corrupt });
+
+      expect(doc.getMap(INLINE_COMMENTS_KEY).size).toBe(0);
+      expect(doc.getMap(WHITEBOARD_KEY).size).toBe(0);
     });
 
     it('GIVEN no initialContentByLanguage WHEN creating THEN all language Y.Texts are empty', () => {
@@ -190,6 +207,36 @@ describe('YjsDocumentStore', () => {
       expect(reconstructedComments.get('comment-1')?.get('content')).toBe(
         'Consider the edge case on this line.',
       );
+      reconstructed.destroy();
+    });
+
+    it('GIVEN doc with whiteboard records WHEN destroying THEN snapshot preserves the whiteboard map', () => {
+      const store = new YjsDocumentStore();
+      const { doc } = store.createDoc('room-1');
+      const whiteboard = doc.getMap<Y.Map<unknown>>(WHITEBOARD_KEY);
+      const shape = new Y.Map<unknown>();
+      shape.set('type', 'geo');
+      shape.set('x', 100);
+      shape.set('y', 200);
+      shape.set('meta', {
+        authorId: 'user-1',
+        layer: 'drawing',
+        createdAt: 1_700_000_000_000,
+      });
+      whiteboard.set('shape:abc', shape);
+
+      const snapshot = store.destroyDoc('room-1');
+
+      const reconstructed = new Y.Doc();
+      Y.applyUpdate(reconstructed, snapshot!);
+      const reconstructedWhiteboard = reconstructed.getMap<Y.Map<unknown>>(WHITEBOARD_KEY);
+      const reconstructedShape = reconstructedWhiteboard.get('shape:abc');
+      expect(reconstructedShape?.get('type')).toBe('geo');
+      expect(reconstructedShape?.get('meta')).toEqual({
+        authorId: 'user-1',
+        layer: 'drawing',
+        createdAt: 1_700_000_000_000,
+      });
       reconstructed.destroy();
     });
 
