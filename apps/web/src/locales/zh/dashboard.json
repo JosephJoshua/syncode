@@ -40,7 +40,14 @@
   },
   "aria": {
     "filterSessions": "筛选会话",
-    "sortSessions": "排序会话"
+    "sortSessions": "排序会话",
+    "previousPage": "上一页",
+    "nextPage": "下一页"
+  },
+  "pagination": {
+    "previous": "上一页",
+    "next": "下一页",
+    "summary": "显示第 {{start}}-{{end}} 条，共 {{total}} 条"
   },
   "role": {
     "candidate": "候选人",

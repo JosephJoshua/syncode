@@ -40,7 +40,14 @@
   },
   "aria": {
     "filterSessions": "Filter sessions",
-    "sortSessions": "Sort sessions"
+    "sortSessions": "Sort sessions",
+    "previousPage": "Previous page",
+    "nextPage": "Next page"
+  },
+  "pagination": {
+    "previous": "Previous",
+    "next": "Next",
+    "summary": "Showing {{start}}-{{end}} of {{total}}"
   },
   "role": {
     "candidate": "Candidate",
