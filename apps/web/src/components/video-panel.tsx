@@ -339,6 +339,44 @@ const VIEWPORT_PADDING = 32;
 
 type ResizeCorner = 'tl' | 'tr' | 'bl' | 'br';
 
+function computeResizeFromCorner(
+  corner: ResizeCorner,
+  origin: { width: number; height: number; x: number; y: number },
+  dx: number,
+  dy: number,
+): { rawWidth: number; rawHeight: number; rawX: number; rawY: number } {
+  switch (corner) {
+    case 'br':
+      return {
+        rawWidth: origin.width + dx,
+        rawHeight: origin.height + dy,
+        rawX: origin.x,
+        rawY: origin.y,
+      };
+    case 'tr':
+      return {
+        rawWidth: origin.width + dx,
+        rawHeight: origin.height - dy,
+        rawX: origin.x,
+        rawY: origin.y + dy,
+      };
+    case 'bl':
+      return {
+        rawWidth: origin.width - dx,
+        rawHeight: origin.height + dy,
+        rawX: origin.x + dx,
+        rawY: origin.y,
+      };
+    default:
+      return {
+        rawWidth: origin.width - dx,
+        rawHeight: origin.height - dy,
+        rawX: origin.x + dx,
+        rawY: origin.y + dy,
+      };
+  }
+}
+
 export function FloatingVideoPanel({
   tiles,
   isMinimized,
@@ -501,28 +539,12 @@ export function FloatingVideoPanel({
       const dy = e.clientY - r.startY;
 
       // Compute requested size and position from the dragged corner.
-      let rawWidth = r.originWidth;
-      let rawHeight = r.originHeight;
-      let rawX = r.originPosX;
-      let rawY = r.originPosY;
-
-      if (r.corner === 'br') {
-        rawWidth = r.originWidth + dx;
-        rawHeight = r.originHeight + dy;
-      } else if (r.corner === 'tr') {
-        rawWidth = r.originWidth + dx;
-        rawHeight = r.originHeight - dy;
-        rawY = r.originPosY + dy;
-      } else if (r.corner === 'bl') {
-        rawWidth = r.originWidth - dx;
-        rawHeight = r.originHeight + dy;
-        rawX = r.originPosX + dx;
-      } else {
-        rawWidth = r.originWidth - dx;
-        rawHeight = r.originHeight - dy;
-        rawX = r.originPosX + dx;
-        rawY = r.originPosY + dy;
-      }
+      const { rawWidth, rawHeight, rawX, rawY } = computeResizeFromCorner(
+        r.corner,
+        { width: r.originWidth, height: r.originHeight, x: r.originPosX, y: r.originPosY },
+        dx,
+        dy,
+      );
 
       const clampedSize = clampSize(rawWidth, rawHeight);
 
