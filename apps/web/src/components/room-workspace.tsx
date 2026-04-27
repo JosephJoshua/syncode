@@ -7,7 +7,7 @@ import type {
 } from '@syncode/contracts';
 import { CONTROL_API, ERROR_CODES } from '@syncode/contracts';
 import type { RoomRole, RoomStatus } from '@syncode/shared';
-import { Badge, Button } from '@syncode/ui';
+import { Badge, Button, cn } from '@syncode/ui';
 import {
   CheckCircle2,
   ChevronDown,
@@ -42,6 +42,7 @@ import {
 } from '@/lib/mock-workspace.js';
 import { allRequiredPeersReady } from '@/lib/participant-readiness.js';
 import { buildInviteLink } from '@/lib/room-stage.js';
+import { authorColor } from '@/lib/whiteboard-author-color.js';
 import { codeTextKey } from '@/lib/yjs-collab-provider.js';
 import { CollaborativeEditor } from './collaborative-editor.js';
 import { ExecutionDetailsPanel } from './execution-details-panel.js';
@@ -54,6 +55,7 @@ import { RoomHeaderBar } from './room-header-bar.js';
 import { type Participant, RoomParticipantCard } from './room-participant-card.js';
 import { type ProblemData, RoomProblemPanel } from './room-problem-panel.js';
 import { RoomStatusBar } from './room-status-bar.js';
+import { RoomWhiteboardPanel } from './room-whiteboard-panel.js';
 import {
   type CaseRunState,
   countPassed,
@@ -276,6 +278,7 @@ export function RoomWorkspace({
   const [rightCollapsed, setRightCollapsed] = useState(false);
   const [rightNarrow, setRightNarrow] = useState(false);
   const [bottomCollapsed, setBottomCollapsed] = useState(false);
+  const [activeCenterTab, setActiveCenterTab] = useState<'code' | 'whiteboard'>('code');
   const [activeCommentLine, setActiveCommentLine] = useState(1);
   const rightMountedRef = useRef(false);
   const rightContentRef = useRef<HTMLDivElement>(null);
@@ -759,13 +762,43 @@ export function RoomWorkspace({
                 {/* Editor toolbar */}
                 <div className="flex h-9 shrink-0 items-center justify-between border-b border-border bg-card px-3">
                   <div className="flex items-center gap-2.5">
-                    <div className="flex items-center gap-1.5 rounded-t-md border border-b-0 border-border bg-background px-2.5 py-1">
-                      <span className="size-2 rounded-full bg-primary/60" />
-                      <span className="font-mono text-[11px] text-foreground/80">
+                    <div
+                      role="tablist"
+                      aria-label="Center workspace tabs"
+                      className="flex items-center"
+                    >
+                      <button
+                        type="button"
+                        role="tab"
+                        aria-selected={activeCenterTab === 'code'}
+                        onClick={() => setActiveCenterTab('code')}
+                        className={cn(
+                          'flex items-center gap-1.5 rounded-t-md border border-b-0 px-2.5 py-1 font-mono text-[11px] transition-colors',
+                          activeCenterTab === 'code'
+                            ? 'border-border bg-background text-foreground/80'
+                            : 'border-transparent bg-transparent text-muted-foreground hover:text-foreground',
+                        )}
+                      >
+                        <span className="size-2 rounded-full bg-primary/60" />
                         solution.{languageExtension(language)}
-                      </span>
+                      </button>
+                      <button
+                        type="button"
+                        role="tab"
+                        aria-selected={activeCenterTab === 'whiteboard'}
+                        onClick={() => setActiveCenterTab('whiteboard')}
+                        className={cn(
+                          'ml-1 flex items-center gap-1.5 rounded-t-md border border-b-0 px-2.5 py-1 font-mono text-[11px] transition-colors',
+                          activeCenterTab === 'whiteboard'
+                            ? 'border-border bg-background text-foreground/80'
+                            : 'border-transparent bg-transparent text-muted-foreground hover:text-foreground',
+                        )}
+                      >
+                        <span className="size-2 rounded-full bg-amber-400/70" />
+                        {t('tabs.whiteboard')}
+                      </button>
                     </div>
-                    {isEditorReadOnly ? (
+                    {isEditorReadOnly && activeCenterTab === 'code' ? (
                       <Badge variant="neutral" size="sm" className="text-[10px]">
                         {t('workspace.readOnly')}
                       </Badge>
@@ -827,24 +860,60 @@ export function RoomWorkspace({
                   </div>
                 ) : null}
 
-                {/* Monaco editor */}
-                <div className="flex-1 overflow-hidden">
-                  {doc && awareness && collabStatus === 'connected' ? (
-                    <CollaborativeEditor
-                      key={doc.clientID}
-                      doc={doc}
-                      awareness={awareness}
-                      language={monacoLanguage}
-                      readOnly={isEditorReadOnly}
-                      commentLineNumbers={commentLineNumbers}
-                      activeCommentLine={activeCommentLine}
-                      onActiveLineChange={setActiveCommentLine}
-                      onRunCode={() => void handleRunCodeRef.current()}
-                      onSubmitCode={() => void requestSubmitCodeRef.current()}
-                    />
-                  ) : (
-                    EDITOR_LOADING
-                  )}
+                {/* Editor / whiteboard surface — kept mounted to preserve
+                    each subtree's local state across tab switches. */}
+                <div className="relative flex-1 overflow-hidden">
+                  <div
+                    className={cn(
+                      'absolute inset-0',
+                      activeCenterTab === 'code' ? 'visible' : 'invisible',
+                    )}
+                  >
+                    {doc && awareness && collabStatus === 'connected' ? (
+                      <CollaborativeEditor
+                        key={doc.clientID}
+                        doc={doc}
+                        awareness={awareness}
+                        language={monacoLanguage}
+                        readOnly={isEditorReadOnly}
+                        commentLineNumbers={commentLineNumbers}
+                        activeCommentLine={activeCommentLine}
+                        onActiveLineChange={setActiveCommentLine}
+                        onRunCode={() => void handleRunCodeRef.current()}
+                        onSubmitCode={() => void requestSubmitCodeRef.current()}
+                      />
+                    ) : (
+                      EDITOR_LOADING
+                    )}
+                  </div>
+                  <div
+                    className={cn(
+                      'absolute inset-0',
+                      activeCenterTab === 'whiteboard' ? 'visible' : 'invisible',
+                    )}
+                  >
+                    {doc && awareness && currentUserId ? (
+                      <RoomWhiteboardPanel
+                        doc={doc}
+                        awareness={awareness}
+                        roomId={roomId}
+                        userId={currentUserId}
+                        userName={currentUserName}
+                        userColor={authorColor(currentUserId)}
+                        canDraw={room.myCapabilities.includes('whiteboard:draw')}
+                        canAnnotate={room.myCapabilities.includes('whiteboard:annotate')}
+                        participantNames={
+                          new Map(
+                            room.participants
+                              .filter((p) => p.isActive)
+                              .map(
+                                (p) => [p.userId, p.displayName ?? p.userId.slice(0, 6)] as const,
+                              ),
+                          )
+                        }
+                      />
+                    ) : null}
+                  </div>
                 </div>
 
                 {/* Expand bar shown when bottom panel is collapsed */}
