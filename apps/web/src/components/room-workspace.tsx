@@ -103,6 +103,121 @@ interface RoomWorkspaceProps {
   dockedVideoPanel?: React.ReactNode;
 }
 
+interface CasePollDeps {
+  caseId: string;
+  jobId: string;
+  expectedOutput: string | null;
+  token: { cancelled: boolean };
+  setMultiRunState: React.Dispatch<React.SetStateAction<MultiRunState>>;
+  t: (key: string) => string;
+}
+
+async function executeCasePoll(deps: CasePollDeps): Promise<void> {
+  const { caseId, jobId, expectedOutput, token, setMultiRunState, t } = deps;
+  try {
+    const response = await api(CONTROL_API.EXECUTION.GET_RESULT, { params: { jobId } });
+    if (token.cancelled) return;
+
+    if (isExecutionResultPayload(response)) {
+      const passed =
+        expectedOutput != null ? response.stdout.trim() === expectedOutput.trim() : null;
+
+      setMultiRunState((prev) => {
+        if (prev.status !== 'running' && prev.status !== 'completed') return prev;
+        const next = new Map(prev.results);
+        next.set(caseId, {
+          status: response.status,
+          jobId,
+          stdout: response.stdout,
+          stderr: response.stderr,
+          exitCode: response.exitCode,
+          durationMs: response.durationMs,
+          memoryUsageMb: response.memoryUsageMb,
+          timedOut: response.timedOut,
+          error: response.error,
+          passed,
+        });
+        let allDone = true;
+        for (const s of next.values()) {
+          if (s.status === 'queued' || s.status === 'running') {
+            allDone = false;
+            break;
+          }
+        }
+        return { status: allDone ? 'completed' : 'running', results: next } as MultiRunState;
+      });
+      return;
+    }
+
+    if (response.status === 'queued' || response.status === 'running') {
+      setMultiRunState((prev) => {
+        if (prev.status !== 'running' && prev.status !== 'completed') return prev;
+        const current = prev.results.get(caseId);
+        if (current?.status === response.status) return prev;
+        const next = new Map(prev.results);
+        next.set(
+          caseId,
+          response.status === 'queued' ? { status: 'queued' } : { status: 'running', jobId },
+        );
+        return { ...prev, results: next };
+      });
+      setTimeout(() => {
+        if (!token.cancelled) executeCasePoll(deps).catch(() => undefined);
+      }, EXECUTION_POLL_INTERVAL_MS);
+    }
+  } catch (error) {
+    const apiError = await readApiError(error);
+    if (!token.cancelled) {
+      setMultiRunState((prev) => {
+        if (prev.status !== 'running' && prev.status !== 'completed') return prev;
+        const next = new Map(prev.results);
+        next.set(caseId, {
+          status: 'request-error',
+          message: apiError?.message ?? t('workspace.runFailed'),
+        });
+        return { ...prev, results: next };
+      });
+    }
+  }
+}
+
+interface SubmissionPollDeps {
+  submissionId: string;
+  cancelled: { value: boolean };
+  setSubmitState: React.Dispatch<React.SetStateAction<SubmitState>>;
+  t: (key: string) => string;
+}
+
+async function executeSubmissionPoll(deps: SubmissionPollDeps): Promise<void> {
+  const { submissionId, cancelled, setSubmitState, t } = deps;
+  try {
+    const details: ExecutionDetailsResponse = await api(
+      CONTROL_API.EXECUTION.GET_SUBMISSION_DETAILS,
+      { params: { submissionId } },
+    );
+
+    if (cancelled.value) return;
+
+    if (details.status === 'completed' || details.status === 'failed') {
+      setSubmitState({ status: 'completed', submissionId, details });
+      return;
+    }
+
+    setSubmitState({ status: 'polling', submissionId });
+    setTimeout(() => {
+      if (!cancelled.value) executeSubmissionPoll(deps).catch(() => undefined);
+    }, SUBMISSION_POLL_INTERVAL_MS);
+  } catch (error) {
+    const apiError = await readApiError(error);
+    if (!cancelled.value) {
+      setSubmitState({
+        status: 'request-error',
+        message: apiError?.message ?? t('workspace.submitFailed'),
+      });
+    }
+  }
+}
+
 export function RoomWorkspace({
   room,
   currentUserId,
@@ -343,78 +458,9 @@ export function RoomWorkspace({
     expectedOutput: string | null,
     token: { cancelled: boolean },
   ) => {
-    const poll = async () => {
-      try {
-        const response = await api(CONTROL_API.EXECUTION.GET_RESULT, { params: { jobId } });
-        if (token.cancelled) return;
-
-        if (isExecutionResultPayload(response)) {
-          const passed =
-            expectedOutput != null ? response.stdout.trim() === expectedOutput.trim() : null;
-
-          setMultiRunState((prev) => {
-            if (prev.status !== 'running' && prev.status !== 'completed') return prev;
-            const next = new Map(prev.results);
-            next.set(caseId, {
-              status: response.status,
-              jobId,
-              stdout: response.stdout,
-              stderr: response.stderr,
-              exitCode: response.exitCode,
-              durationMs: response.durationMs,
-              memoryUsageMb: response.memoryUsageMb,
-              timedOut: response.timedOut,
-              error: response.error,
-              passed,
-            });
-
-            let allDone = true;
-            for (const s of next.values()) {
-              if (s.status === 'queued' || s.status === 'running') {
-                allDone = false;
-                break;
-              }
-            }
-
-            return { status: allDone ? 'completed' : 'running', results: next } as MultiRunState;
-          });
-          return;
-        }
-
-        if (response.status === 'queued' || response.status === 'running') {
-          setMultiRunState((prev) => {
-            if (prev.status !== 'running' && prev.status !== 'completed') return prev;
-            const current = prev.results.get(caseId);
-            if (current?.status === response.status) return prev;
-            const next = new Map(prev.results);
-            next.set(
-              caseId,
-              response.status === 'queued' ? { status: 'queued' } : { status: 'running', jobId },
-            );
-            return { ...prev, results: next };
-          });
-          setTimeout(() => {
-            if (!token.cancelled) void poll();
-          }, EXECUTION_POLL_INTERVAL_MS);
-          return;
-        }
-      } catch (error) {
-        const apiError = await readApiError(error);
-        if (!token.cancelled) {
-          setMultiRunState((prev) => {
-            if (prev.status !== 'running' && prev.status !== 'completed') return prev;
-            const next = new Map(prev.results);
-            next.set(caseId, {
-              status: 'request-error',
-              message: apiError?.message ?? t('workspace.runFailed'),
-            });
-            return { ...prev, results: next };
-          });
-        }
-      }
-    };
-
-    void poll();
+    executeCasePoll({ caseId, jobId, expectedOutput, token, setMultiRunState, t }).catch(
+      () => undefined,
+    );
   };
 
   const handleSubmitCode = async () => {
@@ -440,42 +486,10 @@ export function RoomWorkspace({
   };
 
   const pollSubmission = (submissionId: string) => {
-    let cancelled = false;
-
-    const poll = async () => {
-      try {
-        const details: ExecutionDetailsResponse = await api(
-          CONTROL_API.EXECUTION.GET_SUBMISSION_DETAILS,
-          { params: { submissionId } },
-        );
-
-        if (cancelled) return;
-
-        if (details.status === 'completed' || details.status === 'failed') {
-          setSubmitState({ status: 'completed', submissionId, details });
-          return;
-        }
-
-        // Still pending/running — update with latest partial results and keep polling
-        setSubmitState({ status: 'polling', submissionId });
-        setTimeout(() => {
-          if (!cancelled) void poll();
-        }, SUBMISSION_POLL_INTERVAL_MS);
-      } catch (error) {
-        const apiError = await readApiError(error);
-        if (!cancelled) {
-          setSubmitState({
-            status: 'request-error',
-            message: apiError?.message ?? t('workspace.submitFailed'),
-          });
-        }
-      }
-    };
-
-    void poll();
-
+    const cancelled = { value: false };
+    executeSubmissionPoll({ submissionId, cancelled, setSubmitState, t }).catch(() => undefined);
     return () => {
-      cancelled = true;
+      cancelled.value = true;
     };
   };
 
