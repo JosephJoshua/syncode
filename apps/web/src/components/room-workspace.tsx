@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import {
   Separator as ResizableHandle,
@@ -46,6 +47,7 @@ import { authorColor } from '@/lib/whiteboard-author-color.js';
 import { codeTextKey } from '@/lib/yjs-collab-provider.js';
 import { CollaborativeEditor } from './collaborative-editor.js';
 import { ExecutionDetailsPanel } from './execution-details-panel.js';
+import { FloatingWhiteboardPanel } from './floating-whiteboard-panel.js';
 import { HostControlPanel } from './host-control-panel.js';
 import { InlineCommentsPanel } from './inline-comments-panel.js';
 import { InviteLinkInline } from './invite-link-inline.js';
@@ -279,6 +281,9 @@ export function RoomWorkspace({
   const [rightNarrow, setRightNarrow] = useState(false);
   const [bottomCollapsed, setBottomCollapsed] = useState(false);
   const [activeCenterTab, setActiveCenterTab] = useState<'code' | 'whiteboard'>('code');
+  const [whiteboardViewMode, setWhiteboardViewMode] = useState<'tab' | 'floating'>('tab');
+  const [inlineWhiteboardHost, setInlineWhiteboardHost] = useState<HTMLDivElement | null>(null);
+  const [floatingWhiteboardHost, setFloatingWhiteboardHost] = useState<HTMLDivElement | null>(null);
   const [activeCommentLine, setActiveCommentLine] = useState(1);
   const rightMountedRef = useRef(false);
   const rightContentRef = useRef<HTMLDivElement>(null);
@@ -887,33 +892,40 @@ export function RoomWorkspace({
                     )}
                   </div>
                   <div
+                    ref={setInlineWhiteboardHost}
+                    data-testid="inline-whiteboard-host"
                     className={cn(
                       'absolute inset-0',
-                      activeCenterTab === 'whiteboard' ? 'visible' : 'invisible',
+                      activeCenterTab === 'whiteboard' && whiteboardViewMode === 'tab'
+                        ? 'visible'
+                        : 'invisible',
                     )}
                   >
-                    {doc && awareness && currentUserId ? (
-                      <RoomWhiteboardPanel
-                        doc={doc}
-                        awareness={awareness}
-                        roomId={roomId}
-                        userId={currentUserId}
-                        userName={currentUserName}
-                        userColor={authorColor(currentUserId)}
-                        canDraw={room.myCapabilities.includes('whiteboard:draw')}
-                        canAnnotate={room.myCapabilities.includes('whiteboard:annotate')}
-                        participantNames={
-                          new Map(
-                            room.participants
-                              .filter((p) => p.isActive)
-                              .map(
-                                (p) => [p.userId, p.displayName ?? p.userId.slice(0, 6)] as const,
-                              ),
-                          )
-                        }
-                      />
-                    ) : null}
+                    {/* The whiteboard subtree is portaled into this div from
+                        the workspace top-level mount so it survives switching
+                        between the docked tab and the floating PiP without
+                        remounting (preserves tldraw editor state). */}
                   </div>
+                  {/* Placeholder shown in the tab area when popped out, so
+                      the user knows where the whiteboard went and can dock
+                      it back without going looking for the floating window. */}
+                  {activeCenterTab === 'whiteboard' && whiteboardViewMode === 'floating' ? (
+                    <div className="absolute inset-0 flex items-center justify-center bg-muted/20">
+                      <div className="flex flex-col items-center gap-2 text-center">
+                        <span className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
+                          {t('whiteboard.poppedOut')}
+                        </span>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => setWhiteboardViewMode('tab')}
+                        >
+                          {t('whiteboard.dockBack')}
+                        </Button>
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
 
                 {/* Expand bar shown when bottom panel is collapsed */}
@@ -1162,8 +1174,65 @@ export function RoomWorkspace({
         onCancel={closeSubmissionPreview}
         onConfirm={confirmSubmitPreview}
       />
+
+      {doc && awareness && currentUserId ? (
+        <>
+          {whiteboardViewMode === 'floating' ? (
+            <FloatingWhiteboardPanel
+              persistKey={`${roomId}:${currentUserId}`}
+              title={t('tabs.whiteboard')}
+              onClose={() => setWhiteboardViewMode('tab')}
+              bodyRef={setFloatingWhiteboardHost}
+            />
+          ) : null}
+
+          {/* Single mounted whiteboard panel — its DOM is portaled into
+              either the inline tab host or the floating panel body, swapping
+              targets without ever unmounting the tldraw subtree. */}
+          <WhiteboardPortal
+            target={
+              whiteboardViewMode === 'floating' ? floatingWhiteboardHost : inlineWhiteboardHost
+            }
+          >
+            <RoomWhiteboardPanel
+              doc={doc}
+              awareness={awareness}
+              roomId={roomId}
+              userId={currentUserId}
+              userName={currentUserName}
+              userColor={authorColor(currentUserId)}
+              canDraw={room.myCapabilities.includes('whiteboard:draw')}
+              canAnnotate={room.myCapabilities.includes('whiteboard:annotate')}
+              participantNames={
+                new Map(
+                  room.participants
+                    .filter((p) => p.isActive)
+                    .map((p) => [p.userId, p.displayName ?? p.userId.slice(0, 6)] as const),
+                )
+              }
+              onPopOut={
+                whiteboardViewMode === 'tab' ? () => setWhiteboardViewMode('floating') : undefined
+              }
+              onDock={
+                whiteboardViewMode === 'floating' ? () => setWhiteboardViewMode('tab') : undefined
+              }
+            />
+          </WhiteboardPortal>
+        </>
+      ) : null}
     </div>
   );
+}
+
+function WhiteboardPortal({
+  target,
+  children,
+}: {
+  target: HTMLElement | null;
+  children: React.ReactNode;
+}) {
+  if (!target) return null;
+  return createPortal(children, target);
 }
 
 type ExecutionPollResponse = ExecutionResultResponse | JobStatusResponse;

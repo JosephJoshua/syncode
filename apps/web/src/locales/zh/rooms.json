@@ -350,6 +350,17 @@
     "redo": "重做",
     "authors": "作者",
     "showAnnotations": "显示批注",
-    "hideAnnotations": "隐藏批注"
+    "hideAnnotations": "隐藏批注",
+    "popOut": "弹出为浮动窗口",
+    "dockBack": "停靠回标签页",
+    "poppedOut": "白板已在浮动窗口中",
+    "minimizeFloating": "最小化浮动白板",
+    "restoreFloating": "还原浮动白板",
+    "dockToTab": "停靠到标签页",
+    "closeFloating": "关闭浮动白板",
+    "resizeFromTopLeft": "从左上角调整白板尺寸",
+    "resizeFromTopRight": "从右上角调整白板尺寸",
+    "resizeFromBottomLeft": "从左下角调整白板尺寸",
+    "resizeFromBottomRight": "从右下角调整白板尺寸"
   }
 }

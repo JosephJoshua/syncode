@@ -5,7 +5,14 @@ import {
   type WhiteboardLayer,
 } from '@syncode/shared';
 import { Button, cn } from '@syncode/ui';
-import { Highlighter, PencilLine, Redo2, Undo2 } from 'lucide-react';
+import {
+  Highlighter,
+  PanelRightClose,
+  PanelRightOpen,
+  PencilLine,
+  Redo2,
+  Undo2,
+} from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -33,6 +40,13 @@ export interface RoomWhiteboardPanelProps {
   canDraw: boolean;
   canAnnotate: boolean;
   participantNames: Map<string, string>;
+  // Provided when the panel is currently docked in the tab area; clicking it
+  // pops the whiteboard out into a floating PiP window so the user can draw
+  // and watch the code editor side-by-side.
+  onPopOut?: () => void;
+  // Provided when the panel is currently rendered inside the floating
+  // window; clicking it docks the whiteboard back into the workspace tab.
+  onDock?: () => void;
 }
 
 const VISIBILITY_PREFIX = 'whiteboard:visibility';
@@ -86,6 +100,8 @@ export function RoomWhiteboardPanel({
   canDraw,
   canAnnotate,
   participantNames,
+  onPopOut,
+  onDock,
 }: RoomWhiteboardPanelProps) {
   const { t } = useTranslation('rooms');
 
@@ -211,6 +227,30 @@ export function RoomWhiteboardPanel({
           >
             <Redo2 className="size-3" />
           </Button>
+          {onPopOut ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              onClick={onPopOut}
+              aria-label={t('whiteboard.popOut')}
+              className="h-6 w-6"
+            >
+              <PanelRightOpen className="size-3" />
+            </Button>
+          ) : null}
+          {onDock ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              onClick={onDock}
+              aria-label={t('whiteboard.dockBack')}
+              className="h-6 w-6"
+            >
+              <PanelRightClose className="size-3" />
+            </Button>
+          ) : null}
         </div>
       </div>
       <div className="relative flex-1 overflow-hidden">

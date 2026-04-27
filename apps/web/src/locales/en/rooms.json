@@ -350,6 +350,17 @@
     "redo": "Redo",
     "authors": "Authors",
     "showAnnotations": "Show annotations",
-    "hideAnnotations": "Hide annotations"
+    "hideAnnotations": "Hide annotations",
+    "popOut": "Pop out into a floating window",
+    "dockBack": "Dock to tab",
+    "poppedOut": "Whiteboard is in a floating window",
+    "minimizeFloating": "Minimize floating whiteboard",
+    "restoreFloating": "Restore floating whiteboard",
+    "dockToTab": "Dock to tab",
+    "closeFloating": "Close floating whiteboard",
+    "resizeFromTopLeft": "Resize whiteboard from top left",
+    "resizeFromTopRight": "Resize whiteboard from top right",
+    "resizeFromBottomLeft": "Resize whiteboard from bottom left",
+    "resizeFromBottomRight": "Resize whiteboard from bottom right"
   }
 }
