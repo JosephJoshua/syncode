@@ -1,4 +1,5 @@
 import type { ExecutionDetailsResponse } from '@syncode/contracts';
+import type { TFunction } from 'i18next';
 import { CheckCircle2, ChevronDown, ChevronRight, Clock, MemoryStick, XCircle } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -122,21 +123,7 @@ export function ExecutionDetailsPanel({ details, className = '' }: ExecutionDeta
                 </span>
 
                 {/* Status pill */}
-                {passed ? (
-                  <span className="flex items-center gap-0.5 font-mono text-[10px] font-semibold text-success">
-                    <CheckCircle2 className="size-3" />
-                    {t('execution.statusPass')}
-                  </span>
-                ) : failed ? (
-                  <span className="flex items-center gap-0.5 font-mono text-[10px] font-semibold text-destructive">
-                    <XCircle className="size-3" />
-                    {t('execution.statusFail')}
-                  </span>
-                ) : (
-                  <span className="font-mono text-[10px] text-muted-foreground/50">
-                    {t('execution.statusPending')}
-                  </span>
-                )}
+                <CaseStatusPill passed={passed} failed={failed} t={t} />
 
                 {tc.timedOut ? (
                   <span className="font-mono text-[10px] font-semibold text-warning">
@@ -219,5 +206,37 @@ export function ExecutionDetailsPanel({ details, className = '' }: ExecutionDeta
         })}
       </div>
     </div>
+  );
+}
+
+function CaseStatusPill({
+  passed,
+  failed,
+  t,
+}: {
+  readonly passed: boolean;
+  readonly failed: boolean;
+  readonly t: TFunction<'common'>;
+}) {
+  if (passed) {
+    return (
+      <span className="flex items-center gap-0.5 font-mono text-[10px] font-semibold text-success">
+        <CheckCircle2 className="size-3" />
+        {t('execution.statusPass')}
+      </span>
+    );
+  }
+  if (failed) {
+    return (
+      <span className="flex items-center gap-0.5 font-mono text-[10px] font-semibold text-destructive">
+        <XCircle className="size-3" />
+        {t('execution.statusFail')}
+      </span>
+    );
+  }
+  return (
+    <span className="font-mono text-[10px] text-muted-foreground/50">
+      {t('execution.statusPending')}
+    </span>
   );
 }

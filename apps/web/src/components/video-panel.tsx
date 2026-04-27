@@ -251,11 +251,9 @@ function ZoomOverlay({ tile, kind, onClose }: ZoomOverlayProps) {
           e.preventDefault();
           last.focus();
         }
-      } else {
-        if (active === last) {
-          e.preventDefault();
-          first.focus();
-        }
+      } else if (active === last) {
+        e.preventDefault();
+        first.focus();
       }
     },
     [onClose],

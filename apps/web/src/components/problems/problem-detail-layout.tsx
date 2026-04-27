@@ -384,11 +384,7 @@ function BookmarkToggleButton({
 }) {
   const { t } = useTranslation('problems');
   const isDisabled = !canToggleBookmark || isPending;
-  const label = canToggleBookmark
-    ? isBookmarked
-      ? t('detail.removeBookmark')
-      : t('detail.addBookmark')
-    : t('detail.signInBookmarks');
+  const label = getBookmarkLabel(canToggleBookmark, isBookmarked, t);
 
   return (
     <Button
@@ -485,4 +481,14 @@ function formatDate(value: string) {
     dateStyle: 'medium',
     timeStyle: 'short',
   });
+}
+
+function getBookmarkLabel(
+  canToggleBookmark: boolean,
+  isBookmarked: boolean,
+  t: (key: string) => string,
+): string {
+  if (!canToggleBookmark) return t('detail.signInBookmarks');
+  if (isBookmarked) return t('detail.removeBookmark');
+  return t('detail.addBookmark');
 }

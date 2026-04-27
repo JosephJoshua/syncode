@@ -245,7 +245,7 @@ export function TerminalDemo() {
             <span className="absolute inline-flex size-full animate-ping rounded-full bg-green-500/60" />
             <span className="relative inline-flex size-1.5 rounded-full bg-green-500" />
           </span>
-          ready
+          <span>ready</span>
         </span>
         <span className="text-muted-foreground/20">|</span>
         <span>main</span>
@@ -253,7 +253,8 @@ export function TerminalDemo() {
         <span>Python 3.12</span>
         <span className="ml-auto flex items-center gap-1.5">
           <span className="size-2 rounded-full bg-amber-400" />
-          <span className="size-2 rounded-full bg-violet-400" />2 connected
+          <span className="size-2 rounded-full bg-violet-400" />
+          <span>2 connected</span>
         </span>
       </div>
     </div>
@@ -306,14 +307,7 @@ function AnimatedItem({
       <span className={`mx-2 self-stretch ${hasLineNum ? 'border-r border-white/6' : ''}`} />
 
       {/* Tokens */}
-      <span className="whitespace-pre">
-        {item.tokens.map(([text, cls], j) => (
-          // biome-ignore lint/suspicious/noArrayIndexKey: static token array, never reordered
-          <span key={j} className={cls}>
-            {text}
-          </span>
-        ))}
-      </span>
+      <TokenLine tokens={item.tokens} />
 
       {/* Collaborative cursor */}
       {item.cursor ? (
@@ -331,5 +325,27 @@ function AnimatedItem({
         </motion.span>
       ) : null}
     </motion.div>
+  );
+}
+
+function TokenLine({ tokens }: { readonly tokens: Token[] }) {
+  // Build stable, content-based keys with a per-key occurrence counter to
+  // disambiguate repeated (text, cls) pairs without resorting to bare indices.
+  const seen = new Map<string, number>();
+  const keyed = tokens.map(([text, cls]) => {
+    const base = `${cls}|${text}`;
+    const count = seen.get(base) ?? 0;
+    seen.set(base, count + 1);
+    return { key: `${base}#${String(count)}`, text, cls };
+  });
+
+  return (
+    <span className="whitespace-pre">
+      {keyed.map(({ key, text, cls }) => (
+        <span key={key} className={cls}>
+          {text}
+        </span>
+      ))}
+    </span>
   );
 }

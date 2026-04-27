@@ -96,6 +96,20 @@ export function tabClassName(active: boolean): string {
   }`;
 }
 
+type DiffKind = 'same' | 'expected' | 'actual';
+
+function getDiffPrefix(kind: DiffKind): string {
+  if (kind === 'same') return '  ';
+  if (kind === 'expected') return '- ';
+  return '+ ';
+}
+
+function getDiffColor(kind: DiffKind): string {
+  if (kind === 'same') return 'text-muted-foreground';
+  if (kind === 'expected') return 'text-success';
+  return 'text-destructive';
+}
+
 export function LineDiffBlock({
   expected,
   actual,
@@ -108,13 +122,8 @@ export function LineDiffBlock({
   return (
     <pre className="max-h-40 overflow-auto rounded border border-border bg-background p-2 font-mono text-[11px] leading-relaxed">
       {lines.map((line, i) => {
-        const prefix = line.kind === 'same' ? '  ' : line.kind === 'expected' ? '- ' : '+ ';
-        const color =
-          line.kind === 'same'
-            ? 'text-muted-foreground'
-            : line.kind === 'expected'
-              ? 'text-success'
-              : 'text-destructive';
+        const prefix = getDiffPrefix(line.kind);
+        const color = getDiffColor(line.kind);
 
         return (
           <div key={`${line.kind}-${i}`} className={color}>

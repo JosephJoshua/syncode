@@ -14,6 +14,12 @@ type PermissionStatus = 'idle' | 'prompting' | 'granted' | 'denied';
 const BAR_COUNT = 12;
 const BAR_KEYS = Array.from({ length: BAR_COUNT }, (_, i) => `bar-${String(i)}`);
 
+function getBarColor(index: number): string {
+  if (index < BAR_COUNT * 0.6) return 'bg-emerald-400';
+  if (index < BAR_COUNT * 0.85) return 'bg-amber-400';
+  return 'bg-destructive';
+}
+
 async function acquireStream(
   constraints: MediaStreamConstraints,
   signal: { cancelled: boolean },
@@ -302,13 +308,7 @@ export function LobbyMediaPreview() {
                 key={key}
                 className={cn(
                   'h-2 flex-1 rounded-sm transition-colors duration-75',
-                  active
-                    ? i < BAR_COUNT * 0.6
-                      ? 'bg-emerald-400'
-                      : i < BAR_COUNT * 0.85
-                        ? 'bg-amber-400'
-                        : 'bg-destructive'
-                    : 'bg-muted',
+                  active ? getBarColor(i) : 'bg-muted',
                 )}
               />
             );

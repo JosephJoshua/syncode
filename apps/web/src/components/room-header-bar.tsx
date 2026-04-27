@@ -14,6 +14,12 @@ const STAGE_ACCENT_CLASSES: Record<RoomStatus, string> = {
   finished: 'stage-accent-finished',
 };
 
+function getPresenceDotColor(isMediaConnected: boolean, isActive: boolean): string {
+  if (isMediaConnected) return 'bg-emerald-400';
+  if (isActive) return 'bg-muted-foreground/50';
+  return 'bg-muted-foreground/20';
+}
+
 interface RoomHeaderBarProps {
   readonly roomName: string | null;
   readonly status: RoomStatus;
@@ -110,11 +116,7 @@ export function RoomHeaderBar({
                 <span
                   className={cn(
                     'absolute -bottom-0.5 -right-0.5 size-1.5 rounded-full border border-background',
-                    mediaConnectedSet?.has(p.userId)
-                      ? 'bg-emerald-400'
-                      : p.isActive
-                        ? 'bg-muted-foreground/50'
-                        : 'bg-muted-foreground/20',
+                    getPresenceDotColor(mediaConnectedSet?.has(p.userId) ?? false, p.isActive),
                   )}
                 />
               )}

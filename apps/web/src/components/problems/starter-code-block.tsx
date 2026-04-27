@@ -52,12 +52,18 @@ function renderTokenStream(tokens: Prism.TokenStream, keyPrefix: string): ReactN
   );
 }
 
+function normalizeAliases(alias: Prism.Token['alias']): string[] {
+  if (Array.isArray(alias)) return alias;
+  if (alias) return [alias];
+  return [];
+}
+
 function renderToken(token: string | Prism.Token, key: string): ReactNode {
   if (typeof token === 'string') {
     return token;
   }
 
-  const aliases = Array.isArray(token.alias) ? token.alias : token.alias ? [token.alias] : [];
+  const aliases = normalizeAliases(token.alias);
   const className = ['token', token.type, ...aliases].join(' ');
 
   return (

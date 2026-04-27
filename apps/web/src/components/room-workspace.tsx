@@ -557,13 +557,7 @@ export function RoomWorkspace({
   handleSubmitCodeRef.current = handleSubmitCode;
 
   // Show remote results when local user is idle
-  const multiRunResults =
-    multiRunState.status === 'running' || multiRunState.status === 'completed'
-      ? multiRunState.results
-      : remoteRun?.multiRunState.status === 'running' ||
-          remoteRun?.multiRunState.status === 'completed'
-        ? remoteRun.multiRunState.results
-        : null;
+  const multiRunResults = pickMultiRunResults(multiRunState, remoteRun?.multiRunState);
 
   // Auto-switch tabs when remote execution starts
   const prevRemoteRunRef = useRef(isRemoteRunActive);
@@ -1063,25 +1057,19 @@ function WorkspaceBottomPanel({
         </div>
 
         <div className="relative flex-1 overflow-auto bg-background p-3">
-          {activeBottomTab === 'testcases' ? (
-            <TestCaseEditor
-              cases={testCases}
-              activeCaseId={activeCaseId}
-              onActiveCaseChange={setActiveCaseId}
-              onCaseInputChange={handleCaseInputChange}
-              onAddCase={handleAddCase}
-              onRemoveCase={handleRemoveCase}
-              readOnly={isEditorReadOnly}
-            />
-          ) : activeBottomTab === 'output' ? (
-            <RunResultsPanel
-              multiRunState={multiRunState}
-              cases={testCases}
-              onRunCase={handleRunSingleCase}
-            />
-          ) : (
-            <SubmissionOutput submitState={submitState} />
-          )}
+          <BottomTabContent
+            activeBottomTab={activeBottomTab}
+            testCases={testCases}
+            activeCaseId={activeCaseId}
+            setActiveCaseId={setActiveCaseId}
+            handleCaseInputChange={handleCaseInputChange}
+            handleAddCase={handleAddCase}
+            handleRemoveCase={handleRemoveCase}
+            isEditorReadOnly={isEditorReadOnly}
+            multiRunState={multiRunState}
+            handleRunSingleCase={handleRunSingleCase}
+            submitState={submitState}
+          />
         </div>
       </div>
     </ResizablePanel>
@@ -1092,6 +1080,69 @@ function isExecutionResultPayload(
   response: ExecutionPollResponse,
 ): response is ExecutionResultResponse {
   return 'stdout' in response;
+}
+
+function pickMultiRunResults(
+  localState: MultiRunState,
+  remoteState: MultiRunState | undefined,
+): Map<string, CaseRunState> | null {
+  if (localState.status === 'running' || localState.status === 'completed') {
+    return localState.results;
+  }
+  if (remoteState?.status === 'running' || remoteState?.status === 'completed') {
+    return remoteState.results;
+  }
+  return null;
+}
+
+function BottomTabContent({
+  activeBottomTab,
+  testCases,
+  activeCaseId,
+  setActiveCaseId,
+  handleCaseInputChange,
+  handleAddCase,
+  handleRemoveCase,
+  isEditorReadOnly,
+  multiRunState,
+  handleRunSingleCase,
+  submitState,
+}: {
+  readonly activeBottomTab: 'testcases' | 'output' | 'results';
+  readonly testCases: TestCaseEntry[];
+  readonly activeCaseId: string;
+  readonly setActiveCaseId: (id: string) => void;
+  readonly handleCaseInputChange: (id: string, input: string) => void;
+  readonly handleAddCase: () => void;
+  readonly handleRemoveCase: (id: string) => void;
+  readonly isEditorReadOnly: boolean;
+  readonly multiRunState: MultiRunState;
+  readonly handleRunSingleCase: (id: string) => void;
+  readonly submitState: SubmitState;
+}) {
+  if (activeBottomTab === 'testcases') {
+    return (
+      <TestCaseEditor
+        cases={testCases}
+        activeCaseId={activeCaseId}
+        onActiveCaseChange={setActiveCaseId}
+        onCaseInputChange={handleCaseInputChange}
+        onAddCase={handleAddCase}
+        onRemoveCase={handleRemoveCase}
+        readOnly={isEditorReadOnly}
+      />
+    );
+  }
+  if (activeBottomTab === 'output') {
+    return (
+      <RunResultsPanel
+        multiRunState={multiRunState}
+        cases={testCases}
+        onRunCase={handleRunSingleCase}
+      />
+    );
+  }
+  return <SubmissionOutput submitState={submitState} />;
 }
 
 function SubmissionOutput({ submitState }: { submitState: SubmitState }) {

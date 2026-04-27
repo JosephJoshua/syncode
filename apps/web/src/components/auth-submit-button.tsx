@@ -36,41 +36,71 @@ export function AuthSubmitButton({
         size="lg"
       >
         <AnimatePresence mode="wait" initial={false}>
-          {isSuccess ? (
-            <motion.span
-              key="success"
-              initial={{ opacity: 0, scale: 0.5 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className="inline-flex items-center gap-2"
-            >
-              <Check className="size-4" />
-              {successLabel}
-            </motion.span>
-          ) : isPending ? (
-            <motion.span
-              key="loading"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="inline-flex items-center gap-2"
-            >
-              <LoaderCircle className="size-4 animate-spin" />
-              {pendingLabel}
-            </motion.span>
-          ) : (
-            <motion.span
-              key="idle"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="inline-flex items-center gap-2"
-            >
-              {idleLabel}
-              <ArrowRight className="size-4 transition-transform group-hover/button:translate-x-0.5" />
-            </motion.span>
-          )}
+          <SubmitButtonContent
+            isSuccess={isSuccess}
+            isPending={isPending}
+            idleLabel={idleLabel}
+            pendingLabel={pendingLabel}
+            successLabel={successLabel}
+          />
         </AnimatePresence>
       </Button>
     </motion.div>
+  );
+}
+
+function SubmitButtonContent({
+  isSuccess,
+  isPending,
+  idleLabel,
+  pendingLabel,
+  successLabel,
+}: Readonly<{
+  isSuccess: boolean;
+  isPending: boolean;
+  idleLabel: string;
+  pendingLabel: string;
+  successLabel: string;
+}>) {
+  if (isSuccess) {
+    return (
+      <motion.span
+        key="success"
+        initial={{ opacity: 0, scale: 0.5 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="inline-flex items-center gap-2"
+      >
+        <Check className="size-4" />
+        {successLabel}
+      </motion.span>
+    );
+  }
+
+  if (isPending) {
+    return (
+      <motion.span
+        key="loading"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="inline-flex items-center gap-2"
+      >
+        <LoaderCircle className="size-4 animate-spin" />
+        {pendingLabel}
+      </motion.span>
+    );
+  }
+
+  return (
+    <motion.span
+      key="idle"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="inline-flex items-center gap-2"
+    >
+      {idleLabel}
+      <ArrowRight className="size-4 transition-transform group-hover/button:translate-x-0.5" />
+    </motion.span>
   );
 }

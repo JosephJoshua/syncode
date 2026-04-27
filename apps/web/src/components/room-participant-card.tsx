@@ -40,6 +40,12 @@ const ASSIGNABLE_ROLES: Array<{ value: RoomRole; labelKey: string }> = [
   { value: 'observer', labelKey: 'roleSelect.observer' },
 ];
 
+function getPresenceDotBg(isMediaConnected: boolean, isActive: boolean): string {
+  if (isMediaConnected) return 'bg-emerald-400';
+  if (isActive) return 'bg-muted-foreground/50';
+  return 'bg-muted-foreground/20';
+}
+
 function PresenceDot({
   isMediaConnected,
   isMediaMuted,
@@ -70,11 +76,7 @@ function PresenceDot({
         size === 'sm'
           ? '-bottom-0.5 -right-0.5 size-2 border border-card'
           : '-bottom-0.5 -right-0.5 size-2.5 border-2 border-card',
-        isMediaConnected
-          ? 'bg-emerald-400'
-          : isActive
-            ? 'bg-muted-foreground/50'
-            : 'bg-muted-foreground/20',
+        getPresenceDotBg(isMediaConnected, isActive),
       )}
     />
   );

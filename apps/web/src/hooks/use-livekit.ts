@@ -570,7 +570,7 @@ export function useLiveKit({
     setIsPushToTalkMode((prev) => {
       const next = !prev;
       const room = roomRef.current;
-      if (room && next && room.localParticipant.isMicrophoneEnabled) {
+      if (next && room?.localParticipant.isMicrophoneEnabled) {
         void room.localParticipant.setMicrophoneEnabled(false);
         setIsMicrophoneEnabled(false);
       }
