@@ -144,6 +144,9 @@ export function CollaborativeEditor({
         const shouldBeIdle = now - stamp >= IDLE_HIDE_MS;
         if (shouldBeIdle && !idleIds.has(id)) {
           idleIds.add(id);
+          // Hidden cursors can't receive mouseout, so drop any stale hover
+          // mark to avoid them reappearing transparent on the next update.
+          hoverIds.delete(id);
           changed = true;
         } else if (!shouldBeIdle && idleIds.has(id)) {
           idleIds.delete(id);
