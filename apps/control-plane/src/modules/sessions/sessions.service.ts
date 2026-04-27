@@ -337,6 +337,11 @@ export class SessionsService {
       ]);
     }
 
+    // Defensive cap to prevent unbounded payloads when a session has thousands of
+    // periodic snapshots. Proper cursor pagination should replace this once the UI
+    // grows beyond a single timeline view.
+    const SNAPSHOT_HARD_LIMIT = 1000;
+
     const snapshotRows = await this.db
       .select({
         snapshotId: codeSnapshots.id,
@@ -348,7 +353,8 @@ export class SessionsService {
       })
       .from(codeSnapshots)
       .where(eq(codeSnapshots.sessionId, sessionId))
-      .orderBy(asc(codeSnapshots.createdAt), asc(codeSnapshots.id));
+      .orderBy(asc(codeSnapshots.createdAt), asc(codeSnapshots.id))
+      .limit(SNAPSHOT_HARD_LIMIT);
 
     return snapshotRows.map((snapshot) => ({
       snapshotId: snapshot.snapshotId,
