@@ -3,6 +3,7 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  HttpException,
   Inject,
   Injectable,
   InternalServerErrorException,
@@ -13,6 +14,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import {
+  AI_CLIENT,
   type AuthorizeJoinResponse,
   BROWSEABLE_ROOM_STATUSES,
   type BrowseRoomsQuery,
@@ -20,10 +22,16 @@ import {
   type CreateRoomInput,
   type DestroyDocumentResponse,
   ERROR_CODES,
+  type GenerateHintRequest,
+  type GenerateHintResult,
+  type IAiClient,
   type ICollabClient,
+  type JobId,
   type JoinRoomInput,
   type ListRoomsQuery,
+  type RequestRoomAiHintInput,
   type RoleAssignmentReason,
+  type RoomChatMediaUploadInput,
   type RoomConfig,
   type RunCodeRequest,
   type RunCodeResponse,
@@ -69,7 +77,7 @@ import {
   STORAGE_SERVICE,
 } from '@syncode/shared/ports';
 import { type PaginatedResult, paginate } from '@syncode/shared/server';
-import { and, asc, desc, eq, gt, inArray, lt, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, gte, inArray, lt, or, sql } from 'drizzle-orm';
 import { resolveAvatarUrls } from '@/common/resolve-avatar-urls.js';
 import type { EnvConfig } from '@/config/env.config.js';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
@@ -81,6 +89,8 @@ import type {
   JoinRoomResult,
   MediaTokenResult,
   PublicRoomSummaryResult,
+  RequestRoomAiHintResult,
+  RoomChatMediaUploadResult,
   RoomDetailResult,
   RoomSummaryResult,
   TransferOwnershipResult,
@@ -95,6 +105,8 @@ export class RoomsService {
   constructor(
     @Inject(DB_CLIENT) private readonly db: Database,
     private readonly executionService: ExecutionService,
+    @Inject(AI_CLIENT)
+    private readonly aiClient: IAiClient,
     @Inject(COLLAB_CLIENT)
     private readonly collabClient: ICollabClient,
     @Inject(MEDIA_SERVICE)
@@ -1024,12 +1036,300 @@ export class RoomsService {
     });
   }
 
+  async requestAiHint(
+    roomId: string,
+    userId: string,
+    body: RequestRoomAiHintInput,
+  ): Promise<RequestRoomAiHintResult> {
+    const [room, participant] = await this.getRoomContext(roomId, userId);
+
+    if (!participant) {
+      throw new ForbiddenException({
+        message: 'Not a participant of this room',
+        code: ERROR_CODES.ROOM_ACCESS_DENIED,
+      });
+    }
+
+    const capabilities = resolveRoomPermissions(participant.role, {
+      isHost: room.hostId === userId,
+    });
+
+    if (!capabilities.has('ai:request-hint')) {
+      throw new ForbiddenException({
+        message: 'No ai:request-hint capability',
+        code: ERROR_CODES.ROOM_PERMISSION_DENIED,
+      });
+    }
+
+    if (!room.problemId) {
+      throw new NotFoundException({
+        message: 'No problem selected in room',
+        code: ERROR_CODES.PROBLEM_NOT_FOUND,
+      });
+    }
+
+    if (room.language && body.language !== room.language) {
+      throw new BadRequestException({
+        message: `Hint language must match room language (${room.language})`,
+        code: ERROR_CODES.VALIDATION_FAILED,
+      });
+    }
+
+    const activeLanguage = room.language ?? body.language;
+
+    const isFollowUp = Boolean(body.followUpToHintId);
+    let followUpTarget:
+      | {
+          id: string;
+          hint: string;
+        }
+      | undefined;
+
+    const [totalHints] = await this.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(aiHints)
+      .where(and(eq(aiHints.roomId, roomId), eq(aiHints.userId, userId)));
+
+    let hintIteration = (totalHints?.count ?? 0) + (isFollowUp ? 0 : 1);
+
+    if (isFollowUp) {
+      const [existingHint] = await this.db
+        .select({
+          id: aiHints.id,
+          hint: aiHints.hint,
+        })
+        .from(aiHints)
+        .where(
+          and(
+            eq(aiHints.id, body.followUpToHintId!),
+            eq(aiHints.roomId, roomId),
+            eq(aiHints.userId, userId),
+          ),
+        )
+        .limit(1);
+
+      if (!existingHint) {
+        throw new NotFoundException({
+          message: 'Hint not found',
+          code: ERROR_CODES.VALIDATION_FAILED,
+        });
+      }
+
+      followUpTarget = existingHint;
+      hintIteration = Math.max(totalHints?.count ?? 1, 1);
+    } else {
+      const limitWindowStart = new Date(Date.now() - RoomsService.AI_HINT_LIMIT_WINDOW_MS);
+      const [usage] = await this.db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(aiHints)
+        .where(
+          and(
+            eq(aiHints.roomId, roomId),
+            eq(aiHints.userId, userId),
+            gte(aiHints.createdAt, limitWindowStart),
+          ),
+        );
+
+      if ((usage?.count ?? 0) >= RoomsService.AI_HINT_LIMIT_COUNT) {
+        throw new HttpException(
+          {
+            message: 'Hint rate limit exceeded (3 per 5 minutes)',
+            code: ERROR_CODES.AI_HINT_RATE_LIMIT,
+          },
+          429,
+        );
+      }
+    }
+
+    const [problem] = await this.db
+      .select({
+        title: problems.title,
+        description: problems.description,
+      })
+      .from(problems)
+      .where(eq(problems.id, room.problemId))
+      .limit(1);
+
+    if (!problem) {
+      throw new NotFoundException({
+        message: 'No problem selected in room',
+        code: ERROR_CODES.PROBLEM_NOT_FOUND,
+      });
+    }
+
+    const problemDescription = [problem.title, problem.description].filter(Boolean).join('\n\n');
+    const conversationHistory = await this.loadHintConversationHistory(roomId);
+    const latestSubmissionSummary = await this.loadLatestHintSubmissionSummary(roomId, userId);
+    const reflectionResponse = body.noReply
+      ? 'No reflection provided by learner.'
+      : body.reflectionResponse?.trim();
+
+    try {
+      const submitted = await this.aiClient.submitHintRequest({
+        roomId,
+        participantId: userId,
+        problemDescription,
+        currentCode: body.code,
+        language: activeLanguage,
+        hintLevel: body.hintLevel === 'subtle' ? 'gentle' : body.hintLevel,
+        conversationHistory,
+        latestSubmissionSummary,
+        hintStage: isFollowUp ? 'follow_up' : 'initial',
+        hintIteration,
+        previousHint: followUpTarget?.hint,
+        reflectionResponse,
+      });
+
+      const hintResult = await this.waitForHintResult(submitted.jobId);
+      if (!hintResult) {
+        throw new ServiceUnavailableException({
+          message: 'AI service unavailable',
+          code: ERROR_CODES.AI_SERVICE_UNAVAILABLE,
+        });
+      }
+
+      let hintId: string;
+      if (followUpTarget) {
+        hintId = followUpTarget.id;
+        await this.db
+          .update(aiHints)
+          .set({
+            hint: this.appendHintFollowUp(
+              followUpTarget.hint,
+              reflectionResponse ?? 'No reflection provided by learner.',
+              hintResult.hint,
+            ),
+          })
+          .where(eq(aiHints.id, followUpTarget.id));
+      } else {
+        const [insertedHint] = await this.db
+          .insert(aiHints)
+          .values({
+            roomId,
+            userId,
+            hint: hintResult.hint,
+            hintLevel: body.hintLevel,
+          })
+          .returning({
+            id: aiHints.id,
+          });
+
+        if (!insertedHint) {
+          throw new InternalServerErrorException({
+            message: 'Failed to persist AI hint',
+            code: ERROR_CODES.INTERNAL_ERROR,
+          });
+        }
+        hintId = insertedHint.id;
+      }
+
+      return {
+        jobId: submitted.jobId,
+        hintId,
+        phase: isFollowUp ? 'follow_up' : 'initial',
+        hint: hintResult.hint,
+        suggestedApproach: hintResult.suggestedApproach,
+        reflectionPrompt: hintResult.reflectionPrompt,
+      };
+    } catch (error) {
+      this.logger.warn(`AI hint request failed for room ${roomId}`, error);
+      throw new ServiceUnavailableException({
+        message: 'AI service unavailable',
+        code: ERROR_CODES.AI_SERVICE_UNAVAILABLE,
+      });
+    }
+  }
+
+  async getRoomChatMediaUploadUrl(
+    roomId: string,
+    userId: string,
+    input: RoomChatMediaUploadInput,
+  ): Promise<RoomChatMediaUploadResult> {
+    const [room, participant] = await this.getRoomContext(roomId, userId);
+
+    if (!participant) {
+      throw new ForbiddenException({
+        message: 'Not a participant of this room',
+        code: ERROR_CODES.ROOM_ACCESS_DENIED,
+      });
+    }
+
+    const capabilities = resolveRoomPermissions(participant.role, {
+      isHost: room.hostId === userId,
+    });
+
+    if (!capabilities.has('chat:send')) {
+      throw new ForbiddenException({
+        message: 'You do not have permission to send chat messages in this room',
+        code: ERROR_CODES.ROOM_PERMISSION_DENIED,
+      });
+    }
+
+    if (input.sizeBytes > RoomsService.CHAT_MEDIA_MAX_SIZE_BYTES) {
+      throw new BadRequestException({
+        message: `File is too large. Max size is ${RoomsService.CHAT_MEDIA_MAX_SIZE_BYTES} bytes`,
+        code: ERROR_CODES.VALIDATION_FAILED,
+      });
+    }
+
+    const normalizedContentType = input.contentType.trim().toLowerCase();
+    if (!RoomsService.CHAT_MEDIA_ALLOWED_TYPES.has(normalizedContentType)) {
+      throw new BadRequestException({
+        message: `Unsupported file type: ${input.contentType}`,
+        code: ERROR_CODES.VALIDATION_FAILED,
+      });
+    }
+
+    const safeFileName = this.sanitizeFileName(input.fileName);
+    const key = `rooms/${roomId}/chat/${Date.now()}-${randomBytes(6).toString('hex')}-${safeFileName}`;
+
+    const [uploadUrl, downloadUrl] = await Promise.all([
+      this.storageService.getUploadUrl(key, {
+        expiresInSeconds: RoomsService.CHAT_MEDIA_UPLOAD_URL_EXPIRY_SECONDS,
+        contentType: normalizedContentType,
+      }),
+      this.storageService.getDownloadUrl(key, RoomsService.CHAT_MEDIA_DOWNLOAD_URL_EXPIRY_SECONDS),
+    ]);
+
+    return {
+      key,
+      uploadUrl,
+      downloadUrl,
+      fileName: safeFileName,
+      contentType: normalizedContentType,
+      sizeBytes: input.sizeBytes,
+    };
+  }
+
   private static readonly MEDIA_TOKEN_TTL_SECONDS = 4 * 60 * 60; // 4 hours
   private static readonly MEDIA_CAPABILITIES: RoomCapability[] = [
     'media:audio',
     'media:video',
     'media:screenshare',
   ];
+  private static readonly CHAT_MEDIA_UPLOAD_URL_EXPIRY_SECONDS = 15 * 60;
+  private static readonly CHAT_MEDIA_DOWNLOAD_URL_EXPIRY_SECONDS = 24 * 60 * 60;
+  private static readonly CHAT_MEDIA_MAX_SIZE_BYTES = 10 * 1024 * 1024;
+  private static readonly CHAT_MEDIA_ALLOWED_TYPES = new Set([
+    'image/png',
+    'image/jpeg',
+    'image/webp',
+    'image/gif',
+    'video/mp4',
+    'video/webm',
+    'video/quicktime',
+    'audio/mpeg',
+    'audio/mp4',
+    'audio/wav',
+    'audio/ogg',
+    'application/pdf',
+    'text/plain',
+  ]);
+  private static readonly AI_HINT_LIMIT_COUNT = 3;
+  private static readonly AI_HINT_LIMIT_WINDOW_MS = 5 * 60 * 1000;
+  private static readonly AI_HINT_CHAT_HISTORY_LIMIT = 50;
+  private static readonly AI_HINT_RESULT_TIMEOUT_MS = 30 * 1000;
+  private static readonly AI_HINT_RESULT_POLL_INTERVAL_MS = 500;
 
   async generateMediaToken(roomId: string, userId: string): Promise<MediaTokenResult> {
     const [room, participant] = await this.getRoomContext(roomId, userId);
@@ -1660,6 +1960,154 @@ export class RoomsService {
       code += INVITE_CODE_CHARSET[bytes[i]! % INVITE_CODE_CHARSET.length];
     }
     return code;
+  }
+
+  private sanitizeFileName(fileName: string): string {
+    const trimmed = fileName.trim();
+    if (!trimmed) {
+      return 'attachment.bin';
+    }
+
+    const withoutPath = trimmed.replaceAll('\\', '/').split('/').pop() ?? 'attachment.bin';
+    const safe = withoutPath.replace(/[^a-zA-Z0-9._-]/g, '_');
+    return safe.length > 0 ? safe.slice(0, 120) : 'attachment.bin';
+  }
+
+  private async waitForHintResult(jobId: JobId<'ai:hint'>): Promise<GenerateHintResult | null> {
+    const deadline = Date.now() + RoomsService.AI_HINT_RESULT_TIMEOUT_MS;
+
+    while (Date.now() < deadline) {
+      const result = await this.aiClient.getHintResult(jobId);
+      if (result) {
+        return result;
+      }
+
+      const status = await this.aiClient.getHintJobStatus(jobId);
+      if (status === 'failed') {
+        return null;
+      }
+
+      await this.sleep(RoomsService.AI_HINT_RESULT_POLL_INTERVAL_MS);
+    }
+
+    return null;
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => {
+      setTimeout(resolve, ms);
+    });
+  }
+
+  private appendHintFollowUp(
+    initialHint: string,
+    reflectionResponse: string,
+    followUpHint: string,
+  ): string {
+    const reflectionSection = reflectionResponse.trim().length
+      ? reflectionResponse.trim()
+      : 'No reflection provided by learner.';
+
+    return [
+      initialHint.trim(),
+      '---',
+      `Learner reflection:\n${reflectionSection}`,
+      `Coach follow-up:\n${followUpHint.trim()}`,
+    ]
+      .filter(Boolean)
+      .join('\n\n');
+  }
+
+  private async loadHintConversationHistory(
+    roomId: string,
+  ): Promise<Array<{ role: string; content: string }>> {
+    try {
+      const [chatHistory, participants] = await Promise.all([
+        this.collabClient.getRoomChatHistory(roomId, {
+          limit: RoomsService.AI_HINT_CHAT_HISTORY_LIMIT,
+        }),
+        this.db
+          .select({
+            userId: users.id,
+            username: users.username,
+            displayName: users.displayName,
+          })
+          .from(roomParticipants)
+          .innerJoin(users, eq(users.id, roomParticipants.userId))
+          .where(eq(roomParticipants.roomId, roomId)),
+      ]);
+
+      const identityByUserId = new Map(
+        participants.map((participant) => [
+          participant.userId,
+          participant.displayName ?? participant.username,
+        ]),
+      );
+
+      return chatHistory.messages
+        .filter((message) => message.text.trim().length > 0 || message.attachments.length > 0)
+        .map((message) => {
+          const identity = identityByUserId.get(message.userId) ?? message.userId;
+          const parts: string[] = [];
+          const text = message.text.trim();
+          if (text.length > 0) {
+            parts.push(text);
+          }
+          if (message.attachments.length > 0) {
+            parts.push(
+              `[attachments: ${message.attachments.map((attachment) => attachment.fileName).join(', ')}]`,
+            );
+          }
+
+          return {
+            role: 'user',
+            content: `${identity}: ${parts.join('\n')}`,
+          };
+        });
+    } catch (error) {
+      this.logger.warn(`Unable to load room chat history for AI hint in room ${roomId}`, error);
+      return [];
+    }
+  }
+
+  private async loadLatestHintSubmissionSummary(
+    roomId: string,
+    userId: string,
+  ): Promise<GenerateHintRequest['latestSubmissionSummary']> {
+    const [latest] = await this.db
+      .select({
+        status: submissions.status,
+        passedTestCases: submissions.passedTestCases,
+        totalTestCases: submissions.totalTestCases,
+        failedTestCases: submissions.failedTestCases,
+        errorTestCases: submissions.errorTestCases,
+        submittedAt: submissions.submittedAt,
+      })
+      .from(submissions)
+      .where(and(eq(submissions.roomId, roomId), eq(submissions.userId, userId)))
+      .orderBy(desc(submissions.submittedAt))
+      .limit(1);
+
+    if (!latest) {
+      return null;
+    }
+
+    const allTestsPassed =
+      latest.status === 'completed' &&
+      latest.totalTestCases > 0 &&
+      latest.passedTestCases === latest.totalTestCases &&
+      latest.failedTestCases === 0 &&
+      latest.errorTestCases === 0;
+
+    return {
+      status: latest.status,
+      passedTestCases: latest.passedTestCases,
+      totalTestCases: latest.totalTestCases,
+      failedTestCases: latest.failedTestCases,
+      errorTestCases: latest.errorTestCases,
+      allTestsPassed,
+      submittedAt: latest.submittedAt.toISOString(),
+    };
   }
 
   async markParticipantInactive(roomId: string, userId: string, leftAt: Date): Promise<void> {
