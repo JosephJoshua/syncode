@@ -292,6 +292,8 @@
     "cannotTransferOwnership": "Cannot transfer ownership to this participant.",
     "cancel": "Cancel",
     "roleUpdated": "Participant role updated.",
+    "submissionPreviewTitle": "Confirm Submission",
+    "submissionPreviewDescription": "Please review your code before final submission.",
     "submitCode": "Submit",
     "submitFailed": "Submission failed to start.",
     "submitting": "Submitting solution…",
