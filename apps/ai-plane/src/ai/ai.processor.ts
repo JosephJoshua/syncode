@@ -6,7 +6,10 @@ import {
   AI_INTERVIEW_RESULT_QUEUE,
   AI_REVIEW_QUEUE,
   AI_REVIEW_RESULT_QUEUE,
+  AI_SESSION_REPORT_QUEUE,
+  AI_SESSION_REPORT_RESULT_QUEUE,
   type GenerateHintRequest,
+  type GenerateSessionReportRequest,
   type InterviewResponseRequest,
   type ReviewCodeRequest,
 } from '@syncode/contracts';
@@ -50,6 +53,15 @@ export class AiProcessor implements OnModuleInit {
       { concurrency: 3 },
     );
     this.logger.log(`Registered processor on ${AI_INTERVIEW_QUEUE}`);
+
+    this.queueService.process<GenerateSessionReportRequest>(
+      AI_SESSION_REPORT_QUEUE,
+      async (job: QueueJob<GenerateSessionReportRequest>) => {
+        await this.handleSessionReportJob(job);
+      },
+      { concurrency: 1 },
+    );
+    this.logger.log(`Registered processor on ${AI_SESSION_REPORT_QUEUE}`);
   }
 
   private async handleHintJob(job: QueueJob<GenerateHintRequest>): Promise<void> {
@@ -86,5 +98,27 @@ export class AiProcessor implements OnModuleInit {
     });
 
     this.logger.log(`Interview job ${jobId} completed`);
+  }
+
+  private async handleSessionReportJob(job: QueueJob<GenerateSessionReportRequest>): Promise<void> {
+    const { id: jobId, data: request } = job;
+    this.logger.log(`Processing session report job ${jobId} for session ${request.sessionId}`);
+    try {
+      const result = await this.aiService.generateSessionReport(request);
+      await this.queueService.enqueue(AI_SESSION_REPORT_RESULT_QUEUE, 'session-report-result', {
+        ...result,
+        jobId,
+      });
+
+      this.logger.log(`Session report job ${jobId} completed`);
+    } catch (error) {
+      this.logger.error(
+        `Session report job ${jobId} failed for session ${request.sessionId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+        error instanceof Error ? error.stack : undefined,
+      );
+      throw error;
+    }
   }
 }

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { SessionReportsService } from './session-reports.service.js';
 import { SessionsController } from './sessions.controller.js';
 import type { SessionsService } from './sessions.service.js';
 
@@ -8,7 +9,7 @@ const SESSION_DETAIL_RESULT = {
   sessionId: 'session-1',
   roomId: 'room-1',
   mode: 'peer' as const,
-  problem: { id: 'problem-1', title: 'Two Sum', difficulty: 'easy' },
+  problem: { id: 'problem-1', title: 'Two Sum', difficulty: 'easy' as const },
   language: 'python' as const,
   duration: 3600,
   participants: [
@@ -45,8 +46,34 @@ const SESSION_DETAIL_RESULT = {
     feedback: 'Good job',
     generatedAt: new Date('2026-04-01T00:50:00Z'),
   },
+  latestCodeSnapshot: {
+    id: 'snapshot-1',
+    code: 'print("hello")',
+    language: 'python' as const,
+    trigger: 'session_end',
+    linesOfCode: 1,
+    createdAt: new Date('2026-04-01T00:55:00Z'),
+  },
+  peerFeedback: [
+    {
+      id: 'feedback-1',
+      reviewerId: 'user-1',
+      reviewerName: 'Alice',
+      candidateId: 'user-2',
+      candidateName: 'Bob',
+      problemSolvingRating: 4,
+      communicationRating: 4,
+      codeQualityRating: 4,
+      debuggingRating: 4,
+      overallRating: 4,
+      strengths: 'Clear reasoning',
+      improvements: 'Cover edge cases earlier',
+      wouldPairAgain: true,
+      createdAt: new Date('2026-04-01T00:58:00Z'),
+    },
+  ],
   hasReport: true,
-  hasFeedback: false,
+  hasFeedback: true,
   hasRecording: false,
   createdAt: new Date('2026-04-01T00:00:00Z'),
   finishedAt: new Date('2026-04-01T01:00:00Z'),
@@ -96,6 +123,25 @@ const SNAPSHOTS_RESULT = {
   pagination: { nextCursor: null, hasMore: false },
 };
 
+const REPORT_RESULT = {
+  sessionId: 'session-1',
+  generatedAt: '2026-04-01T01:00:00.000Z',
+  overallScore: 85,
+  dimensions: {
+    correctness: {
+      score: 90,
+      feedback: 'Good correctness',
+      evidence: [],
+    },
+  },
+  strengths: ['Strong debugging'],
+  areasForImprovement: ['Explain tradeoffs'],
+  detailedFeedback: 'Detailed feedback',
+  comparisonToHistory: null,
+  peerFeedbackSummary: null,
+  testCaseBreakdown: [],
+};
+
 function createFixture() {
   const sessionsService: Pick<
     SessionsService,
@@ -107,9 +153,15 @@ function createFixture() {
     getSession: vi.fn(async () => SESSION_DETAIL_RESULT),
     deleteSession: vi.fn(async () => undefined),
   };
+  const sessionReportsService: Pick<SessionReportsService, 'getReport'> = {
+    getReport: vi.fn(async () => REPORT_RESULT),
+  };
 
-  const controller = new SessionsController(sessionsService as SessionsService);
-  return { controller, sessionsService };
+  const controller = new SessionsController(
+    sessionsService as SessionsService,
+    sessionReportsService as SessionReportsService,
+  );
+  return { controller, sessionsService, sessionReportsService };
 }
 
 describe('SessionsController', () => {
@@ -159,6 +211,8 @@ describe('SessionsController', () => {
       expect(result.runs[0].createdAt).toBe('2026-04-01T00:30:00.000Z');
       expect(result.submissions[0].createdAt).toBe('2026-04-01T00:45:00.000Z');
       expect(result.report?.generatedAt).toBe('2026-04-01T00:50:00.000Z');
+      expect(result.latestCodeSnapshot?.createdAt).toBe('2026-04-01T00:55:00.000Z');
+      expect(result.peerFeedback[0].createdAt).toBe('2026-04-01T00:58:00.000Z');
     });
   });
 
@@ -184,6 +238,16 @@ describe('SessionsController', () => {
         ],
         pagination: { nextCursor: null, hasMore: false },
       });
+    });
+  });
+
+  describe('getReport', () => {
+    it('GIVEN session report WHEN getting THEN returns the report body unchanged', async () => {
+      const { controller } = createFixture();
+
+      const result = await controller.getReport(AUTH_USER, 'session-1');
+
+      expect(result).toEqual(REPORT_RESULT);
     });
   });
 });

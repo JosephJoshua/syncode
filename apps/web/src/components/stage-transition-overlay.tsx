@@ -8,6 +8,8 @@ interface StageTransitionOverlayProps {
   readonly status: RoomStatus;
 }
 
+export const STAGE_TRANSITION_OVERLAY_DURATION_MS = 2500;
+
 export function StageTransitionOverlay({ status }: StageTransitionOverlayProps) {
   const { t } = useTranslation('rooms');
   const [visible, setVisible] = useState(false);
@@ -24,7 +26,7 @@ export function StageTransitionOverlay({ status }: StageTransitionOverlayProps) 
     if (status !== prevStatusRef.current && status !== 'waiting') {
       prevStatusRef.current = status;
       setVisible(true);
-      const timer = setTimeout(() => setVisible(false), 2500);
+      const timer = setTimeout(() => setVisible(false), STAGE_TRANSITION_OVERLAY_DURATION_MS);
       return () => clearTimeout(timer);
     }
 

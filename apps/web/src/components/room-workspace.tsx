@@ -30,15 +30,23 @@ import {
 import { toast } from 'sonner';
 import type { Awareness } from 'y-protocols/awareness';
 import type * as Y from 'yjs';
+import { useInlineComments } from '@/hooks/use-inline-comments.js';
 import { useSharedExecution } from '@/hooks/use-shared-execution.js';
 import type { CollabConnectionStatus } from '@/hooks/use-yjs-collab.js';
 import { api, readApiError, resolveErrorMessage } from '@/lib/api-client.js';
+import {
+  MOCK_INLINE_COMMENTS,
+  MOCK_WORKSPACE_CODE,
+  MOCK_WORKSPACE_PROBLEM,
+  MOCK_WORKSPACE_TEST_CASES,
+} from '@/lib/mock-workspace.js';
 import { allRequiredPeersReady } from '@/lib/participant-readiness.js';
 import { buildInviteLink } from '@/lib/room-stage.js';
 import { codeTextKey } from '@/lib/yjs-collab-provider.js';
 import { CollaborativeEditor } from './collaborative-editor.js';
 import { ExecutionDetailsPanel } from './execution-details-panel.js';
 import { HostControlPanel } from './host-control-panel.js';
+import { InlineCommentsPanel } from './inline-comments-panel.js';
 import { InviteLinkInline } from './invite-link-inline.js';
 import { LanguagePicker } from './language-picker.js';
 import { LANGUAGE_VERSIONED_LABELS } from './language-selector.data.js';
@@ -61,6 +69,7 @@ import {
 } from './room-workspace-utils.js';
 import { RunResultsPanel } from './run-results-panel.js';
 import { StageTransitionOverlay } from './stage-transition-overlay.js';
+import { SubmissionPreviewModal } from './submission-preview-modal.js';
 import { TestCaseEditor } from './testcase-editor.js';
 
 interface RoomWorkspaceProps {
@@ -85,6 +94,7 @@ interface RoomWorkspaceProps {
   isRemovingParticipant: string | null;
   collabStatus: CollabConnectionStatus;
   currentUserName: string;
+  isMockPreview?: boolean;
   speakingMap?: ReadonlyMap<string, boolean>;
   mediaControls?: React.ReactNode;
   mediaConnectedSet?: ReadonlySet<string>;
@@ -181,43 +191,6 @@ async function executeCasePoll(deps: CasePollDeps): Promise<void> {
   }
 }
 
-interface SubmissionPollDeps {
-  submissionId: string;
-  cancelled: { value: boolean };
-  setSubmitState: React.Dispatch<React.SetStateAction<SubmitState>>;
-  t: (key: string) => string;
-}
-
-async function executeSubmissionPoll(deps: SubmissionPollDeps): Promise<void> {
-  const { submissionId, cancelled, setSubmitState, t } = deps;
-  try {
-    const details: ExecutionDetailsResponse = await api(
-      CONTROL_API.EXECUTION.GET_SUBMISSION_DETAILS,
-      { params: { submissionId } },
-    );
-
-    if (cancelled.value) return;
-
-    if (details.status === 'completed' || details.status === 'failed') {
-      setSubmitState({ status: 'completed', submissionId, details });
-      return;
-    }
-
-    setSubmitState({ status: 'polling', submissionId });
-    setTimeout(() => {
-      if (!cancelled.value) executeSubmissionPoll(deps).catch(() => undefined);
-    }, SUBMISSION_POLL_INTERVAL_MS);
-  } catch (error) {
-    const apiError = await readApiError(error);
-    if (!cancelled.value) {
-      setSubmitState({
-        status: 'request-error',
-        message: apiError?.message ?? t('workspace.submitFailed'),
-      });
-    }
-  }
-}
-
 export function RoomWorkspace({
   room,
   currentUserId,
@@ -240,6 +213,7 @@ export function RoomWorkspace({
   isRemovingParticipant,
   collabStatus,
   currentUserName,
+  isMockPreview = false,
   speakingMap,
   mediaControls,
   mediaConnectedSet,
@@ -294,6 +268,7 @@ export function RoomWorkspace({
   const leftPanelRef = usePanelRef();
   const rightPanelRef = usePanelRef();
   const [submitState, setSubmitState] = useState<SubmitState>({ status: 'idle' });
+  const [submissionPreviewCode, setSubmissionPreviewCode] = useState<string | null>(null);
   const [activeBottomTab, setActiveBottomTab] = useState<'testcases' | 'output' | 'results'>(
     'testcases',
   );
@@ -301,6 +276,7 @@ export function RoomWorkspace({
   const [rightCollapsed, setRightCollapsed] = useState(false);
   const [rightNarrow, setRightNarrow] = useState(false);
   const [bottomCollapsed, setBottomCollapsed] = useState(false);
+  const [activeCommentLine, setActiveCommentLine] = useState(1);
   const rightMountedRef = useRef(false);
   const rightContentRef = useRef<HTMLDivElement>(null);
 
@@ -323,8 +299,10 @@ export function RoomWorkspace({
   const nextCustomId = useRef(1);
 
   useEffect(() => {
-    if (!problem) return;
-    const entries: TestCaseEntry[] = problem.testCases.map((tc, i) => ({
+    const sourceCases = problem?.testCases ?? (isMockPreview ? MOCK_WORKSPACE_TEST_CASES : null);
+    if (!sourceCases) return;
+
+    const entries: TestCaseEntry[] = sourceCases.map((tc, i) => ({
       id: `problem-${i}`,
       input: tc.input,
       expectedOutput: tc.expectedOutput,
@@ -333,7 +311,7 @@ export function RoomWorkspace({
     }));
     setTestCases(entries);
     if (entries.length > 0) setActiveCaseId(entries[0]?.id ?? '');
-  }, [problem, t]);
+  }, [isMockPreview, problem, t]);
 
   useEffect(() => {
     return () => {
@@ -341,6 +319,43 @@ export function RoomWorkspace({
       for (const cancel of cancelMultiRunRef.current.values()) cancel();
     };
   }, []);
+
+  const { comments, commentLineNumbers, addComment, updateComment, deleteComment } =
+    useInlineComments(doc, language);
+  const seededMockCodeRef = useRef(false);
+  const seededMockCommentsRef = useRef(false);
+
+  useEffect(() => {
+    if (!doc || !isMockPreview || seededMockCodeRef.current) {
+      return;
+    }
+
+    const codeText = doc.getText(codeTextKey(language));
+    if (codeText.length === 0) {
+      doc.transact(() => {
+        codeText.insert(0, MOCK_WORKSPACE_CODE);
+      });
+    }
+
+    seededMockCodeRef.current = true;
+  }, [doc, isMockPreview, language]);
+
+  useEffect(() => {
+    if (!doc || !isMockPreview || seededMockCommentsRef.current || comments.length > 0) {
+      return;
+    }
+
+    for (const comment of MOCK_INLINE_COMMENTS) {
+      addComment({
+        authorId: 'mock-reviewer',
+        authorName: 'Mock Interviewer',
+        content: comment.content,
+        lineNumber: comment.lineNumber,
+      });
+    }
+
+    seededMockCommentsRef.current = true;
+  }, [addComment, comments.length, doc, isMockPreview]);
 
   const handleLanguageChanged = useCallback(
     (updated: RoomDetail) => {
@@ -366,7 +381,7 @@ export function RoomWorkspace({
   const amHost = Boolean(currentUserId && room.hostId === currentUserId);
   const canChangePhase = room.myCapabilities.includes('room:change-phase');
   const canControlEditorLock = canChangePhase;
-  const canRunCode = room.myCapabilities.includes('code:run');
+  const canRunCode = !isMockPreview && room.myCapabilities.includes('code:run');
   const canEditCode = room.myCapabilities.includes('code:edit');
   const canManageParticipants = room.myCapabilities.includes('participant:assign-role');
   const isEditorReadOnly = !canEditCode || room.editorLocked || room.status === 'finished';
@@ -379,7 +394,8 @@ export function RoomWorkspace({
     ? buildInviteLink(roomId, room.roomCode)
     : globalThis.window.location.href;
 
-  const canSubmitCode = room.myCapabilities.includes('code:submit') && !!room.problemId;
+  const canSubmitCode =
+    !isMockPreview && room.myCapabilities.includes('code:submit') && !!room.problemId;
 
   const handleAddCase = useCallback(() => {
     const idx = nextCustomId.current++;
@@ -417,6 +433,7 @@ export function RoomWorkspace({
     !isSubmitBusy;
   const runDisabled = !canRunCode || isEditorReadOnly || isMultiRunBusy || isRemoteRunActive;
   const submitDisabled = !canSubmitCode || isEditorReadOnly || isSubmitBusy || isRemoteSubmitActive;
+  const isSubmissionPreviewOpen = submissionPreviewCode !== null;
 
   const getCode = useCallback(() => {
     return doc?.getText(codeTextKey(language)).toString() ?? '';
@@ -465,35 +482,95 @@ export function RoomWorkspace({
     );
   };
 
-  const handleSubmitCode = async () => {
-    cancelSubmitPollRef.current?.();
-    setSubmitState({ status: 'submitting' });
-    setActiveBottomTab('results');
+  const pollSubmission = useCallback(
+    (submissionId: string) => {
+      let cancelled = false;
 
-    try {
-      const response = await api(CONTROL_API.ROOMS.SUBMIT, {
-        params: { id: roomId },
-        body: { language, code: getCode() },
-      });
+      const poll = async () => {
+        try {
+          const details: ExecutionDetailsResponse = await api(
+            CONTROL_API.EXECUTION.GET_SUBMISSION_DETAILS,
+            { params: { submissionId } },
+          );
 
-      setSubmitState({ status: 'polling', submissionId: response.submissionId });
-      cancelSubmitPollRef.current = pollSubmission(response.submissionId);
-      broadcastSubmit(currentUserName, response.submissionId);
-    } catch (error) {
-      const apiError = await readApiError(error);
-      const message = resolveErrorMessage(apiError, SUBMIT_ERROR_KEYS, 'workspace.submitFailed', t);
-      setSubmitState({ status: 'request-error', message });
-      toast.error(message);
-    }
-  };
+          if (cancelled) return;
 
-  const pollSubmission = (submissionId: string) => {
-    const cancelled = { value: false };
-    executeSubmissionPoll({ submissionId, cancelled, setSubmitState, t }).catch(() => undefined);
-    return () => {
-      cancelled.value = true;
-    };
-  };
+          if (details.status === 'completed' || details.status === 'failed') {
+            setSubmitState({ status: 'completed', submissionId, details });
+            return;
+          }
+
+          // Still pending/running — keep polling until the submission reaches a terminal state
+          setSubmitState({ status: 'polling', submissionId });
+          setTimeout(() => {
+            if (!cancelled) void poll();
+          }, SUBMISSION_POLL_INTERVAL_MS);
+        } catch (error) {
+          const apiError = await readApiError(error);
+          if (!cancelled) {
+            setSubmitState({
+              status: 'request-error',
+              message: apiError?.message ?? t('workspace.submitFailed'),
+            });
+          }
+        }
+      };
+
+      void poll();
+
+      return () => {
+        cancelled = true;
+      };
+    },
+    [t],
+  );
+
+  const handleSubmitCode = useCallback(
+    async (codeOverride?: string) => {
+      cancelSubmitPollRef.current?.();
+      setSubmitState({ status: 'submitting' });
+      setActiveBottomTab('results');
+
+      try {
+        const response = await api(CONTROL_API.ROOMS.SUBMIT, {
+          params: { id: roomId },
+          body: { language, code: codeOverride ?? getCode() },
+        });
+
+        setSubmitState({ status: 'polling', submissionId: response.submissionId });
+        cancelSubmitPollRef.current = pollSubmission(response.submissionId);
+        broadcastSubmit(currentUserName, response.submissionId);
+      } catch (error) {
+        const apiError = await readApiError(error);
+        const message = resolveErrorMessage(
+          apiError,
+          SUBMIT_ERROR_KEYS,
+          'workspace.submitFailed',
+          t,
+        );
+        setSubmitState({ status: 'request-error', message });
+        toast.error(message);
+      }
+    },
+    [broadcastSubmit, currentUserName, getCode, language, pollSubmission, roomId, t],
+  );
+
+  const requestSubmitCode = useCallback(() => {
+    if (submitDisabled) return;
+    setSubmissionPreviewCode(getCode());
+  }, [getCode, submitDisabled]);
+
+  const closeSubmissionPreview = useCallback(() => {
+    setSubmissionPreviewCode(null);
+  }, []);
+
+  const confirmSubmitPreview = useCallback(() => {
+    if (submitDisabled || submissionPreviewCode === null) return;
+
+    const codeSnapshot = submissionPreviewCode;
+    setSubmissionPreviewCode(null);
+    void handleSubmitCode(codeSnapshot);
+  }, [submissionPreviewCode, submitDisabled, handleSubmitCode]);
 
   const runCase = async (tc: TestCaseEntry, code?: string): Promise<string | null> => {
     cancelMultiRunRef.current.get(tc.id)?.();
@@ -553,8 +630,8 @@ export function RoomWorkspace({
 
   const handleRunCodeRef = useRef(handleRunCode);
   handleRunCodeRef.current = handleRunCode;
-  const handleSubmitCodeRef = useRef(handleSubmitCode);
-  handleSubmitCodeRef.current = handleSubmitCode;
+  const requestSubmitCodeRef = useRef(requestSubmitCode);
+  requestSubmitCodeRef.current = requestSubmitCode;
 
   // Show remote results when local user is idle
   const multiRunResults = pickMultiRunResults(multiRunState, remoteRun?.multiRunState);
@@ -600,6 +677,9 @@ export function RoomWorkspace({
         : null,
     [problem],
   );
+  const displayProblemPanelData =
+    problemPanelData ?? (isMockPreview ? MOCK_WORKSPACE_PROBLEM : null);
+  const showProblemPanel = Boolean(displayProblemPanelData);
 
   return (
     <div className="fixed inset-0 z-40 flex flex-col overflow-hidden bg-background">
@@ -621,7 +701,7 @@ export function RoomWorkspace({
       {/* Main resizable 3-panel area */}
       <ResizablePanelGroup orientation="horizontal" style={{ flex: 1 }}>
         {/* Left: Problem Panel */}
-        {room.problemId ? (
+        {showProblemPanel ? (
           <>
             <ResizablePanel
               panelRef={leftPanelRef}
@@ -644,10 +724,10 @@ export function RoomWorkspace({
                 </button>
               ) : (
                 <RoomProblemPanel
-                  problem={problemPanelData}
+                  problem={displayProblemPanelData}
                   loading={problemLoading}
                   error={problemError}
-                  hasProblem
+                  hasProblem={showProblemPanel}
                 />
               )}
             </ResizablePanel>
@@ -666,11 +746,16 @@ export function RoomWorkspace({
         ) : null}
 
         {/* Center: Editor + Output (vertically resizable) */}
-        <ResizablePanel defaultSize={room.problemId ? 50 : 75} minSize={20}>
+        <ResizablePanel defaultSize={showProblemPanel ? 50 : 75} minSize={20}>
           <ResizablePanelGroup orientation="vertical">
             {/* Editor panel */}
             <ResizablePanel defaultSize={55} minSize={20}>
               <div className="flex h-full flex-col">
+                {isMockPreview ? (
+                  <div className="flex h-7 shrink-0 items-center border-b border-border bg-primary/5 px-3 font-mono text-[10px] uppercase tracking-widest text-primary/80">
+                    {t('workspace.mockPreviewBanner')}
+                  </div>
+                ) : null}
                 {/* Editor toolbar */}
                 <div className="flex h-9 shrink-0 items-center justify-between border-b border-border bg-card px-3">
                   <div className="flex items-center gap-2.5">
@@ -714,7 +799,7 @@ export function RoomWorkspace({
                         size="sm"
                         variant="secondary"
                         disabled={submitDisabled}
-                        onClick={() => void handleSubmitCodeRef.current()}
+                        onClick={() => void requestSubmitCodeRef.current()}
                         className="h-7 gap-1.5 px-3 text-xs font-medium"
                       >
                         {isSubmitBusy ? (
@@ -744,15 +829,18 @@ export function RoomWorkspace({
 
                 {/* Monaco editor */}
                 <div className="flex-1 overflow-hidden">
-                  {doc && awareness ? (
+                  {doc && awareness && collabStatus === 'connected' ? (
                     <CollaborativeEditor
                       key={doc.clientID}
                       doc={doc}
                       awareness={awareness}
                       language={monacoLanguage}
                       readOnly={isEditorReadOnly}
+                      commentLineNumbers={commentLineNumbers}
+                      activeCommentLine={activeCommentLine}
+                      onActiveLineChange={setActiveCommentLine}
                       onRunCode={() => void handleRunCodeRef.current()}
-                      onSubmitCode={() => void handleSubmitCodeRef.current()}
+                      onSubmitCode={() => void requestSubmitCodeRef.current()}
                     />
                   ) : (
                     EDITOR_LOADING
@@ -856,7 +944,7 @@ export function RoomWorkspace({
                     elapsedMs={elapsedMs}
                     timerPaused={room.timerPaused}
                     editorLocked={room.editorLocked}
-                    canChangePhase={canChangePhase}
+                    canChangePhase={!isMockPreview && canChangePhase}
                     canControlEditorLock={canControlEditorLock}
                     isPending={isTransitioning}
                     isLockingEditor={isLockingEditor}
@@ -942,10 +1030,36 @@ export function RoomWorkspace({
                 </div>
               </motion.div>
 
+              <motion.div
+                className=""
+                initial={rightMountedRef.current ? false : { opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.35, delay: 0.3, ease: [0.22, 1, 0.36, 1] }}
+              >
+                <InlineCommentsPanel
+                  comments={comments}
+                  activeLineNumber={activeCommentLine}
+                  disabled={!doc}
+                  onActiveLineChange={setActiveCommentLine}
+                  onAddComment={(content) =>
+                    addComment({
+                      authorId: currentUserId ?? 'mock-user',
+                      authorName: currentUserName || 'Mock User',
+                      content,
+                      lineNumber: activeCommentLine,
+                    })
+                  }
+                  onUpdateComment={(commentId, content) => {
+                    updateComment(commentId, { content });
+                  }}
+                  onDeleteComment={deleteComment}
+                />
+              </motion.div>
+
               {/* Invite link */}
               {rightNarrow ? null : (
                 <motion.div
-                  className="p-3"
+                  className="border-t border-border p-3"
                   initial={rightMountedRef.current ? false : { opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.35, delay: 0.3, ease: [0.22, 1, 0.36, 1] }}
@@ -965,6 +1079,19 @@ export function RoomWorkspace({
         editorLocked={room.editorLocked}
         participantCount={participants.length}
         collabStatus={collabStatus}
+      />
+
+      <SubmissionPreviewModal
+        open={isSubmissionPreviewOpen}
+        code={submissionPreviewCode ?? ''}
+        language={monacoLanguage}
+        fileExtension={languageExtension(language)}
+        confirmDisabled={submitDisabled}
+        onOpenChange={(open) => {
+          if (!open) closeSubmissionPreview();
+        }}
+        onCancel={closeSubmissionPreview}
+        onConfirm={confirmSubmitPreview}
       />
     </div>
   );

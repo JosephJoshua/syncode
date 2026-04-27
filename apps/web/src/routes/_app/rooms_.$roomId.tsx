@@ -19,6 +19,7 @@ import { toast } from 'sonner';
 import { MediaControls } from '@/components/media-controls.js';
 import { RoomLobby } from '@/components/room-lobby.js';
 import { RoomWorkspace } from '@/components/room-workspace.js';
+import { STAGE_TRANSITION_OVERLAY_DURATION_MS } from '@/components/stage-transition-overlay.js';
 import {
   DockedVideoPanel,
   FloatingVideoPanel,
@@ -74,9 +75,11 @@ const CURSOR_COLORS = [
 ];
 
 function userCursorColor(participants: { userId: string }[], currentUserId: string | null): string {
-  if (!currentUserId) return CURSOR_COLORS[0]!;
+  const defaultColor = CURSOR_COLORS[0] ?? '#00e599';
+
+  if (!currentUserId) return defaultColor;
   const index = participants.findIndex((p) => p.userId === currentUserId);
-  return CURSOR_COLORS[index >= 0 ? index % CURSOR_COLORS.length : 0]!;
+  return CURSOR_COLORS[index >= 0 ? index % CURSOR_COLORS.length : 0] ?? defaultColor;
 }
 
 interface JoinDeps {
@@ -149,13 +152,14 @@ async function performLoadOrRecover(deps: JoinDeps): Promise<void> {
 function RoomPage() {
   const { t } = useTranslation('rooms');
   const { roomId } = Route.useParams();
-  const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const currentUserId = useAuthStore((state) => state.user?.id ?? null);
   const [room, setRoom] = useState<RoomDetail | null>(null);
   const [isJoining, setIsJoining] = useState(true);
   const [joinError, setJoinError] = useState<string | null>(null);
   const [joinNotice, setJoinNotice] = useState<string | null>(null);
+  const [mockWorkspacePreview, setMockWorkspacePreview] = useState(false);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [isUpdatingRole, setIsUpdatingRole] = useState<string | null>(null);
   const [isTransferringOwnership, setIsTransferringOwnership] = useState<string | null>(null);
@@ -169,6 +173,8 @@ function RoomPage() {
   } | null>(null);
   const [now, setNow] = useState(Date.now());
   const joinPromiseRef = useRef<Promise<void> | null>(null);
+  const previousStatusRef = useRef<RoomStatus | null>(null);
+  const shouldRedirectToSessionRef = useRef(false);
   // Capture collab credentials once — subsequent polls generate fresh JWTs which would
   // cause the WebSocket to reconnect on every poll if used directly. The collab JWT has
   // a 24h lifetime, so the first token is valid for the entire session.
@@ -239,6 +245,34 @@ function RoomPage() {
       joinPromiseRef.current = null;
     };
   }, [refreshRoomDetail, roomId, t]);
+
+  useEffect(() => {
+    const currentStatus = room?.status ?? null;
+    const previousStatus = previousStatusRef.current;
+
+    if (currentStatus === 'finished' && previousStatus && previousStatus !== 'finished') {
+      shouldRedirectToSessionRef.current = true;
+    }
+
+    previousStatusRef.current = currentStatus;
+  }, [room?.status]);
+
+  useEffect(() => {
+    if (!shouldRedirectToSessionRef.current || room?.status !== 'finished' || !room.sessionId) {
+      return;
+    }
+
+    const finishedSessionId = room.sessionId;
+    const redirectTimer = window.setTimeout(() => {
+      shouldRedirectToSessionRef.current = false;
+      navigate({
+        to: '/sessions/$sessionId/feedback',
+        params: { sessionId: finishedSessionId },
+      }).catch(() => {});
+    }, STAGE_TRANSITION_OVERLAY_DURATION_MS + 2000);
+
+    return () => window.clearTimeout(redirectTimer);
+  }, [navigate, room?.sessionId, room?.status]);
 
   const roomStatus = room?.status;
   useEffect(() => {
@@ -553,6 +587,15 @@ function RoomPage() {
   const canChangePhase = room?.myCapabilities.includes('room:change-phase') ?? false;
   const canManageParticipants = room?.myCapabilities.includes('participant:assign-role') ?? false;
   const isWorkspace = room ? isWorkspaceStage(room.status) : false;
+  const canPreviewWorkspace =
+    room?.status === 'waiting' &&
+    (room?.participants.filter((participant) => participant.isActive).length ?? 0) === 1;
+  const shouldShowMockWorkspace = !isWorkspace && mockWorkspacePreview;
+  const workspaceRoom: RoomDetail | null = room
+    ? shouldShowMockWorkspace
+      ? { ...room, status: 'warmup' as const }
+      : room
+    : null;
   const elapsedMs = useMemo(
     () =>
       computeRoomElapsedMs({
@@ -820,13 +863,13 @@ function RoomPage() {
     </AlertDialog>
   );
 
-  if (isWorkspace) {
+  if (workspaceRoom && (isWorkspace || shouldShowMockWorkspace)) {
     return (
       <>
         {transferDialog}
         {removeParticipantDialog}
         <RoomWorkspace
-          room={room}
+          room={workspaceRoom}
           currentUserId={currentUserId}
           roomId={roomId}
           elapsedMs={elapsedMs}
@@ -851,6 +894,7 @@ function RoomPage() {
           doc={doc}
           awareness={awareness}
           currentUserName={currentUser?.displayName ?? currentUser?.username ?? 'Anonymous'}
+          isMockPreview={shouldShowMockWorkspace}
           speakingMap={speakingMap}
           mediaControls={mediaControlsElement}
           mediaConnectedSet={mediaConnectedSet}
@@ -905,11 +949,13 @@ function RoomPage() {
         isUpdatingRole={isUpdatingRole}
         isTransferringOwnership={isTransferringOwnership}
         joinNotice={joinNotice}
+        canPreviewWorkspace={canPreviewWorkspace}
         collabStatus={collabStatus}
         onParticipantRoleChange={handleParticipantRoleChange}
         onTransferOwnership={handleTransferOwnership}
         onToggleReady={handleToggleReady}
         onTransition={handleTransition}
+        onPreviewWorkspace={() => setMockWorkspacePreview(true)}
         onRoomUpdated={setRoom}
         mediaControls={mediaControlsElement}
         speakingMap={speakingMap}

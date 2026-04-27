@@ -24,10 +24,7 @@ import { type PaginatedResult, paginate } from '@syncode/shared/server';
 import { and, asc, type Column, desc, eq, gt, gte, inArray, lt, lte, or, sql } from 'drizzle-orm';
 import { resolveAvatarUrls } from '@/common/resolve-avatar-urls.js';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
-import {
-  normalizeReportScoreMap,
-  normalizeReportStringArray,
-} from './session-report-normalizers.js';
+import { filterReviewFeedback, isAllReviewFeedbackSubmitted } from './session-feedback-utils.js';
 import type {
   SessionCodeSnapshotResult,
   SessionDetailResult,
@@ -89,13 +86,17 @@ export class SessionsService {
             cursorSort,
             cursorId,
             compareOp,
+            userId,
           );
           if (cursorCondition) {
             conditions.push(cursorCondition);
           }
         }
 
-        const sortColumn = this.getSortColumn(query.sortBy);
+        const sortColumn =
+          query.sortBy === 'overallScore'
+            ? this.getOverallScoreSortExpr(userId)
+            : this.getSortColumn(query.sortBy);
 
         const baseQuery = this.db
           .select({
@@ -106,8 +107,21 @@ export class SessionsService {
             difficulty: problems.difficulty,
             language: sessions.language,
             durationMs: sessions.durationMs,
-            overallScore: sessionReports.overallScore,
-            hasReport: sql<boolean>`${sessionReports.id} IS NOT NULL`.as('has_report'),
+            overallScore: sql<number | null>`(
+              SELECT ${sessionReports.overallScore}
+              FROM ${sessionReports}
+              WHERE ${sessionReports.sessionId} = ${sessions.id}
+                AND ${sessionReports.userId} = ${userId}
+                AND ${sessionReports.status} = 'completed'
+              LIMIT 1
+            )`.as('overall_score'),
+            hasReport: sql<boolean>`EXISTS (
+              SELECT 1
+              FROM ${sessionReports}
+              WHERE ${sessionReports.sessionId} = ${sessions.id}
+                AND ${sessionReports.userId} = ${userId}
+                AND ${sessionReports.status} = 'completed'
+            )`.as('has_report'),
             hasFeedback: sql<boolean>`EXISTS (
               SELECT 1 FROM peer_feedback pf
               WHERE pf.session_id = ${sessions.id}
@@ -116,8 +130,7 @@ export class SessionsService {
             finishedAt: sessions.finishedAt,
           })
           .from(sessions)
-          .leftJoin(problems, eq(problems.id, sessions.problemId))
-          .leftJoin(sessionReports, eq(sessionReports.sessionId, sessions.id));
+          .leftJoin(problems, eq(problems.id, sessions.problemId));
 
         const orderExpressions = this.isNullableSortColumn(query.sortBy)
           ? [
@@ -212,15 +225,14 @@ export class SessionsService {
     }
 
     if (!isAdmin) {
-      await Promise.all([
-        this.assertParticipant(sessionId, userId),
-        this.assertNotSoftDeleted(sessionId, userId),
-      ]);
+      await this.assertSessionAccessible(sessionId, userId, isAdmin);
     }
 
     const [
       participantRows,
       report,
+      latestCodeSnapshot,
+      feedbackRows,
       feedbackExists,
       recordingExists,
       runRows,
@@ -240,16 +252,48 @@ export class SessionsService {
         .innerJoin(users, eq(users.id, sessionParticipants.userId))
         .where(eq(sessionParticipants.sessionId, sessionId)),
       this.db.query.sessionReports.findFirst({
-        columns: {
-          overallScore: true,
-          categoryScores: true,
-          strengths: true,
-          areasForImprovement: true,
-          feedback: true,
-          generatedAt: true,
-        },
-        where: (table, { eq }) => eq(table.sessionId, sessionId),
+        columns: { id: true, report: true, generatedAt: true, overallScore: true },
+        where: (table, { and, eq }) =>
+          and(
+            eq(table.sessionId, sessionId),
+            eq(table.userId, userId),
+            eq(table.status, 'completed'),
+          ),
       }),
+      this.db
+        .select({
+          id: codeSnapshots.id,
+          code: codeSnapshots.code,
+          language: codeSnapshots.language,
+          trigger: codeSnapshots.trigger,
+          linesOfCode: codeSnapshots.linesOfCode,
+          createdAt: codeSnapshots.createdAt,
+        })
+        .from(codeSnapshots)
+        .where(eq(codeSnapshots.sessionId, sessionId))
+        .orderBy(desc(codeSnapshots.createdAt))
+        .limit(1),
+      this.db
+        .select({
+          id: peerFeedback.id,
+          reviewerId: peerFeedback.reviewerId,
+          reviewerUsername: users.username,
+          reviewerDisplayName: users.displayName,
+          candidateId: peerFeedback.candidateId,
+          problemSolvingRating: peerFeedback.problemSolvingRating,
+          communicationRating: peerFeedback.communicationRating,
+          codeQualityRating: peerFeedback.codeQualityRating,
+          debuggingRating: peerFeedback.debuggingRating,
+          overallRating: peerFeedback.overallRating,
+          strengths: peerFeedback.strengths,
+          improvements: peerFeedback.improvements,
+          wouldPairAgain: peerFeedback.wouldPairAgain,
+          createdAt: peerFeedback.createdAt,
+        })
+        .from(peerFeedback)
+        .innerJoin(users, eq(users.id, peerFeedback.reviewerId))
+        .where(eq(peerFeedback.sessionId, sessionId))
+        .orderBy(asc(peerFeedback.createdAt)),
       this.db
         .select({ id: peerFeedback.id })
         .from(peerFeedback)
@@ -293,7 +337,28 @@ export class SessionsService {
         : Promise.resolve([]),
     ]);
 
-    const normalizedReport = this.buildReport(report);
+    const reviewParticipantIds = new Set(
+      participantRows
+        .filter((participant) => this.isReviewParticipantRole(participant.role))
+        .map((participant) => participant.userId),
+    );
+    const reviewFeedbackRows = filterReviewFeedback(feedbackRows, reviewParticipantIds);
+    const allReviewFeedbackSubmitted = isAllReviewFeedbackSubmitted(
+      reviewParticipantIds.size,
+      reviewFeedbackRows.length,
+    );
+    const visibleFeedbackRows = isAdmin
+      ? feedbackRows
+      : reviewFeedbackRows.filter(
+          (feedback) => allReviewFeedbackSubmitted || feedback.reviewerId === userId,
+        );
+    const normalizedReport = report
+      ? {
+          ...((report.report as Record<string, unknown> | null) ?? {}),
+          generatedAt: report.generatedAt ?? new Date(),
+          overallScore: report.overallScore ?? undefined,
+        }
+      : null;
 
     return {
       sessionId: session.id,
@@ -323,6 +388,23 @@ export class SessionsService {
         createdAt: s.createdAt,
       })),
       report: normalizedReport,
+      latestCodeSnapshot: latestCodeSnapshot[0] ?? null,
+      peerFeedback: visibleFeedbackRows.map((feedback) => ({
+        id: feedback.id,
+        reviewerId: feedback.reviewerId,
+        reviewerName: feedback.reviewerDisplayName ?? feedback.reviewerUsername,
+        candidateId: feedback.candidateId,
+        candidateName: this.getParticipantName(participantRows, feedback.candidateId),
+        problemSolvingRating: feedback.problemSolvingRating,
+        communicationRating: feedback.communicationRating,
+        codeQualityRating: feedback.codeQualityRating,
+        debuggingRating: feedback.debuggingRating,
+        overallRating: feedback.overallRating,
+        strengths: feedback.strengths,
+        improvements: feedback.improvements,
+        wouldPairAgain: feedback.wouldPairAgain,
+        createdAt: feedback.createdAt,
+      })),
       hasReport: normalizedReport != null,
       hasFeedback: feedbackExists.length > 0,
       hasRecording: recordingExists.length > 0,
@@ -337,25 +419,7 @@ export class SessionsService {
     isAdmin: boolean,
     query: ListCodeSnapshotsQuery,
   ): Promise<PaginatedResult<SessionCodeSnapshotResult>> {
-    const [session] = await this.db
-      .select({ id: sessions.id })
-      .from(sessions)
-      .where(eq(sessions.id, sessionId))
-      .limit(1);
-
-    if (!session) {
-      throw new NotFoundException({
-        message: 'Session not found',
-        code: ERROR_CODES.SESSION_NOT_FOUND,
-      });
-    }
-
-    if (!isAdmin) {
-      await Promise.all([
-        this.assertParticipant(sessionId, userId),
-        this.assertNotSoftDeleted(sessionId, userId),
-      ]);
-    }
+    await this.assertSessionAccessible(sessionId, userId, isAdmin);
 
     return paginate<SessionCodeSnapshotResult>({
       cursor: query.cursor,
@@ -407,7 +471,8 @@ export class SessionsService {
     const [session] = await this.db
       .select({ id: sessions.id })
       .from(sessions)
-      .where(eq(sessions.id, sessionId));
+      .where(eq(sessions.id, sessionId))
+      .limit(1);
 
     if (!session) {
       throw new NotFoundException({
@@ -431,6 +496,32 @@ export class SessionsService {
       where: (table, { eq }) => eq(table.id, userId),
     });
     return user?.role === 'admin';
+  }
+
+  async assertSessionAccessible(
+    sessionId: string,
+    userId: string,
+    isAdmin: boolean,
+  ): Promise<void> {
+    const [session] = await this.db
+      .select({ id: sessions.id })
+      .from(sessions)
+      .where(eq(sessions.id, sessionId))
+      .limit(1);
+
+    if (!session) {
+      throw new NotFoundException({
+        message: 'Session not found',
+        code: ERROR_CODES.SESSION_NOT_FOUND,
+      });
+    }
+
+    if (!isAdmin) {
+      await Promise.all([
+        this.assertParticipant(sessionId, userId),
+        this.assertNotSoftDeleted(sessionId, userId),
+      ]);
+    }
   }
 
   private async assertParticipant(sessionId: string, userId: string): Promise<void> {
@@ -470,15 +561,28 @@ export class SessionsService {
     cursorSort: string,
     cursorId: string,
     compareOp: typeof gt | typeof lt,
+    userId: string,
   ) {
-    const sortColumn = this.getSortColumn(sortBy);
+    const sortColumn =
+      sortBy === 'overallScore' ? this.getOverallScoreSortExpr(userId) : this.getSortColumn(sortBy);
     const isNullCursor = cursorSort === NULL_SENTINEL;
 
     if (isNullCursor) {
       return and(sql`${sortColumn} IS NULL`, compareOp(sessions.id, cursorId));
     }
 
-    if (sortBy === 'overallScore' || sortBy === 'duration') {
+    if (sortBy === 'overallScore') {
+      const cursorNum = Number(cursorSort);
+      if (Number.isNaN(cursorNum)) return null;
+      const operator = compareOp === gt ? sql.raw('>') : sql.raw('<');
+
+      return or(
+        sql`${sortColumn} ${operator} ${cursorNum}`,
+        and(sql`${sortColumn} = ${cursorNum}`, compareOp(sessions.id, cursorId)),
+      );
+    }
+
+    if (sortBy === 'duration') {
       const cursorNum = Number(cursorSort);
       if (Number.isNaN(cursorNum)) return null;
       const compareValue = cursorNum;
@@ -514,8 +618,6 @@ export class SessionsService {
     switch (sortBy) {
       case 'finishedAt':
         return sessions.finishedAt;
-      case 'overallScore':
-        return sessionReports.overallScore;
       case 'duration':
         return sessions.durationMs;
       default:
@@ -523,58 +625,34 @@ export class SessionsService {
     }
   }
 
+  private getOverallScoreSortExpr(userId: string) {
+    return sql<number | null>`(
+      SELECT ${sessionReports.overallScore}
+      FROM ${sessionReports}
+      WHERE ${sessionReports.sessionId} = ${sessions.id}
+        AND ${sessionReports.userId} = ${userId}
+        AND ${sessionReports.status} = 'completed'
+      LIMIT 1
+    )`;
+  }
+
   private isNullableSortColumn(sortBy: SortBy): boolean {
     return sortBy === 'overallScore' || sortBy === 'finishedAt' || sortBy === 'duration';
   }
 
+  private getParticipantName(
+    participants: Array<{ userId: string; username: string; displayName: string | null }>,
+    userId: string,
+  ): string {
+    const participant = participants.find((item) => item.userId === userId);
+    return participant?.displayName ?? participant?.username ?? userId;
+  }
+
+  private isReviewParticipantRole(role: string): role is 'candidate' | 'interviewer' {
+    return role === 'candidate' || role === 'interviewer';
+  }
+
   private countLinesOfCode(code: string): number {
     return code ? code.split('\n').length : 0;
-  }
-
-  private buildReport(
-    report:
-      | {
-          overallScore: number | null;
-          categoryScores: unknown;
-          strengths: unknown;
-          areasForImprovement: unknown;
-          feedback: string | null;
-          generatedAt: Date;
-        }
-      | null
-      | undefined,
-  ): {
-    overallScore: number;
-    categoryScores: Record<string, number>;
-    strengths: string[];
-    areasForImprovement: string[];
-    feedback: string | null;
-    generatedAt: Date;
-  } | null {
-    if (!report) return null;
-    const overallScore = this.normalizeOverallScore(report.overallScore);
-    if (overallScore === null) {
-      return null;
-    }
-    return {
-      overallScore,
-      categoryScores: normalizeReportScoreMap(report.categoryScores),
-      strengths: normalizeReportStringArray(report.strengths),
-      areasForImprovement: normalizeReportStringArray(report.areasForImprovement),
-      feedback: report.feedback,
-      generatedAt: report.generatedAt,
-    };
-  }
-
-  private normalizeOverallScore(value: number | null | undefined): number | null {
-    if (typeof value !== 'number' || !Number.isFinite(value)) {
-      return null;
-    }
-    const rounded = Math.round(value);
-    if (rounded < 0 || rounded > 100) {
-      this.logger.warn(`Discarding overallScore outside 0-100 range: ${value}`);
-      return null;
-    }
-    return rounded;
   }
 }

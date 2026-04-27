@@ -1,4 +1,12 @@
+import { ERROR_CODES } from '@syncode/contracts';
 import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
   Avatar,
   AvatarFallback,
   Badge,
@@ -6,6 +14,11 @@ import {
   Card,
   cn,
   Input,
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationNext,
+  PaginationPrevious,
   Select,
   SelectContent,
   SelectItem,
@@ -18,37 +31,32 @@ import {
   TableHeader,
   TableRow,
 } from '@syncode/ui';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { Search } from 'lucide-react';
-import { useDeferredValue, useState } from 'react';
+import { Loader2, Search, Trash2 } from 'lucide-react';
+import { useDeferredValue, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { toast } from 'sonner';
+import { ApiError } from '@/lib/api-client.js';
 import type {
+  DashboardSessionHistory,
   SessionParticipant,
   SessionRole,
   SessionRow,
   SessionStatus,
+} from '@/lib/dashboard-session-history.js';
+import {
+  deleteSession,
+  formatSessionDateTime,
+  getDashboardSessionHistoryQueryKey,
+  removeSessionFromDashboardHistory,
 } from '@/lib/dashboard-session-history.js';
 import { getUserInitial } from '@/lib/user-utils.js';
 import { useAuthStore } from '@/stores/auth.store.js';
 
 type SessionFilter = 'all' | 'passed' | 'failed';
 type SessionSort = 'date-desc' | 'date-asc' | 'score-desc' | 'score-asc' | 'duration-desc';
-
-const SESSION_DATE_FORMAT = new Intl.DateTimeFormat(undefined, {
-  year: 'numeric',
-  month: 'short',
-  day: '2-digit',
-});
-
-function formatSessionDate(date: string) {
-  const parsed = new Date(date);
-
-  if (Number.isNaN(parsed.getTime())) {
-    return date;
-  }
-
-  return SESSION_DATE_FORMAT.format(parsed);
-}
+const SESSION_HISTORY_PAGE_SIZE = 10;
 
 function getStatusBadgeVariant(status: SessionStatus) {
   if (status === 'passed') {
@@ -88,7 +96,7 @@ function compareRows(a: SessionRow, b: SessionRow, sortBy: SessionSort) {
   }
 
   if (sortBy === 'duration-desc') {
-    return b.durationMinutes - a.durationMinutes;
+    return b.durationSeconds - a.durationSeconds;
   }
 
   return new Date(b.date).getTime() - new Date(a.date).getTime();
@@ -123,170 +131,15 @@ function ParticipantAvatar({
   );
 }
 
-function renderRecentSessionsBody({
-  isLoading,
-  isUnavailable,
-  isError,
-  hasVisibleRows,
-  hasBaseRows,
-  onRetry,
-  filteredRows,
-  currentUserInitial,
-  t,
-}: {
-  readonly isLoading: boolean;
-  readonly isUnavailable: boolean;
-  readonly isError: boolean;
-  readonly hasVisibleRows: boolean;
-  readonly hasBaseRows: boolean;
-  readonly onRetry?: () => void;
-  readonly filteredRows: SessionRow[];
-  readonly currentUserInitial: string;
-  readonly t: (key: string) => string;
-}) {
-  if (isLoading) {
-    return (
-      <StateMessage title={t('empty.loadingTitle')} description={t('empty.loadingDescription')} />
-    );
-  }
-  if (isUnavailable) {
-    return (
-      <StateMessage
-        title={t('empty.unavailableTitle')}
-        description={t('empty.unavailableDescription')}
-      />
-    );
-  }
-  if (isError) {
-    return (
-      <StateMessage
-        title={t('empty.errorTitle')}
-        description={t('empty.errorDescription')}
-        action={
-          onRetry ? (
-            <Button variant="outline" className="mt-4" onClick={onRetry}>
-              {t('common:retry')}
-            </Button>
-          ) : null
-        }
-      />
-    );
-  }
-  if (!hasVisibleRows) {
-    return (
-      <StateMessage
-        title={hasBaseRows ? t('empty.noMatchTitle') : t('empty.noSessionsTitle')}
-        description={hasBaseRows ? t('empty.noMatchDescription') : t('empty.noSessionsDescription')}
-      />
-    );
-  }
-  return (
-    <Table>
-      <TableHeader>
-        <TableRow className="hover:bg-transparent">
-          <TableHead className="w-35 text-center">{t('table.date')}</TableHead>
-          <TableHead className="min-w-65 text-center">{t('table.problem')}</TableHead>
-          <TableHead className="w-22 text-center">{t('table.partner')}</TableHead>
-          <TableHead className="w-24 text-center">{t('table.observer')}</TableHead>
-          <TableHead className="w-30 text-center">{t('table.role')}</TableHead>
-          <TableHead className="w-30 text-center">{t('table.status')}</TableHead>
-          <TableHead className="w-22.5 text-center">{t('table.score')}</TableHead>
-          <TableHead className="w-25 text-center">{t('table.duration')}</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {filteredRows.map((row) => (
-          <RecentSessionRow key={row.id} row={row} currentUserInitial={currentUserInitial} t={t} />
-        ))}
-      </TableBody>
-    </Table>
-  );
-}
-
-function RecentSessionRow({
-  row,
-  currentUserInitial,
-  t,
-}: {
-  readonly row: SessionRow;
-  readonly currentUserInitial: string;
-  readonly t: (key: string) => string;
-}) {
-  return (
-    <TableRow key={row.id}>
-      <TableCell className="text-muted-foreground">{formatSessionDate(row.date)}</TableCell>
-      <TableCell>
-        <Link
-          to="/sessions/$sessionId/feedback"
-          params={{ sessionId: row.id }}
-          className="block truncate rounded-sm font-medium text-foreground transition-colors hover:text-foreground/85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-          title={row.problemName}
-        >
-          {row.problemName}
-        </Link>
-      </TableCell>
-      <TableCell className="text-center">
-        <ParticipantAvatar participant={row.partner} currentUserInitial={currentUserInitial} />
-      </TableCell>
-      <TableCell className="text-center">
-        <ParticipantAvatar participant={row.observer} currentUserInitial={currentUserInitial} />
-      </TableCell>
-      <TableCell className="text-center">
-        <Badge variant={getRoleBadgeVariant(row.role)}>{t(`role.${row.role}`)}</Badge>
-      </TableCell>
-      <TableCell className="text-center">
-        {row.role === 'candidate' && row.status ? (
-          <Badge variant={getStatusBadgeVariant(row.status)}>
-            {row.status === 'passed' ? t('status.pass') : t('status.failed')}
-          </Badge>
-        ) : (
-          <span className="text-muted-foreground">-</span>
-        )}
-      </TableCell>
-      <TableCell className="text-center">
-        {row.role === 'candidate' && typeof row.score === 'number' ? (
-          <span
-            className={cn(
-              'font-medium',
-              row.status === 'passed' ? 'text-primary' : 'text-amber-400',
-            )}
-          >
-            {row.score}
-          </span>
-        ) : (
-          <span className="text-muted-foreground">-</span>
-        )}
-      </TableCell>
-      <TableCell className="text-center text-muted-foreground">{row.durationMinutes}m</TableCell>
-    </TableRow>
-  );
-}
-
-function StateMessage({
-  title,
-  description,
-  action,
-}: {
-  readonly title: string;
-  readonly description: string;
-  readonly action?: React.ReactNode;
-}) {
-  return (
-    <div className="flex min-h-64 flex-col items-center justify-center px-6 py-12 text-center">
-      <h3 className="text-lg font-semibold tracking-tight text-foreground">{title}</h3>
-      <p className="mt-2 max-w-md text-sm text-muted-foreground">{description}</p>
-      {action}
-    </div>
-  );
-}
-
 export function DashboardRecentSessions({
+  viewerId,
   rows,
   isLoading = false,
   isError = false,
   isUnavailable = false,
   onRetry,
 }: {
+  readonly viewerId: string | null;
   readonly rows: SessionRow[];
   readonly isLoading?: boolean;
   readonly isError?: boolean;
@@ -294,12 +147,16 @@ export function DashboardRecentSessions({
   readonly onRetry?: () => void;
 }) {
   const { t } = useTranslation('dashboard');
+  const queryClient = useQueryClient();
   const user = useAuthStore((state) => state.user);
   const currentUserInitial = getUserInitial(user) || 'U';
   const [searchQuery, setSearchQuery] = useState('');
   const deferredSearchQuery = useDeferredValue(searchQuery);
   const [filter, setFilter] = useState<SessionFilter>('all');
   const [sortBy, setSortBy] = useState<SessionSort>('date-desc');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pendingDeleteSessionId, setPendingDeleteSessionId] = useState<string | null>(null);
+  const sessionHistoryQueryKey = getDashboardSessionHistoryQueryKey(viewerId);
 
   const normalizedQuery = deferredSearchQuery.trim().toLowerCase();
   const baseRows = rows.map((row) => {
@@ -330,9 +187,96 @@ export function DashboardRecentSessions({
       return true;
     })
     .sort((a, b) => compareRows(a, b, sortBy));
+  const totalPages = Math.ceil(filteredRows.length / SESSION_HISTORY_PAGE_SIZE);
 
   const hasBaseRows = baseRows.length > 0;
   const hasVisibleRows = filteredRows.length > 0;
+  // Clamp the page in derived calculations so that a stale currentPage (e.g.
+  // after rows shrink on refresh) doesn't render an empty slice with an
+  // invalid summary range while the useEffect correction is pending.
+  const safeCurrentPage = hasVisibleRows ? Math.min(Math.max(currentPage, 1), totalPages) : 1;
+  const paginatedRows = filteredRows.slice(
+    (safeCurrentPage - 1) * SESSION_HISTORY_PAGE_SIZE,
+    safeCurrentPage * SESSION_HISTORY_PAGE_SIZE,
+  );
+  const hasPreviousPage = safeCurrentPage > 1;
+  const hasNextPage = safeCurrentPage < totalPages;
+  const pageStart = hasVisibleRows ? (safeCurrentPage - 1) * SESSION_HISTORY_PAGE_SIZE + 1 : 0;
+  const pageEnd = hasVisibleRows
+    ? Math.min(safeCurrentPage * SESSION_HISTORY_PAGE_SIZE, filteredRows.length)
+    : 0;
+
+  useEffect(() => {
+    if (!hasVisibleRows) {
+      if (currentPage !== 1) {
+        setCurrentPage(1);
+      }
+
+      return;
+    }
+
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, hasVisibleRows, totalPages]);
+
+  const deleteSessionMutation = useMutation<
+    void,
+    unknown,
+    { sessionId: string },
+    { previousHistory?: DashboardSessionHistory }
+  >({
+    mutationFn: async ({ sessionId }) => {
+      await deleteSession(sessionId);
+    },
+    onMutate: async ({ sessionId }) => {
+      await queryClient.cancelQueries({ queryKey: sessionHistoryQueryKey });
+
+      const previousHistory =
+        queryClient.getQueryData<DashboardSessionHistory>(sessionHistoryQueryKey);
+
+      queryClient.setQueryData<DashboardSessionHistory>(sessionHistoryQueryKey, (currentHistory) =>
+        currentHistory
+          ? removeSessionFromDashboardHistory(currentHistory, sessionId)
+          : currentHistory,
+      );
+
+      return { previousHistory };
+    },
+    onSuccess: () => {
+      // Close the dialog only after the request lands so the in-dialog
+      // pending UI ('Deleting...') is actually visible.
+      setPendingDeleteSessionId(null);
+    },
+    onError: (error, _variables, context) => {
+      if (context?.previousHistory) {
+        queryClient.setQueryData(sessionHistoryQueryKey, context.previousHistory);
+      }
+
+      // Refetch only on error so the optimistic update is reconciled with
+      // server truth. The success path already removed the row optimistically.
+      void queryClient.invalidateQueries({ queryKey: sessionHistoryQueryKey });
+      toast.error(getDeleteSessionErrorMessage(error, t));
+    },
+  });
+
+  const handleDeleteSessionClick = (sessionId: string) => {
+    setPendingDeleteSessionId(sessionId);
+  };
+
+  const handleDeleteDialogOpenChange = (open: boolean) => {
+    if (!open) {
+      setPendingDeleteSessionId(null);
+    }
+  };
+
+  const confirmDeleteSession = () => {
+    if (!pendingDeleteSessionId || !viewerId || deleteSessionMutation.isPending) {
+      return;
+    }
+
+    deleteSessionMutation.mutate({ sessionId: pendingDeleteSessionId });
+  };
 
   return (
     <section className="mt-10 sm:mt-12">
@@ -346,13 +290,22 @@ export function DashboardRecentSessions({
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
+              onChange={(event) => {
+                setSearchQuery(event.target.value);
+                setCurrentPage(1);
+              }}
               placeholder={t('search.placeholder')}
               className="h-11 pl-9"
             />
           </div>
 
-          <Select value={filter} onValueChange={(value) => setFilter(value as SessionFilter)}>
+          <Select
+            value={filter}
+            onValueChange={(value) => {
+              setFilter(value as SessionFilter);
+              setCurrentPage(1);
+            }}
+          >
             <SelectTrigger
               className="w-full md:w-42.5 xl:flex-none"
               aria-label={t('aria.filterSessions')}
@@ -366,7 +319,13 @@ export function DashboardRecentSessions({
             </SelectContent>
           </Select>
 
-          <Select value={sortBy} onValueChange={(value) => setSortBy(value as SessionSort)}>
+          <Select
+            value={sortBy}
+            onValueChange={(value) => {
+              setSortBy(value as SessionSort);
+              setCurrentPage(1);
+            }}
+          >
             <SelectTrigger
               className="w-full md:w-57.5 xl:flex-none"
               aria-label={t('aria.sortSessions')}
@@ -385,18 +344,245 @@ export function DashboardRecentSessions({
       </div>
 
       <Card className="mt-5 gap-0 overflow-hidden border border-border/50 bg-card/80 py-0 backdrop-blur-sm">
-        {renderRecentSessionsBody({
-          isLoading,
-          isUnavailable,
-          isError,
-          hasVisibleRows,
-          hasBaseRows,
-          onRetry,
-          filteredRows,
-          currentUserInitial,
-          t,
-        })}
+        {isLoading ? (
+          <div className="flex min-h-64 flex-col items-center justify-center px-6 py-12 text-center">
+            <h3 className="text-lg font-semibold tracking-tight text-foreground">
+              {t('empty.loadingTitle')}
+            </h3>
+            <p className="mt-2 max-w-md text-sm text-muted-foreground">
+              {t('empty.loadingDescription')}
+            </p>
+          </div>
+        ) : isUnavailable ? (
+          <div className="flex min-h-64 flex-col items-center justify-center px-6 py-12 text-center">
+            <h3 className="text-lg font-semibold tracking-tight text-foreground">
+              {t('empty.unavailableTitle')}
+            </h3>
+            <p className="mt-2 max-w-md text-sm text-muted-foreground">
+              {t('empty.unavailableDescription')}
+            </p>
+          </div>
+        ) : isError ? (
+          <div className="flex min-h-64 flex-col items-center justify-center px-6 py-12 text-center">
+            <h3 className="text-lg font-semibold tracking-tight text-foreground">
+              {t('empty.errorTitle')}
+            </h3>
+            <p className="mt-2 max-w-md text-sm text-muted-foreground">
+              {t('empty.errorDescription')}
+            </p>
+            {onRetry ? (
+              <Button variant="outline" className="mt-4" onClick={onRetry}>
+                {t('common:retry')}
+              </Button>
+            ) : null}
+          </div>
+        ) : hasVisibleRows ? (
+          <>
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className="w-35 text-center">{t('table.date')}</TableHead>
+                  <TableHead className="min-w-65 text-center">{t('table.problem')}</TableHead>
+                  <TableHead className="w-22 text-center">{t('table.partner')}</TableHead>
+                  <TableHead className="w-24 text-center">{t('table.observer')}</TableHead>
+                  <TableHead className="w-30 text-center">{t('table.role')}</TableHead>
+                  <TableHead className="w-30 text-center">{t('table.status')}</TableHead>
+                  <TableHead className="w-22.5 text-center">{t('table.score')}</TableHead>
+                  <TableHead className="w-25 text-center">{t('table.duration')}</TableHead>
+                  <TableHead className="w-20 text-center">{t('table.actions')}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {paginatedRows.map((row) => (
+                  <TableRow key={row.id}>
+                    <TableCell className="text-muted-foreground">
+                      {formatSessionDateTime(row.date)}
+                    </TableCell>
+                    <TableCell>
+                      <Link
+                        to="/sessions/$sessionId"
+                        params={{ sessionId: row.id }}
+                        className="block truncate rounded-sm font-medium text-foreground transition-colors hover:text-foreground/85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                        title={row.problemName}
+                      >
+                        {row.problemName}
+                      </Link>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <ParticipantAvatar
+                        participant={row.partner}
+                        currentUserInitial={currentUserInitial}
+                      />
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <ParticipantAvatar
+                        participant={row.observer}
+                        currentUserInitial={currentUserInitial}
+                      />
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <Badge variant={getRoleBadgeVariant(row.role)}>{t(`role.${row.role}`)}</Badge>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {row.role === 'candidate' && row.status ? (
+                        <Badge variant={getStatusBadgeVariant(row.status)}>
+                          {row.status === 'passed' ? t('status.pass') : t('status.failed')}
+                        </Badge>
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {row.role === 'candidate' && typeof row.score === 'number' ? (
+                        <span
+                          className={cn(
+                            'font-medium',
+                            row.status === 'passed' ? 'text-primary' : 'text-amber-400',
+                          )}
+                        >
+                          {row.score}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-center text-muted-foreground">
+                      {row.durationLabel}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-xs"
+                        aria-label={t('actions.deleteSessionAriaLabel')}
+                        disabled={deleteSessionMutation.isPending || !viewerId}
+                        className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive focus-visible:text-destructive focus-visible:ring-destructive/20"
+                        onClick={() => handleDeleteSessionClick(row.id)}
+                      >
+                        <Trash2 className="size-3.5" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+
+            {hasVisibleRows ? (
+              <div className="flex flex-col gap-3 border-t border-border/50 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+                <p className="text-sm text-muted-foreground">
+                  {t('pagination.summary', {
+                    start: pageStart,
+                    end: pageEnd,
+                    total: filteredRows.length,
+                  })}
+                </p>
+
+                <Pagination className="justify-end">
+                  <PaginationContent>
+                    <PaginationItem>
+                      <PaginationPrevious
+                        aria-label={t('aria.previousPage')}
+                        disabled={!hasPreviousPage}
+                        onClick={() => {
+                          if (!hasPreviousPage) {
+                            return;
+                          }
+
+                          setCurrentPage((page) => page - 1);
+                        }}
+                      >
+                        {t('pagination.previous')}
+                      </PaginationPrevious>
+                    </PaginationItem>
+                    <PaginationItem>
+                      <PaginationNext
+                        aria-label={t('aria.nextPage')}
+                        disabled={!hasNextPage}
+                        onClick={() => {
+                          if (!hasNextPage) {
+                            return;
+                          }
+
+                          setCurrentPage((page) => page + 1);
+                        }}
+                      >
+                        {t('pagination.next')}
+                      </PaginationNext>
+                    </PaginationItem>
+                  </PaginationContent>
+                </Pagination>
+              </div>
+            ) : null}
+          </>
+        ) : (
+          <div className="flex min-h-64 flex-col items-center justify-center px-6 py-12 text-center">
+            <h3 className="text-lg font-semibold tracking-tight text-foreground">
+              {hasBaseRows ? t('empty.noMatchTitle') : t('empty.noSessionsTitle')}
+            </h3>
+            <p className="mt-2 max-w-md text-sm text-muted-foreground">
+              {hasBaseRows ? t('empty.noMatchDescription') : t('empty.noSessionsDescription')}
+            </p>
+          </div>
+        )}
+
+        <AlertDialog
+          open={pendingDeleteSessionId !== null}
+          onOpenChange={handleDeleteDialogOpenChange}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>{t('deleteDialog.title')}</AlertDialogTitle>
+              <AlertDialogDescription>{t('deleteDialog.description')}</AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={deleteSessionMutation.isPending}>
+                {t('deleteDialog.cancel')}
+              </AlertDialogCancel>
+              {/*
+                Use a plain Button instead of AlertDialogAction: AlertDialogAction
+                triggers Radix's close-on-click, which would unmount the dialog
+                before the pending UI ('Deleting...') becomes visible. We close
+                explicitly in the mutation's onSuccess.
+              */}
+              <Button
+                type="button"
+                variant="destructive"
+                disabled={deleteSessionMutation.isPending || !viewerId}
+                onClick={confirmDeleteSession}
+              >
+                {deleteSessionMutation.isPending ? (
+                  <span className="inline-flex items-center gap-2">
+                    <Loader2 className="size-4 animate-spin" />
+                    {t('deleteDialog.deleting')}
+                  </span>
+                ) : (
+                  t('deleteDialog.confirm')
+                )}
+              </Button>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </Card>
     </section>
   );
+}
+
+function getDeleteSessionErrorMessage(error: unknown, t: (key: string) => string) {
+  if (error instanceof ApiError) {
+    if (error.response.code === ERROR_CODES.SESSION_NOT_FOUND) {
+      return t('deleteToast.sessionNotFound');
+    }
+
+    if (error.response.code === ERROR_CODES.SESSION_NOT_PARTICIPANT) {
+      return t('deleteToast.notParticipant');
+    }
+
+    if (error.response.statusCode === 401) {
+      return t('deleteToast.unauthorized');
+    }
+
+    return error.response.message || t('deleteToast.deleteFailed');
+  }
+
+  return t('deleteToast.deleteFailed');
 }

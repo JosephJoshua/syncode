@@ -35,11 +35,13 @@ interface RoomLobbyProps {
   isUpdatingRole: string | null;
   isTransferringOwnership: string | null;
   joinNotice: string | null;
+  canPreviewWorkspace?: boolean;
   collabStatus: CollabConnectionStatus;
   onParticipantRoleChange: (userId: string, role: RoomRole) => void;
   onTransferOwnership: (userId: string, displayName: string) => void;
   onToggleReady: () => void;
   onTransition: (targetStatus: RoomStatus) => void;
+  onPreviewWorkspace?: () => void;
   onRoomUpdated?: (room: RoomDetail) => void;
   mediaControls?: React.ReactNode;
   speakingMap?: ReadonlyMap<string, boolean>;
@@ -201,11 +203,13 @@ export function RoomLobby({
   isUpdatingRole,
   isTransferringOwnership,
   joinNotice,
+  canPreviewWorkspace = false,
   collabStatus,
   onParticipantRoleChange,
   onTransferOwnership,
   onToggleReady,
   onTransition,
+  onPreviewWorkspace,
   onRoomUpdated,
   mediaControls,
   speakingMap,
@@ -436,6 +440,21 @@ export function RoomLobby({
                       {t('lobby.awaitingController')}
                     </p>
                   )}
+                  {canPreviewWorkspace && onPreviewWorkspace ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full"
+                      onClick={onPreviewWorkspace}
+                    >
+                      {t('readyButton.previewWorkspace')}
+                    </Button>
+                  ) : null}
+                  {canPreviewWorkspace ? (
+                    <p className="text-[11px] text-muted-foreground">
+                      {t('lobby.previewWorkspaceHelp')}
+                    </p>
+                  ) : null}
                 </div>
               </div>
             </Card>

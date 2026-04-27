@@ -11,12 +11,14 @@ import request from 'supertest';
 import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard.js';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
 import { ExecutionService } from '@/modules/execution/execution.service.js';
+import { SessionReportsService } from '@/modules/sessions/session-reports.service.js';
 import { InMemoryCacheService } from '@/test/in-memory-cache.service.js';
 import {
   createTestDb,
   insertParticipant,
   insertProblem,
   insertRoom,
+  insertSession,
   insertTestCase,
   insertUser,
 } from '@/test/integration-setup.js';
@@ -27,6 +29,7 @@ import {
   createMockExecutionClient,
   createMockJwtService,
   createMockMediaService,
+  createMockSessionReportsService,
   createMockStorageService,
   TestAuthGuard,
 } from '@/test/mock-factories.js';
@@ -59,6 +62,7 @@ beforeEach(async () => {
       { provide: STORAGE_SERVICE, useValue: createMockStorageService() },
       { provide: JwtService, useValue: createMockJwtService() },
       { provide: ConfigService, useValue: createMockConfigService() },
+      { provide: SessionReportsService, useValue: createMockSessionReportsService() },
       Reflector,
     ],
   })
@@ -233,7 +237,21 @@ describe('GET /rooms/:id', () => {
     expect(res.body.myCapabilities).toEqual(
       expect.arrayContaining(['code:edit', 'participant:kick']),
     );
+    expect(res.body.sessionId).toBeNull();
     expect(res.body.currentPhaseStartedAt).toBeNull();
+  });
+
+  it('GIVEN room has a session WHEN getting room THEN returns the room session id', async () => {
+    const user = await insertUser(db);
+    const room = await insertRoom(db, user.id, { status: 'warmup' });
+    await insertParticipant(db, room.id, user.id, 'interviewer');
+    const session = await insertSession(db, room.id, { status: 'ongoing' });
+
+    const res = await asUser(request(app.getHttpServer()).get(`/rooms/${room.id}`), user).expect(
+      200,
+    );
+
+    expect(res.body.sessionId).toBe(session.id);
   });
 
   it('GIVEN user is not a participant WHEN getting room THEN returns 403', async () => {
@@ -276,6 +294,7 @@ describe('POST /rooms/:id/join', () => {
     expect(res.body.collabUrl).toBe('http://localhost:3001');
     expect(res.body.myCapabilities).toEqual(expect.arrayContaining(['code:edit', 'code:run']));
     expect(res.body.room.roomId).toBe(room.id);
+    expect(res.body.room.sessionId).toBeNull();
     expect(res.body.room.participants).toHaveLength(2);
     expect(res.body.room.createdAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     expect(res.body.room.participants[0].joinedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);

@@ -1,4 +1,4 @@
-import { HttpException, HttpStatus } from '@nestjs/common';
+import { type ArgumentsHost, HttpException, HttpStatus } from '@nestjs/common';
 import { CircuitBreakerOpenError, CircuitBreakerTimeoutError } from '@syncode/shared/ports';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { GlobalExceptionFilter } from './global-exception.filter';
@@ -11,14 +11,14 @@ function createMockHost(mockResponse: {
     switchToHttp: () => ({
       getResponse: () => mockResponse,
     }),
-  } as any;
+  } as unknown as ArgumentsHost;
 }
 
 describe('GlobalExceptionFilter', () => {
   let filter: GlobalExceptionFilter;
   let mockJson: ReturnType<typeof vi.fn>;
   let mockStatus: ReturnType<typeof vi.fn>;
-  let mockHost: any;
+  let mockHost: ArgumentsHost;
 
   beforeEach(() => {
     filter = new GlobalExceptionFilter();

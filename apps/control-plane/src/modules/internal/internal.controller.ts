@@ -1,4 +1,13 @@
-import { Body, Controller, Inject, Logger, Param, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Inject,
+  InternalServerErrorException,
+  Logger,
+  Param,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiExcludeEndpoint } from '@nestjs/swagger';
 import { SkipThrottle } from '@nestjs/throttler';
 import {
@@ -53,18 +62,6 @@ export class InternalController {
     try {
       const { roomId, snapshot, code, language, timestamp, trigger } = payload;
 
-      const snapshotBuffer = Buffer.from(snapshot);
-      const key = `snapshots/${roomId}/${timestamp}.yjs`;
-      await this.storageService.upload(key, snapshotBuffer, {
-        contentType: 'application/octet-stream',
-        metadata: {
-          roomId,
-          timestamp: timestamp.toString(),
-        },
-      });
-
-      await this.roomsService.persistDocSnapshot(roomId, new Uint8Array(snapshot));
-
       const [session] = await this.db
         .select({ id: sessions.id, language: sessions.language })
         .from(sessions)
@@ -96,11 +93,35 @@ export class InternalController {
         );
       }
 
+      // Persist the canonical Y.Doc state to the DB first — this is what room
+      // recovery relies on. The S3 blob is a recoverable mirror, so a transient
+      // S3 failure should not block the DB write.
+      await this.roomsService.persistDocSnapshot(roomId, new Uint8Array(snapshot));
+
+      const snapshotBuffer = Buffer.from(snapshot);
+      const key = `snapshots/${roomId}/${timestamp}.yjs`;
+
+      try {
+        await this.storageService.upload(key, snapshotBuffer, {
+          contentType: 'application/octet-stream',
+          metadata: {
+            roomId,
+            timestamp: timestamp.toString(),
+          },
+        });
+      } catch (error) {
+        this.logger.warn(
+          `Snapshot blob upload to S3 failed for room ${roomId}, but doc state and code history were stored in DB: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+
       this.logger.log(`Snapshot stored for room ${roomId} at ${timestamp}`);
       return { success: true };
     } catch (error) {
       this.logger.error('Failed to store snapshot', error);
-      return { success: false };
+      throw new InternalServerErrorException('Failed to store snapshot');
     }
   }
 

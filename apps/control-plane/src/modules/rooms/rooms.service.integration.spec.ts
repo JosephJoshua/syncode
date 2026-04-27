@@ -23,12 +23,15 @@ import { CACHE_SERVICE, MEDIA_SERVICE, STORAGE_SERVICE } from '@syncode/shared/p
 import { and, eq } from 'drizzle-orm';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
 import { ExecutionService } from '@/modules/execution/execution.service.js';
+import { SessionReportsService } from '@/modules/sessions/session-reports.service.js';
 import { InMemoryCacheService } from '@/test/in-memory-cache.service.js';
 import {
   createTestDb,
   insertParticipant,
   insertProblem,
   insertRoom,
+  insertSession,
+  insertSessionParticipant,
   insertTestCase,
   insertUser,
 } from '@/test/integration-setup.js';
@@ -38,6 +41,7 @@ import {
   createMockExecutionClient,
   createMockJwtService,
   createMockMediaService,
+  createMockSessionReportsService,
   createMockStorageService,
 } from '@/test/mock-factories.js';
 import { RoomsService } from './rooms.service.js';
@@ -47,6 +51,7 @@ let cleanup: () => Promise<void>;
 let service: RoomsService;
 let mockExecutionClient: ReturnType<typeof createMockExecutionClient>;
 let mockCollabClient: ReturnType<typeof createMockCollabClient>;
+let mockSessionReportsService: ReturnType<typeof createMockSessionReportsService>;
 
 beforeEach(async () => {
   vi.clearAllMocks();
@@ -56,6 +61,7 @@ beforeEach(async () => {
   cleanup = testDb.cleanup;
   mockExecutionClient = createMockExecutionClient();
   mockCollabClient = createMockCollabClient();
+  mockSessionReportsService = createMockSessionReportsService();
 
   const module = await Test.createTestingModule({
     providers: [
@@ -69,6 +75,7 @@ beforeEach(async () => {
       { provide: STORAGE_SERVICE, useValue: createMockStorageService() },
       { provide: JwtService, useValue: createMockJwtService() },
       { provide: ConfigService, useValue: createMockConfigService() },
+      { provide: SessionReportsService, useValue: mockSessionReportsService },
     ],
   }).compile();
 
@@ -928,6 +935,22 @@ describe('transitionPhase (multi-step)', () => {
 
     const [updated] = await db.select().from(rooms).where(eq(rooms.id, room.id));
     expect(updated!.status).toBe('finished');
+  });
+
+  it('GIVEN session finishes WHEN transitioning to finished THEN enqueues participant reports for that session', async () => {
+    const host = await insertUser(db);
+    const candidate = await insertUser(db);
+    const room = await insertRoom(db, host.id, { status: 'wrapup' });
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+    await insertParticipant(db, room.id, candidate.id, 'candidate');
+
+    const session = await insertSession(db, room.id, { status: 'ongoing' });
+    await insertSessionParticipant(db, session.id, host.id, 'interviewer');
+    await insertSessionParticipant(db, session.id, candidate.id, 'candidate');
+
+    await service.transitionPhase(room.id, host.id, 'finished');
+
+    expect(mockSessionReportsService.enqueueForFinishedSession).toHaveBeenCalledWith(session.id);
   });
 
   it('GIVEN peer room with 2 active participants WHEN transitioning to finished THEN all participants flip to inactive with leftAt', async () => {

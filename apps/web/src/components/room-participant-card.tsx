@@ -46,6 +46,33 @@ function getPresenceDotBg(isMediaConnected: boolean, isActive: boolean): string 
   return 'bg-muted-foreground/20';
 }
 
+function getBadgeTranslateClass({
+  isHost,
+  showParticipantActions,
+  isParticipantMenuOpen,
+}: {
+  readonly isHost: boolean;
+  readonly showParticipantActions: boolean;
+  readonly isParticipantMenuOpen: boolean;
+}): string | undefined {
+  // No actions slot rendered: no extra gap-1.5 space, so no offset needed.
+  if (!showParticipantActions) {
+    return undefined;
+  }
+
+  if (isHost) {
+    return isParticipantMenuOpen
+      ? '-translate-x-0.5'
+      : 'group-hover:-translate-x-0.5 group-focus-within:-translate-x-0.5';
+  }
+
+  // Non-host: shift right by 6px to keep role badge aligned with host's badge,
+  // then nudge to +4px when the actions slot becomes visible.
+  return isParticipantMenuOpen
+    ? 'translate-x-[4px]'
+    : 'translate-x-[6px] group-hover:translate-x-[4px] group-focus-within:translate-x-[4px]';
+}
+
 function PresenceDot({
   isMediaConnected,
   isMediaMuted,
@@ -330,8 +357,12 @@ function CompactParticipantRow({
         {showParticipantActions ? (
           <div
             className={cn(
-              'overflow-hidden transition-all duration-200 ease-out',
-              isParticipantMenuOpen ? 'w-6' : 'w-0 group-hover:w-6 group-focus-within:w-6',
+              'flex items-center gap-1.5 transition-transform duration-200 ease-out',
+              getBadgeTranslateClass({
+                isHost,
+                showParticipantActions,
+                isParticipantMenuOpen,
+              }),
             )}
           >
             <DropdownMenu open={isParticipantMenuOpen} onOpenChange={setIsParticipantMenuOpen}>

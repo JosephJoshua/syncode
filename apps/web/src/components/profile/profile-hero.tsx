@@ -102,7 +102,10 @@ export function ProfileHero({
               style={avatarShadow}
             >
               {hasAvatar ? (
-                <AvatarImage src={profile.avatarUrl!} alt={getUserDisplayName(profile) ?? ''} />
+                <AvatarImage
+                  src={profile.avatarUrl ?? undefined}
+                  alt={getUserDisplayName(profile) ?? ''}
+                />
               ) : null}
               <AvatarFallback>{getUserInitial(profile)}</AvatarFallback>
             </Avatar>

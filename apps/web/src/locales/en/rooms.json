@@ -1,11 +1,10 @@
 {
   "heading": "Rooms",
   "subtitle": {
-    "activeCount_one": "{{count}} active room",
-    "activeCount_other": "{{count}} active rooms",
-    "totalCount_one": "{{count}} room",
-    "totalCount_other": "{{count}} rooms",
-    "totalLabel": "{{totalCount}} total",
+    "pageCount_one": "{{count}} room on this page",
+    "pageCount_other": "{{count}} rooms on this page",
+    "pageCountWithStatus_one": "{{count}} {{status}} room on this page",
+    "pageCountWithStatus_other": "{{count}} {{status}} rooms on this page",
     "noActive": "No active rooms"
   },
   "button": {
@@ -113,7 +112,9 @@
     "provisioning": "Provisioning Workspace...",
     "noMatchingProblems": "No matching problems",
     "problemRequired": "Please select a problem",
-    "createFailed": "Failed to create room. Please try again."
+    "createFailed": "Failed to create room. Please try again.",
+    "mockProblemNotice": "Using mock problems because the API returned no real problems. Rooms created from these options will skip backend problem binding for local UI testing.",
+    "mockBadge": "Mock"
   },
   "success": {
     "details": "Selected Workspace Details",
@@ -157,6 +158,7 @@
     "editorUnlocked": "Editor unlocked",
     "awaitingController": "Waiting for the host or current interviewer to open the workspace.",
     "readyFailed": "Failed to update ready status.",
+    "previewWorkspaceHelp": "Local preview bypasses role validation and seeds mock problem/comment data for UI testing.",
     "removedFromRoom": "You have been removed from this room by the host.",
     "participantsNotReady": "All participants must be ready before starting."
   },
@@ -192,7 +194,8 @@
     "ready": "I'm Ready",
     "cancelReady": "Cancel Ready",
     "enterWorkspace": "Enter Workspace",
-    "readyFirst": "Click \"I'm Ready\" before entering the workspace."
+    "readyFirst": "Click \"I'm Ready\" before entering the workspace.",
+    "previewWorkspace": "Preview Workspace"
   },
   "warning": "Needs exactly one candidate and one interviewer to start.",
   "warningAi": "Needs exactly one candidate to start (no interviewer needed).",
@@ -292,6 +295,8 @@
     "cannotTransferOwnership": "Cannot transfer ownership to this participant.",
     "cancel": "Cancel",
     "roleUpdated": "Participant role updated.",
+    "submissionPreviewTitle": "Confirm Submission",
+    "submissionPreviewDescription": "Please review your code before final submission.",
     "submitCode": "Submit",
     "submitFailed": "Submission failed to start.",
     "submitting": "Submitting solution…",
@@ -319,6 +324,15 @@
     "sessionHeading": "Session",
     "remoteRunning": "{{name}} is running code...",
     "remoteSubmitting": "{{name}} is submitting...",
+    "mockPreviewBanner": "Mock workspace preview: run and submit are disabled, and sample problem/comment data is seeded locally.",
+    "inlineCommentsHeading": "Inline Comments",
+    "selectedLine": "Line {{line}}",
+    "lineBadge": "L{{line}}",
+    "inlineCommentsPlaceholder": "Add an inline note for line {{line}}",
+    "inlineCommentsOnLine": "{{count}} comment(s) on line {{line}}",
+    "inlineCommentsEmptyLine": "No comments on line {{line}} yet.",
+    "inlineCommentsEmpty": "No inline comments yet. Add one for the selected line.",
+    "addComment": "Add Comment",
     "languagePickerLabel": "Language",
     "languagePickerPlaceholder": "Select a language",
     "languageChangeFailed": "Failed to change the language.",

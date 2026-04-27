@@ -1,0 +1,302 @@
+import type { SessionDetail } from '@syncode/contracts';
+import { Badge, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@syncode/ui';
+import {
+  Bot,
+  CalendarClock,
+  CircleCheckBig,
+  CircleDashed,
+  Clock3,
+  Code2,
+  MonitorPlay,
+  Radio,
+  Send,
+  Sparkles,
+  UsersRound,
+} from 'lucide-react';
+import type { ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
+import {
+  formatSessionDateTime,
+  formatSessionDuration,
+  resolveSessionDurationSeconds,
+} from '@/lib/dashboard-session-history.js';
+
+type ReportStatus = 'pending' | 'ready' | 'unavailable';
+
+export function ReportSessionOverview({
+  session,
+  currentUserId,
+  reportStatus,
+  reportGeneratedAt,
+}: {
+  session: SessionDetail;
+  currentUserId: string | null;
+  reportStatus: ReportStatus;
+  reportGeneratedAt: string | undefined;
+}) {
+  const { t } = useTranslation('feedback');
+  const durationSeconds = resolveSessionDurationSeconds(
+    session.createdAt,
+    session.finishedAt,
+    session.duration,
+  );
+
+  return (
+    <Card className="border border-border/50 bg-card/80 py-0 backdrop-blur-sm">
+      <CardHeader className="px-5 pt-6 pb-4 sm:px-6">
+        <CardTitle className="flex items-center gap-2">
+          <UsersRound className="size-4 text-primary" />
+          <span>{t('details.heading')}</span>
+        </CardTitle>
+        <CardDescription>{t('details.description')}</CardDescription>
+      </CardHeader>
+      <CardContent className="px-5 pb-6 sm:px-6">
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
+          <div className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              <OverviewStat
+                label={t('details.mode')}
+                value={t(`mode.${session.mode}`)}
+                icon={<MonitorPlay className="size-4 text-primary" />}
+              />
+              <OverviewStat
+                label={t('details.language')}
+                value={session.language ?? t('details.unknown')}
+                icon={<Code2 className="size-4 text-primary" />}
+              />
+              <OverviewStat
+                label={t('details.difficulty')}
+                value={session.problem?.difficulty ?? t('details.unknown')}
+                icon={<Sparkles className="size-4 text-primary" />}
+              />
+              <OverviewStat
+                label={t('details.duration')}
+                value={formatSessionDuration(durationSeconds)}
+                icon={<Clock3 className="size-4 text-primary" />}
+              />
+              <OverviewStat
+                label={t('details.date')}
+                value={formatSessionDateTime(session.finishedAt ?? session.createdAt)}
+                icon={<CalendarClock className="size-4 text-primary" />}
+              />
+              <OverviewStat
+                label={t('details.generatedAt')}
+                value={
+                  reportGeneratedAt
+                    ? formatSessionDateTime(reportGeneratedAt)
+                    : reportStatus === 'pending'
+                      ? t('details.pending')
+                      : t('details.unknown')
+                }
+                icon={<Bot className="size-4 text-primary" />}
+              />
+            </div>
+
+            <div className="rounded-2xl bg-muted/35 p-4 ring-1 ring-border/50">
+              <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+                {t('details.activity')}
+              </p>
+              <div className="mt-4 flex flex-wrap gap-2.5">
+                <ActivityPill
+                  icon={<Radio className="size-3.5" />}
+                  label={t('details.runs')}
+                  value={String(session.runs.length)}
+                />
+                <ActivityPill
+                  icon={<Send className="size-3.5" />}
+                  label={t('details.submissions')}
+                  value={String(session.submissions.length)}
+                />
+                <ActivityStatusPill
+                  label={t('details.report')}
+                  status={reportStatus}
+                  readyText={t('details.available')}
+                  pendingText={t('details.pending')}
+                  unavailableText={t('details.unavailable')}
+                />
+                <ActivityBooleanPill
+                  label={t('details.feedbackStatus')}
+                  enabled={session.hasFeedback}
+                  enabledText={t('details.available')}
+                  disabledText={t('details.unavailable')}
+                />
+                <ActivityBooleanPill
+                  label={t('details.recording')}
+                  enabled={session.hasRecording}
+                  enabledText={t('details.available')}
+                  disabledText={t('details.unavailable')}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl bg-muted/35 p-4 ring-1 ring-border/50">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+                  {t('participants.heading')}
+                </p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {t('participants.description', { count: session.participants.length })}
+                </p>
+              </div>
+              <Badge size="sm" variant="neutral">
+                {session.participants.length}
+              </Badge>
+            </div>
+
+            <ul className="mt-4 space-y-3">
+              {session.participants.map((participant) => {
+                const displayName = participant.displayName ?? participant.username;
+                const initials = getInitials(displayName);
+                const isCurrentUser = currentUserId === participant.userId;
+
+                return (
+                  <li
+                    key={participant.userId}
+                    className="flex items-start gap-3 rounded-2xl bg-background/60 px-3 py-3"
+                  >
+                    <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/12 font-semibold text-primary">
+                      {initials}
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="truncate text-sm font-semibold text-foreground">
+                          {displayName}
+                        </p>
+                        <Badge size="sm" variant={getParticipantBadgeVariant(participant.role)}>
+                          {t(`role.${participant.role}`)}
+                        </Badge>
+                        {isCurrentUser ? (
+                          <Badge size="sm" variant="outline">
+                            {t('participants.you')}
+                          </Badge>
+                        ) : null}
+                      </div>
+
+                      <p className="mt-1 text-xs text-muted-foreground">@{participant.username}</p>
+
+                      <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+                        <p>
+                          {t('participants.joinedAt')}:{' '}
+                          {formatSessionDateTime(participant.joinedAt)}
+                        </p>
+                        <p>
+                          {t('participants.leftAt')}:{' '}
+                          {participant.leftAt
+                            ? formatSessionDateTime(participant.leftAt)
+                            : t('participants.leftAtMissing')}
+                        </p>
+                      </div>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function OverviewStat({ label, value, icon }: { label: string; value: string; icon: ReactNode }) {
+  return (
+    <div className="rounded-2xl bg-muted/35 p-4 ring-1 ring-border/50">
+      <div className="flex items-center gap-2">{icon}</div>
+      <p className="mt-3 font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+        {label}
+      </p>
+      <p className="mt-2 text-sm font-medium leading-6 text-foreground">{value}</p>
+    </div>
+  );
+}
+
+function ActivityPill({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
+  return (
+    <div className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/70 px-3 py-1.5 text-xs text-foreground">
+      <span className="text-primary">{icon}</span>
+      <span className="text-muted-foreground">{label}</span>
+      <span className="font-semibold text-foreground">{value}</span>
+    </div>
+  );
+}
+
+function ActivityBooleanPill({
+  label,
+  enabled,
+  enabledText,
+  disabledText,
+}: {
+  label: string;
+  enabled: boolean;
+  enabledText: string;
+  disabledText: string;
+}) {
+  return (
+    <ActivityStatusPill
+      label={label}
+      status={enabled ? 'ready' : 'unavailable'}
+      readyText={enabledText}
+      pendingText={enabledText}
+      unavailableText={disabledText}
+    />
+  );
+}
+
+function ActivityStatusPill({
+  label,
+  status,
+  readyText,
+  pendingText,
+  unavailableText,
+}: {
+  label: string;
+  status: ReportStatus;
+  readyText: string;
+  pendingText: string;
+  unavailableText: string;
+}) {
+  const variant = status === 'ready' ? 'success' : status === 'pending' ? 'warning' : 'outline';
+  const icon =
+    status === 'ready' ? (
+      <CircleCheckBig className="size-3.5" />
+    ) : (
+      <CircleDashed className="size-3.5" />
+    );
+
+  const value =
+    status === 'ready' ? readyText : status === 'pending' ? pendingText : unavailableText;
+
+  return (
+    <Badge size="sm" variant={variant}>
+      {icon}
+      {label}: {value}
+    </Badge>
+  );
+}
+
+function getInitials(value: string) {
+  const parts = value.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) {
+    return '??';
+  }
+
+  return parts
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? '')
+    .join('');
+}
+
+function getParticipantBadgeVariant(role: SessionDetail['participants'][number]['role']) {
+  if (role === 'candidate') {
+    return 'candidate';
+  }
+
+  if (role === 'interviewer') {
+    return 'interviewer';
+  }
+
+  return 'observer';
+}
