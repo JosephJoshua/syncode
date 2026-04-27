@@ -30,6 +30,51 @@ interface RoomProblemPanelProps {
   readonly hasProblem: boolean;
 }
 
+function RoomProblemBody({
+  problem,
+  loading,
+  error,
+  hasProblem,
+  t,
+}: {
+  readonly problem: ProblemData | null;
+  readonly loading: boolean;
+  readonly error: string | null;
+  readonly hasProblem: boolean;
+  readonly t: (key: string) => string;
+}) {
+  if (!hasProblem) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 text-center">
+        <FileText size={24} className="mb-3 text-muted-foreground/40" />
+        <p className="text-xs text-muted-foreground">{t('problem.noProblem')}</p>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12">
+        <Loader2 size={20} className="animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 text-center">
+        <p className="text-xs text-destructive">{error}</p>
+      </div>
+    );
+  }
+
+  if (problem) {
+    return <ProblemContent problem={problem} />;
+  }
+
+  return null;
+}
+
 export function RoomProblemPanel({ problem, loading, error, hasProblem }: RoomProblemPanelProps) {
   const { t } = useTranslation('rooms');
 
@@ -42,24 +87,13 @@ export function RoomProblemPanel({ problem, loading, error, hasProblem }: RoomPr
       </div>
 
       <div className="flex-1 overflow-y-auto p-4">
-        {hasProblem ? (
-          loading ? (
-            <div className="flex flex-col items-center justify-center py-12">
-              <Loader2 size={20} className="animate-spin text-primary" />
-            </div>
-          ) : error ? (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <p className="text-xs text-destructive">{error}</p>
-            </div>
-          ) : problem ? (
-            <ProblemContent problem={problem} />
-          ) : null
-        ) : (
-          <div className="flex flex-col items-center justify-center py-12 text-center">
-            <FileText size={24} className="mb-3 text-muted-foreground/40" />
-            <p className="text-xs text-muted-foreground">{t('problem.noProblem')}</p>
-          </div>
-        )}
+        <RoomProblemBody
+          problem={problem}
+          loading={loading}
+          error={error}
+          hasProblem={hasProblem}
+          t={t}
+        />
       </div>
     </div>
   );
