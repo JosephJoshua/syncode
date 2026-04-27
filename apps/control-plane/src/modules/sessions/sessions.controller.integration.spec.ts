@@ -144,27 +144,34 @@ describe('GET /sessions/:sessionId/snapshots', () => {
     const session = await insertSession(db, room.id, { language: 'python' });
     await insertSessionParticipant(db, session.id, owner.id);
 
-    await asUser(
+    const res = await asUser(
       request(app.getHttpServer()).get(`/sessions/${session.id}/snapshots`),
       stranger,
-    ).expect(403);
+    );
+
+    expect(res.status).toBe(403);
   });
 
   it('GIVEN non-existent session WHEN getting snapshots THEN returns 404', async () => {
     const user = await insertUser(db);
 
-    await asUser(
+    const res = await asUser(
       request(app.getHttpServer()).get('/sessions/00000000-0000-0000-0000-000000000000/snapshots'),
       user,
-    ).expect(404);
+    );
+
+    expect(res.status).toBe(404);
   });
 
   it('GIVEN malformed session id WHEN getting snapshots THEN returns 400', async () => {
     const user = await insertUser(db);
 
-    await asUser(request(app.getHttpServer()).get('/sessions/{sessionId}/snapshots'), user).expect(
-      400,
+    const res = await asUser(
+      request(app.getHttpServer()).get('/sessions/{sessionId}/snapshots'),
+      user,
     );
+
+    expect(res.status).toBe(400);
   });
 });
 
