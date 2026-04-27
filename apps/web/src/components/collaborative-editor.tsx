@@ -46,14 +46,18 @@ export function CollaborativeEditor({
       id: 'syncode-run',
       label: 'Run Code',
       keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter],
-      run: () => void onRunCodeRef.current(),
+      run: () => {
+        onRunCodeRef.current();
+      },
     });
 
     editorInstance.addAction({
       id: 'syncode-submit',
       label: 'Submit Code',
       keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.Enter],
-      run: () => void onSubmitCodeRef.current(),
+      run: () => {
+        onSubmitCodeRef.current();
+      },
     });
 
     setEditor(editorInstance);

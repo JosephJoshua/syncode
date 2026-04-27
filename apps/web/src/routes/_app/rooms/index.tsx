@@ -88,11 +88,11 @@ function RoomsPage() {
       return;
     }
 
-    void navigate({
+    navigate({
       to: '/rooms/$roomId',
       params: { roomId: parsed.roomId },
       search: { code: parsed.code },
-    }).catch(() => {});
+    }).catch(() => undefined);
   };
 
   return (

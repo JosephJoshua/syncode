@@ -125,7 +125,7 @@ function CreateRoomPage() {
         },
       }),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['rooms'] });
+      queryClient.invalidateQueries({ queryKey: ['rooms'] }).catch(() => undefined);
     },
   });
 
@@ -605,10 +605,10 @@ function CreateRoomPage() {
                           return;
                         }
 
-                        void navigate({
+                        navigate({
                           to: '/rooms/$roomId',
                           params: { roomId: createdRoomId },
-                        });
+                        }).catch(() => undefined);
                       }}
                       disabled={!createdRoomId}
                     >

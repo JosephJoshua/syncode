@@ -290,7 +290,7 @@ function RoomPage() {
           if (apiError?.code === ERROR_CODES.ROOM_PARTICIPANT_REMOVED) {
             kickedRef.current = true;
             toast.error(apiError.message ?? t('lobby.removedFromRoom'));
-            void navigate({ to: '/rooms' });
+            navigate({ to: '/rooms' }).catch(() => undefined);
             return;
           }
           // Other errors are non-fatal — the participant sweep will reconcile.
@@ -322,6 +322,16 @@ function RoomPage() {
 
     let disposed = false;
 
+    const scheduleTokenRefresh = (refreshIn: number) => {
+      if (mediaTokenTimerRef.current) clearTimeout(mediaTokenTimerRef.current);
+      mediaTokenTimerRef.current = setTimeout(() => {
+        if (disposed) return;
+        mediaCredsRef.current = null;
+        setMediaReady(false);
+        fetchToken();
+      }, refreshIn);
+    };
+
     const fetchToken = () => {
       api(CONTROL_API.ROOMS.MEDIA_TOKEN, { params: { id: roomId } })
         .then((result) => {
@@ -331,13 +341,7 @@ function RoomPage() {
 
           const expiresAt = new Date(result.expiresAt).getTime();
           const refreshIn = Math.max(expiresAt - Date.now() - 5 * 60 * 1000, 60_000);
-          if (mediaTokenTimerRef.current) clearTimeout(mediaTokenTimerRef.current);
-          mediaTokenTimerRef.current = setTimeout(() => {
-            if (disposed) return;
-            mediaCredsRef.current = null;
-            setMediaReady(false);
-            fetchToken();
-          }, refreshIn);
+          scheduleTokenRefresh(refreshIn);
         })
         .catch((err) => {
           if (disposed) return;
@@ -616,7 +620,7 @@ function RoomPage() {
     onSuccess: async (_, variables) => {
       setPendingRemoval(null);
       await refreshRoomDetail();
-      void queryClient.invalidateQueries({ queryKey: ['rooms'] });
+      queryClient.invalidateQueries({ queryKey: ['rooms'] }).catch(() => undefined);
       toast.success(t('workspace.removeParticipantSuccess', { name: variables.displayName }));
     },
     onError: async (error) => {

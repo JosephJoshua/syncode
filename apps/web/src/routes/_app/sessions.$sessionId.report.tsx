@@ -42,7 +42,12 @@ function SessionReportPage() {
   if (sessionQuery.isError) {
     return (
       <StateView title={t('error.title')} description={t('error.description')}>
-        <Button variant="outline" onClick={() => void sessionQuery.refetch()}>
+        <Button
+          variant="outline"
+          onClick={() => {
+            sessionQuery.refetch().catch(() => undefined);
+          }}
+        >
           {t('error.retry')}
         </Button>
       </StateView>

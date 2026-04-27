@@ -123,7 +123,7 @@ function BrowseRoomsPage() {
     try {
       await joinMutation.mutateAsync(roomId);
       toast.success(t('browse.joinSuccess'));
-      void navigate({ to: '/rooms/$roomId', params: { roomId } }).catch(() => {});
+      navigate({ to: '/rooms/$roomId', params: { roomId } }).catch(() => undefined);
     } catch (error) {
       const apiError = await readApiError(error);
       toast.error(resolveJoinError(apiError, t, 'browse.joinFailed'));

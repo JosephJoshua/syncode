@@ -102,7 +102,7 @@ function DashboardPage() {
         isUnavailable={isUnavailable}
         isError={sessionHistoryQuery.isError}
         onRetry={() => {
-          void sessionHistoryQuery.refetch();
+          sessionHistoryQuery.refetch().catch(() => undefined);
         }}
       />
     </div>

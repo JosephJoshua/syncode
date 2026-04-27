@@ -45,6 +45,12 @@ export interface RemoteSubmitState {
   submitState: SubmitState;
 }
 
+function schedulePoll(intervalMs: number, fn: () => Promise<void>): void {
+  setTimeout(() => {
+    fn().catch(() => undefined);
+  }, intervalMs);
+}
+
 function isExecutionResult(response: { status: string }): response is {
   status: 'completed' | 'failed';
   stdout: string;
@@ -145,11 +151,11 @@ export function useSharedExecution(awareness: Awareness | null, doc: Y.Doc | nul
             });
           } else if (response.status === 'running') {
             results.set(caseInfo.caseId, { status: 'running', jobId: caseInfo.jobId });
-            setTimeout(() => void poll(), EXECUTION_POLL_INTERVAL_MS);
+            schedulePoll(EXECUTION_POLL_INTERVAL_MS, poll);
             updateRunState(results, userName);
             return;
           } else {
-            setTimeout(() => void poll(), EXECUTION_POLL_INTERVAL_MS);
+            schedulePoll(EXECUTION_POLL_INTERVAL_MS, poll);
             return;
           }
         } catch {
@@ -177,7 +183,7 @@ export function useSharedExecution(awareness: Awareness | null, doc: Y.Doc | nul
             });
             return;
           }
-          setTimeout(() => void poll(), SUBMISSION_POLL_INTERVAL_MS);
+          schedulePoll(SUBMISSION_POLL_INTERVAL_MS, poll);
         } catch {
           setRemoteSubmit({
             userName,
