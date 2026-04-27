@@ -115,6 +115,7 @@ function formatTimeAgo(iso: string): string {
 
 export function RoomsPage() {
   const { t } = useTranslation('rooms');
+  const { t: tCommon } = useTranslation('common');
   const navigate = useNavigate();
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [paginationState, setPaginationState] = useState(createInitialPaginationState);
@@ -390,6 +391,7 @@ export function RoomsPage() {
             <PaginationContent>
               <PaginationItem>
                 <PaginationPrevious
+                  aria-label={tCommon('pagination.previousAria')}
                   disabled={!hasPreviousPage || roomsQuery.isFetching}
                   onClick={() => {
                     if (!hasPreviousPage || roomsQuery.isFetching) {
@@ -401,10 +403,13 @@ export function RoomsPage() {
                       cursorHistory: current.cursorHistory.slice(0, -1),
                     }));
                   }}
-                />
+                >
+                  {tCommon('pagination.previous')}
+                </PaginationPrevious>
               </PaginationItem>
               <PaginationItem>
                 <PaginationNext
+                  aria-label={tCommon('pagination.nextAria')}
                   disabled={!hasNextPage || roomsQuery.isFetching}
                   onClick={() => {
                     if (!hasNextPage || !nextCursor || roomsQuery.isFetching) {
@@ -416,7 +421,9 @@ export function RoomsPage() {
                       cursorHistory: [...current.cursorHistory, current.currentCursor],
                     }));
                   }}
-                />
+                >
+                  {tCommon('pagination.next')}
+                </PaginationNext>
               </PaginationItem>
             </PaginationContent>
           </Pagination>

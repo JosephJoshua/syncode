@@ -181,18 +181,22 @@ export function DashboardRecentSessions({
     })
     .sort((a, b) => compareRows(a, b, sortBy));
   const totalPages = Math.ceil(filteredRows.length / SESSION_HISTORY_PAGE_SIZE);
-  const paginatedRows = filteredRows.slice(
-    (currentPage - 1) * SESSION_HISTORY_PAGE_SIZE,
-    currentPage * SESSION_HISTORY_PAGE_SIZE,
-  );
 
   const hasBaseRows = baseRows.length > 0;
   const hasVisibleRows = filteredRows.length > 0;
-  const hasPreviousPage = currentPage > 1;
-  const hasNextPage = currentPage < totalPages;
-  const pageStart = hasVisibleRows ? (currentPage - 1) * SESSION_HISTORY_PAGE_SIZE + 1 : 0;
+  // Clamp the page in derived calculations so that a stale currentPage (e.g.
+  // after rows shrink on refresh) doesn't render an empty slice with an
+  // invalid summary range while the useEffect correction is pending.
+  const safeCurrentPage = hasVisibleRows ? Math.min(Math.max(currentPage, 1), totalPages) : 1;
+  const paginatedRows = filteredRows.slice(
+    (safeCurrentPage - 1) * SESSION_HISTORY_PAGE_SIZE,
+    safeCurrentPage * SESSION_HISTORY_PAGE_SIZE,
+  );
+  const hasPreviousPage = safeCurrentPage > 1;
+  const hasNextPage = safeCurrentPage < totalPages;
+  const pageStart = hasVisibleRows ? (safeCurrentPage - 1) * SESSION_HISTORY_PAGE_SIZE + 1 : 0;
   const pageEnd = hasVisibleRows
-    ? Math.min(currentPage * SESSION_HISTORY_PAGE_SIZE, filteredRows.length)
+    ? Math.min(safeCurrentPage * SESSION_HISTORY_PAGE_SIZE, filteredRows.length)
     : 0;
 
   useEffect(() => {
