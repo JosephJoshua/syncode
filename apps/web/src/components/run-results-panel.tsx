@@ -25,6 +25,104 @@ interface RunResultsPanelProps {
   onRunCase?: (caseId: string) => void;
 }
 
+function CaseCompletedDetails({
+  state,
+  failed,
+  caseEntry,
+  tc,
+}: {
+  state: CaseRunState & { status: 'completed' | 'failed' };
+  failed: boolean;
+  caseEntry: TestCaseEntry;
+  tc: (key: string) => string;
+}) {
+  return (
+    <div className="space-y-2 border-t border-border/60 px-2.5 py-2">
+      {failed && caseEntry.expectedOutput != null ? (
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-1 font-mono text-[10px] font-semibold uppercase tracking-wider text-destructive/80">
+            <XCircle className="size-3" />
+            {tc('execution.outputDiff')}
+          </div>
+          <LineDiffBlock expected={caseEntry.expectedOutput} actual={state.stdout} />
+        </div>
+      ) : null}
+
+      <div>
+        <span className="font-mono text-[10px] uppercase text-muted-foreground/50">
+          {tc('execution.stdout')}
+        </span>
+        <pre className="mt-0.5 max-h-24 overflow-auto rounded border border-border bg-background p-2 font-mono text-[11px] text-foreground/80">
+          {state.stdout || tc('execution.empty')}
+        </pre>
+      </div>
+
+      {state.stderr ? (
+        <div>
+          <span className="font-mono text-[10px] uppercase text-muted-foreground/50">
+            {tc('execution.stderr')}
+          </span>
+          <pre className="mt-0.5 max-h-24 overflow-auto rounded border border-border bg-background p-2 font-mono text-[11px] text-destructive/80">
+            {state.stderr}
+          </pre>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function CaseStatusBadge({
+  passed,
+  failed,
+  isError,
+  isLoading,
+  done,
+  t,
+}: {
+  passed: boolean;
+  failed: boolean;
+  isError: boolean;
+  isLoading: boolean;
+  done: boolean;
+  t: (key: string) => string;
+}) {
+  if (passed) {
+    return (
+      <span className="flex items-center gap-0.5 font-mono text-[10px] font-semibold text-success">
+        <CheckCircle2 className="size-3" />
+        {t('workspace.casePass')}
+      </span>
+    );
+  }
+  if (failed) {
+    return (
+      <span className="flex items-center gap-0.5 font-mono text-[10px] font-semibold text-destructive">
+        <XCircle className="size-3" />
+        {t('workspace.caseFail')}
+      </span>
+    );
+  }
+  if (isError) {
+    return (
+      <span className="flex items-center gap-0.5 font-mono text-[10px] font-semibold text-destructive">
+        <XCircle className="size-3" />
+        error
+      </span>
+    );
+  }
+  if (isLoading) {
+    return <Loader2 className="size-3 animate-spin text-primary" />;
+  }
+  if (done) {
+    return <span className="font-mono text-[10px] text-muted-foreground">done</span>;
+  }
+  return (
+    <span className="font-mono text-[10px] text-muted-foreground/50">
+      {t('workspace.casePending')}
+    </span>
+  );
+}
+
 function CaseRow({
   caseEntry,
   state,
@@ -65,30 +163,14 @@ function CaseRow({
 
           <span className="font-mono text-[11px] text-foreground/80">{caseEntry.label}</span>
 
-          {passed ? (
-            <span className="flex items-center gap-0.5 font-mono text-[10px] font-semibold text-success">
-              <CheckCircle2 className="size-3" />
-              {t('workspace.casePass')}
-            </span>
-          ) : failed ? (
-            <span className="flex items-center gap-0.5 font-mono text-[10px] font-semibold text-destructive">
-              <XCircle className="size-3" />
-              {t('workspace.caseFail')}
-            </span>
-          ) : isError ? (
-            <span className="flex items-center gap-0.5 font-mono text-[10px] font-semibold text-destructive">
-              <XCircle className="size-3" />
-              error
-            </span>
-          ) : isLoading ? (
-            <Loader2 className="size-3 animate-spin text-primary" />
-          ) : done ? (
-            <span className="font-mono text-[10px] text-muted-foreground">done</span>
-          ) : (
-            <span className="font-mono text-[10px] text-muted-foreground/50">
-              {t('workspace.casePending')}
-            </span>
-          )}
+          <CaseStatusBadge
+            passed={passed}
+            failed={failed}
+            isError={isError}
+            isLoading={isLoading}
+            done={done}
+            t={t}
+          />
 
           {isCompleted && state.timedOut ? (
             <span className="font-mono text-[10px] font-semibold text-warning">TLE</span>
@@ -116,37 +198,7 @@ function CaseRow({
 
       {/* Expanded detail */}
       {expanded && isCompleted ? (
-        <div className="space-y-2 border-t border-border/60 px-2.5 py-2">
-          {failed && caseEntry.expectedOutput != null ? (
-            <div className="space-y-1.5">
-              <div className="flex items-center gap-1 font-mono text-[10px] font-semibold uppercase tracking-wider text-destructive/80">
-                <XCircle className="size-3" />
-                {tc('execution.outputDiff')}
-              </div>
-              <LineDiffBlock expected={caseEntry.expectedOutput} actual={state.stdout} />
-            </div>
-          ) : null}
-
-          <div>
-            <span className="font-mono text-[10px] uppercase text-muted-foreground/50">
-              {tc('execution.stdout')}
-            </span>
-            <pre className="mt-0.5 max-h-24 overflow-auto rounded border border-border bg-background p-2 font-mono text-[11px] text-foreground/80">
-              {state.stdout || tc('execution.empty')}
-            </pre>
-          </div>
-
-          {state.stderr ? (
-            <div>
-              <span className="font-mono text-[10px] uppercase text-muted-foreground/50">
-                {tc('execution.stderr')}
-              </span>
-              <pre className="mt-0.5 max-h-24 overflow-auto rounded border border-border bg-background p-2 font-mono text-[11px] text-destructive/80">
-                {state.stderr}
-              </pre>
-            </div>
-          ) : null}
-        </div>
+        <CaseCompletedDetails state={state} failed={failed} caseEntry={caseEntry} tc={tc} />
       ) : null}
 
       {expanded && isError ? (
