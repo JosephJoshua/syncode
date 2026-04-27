@@ -2,7 +2,7 @@ import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { ERROR_CODES } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
-import { sessionDeletions } from '@syncode/db';
+import { codeSnapshots, sessionDeletions } from '@syncode/db';
 import { STORAGE_SERVICE } from '@syncode/shared/ports';
 import { and, eq } from 'drizzle-orm';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
@@ -331,6 +331,27 @@ describe('getSession', () => {
       reviewerId: user1.id,
       candidateId: user2.id,
     });
+    await db.insert(codeSnapshots).values({
+      sessionId: session.id,
+      roomId: room.id,
+      code: 'print("old")',
+      language: 'python',
+      trigger: 'periodic',
+      linesOfCode: 1,
+      createdAt: new Date('2026-04-01T00:10:00Z'),
+    });
+    const [latestSnapshot] = await db
+      .insert(codeSnapshots)
+      .values({
+        sessionId: session.id,
+        roomId: room.id,
+        code: 'print("new")',
+        language: 'python',
+        trigger: 'session_end',
+        linesOfCode: 1,
+        createdAt: new Date('2026-04-01T00:20:00Z'),
+      })
+      .returning();
 
     const completedRun = await insertRun(db, room.id, user1.id, { status: 'completed' });
     await insertRun(db, room.id, user1.id, { status: 'pending' }); // should be filtered out
@@ -356,12 +377,41 @@ describe('getSession', () => {
       categoryScores: { problemSolving: 80, communication: 80 },
       feedback: 'Good job',
     });
+    expect(result.latestCodeSnapshot).toMatchObject({
+      id: latestSnapshot.id,
+      code: 'print("new")',
+      trigger: 'session_end',
+    });
+    expect(result.peerFeedback).toHaveLength(1);
+    expect(result.peerFeedback[0]).toMatchObject({
+      reviewerId: user1.id,
+      candidateId: user2.id,
+    });
 
     // Only terminal runs/submissions
     expect(result.runs).toHaveLength(1);
     expect(result.runs[0].jobId).toBe(completedRun.jobId);
     expect(result.submissions).toHaveLength(1);
     expect(result.submissions[0].submissionId).toBe(completedSub.id);
+  });
+
+  it('GIVEN feedback is partially submitted WHEN candidate gets detail THEN hides other reviewer feedback', async () => {
+    const interviewer = await insertUser(db);
+    const candidate = await insertUser(db);
+    const room = await insertRoom(db, interviewer.id);
+    const session = await insertSession(db, room.id);
+    await insertSessionParticipant(db, session.id, interviewer.id, 'interviewer');
+    await insertSessionParticipant(db, session.id, candidate.id, 'candidate');
+    await insertPeerFeedbackRow(db, {
+      sessionId: session.id,
+      roomId: room.id,
+      reviewerId: interviewer.id,
+      candidateId: candidate.id,
+    });
+
+    const result = await service.getSession(session.id, candidate.id, false);
+
+    expect(result.peerFeedback).toHaveLength(0);
   });
 
   it('GIVEN non-participant WHEN getSession THEN throws ForbiddenException', async () => {

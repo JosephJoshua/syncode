@@ -45,8 +45,34 @@ const SESSION_DETAIL_RESULT = {
     feedback: 'Good job',
     generatedAt: new Date('2026-04-01T00:50:00Z'),
   },
+  latestCodeSnapshot: {
+    id: 'snapshot-1',
+    code: 'print("hello")',
+    language: 'python' as const,
+    trigger: 'session_end',
+    linesOfCode: 1,
+    createdAt: new Date('2026-04-01T00:55:00Z'),
+  },
+  peerFeedback: [
+    {
+      id: 'feedback-1',
+      reviewerId: 'user-1',
+      reviewerName: 'Alice',
+      candidateId: 'user-2',
+      candidateName: 'Bob',
+      problemSolvingRating: 4,
+      communicationRating: 4,
+      codeQualityRating: 4,
+      debuggingRating: 4,
+      overallRating: 4,
+      strengths: 'Clear reasoning',
+      improvements: 'Cover edge cases earlier',
+      wouldPairAgain: true,
+      createdAt: new Date('2026-04-01T00:58:00Z'),
+    },
+  ],
   hasReport: true,
-  hasFeedback: false,
+  hasFeedback: true,
   hasRecording: false,
   createdAt: new Date('2026-04-01T00:00:00Z'),
   finishedAt: new Date('2026-04-01T01:00:00Z'),
@@ -159,6 +185,8 @@ describe('SessionsController', () => {
       expect(result.runs[0].createdAt).toBe('2026-04-01T00:30:00.000Z');
       expect(result.submissions[0].createdAt).toBe('2026-04-01T00:45:00.000Z');
       expect(result.report?.generatedAt).toBe('2026-04-01T00:50:00.000Z');
+      expect(result.latestCodeSnapshot?.createdAt).toBe('2026-04-01T00:55:00.000Z');
+      expect(result.peerFeedback[0].createdAt).toBe('2026-04-01T00:58:00.000Z');
     });
   });
 

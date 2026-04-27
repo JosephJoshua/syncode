@@ -363,7 +363,7 @@ export function DashboardRecentSessions({
                   </TableCell>
                   <TableCell>
                     <Link
-                      to="/sessions/$sessionId/feedback"
+                      to="/sessions/$sessionId"
                       params={{ sessionId: row.id }}
                       className="block truncate rounded-sm font-medium text-foreground transition-colors hover:text-foreground/85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
                       title={row.problemName}

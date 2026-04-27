@@ -20,6 +20,7 @@ import { Route as AppBookmarksRouteImport } from './routes/_app/bookmarks'
 import { Route as AppRoomsRouteRouteImport } from './routes/_app/rooms/route'
 import { Route as AppRoomsIndexRouteImport } from './routes/_app/rooms/index'
 import { Route as AppProblemsIndexRouteImport } from './routes/_app/problems.index'
+import { Route as AppSessionsSessionIdRouteImport } from './routes/_app/sessions.$sessionId'
 import { Route as AppRoomsCreateRouteImport } from './routes/_app/rooms_.create'
 import { Route as AppRoomsRoomIdRouteImport } from './routes/_app/rooms_.$roomId'
 import { Route as AppRoomsBrowseRouteImport } from './routes/_app/rooms/browse'
@@ -80,6 +81,11 @@ const AppProblemsIndexRoute = AppProblemsIndexRouteImport.update({
   path: '/problems/',
   getParentRoute: () => AppRouteRoute,
 } as any)
+const AppSessionsSessionIdRoute = AppSessionsSessionIdRouteImport.update({
+  id: '/sessions/$sessionId',
+  path: '/sessions/$sessionId',
+  getParentRoute: () => AppRouteRoute,
+} as any)
 const AppRoomsCreateRoute = AppRoomsCreateRouteImport.update({
   id: '/rooms_/create',
   path: '/rooms/create',
@@ -108,9 +114,9 @@ const AppSessionsSessionIdReportRoute =
   } as any)
 const AppSessionsSessionIdFeedbackRoute =
   AppSessionsSessionIdFeedbackRouteImport.update({
-    id: '/sessions/$sessionId/feedback',
-    path: '/sessions/$sessionId/feedback',
-    getParentRoute: () => AppRouteRoute,
+    id: '/feedback',
+    path: '/feedback',
+    getParentRoute: () => AppSessionsSessionIdRoute,
   } as any)
 
 export interface FileRoutesByFullPath {
@@ -125,6 +131,7 @@ export interface FileRoutesByFullPath {
   '/rooms/browse': typeof AppRoomsBrowseRoute
   '/rooms/$roomId': typeof AppRoomsRoomIdRoute
   '/rooms/create': typeof AppRoomsCreateRoute
+  '/sessions/$sessionId': typeof AppSessionsSessionIdRouteWithChildren
   '/problems/': typeof AppProblemsIndexRoute
   '/rooms/': typeof AppRoomsIndexRoute
   '/sessions/$sessionId/feedback': typeof AppSessionsSessionIdFeedbackRoute
@@ -141,6 +148,7 @@ export interface FileRoutesByTo {
   '/rooms/browse': typeof AppRoomsBrowseRoute
   '/rooms/$roomId': typeof AppRoomsRoomIdRoute
   '/rooms/create': typeof AppRoomsCreateRoute
+  '/sessions/$sessionId': typeof AppSessionsSessionIdRouteWithChildren
   '/problems': typeof AppProblemsIndexRoute
   '/rooms': typeof AppRoomsIndexRoute
   '/sessions/$sessionId/feedback': typeof AppSessionsSessionIdFeedbackRoute
@@ -161,6 +169,7 @@ export interface FileRoutesById {
   '/_app/rooms/browse': typeof AppRoomsBrowseRoute
   '/_app/rooms_/$roomId': typeof AppRoomsRoomIdRoute
   '/_app/rooms_/create': typeof AppRoomsCreateRoute
+  '/_app/sessions/$sessionId': typeof AppSessionsSessionIdRouteWithChildren
   '/_app/problems/': typeof AppProblemsIndexRoute
   '/_app/rooms/': typeof AppRoomsIndexRoute
   '/_app/sessions/$sessionId/feedback': typeof AppSessionsSessionIdFeedbackRoute
@@ -180,6 +189,7 @@ export interface FileRouteTypes {
     | '/rooms/browse'
     | '/rooms/$roomId'
     | '/rooms/create'
+    | '/sessions/$sessionId'
     | '/problems/'
     | '/rooms/'
     | '/sessions/$sessionId/feedback'
@@ -196,6 +206,7 @@ export interface FileRouteTypes {
     | '/rooms/browse'
     | '/rooms/$roomId'
     | '/rooms/create'
+    | '/sessions/$sessionId'
     | '/problems'
     | '/rooms'
     | '/sessions/$sessionId/feedback'
@@ -215,6 +226,7 @@ export interface FileRouteTypes {
     | '/_app/rooms/browse'
     | '/_app/rooms_/$roomId'
     | '/_app/rooms_/create'
+    | '/_app/sessions/$sessionId'
     | '/_app/problems/'
     | '/_app/rooms/'
     | '/_app/sessions/$sessionId/feedback'
@@ -305,6 +317,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppProblemsIndexRouteImport
       parentRoute: typeof AppRouteRoute
     }
+    '/_app/sessions/$sessionId': {
+      id: '/_app/sessions/$sessionId'
+      path: '/sessions/$sessionId'
+      fullPath: '/sessions/$sessionId'
+      preLoaderRoute: typeof AppSessionsSessionIdRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
     '/_app/rooms_/create': {
       id: '/_app/rooms_/create'
       path: '/rooms/create'
@@ -342,10 +361,10 @@ declare module '@tanstack/react-router' {
     }
     '/_app/sessions/$sessionId/feedback': {
       id: '/_app/sessions/$sessionId/feedback'
-      path: '/sessions/$sessionId/feedback'
+      path: '/feedback'
       fullPath: '/sessions/$sessionId/feedback'
       preLoaderRoute: typeof AppSessionsSessionIdFeedbackRouteImport
-      parentRoute: typeof AppRouteRoute
+      parentRoute: typeof AppSessionsSessionIdRoute
     }
   }
 }
@@ -364,6 +383,17 @@ const AppRoomsRouteRouteWithChildren = AppRoomsRouteRoute._addFileChildren(
   AppRoomsRouteRouteChildren,
 )
 
+interface AppSessionsSessionIdRouteChildren {
+  AppSessionsSessionIdFeedbackRoute: typeof AppSessionsSessionIdFeedbackRoute
+}
+
+const AppSessionsSessionIdRouteChildren: AppSessionsSessionIdRouteChildren = {
+  AppSessionsSessionIdFeedbackRoute: AppSessionsSessionIdFeedbackRoute,
+}
+
+const AppSessionsSessionIdRouteWithChildren =
+  AppSessionsSessionIdRoute._addFileChildren(AppSessionsSessionIdRouteChildren)
+
 interface AppRouteRouteChildren {
   AppRoomsRouteRoute: typeof AppRoomsRouteRouteWithChildren
   AppBookmarksRoute: typeof AppBookmarksRoute
@@ -372,6 +402,7 @@ interface AppRouteRouteChildren {
   AppProblemsProblemIdRoute: typeof AppProblemsProblemIdRoute
   AppRoomsRoomIdRoute: typeof AppRoomsRoomIdRoute
   AppRoomsCreateRoute: typeof AppRoomsCreateRoute
+  AppSessionsSessionIdRoute: typeof AppSessionsSessionIdRouteWithChildren
   AppProblemsIndexRoute: typeof AppProblemsIndexRoute
   AppSessionsSessionIdFeedbackRoute: typeof AppSessionsSessionIdFeedbackRoute
   AppSessionsSessionIdReportRoute: typeof AppSessionsSessionIdReportRoute
@@ -385,6 +416,7 @@ const AppRouteRouteChildren: AppRouteRouteChildren = {
   AppProblemsProblemIdRoute: AppProblemsProblemIdRoute,
   AppRoomsRoomIdRoute: AppRoomsRoomIdRoute,
   AppRoomsCreateRoute: AppRoomsCreateRoute,
+  AppSessionsSessionIdRoute: AppSessionsSessionIdRouteWithChildren,
   AppProblemsIndexRoute: AppProblemsIndexRoute,
   AppSessionsSessionIdFeedbackRoute: AppSessionsSessionIdFeedbackRoute,
   AppSessionsSessionIdReportRoute: AppSessionsSessionIdReportRoute,
