@@ -139,6 +139,13 @@ export class SessionsController {
         ...s,
         createdAt: s.createdAt.toISOString(),
       })),
+      report: result.report
+        ? {
+            ...result.report,
+            feedback: result.report.feedback ?? '',
+            generatedAt: result.report.generatedAt.toISOString(),
+          }
+        : null,
       createdAt: result.createdAt.toISOString(),
       finishedAt: result.finishedAt?.toISOString() ?? null,
     };

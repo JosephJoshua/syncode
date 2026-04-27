@@ -351,6 +351,11 @@ describe('getSession', () => {
     expect(result.hasReport).toBe(true);
     expect(result.hasFeedback).toBe(true);
     expect(result.hasRecording).toBe(true);
+    expect(result.report).toMatchObject({
+      overallScore: 80,
+      categoryScores: { problemSolving: 80, communication: 80 },
+      feedback: 'Good job',
+    });
 
     // Only terminal runs/submissions
     expect(result.runs).toHaveLength(1);
