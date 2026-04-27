@@ -401,8 +401,9 @@ describe('getSession', () => {
     expect(result.hasRecording).toBe(true);
     expect(result.report).toMatchObject({
       overallScore: 80,
-      categoryScores: { problemSolving: 80, communication: 80 },
-      feedback: 'Good job',
+      strengths: ['Good job'],
+      areasForImprovement: ['Keep practicing'],
+      detailedFeedback: 'Good job',
     });
     expect(result.latestCodeSnapshot).toMatchObject({
       id: latestSnapshot.id,

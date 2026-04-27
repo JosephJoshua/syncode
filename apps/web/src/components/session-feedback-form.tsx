@@ -49,10 +49,8 @@ export function SessionFeedbackForm({
   isSubmitting = false,
   onSubmit,
 }: SessionFeedbackFormProps) {
-  const { t, i18n } = useTranslation('feedback');
-  // Recreate the schema when the active language changes so error messages
-  // localize properly. Calling i18n.t at module init would freeze them.
-  const schema = useMemo(() => createSessionFeedbackFormSchema(), [i18n.language]);
+  const { t } = useTranslation('feedback');
+  const schema = useMemo(() => createSessionFeedbackFormSchema(), []);
   const {
     control,
     formState: { errors, isValid },

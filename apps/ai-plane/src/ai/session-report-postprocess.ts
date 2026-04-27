@@ -94,6 +94,18 @@ export function postprocessSessionReport(
     usesPlatformIo,
   );
 
+  if (nextReport.dimensions) {
+    nextReport.categoryScores = Object.fromEntries(
+      Object.entries(nextReport.dimensions)
+        .filter(([, dimension]) => dimension !== undefined)
+        .map(([key, dimension]) => [key, Math.round(dimension.score)]),
+    );
+  }
+
+  if (nextReport.detailedFeedback) {
+    nextReport.feedback = nextReport.detailedFeedback;
+  }
+
   return nextReport;
 }
 

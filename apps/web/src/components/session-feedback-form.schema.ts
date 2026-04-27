@@ -38,9 +38,7 @@ export function createSessionFeedbackFormSchema() {
   });
 }
 
-export type SessionFeedbackFormValues = z.infer<
-  ReturnType<typeof createSessionFeedbackFormSchema>
->;
+export type SessionFeedbackFormValues = z.infer<ReturnType<typeof createSessionFeedbackFormSchema>>;
 
 export interface SessionFeedbackCandidate {
   userId: string;

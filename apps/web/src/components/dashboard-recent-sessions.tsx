@@ -47,6 +47,7 @@ import type {
 } from '@/lib/dashboard-session-history.js';
 import {
   deleteSession,
+  formatSessionDateTime,
   getDashboardSessionHistoryQueryKey,
   removeSessionFromDashboardHistory,
 } from '@/lib/dashboard-session-history.js';
@@ -395,7 +396,7 @@ export function DashboardRecentSessions({
                 {paginatedRows.map((row) => (
                   <TableRow key={row.id}>
                     <TableCell className="text-muted-foreground">
-                      {formatSessionDate(row.date)}
+                      {formatSessionDateTime(row.date)}
                     </TableCell>
                     <TableCell>
                       <Link
@@ -446,7 +447,7 @@ export function DashboardRecentSessions({
                       )}
                     </TableCell>
                     <TableCell className="text-center text-muted-foreground">
-                      {row.durationMinutes}m
+                      {row.durationLabel}
                     </TableCell>
                     <TableCell className="text-center">
                       <Button

@@ -103,10 +103,10 @@ describe('InternalController', () => {
     expect(mocks.db.insert).toHaveBeenCalled();
   });
 
-  it('GIVEN storage upload fails and no db row can be written WHEN handleSnapshotReady THEN throws', async () => {
+  it('GIVEN persistDocSnapshot fails WHEN handleSnapshotReady THEN throws because doc state is canonical', async () => {
     const mocks = createMocks();
-    mocks.db.limit.mockResolvedValueOnce([]);
-    mocks.storageService.upload.mockRejectedValue(new Error('S3 unavailable'));
+    mocks.db.limit.mockResolvedValueOnce([{ id: 'session-1', language: 'typescript' }]);
+    mocks.roomsService.persistDocSnapshot.mockRejectedValue(new Error('DB unavailable'));
     const controller = await createController(mocks);
 
     const payload: SnapshotReadyPayload = {
@@ -119,6 +119,28 @@ describe('InternalController', () => {
 
     await expect(controller.handleSnapshotReady(payload)).rejects.toThrow(
       'Failed to store snapshot',
+    );
+  });
+
+  it('GIVEN storage upload fails WHEN handleSnapshotReady THEN persists doc snapshot first then swallows the S3 error', async () => {
+    const mocks = createMocks();
+    mocks.db.limit.mockResolvedValueOnce([{ id: 'session-1', language: 'typescript' }]);
+    mocks.storageService.upload.mockRejectedValue(new Error('S3 unavailable'));
+    const controller = await createController(mocks);
+
+    const payload: SnapshotReadyPayload = {
+      roomId: 'room-456',
+      snapshot: [4, 5, 6],
+      code: 'let y = 2;',
+      language: 'javascript',
+      timestamp: 1712500001000,
+      trigger: 'submission',
+    };
+
+    await expect(controller.handleSnapshotReady(payload)).resolves.toEqual({ success: true });
+    expect(mocks.roomsService.persistDocSnapshot).toHaveBeenCalledWith(
+      'room-456',
+      expect.any(Uint8Array),
     );
   });
 

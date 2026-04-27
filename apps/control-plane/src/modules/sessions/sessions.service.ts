@@ -25,10 +25,6 @@ import { and, asc, type Column, desc, eq, gt, gte, inArray, lt, lte, or, sql } f
 import { resolveAvatarUrls } from '@/common/resolve-avatar-urls.js';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
 import { filterReviewFeedback, isAllReviewFeedbackSubmitted } from './session-feedback-utils.js';
-import {
-  normalizeReportScoreMap,
-  normalizeReportStringArray,
-} from './session-report-normalizers.js';
 import type {
   SessionCodeSnapshotResult,
   SessionDetailResult,
@@ -256,7 +252,7 @@ export class SessionsService {
         .innerJoin(users, eq(users.id, sessionParticipants.userId))
         .where(eq(sessionParticipants.sessionId, sessionId)),
       this.db.query.sessionReports.findFirst({
-        columns: { id: true },
+        columns: { id: true, report: true, generatedAt: true, overallScore: true },
         where: (table, { and, eq }) =>
           and(
             eq(table.sessionId, sessionId),
@@ -356,7 +352,13 @@ export class SessionsService {
       : reviewFeedbackRows.filter(
           (feedback) => allReviewFeedbackSubmitted || feedback.reviewerId === userId,
         );
-    const normalizedReport = this.buildReport(report);
+    const normalizedReport = report
+      ? {
+          ...((report.report as Record<string, unknown> | null) ?? {}),
+          generatedAt: report.generatedAt ?? new Date(),
+          overallScore: report.overallScore ?? undefined,
+        }
+      : null;
 
     return {
       sessionId: session.id,
