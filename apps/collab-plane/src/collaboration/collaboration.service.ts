@@ -6,12 +6,15 @@ import {
   type OnModuleDestroy,
 } from '@nestjs/common';
 import type {
+  ChangeLanguageRequest,
+  ChangeLanguageResponse,
   CreateDocumentRequest,
   CreateDocumentResponse,
   DestroyDocumentResponse,
   IControlPlaneCallbackClient,
   KickUserRequest,
   KickUserResponse,
+  ParticipantHeartbeatRequest,
   UpdateRoomStateRequest,
   UpdateRoomStateResponse,
   UserDisconnectedPayload,
@@ -50,12 +53,13 @@ export class CollaborationService implements OnModuleDestroy {
       this.roomRegistry.createRoom(request.roomId, {
         phase: request.initialPhase,
         editorLocked: request.editorLocked,
+        language: request.initialLanguage,
       });
 
     const snapshot = request.snapshot ? new Uint8Array(request.snapshot) : undefined;
     const { created } = this.docStore.createDoc(request.roomId, {
       snapshot,
-      initialContent: snapshot ? undefined : request.initialContent,
+      initialContentByLanguage: request.initialContentByLanguage,
     });
 
     if (created) {
@@ -158,6 +162,33 @@ export class CollaborationService implements OnModuleDestroy {
     return { success: true };
   }
 
+  async changeLanguage(request: ChangeLanguageRequest): Promise<ChangeLanguageResponse> {
+    const room = this.roomRegistry.getRoom(request.roomId);
+    if (!room) {
+      this.logger.debug(`changeLanguage: room ${request.roomId} not found; no broadcast sent`);
+      return { success: false };
+    }
+
+    // Update the registry BEFORE broadcasting so a concurrent periodic snapshot
+    // reads the new active language rather than the old one.
+    this.roomRegistry.updateLanguage(request.roomId, request.language);
+
+    this.broadcastJson(room, {
+      type: COLLAB_WS_EVENTS.LANGUAGE_CHANGE,
+      data: {
+        language: request.language,
+        changedBy: request.changedBy ?? null,
+      },
+      timestamp: Date.now(),
+    });
+
+    this.logger.debug(
+      `Language change broadcast for room ${request.roomId}: language=${request.language}`,
+    );
+
+    return { success: true };
+  }
+
   broadcastParticipantReady(roomId: string, userId: string, isReady: boolean): void {
     const room = this.roomRegistry.getRoom(roomId);
     if (!room) return;
@@ -171,6 +202,22 @@ export class CollaborationService implements OnModuleDestroy {
 
   notifyUserDisconnected(payload: UserDisconnectedPayload): void {
     void this.callbackClient.notifyUserDisconnected(payload);
+  }
+
+  /**
+   * Fire-and-forget participant-heartbeat delivery to control-plane.
+   * The callback client swallows errors per its port contract, but we wrap
+   * in a try/catch defensively in case a synchronous throw ever occurs.
+   */
+  heartbeatParticipants(participants: ParticipantHeartbeatRequest['participants']): void {
+    if (participants.length === 0) return;
+    try {
+      void this.callbackClient.heartbeatParticipants({ participants });
+    } catch (error) {
+      this.logger.warn(
+        `Failed to dispatch participant heartbeat: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
 
   checkRoomEmpty(roomId: string): void {

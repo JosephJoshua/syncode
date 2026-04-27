@@ -1,7 +1,12 @@
 import { Test } from '@nestjs/testing';
-import type { SnapshotReadyPayload, UserDisconnectedPayload } from '@syncode/contracts';
+import type {
+  ParticipantHeartbeatRequest,
+  SnapshotReadyPayload,
+  UserDisconnectedPayload,
+} from '@syncode/contracts';
 import { STORAGE_SERVICE } from '@syncode/shared/ports';
 import { describe, expect, it, vi } from 'vitest';
+import { InternalCallbackGuard } from '@/common/guards/internal-callback.guard.js';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
 import { RoomsService } from '@/modules/rooms/rooms.service.js';
 import { InternalController } from './internal.controller.js';
@@ -10,7 +15,9 @@ function createMocks() {
   return {
     roomsService: {
       markParticipantInactive: vi.fn().mockResolvedValue(undefined),
+      recordParticipantHeartbeats: vi.fn().mockResolvedValue(0),
       persistDocSnapshot: vi.fn().mockResolvedValue(undefined),
+      authorizeJoin: vi.fn().mockResolvedValue({ authorized: true }),
     },
     storageService: {
       upload: vi.fn().mockResolvedValue(undefined),
@@ -37,7 +44,10 @@ async function createController(mocks: ReturnType<typeof createMocks>) {
       { provide: STORAGE_SERVICE, useValue: mocks.storageService },
       { provide: DB_CLIENT, useValue: mocks.db },
     ],
-  }).compile();
+  })
+    .overrideGuard(InternalCallbackGuard)
+    .useValue({ canActivate: () => true })
+    .compile();
 
   return module.get(InternalController);
 }
@@ -52,6 +62,7 @@ describe('InternalController', () => {
       roomId: 'room-123',
       snapshot: [1, 2, 3],
       code: 'const x = 1;',
+      language: 'python',
       timestamp: 1712500000000,
       trigger: 'periodic',
     };
@@ -82,6 +93,7 @@ describe('InternalController', () => {
       roomId: 'room-456',
       snapshot: [4, 5, 6],
       code: 'let y = 2;',
+      language: 'javascript',
       timestamp: 1712500001000,
       trigger: 'submission',
     };
@@ -122,15 +134,17 @@ describe('InternalController', () => {
     expect(result).toEqual({ success: false });
   });
 
-  it('GIVEN valid snapshot with session WHEN handleSnapshotReady THEN inserts into DB and returns success', async () => {
+  it('GIVEN payload language differs from session language WHEN handleSnapshotReady THEN persists the payload language (reflects mid-session switch)', async () => {
     const mocks = createMocks();
+    // Session was started in typescript; user has since switched to python.
     mocks.db.limit.mockResolvedValueOnce([{ id: 'session-1', language: 'typescript' }]);
     const controller = await createController(mocks);
 
     const payload: SnapshotReadyPayload = {
       roomId: 'room-123',
       snapshot: [1, 2, 3],
-      code: 'const x = 1;',
+      code: 'print(1)',
+      language: 'python',
       timestamp: 1712500000000,
       trigger: 'periodic',
     };
@@ -143,10 +157,31 @@ describe('InternalController', () => {
       expect.objectContaining({
         sessionId: 'session-1',
         roomId: 'room-123',
-        code: 'const x = 1;',
-        language: 'typescript',
+        code: 'print(1)',
+        language: 'python',
         trigger: 'periodic',
       }),
+    );
+  });
+
+  it('GIVEN heartbeat payload WHEN handleParticipantHeartbeat THEN delegates to rooms service and returns updated count', async () => {
+    const mocks = createMocks();
+    mocks.roomsService.recordParticipantHeartbeats.mockResolvedValueOnce(3);
+    const controller = await createController(mocks);
+
+    const payload: ParticipantHeartbeatRequest = {
+      participants: [
+        { roomId: 'room-1', userId: 'user-1' },
+        { roomId: 'room-1', userId: 'user-2' },
+        { roomId: 'room-2', userId: 'user-3' },
+      ],
+    };
+
+    const result = await controller.handleParticipantHeartbeat(payload);
+
+    expect(result).toEqual({ updated: 3 });
+    expect(mocks.roomsService.recordParticipantHeartbeats).toHaveBeenCalledWith(
+      payload.participants,
     );
   });
 
@@ -159,6 +194,7 @@ describe('InternalController', () => {
       roomId: 'room-abc',
       snapshot: [9, 8, 7, 6],
       code: 'let z = 3;',
+      language: 'typescript',
       timestamp: 1712500003000,
       trigger: 'periodic',
     };
@@ -181,6 +217,7 @@ describe('InternalController', () => {
       roomId: 'room-123',
       snapshot: [1, 2, 3],
       code: 'const x = 1;',
+      language: 'typescript',
       timestamp: 1712500000000,
       trigger: 'periodic',
     };

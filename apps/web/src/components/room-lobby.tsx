@@ -1,5 +1,6 @@
-import type { RoomMode, RoomRole, RoomStatus } from '@syncode/shared';
-import { Badge, Button, Card } from '@syncode/ui';
+import type { RoomDetail } from '@syncode/contracts';
+import type { RoomMode, RoomRole, RoomStatus, SupportedLanguage } from '@syncode/shared';
+import { Badge, Button, Card, cn } from '@syncode/ui';
 import { AlertTriangle, Check, Copy, Crown, Loader2, Play } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useMemo } from 'react';
@@ -12,6 +13,7 @@ import {
   countActiveRoleConfiguration,
   isRoomConfigurationValid,
 } from '@/lib/room-stage.js';
+import { LanguagePicker } from './language-picker.js';
 import { LobbyBot } from './lobby-bot.js';
 import { LobbyMediaPreview } from './lobby-media-preview.js';
 import { type Participant, RoomParticipantCard } from './room-participant-card.js';
@@ -25,16 +27,21 @@ interface RoomLobbyProps {
   hostId: string;
   currentUserId: string | null;
   participants: Participant[];
+  language: SupportedLanguage | null;
+  myCapabilities: readonly string[];
   canChangePhase: boolean;
   canManageParticipants: boolean;
   isTransitioning: boolean;
   isUpdatingRole: string | null;
   isTransferringOwnership: string | null;
   joinNotice: string | null;
+  collabStatus: CollabConnectionStatus;
   onParticipantRoleChange: (userId: string, role: RoomRole) => void;
   onTransferOwnership: (userId: string, displayName: string) => void;
   onToggleReady: () => void;
   onTransition: (targetStatus: RoomStatus) => void;
+  onRoomUpdated?: (room: RoomDetail) => void;
+  mediaControls?: React.ReactNode;
   speakingMap?: ReadonlyMap<string, boolean>;
   mediaConnectedSet?: ReadonlySet<string>;
   mediaMutedMap?: ReadonlyMap<string, boolean>;
@@ -48,8 +55,6 @@ interface RoomLobbyProps {
   };
   selfMicrophoneEnabled?: boolean;
   onSelfMicrophoneToggle?: () => void;
-  mediaControls?: React.ReactNode;
-  collabStatus?: CollabConnectionStatus;
 }
 
 const COLLAB_STATUS_INDICATOR: Record<
@@ -87,24 +92,27 @@ export function RoomLobby({
   hostId,
   currentUserId,
   participants,
+  language,
+  myCapabilities,
   canChangePhase,
   canManageParticipants,
   isTransitioning,
   isUpdatingRole,
   isTransferringOwnership,
   joinNotice,
+  collabStatus,
   onParticipantRoleChange,
   onTransferOwnership,
   onToggleReady,
   onTransition,
+  onRoomUpdated,
+  mediaControls,
   speakingMap,
   mediaConnectedSet,
   mediaMutedMap,
   participantMediaControls,
   selfMicrophoneEnabled,
   onSelfMicrophoneToggle,
-  mediaControls,
-  collabStatus,
 }: RoomLobbyProps) {
   const { t } = useTranslation('rooms');
   const collabIndicator = collabStatus ? COLLAB_STATUS_INDICATOR[collabStatus] : null;
@@ -136,6 +144,7 @@ export function RoomLobby({
   );
   const canEnterWorkspace =
     status === 'waiting' && canChangePhase && isRoomValid && myReady && allPeersReady;
+  const rolesLocked = status !== 'waiting';
 
   const inviteLink = buildInviteLink(roomId, roomCode);
 
@@ -201,6 +210,7 @@ export function RoomLobby({
                   currentUserId={currentUserId}
                   roomHostId={hostId}
                   canManageParticipants={canManageParticipants}
+                  rolesLocked={rolesLocked}
                   isUpdatingRole={isUpdatingRole === participant.userId}
                   isTransferringOwnership={isTransferringOwnership === participant.userId}
                   isSpeaking={speakingMap?.get(participant.userId) ?? false}
@@ -286,6 +296,18 @@ export function RoomLobby({
                       ) : null}
                     </div>
                   </div>
+                  <div className="flex items-center justify-between gap-2 border-t border-border/40 pt-1.5">
+                    <span className="shrink-0 text-xs text-muted-foreground">
+                      {t('workspace.languagePickerLabel')}
+                    </span>
+                    <LanguagePicker
+                      roomId={roomId}
+                      currentLanguage={language}
+                      myCapabilities={myCapabilities}
+                      onLanguageChanged={onRoomUpdated}
+                      className="h-8 min-w-[9rem]"
+                    />
+                  </div>
                   <div className="border-t border-border/40 pt-1.5 text-[11px] text-muted-foreground">
                     <div className="flex items-center justify-between gap-2">
                       <span className="shrink-0">{t(`status.${status}`)}</span>
@@ -297,6 +319,13 @@ export function RoomLobby({
                     </div>
                   </div>
                 </div>
+
+                {/* Media controls */}
+                {mediaControls ? (
+                  <div className="flex items-center justify-center rounded-md border border-border/60 bg-background/70 px-2 py-2">
+                    {mediaControls}
+                  </div>
+                ) : null}
 
                 {/* Ready toggle */}
                 <Button

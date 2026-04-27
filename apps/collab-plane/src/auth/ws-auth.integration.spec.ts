@@ -15,7 +15,10 @@ import { CollaborationModule } from '../collaboration/collaboration.module.js';
   providers: [
     {
       provide: CONTROL_PLANE_CALLBACK,
-      useValue: { notifyUserDisconnected: vi.fn().mockResolvedValue(undefined) },
+      useValue: {
+        notifyUserDisconnected: vi.fn().mockResolvedValue(undefined),
+        heartbeatParticipants: vi.fn().mockResolvedValue(null),
+      },
     },
   ],
   exports: [CONTROL_PLANE_CALLBACK],
