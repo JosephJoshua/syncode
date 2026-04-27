@@ -1,4 +1,13 @@
-import { Controller, Delete, Get, HttpCode, Param, Query, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  ParseUUIDPipe,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -14,6 +23,8 @@ import { ErrorResponseDto } from '@/common/dto/error-response.dto.js';
 import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard.js';
 import type { AuthUser } from '@/modules/auth/auth.types.js';
 import {
+  CodeSnapshotsResponseDto,
+  ListCodeSnapshotsQueryDto,
   ListSessionsQueryDto,
   SessionDetailDto,
   SessionHistoryResponseDto,
@@ -60,10 +71,46 @@ export class SessionsController {
     };
   }
 
+  @Get(CONTROL_API.SESSIONS.SNAPSHOTS.route)
+  @ApiOperation({ summary: 'Get code snapshots for a session' })
+  @ApiParam({ name: 'sessionId', description: 'Session ID (UUID)' })
+  @ApiQuery({ name: 'cursor', required: false, description: 'Pagination cursor' })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Page size (1-100)' })
+  @ApiResponse({
+    status: 200,
+    type: CodeSnapshotsResponseDto,
+    description: 'Paginated code snapshot list',
+  })
+  @ApiResponse({ status: 400, type: ErrorResponseDto, description: 'Validation error' })
+  @ApiResponse({ status: 401, type: ErrorResponseDto, description: 'Unauthorized' })
+  @ApiResponse({
+    status: 403,
+    type: ErrorResponseDto,
+    description: 'Not a participant of this session',
+  })
+  @ApiResponse({ status: 404, type: ErrorResponseDto, description: 'Session not found' })
+  async listSnapshots(
+    @CurrentUser() user: AuthUser,
+    @Param('sessionId', new ParseUUIDPipe()) sessionId: string,
+    @Query() query: ListCodeSnapshotsQueryDto,
+  ): Promise<CodeSnapshotsResponseDto> {
+    const isAdmin = await this.sessionsService.isAdmin(user.id);
+    const result = await this.sessionsService.listSnapshots(sessionId, user.id, isAdmin, query);
+
+    return {
+      data: result.data.map((snapshot) => ({
+        ...snapshot,
+        timestamp: snapshot.timestamp.toISOString(),
+      })),
+      pagination: result.pagination,
+    };
+  }
+
   @Get(CONTROL_API.SESSIONS.GET.route)
   @ApiOperation({ summary: 'Get session details' })
   @ApiParam({ name: 'id', description: 'Session ID (UUID)' })
   @ApiResponse({ status: 200, type: SessionDetailDto, description: 'Session detail' })
+  @ApiResponse({ status: 400, type: ErrorResponseDto, description: 'Validation error' })
   @ApiResponse({ status: 401, type: ErrorResponseDto, description: 'Unauthorized' })
   @ApiResponse({
     status: 403,
@@ -73,7 +120,7 @@ export class SessionsController {
   @ApiResponse({ status: 404, type: ErrorResponseDto, description: 'Session not found' })
   async getSession(
     @CurrentUser() user: AuthUser,
-    @Param('id') id: string,
+    @Param('id', new ParseUUIDPipe()) id: string,
   ): Promise<SessionDetailDto> {
     const isAdmin = await this.sessionsService.isAdmin(user.id);
     const result = await this.sessionsService.getSession(id, user.id, isAdmin);
@@ -92,6 +139,23 @@ export class SessionsController {
         ...s,
         createdAt: s.createdAt.toISOString(),
       })),
+      report: result.report
+        ? {
+            ...result.report,
+            feedback: result.report.feedback ?? '',
+            generatedAt: result.report.generatedAt.toISOString(),
+          }
+        : null,
+      latestCodeSnapshot: result.latestCodeSnapshot
+        ? {
+            ...result.latestCodeSnapshot,
+            createdAt: result.latestCodeSnapshot.createdAt.toISOString(),
+          }
+        : null,
+      peerFeedback: (result.peerFeedback ?? []).map((feedback) => ({
+        ...feedback,
+        createdAt: feedback.createdAt.toISOString(),
+      })),
       createdAt: result.createdAt.toISOString(),
       finishedAt: result.finishedAt?.toISOString() ?? null,
     };
@@ -102,6 +166,7 @@ export class SessionsController {
   @ApiOperation({ summary: 'Soft-delete a session from history' })
   @ApiParam({ name: 'id', description: 'Session ID (UUID)' })
   @ApiResponse({ status: 204, description: 'Session soft-deleted' })
+  @ApiResponse({ status: 400, type: ErrorResponseDto, description: 'Validation error' })
   @ApiResponse({ status: 401, type: ErrorResponseDto, description: 'Unauthorized' })
   @ApiResponse({
     status: 403,
@@ -109,7 +174,10 @@ export class SessionsController {
     description: 'Not a participant of this session',
   })
   @ApiResponse({ status: 404, type: ErrorResponseDto, description: 'Session not found' })
-  async deleteSession(@CurrentUser() user: AuthUser, @Param('id') id: string): Promise<void> {
+  async deleteSession(
+    @CurrentUser() user: AuthUser,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ): Promise<void> {
     const isAdmin = await this.sessionsService.isAdmin(user.id);
     await this.sessionsService.deleteSession(id, user.id, isAdmin);
   }

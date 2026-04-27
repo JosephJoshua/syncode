@@ -11,16 +11,12 @@ import {
   AlertDialogTitle,
 } from '@syncode/ui';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { AlertTriangle, Loader2 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { MediaControls } from '@/components/media-controls.js';
-import type {
-  AudioProcessingSettings,
-  VideoQualityPreset,
-} from '@/components/media-settings-panel.js';
 import { RoomLobby } from '@/components/room-lobby.js';
 import { RoomWorkspace } from '@/components/room-workspace.js';
 import {
@@ -31,20 +27,39 @@ import {
 import { useLiveKit } from '@/hooks/use-livekit.js';
 import { useMediaShortcuts } from '@/hooks/use-media-shortcuts.js';
 import { useYjsCollab } from '@/hooks/use-yjs-collab.js';
-import { type ApiErrorResult, api, readApiError, resolveErrorMessage } from '@/lib/api-client.js';
+import { api, readApiError, resolveErrorMessage } from '@/lib/api-client.js';
+import { resolveJoinError } from '@/lib/join-errors.js';
 import { computeRoomElapsedMs, isWorkspaceStage, ROLE_LABEL_KEYS } from '@/lib/room-stage.js';
 import { useAuthStore } from '@/stores/auth.store.js';
+import { useMediaSettingsStore } from '@/stores/media-settings.store.js';
 
-export const Route = createFileRoute('/_app/rooms/$roomId')({
+export const Route = createFileRoute('/_app/rooms_/$roomId')({
   component: RoomPage,
 });
 
 import type { JoinRoomResponse, RoomDetail } from '@syncode/contracts';
 
 const ROOM_REFRESH_INTERVAL_MS = 15_000;
-const REMOVE_PARTICIPANT_ROUTE = defineRoute<void, void>()(
-  'rooms/:id/participants/:userId',
-  'DELETE',
+type LockEditorResponse = {
+  roomId?: string;
+  editorLocked?: boolean;
+  lockedAt?: string;
+  lockedBy?: string;
+};
+type UnlockEditorResponse = {
+  roomId?: string;
+  editorLocked?: boolean;
+  unlockedAt?: string;
+  unlockedBy?: string;
+};
+
+const LOCK_EDITOR_ROUTE = defineRoute<void, LockEditorResponse>()(
+  'rooms/:roomId/control/lock-editor',
+  'POST',
+);
+const UNLOCK_EDITOR_ROUTE = defineRoute<void, UnlockEditorResponse>()(
+  'rooms/:roomId/control/unlock-editor',
+  'POST',
 );
 
 const CURSOR_COLORS = [
@@ -68,6 +83,7 @@ function RoomPage() {
   const { t } = useTranslation('rooms');
   const { roomId } = Route.useParams();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const currentUserId = useAuthStore((state) => state.user?.id ?? null);
   const [room, setRoom] = useState<RoomDetail | null>(null);
   const [isJoining, setIsJoining] = useState(true);
@@ -90,6 +106,10 @@ function RoomPage() {
   // cause the WebSocket to reconnect on every poll if used directly. The collab JWT has
   // a 24h lifetime, so the first token is valid for the entire session.
   const collabCredsRef = useRef<{ collabToken: string; collabUrl: string } | null>(null);
+  // Flips to true when the server reports ROOM_PARTICIPANT_REMOVED during the
+  // post-reconnect /join re-call. Short-circuits further reconnect attempts and
+  // redirects away from the now-inaccessible room.
+  const kickedRef = useRef(false);
 
   // Tick clock only when the timer is actively running (coding + not paused)
   const timerActive =
@@ -255,6 +275,28 @@ function RoomPage() {
     onRoomStatePatch: handleRoomStatePatch,
     onParticipantReady: handleParticipantReady,
     onPhaseChange: () => void refreshRoomDetail(),
+    onLanguageChange: () => void refreshRoomDetail(),
+    onReconnected: () => {
+      if (kickedRef.current) return;
+      void (async () => {
+        try {
+          const result = await api(CONTROL_API.ROOMS.JOIN, {
+            params: { id: roomId },
+            body: {},
+          });
+          setRoom(result.room);
+        } catch (error) {
+          const apiError = await readApiError(error);
+          if (apiError?.code === ERROR_CODES.ROOM_PARTICIPANT_REMOVED) {
+            kickedRef.current = true;
+            toast.error(apiError.message ?? t('lobby.removedFromRoom'));
+            void navigate({ to: '/rooms' });
+            return;
+          }
+          // Other errors are non-fatal — the participant sweep will reconcile.
+        }
+      })();
+    },
     onRoomNotFound: async () => {
       await api(CONTROL_API.ROOMS.ENSURE_COLLAB, { params: { id: roomId } });
     },
@@ -262,7 +304,8 @@ function RoomPage() {
 
   const mediaCredsRef = useRef<{ token: string; url: string } | null>(null);
   const [mediaReady, setMediaReady] = useState(false);
-  const [videoPanelMode, setVideoPanelMode] = useState<'floating' | 'docked'>('docked');
+  const videoPanelMode = useMediaSettingsStore((s) => s.videoPanelMode);
+  const setVideoPanelMode = useMediaSettingsStore((s) => s.setVideoPanelMode);
   const [isVideoMinimized, setIsVideoMinimized] = useState(false);
 
   const hasMediaCapability =
@@ -313,12 +356,17 @@ function RoomPage() {
     };
   }, [room, hasMediaCapability, roomId]);
 
-  const [audioProcessing, setAudioProcessing] = useState<AudioProcessingSettings>({
-    noiseSuppression: true,
-    echoCancellation: true,
-    autoGainControl: false,
-  });
-  const [videoQuality, setVideoQuality] = useState<VideoQualityPreset>('medium');
+  const audioProcessing = useMediaSettingsStore((s) => s.audioProcessing);
+  const setAudioProcessingStored = useMediaSettingsStore((s) => s.setAudioProcessing);
+  const videoQuality = useMediaSettingsStore((s) => s.videoQuality);
+  const setVideoQuality = useMediaSettingsStore((s) => s.setVideoQuality);
+  const preferredAudioDeviceId = useMediaSettingsStore((s) => s.audioInputDeviceId);
+  const preferredVideoDeviceId = useMediaSettingsStore((s) => s.videoInputDeviceId);
+  const setAudioInputDeviceId = useMediaSettingsStore((s) => s.setAudioInputDeviceId);
+  const setVideoInputDeviceId = useMediaSettingsStore((s) => s.setVideoInputDeviceId);
+  const reconcileDevices = useMediaSettingsStore((s) => s.reconcileDevices);
+  const outputVolume = useMediaSettingsStore((s) => s.outputVolume);
+  const setOutputVolumeStored = useMediaSettingsStore((s) => s.setOutputVolume);
 
   const {
     connectionState: mediaConnectionState,
@@ -354,6 +402,9 @@ function RoomPage() {
     token: mediaCredsRef.current?.token ?? null,
     connect: mediaReady && hasMediaCapability && room?.status !== 'finished',
     audioProcessing,
+    preferredAudioDeviceId,
+    preferredVideoDeviceId,
+    onDevicesDiscovered: reconcileDevices,
   });
 
   const mediaConnectedSet = useMemo(() => {
@@ -371,15 +422,19 @@ function RoomPage() {
     return map;
   }, [mediaLocalParticipant, mediaRemoteParticipants]);
 
-  const [outputVolume, setOutputVolumeState] = useState(1);
-
   const handleOutputVolumeChange = useCallback(
     (vol: number) => {
-      setOutputVolumeState(vol);
+      setOutputVolumeStored(vol);
       setOutputVolume(vol);
     },
-    [setOutputVolume],
+    [setOutputVolume, setOutputVolumeStored],
   );
+
+  // Replay the persisted volume onto any attached audio elements whenever it
+  // changes (including right after connect, once elements exist).
+  useEffect(() => {
+    setOutputVolume(outputVolume);
+  }, [outputVolume, setOutputVolume]);
 
   const mediaControlsElement = hasMediaCapability ? (
     <MediaControls
@@ -395,12 +450,16 @@ function RoomPage() {
       videoInputDevices={videoInputDevices}
       activeAudioDeviceId={activeAudioDeviceId}
       activeVideoDeviceId={activeVideoDeviceId}
-      onSwitchDevice={(kind, id) => void switchDevice(kind, id)}
+      onSwitchDevice={(kind, id) => {
+        if (kind === 'audioinput') setAudioInputDeviceId(id);
+        else if (kind === 'videoinput') setVideoInputDeviceId(id);
+        void switchDevice(kind, id);
+      }}
       outputVolume={outputVolume}
       onOutputVolumeChange={handleOutputVolumeChange}
       audioProcessing={audioProcessing}
       onAudioProcessingChange={(settings) => {
-        setAudioProcessing(settings);
+        setAudioProcessingStored(settings);
         void applyAudioProcessing(settings);
       }}
       onVideoFilterChange={(settings) => void setVideoFilter(settings)}
@@ -551,7 +610,7 @@ function RoomPage() {
 
   const removeParticipantMutation = useMutation({
     mutationFn: async ({ userId }: { userId: string; displayName: string }) =>
-      api(REMOVE_PARTICIPANT_ROUTE, {
+      api(CONTROL_API.ROOMS.REMOVE_PARTICIPANT, {
         params: { id: roomId, userId },
       }),
     onSuccess: async (_, variables) => {
@@ -565,6 +624,68 @@ function RoomPage() {
       toast.error(apiError?.message ?? t('workspace.removeParticipantFailed'));
     },
   });
+
+  const lockEditorMutation = useMutation({
+    mutationFn: async () =>
+      api(LOCK_EDITOR_ROUTE, {
+        params: { roomId },
+      }),
+    onSuccess: () => {
+      setRoom((prev) => (prev ? { ...prev, editorLocked: true } : prev));
+      void refreshRoomDetail().catch(() => undefined);
+    },
+    onError: async (error) => {
+      const apiError = await readApiError(error);
+
+      if (apiError?.statusCode === 401) {
+        return;
+      }
+
+      if (apiError?.statusCode === 409 || apiError?.code === ERROR_CODES.ROOM_EDITOR_LOCKED) {
+        setRoom((prev) => (prev ? { ...prev, editorLocked: true } : prev));
+        void refreshRoomDetail().catch(() => undefined);
+      }
+
+      toast.error(
+        resolveErrorMessage(apiError, LOCK_EDITOR_ERROR_KEYS, 'workspace.editorLockedError', t),
+      );
+    },
+  });
+  const unlockEditorMutation = useMutation({
+    mutationFn: async () =>
+      api(UNLOCK_EDITOR_ROUTE, {
+        params: { roomId },
+      }),
+    onSuccess: () => {
+      setRoom((prev) => (prev ? { ...prev, editorLocked: false } : prev));
+      void refreshRoomDetail().catch(() => undefined);
+    },
+    onError: async (error) => {
+      const apiError = await readApiError(error);
+
+      if (apiError?.statusCode === 401) {
+        return;
+      }
+
+      if (apiError?.statusCode === 409 || apiError?.code === ERROR_CODES.ROOM_EDITOR_NOT_LOCKED) {
+        setRoom((prev) => (prev ? { ...prev, editorLocked: false } : prev));
+        void refreshRoomDetail().catch(() => undefined);
+      }
+
+      toast.error(
+        resolveErrorMessage(apiError, UNLOCK_EDITOR_ERROR_KEYS, 'workspace.editorUnlockFailed', t),
+      );
+    },
+  });
+
+  const handleLockEditor = useCallback(() => {
+    if (room?.editorLocked || lockEditorMutation.isPending) return;
+    lockEditorMutation.mutate();
+  }, [lockEditorMutation, room?.editorLocked]);
+  const handleUnlockEditor = useCallback(() => {
+    if (!room?.editorLocked || unlockEditorMutation.isPending) return;
+    unlockEditorMutation.mutate();
+  }, [room?.editorLocked, unlockEditorMutation]);
 
   const handleToggleReady = useCallback(async () => {
     try {
@@ -685,7 +806,12 @@ function RoomPage() {
           roomId={roomId}
           elapsedMs={elapsedMs}
           isTransitioning={isTransitioning}
+          isLockingEditor={lockEditorMutation.isPending}
+          isUnlockingEditor={unlockEditorMutation.isPending}
           onTransition={handleTransition}
+          onLockEditor={handleLockEditor}
+          onUnlockEditor={handleUnlockEditor}
+          onRoomUpdated={setRoom}
           onParticipantRoleChange={handleParticipantRoleChange}
           onTransferOwnership={handleTransferOwnership}
           onRemoveParticipant={handleRemoveParticipant}
@@ -746,16 +872,21 @@ function RoomPage() {
         hostId={room.hostId}
         currentUserId={currentUserId}
         participants={room.participants}
+        language={room.language}
+        myCapabilities={room.myCapabilities}
         canChangePhase={canChangePhase}
         canManageParticipants={canManageParticipants}
         isTransitioning={isTransitioning}
         isUpdatingRole={isUpdatingRole}
         isTransferringOwnership={isTransferringOwnership}
         joinNotice={joinNotice}
+        collabStatus={collabStatus}
         onParticipantRoleChange={handleParticipantRoleChange}
         onTransferOwnership={handleTransferOwnership}
         onToggleReady={handleToggleReady}
         onTransition={handleTransition}
+        onRoomUpdated={setRoom}
+        mediaControls={mediaControlsElement}
         speakingMap={speakingMap}
         mediaConnectedSet={mediaConnectedSet}
         mediaMutedMap={mediaMutedMap}
@@ -791,17 +922,6 @@ function buildJoinNotice(
   return t('lobby.autoAssigned', { role: roleLabel });
 }
 
-const JOIN_ERROR_KEYS: Partial<Record<string, string>> = {
-  [ERROR_CODES.ROOM_NOT_FOUND]: 'lobby.roomNotFound',
-  [ERROR_CODES.ROOM_FULL]: 'lobby.roomFull',
-  [ERROR_CODES.ROOM_FINISHED]: 'lobby.roomFinished',
-  [ERROR_CODES.ROOM_INVALID_CODE]: 'lobby.invalidCode',
-  [ERROR_CODES.ROOM_ACCESS_DENIED]: 'lobby.accessDenied',
-  [ERROR_CODES.ROOM_PERMISSION_DENIED]: 'lobby.accessDenied',
-  [ERROR_CODES.ROOM_INVITE_CODE_EXHAUSTED]: 'lobby.invalidCode',
-  [ERROR_CODES.ROOM_ROLE_UNAVAILABLE]: 'lobby.roleUnavailable',
-};
-
 const TRANSITION_ERROR_KEYS: Partial<Record<string, string>> = {
   [ERROR_CODES.ROOM_INVALID_TRANSITION]: 'lobby.invalidTransition',
   [ERROR_CODES.ROOM_NOT_PEER_MODE]: 'lobby.notPeerMode',
@@ -811,6 +931,7 @@ const TRANSITION_ERROR_KEYS: Partial<Record<string, string>> = {
 
 const ROLE_UPDATE_ERROR_KEYS: Partial<Record<string, string>> = {
   [ERROR_CODES.ROOM_ROLE_CONSTRAINT_VIOLATION]: 'lobby.roleConstraintViolation',
+  [ERROR_CODES.ROOM_ROLES_LOCKED]: 'workspace.rolesLocked',
   [ERROR_CODES.PARTICIPANT_NOT_FOUND]: 'lobby.participantNotFound',
   [ERROR_CODES.ROOM_PERMISSION_DENIED]: 'lobby.accessDenied',
   [ERROR_CODES.ROOM_NOT_PEER_MODE]: 'lobby.notPeerMode',
@@ -822,6 +943,17 @@ const TRANSFER_ERROR_KEYS: Partial<Record<string, string>> = {
   [ERROR_CODES.ROOM_PERMISSION_DENIED]: 'lobby.accessDenied',
 };
 
-function resolveJoinError(apiError: ApiErrorResult, t: (key: string) => string): string {
-  return resolveErrorMessage(apiError, JOIN_ERROR_KEYS, 'lobby.joinFailed', t);
-}
+const LOCK_EDITOR_ERROR_KEYS: Partial<Record<string, string>> = {
+  [ERROR_CODES.ROOM_EDITOR_LOCKED]: 'workspace.editorLockedError',
+  [ERROR_CODES.ROOM_NOT_FOUND]: 'lobby.roomNotFound',
+  [ERROR_CODES.ROOM_PERMISSION_DENIED]: 'lobby.accessDenied',
+  [ERROR_CODES.ROOM_ACCESS_DENIED]: 'lobby.accessDenied',
+  [ERROR_CODES.FORBIDDEN]: 'lobby.accessDenied',
+};
+
+const UNLOCK_EDITOR_ERROR_KEYS: Partial<Record<string, string>> = {
+  [ERROR_CODES.ROOM_NOT_FOUND]: 'lobby.roomNotFound',
+  [ERROR_CODES.ROOM_PERMISSION_DENIED]: 'lobby.accessDenied',
+  [ERROR_CODES.ROOM_ACCESS_DENIED]: 'lobby.accessDenied',
+  [ERROR_CODES.FORBIDDEN]: 'lobby.accessDenied',
+};

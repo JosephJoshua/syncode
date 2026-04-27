@@ -11,6 +11,7 @@ import { InfrastructureModule } from './infrastructure/infrastructure.module.js'
 import { AuthModule } from './modules/auth/auth.module.js';
 import { DbModule } from './modules/db/db.module.js';
 import { ExecutionModule } from './modules/execution/execution.module.js';
+import { FeedbackModule } from './modules/feedback/feedback.module.js';
 import { InternalModule } from './modules/internal/internal.module.js';
 import { ProblemsModule } from './modules/problems/problems.module.js';
 import { RoomsModule } from './modules/rooms/rooms.module.js';
@@ -98,12 +99,15 @@ if (!isProd) {
     // Rate limiting
     ThrottlerModule.forRootAsync({
       inject: [ConfigService],
-      useFactory: (config: ConfigService<EnvConfig>) => [
-        {
-          ttl: (config.get('THROTTLE_TTL_SECS', { infer: true }) ?? 60) * 1_000, // seconds -> ms
-          limit: config.get('THROTTLE_LIMIT', { infer: true }) ?? 10,
-        },
-      ],
+      useFactory: (config: ConfigService<EnvConfig>) => ({
+        throttlers: [
+          {
+            ttl: (config.get('THROTTLE_TTL_SECS', { infer: true }) ?? 60) * 1_000, // seconds -> ms
+            limit: config.get('THROTTLE_LIMIT', { infer: true }) ?? 10,
+          },
+        ],
+        skipIf: () => config.get('NODE_ENV', { infer: true }) === 'development',
+      }),
     }),
 
     // Global modules
@@ -117,6 +121,7 @@ if (!isProd) {
     RoomsModule,
     SessionsModule,
     ProblemsModule,
+    FeedbackModule,
     ExecutionModule,
     InternalModule,
   ],

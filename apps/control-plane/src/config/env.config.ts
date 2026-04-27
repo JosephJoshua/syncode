@@ -26,6 +26,10 @@ const envSchema = z
 
     COLLAB_JWT_SECRET: z.string().min(32, 'COLLAB_JWT_SECRET must be at least 32 characters'),
 
+    INTERNAL_CALLBACK_SECRET: z
+      .string()
+      .min(32, 'INTERNAL_CALLBACK_SECRET must be at least 32 characters'),
+
     S3_ENDPOINT: z.url(),
     S3_PUBLIC_ENDPOINT: z.url().optional(),
     S3_ACCESS_KEY: z.string().min(1),

@@ -36,7 +36,9 @@ import { motion } from 'motion/react';
 import type React from 'react';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { FilterPill } from '@/components/filter-pill.js';
 import { api } from '@/lib/api-client.js';
+import { ROLE_LABEL_KEYS, ROOM_STATUS_KEYS, ROOM_STATUS_STYLES } from '@/lib/room-stage.js';
 
 export const Route = createFileRoute('/_app/rooms/')({
   component: RoomsPage,
@@ -44,43 +46,6 @@ export const Route = createFileRoute('/_app/rooms/')({
 
 type StatusFilter = RoomStatusType | 'all';
 const ROOMS_PAGE_SIZE = 10;
-
-const ROOM_STATUS_KEYS: Record<RoomStatusType, string> = {
-  [RoomStatus.WAITING]: 'status.waiting',
-  [RoomStatus.WARMUP]: 'status.warmup',
-  [RoomStatus.CODING]: 'status.coding',
-  [RoomStatus.WRAPUP]: 'status.wrapup',
-  [RoomStatus.FINISHED]: 'status.finished',
-};
-
-const ROLE_LABEL_KEYS: Record<string, string> = {
-  [RoomRole.CANDIDATE]: 'role.candidate',
-  [RoomRole.INTERVIEWER]: 'role.interviewer',
-  [RoomRole.OBSERVER]: 'role.observer',
-};
-
-const STATUS_STYLES: Record<string, { dot: string; badge: string }> = {
-  waiting: {
-    dot: 'bg-amber-400 shadow-[0_0_6px_oklch(0.76_0.16_75/0.6)]',
-    badge: 'border-amber-500/30 bg-amber-500/10 text-amber-400',
-  },
-  warmup: {
-    dot: 'bg-sky-400 shadow-[0_0_6px_oklch(0.72_0.14_230/0.6)]',
-    badge: 'border-sky-500/30 bg-sky-500/10 text-sky-400',
-  },
-  coding: {
-    dot: 'bg-primary shadow-[0_0_6px_oklch(0.82_0.18_165/0.6)] animate-pulse',
-    badge: 'border-primary/30 bg-primary/10 text-primary',
-  },
-  wrapup: {
-    dot: 'bg-violet-400 shadow-[0_0_6px_oklch(0.65_0.18_290/0.6)]',
-    badge: 'border-violet-500/30 bg-violet-500/10 text-violet-400',
-  },
-  finished: {
-    dot: 'bg-muted-foreground/50',
-    badge: 'border-border bg-muted/30 text-muted-foreground',
-  },
-};
 
 const STATUS_FILTER_VALUES: StatusFilter[] = ['all', ...ROOM_STATUSES];
 
@@ -169,9 +134,9 @@ export function RoomsPage() {
   };
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-8 sm:py-10 lg:py-12">
+    <div>
       <motion.div
-        className="mb-6 flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between"
+        className="mb-6 flex items-start justify-between gap-4"
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.45, delay: 0.05, ease: [0.22, 1, 0.36, 1] }}
@@ -262,23 +227,16 @@ export function RoomsPage() {
 
       <div className="mb-6 flex flex-wrap gap-2">
         {STATUS_FILTER_VALUES.map((value) => (
-          <button
+          <FilterPill
             key={value}
-            type="button"
-            aria-pressed={statusFilter === value}
+            active={statusFilter === value}
             onClick={() => {
               setStatusFilter(value);
               resetCursorPagination();
             }}
-            className={cn(
-              'inline-flex h-8 items-center rounded-lg px-3 text-xs font-medium transition-colors',
-              statusFilter === value
-                ? 'bg-primary/10 text-primary ring-1 ring-primary/20'
-                : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground',
-            )}
           >
             {value === 'all' ? t('filter.all') : t(ROOM_STATUS_KEYS[value])}
-          </button>
+          </FilterPill>
         ))}
       </div>
 
@@ -287,23 +245,31 @@ export function RoomsPage() {
           <Loader2 size={32} className="animate-spin text-primary/60" />
         </div>
       ) : roomsQuery.isError ? (
-        <div className="flex flex-col items-center justify-center py-24 text-center">
-          <AlertTriangle size={32} className="mb-4 text-destructive/60" />
+        <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-destructive/40 bg-card/30 px-6 py-20 text-center backdrop-blur-sm">
+          <div className="relative mb-5">
+            <div className="absolute inset-0 -z-10 rounded-full bg-destructive/15 blur-2xl" />
+            <div className="flex size-16 items-center justify-center rounded-2xl border border-destructive/40 bg-card text-destructive/70">
+              <AlertTriangle size={28} />
+            </div>
+          </div>
           <h3 className="text-lg font-semibold text-foreground">{t('error.loadFailed')}</h3>
-          <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+          <p className="mt-1.5 max-w-sm text-sm text-muted-foreground">
             {t('error.loadFailedDescription')}
           </p>
-          <Button variant="outline" className="mt-4" onClick={() => roomsQuery.refetch()}>
+          <Button variant="outline" className="mt-5" onClick={() => roomsQuery.refetch()}>
             {t('error.retry')}
           </Button>
         </div>
       ) : rooms.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-24 text-center">
-          <div className="mb-4 flex size-16 items-center justify-center rounded-2xl border border-border/50 bg-card/60">
-            <Radio size={28} className="text-muted-foreground/40" />
+        <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border/60 bg-card/30 px-6 py-20 text-center backdrop-blur-sm">
+          <div className="relative mb-5">
+            <div className="absolute inset-0 -z-10 rounded-full bg-primary/15 blur-2xl" />
+            <div className="flex size-16 items-center justify-center rounded-2xl border border-border/60 bg-card text-primary">
+              <Radio size={28} />
+            </div>
           </div>
           <h3 className="text-lg font-semibold text-foreground">{t('empty.noRooms')}</h3>
-          <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+          <p className="mt-1.5 max-w-sm text-sm text-muted-foreground">
             {statusFilter === 'all'
               ? t('empty.noRoomsDescription')
               : t('empty.noRoomsWithStatus', { status: t(ROOM_STATUS_KEYS[statusFilter]) })}
@@ -317,7 +283,7 @@ export function RoomsPage() {
                 dot: 'bg-muted-foreground/50',
                 badge: 'border-border bg-muted/30 text-muted-foreground',
               };
-              const styles = STATUS_STYLES[room.status] ?? fallback;
+              const styles = ROOM_STATUS_STYLES[room.status] ?? fallback;
 
               return (
                 <motion.div
@@ -331,7 +297,7 @@ export function RoomsPage() {
                   }}
                 >
                   <Link to="/rooms/$roomId" params={{ roomId: room.roomId }} className="block">
-                    <Card className="group h-full rounded-xl border border-white/[0.035] bg-card/40 p-5 ring-1 ring-border/30 backdrop-blur-sm transition-all duration-200 hover:border-primary/12 hover:bg-card/60 hover:shadow-[0_10px_30px_-24px_color-mix(in_oklch,var(--primary)_80%,transparent)] hover:ring-primary/20 sm:p-6">
+                    <Card className="group h-full rounded-2xl border border-white/[0.035] bg-card/50 p-5 ring-1 ring-border/30 backdrop-blur-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/20 hover:bg-card/70 hover:shadow-[0_20px_40px_-24px_color-mix(in_oklch,var(--primary)_70%,transparent)] hover:ring-primary/20 sm:p-6">
                       {/* Top row: status + meta */}
                       <div className="mb-4 flex items-center justify-between">
                         <Badge

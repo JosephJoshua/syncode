@@ -13,6 +13,7 @@ import type {
   executionResultResponseSchema,
   jobStatusResponseSchema,
 } from './execution.js';
+import type { sessionFeedbackResponseSchema, submitSessionFeedbackSchema } from './feedback.js';
 import type { healthCheckResponseSchema } from './health.js';
 import type {
   problemDetailSchema,
@@ -20,6 +21,9 @@ import type {
   problemsTagsResponseSchema,
 } from './problems.js';
 import type {
+  browseRoomsQuerySchema,
+  browseRoomsResponseSchema,
+  changeRoomLanguageSchema,
   createRoomResponseSchema,
   createRoomSchema,
   destroyRoomResponseSchema,
@@ -42,6 +46,8 @@ import type {
   updateRoomParticipantSchema,
 } from './rooms.js';
 import type {
+  codeSnapshotsResponseSchema,
+  listCodeSnapshotsQuerySchema,
   listSessionsQuerySchema,
   sessionDetailSchema,
   sessionHistoryResponseSchema,
@@ -98,6 +104,10 @@ export const CONTROL_API = {
       z.infer<typeof listRoomsQuerySchema>,
       z.infer<typeof listRoomsResponseSchema>
     >()('rooms', 'GET'),
+    BROWSE_PUBLIC: defineRoute<
+      z.infer<typeof browseRoomsQuerySchema>,
+      z.infer<typeof browseRoomsResponseSchema>
+    >()('rooms/public', 'GET'),
     GET: defineRoute<void, z.infer<typeof roomDetailSchema>>()('rooms/:id', 'GET'),
     JOIN: defineRoute<z.infer<typeof joinRoomSchema>, z.infer<typeof joinRoomResponseSchema>>()(
       'rooms/:id/join',
@@ -111,6 +121,7 @@ export const CONTROL_API = {
       z.infer<typeof updateRoomParticipantSchema>,
       z.infer<typeof updateRoomParticipantResponseSchema>
     >()('rooms/:id/participants/:participantUserId', 'PATCH'),
+    REMOVE_PARTICIPANT: defineRoute<void, void>()('rooms/:id/participants/:userId', 'DELETE'),
     DESTROY: defineRoute<void, z.infer<typeof destroyRoomResponseSchema>>()('rooms/:id', 'DELETE'),
     RUN: defineRoute<z.infer<typeof runCodeSchema>, z.infer<typeof runCodeResponseSchema>>()(
       'rooms/:id/run',
@@ -125,6 +136,10 @@ export const CONTROL_API = {
       z.infer<typeof transitionRoomPhaseResponseSchema>
     >()('rooms/:id/control/transition', 'POST'),
     TOGGLE_READY: defineRoute<void, z.infer<typeof roomDetailSchema>>()('rooms/:id/ready', 'POST'),
+    CHANGE_LANGUAGE: defineRoute<
+      z.infer<typeof changeRoomLanguageSchema>,
+      z.infer<typeof roomDetailSchema>
+    >()('rooms/:id/language', 'PATCH'),
     MEDIA_TOKEN: defineRoute<void, z.infer<typeof mediaTokenResponseSchema>>()(
       'rooms/:id/media/token',
       'POST',
@@ -168,8 +183,22 @@ export const CONTROL_API = {
       z.infer<typeof listSessionsQuerySchema>,
       z.infer<typeof sessionHistoryResponseSchema>
     >()('sessions', 'GET'),
+    SNAPSHOTS: defineRoute<
+      z.infer<typeof listCodeSnapshotsQuerySchema>,
+      z.infer<typeof codeSnapshotsResponseSchema>
+    >()('sessions/:sessionId/snapshots', 'GET'),
     GET: defineRoute<void, z.infer<typeof sessionDetailSchema>>()('sessions/:id', 'GET'),
     DELETE: defineRoute<void, void>()('sessions/:id', 'DELETE'),
+  },
+  FEEDBACK: {
+    SUBMIT_SESSION: defineRoute<
+      z.infer<typeof submitSessionFeedbackSchema>,
+      z.infer<typeof sessionFeedbackResponseSchema>
+    >()('sessions/:id/feedback', 'POST'),
+    GET_SESSION: defineRoute<void, z.infer<typeof sessionFeedbackResponseSchema>>()(
+      'sessions/:id/feedback',
+      'GET',
+    ),
   },
   HEALTH: defineRoute<void, z.infer<typeof healthCheckResponseSchema>>()('health', 'GET'),
 };

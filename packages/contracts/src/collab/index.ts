@@ -4,9 +4,16 @@ export {
 } from './callback-client.js';
 export { COLLAB_CLIENT, type ICollabClient } from './client.js';
 export {
+  type AuthorizeJoinDenialReason,
+  type AuthorizeJoinRequest,
+  type AuthorizeJoinResponse,
+  authorizeJoinRequestSchema,
   CONTROL_INTERNAL,
+  type ParticipantHeartbeatRequest,
+  type ParticipantHeartbeatResponse,
   type PersistDocSnapshotPayload,
   type PersistDocSnapshotResponse,
+  participantHeartbeatRequestSchema,
   persistDocSnapshotPayloadSchema,
   type SnapshotReadyPayload,
   type SnapshotTrigger,
@@ -17,6 +24,8 @@ export {
 export {
   type BroadcastParticipantReadyRequest,
   type BroadcastParticipantReadyResponse,
+  type ChangeLanguageRequest,
+  type ChangeLanguageResponse,
   COLLAB_INTERNAL,
   type CreateDocumentRequest,
   type CreateDocumentResponse,
@@ -31,6 +40,7 @@ export {
   COLLAB_WS_EVENTS,
   type CollabWsMessage,
   type EditorLockEventData,
+  type LanguageChangeEventData,
   type ParticipantReadyEventData,
   type PhaseChangeEventData,
   type RoomStateEventData,

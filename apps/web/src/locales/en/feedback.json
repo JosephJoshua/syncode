@@ -26,5 +26,55 @@
     "role": "Role",
     "date": "Date",
     "duration": "Duration"
+  },
+  "form": {
+    "title": "Peer Evaluation",
+    "description": "Score your partner's interview performance and leave actionable written feedback.",
+    "field": {
+      "candidate": "Feedback target",
+      "strengths": "What went well",
+      "improvements": "What to improve",
+      "wouldPairAgain": "Pairing preference"
+    },
+    "hint": {
+      "candidate": "Choose the participant this evaluation is for.",
+      "strengths": "Call out concrete behaviors, explanations, or implementation choices that helped.",
+      "improvements": "Share specific next steps for the next interview practice."
+    },
+    "placeholder": {
+      "candidate": "Select a participant",
+      "strengths": "They clarified assumptions before coding and explained tradeoffs clearly.",
+      "improvements": "They could narrate edge cases earlier and keep variable names more consistent."
+    },
+    "rating": {
+      "problemSolving": "Problem-solving",
+      "communication": "Communication",
+      "codeQuality": "Code quality",
+      "debugging": "Debugging",
+      "overall": "Overall"
+    },
+    "ratingHint": {
+      "problemSolving": "Approach, decomposition, and edge-case reasoning.",
+      "communication": "Clarity, collaboration, and interview narration.",
+      "codeQuality": "Readability, structure, and maintainability.",
+      "debugging": "Ability to inspect failures and adapt quickly.",
+      "overall": "Your holistic evaluation of the session."
+    },
+    "ratingAria": "{{label}} rating {{rating}} out of 5",
+    "option": {
+      "pairAgainYes": "Would pair again",
+      "pairAgainNo": "Would not pair again"
+    },
+    "button": {
+      "submit": "Submit feedback",
+      "submitting": "Submitting..."
+    },
+    "validation": {
+      "candidateRequired": "Choose who this feedback is for.",
+      "ratingRequired": "Pick a rating from 1 to 5.",
+      "strengthsRequired": "Add at least one strength.",
+      "improvementsRequired": "Add at least one improvement.",
+      "textMaxLength": "Keep feedback under 2000 characters."
+    }
   }
 }

@@ -24,6 +24,8 @@ function createFixture() {
   const callbackClient: IControlPlaneCallbackClient = {
     notifyUserDisconnected: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
     notifySnapshotReady: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+    heartbeatParticipants: vi.fn<() => Promise<null>>().mockResolvedValue(null),
+    authorizeJoin: vi.fn().mockResolvedValue({ authorized: true }),
     persistDocSnapshot: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
   };
 
@@ -66,6 +68,22 @@ describe('CollaborationService', () => {
       expect(result.created).toBe(true);
     });
 
+    it('GIVEN initialLanguage WHEN creating document THEN registry reflects the active language', async () => {
+      const { service, roomRegistry } = createFixture();
+
+      await service.createDocument({ roomId: 'room-1', initialLanguage: 'python' });
+
+      expect(roomRegistry.getRoom('room-1')?.language).toBe('python');
+    });
+
+    it('GIVEN no initialLanguage WHEN creating document THEN registry language is null', async () => {
+      const { service, roomRegistry } = createFixture();
+
+      await service.createDocument({ roomId: 'room-1' });
+
+      expect(roomRegistry.getRoom('room-1')?.language).toBeNull();
+    });
+
     it('GIVEN existing document WHEN creating duplicate THEN returns created=false without throwing', async () => {
       const { service, docStore } = createFixture();
       docStore.createDoc
@@ -79,19 +97,17 @@ describe('CollaborationService', () => {
       expect(result.roomId).toBe('room-1');
     });
 
-    it('GIVEN snapshot in request WHEN creating THEN forwards snapshot bytes to docStore and omits initialContent', async () => {
+    it('GIVEN snapshot in request WHEN creating THEN forwards snapshot bytes to docStore', async () => {
       const { service, docStore } = createFixture();
 
       await service.createDocument({
         roomId: 'room-1',
         snapshot: [1, 2, 3],
-        initialContent: 'ignored',
       });
 
       const [, options] = docStore.createDoc.mock.calls[0];
       expect(options.snapshot).toBeInstanceOf(Uint8Array);
       expect(Array.from(options.snapshot as Uint8Array)).toEqual([1, 2, 3]);
-      expect(options.initialContent).toBeUndefined();
     });
   });
 
@@ -318,6 +334,69 @@ describe('CollaborationService', () => {
       expect(messages.some((m: { type: string }) => m.type === COLLAB_WS_EVENTS.EDITOR_LOCK)).toBe(
         true,
       );
+    });
+  });
+
+  describe('changeLanguage', () => {
+    it('GIVEN a room WHEN changeLanguage THEN LANGUAGE_CHANGE broadcast to all clients', async () => {
+      const { service, roomRegistry } = createFixture();
+      await service.createDocument({ roomId: 'room-1' });
+
+      const client1 = fakeClient();
+      const client2 = fakeClient();
+      roomRegistry.addClient('room-1', 'user-1', client1);
+      roomRegistry.addClient('room-1', 'user-2', client2);
+
+      const result = await service.changeLanguage({
+        roomId: 'room-1',
+        language: 'python',
+        changedBy: 'host-user',
+      });
+
+      expect(result).toEqual({ success: true });
+
+      for (const client of [client1, client2]) {
+        const call = (client.send as ReturnType<typeof vi.fn>).mock.calls[0];
+        expect(call).toBeDefined();
+        const msg = JSON.parse(call[0]);
+        expect(msg.type).toBe(COLLAB_WS_EVENTS.LANGUAGE_CHANGE);
+        expect(msg.data).toEqual({ language: 'python', changedBy: 'host-user' });
+        expect(msg.timestamp).toEqual(expect.any(Number));
+      }
+    });
+
+    it('GIVEN a room and no changedBy WHEN changeLanguage THEN broadcast data.changedBy is null', async () => {
+      const { service, roomRegistry } = createFixture();
+      await service.createDocument({ roomId: 'room-1' });
+
+      const client = fakeClient();
+      roomRegistry.addClient('room-1', 'user-1', client);
+
+      await service.changeLanguage({ roomId: 'room-1', language: 'javascript' });
+
+      const call = (client.send as ReturnType<typeof vi.fn>).mock.calls[0];
+      const msg = JSON.parse(call[0]);
+      expect(msg.data).toEqual({ language: 'javascript', changedBy: null });
+    });
+
+    it('GIVEN a room WHEN changeLanguage THEN registry reflects the new active language', async () => {
+      const { service, roomRegistry } = createFixture();
+      await service.createDocument({ roomId: 'room-1', initialLanguage: 'python' });
+
+      await service.changeLanguage({ roomId: 'room-1', language: 'javascript' });
+
+      expect(roomRegistry.getRoom('room-1')?.language).toBe('javascript');
+    });
+
+    it('GIVEN unknown room WHEN changeLanguage THEN returns { success: false }', async () => {
+      const { service } = createFixture();
+
+      const result = await service.changeLanguage({
+        roomId: 'does-not-exist',
+        language: 'python',
+      });
+
+      expect(result).toEqual({ success: false });
     });
   });
 

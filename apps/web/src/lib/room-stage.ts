@@ -14,6 +14,29 @@ export const ROOM_STATUS_KEYS: Record<RoomStatus, string> = {
   finished: 'status.finished',
 };
 
+export const ROOM_STATUS_STYLES: Record<RoomStatus, { dot: string; badge: string }> = {
+  waiting: {
+    dot: 'bg-amber-400 shadow-[0_0_6px_oklch(0.76_0.16_75/0.6)]',
+    badge: 'border-amber-500/30 bg-amber-500/10 text-amber-400',
+  },
+  warmup: {
+    dot: 'bg-sky-400 shadow-[0_0_6px_oklch(0.72_0.14_230/0.6)]',
+    badge: 'border-sky-500/30 bg-sky-500/10 text-sky-400',
+  },
+  coding: {
+    dot: 'bg-primary shadow-[0_0_6px_oklch(0.82_0.18_165/0.6)] animate-pulse',
+    badge: 'border-primary/30 bg-primary/10 text-primary',
+  },
+  wrapup: {
+    dot: 'bg-violet-400 shadow-[0_0_6px_oklch(0.65_0.18_290/0.6)]',
+    badge: 'border-violet-500/30 bg-violet-500/10 text-violet-400',
+  },
+  finished: {
+    dot: 'bg-muted-foreground/50',
+    badge: 'border-border bg-muted/30 text-muted-foreground',
+  },
+};
+
 export const STAGE_THEME: Record<RoomStatus, { text: string; bg: string; glow: string }> = {
   waiting: {
     text: 'text-muted-foreground',

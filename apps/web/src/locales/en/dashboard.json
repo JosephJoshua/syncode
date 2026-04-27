@@ -32,7 +32,24 @@
     "role": "Role",
     "status": "Status",
     "score": "Score",
-    "duration": "Duration"
+    "duration": "Duration",
+    "actions": "Actions"
+  },
+  "actions": {
+    "deleteSessionAriaLabel": "Delete session"
+  },
+  "deleteDialog": {
+    "title": "Delete session?",
+    "description": "This action cannot be undone. This session history entry will be permanently deleted.",
+    "cancel": "Cancel",
+    "confirm": "Delete session",
+    "deleting": "Deleting..."
+  },
+  "deleteToast": {
+    "deleteFailed": "We couldn't delete this session right now.",
+    "sessionNotFound": "This session could not be found.",
+    "notParticipant": "You can't delete a session you didn't participate in.",
+    "unauthorized": "Your session expired. Please sign in again."
   },
   "status": {
     "pass": "Pass",

@@ -23,7 +23,7 @@ vi.mock('@/lib/yjs-collab-provider.js', async () => {
         destroy: mockDestroy,
       };
     }),
-    CODE_TEXT_KEY: 'code',
+    codeTextKey: (language: string) => `code:${language}`,
   };
 });
 

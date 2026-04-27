@@ -40,6 +40,33 @@ const ASSIGNABLE_ROLES: Array<{ value: RoomRole; labelKey: string }> = [
   { value: 'observer', labelKey: 'roleSelect.observer' },
 ];
 
+function getBadgeTranslateClass({
+  isHost,
+  showParticipantActions,
+  isParticipantMenuOpen,
+}: {
+  isHost: boolean;
+  showParticipantActions: boolean;
+  isParticipantMenuOpen: boolean;
+}): string | undefined {
+  // No actions slot rendered: no extra gap-1.5 space, so no offset needed.
+  if (!showParticipantActions) {
+    return undefined;
+  }
+
+  if (isHost) {
+    return isParticipantMenuOpen
+      ? '-translate-x-0.5'
+      : 'group-hover:-translate-x-0.5 group-focus-within:-translate-x-0.5';
+  }
+
+  // Non-host: shift right by 6px to keep role badge aligned with host's badge,
+  // then nudge to +4px when the actions slot becomes visible.
+  return isParticipantMenuOpen
+    ? 'translate-x-[4px]'
+    : 'translate-x-[6px] group-hover:translate-x-[4px] group-focus-within:translate-x-[4px]';
+}
+
 function PresenceDot({
   isMediaConnected,
   isMediaMuted,
@@ -168,6 +195,7 @@ interface RoomParticipantCardProps {
   isUpdatingRole: boolean;
   isTransferringOwnership: boolean;
   isRemovingParticipant?: boolean;
+  rolesLocked?: boolean;
   isSpeaking?: boolean;
   isMediaConnected?: boolean;
   isMediaMuted?: boolean;
@@ -194,6 +222,7 @@ export function RoomParticipantCard({
   isUpdatingRole,
   isTransferringOwnership,
   isRemovingParticipant = false,
+  rolesLocked = false,
   isSpeaking = false,
   isMediaConnected = false,
   isMediaMuted = false,
@@ -255,10 +284,11 @@ export function RoomParticipantCard({
           <div
             className={cn(
               'flex items-center gap-1.5 transition-transform duration-200 ease-out',
-              showParticipantActions &&
-                (isParticipantMenuOpen
-                  ? '-translate-x-0.5'
-                  : 'group-hover:-translate-x-0.5 group-focus-within:-translate-x-0.5'),
+              getBadgeTranslateClass({
+                isHost,
+                showParticipantActions,
+                isParticipantMenuOpen,
+              }),
             )}
           >
             <Badge variant={participant.role} className="text-[10px]">
@@ -390,7 +420,7 @@ export function RoomParticipantCard({
           </div>
 
           <div className="mt-1.5 flex items-center gap-2">
-            {canManageParticipants && (!isHost || isMe) ? (
+            {canManageParticipants && (!isHost || isMe) && !rolesLocked ? (
               <Select
                 value={participant.role}
                 onValueChange={(value) => onRoleChange?.(participant.userId, value as RoomRole)}
@@ -407,7 +437,12 @@ export function RoomParticipantCard({
                 </SelectContent>
               </Select>
             ) : (
-              <Badge variant={participant.role}>{t(ROLE_LABEL_KEYS[participant.role])}</Badge>
+              <Badge
+                variant={participant.role}
+                title={rolesLocked ? t('workspace.rolesLocked') : undefined}
+              >
+                {t(ROLE_LABEL_KEYS[participant.role])}
+              </Badge>
             )}
 
             {isUpdatingRole ? <Loader2 className="size-3.5 animate-spin text-primary" /> : null}

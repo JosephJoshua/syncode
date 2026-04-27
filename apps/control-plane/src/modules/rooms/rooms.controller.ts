@@ -22,8 +22,18 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { SkipThrottle } from '@nestjs/throttler';
-import { CONTROL_API, ROOMS_SORT_BY_OPTIONS, SORT_ORDER_OPTIONS } from '@syncode/contracts';
-import { ROOM_MODES, ROOM_STATUSES } from '@syncode/shared';
+import {
+  BROWSEABLE_ROOM_STATUSES,
+  CONTROL_API,
+  ROOMS_SORT_BY_OPTIONS,
+  SORT_ORDER_OPTIONS,
+} from '@syncode/contracts';
+import {
+  PROBLEM_DIFFICULTIES,
+  ROOM_MODES,
+  ROOM_STATUSES,
+  SUPPORTED_LANGUAGES,
+} from '@syncode/shared';
 import { CurrentUser } from '@/common/decorators/current-user.decorator.js';
 import { Idempotent } from '@/common/decorators/idempotent.decorator.js';
 import { ErrorResponseDto } from '@/common/dto/error-response.dto.js';
@@ -31,6 +41,9 @@ import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard.js';
 import { IdempotencyInterceptor } from '@/common/interceptors/idempotency.interceptor.js';
 import type { AuthUser } from '@/modules/auth/auth.types.js';
 import {
+  BrowseRoomsQueryDto,
+  BrowseRoomsResponseDto,
+  ChangeRoomLanguageDto,
   CreateRoomDto,
   CreateRoomResponseDto,
   DestroyRoomResponseDto,
@@ -99,6 +112,29 @@ export class RoomsController {
     @Query() query: ListRoomsQueryDto,
   ): Promise<ListRoomsResponseDto> {
     const result = await this.roomsService.listRooms(user.id, query);
+    return {
+      data: result.data.map((room) => ({
+        ...room,
+        createdAt: room.createdAt.toISOString(),
+      })),
+      pagination: result.pagination,
+    };
+  }
+
+  @Get(CONTROL_API.ROOMS.BROWSE_PUBLIC.route)
+  @ApiOperation({ summary: 'Browse public rooms with filters' })
+  @ApiQuery({ name: 'cursor', required: false, description: 'Pagination cursor' })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Page size (1-100)' })
+  @ApiQuery({ name: 'status', required: false, enum: [...BROWSEABLE_ROOM_STATUSES] })
+  @ApiQuery({ name: 'language', required: false, enum: [...SUPPORTED_LANGUAGES] })
+  @ApiQuery({ name: 'difficulty', required: false, enum: [...PROBLEM_DIFFICULTIES] })
+  @ApiQuery({ name: 'search', required: false, type: String })
+  @ApiResponse({ status: 200, type: BrowseRoomsResponseDto })
+  async browsePublicRooms(
+    @CurrentUser() user: AuthUser,
+    @Query() query: BrowseRoomsQueryDto,
+  ): Promise<BrowseRoomsResponseDto> {
+    const result = await this.roomsService.browsePublicRooms(user.id, query);
     return {
       data: result.data.map((room) => ({
         ...room,
@@ -183,6 +219,35 @@ export class RoomsController {
     };
   }
 
+  @Delete(CONTROL_API.ROOMS.REMOVE_PARTICIPANT.route)
+  @HttpCode(204)
+  @ApiOperation({ summary: 'Remove a participant from the room (host only)' })
+  @ApiParam({ name: 'id', description: 'Room ID (UUID)' })
+  @ApiParam({ name: 'userId', description: 'Target participant user ID (UUID)' })
+  @ApiResponse({ status: 204, description: 'Participant removed' })
+  @ApiResponse({
+    status: 400,
+    type: ErrorResponseDto,
+    description: 'Cannot remove yourself',
+  })
+  @ApiResponse({
+    status: 403,
+    type: ErrorResponseDto,
+    description: 'Requester is not the host',
+  })
+  @ApiResponse({
+    status: 404,
+    type: ErrorResponseDto,
+    description: 'Room or participant not found',
+  })
+  async removeParticipant(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Param('userId') userId: string,
+  ): Promise<void> {
+    await this.roomsService.removeParticipant(id, user.id, userId);
+  }
+
   @Delete(CONTROL_API.ROOMS.DESTROY.route)
   @ApiOperation({ summary: 'Destroy a room' })
   @ApiParam({ name: 'id', description: 'Room ID (UUID)' })
@@ -250,6 +315,24 @@ export class RoomsController {
     @Param('id') id: string,
   ): Promise<RoomDetailDto> {
     const result = await this.roomsService.toggleReady(id, user.id);
+    return this.serializeRoomDetail(result);
+  }
+
+  @Patch(CONTROL_API.ROOMS.CHANGE_LANGUAGE.route)
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Change the active programming language for a room' })
+  @ApiParam({ name: 'id', description: 'Room ID (UUID)' })
+  @ApiBody({ type: ChangeRoomLanguageDto })
+  @ApiResponse({ status: 200, type: RoomDetailDto })
+  @ApiResponse({ status: 400, type: ErrorResponseDto })
+  @ApiResponse({ status: 403, type: ErrorResponseDto })
+  @ApiResponse({ status: 404, type: ErrorResponseDto })
+  async changeLanguage(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() body: ChangeRoomLanguageDto,
+  ): Promise<RoomDetailDto> {
+    const result = await this.roomsService.changeLanguage(id, user.id, body.language);
     return this.serializeRoomDetail(result);
   }
 
