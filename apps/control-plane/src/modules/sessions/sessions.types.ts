@@ -1,3 +1,4 @@
+import type { CodeSnapshotTrigger } from '@syncode/contracts';
 import type { RoomMode, RoomRole, SupportedLanguage } from '@syncode/shared';
 
 export interface SessionSummaryResult {
@@ -41,7 +42,7 @@ export interface SessionDetailResult {
   runs: SessionRunResult[];
   submissions: SessionSubmissionResult[];
   report: SessionReportResult | null;
-  latestCodeSnapshot: SessionCodeSnapshotResult | null;
+  latestCodeSnapshot: SessionLatestCodeSnapshotResult | null;
   peerFeedback: SessionPeerFeedbackResult[];
   hasReport: boolean;
   hasFeedback: boolean;
@@ -73,16 +74,25 @@ export interface SessionSubmissionResult {
   createdAt: Date;
 }
 
+export interface SessionCodeSnapshotResult {
+  snapshotId: string;
+  timestamp: Date;
+  trigger: CodeSnapshotTrigger;
+  language: SupportedLanguage;
+  code: string;
+  linesOfCode: number;
+}
+
 export interface SessionReportResult {
   overallScore: number;
   categoryScores: Record<string, number>;
   strengths: string[];
   areasForImprovement: string[];
-  feedback: string;
+  feedback: string | null;
   generatedAt: Date;
 }
 
-export interface SessionCodeSnapshotResult {
+export interface SessionLatestCodeSnapshotResult {
   id: string;
   code: string;
   language: SupportedLanguage;

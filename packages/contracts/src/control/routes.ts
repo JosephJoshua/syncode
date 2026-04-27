@@ -13,6 +13,7 @@ import type {
   executionResultResponseSchema,
   jobStatusResponseSchema,
 } from './execution.js';
+import type { sessionFeedbackResponseSchema, submitSessionFeedbackSchema } from './feedback.js';
 import type { healthCheckResponseSchema } from './health.js';
 import type {
   problemDetailSchema,
@@ -45,6 +46,8 @@ import type {
   updateRoomParticipantSchema,
 } from './rooms.js';
 import type {
+  codeSnapshotsResponseSchema,
+  listCodeSnapshotsQuerySchema,
   listSessionsQuerySchema,
   sessionDetailSchema,
   sessionHistoryResponseSchema,
@@ -180,8 +183,22 @@ export const CONTROL_API = {
       z.infer<typeof listSessionsQuerySchema>,
       z.infer<typeof sessionHistoryResponseSchema>
     >()('sessions', 'GET'),
+    SNAPSHOTS: defineRoute<
+      z.infer<typeof listCodeSnapshotsQuerySchema>,
+      z.infer<typeof codeSnapshotsResponseSchema>
+    >()('sessions/:sessionId/snapshots', 'GET'),
     GET: defineRoute<void, z.infer<typeof sessionDetailSchema>>()('sessions/:id', 'GET'),
     DELETE: defineRoute<void, void>()('sessions/:id', 'DELETE'),
+  },
+  FEEDBACK: {
+    SUBMIT_SESSION: defineRoute<
+      z.infer<typeof submitSessionFeedbackSchema>,
+      z.infer<typeof sessionFeedbackResponseSchema>
+    >()('sessions/:id/feedback', 'POST'),
+    GET_SESSION: defineRoute<void, z.infer<typeof sessionFeedbackResponseSchema>>()(
+      'sessions/:id/feedback',
+      'GET',
+    ),
   },
   HEALTH: defineRoute<void, z.infer<typeof healthCheckResponseSchema>>()('health', 'GET'),
 };

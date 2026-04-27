@@ -8,6 +8,7 @@ import { and, eq } from 'drizzle-orm';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
 import {
   createTestDb,
+  insertCodeSnapshot,
   insertPeerFeedbackRow,
   insertProblem,
   insertRoom,
@@ -457,6 +458,140 @@ describe('getSession', () => {
     await expect(
       service.getSession('00000000-0000-0000-0000-000000000000', user.id, false),
     ).rejects.toThrow(NotFoundException);
+  });
+});
+
+describe('listSnapshots', () => {
+  it('GIVEN session snapshots WHEN listing THEN returns chronological snapshots with stored triggers', async () => {
+    const user = await insertUser(db);
+    const room = await insertRoom(db, user.id);
+    const session = await insertSession(db, room.id, {
+      status: 'ongoing',
+      language: 'python',
+    });
+    await insertSessionParticipant(db, session.id, user.id);
+
+    await insertCodeSnapshot(db, {
+      sessionId: session.id,
+      roomId: room.id,
+      code: 'print("later")',
+      language: 'python',
+      trigger: 'periodic',
+      linesOfCode: null,
+      createdAt: new Date('2026-04-18T10:02:00.000Z'),
+    });
+    await insertCodeSnapshot(db, {
+      sessionId: session.id,
+      roomId: room.id,
+      code: 'print("first")',
+      language: 'python',
+      trigger: 'submission',
+      linesOfCode: 1,
+      createdAt: new Date('2026-04-18T10:00:00.000Z'),
+    });
+    await insertCodeSnapshot(db, {
+      sessionId: session.id,
+      roomId: room.id,
+      code: 'print("middle")',
+      language: 'python',
+      trigger: 'phase_change',
+      linesOfCode: 1,
+      createdAt: new Date('2026-04-18T10:01:00.000Z'),
+    });
+
+    const result = await service.listSnapshots(session.id, user.id, false, {
+      limit: 50,
+      sortOrder: 'asc',
+    });
+
+    expect(result.data).toHaveLength(3);
+    expect(result.data.map((snapshot) => snapshot.trigger)).toEqual([
+      'submission',
+      'phase_change',
+      'periodic',
+    ]);
+    expect(result.data.map((snapshot) => snapshot.code)).toEqual([
+      'print("first")',
+      'print("middle")',
+      'print("later")',
+    ]);
+    expect(result.data[2]?.linesOfCode).toBe(1);
+    expect(result.pagination).toEqual({ nextCursor: null, hasMore: false });
+  });
+
+  it('GIVEN snapshots exceed limit WHEN listing THEN returns next cursor for follow-up page', async () => {
+    const user = await insertUser(db);
+    const room = await insertRoom(db, user.id);
+    const session = await insertSession(db, room.id, {
+      status: 'ongoing',
+      language: 'python',
+    });
+    await insertSessionParticipant(db, session.id, user.id);
+
+    for (let i = 0; i < 3; i += 1) {
+      await insertCodeSnapshot(db, {
+        sessionId: session.id,
+        roomId: room.id,
+        code: `print("${i}")`,
+        language: 'python',
+        trigger: 'periodic',
+        linesOfCode: 1,
+        createdAt: new Date(Date.UTC(2026, 3, 18, 10, i, 0)),
+      });
+    }
+
+    const firstPage = await service.listSnapshots(session.id, user.id, false, {
+      limit: 2,
+      sortOrder: 'asc',
+    });
+
+    expect(firstPage.data).toHaveLength(2);
+    expect(firstPage.pagination.hasMore).toBe(true);
+    expect(firstPage.pagination.nextCursor).not.toBeNull();
+
+    const secondPage = await service.listSnapshots(session.id, user.id, false, {
+      limit: 2,
+      sortOrder: 'asc',
+      cursor: firstPage.pagination.nextCursor ?? undefined,
+    });
+
+    expect(secondPage.data).toHaveLength(1);
+    expect(secondPage.pagination.hasMore).toBe(false);
+    expect(secondPage.pagination.nextCursor).toBeNull();
+  });
+
+  it('GIVEN non-participant WHEN listing snapshots THEN throws ForbiddenException', async () => {
+    const { room, session } = await seedFinishedSession({
+      sessionOverrides: { language: 'python' },
+    });
+    const stranger = await insertUser(db);
+
+    await insertCodeSnapshot(db, {
+      sessionId: session.id,
+      roomId: room.id,
+      code: 'print("hello")',
+      language: 'python',
+      trigger: 'submission',
+      linesOfCode: 1,
+    });
+
+    await expect(
+      service.listSnapshots(session.id, stranger.id, false, { limit: 50, sortOrder: 'asc' }),
+    ).rejects.toThrow(ForbiddenException);
+  });
+
+  it('GIVEN soft-deleted session WHEN listing snapshots THEN throws NotFoundException', async () => {
+    const user = await insertUser(db);
+    const room = await insertRoom(db, user.id);
+    const session = await insertSession(db, room.id, { language: 'python' });
+    await insertSessionParticipant(db, session.id, user.id);
+    await insertSessionDeletion(db, session.id, user.id);
+
+    await expect(
+      service.listSnapshots(session.id, user.id, false, { limit: 50, sortOrder: 'asc' }),
+    ).rejects.toMatchObject({
+      response: { code: ERROR_CODES.SESSION_NOT_FOUND },
+    });
   });
 });
 
