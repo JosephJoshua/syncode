@@ -82,9 +82,15 @@ export const useMediaSettingsStore = create<MediaSettingsState>()(
     {
       name: 'syncode.media-settings.v1',
       version: 1,
-      storage: createJSONStorage(() =>
-        typeof window === 'undefined' ? NOOP_STORAGE : window.localStorage,
-      ),
+      // Some test runners report `typeof window === 'object'` but expose a
+      // localStorage stub that lacks setItem. Probe for the real method
+      // before handing it to zustand.
+      storage: createJSONStorage(() => {
+        if (typeof window === 'undefined') return NOOP_STORAGE;
+        const ls = window.localStorage;
+        if (!ls || typeof ls.setItem !== 'function') return NOOP_STORAGE;
+        return ls;
+      }),
       partialize: (state) => ({
         audioInputDeviceId: state.audioInputDeviceId,
         videoInputDeviceId: state.videoInputDeviceId,
