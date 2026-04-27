@@ -188,9 +188,9 @@ describe('Yjs Document Sync (integration)', () => {
 
     const { ws, messages } = await connectAndJoin('room-1', 'user-1');
 
-    // Should have received room-state JSON
-    expect(messages.json).toHaveLength(1);
-    expect(messages.json[0]).toMatchObject({ type: 'room-state' });
+    // Should have received room-state JSON (plus optional chat-history bootstrap event)
+    expect(messages.json.length).toBeGreaterThanOrEqual(1);
+    expect(messages.json.some((message) => message.type === 'room-state')).toBe(true);
 
     // Should have received SyncStep1 binary
     expect(messages.binary.length).toBeGreaterThanOrEqual(1);

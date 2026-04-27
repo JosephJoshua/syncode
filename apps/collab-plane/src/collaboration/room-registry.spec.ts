@@ -159,4 +159,76 @@ describe('RoomRegistry', () => {
       expect(registry.deleteRoom('room-1')).toBe(false);
     });
   });
+
+  describe('chat messages', () => {
+    it('GIVEN room exists WHEN creating chat message THEN message is stored and returned in history', () => {
+      const registry = new RoomRegistry();
+      registry.createRoom('room-1');
+
+      const message = registry.createChatMessage('room-1', {
+        userId: 'user-1',
+        text: 'Hello room',
+        replyToMessageId: null,
+        mentions: [],
+        attachments: [],
+      });
+
+      expect(message.messageId).toBeTruthy();
+      expect(message.userId).toBe('user-1');
+      expect(registry.listChatMessages('room-1')).toHaveLength(1);
+    });
+
+    it('GIVEN existing message reaction WHEN same user toggles THEN reaction is removed', () => {
+      const registry = new RoomRegistry();
+      registry.createRoom('room-1');
+      const message = registry.createChatMessage('room-1', {
+        userId: 'user-1',
+        text: 'React to me',
+        replyToMessageId: null,
+        mentions: [],
+        attachments: [],
+      });
+
+      const first = registry.toggleChatReaction('room-1', {
+        messageId: message.messageId,
+        userId: 'user-2',
+        emoji: '👍',
+      });
+      expect(first.reactions).toEqual([{ emoji: '👍', userIds: ['user-2'] }]);
+
+      const second = registry.toggleChatReaction('room-1', {
+        messageId: message.messageId,
+        userId: 'user-2',
+        emoji: '👍',
+      });
+      expect(second.reactions).toEqual([]);
+    });
+
+    it('GIVEN unknown message WHEN toggling reaction THEN throws NotFoundException', () => {
+      const registry = new RoomRegistry();
+      registry.createRoom('room-1');
+
+      expect(() =>
+        registry.toggleChatReaction('room-1', {
+          messageId: 'missing',
+          userId: 'user-1',
+          emoji: '🔥',
+        }),
+      ).toThrow(NotFoundException);
+    });
+
+    it('GIVEN room chat WHEN marking read THEN stores monotonic read timestamp per user', () => {
+      const registry = new RoomRegistry();
+      registry.createRoom('room-1');
+
+      const first = registry.markChatRead('room-1', { userId: 'user-1', upTo: 100 });
+      expect(first).toEqual({ userId: 'user-1', lastReadAt: 100 });
+
+      const second = registry.markChatRead('room-1', { userId: 'user-1', upTo: 50 });
+      expect(second).toEqual({ userId: 'user-1', lastReadAt: 100 });
+
+      const states = registry.listChatReadStates('room-1');
+      expect(states).toContainEqual({ userId: 'user-1', lastReadAt: 100 });
+    });
+  });
 });
