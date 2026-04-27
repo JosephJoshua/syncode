@@ -123,6 +123,163 @@ function ParticipantAvatar({
   );
 }
 
+function renderRecentSessionsBody({
+  isLoading,
+  isUnavailable,
+  isError,
+  hasVisibleRows,
+  hasBaseRows,
+  onRetry,
+  filteredRows,
+  currentUserInitial,
+  t,
+}: {
+  isLoading: boolean;
+  isUnavailable: boolean;
+  isError: boolean;
+  hasVisibleRows: boolean;
+  hasBaseRows: boolean;
+  onRetry?: () => void;
+  filteredRows: SessionRow[];
+  currentUserInitial: string;
+  t: (key: string) => string;
+}) {
+  if (isLoading) {
+    return (
+      <StateMessage title={t('empty.loadingTitle')} description={t('empty.loadingDescription')} />
+    );
+  }
+  if (isUnavailable) {
+    return (
+      <StateMessage
+        title={t('empty.unavailableTitle')}
+        description={t('empty.unavailableDescription')}
+      />
+    );
+  }
+  if (isError) {
+    return (
+      <StateMessage
+        title={t('empty.errorTitle')}
+        description={t('empty.errorDescription')}
+        action={
+          onRetry ? (
+            <Button variant="outline" className="mt-4" onClick={onRetry}>
+              {t('common:retry')}
+            </Button>
+          ) : null
+        }
+      />
+    );
+  }
+  if (!hasVisibleRows) {
+    return (
+      <StateMessage
+        title={hasBaseRows ? t('empty.noMatchTitle') : t('empty.noSessionsTitle')}
+        description={hasBaseRows ? t('empty.noMatchDescription') : t('empty.noSessionsDescription')}
+      />
+    );
+  }
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow className="hover:bg-transparent">
+          <TableHead className="w-35 text-center">{t('table.date')}</TableHead>
+          <TableHead className="min-w-65 text-center">{t('table.problem')}</TableHead>
+          <TableHead className="w-22 text-center">{t('table.partner')}</TableHead>
+          <TableHead className="w-24 text-center">{t('table.observer')}</TableHead>
+          <TableHead className="w-30 text-center">{t('table.role')}</TableHead>
+          <TableHead className="w-30 text-center">{t('table.status')}</TableHead>
+          <TableHead className="w-22.5 text-center">{t('table.score')}</TableHead>
+          <TableHead className="w-25 text-center">{t('table.duration')}</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {filteredRows.map((row) => (
+          <RecentSessionRow key={row.id} row={row} currentUserInitial={currentUserInitial} t={t} />
+        ))}
+      </TableBody>
+    </Table>
+  );
+}
+
+function RecentSessionRow({
+  row,
+  currentUserInitial,
+  t,
+}: {
+  row: SessionRow;
+  currentUserInitial: string;
+  t: (key: string) => string;
+}) {
+  return (
+    <TableRow key={row.id}>
+      <TableCell className="text-muted-foreground">{formatSessionDate(row.date)}</TableCell>
+      <TableCell>
+        <Link
+          to="/sessions/$sessionId/feedback"
+          params={{ sessionId: row.id }}
+          className="block truncate rounded-sm font-medium text-foreground transition-colors hover:text-foreground/85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+          title={row.problemName}
+        >
+          {row.problemName}
+        </Link>
+      </TableCell>
+      <TableCell className="text-center">
+        <ParticipantAvatar participant={row.partner} currentUserInitial={currentUserInitial} />
+      </TableCell>
+      <TableCell className="text-center">
+        <ParticipantAvatar participant={row.observer} currentUserInitial={currentUserInitial} />
+      </TableCell>
+      <TableCell className="text-center">
+        <Badge variant={getRoleBadgeVariant(row.role)}>{t(`role.${row.role}`)}</Badge>
+      </TableCell>
+      <TableCell className="text-center">
+        {row.role === 'candidate' && row.status ? (
+          <Badge variant={getStatusBadgeVariant(row.status)}>
+            {row.status === 'passed' ? t('status.pass') : t('status.failed')}
+          </Badge>
+        ) : (
+          <span className="text-muted-foreground">-</span>
+        )}
+      </TableCell>
+      <TableCell className="text-center">
+        {row.role === 'candidate' && typeof row.score === 'number' ? (
+          <span
+            className={cn(
+              'font-medium',
+              row.status === 'passed' ? 'text-primary' : 'text-amber-400',
+            )}
+          >
+            {row.score}
+          </span>
+        ) : (
+          <span className="text-muted-foreground">-</span>
+        )}
+      </TableCell>
+      <TableCell className="text-center text-muted-foreground">{row.durationMinutes}m</TableCell>
+    </TableRow>
+  );
+}
+
+function StateMessage({
+  title,
+  description,
+  action,
+}: {
+  title: string;
+  description: string;
+  action?: React.ReactNode;
+}) {
+  return (
+    <div className="flex min-h-64 flex-col items-center justify-center px-6 py-12 text-center">
+      <h3 className="text-lg font-semibold tracking-tight text-foreground">{title}</h3>
+      <p className="mt-2 max-w-md text-sm text-muted-foreground">{description}</p>
+      {action}
+    </div>
+  );
+}
+
 export function DashboardRecentSessions({
   rows,
   isLoading = false,
@@ -228,123 +385,17 @@ export function DashboardRecentSessions({
       </div>
 
       <Card className="mt-5 gap-0 overflow-hidden border border-border/50 bg-card/80 py-0 backdrop-blur-sm">
-        {isLoading ? (
-          <div className="flex min-h-64 flex-col items-center justify-center px-6 py-12 text-center">
-            <h3 className="text-lg font-semibold tracking-tight text-foreground">
-              {t('empty.loadingTitle')}
-            </h3>
-            <p className="mt-2 max-w-md text-sm text-muted-foreground">
-              {t('empty.loadingDescription')}
-            </p>
-          </div>
-        ) : isUnavailable ? (
-          <div className="flex min-h-64 flex-col items-center justify-center px-6 py-12 text-center">
-            <h3 className="text-lg font-semibold tracking-tight text-foreground">
-              {t('empty.unavailableTitle')}
-            </h3>
-            <p className="mt-2 max-w-md text-sm text-muted-foreground">
-              {t('empty.unavailableDescription')}
-            </p>
-          </div>
-        ) : isError ? (
-          <div className="flex min-h-64 flex-col items-center justify-center px-6 py-12 text-center">
-            <h3 className="text-lg font-semibold tracking-tight text-foreground">
-              {t('empty.errorTitle')}
-            </h3>
-            <p className="mt-2 max-w-md text-sm text-muted-foreground">
-              {t('empty.errorDescription')}
-            </p>
-            {onRetry ? (
-              <Button variant="outline" className="mt-4" onClick={onRetry}>
-                {t('common:retry')}
-              </Button>
-            ) : null}
-          </div>
-        ) : hasVisibleRows ? (
-          <Table>
-            <TableHeader>
-              <TableRow className="hover:bg-transparent">
-                <TableHead className="w-35 text-center">{t('table.date')}</TableHead>
-                <TableHead className="min-w-65 text-center">{t('table.problem')}</TableHead>
-                <TableHead className="w-22 text-center">{t('table.partner')}</TableHead>
-                <TableHead className="w-24 text-center">{t('table.observer')}</TableHead>
-                <TableHead className="w-30 text-center">{t('table.role')}</TableHead>
-                <TableHead className="w-30 text-center">{t('table.status')}</TableHead>
-                <TableHead className="w-22.5 text-center">{t('table.score')}</TableHead>
-                <TableHead className="w-25 text-center">{t('table.duration')}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredRows.map((row) => (
-                <TableRow key={row.id}>
-                  <TableCell className="text-muted-foreground">
-                    {formatSessionDate(row.date)}
-                  </TableCell>
-                  <TableCell>
-                    <Link
-                      to="/sessions/$sessionId/feedback"
-                      params={{ sessionId: row.id }}
-                      className="block truncate rounded-sm font-medium text-foreground transition-colors hover:text-foreground/85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-                      title={row.problemName}
-                    >
-                      {row.problemName}
-                    </Link>
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <ParticipantAvatar
-                      participant={row.partner}
-                      currentUserInitial={currentUserInitial}
-                    />
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <ParticipantAvatar
-                      participant={row.observer}
-                      currentUserInitial={currentUserInitial}
-                    />
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <Badge variant={getRoleBadgeVariant(row.role)}>{t(`role.${row.role}`)}</Badge>
-                  </TableCell>
-                  <TableCell className="text-center">
-                    {row.role === 'candidate' && row.status ? (
-                      <Badge variant={getStatusBadgeVariant(row.status)}>
-                        {row.status === 'passed' ? t('status.pass') : t('status.failed')}
-                      </Badge>
-                    ) : (
-                      <span className="text-muted-foreground">-</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-center">
-                    {row.role === 'candidate' && typeof row.score === 'number' ? (
-                      <span
-                        className={cn(
-                          'font-medium',
-                          row.status === 'passed' ? 'text-primary' : 'text-amber-400',
-                        )}
-                      >
-                        {row.score}
-                      </span>
-                    ) : (
-                      <span className="text-muted-foreground">-</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-center text-muted-foreground">
-                    {row.durationMinutes}m
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        ) : (
-          <div className="flex min-h-64 flex-col items-center justify-center px-6 py-12 text-center">
-            <h3 className="text-lg font-semibold tracking-tight text-foreground">
-              {hasBaseRows ? t('empty.noMatchTitle') : t('empty.noSessionsTitle')}
-            </h3>
-            <p className="mt-2 max-w-md text-sm text-muted-foreground">
-              {hasBaseRows ? t('empty.noMatchDescription') : t('empty.noSessionsDescription')}
-            </p>
-          </div>
-        )}
+        {renderRecentSessionsBody({
+          isLoading,
+          isUnavailable,
+          isError,
+          hasVisibleRows,
+          hasBaseRows,
+          onRetry,
+          filteredRows,
+          currentUserInitial,
+          t,
+        })}
       </Card>
     </section>
   );
