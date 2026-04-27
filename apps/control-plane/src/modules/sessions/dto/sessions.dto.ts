@@ -1,6 +1,7 @@
 import {
   codeSnapshotSchema,
   codeSnapshotsResponseSchema,
+  listCodeSnapshotsQuerySchema,
   listSessionsQuerySchema,
   sessionDetailSchema,
   sessionHistoryResponseSchema,
@@ -10,6 +11,7 @@ import {
 import { createZodDto } from 'nestjs-zod';
 
 export class ListSessionsQueryDto extends createZodDto(listSessionsQuerySchema) {}
+export class ListCodeSnapshotsQueryDto extends createZodDto(listCodeSnapshotsQuerySchema) {}
 export class CodeSnapshotDto extends createZodDto(codeSnapshotSchema) {}
 export class CodeSnapshotsResponseDto extends createZodDto(codeSnapshotsResponseSchema) {}
 export class SessionSummaryDto extends createZodDto(sessionSummarySchema) {}

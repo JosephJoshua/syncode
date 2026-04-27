@@ -1,5 +1,10 @@
 import { ForbiddenException, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { ERROR_CODES, type ListSessionsQuery, SESSIONS_SORT_BY_OPTIONS } from '@syncode/contracts';
+import {
+  ERROR_CODES,
+  type ListCodeSnapshotsQuery,
+  type ListSessionsQuery,
+  SESSIONS_SORT_BY_OPTIONS,
+} from '@syncode/contracts';
 import type { Database } from '@syncode/db';
 import {
   codeSnapshots,
@@ -334,30 +339,54 @@ export class SessionsService {
     sessionId: string,
     userId: string,
     isAdmin: boolean,
-  ): Promise<SessionCodeSnapshotResult[]> {
+    query: ListCodeSnapshotsQuery,
+  ): Promise<PaginatedResult<SessionCodeSnapshotResult>> {
     await this.assertSessionAccessible(sessionId, userId, isAdmin);
 
-    const snapshotRows = await this.db
-      .select({
-        snapshotId: codeSnapshots.id,
-        timestamp: codeSnapshots.createdAt,
-        trigger: codeSnapshots.trigger,
-        language: codeSnapshots.language,
-        code: codeSnapshots.code,
-        linesOfCode: codeSnapshots.linesOfCode,
-      })
-      .from(codeSnapshots)
-      .where(eq(codeSnapshots.sessionId, sessionId))
-      .orderBy(asc(codeSnapshots.createdAt), asc(codeSnapshots.id));
+    return paginate<SessionCodeSnapshotResult>({
+      cursor: query.cursor,
+      limit: query.limit,
+      getCursorValues: (row) => [row.timestamp.toISOString(), row.snapshotId],
+      fetchPage: async (decoded, fetchLimit) => {
+        const conditions = [eq(codeSnapshots.sessionId, sessionId)];
 
-    return snapshotRows.map((snapshot) => ({
-      snapshotId: snapshot.snapshotId,
-      timestamp: snapshot.timestamp,
-      trigger: snapshot.trigger,
-      language: snapshot.language,
-      code: snapshot.code,
-      linesOfCode: snapshot.linesOfCode ?? this.countLinesOfCode(snapshot.code),
-    }));
+        if (decoded?.length === 2 && decoded[0] && decoded[1]) {
+          const [cursorTs, cursorId] = decoded;
+          const cursorDate = new Date(cursorTs);
+          if (!Number.isNaN(cursorDate.getTime())) {
+            conditions.push(
+              or(
+                gt(codeSnapshots.createdAt, cursorDate),
+                and(eq(codeSnapshots.createdAt, cursorDate), gt(codeSnapshots.id, cursorId)),
+              )!,
+            );
+          }
+        }
+
+        const rows = await this.db
+          .select({
+            snapshotId: codeSnapshots.id,
+            timestamp: codeSnapshots.createdAt,
+            trigger: codeSnapshots.trigger,
+            language: codeSnapshots.language,
+            code: codeSnapshots.code,
+            linesOfCode: codeSnapshots.linesOfCode,
+          })
+          .from(codeSnapshots)
+          .where(and(...conditions))
+          .orderBy(asc(codeSnapshots.createdAt), asc(codeSnapshots.id))
+          .limit(fetchLimit);
+
+        return rows.map((snapshot) => ({
+          snapshotId: snapshot.snapshotId,
+          timestamp: snapshot.timestamp,
+          trigger: snapshot.trigger,
+          language: snapshot.language,
+          code: snapshot.code,
+          linesOfCode: snapshot.linesOfCode ?? this.countLinesOfCode(snapshot.code),
+        }));
+      },
+    });
   }
 
   async deleteSession(sessionId: string, userId: string, isAdmin: boolean): Promise<void> {

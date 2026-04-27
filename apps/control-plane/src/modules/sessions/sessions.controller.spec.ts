@@ -9,7 +9,7 @@ const SESSION_DETAIL_RESULT = {
   sessionId: 'session-1',
   roomId: 'room-1',
   mode: 'peer' as const,
-  problem: { id: 'problem-1', title: 'Two Sum', difficulty: 'easy' },
+  problem: { id: 'problem-1', title: 'Two Sum', difficulty: 'easy' as const },
   language: 'python' as const,
   duration: 3600,
   participants: [
@@ -75,16 +75,19 @@ const LIST_RESULT = {
   pagination: { nextCursor: null, hasMore: false },
 };
 
-const SNAPSHOTS_RESULT = [
-  {
-    snapshotId: 'snapshot-1',
-    timestamp: new Date('2026-04-01T00:10:00Z'),
-    trigger: 'phase_change' as const,
-    language: 'python' as const,
-    code: 'print("hello")',
-    linesOfCode: 1,
-  },
-];
+const SNAPSHOTS_RESULT = {
+  data: [
+    {
+      snapshotId: 'snapshot-1',
+      timestamp: new Date('2026-04-01T00:10:00Z'),
+      trigger: 'phase_change' as const,
+      language: 'python' as const,
+      code: 'print("hello")',
+      linesOfCode: 1,
+    },
+  ],
+  pagination: { nextCursor: null, hasMore: false },
+};
 
 const REPORT_RESULT = {
   sessionId: 'session-1',
@@ -177,10 +180,13 @@ describe('SessionsController', () => {
   });
 
   describe('listSnapshots', () => {
-    it('GIVEN code snapshots WHEN listing THEN serializes timestamps to ISO strings', async () => {
+    it('GIVEN code snapshots WHEN listing THEN serializes timestamps and includes pagination', async () => {
       const { controller } = createFixture();
 
-      const result = await controller.listSnapshots(AUTH_USER, 'session-1');
+      const result = await controller.listSnapshots(AUTH_USER, 'session-1', {
+        limit: 50,
+        sortOrder: 'asc',
+      });
 
       expect(result).toEqual({
         data: [
@@ -193,6 +199,7 @@ describe('SessionsController', () => {
             linesOfCode: 1,
           },
         ],
+        pagination: { nextCursor: null, hasMore: false },
       });
     });
   });

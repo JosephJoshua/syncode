@@ -378,6 +378,11 @@ describe('getSession', () => {
     expect(result.hasReport).toBe(true);
     expect(result.hasFeedback).toBe(true);
     expect(result.hasRecording).toBe(true);
+    expect(result.report).toMatchObject({
+      overallScore: 80,
+      categoryScores: { problemSolving: 80, communication: 80 },
+      feedback: 'Good job',
+    });
 
     // Only terminal runs/submissions
     expect(result.runs).toHaveLength(1);
@@ -490,20 +495,65 @@ describe('listSnapshots', () => {
       createdAt: new Date('2026-04-18T10:01:00.000Z'),
     });
 
-    const result = await service.listSnapshots(session.id, user.id, false);
+    const result = await service.listSnapshots(session.id, user.id, false, {
+      limit: 50,
+      sortOrder: 'asc',
+    });
 
-    expect(result).toHaveLength(3);
-    expect(result.map((snapshot) => snapshot.trigger)).toEqual([
+    expect(result.data).toHaveLength(3);
+    expect(result.data.map((snapshot) => snapshot.trigger)).toEqual([
       'submission',
       'phase_change',
       'periodic',
     ]);
-    expect(result.map((snapshot) => snapshot.code)).toEqual([
+    expect(result.data.map((snapshot) => snapshot.code)).toEqual([
       'print("first")',
       'print("middle")',
       'print("later")',
     ]);
-    expect(result[2]?.linesOfCode).toBe(1);
+    expect(result.data[2]?.linesOfCode).toBe(1);
+    expect(result.pagination).toEqual({ nextCursor: null, hasMore: false });
+  });
+
+  it('GIVEN snapshots exceed limit WHEN listing THEN returns next cursor for follow-up page', async () => {
+    const user = await insertUser(db);
+    const room = await insertRoom(db, user.id);
+    const session = await insertSession(db, room.id, {
+      status: 'ongoing',
+      language: 'python',
+    });
+    await insertSessionParticipant(db, session.id, user.id);
+
+    for (let i = 0; i < 3; i += 1) {
+      await insertCodeSnapshot(db, {
+        sessionId: session.id,
+        roomId: room.id,
+        code: `print("${i}")`,
+        language: 'python',
+        trigger: 'periodic',
+        linesOfCode: 1,
+        createdAt: new Date(Date.UTC(2026, 3, 18, 10, i, 0)),
+      });
+    }
+
+    const firstPage = await service.listSnapshots(session.id, user.id, false, {
+      limit: 2,
+      sortOrder: 'asc',
+    });
+
+    expect(firstPage.data).toHaveLength(2);
+    expect(firstPage.pagination.hasMore).toBe(true);
+    expect(firstPage.pagination.nextCursor).not.toBeNull();
+
+    const secondPage = await service.listSnapshots(session.id, user.id, false, {
+      limit: 2,
+      sortOrder: 'asc',
+      cursor: firstPage.pagination.nextCursor ?? undefined,
+    });
+
+    expect(secondPage.data).toHaveLength(1);
+    expect(secondPage.pagination.hasMore).toBe(false);
+    expect(secondPage.pagination.nextCursor).toBeNull();
   });
 
   it('GIVEN non-participant WHEN listing snapshots THEN throws ForbiddenException', async () => {
@@ -521,9 +571,9 @@ describe('listSnapshots', () => {
       linesOfCode: 1,
     });
 
-    await expect(service.listSnapshots(session.id, stranger.id, false)).rejects.toThrow(
-      ForbiddenException,
-    );
+    await expect(
+      service.listSnapshots(session.id, stranger.id, false, { limit: 50, sortOrder: 'asc' }),
+    ).rejects.toThrow(ForbiddenException);
   });
 
   it('GIVEN soft-deleted session WHEN listing snapshots THEN throws NotFoundException', async () => {
@@ -533,7 +583,9 @@ describe('listSnapshots', () => {
     await insertSessionParticipant(db, session.id, user.id);
     await insertSessionDeletion(db, session.id, user.id);
 
-    await expect(service.listSnapshots(session.id, user.id, false)).rejects.toMatchObject({
+    await expect(
+      service.listSnapshots(session.id, user.id, false, { limit: 50, sortOrder: 'asc' }),
+    ).rejects.toMatchObject({
       response: { code: ERROR_CODES.SESSION_NOT_FOUND },
     });
   });
