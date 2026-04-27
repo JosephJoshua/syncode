@@ -64,6 +64,20 @@
       "when": 1776622913755,
       "tag": "0008_nice_menace",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1777318676644,
+      "tag": "0006_room_doc_snapshots_backfill",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1777328736868,
+      "tag": "0009_room_participants_compat",
+      "breakpoints": true
     }
   ]
 }
