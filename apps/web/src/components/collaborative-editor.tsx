@@ -617,14 +617,188 @@ export function CollaborativeEditor({
   }, [awareness, doc.clientID, editorRoot]);
 
   return (
-    <Editor
-      height="100%"
-      language={language}
-      theme="syncode-dark"
-      beforeMount={handleEditorWillMount}
-      onMount={handleMount}
-      options={editorOptions}
-      loading={EDITOR_LOADING}
-    />
+    <div className="relative h-full">
+      <Editor
+        height="100%"
+        language={language}
+        theme="syncode-dark"
+        beforeMount={handleEditorWillMount}
+        onMount={handleMount}
+        options={editorOptions}
+        loading={EDITOR_LOADING}
+      />
+
+      <div className="pointer-events-none absolute inset-0 z-10">
+        {commentGlyphOverlays.map((marker) => (
+          <button
+            key={marker.lineNumber}
+            type="button"
+            onClick={() => {
+              setSelectedLine(marker.lineNumber);
+              setComposerLine(null);
+              setComposerDraft('');
+              setThreadLine((previous) =>
+                previous === marker.lineNumber ? null : marker.lineNumber,
+              );
+              (editor as unknown as EditorLike | null)?.focus();
+            }}
+            className={cn(
+              'pointer-events-auto absolute grid size-[14px] place-items-center rounded-full border text-[8px] font-bold leading-none shadow-sm transition-all',
+              marker.isExpanded
+                ? 'border-emerald-300/80 bg-emerald-400/40 text-emerald-100 shadow-emerald-500/30'
+                : 'border-emerald-400/55 bg-emerald-500/20 text-emerald-200 hover:bg-emerald-500/30',
+            )}
+            style={{
+              top: marker.top,
+              left: marker.left,
+            }}
+            aria-label={t('workspace.inlineCommentsOnLine', { count: 1, line: marker.lineNumber })}
+            title={t('workspace.inlineCommentsOnLine', { count: 1, line: marker.lineNumber })}
+          >
+            {marker.isExpanded ? '▾' : '▸'}
+          </button>
+        ))}
+
+        {canAddComments && selectedLineOverlay ? (
+          <button
+            type="button"
+            onClick={() => {
+              setThreadLine(null);
+              setComposerLine(selectedLine);
+              setComposerDraft('');
+              (editor as unknown as EditorLike | null)?.focus();
+            }}
+            className="pointer-events-auto absolute flex size-5 items-center justify-center rounded-full border border-emerald-400/50 bg-background/95 text-emerald-300 shadow-sm shadow-black/40 transition-colors hover:border-emerald-300 hover:bg-emerald-500/15"
+            style={{
+              top: selectedLineOverlay.top + Math.max(selectedLineOverlay.height / 2 - 10, 0),
+              left: selectedLineOverlay.glyphLeft + (commentLineSet.has(selectedLine) ? 18 : 0),
+            }}
+            aria-label={t('workspace.addComment')}
+            title={t('workspace.addComment')}
+          >
+            <Plus className="size-3" />
+          </button>
+        ) : null}
+
+        {composerOverlay ? (
+          <div
+            className="pointer-events-auto absolute w-[min(24rem,calc(100%-1rem))] rounded-lg border border-border bg-card/95 p-2.5 shadow-lg shadow-black/35 backdrop-blur"
+            style={{
+              top: composerOverlay.top + composerOverlay.height + 6,
+              left: composerOverlay.left,
+            }}
+          >
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                {t('workspace.selectedLine', { line: composerOverlay.lineNumber })}
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setComposerLine(null);
+                  setComposerDraft('');
+                }}
+                className="rounded p-1 text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+                aria-label={t('workspace.cancel')}
+                title={t('workspace.cancel')}
+              >
+                <X className="size-3" />
+              </button>
+            </div>
+            <textarea
+              value={composerDraft}
+              onChange={(event) => setComposerDraft(event.target.value)}
+              rows={3}
+              placeholder={t('workspace.inlineCommentsPlaceholder', {
+                line: composerOverlay.lineNumber,
+              })}
+              className="w-full resize-none rounded-md border border-border/70 bg-background/70 px-2 py-1.5 text-xs text-foreground outline-none placeholder:text-muted-foreground/65"
+              onKeyDown={(event) => {
+                if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+                  event.preventDefault();
+                  submitComment();
+                }
+              }}
+            />
+            <div className="mt-2 flex justify-end gap-1.5">
+              <button
+                type="button"
+                onClick={() => {
+                  setComposerLine(null);
+                  setComposerDraft('');
+                }}
+                className="rounded border border-border/70 px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+              >
+                {t('workspace.cancel')}
+              </button>
+              <button
+                type="button"
+                onClick={submitComment}
+                disabled={composerDraft.trim().length === 0}
+                className={cn(
+                  'rounded border px-2 py-1 text-xs transition-colors',
+                  composerDraft.trim().length === 0
+                    ? 'cursor-not-allowed border-border/60 text-muted-foreground/50'
+                    : 'border-emerald-400/50 bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25',
+                )}
+              >
+                {t('workspace.addComment')}
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        {threadOverlay && threadComments.length > 0 ? (
+          <div
+            className="pointer-events-auto absolute w-[min(26rem,calc(100%-1rem))] rounded-lg border border-emerald-400/30 bg-card/95 p-2.5 shadow-lg shadow-black/35 backdrop-blur"
+            style={{
+              top: threadOverlay.top + threadOverlay.height + 6,
+              left: threadOverlay.left,
+            }}
+          >
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <div className="flex min-w-0 items-center gap-1.5">
+                <MessageCircle className="size-3 text-emerald-300" />
+                <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                  {t('workspace.inlineCommentsOnLine', {
+                    count: threadComments.length,
+                    line: threadOverlay.lineNumber,
+                  })}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setThreadLine(null)}
+                className="rounded p-1 text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+                aria-label={t('workspace.cancel')}
+                title={t('workspace.cancel')}
+              >
+                <X className="size-3" />
+              </button>
+            </div>
+            <div className="max-h-60 space-y-2 overflow-y-auto pr-0.5">
+              {threadComments.map((comment) => (
+                <div
+                  key={comment.id}
+                  className="rounded-md border border-border/60 bg-background/55 px-2.5 py-2"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="truncate text-xs font-medium text-foreground">
+                      {comment.authorName}
+                    </span>
+                    <span className="shrink-0 font-mono text-[10px] text-muted-foreground/70">
+                      {formatTime(comment.createdAt)}
+                    </span>
+                  </div>
+                  <p className="mt-1 whitespace-pre-wrap text-xs text-muted-foreground">
+                    {comment.content}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </div>
   );
 }
