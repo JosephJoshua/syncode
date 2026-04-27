@@ -1,5 +1,6 @@
 import type { DestroyDocumentResponse, RoleAssignmentReason, RoomConfig } from '@syncode/contracts';
 import type {
+  ProblemDifficulty,
   RoomCapability,
   RoomMode,
   RoomRole,
@@ -29,6 +30,23 @@ export interface RoomSummaryResult extends RoomBaseResult {
   myRole: RoomRole;
   problemTitle: string | null;
   participantCount: number;
+}
+
+export interface PublicRoomSummaryResult {
+  roomId: string;
+  name: string | null;
+  status: RoomStatus;
+  mode: RoomMode;
+  hostId: string;
+  hostName: string;
+  hostAvatarUrl: string | null;
+  language: SupportedLanguage | null;
+  problemTitle: string | null;
+  problemDifficulty: ProblemDifficulty | null;
+  participantCount: number;
+  isParticipant: boolean;
+  maxParticipants: number;
+  createdAt: Date;
 }
 
 export interface ParticipantResult {

@@ -1,4 +1,4 @@
-import type { INestApplication } from '@nestjs/common';
+import { UnauthorizedException } from '@nestjs/common';
 import type request from 'supertest';
 import { vi } from 'vitest';
 
@@ -22,10 +22,12 @@ export function createMockConfigService(overrides: Record<string, unknown> = {})
 export class TestAuthGuard {
   canActivate(context: any) {
     const req = context.switchToHttp().getRequest();
-    req.user = {
-      id: req.headers['x-test-user-id'],
-      email: req.headers['x-test-user-email'],
-    };
+    const id = req.headers['x-test-user-id'];
+    const email = req.headers['x-test-user-email'];
+    if (!id || !email) {
+      throw new UnauthorizedException({ message: 'Unauthorized' });
+    }
+    req.user = { id, email };
     return true;
   }
 }
@@ -36,12 +38,15 @@ export function asUser(agent: request.Test, user: { id: string; email: string })
 
 export function createMockCollabClient() {
   return {
-    createDocument: vi.fn().mockResolvedValue({ roomId: 'stub', createdAt: Date.now() }),
+    createDocument: vi
+      .fn()
+      .mockResolvedValue({ roomId: 'stub', createdAt: Date.now(), created: true }),
     destroyDocument: vi.fn().mockResolvedValue({ roomId: 'stub', finalSnapshot: undefined }),
     kickUser: vi.fn(),
     updateRoomState: vi.fn().mockResolvedValue({ success: true }),
     broadcastParticipantReady: vi.fn().mockResolvedValue({ success: true }),
-    healthCheck: vi.fn(),
+    changeLanguage: vi.fn().mockResolvedValue({ success: true }),
+    healthCheck: vi.fn().mockResolvedValue(true),
   };
 }
 

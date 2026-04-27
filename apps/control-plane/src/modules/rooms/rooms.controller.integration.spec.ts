@@ -119,6 +119,99 @@ describe('GET /rooms', () => {
   });
 });
 
+describe('GET /rooms/public', () => {
+  it('GIVEN one public and one private waiting room WHEN fetching with auth THEN returns only the public room', async () => {
+    const host = await insertUser(db);
+    const caller = await insertUser(db);
+    const publicRoom = await insertRoom(db, host.id, {
+      isPrivate: false,
+      status: 'waiting',
+    });
+    await insertParticipant(db, publicRoom.id, host.id, 'interviewer');
+    const privateRoom = await insertRoom(db, host.id, {
+      isPrivate: true,
+      status: 'waiting',
+    });
+    await insertParticipant(db, privateRoom.id, host.id, 'interviewer');
+
+    const res = await asUser(request(app.getHttpServer()).get('/rooms/public'), caller).expect(200);
+
+    expect(res.body.data).toHaveLength(1);
+    expect(res.body.data[0].roomId).toBe(publicRoom.id);
+    expect(res.body.data[0].createdAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(res.body.pagination).toEqual({ nextCursor: null, hasMore: false });
+  });
+
+  it('GIVEN unauthenticated request WHEN fetching public rooms THEN returns 401', async () => {
+    await request(app.getHttpServer()).get('/rooms/public').expect(401);
+  });
+
+  it('GIVEN easy and hard problem rooms WHEN filtering by difficulty=easy THEN hard-difficulty rooms are excluded', async () => {
+    const host = await insertUser(db);
+    const caller = await insertUser(db);
+    const easyProblem = await insertProblem(db, { difficulty: 'easy' });
+    const hardProblem = await insertProblem(db, { difficulty: 'hard' });
+    const easyRoom = await insertRoom(db, host.id, {
+      isPrivate: false,
+      status: 'waiting',
+      problemId: easyProblem.id,
+    });
+    await insertParticipant(db, easyRoom.id, host.id, 'interviewer');
+    const hardRoom = await insertRoom(db, host.id, {
+      isPrivate: false,
+      status: 'waiting',
+      problemId: hardProblem.id,
+    });
+    await insertParticipant(db, hardRoom.id, host.id, 'interviewer');
+
+    const res = await asUser(
+      request(app.getHttpServer()).get('/rooms/public').query({ difficulty: 'easy' }),
+      caller,
+    ).expect(200);
+
+    expect(res.body.data).toHaveLength(1);
+    expect(res.body.data[0].roomId).toBe(easyRoom.id);
+    expect(res.body.data[0].problemDifficulty).toBe('easy');
+  });
+
+  it('GIVEN a room linked to "Two Sum" WHEN searching case-insensitively THEN it is returned', async () => {
+    const host = await insertUser(db);
+    const caller = await insertUser(db);
+    const twoSum = await insertProblem(db, { title: 'Two Sum' });
+    const merge = await insertProblem(db, { title: 'Merge Intervals' });
+    const twoSumRoom = await insertRoom(db, host.id, {
+      isPrivate: false,
+      status: 'waiting',
+      problemId: twoSum.id,
+    });
+    await insertParticipant(db, twoSumRoom.id, host.id, 'interviewer');
+    const mergeRoom = await insertRoom(db, host.id, {
+      isPrivate: false,
+      status: 'waiting',
+      problemId: merge.id,
+    });
+    await insertParticipant(db, mergeRoom.id, host.id, 'interviewer');
+
+    const res = await asUser(
+      request(app.getHttpServer()).get('/rooms/public').query({ search: 'two' }),
+      caller,
+    ).expect(200);
+
+    expect(res.body.data).toHaveLength(1);
+    expect(res.body.data[0].roomId).toBe(twoSumRoom.id);
+    expect(res.body.data[0].problemTitle).toBe('Two Sum');
+  });
+
+  it('GIVEN invalid status filter WHEN fetching public rooms THEN returns 400', async () => {
+    const caller = await insertUser(db);
+
+    await asUser(
+      request(app.getHttpServer()).get('/rooms/public').query({ status: 'not-a-real-status' }),
+      caller,
+    ).expect(400);
+  });
+});
+
 describe('GET /rooms/:id', () => {
   it('GIVEN user is participant WHEN getting room THEN returns detail with ISO timestamps on participants', async () => {
     const user = await insertUser(db);
@@ -191,14 +284,16 @@ describe('POST /rooms/:id/join', () => {
       .expect(404);
   });
 
-  it('GIVEN user already a participant WHEN joining THEN returns 409', async () => {
+  it('GIVEN user already a participant WHEN joining THEN 200 with current role (idempotent)', async () => {
     const user = await insertUser(db);
     const room = await insertRoom(db, user.id, { maxParticipants: 4 });
     await insertParticipant(db, room.id, user.id, 'interviewer');
 
-    await asUser(request(app.getHttpServer()).post(`/rooms/${room.id}/join`), user)
+    const res = await asUser(request(app.getHttpServer()).post(`/rooms/${room.id}/join`), user)
       .send({ roomCode: room.inviteCode })
-      .expect(409);
+      .expect(200);
+
+    expect(res.body.assignedRole).toBe('interviewer');
   });
 });
 
@@ -250,13 +345,66 @@ describe('PATCH /rooms/:id/participants/:participantUserId', () => {
   });
 });
 
+describe('DELETE /rooms/:id/participants/:userId', () => {
+  it('GIVEN host WHEN removing another participant THEN returns 204', async () => {
+    const host = await insertUser(db);
+    const target = await insertUser(db);
+    const room = await insertRoom(db, host.id);
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+    await insertParticipant(db, room.id, target.id, 'candidate');
+
+    await asUser(
+      request(app.getHttpServer()).delete(`/rooms/${room.id}/participants/${target.id}`),
+      host,
+    ).expect(204);
+  });
+
+  it('GIVEN non-host WHEN removing a participant THEN returns 403', async () => {
+    const host = await insertUser(db);
+    const other = await insertUser(db);
+    const target = await insertUser(db);
+    const room = await insertRoom(db, host.id);
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+    await insertParticipant(db, room.id, other.id, 'observer');
+    await insertParticipant(db, room.id, target.id, 'candidate');
+
+    await asUser(
+      request(app.getHttpServer()).delete(`/rooms/${room.id}/participants/${target.id}`),
+      other,
+    ).expect(403);
+  });
+
+  it('GIVEN host removing self WHEN requesting THEN returns 400', async () => {
+    const host = await insertUser(db);
+    const room = await insertRoom(db, host.id);
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+
+    await asUser(
+      request(app.getHttpServer()).delete(`/rooms/${room.id}/participants/${host.id}`),
+      host,
+    ).expect(400);
+  });
+
+  it('GIVEN target participant missing WHEN removing THEN returns 404', async () => {
+    const host = await insertUser(db);
+    const ghost = await insertUser(db);
+    const room = await insertRoom(db, host.id);
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+
+    await asUser(
+      request(app.getHttpServer()).delete(`/rooms/${room.id}/participants/${ghost.id}`),
+      host,
+    ).expect(404);
+  });
+});
+
 describe('POST /rooms/:id/control/transition', () => {
   it('GIVEN valid next phase WHEN transitioning THEN returns ISO timestamp with updated statuses', async () => {
     const host = await insertUser(db);
     const candidate = await insertUser(db);
     const room = await insertRoom(db, host.id);
-    await insertParticipant(db, room.id, host.id, 'interviewer');
-    await insertParticipant(db, room.id, candidate.id, 'candidate');
+    await insertParticipant(db, room.id, host.id, 'interviewer', { isReady: true });
+    await insertParticipant(db, room.id, candidate.id, 'candidate', { isReady: true });
 
     const res = await asUser(
       request(app.getHttpServer()).post(`/rooms/${room.id}/control/transition`),
@@ -433,5 +581,71 @@ describe('POST /rooms/:id/media/token', () => {
     ).expect(200);
 
     expect(res.body.token).toBe('lk-candidate-token');
+  });
+});
+
+describe('PATCH /rooms/:id/language', () => {
+  it('GIVEN a candidate member WHEN PATCH THEN 200 with updated detail (language in response body matches input)', async () => {
+    const host = await insertUser(db);
+    const candidate = await insertUser(db);
+    const room = await insertRoom(db, host.id, { status: 'coding', language: 'python' });
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+    await insertParticipant(db, room.id, candidate.id, 'candidate');
+
+    const res = await asUser(
+      request(app.getHttpServer()).patch(`/rooms/${room.id}/language`),
+      candidate,
+    )
+      .send({ language: 'javascript' })
+      .expect(200);
+
+    expect(res.body.language).toBe('javascript');
+    expect(res.body.roomId).toBe(room.id);
+  });
+
+  it('GIVEN an observer member WHEN PATCH THEN 403', async () => {
+    const host = await insertUser(db);
+    const observer = await insertUser(db);
+    const candidate = await insertUser(db);
+    const room = await insertRoom(db, host.id, { status: 'coding', language: 'python' });
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+    await insertParticipant(db, room.id, candidate.id, 'candidate');
+    await insertParticipant(db, room.id, observer.id, 'observer');
+
+    await asUser(request(app.getHttpServer()).patch(`/rooms/${room.id}/language`), observer)
+      .send({ language: 'javascript' })
+      .expect(403);
+  });
+
+  it('GIVEN invalid language in body WHEN PATCH THEN 400', async () => {
+    const host = await insertUser(db);
+    const room = await insertRoom(db, host.id, { status: 'coding', language: 'python' });
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+
+    await asUser(request(app.getHttpServer()).patch(`/rooms/${room.id}/language`), host)
+      .send({ language: 'brainfuck' })
+      .expect(400);
+  });
+
+  it('GIVEN non-member WHEN PATCH THEN 403', async () => {
+    const host = await insertUser(db);
+    const stranger = await insertUser(db);
+    const room = await insertRoom(db, host.id, { status: 'coding', language: 'python' });
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+
+    await asUser(request(app.getHttpServer()).patch(`/rooms/${room.id}/language`), stranger)
+      .send({ language: 'javascript' })
+      .expect(403);
+  });
+
+  it('GIVEN unauthenticated WHEN PATCH THEN 401', async () => {
+    const host = await insertUser(db);
+    const room = await insertRoom(db, host.id, { status: 'coding', language: 'python' });
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+
+    await request(app.getHttpServer())
+      .patch(`/rooms/${room.id}/language`)
+      .send({ language: 'javascript' })
+      .expect(401);
   });
 });

@@ -11,6 +11,49 @@
   "button": {
     "createRoom": "Create Room"
   },
+  "tabs": {
+    "ariaLabel": "Rooms sections",
+    "myRooms": "My rooms",
+    "browse": "Browse"
+  },
+  "layout": {
+    "sub": "Manage your rooms and drop into open interview lobbies."
+  },
+  "browse": {
+    "heading": "Public Rooms",
+    "subheading": "Drop into an open interview room and practice with someone already online.",
+    "resultCount_one": "{{count}} room matches",
+    "resultCount_other": "{{count}} rooms match",
+    "filters": {
+      "search": "Search rooms, problems, or hosts",
+      "language": "Language",
+      "languageAll": "Any language",
+      "clearLanguage": "Clear language filter",
+      "difficulty": "Difficulty",
+      "difficultyAll": "Any",
+      "status": "Status",
+      "statusAll": "All statuses"
+    },
+    "card": {
+      "participantFraction": "{{current}} / {{max}}",
+      "hostedBy": "Hosted by {{name}}",
+      "unknownProblem": "No problem selected",
+      "join": "Join room",
+      "enter": "Enter",
+      "alreadyJoined": "You're in this room"
+    },
+    "emptyState": {
+      "title": "Nothing on air right now",
+      "subtitle": "Public rooms come and go. Create your own, or loosen your filters to see more.",
+      "createRoom": "Start a new room",
+      "clearFilters": "Clear filters"
+    },
+    "loadMore": "Load more rooms",
+    "loading": "Tuning into the lobby…",
+    "joinSuccess": "Joined room. Taking you there now.",
+    "joinFailed": "Couldn't join this room. It may be full or no longer public.",
+    "joinRemoved": "You've been removed from this room."
+  },
   "join": {
     "heading": "Join a Room",
     "description": "Paste an invite link from your partner to join their workspace.",
@@ -58,6 +101,14 @@
     "noLanguagesAvailable": "No languages available",
     "publicRoom": "Public Room",
     "publicRoomDescription": "Anyone with the link can join directly",
+    "maxParticipantsLabel": "Max participants",
+    "maxParticipantsHelp": "2 for one-on-one, up to 8 to allow observers.",
+    "modeLabel": "Session Mode",
+    "modePeer": "Peer interview",
+    "modePeerDesc": "Practice live with another person as interviewer or candidate.",
+    "modeAi": "AI interviewer",
+    "modeAiDesc": "An AI plays the interviewer. Solo practice, anytime.",
+    "modeAiUnavailable": "Coming soon",
     "button": "Create Collaborative Room",
     "provisioning": "Provisioning Workspace...",
     "noMatchingProblems": "No matching problems",
@@ -68,6 +119,10 @@
     "details": "Selected Workspace Details",
     "provisioned": "Room Provisioned Successfully!",
     "shareLink": "Share this invite link with collaborators:",
+    "publicShareHeading": "Your room is live on the public board.",
+    "publicShareBody": "People can find and join it from Browse, or use this link for a direct jump.",
+    "privateShareHeading": "Share this invite link with collaborators",
+    "privateShareBody": "Only people with this link and code can join your private room.",
     "setupNew": "Setup New Room",
     "enterWorkspace": "Enter Workspace",
     "publicAccess": "Public Access",
@@ -101,7 +156,29 @@
     "editorLocked": "Editor locked",
     "editorUnlocked": "Editor unlocked",
     "awaitingController": "Waiting for the host or current interviewer to open the workspace.",
-    "readyFailed": "Failed to update ready status."
+    "readyFailed": "Failed to update ready status.",
+    "removedFromRoom": "You have been removed from this room by the host.",
+    "participantsNotReady": "All participants must be ready before starting."
+  },
+  "lobbyPreview": {
+    "title": "Check your camera and mic",
+    "devices": "Devices",
+    "camera": "Camera",
+    "microphone": "Microphone",
+    "cameraOff": "Camera is off",
+    "cameraOffAction": "Turn on camera",
+    "cameraOnAction": "Turn off camera",
+    "micOffAction": "Turn on mic",
+    "micOnAction": "Turn off mic",
+    "cameraDenied": "Camera access was denied.",
+    "cameraUnavailable": "Camera unavailable.",
+    "micDenied": "Microphone access was denied.",
+    "micUnavailable": "Microphone unavailable.",
+    "noCameras": "No cameras detected.",
+    "noMicrophones": "No microphones detected.",
+    "noiseSuppression": "Noise suppression",
+    "echoCancel": "Echo cancel",
+    "permissionHelp": "Enable camera and microphone in your browser settings, then try again."
   },
   "roleSelect": {
     "heading": "Your Role",
@@ -134,7 +211,8 @@
     "unlocked": "Unlocked",
     "lockToggle": "Toggle editor lock",
     "viewOnly": "Stage ownership belongs to the host or current interviewer.",
-    "awaitingController": "You can watch the stage here, but only the host or current interviewer can move it."
+    "awaitingController": "You can watch the stage here, but only the host or current interviewer can move it.",
+    "awaitingReady": "Waiting for all required participants to be ready."
   },
   "stage": {
     "waiting": "AWAITING_PEERS",
@@ -197,6 +275,8 @@
     "emptyStderr": "(no stderr)",
     "participantsHeading": "Participants",
     "participantActions": "Participant actions",
+    "muteMyMicrophone": "Mute my microphone",
+    "unmuteMyMicrophone": "Unmute my microphone",
     "transferOwnership": "Make host",
     "removeParticipant": "Remove participant",
     "removeParticipantTitle": "Remove Participant",
@@ -238,6 +318,11 @@
     "phaseChanged": "Phase changed to {{phase}}",
     "sessionHeading": "Session",
     "remoteRunning": "{{name}} is running code...",
-    "remoteSubmitting": "{{name}} is submitting..."
+    "remoteSubmitting": "{{name}} is submitting...",
+    "languagePickerLabel": "Language",
+    "languagePickerPlaceholder": "Select a language",
+    "languageChangeFailed": "Failed to change the language.",
+    "noStarterForLanguage": "No starter code for {{language}} — starting with a blank editor.",
+    "rolesLocked": "Roles are locked once the session starts."
   }
 }

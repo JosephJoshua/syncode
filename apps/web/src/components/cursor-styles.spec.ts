@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildCursorCssRules } from './cursor-styles.js';
+import { buildCursorCssRules, HOVER_TRANSPARENT_OPACITY } from './cursor-styles.js';
 
 describe('buildCursorCssRules', () => {
   it('GIVEN remote user with valid hex color THEN generates selection, cursor, and label CSS rules', () => {
@@ -58,7 +58,6 @@ describe('buildCursorCssRules', () => {
 
     const labelRule = rules.find((r) => r.includes('::after'));
     expect(labelRule).toBeDefined();
-    // Quotes, semicolons, and braces are stripped — CSS injection neutralized
     expect(labelRule).not.toContain('"; }');
     expect(labelRule).not.toContain('{ color');
   });
@@ -102,5 +101,64 @@ describe('buildCursorCssRules', () => {
     expect(rules).toHaveLength(8);
     expect(rules.some((r) => r.includes('yRemoteSelection-2'))).toBe(true);
     expect(rules.some((r) => r.includes('yRemoteSelection-3'))).toBe(true);
+  });
+
+  it('GIVEN base cursor rules THEN include an opacity transition so idle fade animates', () => {
+    const states = new Map<number, Record<string, unknown>>([
+      [2, { user: { name: 'A', color: '#ff0000' } }],
+    ]);
+
+    const rules = buildCursorCssRules(states, 1);
+
+    const headRule = rules.find(
+      (r) => r.includes('.yRemoteSelectionHead-2 {') && !r.includes('::'),
+    );
+    expect(headRule).toBeDefined();
+    expect(headRule).toContain('transition: opacity');
+  });
+
+  it('GIVEN a client id in idleClientIds THEN emits an opacity: 0 rule for that client', () => {
+    const states = new Map<number, Record<string, unknown>>([
+      [2, { user: { name: 'A', color: '#ff0000' } }],
+      [3, { user: { name: 'B', color: '#00ff00' } }],
+    ]);
+
+    const rules = buildCursorCssRules(states, 1, { idleClientIds: new Set([2]) });
+
+    const idleRule = rules.find(
+      (r) => r.includes('opacity: 0') && r.includes('yRemoteSelection-2'),
+    );
+    expect(idleRule).toBeDefined();
+    expect(rules.some((r) => r.includes('yRemoteSelection-3') && r.includes('opacity: 0'))).toBe(
+      false,
+    );
+  });
+
+  it('GIVEN a client id in transparentClientIds THEN emits a reduced-opacity rule', () => {
+    const states = new Map<number, Record<string, unknown>>([
+      [2, { user: { name: 'A', color: '#ff0000' } }],
+    ]);
+
+    const rules = buildCursorCssRules(states, 1, { transparentClientIds: new Set([2]) });
+
+    const hoverRule = rules.find(
+      (r) =>
+        r.includes(`opacity: ${HOVER_TRANSPARENT_OPACITY}`) && r.includes('yRemoteSelection-2'),
+    );
+    expect(hoverRule).toBeDefined();
+  });
+
+  it('GIVEN a client id is both idle and transparent THEN idle wins (fully hidden)', () => {
+    const states = new Map<number, Record<string, unknown>>([
+      [2, { user: { name: 'A', color: '#ff0000' } }],
+    ]);
+
+    const rules = buildCursorCssRules(states, 1, {
+      idleClientIds: new Set([2]),
+      transparentClientIds: new Set([2]),
+    });
+
+    expect(rules.some((r) => r.includes('opacity: 0') && !r.includes('0.'))).toBe(true);
+    expect(rules.some((r) => r.includes(`opacity: ${HOVER_TRANSPARENT_OPACITY}`))).toBe(false);
   });
 });

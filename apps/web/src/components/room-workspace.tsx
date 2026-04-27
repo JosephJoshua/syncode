@@ -33,12 +33,15 @@ import type * as Y from 'yjs';
 import { useSharedExecution } from '@/hooks/use-shared-execution.js';
 import type { CollabConnectionStatus } from '@/hooks/use-yjs-collab.js';
 import { api, readApiError, resolveErrorMessage } from '@/lib/api-client.js';
+import { allRequiredPeersReady } from '@/lib/participant-readiness.js';
 import { buildInviteLink } from '@/lib/room-stage.js';
-import { CODE_TEXT_KEY } from '@/lib/yjs-collab-provider.js';
+import { codeTextKey } from '@/lib/yjs-collab-provider.js';
 import { CollaborativeEditor } from './collaborative-editor.js';
 import { ExecutionDetailsPanel } from './execution-details-panel.js';
 import { HostControlPanel } from './host-control-panel.js';
 import { InviteLinkInline } from './invite-link-inline.js';
+import { LanguagePicker } from './language-picker.js';
+import { LANGUAGE_VERSIONED_LABELS } from './language-selector.data.js';
 import { RoomHeaderBar } from './room-header-bar.js';
 import { type Participant, RoomParticipantCard } from './room-participant-card.js';
 import { type ProblemData, RoomProblemPanel } from './room-problem-panel.js';
@@ -73,6 +76,7 @@ interface RoomWorkspaceProps {
   onTransition: (targetStatus: RoomStatus) => Promise<void>;
   onLockEditor: () => void;
   onUnlockEditor: () => void;
+  onRoomUpdated: (room: RoomDetail) => void;
   onParticipantRoleChange: (userId: string, role: RoomRole) => Promise<void>;
   onTransferOwnership: (userId: string, displayName: string) => void;
   onRemoveParticipant: (userId: string, displayName: string) => void;
@@ -94,6 +98,8 @@ interface RoomWorkspaceProps {
     muteSet: ReadonlySet<string>;
     videoHiddenSet: ReadonlySet<string>;
   };
+  selfMicrophoneEnabled?: boolean;
+  onSelfMicrophoneToggle?: () => void;
   dockedVideoPanel?: React.ReactNode;
 }
 
@@ -110,6 +116,7 @@ export function RoomWorkspace({
   onTransition,
   onLockEditor,
   onUnlockEditor,
+  onRoomUpdated,
   onParticipantRoleChange,
   onTransferOwnership,
   onRemoveParticipant,
@@ -124,6 +131,8 @@ export function RoomWorkspace({
   mediaMutedMap,
   connectionQualityMap,
   participantMediaControls,
+  selfMicrophoneEnabled,
+  onSelfMicrophoneToggle,
   dockedVideoPanel,
 }: RoomWorkspaceProps) {
   const { t } = useTranslation('rooms');
@@ -131,6 +140,11 @@ export function RoomWorkspace({
   const { remoteRun, remoteSubmit, broadcastRun, broadcastSubmit } = useSharedExecution(
     awareness,
     doc,
+  );
+
+  const allRequiredReady = useMemo(
+    () => allRequiredPeersReady(room.participants, room.mode),
+    [room.participants, room.mode],
   );
 
   const [problem, setProblem] = useState<ProblemDetail | null>(null);
@@ -213,6 +227,27 @@ export function RoomWorkspace({
     };
   }, []);
 
+  const handleLanguageChanged = useCallback(
+    (updated: RoomDetail) => {
+      const previousLanguage = room.language;
+      const nextLanguage = updated.language;
+      if (
+        nextLanguage &&
+        nextLanguage !== previousLanguage &&
+        problem &&
+        !problem.starterCode?.[nextLanguage]
+      ) {
+        toast.info(
+          t('workspace.noStarterForLanguage', {
+            language: LANGUAGE_VERSIONED_LABELS[nextLanguage],
+          }),
+        );
+      }
+      onRoomUpdated(updated);
+    },
+    [onRoomUpdated, problem, room.language, t],
+  );
+
   const amHost = Boolean(currentUserId && room.hostId === currentUserId);
   const canChangePhase = room.myCapabilities.includes('room:change-phase');
   const canControlEditorLock = canChangePhase;
@@ -267,8 +302,8 @@ export function RoomWorkspace({
   const submitDisabled = !canSubmitCode || isEditorReadOnly || isSubmitBusy || isRemoteSubmitActive;
 
   const getCode = useCallback(() => {
-    return doc?.getText(CODE_TEXT_KEY).toString() ?? '';
-  }, [doc]);
+    return doc?.getText(codeTextKey(language)).toString() ?? '';
+  }, [doc, language]);
 
   const handleRunCode = async () => {
     if (testCases.length === 0) return;
@@ -642,9 +677,13 @@ export function RoomWorkspace({
                     ) : null}
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground/50">
-                      {language}
-                    </span>
+                    <LanguagePicker
+                      roomId={roomId}
+                      currentLanguage={room.language}
+                      myCapabilities={room.myCapabilities}
+                      onLanguageChanged={handleLanguageChanged}
+                      className="h-7 min-w-[8rem]"
+                    />
                     <Button
                       type="button"
                       size="sm"
@@ -867,6 +906,7 @@ export function RoomWorkspace({
                     isPending={isTransitioning}
                     isLockingEditor={isLockingEditor}
                     isUnlockingEditor={isUnlockingEditor}
+                    allRequiredReady={allRequiredReady}
                     onTransition={(targetStatus) => {
                       void onTransition(targetStatus);
                     }}
@@ -918,6 +958,8 @@ export function RoomWorkspace({
                         participantMediaControls?.videoHiddenSet.has(participant.userId) ?? false
                       }
                       localVolume={participantMediaControls?.volumeMap.get(participant.userId)}
+                      isSelfMicrophoneEnabled={selfMicrophoneEnabled}
+                      onSelfMicrophoneToggle={onSelfMicrophoneToggle}
                       onLocalMuteToggle={
                         participantMediaControls
                           ? (muted) => participantMediaControls.setMuted(participant.userId, muted)

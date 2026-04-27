@@ -2,13 +2,21 @@ import { defineRoute } from '../route-utils.js';
 
 export interface CreateDocumentRequest {
   roomId: string;
-  initialContent?: string;
+  initialContentByLanguage?: Record<string, string>;
+  initialLanguage?: string;
   initialPhase?: string;
   editorLocked?: boolean;
+  /**
+   * Binary Y.Doc update (as number[] for JSON transport). When present, the collab-plane
+   * applies it to the fresh doc instead of seeding from `initialContent`.
+   */
+  snapshot?: number[];
 }
 export interface CreateDocumentResponse {
   roomId: string;
   createdAt: number;
+  /** True if this call actually created a new doc; false if one already existed. */
+  created: boolean;
 }
 
 export interface DestroyDocumentResponse {
@@ -44,6 +52,16 @@ export interface BroadcastParticipantReadyResponse {
   success: boolean;
 }
 
+export interface ChangeLanguageRequest {
+  roomId: string;
+  language: string;
+  changedBy?: string;
+}
+
+export interface ChangeLanguageResponse {
+  success: boolean;
+}
+
 export const COLLAB_INTERNAL = {
   CREATE_DOCUMENT: defineRoute<CreateDocumentRequest, CreateDocumentResponse>()(
     'internal/documents',
@@ -65,5 +83,9 @@ export const COLLAB_INTERNAL = {
     BroadcastParticipantReadyRequest,
     BroadcastParticipantReadyResponse
   >()('internal/documents/:roomId/participant-ready', 'POST'),
+  CHANGE_LANGUAGE: defineRoute<ChangeLanguageRequest, ChangeLanguageResponse>()(
+    'internal/documents/:roomId/language',
+    'POST',
+  ),
   HEALTH: defineRoute<void, { status: 'ok' }>()('internal/health', 'GET'),
 };

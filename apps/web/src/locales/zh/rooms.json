@@ -11,6 +11,49 @@
   "button": {
     "createRoom": "创建房间"
   },
+  "tabs": {
+    "ariaLabel": "房间分区",
+    "myRooms": "我的房间",
+    "browse": "浏览"
+  },
+  "layout": {
+    "sub": "管理你的房间，或加入开放的面试大厅。"
+  },
+  "browse": {
+    "heading": "公开房间",
+    "subheading": "加入一个开放的面试房间，和正在线上的伙伴一起练习。",
+    "resultCount_one": "匹配到 {{count}} 个房间",
+    "resultCount_other": "匹配到 {{count}} 个房间",
+    "filters": {
+      "search": "搜索房间、题目或主持人",
+      "language": "语言",
+      "languageAll": "全部语言",
+      "clearLanguage": "清除语言筛选",
+      "difficulty": "难度",
+      "difficultyAll": "全部",
+      "status": "状态",
+      "statusAll": "全部状态"
+    },
+    "card": {
+      "participantFraction": "{{current}} / {{max}}",
+      "hostedBy": "主持人 {{name}}",
+      "unknownProblem": "未选择题目",
+      "join": "加入房间",
+      "enter": "进入",
+      "alreadyJoined": "你已加入"
+    },
+    "emptyState": {
+      "title": "当前没有进行中的房间",
+      "subtitle": "公开房间随时变化。创建你自己的，或放宽筛选条件试试。",
+      "createRoom": "创建新房间",
+      "clearFilters": "清除筛选"
+    },
+    "loadMore": "加载更多房间",
+    "loading": "正在连接大厅…",
+    "joinSuccess": "加入成功，正在进入房间。",
+    "joinFailed": "无法加入该房间。可能房间已满或不再公开。",
+    "joinRemoved": "你已被移出该房间。"
+  },
   "join": {
     "heading": "加入房间",
     "description": "将搭档分享的邀请链接粘贴到下方即可加入。",
@@ -58,6 +101,14 @@
     "noLanguagesAvailable": "无可用语言",
     "publicRoom": "公开房间",
     "publicRoomDescription": "任何拥有链接的人都可以直接加入",
+    "maxParticipantsLabel": "最大参与者",
+    "maxParticipantsHelp": "2 人适合一对一，最多 8 人可容纳观察者。",
+    "modeLabel": "会话模式",
+    "modePeer": "真人面试",
+    "modePeerDesc": "与另一位搭档以面试官或候选人的身份实时练习。",
+    "modeAi": "AI 面试官",
+    "modeAiDesc": "由 AI 扮演面试官，随时可进行单人练习。",
+    "modeAiUnavailable": "即将推出",
     "button": "创建协作房间",
     "provisioning": "正在配置工作区...",
     "noMatchingProblems": "没有匹配的题目",
@@ -68,6 +119,10 @@
     "details": "工作区详情",
     "provisioned": "房间创建成功！",
     "shareLink": "将此邀请链接分享给协作者：",
+    "publicShareHeading": "你的房间已发布到公开大厅。",
+    "publicShareBody": "其他人可在「浏览」中找到并加入，或直接使用此链接进入。",
+    "privateShareHeading": "将此邀请链接分享给协作者",
+    "privateShareBody": "只有持有此链接与邀请码的人才能加入你的私密房间。",
     "setupNew": "创建新房间",
     "enterWorkspace": "进入工作区",
     "publicAccess": "公开访问",
@@ -101,7 +156,29 @@
     "editorLocked": "编辑器已锁定",
     "editorUnlocked": "编辑器未锁定",
     "awaitingController": "等待主持人或当前面试官打开工作区。",
-    "readyFailed": "更新准备状态失败。"
+    "readyFailed": "更新准备状态失败。",
+    "removedFromRoom": "您已被房主移出此房间。",
+    "participantsNotReady": "需所有参与者准备就绪后才能开始。"
+  },
+  "lobbyPreview": {
+    "title": "检查摄像头和麦克风",
+    "devices": "设备",
+    "camera": "摄像头",
+    "microphone": "麦克风",
+    "cameraOff": "摄像头已关闭",
+    "cameraOffAction": "打开摄像头",
+    "cameraOnAction": "关闭摄像头",
+    "micOffAction": "打开麦克风",
+    "micOnAction": "关闭麦克风",
+    "cameraDenied": "摄像头访问被拒绝。",
+    "cameraUnavailable": "摄像头不可用。",
+    "micDenied": "麦克风访问被拒绝。",
+    "micUnavailable": "麦克风不可用。",
+    "noCameras": "未检测到摄像头。",
+    "noMicrophones": "未检测到麦克风。",
+    "noiseSuppression": "降噪",
+    "echoCancel": "回声消除",
+    "permissionHelp": "请在浏览器设置中允许摄像头和麦克风访问，然后重试。"
   },
   "roleSelect": {
     "heading": "你的角色",
@@ -134,7 +211,8 @@
     "unlocked": "未锁定",
     "lockToggle": "切换编辑器锁定",
     "viewOnly": "只有主持人或当前面试官可以推进阶段。",
-    "awaitingController": "你可以查看当前阶段，但只有主持人或当前面试官可以推进。"
+    "awaitingController": "你可以查看当前阶段，但只有主持人或当前面试官可以推进。",
+    "awaitingReady": "等待所有必需的参与者准备就绪。"
   },
   "stage": {
     "waiting": "等待同步",
@@ -197,6 +275,8 @@
     "emptyStderr": "（无 stderr）",
     "participantsHeading": "参与者",
     "participantActions": "参与者操作",
+    "muteMyMicrophone": "静音我的麦克风",
+    "unmuteMyMicrophone": "取消静音我的麦克风",
     "transferOwnership": "转移主持人",
     "removeParticipant": "移除参与者",
     "removeParticipantTitle": "移除参与者",
@@ -238,6 +318,11 @@
     "phaseChanged": "阶段已切换至{{phase}}",
     "sessionHeading": "会话",
     "remoteRunning": "{{name}} 正在运行代码...",
-    "remoteSubmitting": "{{name}} 正在提交..."
+    "remoteSubmitting": "{{name}} 正在提交...",
+    "languagePickerLabel": "语言",
+    "languagePickerPlaceholder": "选择语言",
+    "languageChangeFailed": "切换语言失败。",
+    "noStarterForLanguage": "{{language}} 没有起始代码——编辑器已清空。",
+    "rolesLocked": "会话开始后角色已锁定。"
   }
 }
