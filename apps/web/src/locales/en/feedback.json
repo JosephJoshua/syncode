@@ -79,120 +79,57 @@
     "description": "Participants, metadata, and activity from this finished session.",
     "sessionId": "Session ID",
     "role": "Role",
-    "mode": "Mode",
-    "language": "Language",
-    "difficulty": "Difficulty",
-    "date": "Completed At",
-    "duration": "Duration",
-    "generatedAt": "Report Generated",
-    "activity": "Session Activity",
-    "runs": "Runs",
-    "submissions": "Submissions",
-    "report": "Report",
-    "feedbackStatus": "Peer Feedback",
-    "recording": "Recording",
-    "available": "Available",
-    "unavailable": "Unavailable",
-    "pending": "Still generating",
-    "unknown": "Unknown"
+    "date": "Date",
+    "duration": "Duration"
   },
-  "participants": {
-    "heading": "Participants",
-    "description": "{{count}} participants were involved in this session.",
-    "you": "You",
-    "joinedAt": "Joined",
-    "leftAt": "Left",
-    "leftAtMissing": "No leave timestamp"
-  },
-  "comparison": {
-    "trend": "Trend",
-    "sessionsCompared": "Sessions Compared",
-    "averageScore": "Average Score"
-  },
-  "trend": {
-    "improving": "Improving",
-    "stable": "Stable",
-    "declining": "Declining"
-  },
-  "peerFeedback": {
-    "averageRating": "Average Rating",
-    "wouldPairAgain": "Would Pair Again",
-    "themes": "Themes",
-    "none": "No themes"
-  },
-  "peerFeedbackSection": {
-    "loading": "Loading peer feedback…",
-    "error": "Peer feedback could not be loaded right now.",
-    "retry": "Retry peer feedback",
-    "statusHeading": "Status",
-    "awaitingResponses": "Waiting for all responses",
-    "hiddenUntilSubmitted": "Peer feedback will be available once all participants submit.",
-    "empty": "No peer feedback available for this session.",
-    "feedbackFrom": "Feedback from {{name}}",
-    "ratingsPanel": "Ratings",
-    "summaryPanel": "Overall",
-    "wouldPairAgain": "Would Pair Again",
-    "wouldNotPairAgain": "Would Not Pair Again",
-    "strengths": "Strengths",
-    "improvements": "Areas for Improvement",
-    "submittedAt": "Submitted",
-    "ratings": {
-      "problemSolving": "Problem Solving",
+  "form": {
+    "title": "Peer Evaluation",
+    "description": "Score your partner's interview performance and leave actionable written feedback.",
+    "field": {
+      "candidate": "Feedback target",
+      "strengths": "What went well",
+      "improvements": "What to improve",
+      "wouldPairAgain": "Pairing preference"
+    },
+    "hint": {
+      "candidate": "Choose the participant this evaluation is for.",
+      "strengths": "Call out concrete behaviors, explanations, or implementation choices that helped.",
+      "improvements": "Share specific next steps for the next interview practice."
+    },
+    "placeholder": {
+      "candidate": "Select a participant",
+      "strengths": "They clarified assumptions before coding and explained tradeoffs clearly.",
+      "improvements": "They could narrate edge cases earlier and keep variable names more consistent."
+    },
+    "rating": {
+      "problemSolving": "Problem-solving",
       "communication": "Communication",
-      "codeQuality": "Code Quality",
+      "codeQuality": "Code quality",
       "debugging": "Debugging",
       "overall": "Overall"
-    }
-  },
-  "breakdown": {
-    "emptyDescription": "No final test-case breakdown was available for this session.",
-    "caseLabel": "Test Case {{index}}",
-    "pass": "Passed",
-    "failed": "Did not pass",
-    "timeout": "Timed out",
-    "error": "Execution error",
-    "passDescription": "The final submission passed this test case.",
-    "failDescription": "The final submission did not fully satisfy this test case."
-  },
-  "snapshots": {
-    "emptyDescription": "No code snapshots were available for this session yet.",
-    "errorDescription": "The report loaded, but the code snapshot history could not be fetched right now.",
-    "retry": "Retry snapshots",
-    "snapshotLabel": "Snapshot {{index}}",
-    "showAll": "Show all {{count}} snapshots",
-    "showLatest": "Show latest 3 only",
-    "hiddenCount": "{{count}} earlier snapshots are hidden by default.",
-    "showHistory": "Show all {{count}} snapshots",
-    "hideHistory": "Hide snapshot history",
-    "collapsedDescription": "Snapshot history is collapsed by default to keep the report focused.",
-    "loc": "{{count}} LOC",
-    "noCode": "// No code captured in this snapshot.",
-    "trigger": {
-      "periodic": "Periodic",
-      "phase_change": "Phase change",
-      "submission": "Submission",
-      "manual": "Manual",
-      "session_end": "Session end"
-    }
-  },
-  "role": {
-    "candidate": "Candidate",
-    "interviewer": "Interviewer",
-    "observer": "Observer"
-  },
-  "mode": {
-    "peer": "Peer Interview",
-    "ai": "AI Interview"
-  },
-  "timeline": {
-    "showCode": "Show code",
-    "hideCode": "Hide code",
-    "events": {
-      "sessionStart": "Session started",
-      "phase_change": "Phase changed",
-      "submission": "Code submitted",
-      "manual": "Manual snapshot",
-      "session_end": "Session ended"
+    },
+    "ratingHint": {
+      "problemSolving": "Approach, decomposition, and edge-case reasoning.",
+      "communication": "Clarity, collaboration, and interview narration.",
+      "codeQuality": "Readability, structure, and maintainability.",
+      "debugging": "Ability to inspect failures and adapt quickly.",
+      "overall": "Your holistic evaluation of the session."
+    },
+    "ratingAria": "{{label}} rating {{rating}} out of 5",
+    "option": {
+      "pairAgainYes": "Would pair again",
+      "pairAgainNo": "Would not pair again"
+    },
+    "button": {
+      "submit": "Submit feedback",
+      "submitting": "Submitting..."
+    },
+    "validation": {
+      "candidateRequired": "Choose who this feedback is for.",
+      "ratingRequired": "Pick a rating from 1 to 5.",
+      "strengthsRequired": "Add at least one strength.",
+      "improvementsRequired": "Add at least one improvement.",
+      "textMaxLength": "Keep feedback under 2000 characters."
     }
   }
 }

@@ -41,6 +41,9 @@ export interface SessionDetailResult {
   participants: SessionDetailParticipantResult[];
   runs: SessionRunResult[];
   submissions: SessionSubmissionResult[];
+  report: SessionReportResult | null;
+  latestCodeSnapshot: SessionLatestCodeSnapshotResult | null;
+  peerFeedback: SessionPeerFeedbackResult[];
   hasReport: boolean;
   hasFeedback: boolean;
   hasRecording: boolean;
@@ -78,4 +81,39 @@ export interface SessionCodeSnapshotResult {
   language: SupportedLanguage;
   code: string;
   linesOfCode: number;
+}
+
+export interface SessionReportResult {
+  overallScore: number;
+  categoryScores: Record<string, number>;
+  strengths: string[];
+  areasForImprovement: string[];
+  feedback: string | null;
+  generatedAt: Date;
+}
+
+export interface SessionLatestCodeSnapshotResult {
+  id: string;
+  code: string;
+  language: SupportedLanguage;
+  trigger: string;
+  linesOfCode: number | null;
+  createdAt: Date;
+}
+
+export interface SessionPeerFeedbackResult {
+  id: string;
+  reviewerId: string;
+  reviewerName: string;
+  candidateId: string;
+  candidateName: string;
+  problemSolvingRating: number;
+  communicationRating: number;
+  codeQualityRating: number;
+  debuggingRating: number;
+  overallRating: number;
+  strengths: string;
+  improvements: string;
+  wouldPairAgain: boolean;
+  createdAt: Date;
 }
