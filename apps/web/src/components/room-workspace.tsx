@@ -780,80 +780,25 @@ export function RoomWorkspace({
             {/* Thin drag handle between editor and bottom panel */}
             <ResizableHandle className="h-1 bg-border transition-colors hover:bg-primary/40 active:bg-primary/60" />
 
-            {/* Bottom panel: test cases + output + results */}
-            <ResizablePanel
-              panelRef={bottomPanelRef}
-              defaultSize={35}
-              minSize={8}
-              collapsible
-              collapsedSize={0}
-              onResize={() => setBottomCollapsed(bottomPanelRef.current?.isCollapsed() ?? false)}
-            >
-              <div className="flex h-full flex-col bg-card">
-                {/* Integrated tab bar */}
-                <div className="flex h-8 shrink-0 items-center border-b border-border">
-                  <button
-                    type="button"
-                    onClick={() => setActiveBottomTab('testcases')}
-                    className={tabClassName(activeBottomTab === 'testcases')}
-                  >
-                    <TerminalSquare className="size-3" />
-                    {t('workspace.inputLabel')}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActiveBottomTab('output')}
-                    className={tabClassName(activeBottomTab === 'output')}
-                  >
-                    <TerminalSquare className="size-3" />
-                    {t('workspace.outputTab')}
-                  </button>
-                  {canSubmitCode ? (
-                    <button
-                      type="button"
-                      onClick={() => setActiveBottomTab('results')}
-                      className={tabClassName(activeBottomTab === 'results')}
-                    >
-                      <CheckCircle2 className="size-3" />
-                      {t('workspace.resultsTab')}
-                      {isSubmitBusy ? (
-                        <Loader2 className="size-2.5 animate-spin text-primary" />
-                      ) : null}
-                    </button>
-                  ) : null}
-                  <button
-                    type="button"
-                    onClick={() => bottomPanelRef.current?.collapse()}
-                    className="ml-auto mr-2 flex items-center text-muted-foreground/40 transition-colors hover:text-foreground"
-                  >
-                    <ChevronDown size={14} />
-                  </button>
-                </div>
-
-                {/* Tab content */}
-                <div className="relative flex-1 overflow-auto bg-background p-3">
-                  {activeBottomTab === 'testcases' ? (
-                    <TestCaseEditor
-                      cases={testCases}
-                      activeCaseId={activeCaseId}
-                      onActiveCaseChange={setActiveCaseId}
-                      onCaseInputChange={handleCaseInputChange}
-                      onAddCase={handleAddCase}
-                      onRemoveCase={handleRemoveCase}
-                      readOnly={isEditorReadOnly}
-                    />
-                  ) : activeBottomTab === 'output' ? (
-                    <RunResultsPanel
-                      multiRunState={multiRunState}
-                      cases={testCases}
-                      onRunCase={handleRunSingleCase}
-                    />
-                  ) : (
-                    <SubmissionOutput submitState={submitState} />
-                  )}
-                </div>
-              </div>
-            </ResizablePanel>
+            <WorkspaceBottomPanel
+              bottomPanelRef={bottomPanelRef}
+              setBottomCollapsed={setBottomCollapsed}
+              activeBottomTab={activeBottomTab}
+              setActiveBottomTab={setActiveBottomTab}
+              testCases={testCases}
+              activeCaseId={activeCaseId}
+              setActiveCaseId={setActiveCaseId}
+              handleCaseInputChange={handleCaseInputChange}
+              handleAddCase={handleAddCase}
+              handleRemoveCase={handleRemoveCase}
+              isEditorReadOnly={isEditorReadOnly}
+              multiRunState={multiRunState}
+              handleRunSingleCase={handleRunSingleCase}
+              submitState={submitState}
+              canSubmitCode={canSubmitCode}
+              isSubmitBusy={isSubmitBusy}
+              t={t}
+            />
           </ResizablePanelGroup>
         </ResizablePanel>
 
@@ -1030,6 +975,116 @@ export function RoomWorkspace({
 }
 
 type ExecutionPollResponse = ExecutionResultResponse | JobStatusResponse;
+
+function WorkspaceBottomPanel({
+  bottomPanelRef,
+  setBottomCollapsed,
+  activeBottomTab,
+  setActiveBottomTab,
+  testCases,
+  activeCaseId,
+  setActiveCaseId,
+  handleCaseInputChange,
+  handleAddCase,
+  handleRemoveCase,
+  isEditorReadOnly,
+  multiRunState,
+  handleRunSingleCase,
+  submitState,
+  canSubmitCode,
+  isSubmitBusy,
+  t,
+}: {
+  bottomPanelRef: ReturnType<typeof usePanelRef>;
+  setBottomCollapsed: (collapsed: boolean) => void;
+  activeBottomTab: 'testcases' | 'output' | 'results';
+  setActiveBottomTab: (tab: 'testcases' | 'output' | 'results') => void;
+  testCases: TestCaseEntry[];
+  activeCaseId: string;
+  setActiveCaseId: (id: string) => void;
+  handleCaseInputChange: (id: string, input: string) => void;
+  handleAddCase: () => void;
+  handleRemoveCase: (id: string) => void;
+  isEditorReadOnly: boolean;
+  multiRunState: MultiRunState;
+  handleRunSingleCase: (id: string) => void;
+  submitState: SubmitState;
+  canSubmitCode: boolean;
+  isSubmitBusy: boolean;
+  t: (key: string) => string;
+}) {
+  return (
+    <ResizablePanel
+      panelRef={bottomPanelRef}
+      defaultSize={35}
+      minSize={8}
+      collapsible
+      collapsedSize={0}
+      onResize={() => setBottomCollapsed(bottomPanelRef.current?.isCollapsed() ?? false)}
+    >
+      <div className="flex h-full flex-col bg-card">
+        <div className="flex h-8 shrink-0 items-center border-b border-border">
+          <button
+            type="button"
+            onClick={() => setActiveBottomTab('testcases')}
+            className={tabClassName(activeBottomTab === 'testcases')}
+          >
+            <TerminalSquare className="size-3" />
+            {t('workspace.inputLabel')}
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveBottomTab('output')}
+            className={tabClassName(activeBottomTab === 'output')}
+          >
+            <TerminalSquare className="size-3" />
+            {t('workspace.outputTab')}
+          </button>
+          {canSubmitCode ? (
+            <button
+              type="button"
+              onClick={() => setActiveBottomTab('results')}
+              className={tabClassName(activeBottomTab === 'results')}
+            >
+              <CheckCircle2 className="size-3" />
+              {t('workspace.resultsTab')}
+              {isSubmitBusy ? <Loader2 className="size-2.5 animate-spin text-primary" /> : null}
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => bottomPanelRef.current?.collapse()}
+            className="ml-auto mr-2 flex items-center text-muted-foreground/40 transition-colors hover:text-foreground"
+          >
+            <ChevronDown size={14} />
+          </button>
+        </div>
+
+        <div className="relative flex-1 overflow-auto bg-background p-3">
+          {activeBottomTab === 'testcases' ? (
+            <TestCaseEditor
+              cases={testCases}
+              activeCaseId={activeCaseId}
+              onActiveCaseChange={setActiveCaseId}
+              onCaseInputChange={handleCaseInputChange}
+              onAddCase={handleAddCase}
+              onRemoveCase={handleRemoveCase}
+              readOnly={isEditorReadOnly}
+            />
+          ) : activeBottomTab === 'output' ? (
+            <RunResultsPanel
+              multiRunState={multiRunState}
+              cases={testCases}
+              onRunCase={handleRunSingleCase}
+            />
+          ) : (
+            <SubmissionOutput submitState={submitState} />
+          )}
+        </div>
+      </div>
+    </ResizablePanel>
+  );
+}
 
 function isExecutionResultPayload(
   response: ExecutionPollResponse,
