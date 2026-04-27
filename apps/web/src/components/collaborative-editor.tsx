@@ -1,8 +1,12 @@
 import Editor, { type OnMount } from '@monaco-editor/react';
+import { cn } from '@syncode/ui';
+import { MessageCircle, Plus, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { MonacoBinding } from 'y-monaco';
 import type { Awareness } from 'y-protocols/awareness';
 import type * as Y from 'yjs';
+import type { InlineComment } from '@/lib/inline-comments.js';
 import { clientIdFromElement, remoteCursorSelector } from '@/lib/remote-cursor-dom.js';
 import { codeTextKey } from '@/lib/yjs-collab-provider.js';
 import { buildCursorCssRules, IDLE_HIDE_MS } from './cursor-styles.js';
@@ -17,11 +21,16 @@ interface CollaborativeEditorProps {
   awareness: Awareness;
   language: string;
   readOnly: boolean;
-  commentLineNumbers: number[];
-  activeCommentLine: number | null;
+  comments?: InlineComment[];
+  commentLineNumbers?: number[];
+  canAddComments?: boolean;
+  onAddComment?: (lineNumber: number, content: string) => void;
   onRunCode: () => void;
   onSubmitCode: () => void;
-  onActiveLineChange: (lineNumber: number) => void;
+}
+
+interface DisposableLike {
+  dispose: () => void;
 }
 
 interface EditorLike {
@@ -33,9 +42,25 @@ interface EditorLike {
   }) => void;
   getModel: () => object | null;
   getPosition: () => { lineNumber: number } | null;
+  getDomNode: () => HTMLElement | null;
+  focus: () => void;
   onDidChangeCursorPosition: (
     listener: (event: { position: { lineNumber: number } }) => void,
-  ) => void;
+  ) => DisposableLike;
+  onDidScrollChange: (listener: () => void) => DisposableLike;
+  onDidLayoutChange: (listener: () => void) => DisposableLike;
+  onDidChangeModelContent: (listener: () => void) => DisposableLike;
+  onMouseDown: (listener: (event: EditorMouseEventLike) => void) => DisposableLike;
+  getVisibleRanges: () => Array<{ startLineNumber: number; endLineNumber: number }>;
+  getLayoutInfo: () => {
+    glyphMarginLeft: number;
+    glyphMarginWidth: number;
+    contentLeft: number;
+  };
+  getScrolledVisiblePosition: (position: {
+    lineNumber: number;
+    column: number;
+  }) => { top: number; left: number; height: number } | null;
   deltaDecorations: (
     oldDecorations: string[],
     newDecorations: Array<{
@@ -50,6 +75,15 @@ interface EditorLike {
   ) => string[];
 }
 
+interface EditorMouseEventLike {
+  target: {
+    type: number;
+    position?: {
+      lineNumber: number;
+    } | null;
+  };
+}
+
 interface MonacoLike {
   KeyMod: {
     CtrlCmd: number;
@@ -58,6 +92,11 @@ interface MonacoLike {
   KeyCode: {
     Enter: number;
   };
+  editor: {
+    MouseTargetType: {
+      GUTTER_GLYPH_MARGIN: number;
+    };
+  };
 }
 
 export function CollaborativeEditor({
@@ -65,28 +104,69 @@ export function CollaborativeEditor({
   awareness,
   language,
   readOnly,
-  commentLineNumbers,
-  activeCommentLine,
+  comments = [],
+  commentLineNumbers = [],
+  canAddComments = false,
+  onAddComment = () => {},
   onRunCode,
   onSubmitCode,
-  onActiveLineChange,
 }: CollaborativeEditorProps) {
+  const { t } = useTranslation('rooms');
   const bindingRef = useRef<MonacoBinding | null>(null);
   type EditorInstance = Parameters<OnMount>[0];
   const [editor, setEditor] = useState<EditorInstance | null>(null);
   const [editorRoot, setEditorRoot] = useState<HTMLElement | null>(null);
+  const [selectedLine, setSelectedLine] = useState(1);
+  const [composerLine, setComposerLine] = useState<number | null>(null);
+  const [composerDraft, setComposerDraft] = useState('');
+  const [threadLine, setThreadLine] = useState<number | null>(null);
+  const [overlayVersion, setOverlayVersion] = useState(0);
+
+  const monacoRef = useRef<MonacoLike | null>(null);
   const decorationIdsRef = useRef<string[]>([]);
   const onRunCodeRef = useRef(onRunCode);
   onRunCodeRef.current = onRunCode;
   const onSubmitCodeRef = useRef(onSubmitCode);
   onSubmitCodeRef.current = onSubmitCode;
-  const onActiveLineChangeRef = useRef(onActiveLineChange);
-  onActiveLineChangeRef.current = onActiveLineChange;
+  const onAddCommentRef = useRef(onAddComment);
+  onAddCommentRef.current = onAddComment;
 
   const editorOptions = useMemo(() => ({ ...EDITOR_OPTIONS_BASE, readOnly }), [readOnly]);
 
+  const commentsByLine = useMemo(() => {
+    const map = new Map<number, InlineComment[]>();
+    for (const comment of comments) {
+      const list = map.get(comment.lineNumber) ?? [];
+      list.push(comment);
+      map.set(comment.lineNumber, list);
+    }
+    return map;
+  }, [comments]);
+
+  const commentLineSet = useMemo(
+    () =>
+      new Set(
+        commentLineNumbers
+          .filter((lineNumber) => Number.isFinite(lineNumber) && lineNumber > 0)
+          .map((lineNumber) => Math.floor(lineNumber)),
+      ),
+    [commentLineNumbers],
+  );
+
+  useEffect(() => {
+    if (threadLine == null) {
+      return;
+    }
+
+    if (!commentLineSet.has(threadLine)) {
+      setThreadLine(null);
+    }
+  }, [threadLine, commentLineSet]);
+
   const handleMount: OnMount = (editorInstance, monaco) => {
     const monacoApi = monaco as unknown as MonacoLike;
+    const editorApi = editorInstance as unknown as EditorLike;
+    monacoRef.current = monacoApi;
 
     // Register keyboard shortcuts
     editorInstance.addAction({
@@ -103,13 +183,9 @@ export function CollaborativeEditor({
       run: () => void onSubmitCodeRef.current(),
     });
 
-    onActiveLineChangeRef.current(editorInstance.getPosition()?.lineNumber ?? 1);
-    editorInstance.onDidChangeCursorPosition((event) => {
-      onActiveLineChangeRef.current(event.position.lineNumber);
-    });
-
+    setSelectedLine(editorApi.getPosition()?.lineNumber ?? 1);
     setEditor(editorInstance);
-    setEditorRoot(editorInstance.getDomNode());
+    setEditorRoot(editorApi.getDomNode());
   };
 
   useEffect(() => {
@@ -125,41 +201,282 @@ export function CollaborativeEditor({
     return () => {
       bindingRef.current?.destroy();
       bindingRef.current = null;
-      decorationIdsRef.current = editor.deltaDecorations(decorationIdsRef.current, []);
     };
   }, [editor, doc, awareness, language]);
+
+  useEffect(() => {
+    if (!editor || !monacoRef.current) {
+      return;
+    }
+
+    const editorApi = editor as unknown as EditorLike;
+    const mouseTargetType = monacoRef.current.editor.MouseTargetType;
+
+    const cursorDisposable = editorApi.onDidChangeCursorPosition((event) => {
+      setSelectedLine(event.position.lineNumber);
+    });
+
+    const mouseDisposable = editorApi.onMouseDown((event) => {
+      const lineNumber = event.target.position?.lineNumber;
+      if (!lineNumber) {
+        return;
+      }
+
+      setSelectedLine(lineNumber);
+
+      if (
+        event.target.type === mouseTargetType.GUTTER_GLYPH_MARGIN &&
+        commentLineSet.has(lineNumber)
+      ) {
+        setComposerLine(null);
+        setComposerDraft('');
+        setThreadLine((previous) => (previous === lineNumber ? null : lineNumber));
+      }
+    });
+
+    return () => {
+      cursorDisposable.dispose();
+      mouseDisposable.dispose();
+    };
+  }, [editor, commentLineSet]);
 
   useEffect(() => {
     if (!editor) {
       return;
     }
 
-    const uniqueLines = [...new Set(commentLineNumbers)]
-      .filter((lineNumber) => Number.isFinite(lineNumber) && lineNumber > 0)
-      .sort((left, right) => left - right);
+    const uniqueLines = [...commentLineSet].sort((left, right) => left - right);
 
-    const decorations = uniqueLines.map((lineNumber) => ({
-      range: {
-        startLineNumber: lineNumber,
-        startColumn: 1,
-        endLineNumber: lineNumber,
-        endColumn: 1,
-      },
-      options: {
-        isWholeLine: true,
-        className:
-          lineNumber === activeCommentLine ? 'inline-comment-line-active' : 'inline-comment-line',
-        glyphMarginClassName:
-          lineNumber === activeCommentLine ? 'inline-comment-glyph-active' : 'inline-comment-glyph',
-        stickiness: 1,
-      },
-    }));
+    const decorations = uniqueLines.map((lineNumber) => {
+      const isThreadOpen = lineNumber === threadLine;
+      const isActive = isThreadOpen || lineNumber === selectedLine;
 
-    decorationIdsRef.current = (editor as unknown as EditorLike).deltaDecorations(
-      decorationIdsRef.current,
-      decorations,
+      return {
+        range: {
+          startLineNumber: lineNumber,
+          startColumn: 1,
+          endLineNumber: lineNumber,
+          endColumn: 1,
+        },
+        options: {
+          isWholeLine: true,
+          className: isActive ? 'inline-comment-line-active' : 'inline-comment-line',
+          glyphMarginClassName: isThreadOpen
+            ? 'inline-comment-glyph-expanded'
+            : 'inline-comment-glyph-collapsed',
+          stickiness: 1,
+        },
+      };
+    });
+
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) {
+        return;
+      }
+
+      decorationIdsRef.current = (editor as unknown as EditorLike).deltaDecorations(
+        decorationIdsRef.current,
+        decorations,
+      );
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [editor, commentLineSet, selectedLine, threadLine]);
+
+  useEffect(() => {
+    if (!editor) {
+      return;
+    }
+
+    const editorApi = editor as unknown as EditorLike;
+    const bumpOverlay = () => {
+      setOverlayVersion((previous) => previous + 1);
+    };
+
+    const scrollDisposable = editorApi.onDidScrollChange(bumpOverlay);
+    const layoutDisposable = editorApi.onDidLayoutChange(bumpOverlay);
+    const modelDisposable = editorApi.onDidChangeModelContent(bumpOverlay);
+
+    return () => {
+      scrollDisposable.dispose();
+      layoutDisposable.dispose();
+      modelDisposable.dispose();
+    };
+  }, [editor]);
+
+  const selectedLineOverlay = useMemo(() => {
+    void overlayVersion;
+    if (!editor || selectedLine < 1) {
+      return null;
+    }
+
+    const editorApi = editor as unknown as EditorLike;
+    const visibleRanges = editorApi.getVisibleRanges();
+    const isVisible = visibleRanges.some(
+      (range) => selectedLine >= range.startLineNumber && selectedLine <= range.endLineNumber,
     );
-  }, [editor, activeCommentLine, commentLineNumbers]);
+    if (!isVisible) {
+      return null;
+    }
+
+    const linePosition = editorApi.getScrolledVisiblePosition({
+      lineNumber: selectedLine,
+      column: 1,
+    });
+    if (!linePosition) {
+      return null;
+    }
+
+    const layout = editorApi.getLayoutInfo();
+    return {
+      top: linePosition.top,
+      height: linePosition.height,
+      glyphLeft: layout.glyphMarginLeft + Math.max((layout.glyphMarginWidth - 16) / 2, 0),
+      contentLeft: layout.contentLeft + 8,
+    };
+  }, [editor, selectedLine, overlayVersion]);
+
+  const commentGlyphOverlays = useMemo(() => {
+    void overlayVersion;
+    if (!editor || commentLineSet.size === 0) {
+      return [];
+    }
+
+    const editorApi = editor as unknown as EditorLike;
+    const visibleRanges = editorApi.getVisibleRanges();
+    const layout = editorApi.getLayoutInfo();
+    const glyphLeft = layout.glyphMarginLeft + Math.max((layout.glyphMarginWidth - 14) / 2, 0);
+
+    const overlays: Array<{
+      lineNumber: number;
+      top: number;
+      left: number;
+      isExpanded: boolean;
+    }> = [];
+
+    for (const lineNumber of [...commentLineSet].sort((left, right) => left - right)) {
+      const isVisible = visibleRanges.some(
+        (range) => lineNumber >= range.startLineNumber && lineNumber <= range.endLineNumber,
+      );
+      if (!isVisible) {
+        continue;
+      }
+
+      const linePosition = editorApi.getScrolledVisiblePosition({
+        lineNumber,
+        column: 1,
+      });
+      if (!linePosition) {
+        continue;
+      }
+
+      overlays.push({
+        lineNumber,
+        top: linePosition.top + Math.max(linePosition.height / 2 - 7, 0),
+        left: glyphLeft,
+        isExpanded: lineNumber === threadLine,
+      });
+    }
+
+    return overlays;
+  }, [editor, commentLineSet, threadLine, overlayVersion]);
+
+  const composerOverlay = useMemo(() => {
+    void overlayVersion;
+    if (!editor || composerLine == null || composerLine < 1) {
+      return null;
+    }
+
+    const editorApi = editor as unknown as EditorLike;
+    const visibleRanges = editorApi.getVisibleRanges();
+    const isVisible = visibleRanges.some(
+      (range) => composerLine >= range.startLineNumber && composerLine <= range.endLineNumber,
+    );
+    if (!isVisible) {
+      return null;
+    }
+
+    const linePosition = editorApi.getScrolledVisiblePosition({
+      lineNumber: composerLine,
+      column: 1,
+    });
+    if (!linePosition) {
+      return null;
+    }
+
+    const layout = editorApi.getLayoutInfo();
+    return {
+      top: linePosition.top,
+      height: linePosition.height,
+      left: layout.contentLeft + 8,
+      lineNumber: composerLine,
+    };
+  }, [editor, composerLine, overlayVersion]);
+
+  const threadComments = threadLine == null ? [] : (commentsByLine.get(threadLine) ?? []);
+
+  const threadOverlay = useMemo(() => {
+    void overlayVersion;
+    if (!editor || threadLine == null || threadLine < 1) {
+      return null;
+    }
+
+    const editorApi = editor as unknown as EditorLike;
+    const visibleRanges = editorApi.getVisibleRanges();
+    const isVisible = visibleRanges.some(
+      (range) => threadLine >= range.startLineNumber && threadLine <= range.endLineNumber,
+    );
+    if (!isVisible) {
+      return null;
+    }
+
+    const linePosition = editorApi.getScrolledVisiblePosition({
+      lineNumber: threadLine,
+      column: 1,
+    });
+    if (!linePosition) {
+      return null;
+    }
+
+    const layout = editorApi.getLayoutInfo();
+    return {
+      top: linePosition.top,
+      height: linePosition.height,
+      left: layout.contentLeft + 8,
+      lineNumber: threadLine,
+    };
+  }, [editor, threadLine, overlayVersion]);
+
+  const submitComment = () => {
+    if (!canAddComments || composerLine == null) {
+      return;
+    }
+
+    const normalized = composerDraft.trim();
+    if (!normalized) {
+      return;
+    }
+
+    onAddCommentRef.current(composerLine, normalized);
+    setComposerDraft('');
+    setComposerLine(null);
+    setThreadLine(composerLine);
+  };
+
+  const formatTime = (isoTimestamp: string): string => {
+    const timestamp = new Date(isoTimestamp);
+    if (Number.isNaN(timestamp.getTime())) {
+      return '--:--';
+    }
+
+    return new Intl.DateTimeFormat(undefined, {
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(timestamp);
+  };
 
   // Inject dynamic CSS for remote cursor colors from awareness state.
   useEffect(() => {
