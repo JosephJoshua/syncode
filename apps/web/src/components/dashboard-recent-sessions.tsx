@@ -14,6 +14,11 @@ import {
   Card,
   cn,
   Input,
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationNext,
+  PaginationPrevious,
   Select,
   SelectContent,
   SelectItem,
@@ -29,7 +34,7 @@ import {
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { Loader2, Search, Trash2 } from 'lucide-react';
-import { useDeferredValue, useState } from 'react';
+import { useDeferredValue, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { ApiError } from '@/lib/api-client.js';
@@ -50,6 +55,7 @@ import { useAuthStore } from '@/stores/auth.store.js';
 
 type SessionFilter = 'all' | 'passed' | 'failed';
 type SessionSort = 'date-desc' | 'date-asc' | 'score-desc' | 'score-asc' | 'duration-desc';
+const SESSION_HISTORY_PAGE_SIZE = 10;
 
 const SESSION_DATE_FORMAT = new Intl.DateTimeFormat(undefined, {
   year: 'numeric',
@@ -163,6 +169,7 @@ export function DashboardRecentSessions({
   const deferredSearchQuery = useDeferredValue(searchQuery);
   const [filter, setFilter] = useState<SessionFilter>('all');
   const [sortBy, setSortBy] = useState<SessionSort>('date-desc');
+  const [currentPage, setCurrentPage] = useState(1);
   const [pendingDeleteSessionId, setPendingDeleteSessionId] = useState<string | null>(null);
   const sessionHistoryQueryKey = getDashboardSessionHistoryQueryKey(viewerId);
 
@@ -195,9 +202,38 @@ export function DashboardRecentSessions({
       return true;
     })
     .sort((a, b) => compareRows(a, b, sortBy));
+  const totalPages = Math.ceil(filteredRows.length / SESSION_HISTORY_PAGE_SIZE);
 
   const hasBaseRows = baseRows.length > 0;
   const hasVisibleRows = filteredRows.length > 0;
+  // Clamp the page in derived calculations so that a stale currentPage (e.g.
+  // after rows shrink on refresh) doesn't render an empty slice with an
+  // invalid summary range while the useEffect correction is pending.
+  const safeCurrentPage = hasVisibleRows ? Math.min(Math.max(currentPage, 1), totalPages) : 1;
+  const paginatedRows = filteredRows.slice(
+    (safeCurrentPage - 1) * SESSION_HISTORY_PAGE_SIZE,
+    safeCurrentPage * SESSION_HISTORY_PAGE_SIZE,
+  );
+  const hasPreviousPage = safeCurrentPage > 1;
+  const hasNextPage = safeCurrentPage < totalPages;
+  const pageStart = hasVisibleRows ? (safeCurrentPage - 1) * SESSION_HISTORY_PAGE_SIZE + 1 : 0;
+  const pageEnd = hasVisibleRows
+    ? Math.min(safeCurrentPage * SESSION_HISTORY_PAGE_SIZE, filteredRows.length)
+    : 0;
+
+  useEffect(() => {
+    if (!hasVisibleRows) {
+      if (currentPage !== 1) {
+        setCurrentPage(1);
+      }
+
+      return;
+    }
+
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, hasVisibleRows, totalPages]);
 
   const deleteSessionMutation = useMutation<
     void,
@@ -269,13 +305,22 @@ export function DashboardRecentSessions({
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
+              onChange={(event) => {
+                setSearchQuery(event.target.value);
+                setCurrentPage(1);
+              }}
               placeholder={t('search.placeholder')}
               className="h-11 pl-9"
             />
           </div>
 
-          <Select value={filter} onValueChange={(value) => setFilter(value as SessionFilter)}>
+          <Select
+            value={filter}
+            onValueChange={(value) => {
+              setFilter(value as SessionFilter);
+              setCurrentPage(1);
+            }}
+          >
             <SelectTrigger
               className="w-full md:w-42.5 xl:flex-none"
               aria-label={t('aria.filterSessions')}
@@ -289,7 +334,13 @@ export function DashboardRecentSessions({
             </SelectContent>
           </Select>
 
-          <Select value={sortBy} onValueChange={(value) => setSortBy(value as SessionSort)}>
+          <Select
+            value={sortBy}
+            onValueChange={(value) => {
+              setSortBy(value as SessionSort);
+              setCurrentPage(1);
+            }}
+          >
             <SelectTrigger
               className="w-full md:w-57.5 xl:flex-none"
               aria-label={t('aria.sortSessions')}
@@ -341,94 +392,143 @@ export function DashboardRecentSessions({
             ) : null}
           </div>
         ) : hasVisibleRows ? (
-          <Table>
-            <TableHeader>
-              <TableRow className="hover:bg-transparent">
-                <TableHead className="w-35 text-center">{t('table.date')}</TableHead>
-                <TableHead className="min-w-65 text-center">{t('table.problem')}</TableHead>
-                <TableHead className="w-22 text-center">{t('table.partner')}</TableHead>
-                <TableHead className="w-24 text-center">{t('table.observer')}</TableHead>
-                <TableHead className="w-30 text-center">{t('table.role')}</TableHead>
-                <TableHead className="w-30 text-center">{t('table.status')}</TableHead>
-                <TableHead className="w-22.5 text-center">{t('table.score')}</TableHead>
-                <TableHead className="w-25 text-center">{t('table.duration')}</TableHead>
-                <TableHead className="w-20 text-center">{t('table.actions')}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredRows.map((row) => (
-                <TableRow key={row.id}>
-                  <TableCell className="text-muted-foreground">
-                    {formatSessionDate(row.date)}
-                  </TableCell>
-                  <TableCell>
-                    <Link
-                      to="/sessions/$sessionId"
-                      params={{ sessionId: row.id }}
-                      className="block truncate rounded-sm font-medium text-foreground transition-colors hover:text-foreground/85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-                      title={row.problemName}
-                    >
-                      {row.problemName}
-                    </Link>
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <ParticipantAvatar
-                      participant={row.partner}
-                      currentUserInitial={currentUserInitial}
-                    />
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <ParticipantAvatar
-                      participant={row.observer}
-                      currentUserInitial={currentUserInitial}
-                    />
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <Badge variant={getRoleBadgeVariant(row.role)}>{t(`role.${row.role}`)}</Badge>
-                  </TableCell>
-                  <TableCell className="text-center">
-                    {row.role === 'candidate' && row.status ? (
-                      <Badge variant={getStatusBadgeVariant(row.status)}>
-                        {row.status === 'passed' ? t('status.pass') : t('status.failed')}
-                      </Badge>
-                    ) : (
-                      <span className="text-muted-foreground">-</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-center">
-                    {row.role === 'candidate' && typeof row.score === 'number' ? (
-                      <span
-                        className={cn(
-                          'font-medium',
-                          row.status === 'passed' ? 'text-primary' : 'text-amber-400',
-                        )}
-                      >
-                        {row.score}
-                      </span>
-                    ) : (
-                      <span className="text-muted-foreground">-</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-center text-muted-foreground">
-                    {row.durationMinutes}m
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-xs"
-                      aria-label={t('actions.deleteSessionAriaLabel')}
-                      disabled={deleteSessionMutation.isPending || !viewerId}
-                      className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive focus-visible:text-destructive focus-visible:ring-destructive/20"
-                      onClick={() => handleDeleteSessionClick(row.id)}
-                    >
-                      <Trash2 className="size-3.5" />
-                    </Button>
-                  </TableCell>
+          <>
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className="w-35 text-center">{t('table.date')}</TableHead>
+                  <TableHead className="min-w-65 text-center">{t('table.problem')}</TableHead>
+                  <TableHead className="w-22 text-center">{t('table.partner')}</TableHead>
+                  <TableHead className="w-24 text-center">{t('table.observer')}</TableHead>
+                  <TableHead className="w-30 text-center">{t('table.role')}</TableHead>
+                  <TableHead className="w-30 text-center">{t('table.status')}</TableHead>
+                  <TableHead className="w-22.5 text-center">{t('table.score')}</TableHead>
+                  <TableHead className="w-25 text-center">{t('table.duration')}</TableHead>
+                  <TableHead className="w-20 text-center">{t('table.actions')}</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {paginatedRows.map((row) => (
+                  <TableRow key={row.id}>
+                    <TableCell className="text-muted-foreground">
+                      {formatSessionDate(row.date)}
+                    </TableCell>
+                    <TableCell>
+                      <Link
+                        to="/sessions/$sessionId"
+                        params={{ sessionId: row.id }}
+                        className="block truncate rounded-sm font-medium text-foreground transition-colors hover:text-foreground/85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                        title={row.problemName}
+                      >
+                        {row.problemName}
+                      </Link>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <ParticipantAvatar
+                        participant={row.partner}
+                        currentUserInitial={currentUserInitial}
+                      />
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <ParticipantAvatar
+                        participant={row.observer}
+                        currentUserInitial={currentUserInitial}
+                      />
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <Badge variant={getRoleBadgeVariant(row.role)}>{t(`role.${row.role}`)}</Badge>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {row.role === 'candidate' && row.status ? (
+                        <Badge variant={getStatusBadgeVariant(row.status)}>
+                          {row.status === 'passed' ? t('status.pass') : t('status.failed')}
+                        </Badge>
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {row.role === 'candidate' && typeof row.score === 'number' ? (
+                        <span
+                          className={cn(
+                            'font-medium',
+                            row.status === 'passed' ? 'text-primary' : 'text-amber-400',
+                          )}
+                        >
+                          {row.score}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-center text-muted-foreground">
+                      {row.durationMinutes}m
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-xs"
+                        aria-label={t('actions.deleteSessionAriaLabel')}
+                        disabled={deleteSessionMutation.isPending || !viewerId}
+                        className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive focus-visible:text-destructive focus-visible:ring-destructive/20"
+                        onClick={() => handleDeleteSessionClick(row.id)}
+                      >
+                        <Trash2 className="size-3.5" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+
+            {hasVisibleRows ? (
+              <div className="flex flex-col gap-3 border-t border-border/50 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+                <p className="text-sm text-muted-foreground">
+                  {t('pagination.summary', {
+                    start: pageStart,
+                    end: pageEnd,
+                    total: filteredRows.length,
+                  })}
+                </p>
+
+                <Pagination className="justify-end">
+                  <PaginationContent>
+                    <PaginationItem>
+                      <PaginationPrevious
+                        aria-label={t('aria.previousPage')}
+                        disabled={!hasPreviousPage}
+                        onClick={() => {
+                          if (!hasPreviousPage) {
+                            return;
+                          }
+
+                          setCurrentPage((page) => page - 1);
+                        }}
+                      >
+                        {t('pagination.previous')}
+                      </PaginationPrevious>
+                    </PaginationItem>
+                    <PaginationItem>
+                      <PaginationNext
+                        aria-label={t('aria.nextPage')}
+                        disabled={!hasNextPage}
+                        onClick={() => {
+                          if (!hasNextPage) {
+                            return;
+                          }
+
+                          setCurrentPage((page) => page + 1);
+                        }}
+                      >
+                        {t('pagination.next')}
+                      </PaginationNext>
+                    </PaginationItem>
+                  </PaginationContent>
+                </Pagination>
+              </div>
+            ) : null}
+          </>
         ) : (
           <div className="flex min-h-64 flex-col items-center justify-center px-6 py-12 text-center">
             <h3 className="text-lg font-semibold tracking-tight text-foreground">

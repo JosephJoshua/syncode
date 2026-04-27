@@ -108,9 +108,9 @@ const AppProblemsProblemIdRoute = AppProblemsProblemIdRouteImport.update({
 } as any)
 const AppSessionsSessionIdReportRoute =
   AppSessionsSessionIdReportRouteImport.update({
-    id: '/sessions/$sessionId/report',
-    path: '/sessions/$sessionId/report',
-    getParentRoute: () => AppRouteRoute,
+    id: '/report',
+    path: '/report',
+    getParentRoute: () => AppSessionsSessionIdRoute,
   } as any)
 const AppSessionsSessionIdFeedbackRoute =
   AppSessionsSessionIdFeedbackRouteImport.update({
@@ -354,10 +354,10 @@ declare module '@tanstack/react-router' {
     }
     '/_app/sessions/$sessionId/report': {
       id: '/_app/sessions/$sessionId/report'
-      path: '/sessions/$sessionId/report'
+      path: '/report'
       fullPath: '/sessions/$sessionId/report'
       preLoaderRoute: typeof AppSessionsSessionIdReportRouteImport
-      parentRoute: typeof AppRouteRoute
+      parentRoute: typeof AppSessionsSessionIdRoute
     }
     '/_app/sessions/$sessionId/feedback': {
       id: '/_app/sessions/$sessionId/feedback'
@@ -385,10 +385,12 @@ const AppRoomsRouteRouteWithChildren = AppRoomsRouteRoute._addFileChildren(
 
 interface AppSessionsSessionIdRouteChildren {
   AppSessionsSessionIdFeedbackRoute: typeof AppSessionsSessionIdFeedbackRoute
+  AppSessionsSessionIdReportRoute: typeof AppSessionsSessionIdReportRoute
 }
 
 const AppSessionsSessionIdRouteChildren: AppSessionsSessionIdRouteChildren = {
   AppSessionsSessionIdFeedbackRoute: AppSessionsSessionIdFeedbackRoute,
+  AppSessionsSessionIdReportRoute: AppSessionsSessionIdReportRoute,
 }
 
 const AppSessionsSessionIdRouteWithChildren =
@@ -404,8 +406,6 @@ interface AppRouteRouteChildren {
   AppRoomsCreateRoute: typeof AppRoomsCreateRoute
   AppSessionsSessionIdRoute: typeof AppSessionsSessionIdRouteWithChildren
   AppProblemsIndexRoute: typeof AppProblemsIndexRoute
-  AppSessionsSessionIdFeedbackRoute: typeof AppSessionsSessionIdFeedbackRoute
-  AppSessionsSessionIdReportRoute: typeof AppSessionsSessionIdReportRoute
 }
 
 const AppRouteRouteChildren: AppRouteRouteChildren = {
@@ -418,8 +418,6 @@ const AppRouteRouteChildren: AppRouteRouteChildren = {
   AppRoomsCreateRoute: AppRoomsCreateRoute,
   AppSessionsSessionIdRoute: AppSessionsSessionIdRouteWithChildren,
   AppProblemsIndexRoute: AppProblemsIndexRoute,
-  AppSessionsSessionIdFeedbackRoute: AppSessionsSessionIdFeedbackRoute,
-  AppSessionsSessionIdReportRoute: AppSessionsSessionIdReportRoute,
 }
 
 const AppRouteRouteWithChildren = AppRouteRoute._addFileChildren(
