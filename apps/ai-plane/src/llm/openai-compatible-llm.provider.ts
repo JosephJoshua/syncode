@@ -31,15 +31,16 @@ export class OpenAiCompatibleLlmProvider implements ILlmProvider {
   static fromEnv(config: EnvConfig): OpenAiCompatibleLlmProvider {
     return new OpenAiCompatibleLlmProvider({
       baseUrl: config.AI_PLATFORM_BASE_URL,
-      apiKey: config.AI_PLATFORM_API_KEY,
+      apiKey: config.AI_PLATFORM_API_KEY ?? '',
       model: config.AI_PLATFORM_MODEL,
       timeoutMs: config.AI_REQUEST_TIMEOUT_MS,
     });
   }
 
   async generateText(input: LlmGenerateTextInput): Promise<LlmGenerateTextResult> {
+    const model = input.model ?? this.config.model;
     const requestBody = {
-      model: this.config.model,
+      model,
       messages: input.messages,
       temperature: input.temperature ?? 0.1,
       max_tokens: input.maxOutputTokens,
@@ -81,7 +82,7 @@ export class OpenAiCompatibleLlmProvider implements ILlmProvider {
 
         return {
           text,
-          model: data.model ?? this.config.model,
+          model: data.model ?? model,
         };
       } catch (error) {
         if (attempt < MAX_RETRY_ATTEMPTS && isRetryableTransportError(error)) {
