@@ -155,9 +155,11 @@ function ReportPanel({ session }: { session: SessionDetail }) {
               <p className="text-4xl font-semibold tracking-tight text-primary">
                 {report.overallScore}
               </p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {t('report.generatedAt')}: {formatDate(report.generatedAt)}
-              </p>
+              {report.generatedAt ? (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {t('report.generatedAt')}: {formatDate(report.generatedAt)}
+                </p>
+              ) : null}
             </div>
           ) : null}
         </div>
@@ -173,7 +175,7 @@ function ReportPanel({ session }: { session: SessionDetail }) {
               <h3 className="text-sm font-semibold text-foreground">
                 {t('report.categoryScores')}
               </h3>
-              {Object.entries(report.categoryScores).map(([category, score]) => (
+              {Object.entries(report.categoryScores ?? {}).map(([category, score]) => (
                 <div className="space-y-2" key={category}>
                   <div className="flex items-center justify-between gap-3 text-sm">
                     <span className="font-medium text-foreground">
@@ -188,8 +190,11 @@ function ReportPanel({ session }: { session: SessionDetail }) {
               ))}
             </section>
 
-            <ListSection title={t('report.strengths')} items={report.strengths} />
-            <ListSection title={t('report.improvements')} items={report.areasForImprovement} />
+            <ListSection title={t('report.strengths')} items={report.strengths ?? []} />
+            <ListSection
+              title={t('report.improvements')}
+              items={report.areasForImprovement ?? []}
+            />
           </div>
         ) : null}
       </CardContent>

@@ -4,11 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as awarenessProtocol from 'y-protocols/awareness';
 import * as syncProtocol from 'y-protocols/sync';
 import * as Y from 'yjs';
-import {
-  type CollabConnectionStatus,
-  codeTextKey,
-  YjsCollabProvider,
-} from './yjs-collab-provider.js';
+import { codeTextKey, YjsCollabProvider } from './yjs-collab-provider.js';
 
 // ── Mock WebSocket ──────────────────────────────────────────────────────────
 

@@ -1,10 +1,5 @@
 import { CONTROL_API, type ListRoomsQuery } from '@syncode/contracts';
-import {
-  ROOM_STATUSES,
-  RoomRole,
-  RoomStatus,
-  type RoomStatus as RoomStatusType,
-} from '@syncode/shared';
+import { ROOM_STATUSES, type RoomStatus as RoomStatusType } from '@syncode/shared';
 import {
   Badge,
   Button,

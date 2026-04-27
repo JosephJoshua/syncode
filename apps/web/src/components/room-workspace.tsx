@@ -833,6 +833,7 @@ export function RoomWorkspace({
                       readOnly={isEditorReadOnly}
                       commentLineNumbers={commentLineNumbers}
                       activeCommentLine={activeCommentLine}
+                      onActiveLineChange={setActiveCommentLine}
                       onRunCode={() => void handleRunCodeRef.current()}
                       onSubmitCode={() => void requestSubmitCodeRef.current()}
                     />

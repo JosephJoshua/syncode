@@ -1,6 +1,6 @@
 import type { RoomDetail } from '@syncode/contracts';
 import type { RoomMode, RoomRole, RoomStatus, SupportedLanguage } from '@syncode/shared';
-import { Badge, Button, Card, cn } from '@syncode/ui';
+import { Badge, Button, Card } from '@syncode/ui';
 import { AlertTriangle, Check, Copy, Crown, Loader2, Play } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useMemo } from 'react';
