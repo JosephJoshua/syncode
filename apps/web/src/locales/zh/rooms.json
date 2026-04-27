@@ -13,7 +13,9 @@
   "tabs": {
     "ariaLabel": "房间分区",
     "myRooms": "我的房间",
-    "browse": "浏览"
+    "browse": "浏览",
+    "code": "代码",
+    "whiteboard": "白板"
   },
   "layout": {
     "sub": "管理你的房间，或加入开放的面试大厅。"
@@ -338,5 +340,16 @@
     "languageChangeFailed": "切换语言失败。",
     "noStarterForLanguage": "{{language}} 没有起始代码——编辑器已清空。",
     "rolesLocked": "会话开始后角色已锁定。"
+  },
+  "whiteboard": {
+    "layer": "图层",
+    "layerDrawing": "绘图",
+    "layerAnnotation": "批注",
+    "annotatingAs": "{{name}} 正在批注",
+    "undo": "撤销",
+    "redo": "重做",
+    "authors": "作者",
+    "showAnnotations": "显示批注",
+    "hideAnnotations": "隐藏批注"
   }
 }

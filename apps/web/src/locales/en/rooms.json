@@ -13,7 +13,9 @@
   "tabs": {
     "ariaLabel": "Rooms sections",
     "myRooms": "My rooms",
-    "browse": "Browse"
+    "browse": "Browse",
+    "code": "Code",
+    "whiteboard": "Whiteboard"
   },
   "layout": {
     "sub": "Manage your rooms and drop into open interview lobbies."
@@ -338,5 +340,16 @@
     "languageChangeFailed": "Failed to change the language.",
     "noStarterForLanguage": "No starter code for {{language}} — starting with a blank editor.",
     "rolesLocked": "Roles are locked once the session starts."
+  },
+  "whiteboard": {
+    "layer": "Layer",
+    "layerDrawing": "Draw",
+    "layerAnnotation": "Annotate",
+    "annotatingAs": "Annotating as {{name}}",
+    "undo": "Undo",
+    "redo": "Redo",
+    "authors": "Authors",
+    "showAnnotations": "Show annotations",
+    "hideAnnotations": "Hide annotations"
   }
 }
