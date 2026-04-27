@@ -15,6 +15,7 @@ import { FeedbackShell, SectionCard } from '@/components/session-report/report-f
 import { FinalCodeSection } from '@/components/session-report/report-final-code-section.js';
 import { buildHeaderBadges } from '@/components/session-report/report-header-badges.js';
 import { ReportPageSkeleton } from '@/components/session-report/report-page-skeleton.js';
+import { ReportPeerFeedbackSection } from '@/components/session-report/report-peer-feedback-section.js';
 import { ReportPendingState } from '@/components/session-report/report-pending-state.js';
 import { ReportScoreSummary } from '@/components/session-report/report-score-summary.js';
 import { ReportSessionOverview } from '@/components/session-report/report-session-overview.js';
@@ -33,6 +34,7 @@ import {
   getViewerRole,
   toSupportedLanguage,
 } from '@/lib/session-feedback.js';
+import { fetchSessionPeerFeedback } from '@/lib/session-peer-feedback.js';
 import { fetchSessionReport } from '@/lib/session-report.js';
 import { fetchSessionSnapshots } from '@/lib/session-snapshots.js';
 import { useAuthStore } from '@/stores/auth.store.js';
@@ -64,6 +66,12 @@ function SessionFeedbackPage() {
   const snapshotsQuery = useQuery({
     queryKey: ['sessions', sessionId, 'snapshots'],
     queryFn: () => fetchSessionSnapshots(sessionId),
+    retry: false,
+  });
+
+  const peerFeedbackQuery = useQuery({
+    queryKey: ['sessions', sessionId, 'peer-feedback'],
+    queryFn: () => fetchSessionPeerFeedback(sessionId),
     retry: false,
   });
 
@@ -143,6 +151,12 @@ function SessionFeedbackPage() {
             reportStatus="unavailable"
             reportGeneratedAt={undefined}
           />
+          <ReportPeerFeedbackSection
+            feedback={peerFeedbackQuery.data}
+            isLoading={peerFeedbackQuery.isLoading}
+            isError={peerFeedbackQuery.isError}
+            onRetry={() => void peerFeedbackQuery.refetch()}
+          />
 
           <SectionCard title={t('error.title')} description={t('error.description')}>
             <p className="text-sm leading-6 text-muted-foreground">{t('error.body')}</p>
@@ -196,6 +210,13 @@ function SessionFeedbackPage() {
             reportState?.state === 'pending' ? 'pending' : report ? 'ready' : 'unavailable'
           }
           reportGeneratedAt={report?.generatedAt}
+        />
+
+        <ReportPeerFeedbackSection
+          feedback={peerFeedbackQuery.data}
+          isLoading={peerFeedbackQuery.isLoading}
+          isError={peerFeedbackQuery.isError}
+          onRetry={() => void peerFeedbackQuery.refetch()}
         />
 
         <FinalCodeSection

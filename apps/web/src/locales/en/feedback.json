@@ -53,7 +53,9 @@
     "strengths": "Strengths",
     "areasForImprovement": "Areas for Improvement",
     "comparison": "Comparison to History",
-    "peerFeedback": "Peer Feedback Summary"
+    "peerFeedback": "Peer Feedback Summary",
+    "peerFeedbackSection": "Peer Feedback",
+    "peerFeedbackSectionDescription": "Structured feedback from your peer after the session."
   },
   "dimensions": {
     "correctness": {
