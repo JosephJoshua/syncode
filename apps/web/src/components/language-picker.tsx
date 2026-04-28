@@ -8,11 +8,11 @@ import { LANGUAGE_VERSIONED_LABELS } from './language-selector.data.js';
 import { LanguageSelector } from './language-selector.js';
 
 interface LanguagePickerProps {
-  roomId: string;
-  currentLanguage: SupportedLanguage | null;
-  myCapabilities: readonly string[];
-  onLanguageChanged?: (room: RoomDetail) => void;
-  className?: string;
+  readonly roomId: string;
+  readonly currentLanguage: SupportedLanguage | null;
+  readonly myCapabilities: readonly string[];
+  readonly onLanguageChanged?: (room: RoomDetail) => void;
+  readonly className?: string;
 }
 
 /**

@@ -2,10 +2,10 @@ import { cn } from '@syncode/ui';
 import { ProblemMarkdown } from './problem-markdown.js';
 
 interface ConstraintsBlockProps {
-  content: string;
-  compact?: boolean;
-  className?: string;
-  title?: string;
+  readonly content: string;
+  readonly compact?: boolean;
+  readonly className?: string;
+  readonly title?: string;
 }
 
 export function ConstraintsBlock({

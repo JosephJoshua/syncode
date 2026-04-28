@@ -5,12 +5,12 @@ import type { CollabConnectionStatus } from '@/hooks/use-yjs-collab.js';
 import { formatTimer, STAGE_THEME } from '@/lib/room-stage.js';
 
 interface RoomStatusBarProps {
-  status: RoomStatus;
-  myRole: RoomRole;
-  elapsedMs: number;
-  editorLocked: boolean;
-  participantCount: number;
-  collabStatus: CollabConnectionStatus;
+  readonly status: RoomStatus;
+  readonly myRole: RoomRole;
+  readonly elapsedMs: number;
+  readonly editorLocked: boolean;
+  readonly participantCount: number;
+  readonly collabStatus: CollabConnectionStatus;
 }
 
 const STATUS_INDICATOR: Record<CollabConnectionStatus, { dotClass: string; labelKey: string }> = {

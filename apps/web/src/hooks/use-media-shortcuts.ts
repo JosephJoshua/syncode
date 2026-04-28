@@ -68,11 +68,11 @@ export function useMediaShortcuts({
       }
     };
 
-    window.addEventListener('keydown', onKeyDown);
-    window.addEventListener('keyup', onKeyUp);
+    globalThis.window.addEventListener('keydown', onKeyDown);
+    globalThis.window.addEventListener('keyup', onKeyUp);
     return () => {
-      window.removeEventListener('keydown', onKeyDown);
-      window.removeEventListener('keyup', onKeyUp);
+      globalThis.window.removeEventListener('keydown', onKeyDown);
+      globalThis.window.removeEventListener('keyup', onKeyUp);
     };
   }, [enabled]);
 }

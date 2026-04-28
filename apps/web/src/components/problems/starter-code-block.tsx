@@ -10,7 +10,13 @@ import 'prismjs/components/prism-typescript';
 import { type ReactNode, useMemo } from 'react';
 import { resolvePrismLanguage } from './starter-code-language.js';
 
-export function StarterCodeBlock({ code, language }: { code: string; language: string }) {
+export function StarterCodeBlock({
+  code,
+  language,
+}: {
+  readonly code: string;
+  readonly language: string;
+}) {
   const prismLanguage = resolvePrismLanguage(language);
   const grammar = prismLanguage ? Prism.languages[prismLanguage] : null;
   const tokens = useMemo(() => (grammar ? Prism.tokenize(code, grammar) : [code]), [code, grammar]);
@@ -46,12 +52,18 @@ function renderTokenStream(tokens: Prism.TokenStream, keyPrefix: string): ReactN
   );
 }
 
+function normalizeAliases(alias: Prism.Token['alias']): string[] {
+  if (Array.isArray(alias)) return alias;
+  if (alias) return [alias];
+  return [];
+}
+
 function renderToken(token: string | Prism.Token, key: string): ReactNode {
   if (typeof token === 'string') {
     return token;
   }
 
-  const aliases = Array.isArray(token.alias) ? token.alias : token.alias ? [token.alias] : [];
+  const aliases = normalizeAliases(token.alias);
   const className = ['token', token.type, ...aliases].join(' ');
 
   return (

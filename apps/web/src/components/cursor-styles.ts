@@ -31,7 +31,7 @@ export function buildCursorCssRules(
       user.colorLight && /^#(?:[\da-f]{3}|[\da-f]{4}|[\da-f]{6}|[\da-f]{8})$/i.test(user.colorLight)
         ? user.colorLight
         : `${user.color}33`;
-    const name = (user.name ?? '').replace(/[\\";{}\n\r]/g, '');
+    const name = (user.name ?? '').replaceAll(/[\\";{}\n\r]/g, '');
 
     rules.push(
       `.yRemoteSelection-${clientID} {

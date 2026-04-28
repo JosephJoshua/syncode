@@ -5,9 +5,6 @@ export interface VideoFilterSettings {
   contrast: number;
 }
 
-// biome-ignore lint/suspicious/noExplicitAny: LiveKit's TrackProcessor generic requires ProcessorOptions<Kind> which widens the kind param
-type AnyProcessorOpts = any;
-
 export class VideoFilterProcessor implements TrackProcessor<Track.Kind.Video> {
   name = 'video-filter';
   processedTrack?: MediaStreamTrack;
@@ -20,12 +17,14 @@ export class VideoFilterProcessor implements TrackProcessor<Track.Kind.Video> {
   private running = false;
   private settings: VideoFilterSettings = { brightness: 1, contrast: 1 };
 
-  async init(opts: AnyProcessorOpts): Promise<void> {
+  // biome-ignore lint/suspicious/noExplicitAny: LiveKit's TrackProcessor generic requires ProcessorOptions<Kind> which widens the kind param
+  async init(opts: any): Promise<void> {
     this.sourceTrack = opts.track as MediaStreamTrack;
     await this.setup();
   }
 
-  async restart(opts: AnyProcessorOpts): Promise<void> {
+  // biome-ignore lint/suspicious/noExplicitAny: LiveKit's TrackProcessor generic requires ProcessorOptions<Kind> which widens the kind param
+  async restart(opts: any): Promise<void> {
     this.stopLoop();
     this.sourceTrack = opts.track as MediaStreamTrack;
     await this.setup();

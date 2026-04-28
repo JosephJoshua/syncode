@@ -15,7 +15,7 @@ function ProblemDetailRouteComponent() {
   return <ProblemDetailPage problemId={problemId} />;
 }
 
-export function ProblemDetailPage({ problemId }: { problemId: string }) {
+export function ProblemDetailPage({ problemId }: { readonly problemId: string }) {
   const { t } = useTranslation('problems');
   const problemDetailQuery = useProblemDetailQuery(problemId);
 

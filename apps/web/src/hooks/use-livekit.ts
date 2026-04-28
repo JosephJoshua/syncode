@@ -40,6 +40,17 @@ export interface AudioProcessingOptions {
   autoGainControl: boolean;
 }
 
+function speakingMapsEqual(
+  prev: ReadonlyMap<string, boolean>,
+  next: ReadonlyMap<string, boolean>,
+): boolean {
+  if (prev.size !== next.size) return false;
+  for (const [k, v] of next) {
+    if (prev.get(k) !== v) return false;
+  }
+  return true;
+}
+
 export interface UseLiveKitOptions {
   url: string | null;
   token: string | null;
@@ -349,10 +360,7 @@ export function useLiveKit({
             next.set(p.identity, speakerSet.has(p.identity));
           }
         }
-        if (prev.size === next.size && [...next].every(([k, v]) => prev.get(k) === v)) {
-          return prev;
-        }
-        return next;
+        return speakingMapsEqual(prev, next) ? prev : next;
       });
     };
 
@@ -497,7 +505,7 @@ export function useLiveKit({
           }
         }
       })
-      .catch((err) => {
+      .catch((err: unknown) => {
         if (disposed) return;
         console.error('[LiveKit] Connection failed:', err);
         setConnectionState('failed');
@@ -570,7 +578,7 @@ export function useLiveKit({
     setIsPushToTalkMode((prev) => {
       const next = !prev;
       const room = roomRef.current;
-      if (room && next && room.localParticipant.isMicrophoneEnabled) {
+      if (next && room?.localParticipant.isMicrophoneEnabled) {
         void room.localParticipant.setMicrophoneEnabled(false);
         setIsMicrophoneEnabled(false);
       }

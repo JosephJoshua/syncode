@@ -35,7 +35,7 @@ const registerFormSchema = z
       .trim()
       .min(3, i18n.t('register:validation.usernameMinLength'))
       .max(30, i18n.t('register:validation.usernameMaxLength'))
-      .regex(/^[a-zA-Z0-9_]+$/, i18n.t('register:validation.usernamePattern')),
+      .regex(/^\w+$/, i18n.t('register:validation.usernamePattern')),
     email: z.email(i18n.t('register:validation.emailInvalid')),
     password: z.string().min(8, i18n.t('register:validation.passwordMinLength')),
     confirmPassword: z.string().min(1, i18n.t('register:validation.confirmPasswordRequired')),

@@ -4,15 +4,15 @@ import { AnimatePresence, motion } from 'motion/react';
 import type { UseFormRegisterReturn } from 'react-hook-form';
 
 export interface AnimatedFormFieldProps {
-  id: string;
-  label: string;
-  icon: LucideIcon;
-  type?: string;
-  autoComplete?: string;
-  placeholder?: string;
-  error?: string;
-  registration: UseFormRegisterReturn;
-  staggerDelay?: number;
+  readonly id: string;
+  readonly label: string;
+  readonly icon: LucideIcon;
+  readonly type?: string;
+  readonly autoComplete?: string;
+  readonly placeholder?: string;
+  readonly error?: string;
+  readonly registration: UseFormRegisterReturn;
+  readonly staggerDelay?: number;
 }
 
 export function AnimatedFormField({

@@ -7,7 +7,7 @@ const LANGUAGE_LABELS: Record<string, string> = {
   zh: '中文',
 };
 
-export function LanguageSwitcher({ className }: { className?: string }) {
+export function LanguageSwitcher({ className }: { readonly className?: string }) {
   const { i18n, t } = useTranslation('common');
 
   const currentLang = i18n.language.startsWith('zh') ? 'zh' : 'en';

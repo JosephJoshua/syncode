@@ -3,11 +3,11 @@ import { Lock, LockOpen } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 interface EditorLockToggleProps {
-  locked: boolean;
-  interactive: boolean;
-  disabled?: boolean;
-  onLock?: () => void;
-  onUnlock?: () => void;
+  readonly locked: boolean;
+  readonly interactive: boolean;
+  readonly disabled?: boolean;
+  readonly onLock?: () => void;
+  readonly onUnlock?: () => void;
 }
 
 export function EditorLockToggle({

@@ -5,9 +5,9 @@ import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
 
 type ProblemMarkdownProps = {
-  content: string;
-  className?: string;
-  compact?: boolean;
+  readonly content: string;
+  readonly className?: string;
+  readonly compact?: boolean;
 };
 
 const anchorComponent = ({

@@ -114,8 +114,8 @@ function ParticipantAvatar({
   participant,
   currentUserInitial,
 }: {
-  participant: SessionParticipant | null;
-  currentUserInitial: string;
+  readonly participant: SessionParticipant | null;
+  readonly currentUserInitial: string;
 }) {
   if (!participant) {
     return <span className="text-muted-foreground">-</span>;
@@ -139,12 +139,12 @@ export function DashboardRecentSessions({
   isUnavailable = false,
   onRetry,
 }: {
-  viewerId: string | null;
-  rows: SessionRow[];
-  isLoading?: boolean;
-  isError?: boolean;
-  isUnavailable?: boolean;
-  onRetry?: () => void;
+  readonly viewerId: string | null;
+  readonly rows: SessionRow[];
+  readonly isLoading?: boolean;
+  readonly isError?: boolean;
+  readonly isUnavailable?: boolean;
+  readonly onRetry?: () => void;
 }) {
   const { t } = useTranslation('dashboard');
   const queryClient = useQueryClient();

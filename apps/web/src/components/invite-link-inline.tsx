@@ -4,8 +4,8 @@ import { useTranslation } from 'react-i18next';
 import { useClipboard } from '@/hooks/use-clipboard.js';
 
 interface InviteLinkInlineProps {
-  inviteLink: string;
-  className?: string;
+  readonly inviteLink: string;
+  readonly className?: string;
 }
 
 export function InviteLinkInline({ inviteLink, className = '' }: InviteLinkInlineProps) {

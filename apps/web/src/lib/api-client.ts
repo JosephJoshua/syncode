@@ -24,6 +24,8 @@ const client = ky.create({
   },
 });
 
+type SearchParamValue = string | number | boolean | null | undefined;
+
 let refreshPromise: Promise<boolean> | null = null;
 
 async function refreshAccessToken(): Promise<boolean> {
@@ -87,7 +89,7 @@ export async function api<T extends TypedRoute<unknown, unknown>>(
   options?: {
     params?: Record<string, string>;
     body?: RequestOf<T>;
-    searchParams?: Record<string, string | number | boolean | null | undefined>;
+    searchParams?: Record<string, SearchParamValue>;
   },
 ): Promise<ResponseOf<T>> {
   try {
@@ -113,7 +115,7 @@ async function executeRequest<T extends TypedRoute<unknown, unknown>>(
   options?: {
     params?: Record<string, string>;
     body?: RequestOf<T>;
-    searchParams?: Record<string, string | number | boolean | null | undefined>;
+    searchParams?: Record<string, SearchParamValue>;
   },
 ): Promise<ResponseOf<T>> {
   const template = route.route.startsWith('/') ? route.route.slice(1) : route.route;
@@ -134,9 +136,7 @@ async function executeRequest<T extends TypedRoute<unknown, unknown>>(
   return response.json<ResponseOf<T>>();
 }
 
-function normalizeSearchParams(
-  params?: Record<string, string | number | boolean | null | undefined>,
-) {
+function normalizeSearchParams(params?: Record<string, SearchParamValue>) {
   if (!params) {
     return undefined;
   }

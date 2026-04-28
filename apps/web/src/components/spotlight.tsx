@@ -16,8 +16,12 @@ export const CursorSpotlight = memo(function CursorSpotlight() {
   );
 
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: spotlight tracker needs mouse events on container
-    <div className="absolute inset-0 z-0" onMouseMove={handleMouseMove}>
+    <div
+      className="absolute inset-0 z-0"
+      onMouseMove={handleMouseMove}
+      aria-hidden="true"
+      role="presentation"
+    >
       <motion.div
         className="pointer-events-none absolute h-64 w-64 rounded-full bg-primary/[0.04] blur-[80px]"
         style={{ x: offsetX, y: offsetY }}

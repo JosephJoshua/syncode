@@ -25,10 +25,10 @@ const DIFFICULTY_STYLES: Record<ProblemDifficulty, string> = {
 };
 
 type Props = {
-  room: PublicRoomSummary;
-  index: number;
-  onJoin: (roomId: string) => void;
-  isJoining: boolean;
+  readonly room: PublicRoomSummary;
+  readonly index: number;
+  readonly onJoin: (roomId: string) => void;
+  readonly isJoining: boolean;
 };
 
 export function PublicRoomCard({ room, index, onJoin, isJoining }: Props) {
