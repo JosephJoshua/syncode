@@ -1,3 +1,4 @@
+import { ApiProperty } from '@nestjs/swagger';
 import {
   browseRoomsQuerySchema,
   browseRoomsResponseSchema,
@@ -51,6 +52,29 @@ export class DestroyRoomResponseDto extends createZodDto(destroyRoomResponseSche
 export class RunCodeResponseDto extends createZodDto(runCodeResponseSchema) {}
 export class SubmitCodeResponseDto extends createZodDto(submitResponseSchema) {}
 export class RequestRoomAiHintResponseDto extends createZodDto(requestRoomAiHintResponseSchema) {}
+
+export class GetRoomAiHintResultResponseDto {
+  @ApiProperty({ enum: ['pending', 'ready', 'failed'] })
+  status!: 'pending' | 'ready' | 'failed';
+
+  @ApiProperty({ description: 'AI hint job ID' })
+  jobId!: string;
+
+  @ApiProperty({ required: false, description: 'Persistent hint identifier (when status=ready)' })
+  hintId?: string;
+
+  @ApiProperty({ required: false, enum: ['initial', 'follow_up'] })
+  phase?: 'initial' | 'follow_up';
+
+  @ApiProperty({ required: false, description: 'Generated hint content (when status=ready)' })
+  hint?: string;
+
+  @ApiProperty({ required: false })
+  suggestedApproach?: string;
+
+  @ApiProperty({ required: false })
+  reflectionPrompt?: string;
+}
 export class RoomChatMediaUploadResponseDto extends createZodDto(
   roomChatMediaUploadResponseSchema,
 ) {}

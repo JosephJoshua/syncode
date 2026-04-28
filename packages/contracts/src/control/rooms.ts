@@ -144,18 +144,34 @@ export const requestRoomAiHintSchema = z
 export type RequestRoomAiHintInput = z.infer<typeof requestRoomAiHintSchema>;
 
 export const requestRoomAiHintResponseSchema = z.object({
-  jobId: z.string().describe('AI hint job ID'),
+  jobId: z.string().describe('AI hint job ID — poll GET /rooms/:id/ai/hint/:jobId for the result'),
   hintId: z.uuid().describe('Persistent hint identifier'),
   phase: z.enum(['initial', 'follow_up']).describe('Hint stage'),
-  hint: z.string().describe('Generated hint content'),
-  suggestedApproach: z.string().optional().describe('Optional follow-up approach guidance'),
-  reflectionPrompt: z
-    .string()
-    .optional()
-    .describe('Optional reflective question for stage-2 continuation'),
 });
 
 export type RequestRoomAiHintResponse = z.infer<typeof requestRoomAiHintResponseSchema>;
+
+export const getRoomAiHintResultResponseSchema = z.discriminatedUnion('status', [
+  z.object({
+    status: z.literal('pending'),
+    jobId: z.string(),
+  }),
+  z.object({
+    status: z.literal('ready'),
+    jobId: z.string(),
+    hintId: z.uuid(),
+    phase: z.enum(['initial', 'follow_up']),
+    hint: z.string(),
+    suggestedApproach: z.string().optional(),
+    reflectionPrompt: z.string().optional(),
+  }),
+  z.object({
+    status: z.literal('failed'),
+    jobId: z.string(),
+  }),
+]);
+
+export type GetRoomAiHintResultResponse = z.infer<typeof getRoomAiHintResultResponseSchema>;
 
 export const roomChatMediaUploadRequestSchema = z
   .object({

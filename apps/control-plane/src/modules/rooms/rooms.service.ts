@@ -23,7 +23,6 @@ import {
   type DestroyDocumentResponse,
   ERROR_CODES,
   type GenerateHintRequest,
-  type GenerateHintResult,
   type IAiClient,
   type ICollabClient,
   type JobId,
@@ -71,6 +70,8 @@ import {
   type SupportedLanguage,
 } from '@syncode/shared';
 import {
+  CACHE_SERVICE,
+  type ICacheService,
   type IMediaService,
   type IStorageService,
   MEDIA_SERVICE,
@@ -86,6 +87,7 @@ import { SessionReportsService } from '@/modules/sessions/session-reports.servic
 import type {
   CreateRoomResult,
   DestroyRoomResult,
+  GetRoomAiHintResult,
   JoinRoomResult,
   MediaTokenResult,
   PublicRoomSummaryResult,
@@ -98,6 +100,15 @@ import type {
   TransitionPhaseResult,
   UpdateParticipantRoleResult,
 } from './rooms.types.js';
+
+interface HintJobMapping {
+  hintId: string;
+  roomId: string;
+  userId: string;
+  phase: 'initial' | 'follow_up';
+  previousHint?: string;
+  reflectionResponse: string | null;
+}
 
 @Injectable()
 export class RoomsService {
@@ -114,6 +125,8 @@ export class RoomsService {
     private readonly mediaService: IMediaService,
     @Inject(STORAGE_SERVICE)
     private readonly storageService: IStorageService,
+    @Inject(CACHE_SERVICE)
+    private readonly cacheService: ICacheService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService<EnvConfig>,
     private readonly sessionReportsService: SessionReportsService,
@@ -1141,8 +1154,32 @@ export class RoomsService {
       ? 'No reflection provided by learner.'
       : body.reflectionResponse?.trim();
 
+    let hintId: string;
+    if (followUpTarget) {
+      hintId = followUpTarget.id;
+    } else {
+      const [insertedHint] = await this.db
+        .insert(aiHints)
+        .values({
+          roomId,
+          userId,
+          hint: '',
+          hintLevel: body.hintLevel,
+        })
+        .returning({ id: aiHints.id });
+
+      if (!insertedHint) {
+        throw new InternalServerErrorException({
+          message: 'Failed to persist AI hint',
+          code: ERROR_CODES.INTERNAL_ERROR,
+        });
+      }
+      hintId = insertedHint.id;
+    }
+
+    let submitted: { jobId: JobId<'ai:hint'> };
     try {
-      const submitted = await this.aiClient.submitHintRequest({
+      submitted = await this.aiClient.submitHintRequest({
         roomId,
         participantId: userId,
         problemDescription,
@@ -1156,65 +1193,95 @@ export class RoomsService {
         previousHint: followUpTarget?.hint,
         reflectionResponse,
       });
-
-      const hintResult = await this.waitForHintResult(submitted.jobId);
-      if (!hintResult) {
-        throw new ServiceUnavailableException({
-          message: 'AI service unavailable',
-          code: ERROR_CODES.AI_SERVICE_UNAVAILABLE,
-        });
-      }
-
-      let hintId: string;
-      if (followUpTarget) {
-        hintId = followUpTarget.id;
-        await this.db
-          .update(aiHints)
-          .set({
-            hint: this.appendHintFollowUp(
-              followUpTarget.hint,
-              reflectionResponse ?? 'No reflection provided by learner.',
-              hintResult.hint,
-            ),
-          })
-          .where(eq(aiHints.id, followUpTarget.id));
-      } else {
-        const [insertedHint] = await this.db
-          .insert(aiHints)
-          .values({
-            roomId,
-            userId,
-            hint: hintResult.hint,
-            hintLevel: body.hintLevel,
-          })
-          .returning({
-            id: aiHints.id,
-          });
-
-        if (!insertedHint) {
-          throw new InternalServerErrorException({
-            message: 'Failed to persist AI hint',
-            code: ERROR_CODES.INTERNAL_ERROR,
-          });
-        }
-        hintId = insertedHint.id;
-      }
-
-      return {
-        jobId: submitted.jobId,
-        hintId,
-        phase: isFollowUp ? 'follow_up' : 'initial',
-        hint: hintResult.hint,
-        suggestedApproach: hintResult.suggestedApproach,
-        reflectionPrompt: hintResult.reflectionPrompt,
-      };
     } catch (error) {
-      this.logger.warn(`AI hint request failed for room ${roomId}`, error);
+      this.logger.warn(`AI hint submission failed for room ${roomId}`, error);
+      if (!followUpTarget) {
+        await this.db.delete(aiHints).where(eq(aiHints.id, hintId));
+      }
       throw new ServiceUnavailableException({
         message: 'AI service unavailable',
         code: ERROR_CODES.AI_SERVICE_UNAVAILABLE,
       });
     }
+
+    await this.cacheService.set<HintJobMapping>(
+      `${RoomsService.AI_HINT_JOB_CACHE_PREFIX}${submitted.jobId}`,
+      {
+        hintId,
+        roomId,
+        userId,
+        phase: isFollowUp ? 'follow_up' : 'initial',
+        previousHint: followUpTarget?.hint,
+        reflectionResponse: reflectionResponse ?? null,
+      },
+      RoomsService.AI_HINT_JOB_CACHE_TTL_SECONDS,
+    );
+
+    return {
+      jobId: submitted.jobId,
+      hintId,
+      phase: isFollowUp ? 'follow_up' : 'initial',
+    };
+  }
+
+  async getAiHintResult(
+    roomId: string,
+    userId: string,
+    jobId: string,
+  ): Promise<GetRoomAiHintResult> {
+    const [, participant] = await this.getRoomContext(roomId, userId);
+    if (!participant) {
+      throw new ForbiddenException({
+        message: 'Not a participant of this room',
+        code: ERROR_CODES.ROOM_ACCESS_DENIED,
+      });
+    }
+
+    const mapping = await this.cacheService.get<HintJobMapping>(
+      `${RoomsService.AI_HINT_JOB_CACHE_PREFIX}${jobId}`,
+    );
+    if (!mapping || mapping.roomId !== roomId || mapping.userId !== userId) {
+      throw new NotFoundException({
+        message: 'Hint job not found',
+        code: ERROR_CODES.VALIDATION_FAILED,
+      });
+    }
+
+    const typedJobId = jobId as JobId<'ai:hint'>;
+    const hintResult = await this.aiClient.getHintResult(typedJobId);
+
+    if (!hintResult) {
+      const status = await this.aiClient.getHintJobStatus(typedJobId);
+      if (status === 'failed') {
+        return { status: 'failed', jobId };
+      }
+      return { status: 'pending', jobId };
+    }
+
+    const finalHint =
+      mapping.phase === 'follow_up' && mapping.previousHint != null
+        ? this.appendHintFollowUp(
+            mapping.previousHint,
+            mapping.reflectionResponse ?? 'No reflection provided by learner.',
+            hintResult.hint,
+          )
+        : hintResult.hint;
+
+    const expectedCurrentHint = mapping.phase === 'follow_up' ? (mapping.previousHint ?? '') : '';
+    await this.db
+      .update(aiHints)
+      .set({ hint: finalHint })
+      .where(and(eq(aiHints.id, mapping.hintId), eq(aiHints.hint, expectedCurrentHint)));
+
+    return {
+      status: 'ready',
+      jobId,
+      hintId: mapping.hintId,
+      phase: mapping.phase,
+      hint: finalHint,
+      suggestedApproach: hintResult.suggestedApproach,
+      reflectionPrompt: hintResult.reflectionPrompt,
+    };
   }
 
   async getRoomChatMediaUploadUrl(
@@ -1305,8 +1372,8 @@ export class RoomsService {
   private static readonly AI_HINT_LIMIT_COUNT = 3;
   private static readonly AI_HINT_LIMIT_WINDOW_MS = 5 * 60 * 1000;
   private static readonly AI_HINT_CHAT_HISTORY_LIMIT = 50;
-  private static readonly AI_HINT_RESULT_TIMEOUT_MS = 30 * 1000;
-  private static readonly AI_HINT_RESULT_POLL_INTERVAL_MS = 500;
+  private static readonly AI_HINT_JOB_CACHE_PREFIX = 'ai-hint-job:';
+  private static readonly AI_HINT_JOB_CACHE_TTL_SECONDS = 60 * 60;
 
   async generateMediaToken(roomId: string, userId: string): Promise<MediaTokenResult> {
     const [room, participant] = await this.getRoomContext(roomId, userId);
@@ -2043,32 +2110,6 @@ export class RoomsService {
     const withoutPath = trimmed.replaceAll('\\', '/').split('/').pop() ?? 'attachment.bin';
     const safe = withoutPath.replace(/[^a-zA-Z0-9._-]/g, '_');
     return safe.length > 0 ? safe.slice(0, 120) : 'attachment.bin';
-  }
-
-  private async waitForHintResult(jobId: JobId<'ai:hint'>): Promise<GenerateHintResult | null> {
-    const deadline = Date.now() + RoomsService.AI_HINT_RESULT_TIMEOUT_MS;
-
-    while (Date.now() < deadline) {
-      const result = await this.aiClient.getHintResult(jobId);
-      if (result) {
-        return result;
-      }
-
-      const status = await this.aiClient.getHintJobStatus(jobId);
-      if (status === 'failed') {
-        return null;
-      }
-
-      await this.sleep(RoomsService.AI_HINT_RESULT_POLL_INTERVAL_MS);
-    }
-
-    return null;
-  }
-
-  private sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => {
-      setTimeout(resolve, ms);
-    });
   }
 
   private appendHintFollowUp(

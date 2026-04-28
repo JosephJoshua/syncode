@@ -685,7 +685,68 @@ describe('POST /rooms/:id/ai/hint', () => {
     expect(res.body.jobId).toBe('ai-hint-job');
     expect(res.body.hintId).toEqual(expect.any(String));
     expect(res.body.phase).toBe('initial');
-    expect(res.body.hint).toEqual(expect.any(String));
+
+    const persisted = await db
+      .select({ id: aiHints.id, hint: aiHints.hint })
+      .from(aiHints)
+      .where(eq(aiHints.id, res.body.hintId));
+    expect(persisted).toHaveLength(1);
+    expect(persisted[0]!.hint).toBe('');
+
+    const result = await asUser(
+      request(app.getHttpServer()).get(`/rooms/${room.id}/ai/hint/${res.body.jobId}`),
+      candidate,
+    ).expect(200);
+
+    expect(result.body.status).toBe('ready');
+    expect(result.body.hintId).toBe(res.body.hintId);
+    expect(result.body.phase).toBe('initial');
+    expect(result.body.hint).toEqual(expect.any(String));
+  });
+
+  it('GIVEN unknown jobId WHEN polling THEN returns 404', async () => {
+    const interviewer = await insertUser(db);
+    const candidate = await insertUser(db);
+    const problem = await insertProblem(db);
+    const room = await insertRoom(db, interviewer.id, {
+      status: 'coding',
+      problemId: problem.id,
+      language: 'python',
+    });
+    await insertParticipant(db, room.id, interviewer.id, 'interviewer');
+    await insertParticipant(db, room.id, candidate.id, 'candidate');
+
+    await asUser(
+      request(app.getHttpServer()).get(`/rooms/${room.id}/ai/hint/missing-job`),
+      candidate,
+    ).expect(404);
+  });
+
+  it('GIVEN another user holds the job WHEN polling with wrong user THEN returns 404', async () => {
+    const interviewer = await insertUser(db);
+    const candidate = await insertUser(db);
+    const intruder = await insertUser(db);
+    const problem = await insertProblem(db);
+    const room = await insertRoom(db, interviewer.id, {
+      status: 'coding',
+      problemId: problem.id,
+      language: 'python',
+    });
+    await insertParticipant(db, room.id, interviewer.id, 'interviewer');
+    await insertParticipant(db, room.id, candidate.id, 'candidate');
+    await insertParticipant(db, room.id, intruder.id, 'observer');
+
+    const submission = await asUser(
+      request(app.getHttpServer()).post(`/rooms/${room.id}/ai/hint`),
+      candidate,
+    )
+      .send({ code: 'print("hi")', language: 'python', hintLevel: 'subtle' })
+      .expect(202);
+
+    await asUser(
+      request(app.getHttpServer()).get(`/rooms/${room.id}/ai/hint/${submission.body.jobId}`),
+      intruder,
+    ).expect(404);
   });
 
   it('GIVEN request language mismatches active room language WHEN requesting hint THEN returns 400', async () => {

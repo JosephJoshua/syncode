@@ -29,6 +29,7 @@ import type {
   createRoomSchema,
   destroyRoomResponseSchema,
   ensureCollabResponseSchema,
+  getRoomAiHintResultResponseSchema,
   joinRoomResponseSchema,
   joinRoomSchema,
   listRoomsQuerySchema,
@@ -143,6 +144,10 @@ export const CONTROL_API = {
       z.infer<typeof requestRoomAiHintSchema>,
       z.infer<typeof requestRoomAiHintResponseSchema>
     >()('rooms/:id/ai/hint', 'POST'),
+    AI_HINT_RESULT: defineRoute<void, z.infer<typeof getRoomAiHintResultResponseSchema>>()(
+      'rooms/:id/ai/hint/:jobId',
+      'GET',
+    ),
     CHAT_MEDIA_UPLOAD_URL: defineRoute<
       z.infer<typeof roomChatMediaUploadRequestSchema>,
       z.infer<typeof roomChatMediaUploadResponseSchema>

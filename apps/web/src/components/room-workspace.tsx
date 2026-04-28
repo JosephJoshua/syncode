@@ -9,7 +9,7 @@ import type {
   ProblemDetail,
   RoomDetail,
 } from '@syncode/contracts';
-import { CONTROL_API, ERROR_CODES } from '@syncode/contracts';
+import { CONTROL_API, ERROR_CODES, type GetRoomAiHintResultResponse } from '@syncode/contracts';
 import type { RoomRole, RoomStatus } from '@syncode/shared';
 import { Avatar, AvatarFallback, AvatarImage, Badge, Button, cn } from '@syncode/ui';
 import {
@@ -854,7 +854,7 @@ export function RoomWorkspace({
     setActiveProblemTab('hints');
 
     try {
-      const response = await api(CONTROL_API.ROOMS.AI_HINT, {
+      const submission = await api(CONTROL_API.ROOMS.AI_HINT, {
         params: { id: roomId },
         body: {
           code: getCode() || ' ',
@@ -863,21 +863,29 @@ export function RoomWorkspace({
         },
       });
 
+      const result = await pollAiHintResult(roomId, submission.jobId);
+
       setHintHistory((prev) => [
         {
-          id: response.hintId,
-          hint: response.hint,
-          suggestedApproach: response.suggestedApproach,
-          reflectionPrompt: response.reflectionPrompt,
+          id: result.hintId,
+          hint: result.hint,
+          suggestedApproach: result.suggestedApproach,
+          reflectionPrompt: result.reflectionPrompt,
           createdAt: Date.now(),
         },
         ...prev,
       ]);
     } catch (error) {
-      const apiError = await readApiError(error);
-      const message = resolveErrorMessage(apiError, HINT_ERROR_KEYS, 'workspace.hintFailed', t);
-      setHintError(message);
-      toast.error(message);
+      if (error instanceof AiHintTimeoutError || error instanceof AiHintFailedError) {
+        const message = t('workspace.hintUnavailable');
+        setHintError(message);
+        toast.error(message);
+      } else {
+        const apiError = await readApiError(error);
+        const message = resolveErrorMessage(apiError, HINT_ERROR_KEYS, 'workspace.hintFailed', t);
+        setHintError(message);
+        toast.error(message);
+      }
     } finally {
       setHintLoading(false);
     }
@@ -890,7 +898,7 @@ export function RoomWorkspace({
       setActiveProblemTab('hints');
 
       try {
-        const response = await api(CONTROL_API.ROOMS.AI_HINT, {
+        const submission = await api(CONTROL_API.ROOMS.AI_HINT, {
           params: { id: roomId },
           body: {
             code: getCode() || ' ',
@@ -902,28 +910,36 @@ export function RoomWorkspace({
           },
         });
 
+        const result = await pollAiHintResult(roomId, submission.jobId);
+
         setHintHistory((prev) =>
           prev.map((hint) =>
             hint.id === hintId
               ? {
                   ...hint,
                   reflectionResponse: reflectionResponse ?? t('problem.hintNoReply'),
-                  followUpHint: response.hint,
-                  suggestedApproach: response.suggestedApproach ?? hint.suggestedApproach,
+                  followUpHint: result.hint,
+                  suggestedApproach: result.suggestedApproach ?? hint.suggestedApproach,
                 }
               : hint,
           ),
         );
       } catch (error) {
-        const apiError = await readApiError(error);
-        const message = resolveErrorMessage(
-          apiError,
-          HINT_ERROR_KEYS,
-          'workspace.hintFollowUpFailed',
-          t,
-        );
-        setHintError(message);
-        toast.error(message);
+        if (error instanceof AiHintTimeoutError || error instanceof AiHintFailedError) {
+          const message = t('workspace.hintUnavailable');
+          setHintError(message);
+          toast.error(message);
+        } else {
+          const apiError = await readApiError(error);
+          const message = resolveErrorMessage(
+            apiError,
+            HINT_ERROR_KEYS,
+            'workspace.hintFollowUpFailed',
+            t,
+          );
+          setHintError(message);
+          toast.error(message);
+        }
       } finally {
         setHintFollowUpLoadingHintId(null);
       }
@@ -1640,3 +1656,40 @@ const HINT_ERROR_KEYS: Partial<Record<string, string>> = {
   [ERROR_CODES.AI_HINT_RATE_LIMIT]: 'workspace.hintRateLimited',
   [ERROR_CODES.AI_SERVICE_UNAVAILABLE]: 'workspace.hintUnavailable',
 };
+
+const HINT_POLL_INTERVAL_MS = 750;
+const HINT_POLL_TIMEOUT_MS = 30_000;
+
+class AiHintTimeoutError extends Error {
+  constructor() {
+    super('AI hint poll timed out');
+    this.name = 'AiHintTimeoutError';
+  }
+}
+
+class AiHintFailedError extends Error {
+  constructor() {
+    super('AI hint job failed');
+    this.name = 'AiHintFailedError';
+  }
+}
+
+async function pollAiHintResult(
+  roomId: string,
+  jobId: string,
+): Promise<Extract<GetRoomAiHintResultResponse, { status: 'ready' }>> {
+  const deadline = Date.now() + HINT_POLL_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    const result = await api(CONTROL_API.ROOMS.AI_HINT_RESULT, {
+      params: { id: roomId, jobId },
+    });
+    if (result.status === 'ready') {
+      return result;
+    }
+    if (result.status === 'failed') {
+      throw new AiHintFailedError();
+    }
+    await new Promise((resolve) => setTimeout(resolve, HINT_POLL_INTERVAL_MS));
+  }
+  throw new AiHintTimeoutError();
+}

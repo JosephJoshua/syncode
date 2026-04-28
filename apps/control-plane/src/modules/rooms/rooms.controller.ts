@@ -48,6 +48,7 @@ import {
   CreateRoomResponseDto,
   DestroyRoomResponseDto,
   EnsureCollabResponseDto,
+  GetRoomAiHintResultResponseDto,
   JoinRoomDto,
   JoinRoomResponseDto,
   ListRoomsQueryDto,
@@ -313,13 +314,17 @@ export class RoomsController {
 
   @Post(CONTROL_API.ROOMS.AI_HINT.route)
   @HttpCode(202)
-  @ApiOperation({ summary: 'Request AI hint for current code' })
+  @ApiOperation({
+    summary: 'Submit AI hint job for current code',
+    description:
+      'Returns immediately with the job ID. Poll GET /rooms/:id/ai/hint/:jobId for the result.',
+  })
   @ApiParam({ name: 'id', description: 'Room ID (UUID)' })
   @ApiBody({ type: RequestRoomAiHintDto })
   @ApiResponse({
     status: 202,
     type: RequestRoomAiHintResponseDto,
-    description: 'Hint request accepted',
+    description: 'Hint job submitted; poll GET /rooms/:id/ai/hint/:jobId for the result',
   })
   @ApiResponse({
     status: 403,
@@ -347,6 +352,33 @@ export class RoomsController {
     @Body() body: RequestRoomAiHintDto,
   ): Promise<RequestRoomAiHintResponseDto> {
     return this.roomsService.requestAiHint(id, user.id, body);
+  }
+
+  @Get(CONTROL_API.ROOMS.AI_HINT_RESULT.route)
+  @ApiOperation({ summary: 'Poll AI hint job result' })
+  @ApiParam({ name: 'id', description: 'Room ID (UUID)' })
+  @ApiParam({ name: 'jobId', description: 'AI hint job ID returned from POST /ai/hint' })
+  @ApiResponse({
+    status: 200,
+    type: GetRoomAiHintResultResponseDto,
+    description: 'Hint job status: pending, ready, or failed',
+  })
+  @ApiResponse({
+    status: 403,
+    type: ErrorResponseDto,
+    description: 'Not a participant of this room',
+  })
+  @ApiResponse({
+    status: 404,
+    type: ErrorResponseDto,
+    description: 'Job not found, expired, or not owned by caller',
+  })
+  async getAiHintResult(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Param('jobId') jobId: string,
+  ): Promise<GetRoomAiHintResultResponseDto> {
+    return this.roomsService.getAiHintResult(id, user.id, jobId);
   }
 
   @Post(CONTROL_API.ROOMS.CHAT_MEDIA_UPLOAD_URL.route)
