@@ -21,7 +21,27 @@ const TRANSITION_ICONS = {
   finished: <CheckCircle2 className="size-3.5" />,
 } as const satisfies Partial<Record<RoomStatus, ReactNode>>;
 
-function PhaseProgressBar({ currentStatus }: { currentStatus: RoomStatus }) {
+function getPhaseBarClass(active: boolean, completed: boolean): string {
+  if (active) {
+    return 'bg-primary shadow-[0_0_10px_oklch(0.82_0.18_165/0.4)] animate-glow-pulse';
+  }
+  if (completed) {
+    return 'bg-primary/50';
+  }
+  return 'bg-border';
+}
+
+function getPhaseLabelClass(active: boolean, completed: boolean): string {
+  if (active) {
+    return 'text-primary';
+  }
+  if (completed) {
+    return 'text-primary/50';
+  }
+  return 'text-muted-foreground/40';
+}
+
+function PhaseProgressBar({ currentStatus }: { readonly currentStatus: RoomStatus }) {
   const { t } = useTranslation('rooms');
   const currentIndex = ROOM_STATUSES.indexOf(currentStatus);
 
@@ -34,19 +54,9 @@ function PhaseProgressBar({ currentStatus }: { currentStatus: RoomStatus }) {
         return (
           <div key={status} className="flex flex-1 flex-col items-center gap-1">
             <div
-              className={`h-1.5 w-full rounded-full transition-all duration-500 ${
-                active
-                  ? 'bg-primary shadow-[0_0_10px_oklch(0.82_0.18_165/0.4)] animate-glow-pulse'
-                  : completed
-                    ? 'bg-primary/50'
-                    : 'bg-border'
-              }`}
+              className={`h-1.5 w-full rounded-full transition-all duration-500 ${getPhaseBarClass(active, completed)}`}
             />
-            <span
-              className={`font-mono text-[8px] ${
-                active ? 'text-primary' : completed ? 'text-primary/50' : 'text-muted-foreground/40'
-              }`}
-            >
+            <span className={`font-mono text-[8px] ${getPhaseLabelClass(active, completed)}`}>
               {t(ROOM_STATUS_KEYS[status])}
             </span>
           </div>
@@ -56,20 +66,90 @@ function PhaseProgressBar({ currentStatus }: { currentStatus: RoomStatus }) {
   );
 }
 
+function PhaseTransitionSection({
+  currentStatus,
+  canChangePhase,
+  isPending,
+  allRequiredReady,
+  onTransition,
+  t,
+}: {
+  readonly currentStatus: RoomStatus;
+  readonly canChangePhase: boolean;
+  readonly isPending: boolean;
+  readonly allRequiredReady: boolean;
+  readonly onTransition: (targetStatus: RoomStatus) => void;
+  readonly t: (key: string, opts?: Record<string, unknown>) => string;
+}) {
+  if (currentStatus === 'finished') {
+    return (
+      <div className="rounded-md border border-border/60 bg-background/50 px-3 py-2.5 text-center text-xs text-muted-foreground">
+        <CheckCircle2 className="mx-auto mb-1.5 size-5 text-primary" />
+        {t('hostControl.sessionConcluded')}
+      </div>
+    );
+  }
+
+  if (!canChangePhase) {
+    return (
+      <p className="text-[10px] text-muted-foreground">{t('hostControl.awaitingController')}</p>
+    );
+  }
+
+  const nextStages = getNextStatuses(currentStatus);
+
+  return (
+    <div className="space-y-1.5">
+      {nextStages.map((stage) => {
+        const readyGate = stage === 'warmup' && !allRequiredReady;
+        const disabled = isPending || readyGate;
+
+        return (
+          <div key={stage} className="space-y-1">
+            <Button
+              type="button"
+              variant={stage === 'finished' ? 'destructive' : 'default'}
+              size="sm"
+              className={`w-full justify-start gap-1.5 ${
+                stage !== 'finished' && !disabled ? 'shimmer-sweep' : ''
+              }`}
+              disabled={disabled}
+              title={readyGate ? t('hostControl.awaitingReady') : undefined}
+              onClick={() => onTransition(stage)}
+            >
+              {isPending ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                TRANSITION_ICONS[stage as keyof typeof TRANSITION_ICONS]
+              )}
+              {stage === 'finished'
+                ? t('hostControl.endSession')
+                : t('hostControl.advanceTo', { stageName: t(ROOM_STATUS_KEYS[stage]) })}
+            </Button>
+            {readyGate ? (
+              <p className="text-[10px] text-muted-foreground">{t('hostControl.awaitingReady')}</p>
+            ) : null}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 interface HostControlPanelProps {
-  currentStatus: RoomStatus;
-  elapsedMs: number;
-  timerPaused: boolean;
-  editorLocked: boolean;
-  canChangePhase: boolean;
-  canControlEditorLock: boolean;
-  isPending: boolean;
-  isLockingEditor: boolean;
-  isUnlockingEditor: boolean;
-  allRequiredReady: boolean;
-  onTransition: (targetStatus: RoomStatus) => void;
-  onLockEditor: () => void;
-  onUnlockEditor: () => void;
+  readonly currentStatus: RoomStatus;
+  readonly elapsedMs: number;
+  readonly timerPaused: boolean;
+  readonly editorLocked: boolean;
+  readonly canChangePhase: boolean;
+  readonly canControlEditorLock: boolean;
+  readonly isPending: boolean;
+  readonly isLockingEditor: boolean;
+  readonly isUnlockingEditor: boolean;
+  readonly allRequiredReady: boolean;
+  readonly onTransition: (targetStatus: RoomStatus) => void;
+  readonly onLockEditor: () => void;
+  readonly onUnlockEditor: () => void;
 }
 
 export function HostControlPanel({
@@ -88,7 +168,6 @@ export function HostControlPanel({
   onUnlockEditor,
 }: HostControlPanelProps) {
   const { t } = useTranslation('rooms');
-  const nextStages = getNextStatuses(currentStatus);
 
   return (
     <div className="space-y-3">
@@ -119,51 +198,14 @@ export function HostControlPanel({
       </div>
 
       {/* Stage transition buttons */}
-      {currentStatus === 'finished' ? (
-        <div className="rounded-md border border-border/60 bg-background/50 px-3 py-2.5 text-center text-xs text-muted-foreground">
-          <CheckCircle2 className="mx-auto mb-1.5 size-5 text-primary" />
-          {t('hostControl.sessionConcluded')}
-        </div>
-      ) : canChangePhase ? (
-        <div className="space-y-1.5">
-          {nextStages.map((stage) => {
-            const readyGate = stage === 'warmup' && !allRequiredReady;
-            const disabled = isPending || readyGate;
-
-            return (
-              <div key={stage} className="space-y-1">
-                <Button
-                  type="button"
-                  variant={stage === 'finished' ? 'destructive' : 'default'}
-                  size="sm"
-                  className={`w-full justify-start gap-1.5 ${
-                    stage !== 'finished' && !disabled ? 'shimmer-sweep' : ''
-                  }`}
-                  disabled={disabled}
-                  title={readyGate ? t('hostControl.awaitingReady') : undefined}
-                  onClick={() => onTransition(stage)}
-                >
-                  {isPending ? (
-                    <Loader2 className="size-3.5 animate-spin" />
-                  ) : (
-                    TRANSITION_ICONS[stage as keyof typeof TRANSITION_ICONS]
-                  )}
-                  {stage === 'finished'
-                    ? t('hostControl.endSession')
-                    : t('hostControl.advanceTo', { stageName: t(ROOM_STATUS_KEYS[stage]) })}
-                </Button>
-                {readyGate ? (
-                  <p className="text-[10px] text-muted-foreground">
-                    {t('hostControl.awaitingReady')}
-                  </p>
-                ) : null}
-              </div>
-            );
-          })}
-        </div>
-      ) : (
-        <p className="text-[10px] text-muted-foreground">{t('hostControl.awaitingController')}</p>
-      )}
+      <PhaseTransitionSection
+        currentStatus={currentStatus}
+        canChangePhase={canChangePhase}
+        isPending={isPending}
+        allRequiredReady={allRequiredReady}
+        onTransition={onTransition}
+        t={t}
+      />
     </div>
   );
 }
