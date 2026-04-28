@@ -101,21 +101,41 @@ const hydrateFromRemote = (store: TLStore, records: TLRecord[]): void => {
   });
 };
 
+// The visibility filter sets shape.opacity to a tint/hidden value in the
+// LOCAL store only (so each client can hide annotations independently). But
+// when the user later moves that shape, the user-source HistoryEntry carries
+// the locally-mutated opacity — without this normalization step it would leak
+// to peers and corrupt the canonical doc state. Whiteboard shapes always have
+// meta.layer; we normalize their opacity to a canonical 1 on the way out so
+// the per-client visibility tint never crosses the wire.
+const normalizeShapeForYjs = <T extends TLRecord>(record: T): T => {
+  if (record.typeName !== 'shape') return record;
+  const meta = (record as unknown as { meta?: { layer?: unknown } }).meta;
+  if (!meta || meta.layer === undefined) return record;
+  return { ...record, opacity: 1 } as T;
+};
+
 // Forward a tldraw HistoryEntry into the shared Y.Map. Sanitize each record
 // via JSON round-trip so non-cloneable fields don't poison Yjs's internal
-// structuredClone path.
+// structuredClone path. Each MAX_BATCH_PER_TRANSACTION-sized slice runs in
+// its own transaction so a paste of hundreds of shapes doesn't lock the main
+// thread inside one giant Yjs transaction.
 export const applyHistoryEntryToYMap = (
   entry: HistoryEntry<TLRecord>,
   yRecords: Y.Map<TLRecord>,
+  // Optional: invoked once per slice so the caller can wrap each batch in
+  // its own transaction (with a stable origin). When omitted, the caller is
+  // expected to wrap the whole call themselves.
+  runInTransaction?: (fn: () => void) => void,
 ): void => {
   const writes: Array<() => void> = [];
 
   for (const [id, record] of Object.entries(entry.changes.added)) {
-    const sanitized = sanitizeForYjs(record);
+    const sanitized = sanitizeForYjs(normalizeShapeForYjs(record));
     if (sanitized) writes.push(() => yRecords.set(id, sanitized));
   }
   for (const [id, [, after]] of Object.entries(entry.changes.updated)) {
-    const sanitized = sanitizeForYjs(after);
+    const sanitized = sanitizeForYjs(normalizeShapeForYjs(after));
     if (sanitized) writes.push(() => yRecords.set(id, sanitized));
   }
   for (const id of Object.keys(entry.changes.removed)) {
@@ -124,7 +144,14 @@ export const applyHistoryEntryToYMap = (
 
   for (let i = 0; i < writes.length; i += MAX_BATCH_PER_TRANSACTION) {
     const slice = writes.slice(i, i + MAX_BATCH_PER_TRANSACTION);
-    for (const write of slice) write();
+    const apply = () => {
+      for (const write of slice) write();
+    };
+    if (runInTransaction) {
+      runInTransaction(apply);
+    } else {
+      apply();
+    }
   }
 };
 
@@ -204,11 +231,11 @@ export function createYjsTldrawStore({
   );
 
   // Local store -> Yjs: forward user-driven changes into the shared map.
+  // Each batch slice runs in its own transaction so large pastes are split
+  // into multiple smaller transactions instead of one giant one.
   const unsubscribeStore = store.listen(
     (entry: HistoryEntry<TLRecord>) => {
-      doc.transact(() => {
-        applyHistoryEntryToYMap(entry, yRecords);
-      }, localOrigin);
+      applyHistoryEntryToYMap(entry, yRecords, (apply) => doc.transact(apply, localOrigin));
     },
     { source: 'user', scope: 'document' },
   );
