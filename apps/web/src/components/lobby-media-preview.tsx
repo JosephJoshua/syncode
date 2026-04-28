@@ -14,6 +14,12 @@ type PermissionStatus = 'idle' | 'prompting' | 'granted' | 'denied';
 const BAR_COUNT = 12;
 const BAR_KEYS = Array.from({ length: BAR_COUNT }, (_, i) => `bar-${String(i)}`);
 
+function getBarColor(index: number): string {
+  if (index < BAR_COUNT * 0.6) return 'bg-emerald-400';
+  if (index < BAR_COUNT * 0.85) return 'bg-amber-400';
+  return 'bg-destructive';
+}
+
 async function acquireStream(
   constraints: MediaStreamConstraints,
   signal: { cancelled: boolean },
@@ -202,7 +208,7 @@ export function LobbyMediaPreview() {
           if (signal.cancelled) return;
           analyser.getByteFrequencyData(data);
           let sum = 0;
-          for (let i = 0; i < data.length; i++) sum += data[i] ?? 0;
+          for (const value of data) sum += value ?? 0;
           const avg = sum / data.length / 255;
           const next = Math.min(BAR_COUNT, Math.ceil(avg * BAR_COUNT));
           if (next !== prevBarRef.current) {
@@ -302,13 +308,7 @@ export function LobbyMediaPreview() {
                 key={key}
                 className={cn(
                   'h-2 flex-1 rounded-sm transition-colors duration-75',
-                  active
-                    ? i < BAR_COUNT * 0.6
-                      ? 'bg-emerald-400'
-                      : i < BAR_COUNT * 0.85
-                        ? 'bg-amber-400'
-                        : 'bg-destructive'
-                    : 'bg-muted',
+                  active ? getBarColor(i) : 'bg-muted',
                 )}
               />
             );
@@ -402,12 +402,12 @@ function DevicePicker({
   onChange,
   empty,
 }: {
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  devices: DeviceOption[];
-  value: string | null;
-  onChange: (id: string) => void;
-  empty: string;
+  readonly icon: React.ComponentType<{ className?: string }>;
+  readonly label: string;
+  readonly devices: DeviceOption[];
+  readonly value: string | null;
+  readonly onChange: (id: string) => void;
+  readonly empty: string;
 }) {
   return (
     <div>
@@ -441,10 +441,10 @@ function ToggleChip({
   active,
   onClick,
 }: {
-  label: string;
-  icon: React.ComponentType<{ className?: string }>;
-  active: boolean;
-  onClick: () => void;
+  readonly label: string;
+  readonly icon: React.ComponentType<{ className?: string }>;
+  readonly active: boolean;
+  readonly onClick: () => void;
 }) {
   return (
     <button
