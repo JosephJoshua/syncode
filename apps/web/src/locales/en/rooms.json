@@ -381,7 +381,6 @@
     "minimizeFloating": "Minimize floating whiteboard",
     "restoreFloating": "Restore floating whiteboard",
     "dockToTab": "Dock to tab",
-    "closeFloating": "Close floating whiteboard",
     "resizeFromTopLeft": "Resize whiteboard from top left",
     "resizeFromTopRight": "Resize whiteboard from top right",
     "resizeFromBottomLeft": "Resize whiteboard from bottom left",

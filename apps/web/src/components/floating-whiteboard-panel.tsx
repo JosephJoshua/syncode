@@ -1,5 +1,5 @@
 import { Button } from '@syncode/ui';
-import { GripHorizontal, Maximize2, Minimize2, PanelRightClose, X } from 'lucide-react';
+import { GripHorizontal, Maximize2, Minimize2, PanelRightClose } from 'lucide-react';
 import { motion, useMotionValue, useSpring } from 'motion/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -343,16 +343,6 @@ export function FloatingWhiteboardPanel({
               aria-label={t('whiteboard.dockToTab')}
             >
               <PanelRightClose className="size-2.5" />
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-xs"
-              className="size-4 text-muted-foreground/60 hover:text-foreground"
-              onClick={onClose}
-              aria-label={t('whiteboard.closeFloating')}
-            >
-              <X className="size-2.5" />
             </Button>
           </div>
         </div>
