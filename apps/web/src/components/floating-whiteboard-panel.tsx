@@ -171,16 +171,25 @@ export function FloatingWhiteboardPanel({
     [clampPosition, springX, springY],
   );
 
-  const onPointerUp = useCallback(() => {
-    if (!dragRef.current) return;
-    dragRef.current = null;
-    writeGeom(storageKey, {
-      x: posRef.current.x,
-      y: posRef.current.y,
-      width: size.width,
-      height: size.height,
-    });
-  }, [storageKey, size.width, size.height]);
+  const onPointerUp = useCallback(
+    (e: React.PointerEvent) => {
+      if (!dragRef.current) return;
+      dragRef.current = null;
+      writeGeom(storageKey, {
+        x: posRef.current.x,
+        y: posRef.current.y,
+        width: size.width,
+        height: size.height,
+      });
+      // Match endResize: explicitly release pointer capture so the next
+      // pointerdown isn't routed to the stale dragger that captured it.
+      const target = e.target as HTMLElement;
+      if (target.hasPointerCapture?.(e.pointerId)) {
+        target.releasePointerCapture(e.pointerId);
+      }
+    },
+    [storageKey, size.width, size.height],
+  );
 
   const startResize = useCallback(
     (corner: ResizeCorner) => (e: React.PointerEvent) => {
