@@ -73,20 +73,16 @@ export function createYjsTldrawStore({
   // tldraw's strict schema validation throws when a record arrives before
   // its dependency. Fall back to per-record put so a single validation
   // failure doesn't drop the whole batch.
-  if (yRecords.size === 0) {
-    doc.transact(() => {
-      for (const record of store.allRecords()) {
-        yRecords.set(record.id, record as TLRecord);
-      }
-    }, localOrigin);
-  } else {
-    const records: TLRecord[] = [];
-    yRecords.forEach((record) => {
-      records.push(record as TLRecord);
-    });
-    if (records.length > 0) {
-      hydrateFromRemote(store, records);
-    }
+  //
+  // We also defensively filter out anything that isn't a tldraw record:
+  // legacy snapshots from a previous nested-Y.Map layout can leave behind
+  // Y.Map sub-instances at this level, which look like {} with no id field.
+  const initialRecords: TLRecord[] = [];
+  yRecords.forEach((value, key) => {
+    if (isTldrawRecord(value, key)) initialRecords.push(value);
+  });
+  if (initialRecords.length > 0) {
+    hydrateFromRemote(store, initialRecords);
   }
 
   // Stamp author metadata on every locally created record so downstream
@@ -120,8 +116,8 @@ export function createYjsTldrawStore({
         toRemove.push(key as TLRecord['id']);
       } else {
         const record = yRecords.get(key);
-        if (record) {
-          toPut.push(record as TLRecord);
+        if (isTldrawRecord(record, key)) {
+          toPut.push(record);
         }
       }
     });
@@ -246,6 +242,20 @@ function applyRecordsResilient(store: TLStore, records: TLRecord[]): TLRecord[] 
   return failed;
 }
 
+// Defensive runtime guard: only objects with a string id and typeName
+// (matching tldraw's record shape) are treated as records. Filters out
+// legacy Y.Map sub-instances and anything else that ended up in the
+// whiteboard root by accident.
+function isTldrawRecord(value: unknown, key: string): value is TLRecord {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as { id?: unknown; typeName?: unknown };
+  if (typeof candidate.id !== 'string' || typeof candidate.typeName !== 'string') return false;
+  // Y.Map instances wouldn't pass the shape check above, but we double-check
+  // by ruling out anything whose id doesn't match its map key (a property of
+  // tldraw's id-as-key invariant).
+  return candidate.id === key;
+}
+
 function hydrateFromRemote(store: TLStore, records: TLRecord[]): void {
   store.mergeRemoteChanges(() => {
     const retry = applyRecordsResilient(store, records);
@@ -260,10 +270,12 @@ export function applyHistoryEntryToYMap(
   const writes: Array<() => void> = [];
 
   for (const [id, record] of Object.entries(entry.changes.added)) {
-    writes.push(() => yRecords.set(id, record as TLRecord));
+    const sanitized = sanitizeForYjs(record);
+    if (sanitized) writes.push(() => yRecords.set(id, sanitized));
   }
   for (const [id, [, after]] of Object.entries(entry.changes.updated)) {
-    writes.push(() => yRecords.set(id, after as TLRecord));
+    const sanitized = sanitizeForYjs(after);
+    if (sanitized) writes.push(() => yRecords.set(id, sanitized));
   }
   for (const id of Object.keys(entry.changes.removed)) {
     writes.push(() => yRecords.delete(id));
@@ -272,6 +284,19 @@ export function applyHistoryEntryToYMap(
   for (let i = 0; i < writes.length; i += MAX_BATCH_PER_TRANSACTION) {
     const slice = writes.slice(i, i + MAX_BATCH_PER_TRANSACTION);
     for (const write of slice) write();
+  }
+}
+
+// JSON round-trip strips functions, undefined, symbols, and any field that
+// would make Yjs's internal structuredClone choke. tldraw records are
+// documented to be JSON-serializable; this is purely defensive against
+// stray non-clonable references getting attached by upstream code paths
+// (e.g. asset preloaders that briefly attach a Promise resolver).
+export function sanitizeForYjs<T>(value: T): T | null {
+  try {
+    return JSON.parse(JSON.stringify(value)) as T;
+  } catch {
+    return null;
   }
 }
 
