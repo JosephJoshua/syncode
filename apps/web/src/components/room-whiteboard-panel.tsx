@@ -154,6 +154,41 @@ export function RoomWhiteboardPanel({
     (editor: Editor) => {
       editorRef.current = editor;
 
+      // Diagnostic: confirm whether the editor is using our store. If tldraw
+      // wraps or replaces the store internally, our outer store.listen would
+      // see hydration changes (because we mutate that store directly) but
+      // never see user-driven changes (because they happen on the editor's
+      // actual store). Check identity at mount so we can pivot.
+      if (import.meta.env?.DEV) {
+        console.debug('[whiteboard] editor mounted', {
+          editorStore: editor.store,
+          hasSideEffects: !!editor.store.sideEffects,
+        });
+      }
+
+      // Belt-and-suspenders: register a listener directly on editor.store
+      // too. If our outer listener silently misses user events because of
+      // some store-identity issue, this one will catch them.
+      const unsubEditorListen = editor.store.listen((entry) => {
+        try {
+          const counts = {
+            added: Object.keys(entry.changes.added).length,
+            updated: Object.keys(entry.changes.updated).length,
+            removed: Object.keys(entry.changes.removed).length,
+          };
+          const total = counts.added + counts.updated + counts.removed;
+          if (total === 0) return;
+          if (import.meta.env?.DEV) {
+            console.debug('[whiteboard] editor-store entry', {
+              source: entry.source,
+              ...counts,
+            });
+          }
+        } catch (error) {
+          console.error('[whiteboard] editor-store listener threw', error);
+        }
+      });
+
       // (A + C) For locally-authored annotation shapes:
       //   - Force props.color = 'orange' for an immediate, unmissable visual
       //     contrast against drawings that use whatever color the author
@@ -189,7 +224,10 @@ export function RoomWhiteboardPanel({
           });
         },
       );
-      return () => cleanup();
+      return () => {
+        cleanup();
+        unsubEditorListen();
+      };
     },
     // The handler closes over editor via the argument; React doesn't need to
     // re-run this when state outside changes.
