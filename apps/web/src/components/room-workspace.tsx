@@ -1205,9 +1205,12 @@ export function RoomWorkspace({
               canAnnotate={room.myCapabilities.includes('whiteboard:annotate')}
               participantNames={
                 new Map(
-                  room.participants
-                    .filter((p) => p.isActive)
-                    .map((p) => [p.userId, p.displayName ?? p.userId.slice(0, 6)] as const),
+                  // Use displayName when set, otherwise the user's @username
+                  // — never the raw userId UUID, which leaks an identifier
+                  // and isn't human-readable. Include even inactive
+                  // participants so historical authors still show up in
+                  // the legend with their proper name.
+                  room.participants.map((p) => [p.userId, p.displayName ?? p.username] as const),
                 )
               }
               onPopOut={

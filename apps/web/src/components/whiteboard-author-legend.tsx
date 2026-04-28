@@ -68,7 +68,9 @@ export function WhiteboardAuthorLegend({
       <ul className="space-y-1">
         {authors.map((author) => {
           const hidden = hiddenAuthors.has(author.authorId);
-          const name = participantNames.get(author.authorId) ?? author.authorId.slice(0, 6);
+          // Prefer the participant's display name / username; fall back to a
+          // generic 'Unknown' rather than leaking an opaque UUID prefix.
+          const name = participantNames.get(author.authorId) ?? 'Unknown';
           return (
             <li key={author.authorId}>
               <button
