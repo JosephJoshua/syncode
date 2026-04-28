@@ -41,6 +41,13 @@ export interface CreateYjsTldrawStoreResult {
   // object that actually emits user-source events, and pre-attaching a
   // listener to the original store misses them.
   attachLocalStoreForwarder: (target: TLStore) => () => void;
+  // Tell the binding which store to mutate when remote Yjs updates arrive.
+  // Tldraw 4.5's <Tldraw store={...}> wraps the provided store, so the
+  // editor.store visible from onMount is a DIFFERENT object than the one
+  // we passed in. Without this redirection, Yjs->local writes would land
+  // on the original store while the editor renders from the wrapped one,
+  // leaving incoming remote shapes invisible.
+  setLocalApplyTarget: (target: TLStore | null) => void;
 }
 
 // Cap mass-create flushes so a paste of hundreds of shapes doesn't lock the
@@ -350,6 +357,32 @@ export function createYjsTldrawStore({
     });
   };
 
+  // The store we mutate on Yjs->local. Defaults to the local result.store,
+  // but the room-whiteboard-panel calls setLocalApplyTarget(editor.store)
+  // from onMount so remote updates land on the store tldraw is actually
+  // rendering. See setLocalApplyTarget below for the why.
+  let applyTarget: TLStore = store;
+
+  const setLocalApplyTarget = (target: TLStore | null): void => {
+    applyTarget = target ?? store;
+    // Whenever a real editor.store comes online, re-hydrate it from the
+    // current Yjs state. Otherwise the editor would render empty until the
+    // next remote update happened to flip a record we'd already received
+    // during construction-time hydration into result.store (the wrong store).
+    if (target && target !== store) {
+      const records: TLRecord[] = [];
+      yRecords.forEach((value, key) => {
+        if (isTldrawRecord(value, key)) records.push(value);
+      });
+      if (records.length > 0) {
+        if (import.meta.env?.DEV) {
+          console.debug('[whiteboard] re-hydrating editor.store', { count: records.length });
+        }
+        hydrateFromRemote(target, records);
+      }
+    }
+  };
+
   // Yjs -> local store: apply remote-origin map changes back to the store.
   const onYRecordsChange = (event: Y.YMapEvent<TLRecord>, transaction: Y.Transaction) => {
     try {
@@ -370,9 +403,10 @@ export function createYjsTldrawStore({
         console.debug('[whiteboard] Yjs→local', {
           put: toPut.length,
           remove: toRemove.length,
+          target: applyTarget === store ? 'pre-mount' : 'editor.store',
         });
       }
-      store.mergeRemoteChanges(() => {
+      applyTarget.mergeRemoteChanges(() => {
         if (toRemove.length > 0) {
           try {
             store.remove(toRemove);
@@ -428,6 +462,7 @@ export function createYjsTldrawStore({
     undoManager,
     localOrigin,
     attachLocalStoreForwarder,
+    setLocalApplyTarget,
     dispose: () => {
       beforeShapeCreate();
       beforeAssetCreate();
@@ -452,6 +487,9 @@ export interface UseYjsTldrawStoreResult {
   // actually uses (call this from <Tldraw onMount>). The returned function
   // detaches the listener; call it from your onMount cleanup.
   attachLocalStoreForwarder: (target: TLStore) => () => void;
+  // Tell the binding which store to mutate on incoming Yjs updates. Pass
+  // editor.store from onMount; pass null on unmount.
+  setLocalApplyTarget: (target: TLStore | null) => void;
 }
 
 export function useYjsTldrawStore(options: UseYjsTldrawStoreOptions): UseYjsTldrawStoreResult {
@@ -507,5 +545,6 @@ export function useYjsTldrawStore(options: UseYjsTldrawStoreOptions): UseYjsTldr
     undoManager: result.undoManager,
     status,
     attachLocalStoreForwarder: result.attachLocalStoreForwarder,
+    setLocalApplyTarget: result.setLocalApplyTarget,
   };
 }

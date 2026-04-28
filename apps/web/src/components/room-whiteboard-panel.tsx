@@ -126,15 +126,16 @@ export function RoomWhiteboardPanel({
 
   const assetStore = useMemo<TLAssetStore>(() => createControlPlaneAssetStore(roomId), [roomId]);
 
-  const { storeWithStatus, undoManager, attachLocalStoreForwarder } = useYjsTldrawStore({
-    doc,
-    awareness,
-    assetStore,
-    userId,
-    userName,
-    userColor,
-    getLayer: () => layerRef.current,
-  });
+  const { storeWithStatus, undoManager, attachLocalStoreForwarder, setLocalApplyTarget } =
+    useYjsTldrawStore({
+      doc,
+      awareness,
+      assetStore,
+      userId,
+      userName,
+      userColor,
+      getLayer: () => layerRef.current,
+    });
   const store = storeWithStatus.status === 'synced-remote' ? storeWithStatus.store : null;
 
   const handleToggleAuthor = useCallback((authorId: string) => {
@@ -165,6 +166,13 @@ export function RoomWhiteboardPanel({
       // events — pre-attaching a listener to our pre-created store would
       // miss every stroke (the symptom the user diagnostics surfaced).
       const unsubLocalForwarder = attachLocalStoreForwarder(editor.store);
+
+      // For the same reason, redirect remote-source applies to editor.store
+      // so incoming Yjs records land where tldraw is actually rendering.
+      // setLocalApplyTarget also re-hydrates the editor with whatever is
+      // currently in the Yjs map, replaying any records that were received
+      // and applied to the wrong store before this redirection took effect.
+      setLocalApplyTarget(editor.store);
 
       // After hydration, hop to whichever page actually has shapes. tldraw's
       // createTLStore creates a default page with id 'page:page', but a
@@ -239,9 +247,10 @@ export function RoomWhiteboardPanel({
       return () => {
         cleanup();
         unsubLocalForwarder();
+        setLocalApplyTarget(null);
       };
     },
-    [attachLocalStoreForwarder],
+    [attachLocalStoreForwarder, setLocalApplyTarget],
   );
 
   // (D) Switch the active tldraw tool when the user toggles layer mode.
