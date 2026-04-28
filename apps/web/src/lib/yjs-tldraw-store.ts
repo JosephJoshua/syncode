@@ -68,10 +68,11 @@ export function createYjsTldrawStore({
   const yRecords = doc.getMap<TLRecord>(WHITEBOARD_KEY);
 
   // Hydrate the local store from any records already present in the shared
-  // map (late-joiner case). If the shared map is empty, push the local
-  // store's default records (the empty page tldraw seeds on createTLStore)
-  // so the very first writer establishes a baseline. Both clients seeding
-  // the same default ids is fine — the writes are idempotent.
+  // map (late-joiner case). Records may have inter-references (a shape
+  // points at its parent page; a page state references a current page) and
+  // tldraw's strict schema validation throws when a record arrives before
+  // its dependency. Fall back to per-record put so a single validation
+  // failure doesn't drop the whole batch.
   if (yRecords.size === 0) {
     doc.transact(() => {
       for (const record of store.allRecords()) {
@@ -84,9 +85,7 @@ export function createYjsTldrawStore({
       records.push(record as TLRecord);
     });
     if (records.length > 0) {
-      store.mergeRemoteChanges(() => {
-        store.put(records);
-      });
+      hydrateFromRemote(store, records);
     }
   }
 
@@ -127,8 +126,23 @@ export function createYjsTldrawStore({
       }
     });
     store.mergeRemoteChanges(() => {
-      if (toRemove.length > 0) store.remove(toRemove);
-      if (toPut.length > 0) store.put(toPut);
+      if (toRemove.length > 0) {
+        try {
+          store.remove(toRemove);
+        } catch (error) {
+          if (import.meta.env?.DEV) {
+            console.warn('[whiteboard] failed to remove records', toRemove, error);
+          }
+        }
+      }
+      // Per-record put so one validation failure doesn't drop the whole
+      // batch. Two retry passes in case order-of-arrival put a record before
+      // its dependency (e.g. a shape arriving before its parent page); the
+      // second pass picks them up once the dependency lands.
+      if (toPut.length > 0) {
+        const retry = applyRecordsResilient(store, toPut);
+        if (retry.length > 0) applyRecordsResilient(store, retry);
+      }
     });
   };
   yRecords.observe(onYRecordsChange);
@@ -211,6 +225,32 @@ export function useYjsTldrawStore(options: UseYjsTldrawStoreOptions): UseYjsTldr
   }, [result]);
 
   return { store: result.store, undoManager: result.undoManager, status };
+}
+
+// Apply remote records to the local store one-by-one, tolerating per-record
+// validation failures. Returns the records that failed so the caller can
+// retry once the rest of the batch has been applied (resolving simple
+// dependency ordering races).
+function applyRecordsResilient(store: TLStore, records: TLRecord[]): TLRecord[] {
+  const failed: TLRecord[] = [];
+  for (const record of records) {
+    try {
+      store.put([record]);
+    } catch (error) {
+      failed.push(record);
+      if (import.meta.env?.DEV) {
+        console.warn('[whiteboard] failed to apply record', record.id, error);
+      }
+    }
+  }
+  return failed;
+}
+
+function hydrateFromRemote(store: TLStore, records: TLRecord[]): void {
+  store.mergeRemoteChanges(() => {
+    const retry = applyRecordsResilient(store, records);
+    if (retry.length > 0) applyRecordsResilient(store, retry);
+  });
 }
 
 export function applyHistoryEntryToYMap(

@@ -172,4 +172,50 @@ describe('createYjsTldrawStore', () => {
     }).not.toThrow();
     doc.destroy();
   });
+
+  it('GIVEN bound stores on two docs WHEN A writes directly to Yjs root THEN B observes the record via the binding listener', async () => {
+    const docA = new Y.Doc();
+    const docB = new Y.Doc();
+
+    docA.on('update', (update: Uint8Array, origin: unknown) => {
+      if (origin === 'from-b') return;
+      Y.applyUpdate(docB, update, 'from-a');
+    });
+    docB.on('update', (update: Uint8Array, origin: unknown) => {
+      if (origin === 'from-a') return;
+      Y.applyUpdate(docA, update, 'from-b');
+    });
+
+    const a = createYjsTldrawStore({
+      doc: docA,
+      userId: 'alice',
+      userName: 'alice',
+      userColor: '#f00',
+      getLayer: () => 'drawing',
+    });
+    const b = createYjsTldrawStore({
+      doc: docB,
+      userId: 'bob',
+      userName: 'bob',
+      userColor: '#0f0',
+      getLayer: () => 'drawing',
+    });
+
+    // Write a synthetic record directly to A's Yjs map. Bypasses tldraw's
+    // strict schema validation, but confirms the bridge applies remote
+    // updates to B's local store (because B's yMap.observe fires on the
+    // sync update propagated via the bridge).
+    const docAMap = docA.getMap<{ id: string; typeName: string }>(WHITEBOARD_KEY);
+    docAMap.set('synthetic:1', { id: 'synthetic:1', typeName: 'fake' });
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const docBMap = docB.getMap<{ id: string; typeName: string }>(WHITEBOARD_KEY);
+    expect(docBMap.get('synthetic:1')).toEqual({ id: 'synthetic:1', typeName: 'fake' });
+
+    a.dispose();
+    b.dispose();
+    docA.destroy();
+    docB.destroy();
+  });
 });
