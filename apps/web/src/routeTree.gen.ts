@@ -25,7 +25,6 @@ import { Route as AppRoomsCreateRouteImport } from './routes/_app/rooms_.create'
 import { Route as AppRoomsRoomIdRouteImport } from './routes/_app/rooms_.$roomId'
 import { Route as AppRoomsBrowseRouteImport } from './routes/_app/rooms/browse'
 import { Route as AppProblemsProblemIdRouteImport } from './routes/_app/problems.$problemId'
-import { Route as AppSessionsSessionIdFeedbackRouteImport } from './routes/_app/sessions.$sessionId.feedback'
 
 const PublicRouteRoute = PublicRouteRouteImport.update({
   id: '/_public',
@@ -105,12 +104,6 @@ const AppProblemsProblemIdRoute = AppProblemsProblemIdRouteImport.update({
   path: '/problems/$problemId',
   getParentRoute: () => AppRouteRoute,
 } as any)
-const AppSessionsSessionIdFeedbackRoute =
-  AppSessionsSessionIdFeedbackRouteImport.update({
-    id: '/feedback',
-    path: '/feedback',
-    getParentRoute: () => AppSessionsSessionIdRoute,
-  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof PublicIndexRoute
@@ -124,10 +117,9 @@ export interface FileRoutesByFullPath {
   '/rooms/browse': typeof AppRoomsBrowseRoute
   '/rooms/$roomId': typeof AppRoomsRoomIdRoute
   '/rooms/create': typeof AppRoomsCreateRoute
-  '/sessions/$sessionId': typeof AppSessionsSessionIdRouteWithChildren
+  '/sessions/$sessionId': typeof AppSessionsSessionIdRoute
   '/problems/': typeof AppProblemsIndexRoute
   '/rooms/': typeof AppRoomsIndexRoute
-  '/sessions/$sessionId/feedback': typeof AppSessionsSessionIdFeedbackRoute
 }
 export interface FileRoutesByTo {
   '/': typeof PublicIndexRoute
@@ -140,10 +132,9 @@ export interface FileRoutesByTo {
   '/rooms/browse': typeof AppRoomsBrowseRoute
   '/rooms/$roomId': typeof AppRoomsRoomIdRoute
   '/rooms/create': typeof AppRoomsCreateRoute
-  '/sessions/$sessionId': typeof AppSessionsSessionIdRouteWithChildren
+  '/sessions/$sessionId': typeof AppSessionsSessionIdRoute
   '/problems': typeof AppProblemsIndexRoute
   '/rooms': typeof AppRoomsIndexRoute
-  '/sessions/$sessionId/feedback': typeof AppSessionsSessionIdFeedbackRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -160,10 +151,9 @@ export interface FileRoutesById {
   '/_app/rooms/browse': typeof AppRoomsBrowseRoute
   '/_app/rooms_/$roomId': typeof AppRoomsRoomIdRoute
   '/_app/rooms_/create': typeof AppRoomsCreateRoute
-  '/_app/sessions/$sessionId': typeof AppSessionsSessionIdRouteWithChildren
+  '/_app/sessions/$sessionId': typeof AppSessionsSessionIdRoute
   '/_app/problems/': typeof AppProblemsIndexRoute
   '/_app/rooms/': typeof AppRoomsIndexRoute
-  '/_app/sessions/$sessionId/feedback': typeof AppSessionsSessionIdFeedbackRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -182,7 +172,6 @@ export interface FileRouteTypes {
     | '/sessions/$sessionId'
     | '/problems/'
     | '/rooms/'
-    | '/sessions/$sessionId/feedback'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -198,7 +187,6 @@ export interface FileRouteTypes {
     | '/sessions/$sessionId'
     | '/problems'
     | '/rooms'
-    | '/sessions/$sessionId/feedback'
   id:
     | '__root__'
     | '/_app'
@@ -217,7 +205,6 @@ export interface FileRouteTypes {
     | '/_app/sessions/$sessionId'
     | '/_app/problems/'
     | '/_app/rooms/'
-    | '/_app/sessions/$sessionId/feedback'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -339,13 +326,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppProblemsProblemIdRouteImport
       parentRoute: typeof AppRouteRoute
     }
-    '/_app/sessions/$sessionId/feedback': {
-      id: '/_app/sessions/$sessionId/feedback'
-      path: '/feedback'
-      fullPath: '/sessions/$sessionId/feedback'
-      preLoaderRoute: typeof AppSessionsSessionIdFeedbackRouteImport
-      parentRoute: typeof AppSessionsSessionIdRoute
-    }
   }
 }
 
@@ -363,17 +343,6 @@ const AppRoomsRouteRouteWithChildren = AppRoomsRouteRoute._addFileChildren(
   AppRoomsRouteRouteChildren,
 )
 
-interface AppSessionsSessionIdRouteChildren {
-  AppSessionsSessionIdFeedbackRoute: typeof AppSessionsSessionIdFeedbackRoute
-}
-
-const AppSessionsSessionIdRouteChildren: AppSessionsSessionIdRouteChildren = {
-  AppSessionsSessionIdFeedbackRoute: AppSessionsSessionIdFeedbackRoute,
-}
-
-const AppSessionsSessionIdRouteWithChildren =
-  AppSessionsSessionIdRoute._addFileChildren(AppSessionsSessionIdRouteChildren)
-
 interface AppRouteRouteChildren {
   AppRoomsRouteRoute: typeof AppRoomsRouteRouteWithChildren
   AppBookmarksRoute: typeof AppBookmarksRoute
@@ -382,7 +351,7 @@ interface AppRouteRouteChildren {
   AppProblemsProblemIdRoute: typeof AppProblemsProblemIdRoute
   AppRoomsRoomIdRoute: typeof AppRoomsRoomIdRoute
   AppRoomsCreateRoute: typeof AppRoomsCreateRoute
-  AppSessionsSessionIdRoute: typeof AppSessionsSessionIdRouteWithChildren
+  AppSessionsSessionIdRoute: typeof AppSessionsSessionIdRoute
   AppProblemsIndexRoute: typeof AppProblemsIndexRoute
 }
 
@@ -394,7 +363,7 @@ const AppRouteRouteChildren: AppRouteRouteChildren = {
   AppProblemsProblemIdRoute: AppProblemsProblemIdRoute,
   AppRoomsRoomIdRoute: AppRoomsRoomIdRoute,
   AppRoomsCreateRoute: AppRoomsCreateRoute,
-  AppSessionsSessionIdRoute: AppSessionsSessionIdRouteWithChildren,
+  AppSessionsSessionIdRoute: AppSessionsSessionIdRoute,
   AppProblemsIndexRoute: AppProblemsIndexRoute,
 }
 
