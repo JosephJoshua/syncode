@@ -44,6 +44,12 @@ interface RoomLobbyProps {
   onPreviewWorkspace?: () => void;
   onRoomUpdated?: (room: RoomDetail) => void;
   mediaControls?: React.ReactNode;
+  localVideoTrack?: MediaStreamTrack | null;
+  hasLocalVideo?: boolean;
+  isCameraEnabled?: boolean;
+  localScreenShareTrack?: MediaStreamTrack | null;
+  hasLocalScreenShare?: boolean;
+  isScreenShareEnabled?: boolean;
   speakingMap?: ReadonlyMap<string, boolean>;
   mediaConnectedSet?: ReadonlySet<string>;
   mediaMutedMap?: ReadonlyMap<string, boolean>;
@@ -212,6 +218,12 @@ export function RoomLobby({
   onPreviewWorkspace,
   onRoomUpdated,
   mediaControls,
+  localVideoTrack = null,
+  hasLocalVideo = false,
+  isCameraEnabled = false,
+  localScreenShareTrack = null,
+  hasLocalScreenShare = false,
+  isScreenShareEnabled = false,
   speakingMap,
   mediaConnectedSet,
   mediaMutedMap,
@@ -299,12 +311,17 @@ export function RoomLobby({
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-12">
         {/* Participant grid */}
         <div className="lg:col-span-8 space-y-4">
-          {mediaControls ? (
-            <div className="sticky top-0 z-10 flex justify-center rounded-lg border border-border/60 bg-background/80 p-2 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-              {mediaControls}
-            </div>
-          ) : null}
-          <LobbyMediaPreview />
+          <LobbyMediaPreview
+            videoTrack={localVideoTrack}
+            hasVideo={hasLocalVideo}
+            isCameraEnabled={isCameraEnabled}
+            screenShareTrack={localScreenShareTrack}
+            hasScreenShare={hasLocalScreenShare}
+            isScreenShareEnabled={isScreenShareEnabled}
+            isMicrophoneEnabled={selfMicrophoneEnabled ?? false}
+            isSpeaking={(currentUserId ? speakingMap?.get(currentUserId) : false) ?? false}
+            mediaControls={mediaControls ?? null}
+          />
           <LobbyParticipantList
             participants={activeParticipants}
             currentUserId={currentUserId}
@@ -394,13 +411,6 @@ export function RoomLobby({
                     </div>
                   </div>
                 </div>
-
-                {/* Media controls */}
-                {mediaControls ? (
-                  <div className="flex items-center justify-center rounded-md border border-border/60 bg-background/70 px-2 py-2">
-                    {mediaControls}
-                  </div>
-                ) : null}
 
                 {/* Ready toggle */}
                 <Button
