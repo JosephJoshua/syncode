@@ -52,6 +52,7 @@ import {
   JoinRoomResponseDto,
   ListRoomsQueryDto,
   ListRoomsResponseDto,
+  LockEditorResponseDto,
   MediaTokenResponseDto,
   RoomDetailDto,
   RunCodeDto,
@@ -62,6 +63,7 @@ import {
   TransferRoomOwnershipResponseDto,
   TransitionRoomPhaseDto,
   TransitionRoomPhaseResponseDto,
+  UnlockEditorResponseDto,
   UpdateRoomParticipantDto,
   UpdateRoomParticipantResponseDto,
 } from './dto/rooms.dto.js';
@@ -349,6 +351,52 @@ export class RoomsController {
   ): Promise<TransitionRoomPhaseResponseDto> {
     const result = await this.roomsService.transitionPhase(id, user.id, body.targetStatus);
     return { ...result, transitionedAt: result.transitionedAt.toISOString() };
+  }
+
+  @Post(CONTROL_API.ROOMS.LOCK_EDITOR.route)
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Lock the collaborative editor for everyone except the host' })
+  @ApiParam({ name: 'id', description: 'Room ID (UUID)' })
+  @ApiResponse({ status: 200, type: LockEditorResponseDto })
+  @ApiResponse({ status: 403, type: ErrorResponseDto })
+  @ApiResponse({ status: 404, type: ErrorResponseDto })
+  @ApiResponse({ status: 409, type: ErrorResponseDto, description: 'Room has already finished' })
+  async lockEditor(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+  ): Promise<LockEditorResponseDto> {
+    const result = await this.roomsService.setEditorLock(id, user.id, true);
+    return {
+      roomId: result.roomId,
+      editorLocked: true,
+      changed: result.changed,
+      ...(result.changed && result.changedAt && result.changedBy
+        ? { lockedAt: result.changedAt.toISOString(), lockedBy: result.changedBy }
+        : {}),
+    };
+  }
+
+  @Post(CONTROL_API.ROOMS.UNLOCK_EDITOR.route)
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Release the collaborative editor lock' })
+  @ApiParam({ name: 'id', description: 'Room ID (UUID)' })
+  @ApiResponse({ status: 200, type: UnlockEditorResponseDto })
+  @ApiResponse({ status: 403, type: ErrorResponseDto })
+  @ApiResponse({ status: 404, type: ErrorResponseDto })
+  @ApiResponse({ status: 409, type: ErrorResponseDto, description: 'Room has already finished' })
+  async unlockEditor(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+  ): Promise<UnlockEditorResponseDto> {
+    const result = await this.roomsService.setEditorLock(id, user.id, false);
+    return {
+      roomId: result.roomId,
+      editorLocked: false,
+      changed: result.changed,
+      ...(result.changed && result.changedAt && result.changedBy
+        ? { unlockedAt: result.changedAt.toISOString(), unlockedBy: result.changedBy }
+        : {}),
+    };
   }
 
   @Post(CONTROL_API.ROOMS.ENSURE_COLLAB.route)

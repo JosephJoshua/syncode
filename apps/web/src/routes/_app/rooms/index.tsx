@@ -23,7 +23,6 @@ import {
   Hash,
   LinkIcon,
   Loader2,
-  Plus,
   Radio,
   Users,
 } from 'lucide-react';
@@ -51,16 +50,16 @@ function createInitialPaginationState() {
   };
 }
 
-function parseInviteInput(raw: string): { roomId: string; code: string } | null {
+function parseInviteInput(raw: string): { roomId: string; code: string | null } | null {
   const trimmed = raw.trim();
 
-  // Full URL: .../rooms/{uuid}?code=XXXXXX
+  // Full URL: .../rooms/{uuid} with optional ?code=XXXXXX (public rooms have no code).
   try {
     const url = new URL(trimmed, globalThis.location.origin);
     const match = /\/rooms\/([^/]+)/.exec(url.pathname);
-    const code = url.searchParams.get('code');
-    if (match?.[1] && code) {
-      return { roomId: match[1], code: code.toUpperCase() };
+    if (match?.[1]) {
+      const codeParam = url.searchParams.get('code');
+      return { roomId: match[1], code: codeParam ? codeParam.toUpperCase() : null };
     }
   } catch {
     // Not a URL, just fall through.
@@ -102,7 +101,6 @@ export function RoomsPage() {
   });
 
   const rooms = roomsQuery.data?.data ?? [];
-  const roomsCount = rooms.length;
   const hasPreviousPage = paginationState.cursorHistory.length > 0;
   const nextCursor = roomsQuery.data?.pagination.nextCursor ?? null;
   const hasNextPage = roomsQuery.data?.pagination.hasMore === true && nextCursor !== null;
@@ -124,45 +122,12 @@ export function RoomsPage() {
     void navigate({
       to: '/rooms/$roomId',
       params: { roomId: parsed.roomId },
-      search: { code: parsed.code },
+      search: parsed.code ? { code: parsed.code } : {},
     }).catch(() => {});
   };
 
   return (
     <div>
-      <motion.div
-        className="mb-6 flex items-start justify-between gap-4"
-        initial={{ opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.45, delay: 0.05, ease: [0.22, 1, 0.36, 1] }}
-      >
-        <div>
-          <div className="mb-3 inline-flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary ring-1 ring-primary/20">
-            <Radio size={20} />
-          </div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-            {t('heading')}
-          </h1>
-          <p className="mt-1.5 text-sm text-muted-foreground">
-            {statusFilter === 'all'
-              ? roomsCount > 0
-                ? t('subtitle.pageCount', { count: roomsCount })
-                : t('subtitle.noActive')
-              : t('subtitle.pageCountWithStatus', {
-                  count: roomsCount,
-                  status: t(ROOM_STATUS_KEYS[statusFilter]),
-                })}
-          </p>
-        </div>
-
-        <Link to="/rooms/create">
-          <Button className="gap-2 shadow-[0_0_25px_hsl(var(--primary)/0.3)] hover:shadow-[0_0_35px_hsl(var(--primary)/0.5)]">
-            <Plus size={18} />
-            {t('button.createRoom')}
-          </Button>
-        </Link>
-      </motion.div>
-
       <motion.div
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}

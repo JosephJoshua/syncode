@@ -28,6 +28,15 @@
     "showFullReview": "Show full review",
     "showLessReview": "Show less"
   },
+  "role": {
+    "candidate": "Candidate",
+    "interviewer": "Interviewer",
+    "observer": "Observer"
+  },
+  "mode": {
+    "peer": "Peer",
+    "ai": "AI"
+  },
   "overview": {
     "overallScore": "Overall Score",
     "summary": "Quick Read",
@@ -80,7 +89,116 @@
     "sessionId": "Session ID",
     "role": "Role",
     "date": "Date",
-    "duration": "Duration"
+    "duration": "Duration",
+    "mode": "Mode",
+    "language": "Language",
+    "unknown": "Unknown",
+    "difficulty": "Difficulty",
+    "generatedAt": "Report generated",
+    "pending": "Pending",
+    "available": "Available",
+    "unavailable": "Unavailable",
+    "feedbackStatus": "Peer feedback",
+    "recording": "Recording",
+    "activity": "Activity",
+    "runs": "Runs",
+    "submissions": "Submissions",
+    "report": "AI report"
+  },
+  "participants": {
+    "heading": "Participants",
+    "description": "{{count}} participant(s)",
+    "you": "You",
+    "joinedAt": "Joined",
+    "leftAt": "Left",
+    "leftAtMissing": "Still in session"
+  },
+  "snapshots": {
+    "errorDescription": "Code snapshots could not be loaded.",
+    "retry": "Retry",
+    "emptyDescription": "No code snapshots were saved for this session.",
+    "hideHistory": "Hide history",
+    "showHistory": "Show {{count}} snapshots",
+    "collapsedDescription": "{{count}} snapshots saved",
+    "snapshotLabel": "Snapshot {{index}}",
+    "loc": "{{count}} lines",
+    "noCode": "(empty)",
+    "trigger": {
+      "periodic": "Periodic",
+      "phase_change": "Phase change",
+      "submission": "Submission",
+      "manual": "Manual",
+      "session_end": "Session end"
+    }
+  },
+  "timeline": {
+    "hideCode": "Hide code",
+    "showCode": "Show code",
+    "phaseChangeWithTarget": "Phase → {{phase}}",
+    "events": {
+      "sessionStart": "Session started",
+      "sessionEnd": "Session ended",
+      "periodic": "Periodic snapshot",
+      "phase_change": "Phase changed",
+      "submission": "Code submitted",
+      "manual": "Manual save",
+      "session_end": "Session ended"
+    }
+  },
+  "phase": {
+    "waiting": "Waiting",
+    "warmup": "Warm-up",
+    "coding": "Coding",
+    "wrapup": "Wrap-up",
+    "finished": "Finished"
+  },
+  "peerFeedbackSection": {
+    "loading": "Loading peer feedback...",
+    "error": "Peer feedback could not be loaded.",
+    "retry": "Retry",
+    "statusHeading": "Feedback status",
+    "awaitingResponses": "Awaiting peer responses",
+    "hiddenUntilSubmitted": "Feedback will be revealed once all participants have submitted their evaluations.",
+    "empty": "No peer feedback was submitted for this session.",
+    "wouldPairAgain": "Would pair again",
+    "wouldNotPairAgain": "Would not pair again",
+    "feedbackFrom": "Feedback from {{name}}",
+    "submittedAt": "Submitted",
+    "summaryPanel": "Overall",
+    "strengths": "Strengths",
+    "improvements": "Improvements",
+    "ratings": {
+      "problemSolving": "Problem solving",
+      "communication": "Communication",
+      "codeQuality": "Code quality",
+      "debugging": "Debugging"
+    }
+  },
+  "breakdown": {
+    "pass": "Pass",
+    "timeout": "Timeout",
+    "error": "Error",
+    "failed": "Fail",
+    "emptyDescription": "No test case breakdown was available for this session.",
+    "caseLabel": "Case {{index}}",
+    "passDescription": "All test cases passed",
+    "failDescription": "Some test cases failed"
+  },
+  "comparison": {
+    "trend": "Trend",
+    "sessionsCompared": "Sessions compared",
+    "averageScore": "Average score"
+  },
+  "trend": {
+    "improving": "Improving",
+    "stable": "Stable",
+    "declining": "Declining"
+  },
+  "peerFeedback": {
+    "averageRating": "Average rating",
+    "wouldPairAgain": "Would pair again",
+    "themes": "Themes",
+    "none": "None"
   },
   "form": {
     "title": "Peer Evaluation",

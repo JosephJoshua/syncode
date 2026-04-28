@@ -17,16 +17,22 @@ const SOURCE_NAME = 'code';
 const STDIN_PATH = `${CODE_DIR}/stdin.txt`;
 const BINARY_PATH = `${CODE_DIR}/code.out`;
 const DURATION_PATH = `${CODE_DIR}/duration_ns.txt`;
+const MEMORY_PATH = `${CODE_DIR}/peak_kb.txt`;
 
 /**
- * Wrap a run command with inline nanosecond timing.
- * Measures wall-clock time INSIDE the container (no network overhead).
+ * Wrap a run command with inline nanosecond timing AND peak-RSS measurement.
+ *
+ * `sandbox.getMetrics()` is a periodic sampler — short algorithm runs finish
+ * before any sample is taken, so we'd always report no memory. `/usr/bin/time
+ * -f %M` records the child's peak resident set in KB into a file we can read
+ * after the run, regardless of duration. If `/usr/bin/time` is unavailable on
+ * the image we fall back to running the command bare so a missing tool never
+ * breaks execution.
+ *
  * Preserves the inner command's exit code.
  */
 function timedCommand(runCmd: string): string {
-  // Single sh -c invocation that captures start/end timestamps around the actual command.
-  // Uses $$ to avoid variable collision. Writes duration to a file for later retrieval.
-  return `sh -c 'SC_START=$(date +%s%N); ${runCmd}; SC_CODE=$?; SC_END=$(date +%s%N); echo $((SC_END - SC_START)) > ${DURATION_PATH}; exit $SC_CODE'`;
+  return `sh -c 'SC_START=$(date +%s%N); if [ -x /usr/bin/time ]; then /usr/bin/time -f %M -o ${MEMORY_PATH} -- ${runCmd}; else ${runCmd}; fi; SC_CODE=$?; SC_END=$(date +%s%N); echo $((SC_END - SC_START)) > ${DURATION_PATH}; exit $SC_CODE'`;
 }
 
 export class E2bSandboxAdapter implements ISandboxProvider, OnModuleDestroy {
@@ -181,12 +187,14 @@ export class E2bSandboxAdapter implements ISandboxProvider, OnModuleDestroy {
 
   private async peakMemoryMb(sandbox: Sandbox): Promise<number | undefined> {
     try {
-      const metrics = await sandbox.getMetrics();
-      if (metrics.length === 0) return undefined;
-      const peakBytes = Math.max(...metrics.map((m) => m.memUsed));
-      return Math.round((peakBytes / (1024 * 1024)) * 10) / 10;
+      const content = await sandbox.files.read(MEMORY_PATH);
+      // `/usr/bin/time -f %M` writes max RSS in kilobytes, sometimes with a
+      // trailing newline. An empty file means the wrapper fell back to the
+      // bare run path (no time available on the image).
+      const kb = Number(content.trim());
+      if (!Number.isFinite(kb) || kb <= 0) return undefined;
+      return Math.round((kb / 1024) * 10) / 10;
     } catch {
-      this.logger.warn('Could not read sandbox metrics');
       return undefined;
     }
   }

@@ -83,6 +83,7 @@ import type {
   PublicRoomSummaryResult,
   RoomDetailResult,
   RoomSummaryResult,
+  SetEditorLockResult,
   TransferOwnershipResult,
   TransitionPhaseResult,
   UpdateParticipantRoleResult,
@@ -1278,6 +1279,74 @@ export class RoomsService {
       currentStatus: targetStatus,
       transitionedAt: now,
       transitionedBy: userId,
+    };
+  }
+
+  async setEditorLock(
+    roomId: string,
+    userId: string,
+    locked: boolean,
+  ): Promise<SetEditorLockResult> {
+    const now = new Date();
+
+    const { currentStatus, changed } = await this.db.transaction(async (tx) => {
+      const [lockedRoom] = await tx.select().from(rooms).where(eq(rooms.id, roomId)).for('update');
+
+      if (!lockedRoom) {
+        throw new NotFoundException({
+          message: 'Room not found',
+          code: ERROR_CODES.ROOM_NOT_FOUND,
+        });
+      }
+
+      const [participant] = await tx
+        .select({ role: roomParticipants.role, isActive: roomParticipants.isActive })
+        .from(roomParticipants)
+        .where(and(eq(roomParticipants.roomId, roomId), eq(roomParticipants.userId, userId)));
+
+      if (!participant?.isActive) {
+        throw new ForbiddenException({
+          message: 'Not a participant of this room',
+          code: ERROR_CODES.ROOM_ACCESS_DENIED,
+        });
+      }
+
+      if (lockedRoom.hostId !== userId && participant.role !== RoomRole.INTERVIEWER) {
+        throw new ForbiddenException({
+          message: 'You do not have permission to change the editor lock',
+          code: ERROR_CODES.ROOM_PERMISSION_DENIED,
+        });
+      }
+
+      if (lockedRoom.status === RoomStatus.FINISHED) {
+        throw new ConflictException({
+          message: 'Room has already finished',
+          code: ERROR_CODES.ROOM_FINISHED,
+        });
+      }
+
+      // Idempotent: requesting the current state is a no-op, not an error.
+      if (lockedRoom.editorLocked === locked) {
+        return { currentStatus: lockedRoom.status, changed: false };
+      }
+
+      await tx.update(rooms).set({ editorLocked: locked }).where(eq(rooms.id, roomId));
+
+      return { currentStatus: lockedRoom.status, changed: true };
+    });
+
+    if (changed) {
+      this.logger.log(`Room ${roomId} editor ${locked ? 'locked' : 'unlocked'} by user ${userId}`);
+      // Fire-and-forget broadcast — clients reflect the lock by re-querying or
+      // by reacting to the room-state patch event.
+      void this.updateCollabRoomState(roomId, currentStatus, locked, userId);
+    }
+
+    return {
+      roomId,
+      editorLocked: locked,
+      changed,
+      ...(changed ? { changedAt: now, changedBy: userId } : {}),
     };
   }
 

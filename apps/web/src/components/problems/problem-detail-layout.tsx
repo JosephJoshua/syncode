@@ -1,6 +1,7 @@
 import type { ProblemDetail, ProblemExample, ProblemTestCase } from '@syncode/contracts';
 import { SUPPORTED_LANGUAGES, type SupportedLanguage } from '@syncode/shared';
 import { Button } from '@syncode/ui';
+import { Link } from '@tanstack/react-router';
 import { Bookmark, LoaderCircle } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useEffect, useMemo, useState } from 'react';
@@ -191,11 +192,13 @@ function SummaryRail({ problem }: { readonly problem: ProblemDetail }) {
     <div className="rounded-2xl border border-border/60 bg-card/70 p-3">
       <div className="border-b border-border/60 pb-2.5">
         <Button
-          type="button"
+          asChild
           size="lg"
           className="w-full cursor-pointer bg-primary text-primary-foreground shadow-[0_10px_24px_-12px_hsl(var(--primary)/0.9)] hover:-translate-y-0.5 hover:bg-primary/90 hover:shadow-[0_16px_32px_-16px_hsl(var(--primary)/0.95)]"
         >
-          {t('detail.practiceButton')}
+          <Link to="/rooms/create" search={{ problemId: problem.id }}>
+            {t('detail.practiceButton')}
+          </Link>
         </Button>
       </div>
 

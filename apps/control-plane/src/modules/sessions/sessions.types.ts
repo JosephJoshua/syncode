@@ -1,5 +1,11 @@
 import type { CodeSnapshotTrigger, SessionReport } from '@syncode/contracts';
-import type { ProblemDifficulty, RoomMode, RoomRole, SupportedLanguage } from '@syncode/shared';
+import type {
+  ProblemDifficulty,
+  RoomMode,
+  RoomRole,
+  RoomStatus,
+  SupportedLanguage,
+} from '@syncode/shared';
 
 export interface SessionSummaryResult {
   sessionId: string;
@@ -81,6 +87,7 @@ export interface SessionCodeSnapshotResult {
   language: SupportedLanguage;
   code: string;
   linesOfCode: number;
+  phase: RoomStatus | null;
 }
 
 export type SessionReportResult = Omit<SessionReport, 'generatedAt'> & {
@@ -94,6 +101,7 @@ export interface SessionLatestCodeSnapshotResult {
   trigger: string;
   linesOfCode: number | null;
   createdAt: Date;
+  phase: RoomStatus | null;
 }
 
 export interface SessionPeerFeedbackResult {

@@ -49,22 +49,13 @@ export function ReportDimensionCard({
                 <AiFeedbackText text={item.description} />
               </p>
               {item.type === 'code_snippet' && language ? (
-                <>
-                  <p className="mt-2 text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
-                    {item.type}
-                  </p>
-                  <ReportSnapshotCodeViewer
-                    code={item.reference}
-                    language={language}
-                    linesOfCode={Math.max(item.reference.split('\n').length, 1)}
-                    compact
-                  />
-                </>
-              ) : (
-                <p className="mt-1 text-xs uppercase tracking-[0.12em] text-muted-foreground">
-                  {item.type} · {item.reference}
-                </p>
-              )}
+                <ReportSnapshotCodeViewer
+                  code={item.reference}
+                  language={language}
+                  linesOfCode={Math.max(item.reference.split('\n').length, 1)}
+                  compact
+                />
+              ) : null}
             </li>
           ))}
         </ul>
