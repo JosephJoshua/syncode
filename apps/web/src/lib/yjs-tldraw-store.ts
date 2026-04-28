@@ -58,6 +58,19 @@ const DOCUMENT_RECORD_TYPES = new Set(['shape', 'asset', 'page', 'document', 'bi
 const isDocumentRecord = (record: { typeName: string }): boolean =>
   DOCUMENT_RECORD_TYPES.has(record.typeName);
 
+const collectTypeNames = (entry: HistoryEntry<TLRecord>): string[] => {
+  const set = new Set<string>();
+  for (const r of Object.values(entry.changes.added)) set.add((r as { typeName: string }).typeName);
+  for (const [, [before, after]] of Object.entries(entry.changes.updated)) {
+    const r = (after ?? before) as { typeName: string } | undefined;
+    if (r) set.add(r.typeName);
+  }
+  for (const r of Object.values(entry.changes.removed)) {
+    set.add((r as { typeName: string }).typeName);
+  }
+  return Array.from(set);
+};
+
 // Tally only document-scoped records in a HistoryEntry. Session/presence
 // records are excluded so noisy camera/pointer churn doesn't spam the
 // diagnostic log or trigger empty Yjs forwards.
@@ -298,8 +311,27 @@ export function createYjsTldrawStore({
   // user event. The room-whiteboard-panel calls attachLocalStoreForwarder
   // from inside onMount with editor.store.
   const attachLocalStoreForwarder = (target: TLStore): (() => void) => {
+    if (import.meta.env?.DEV) {
+      console.debug('[whiteboard] forwarder attached', { storeId: (target as { id?: string }).id });
+    }
     return target.listen((entry: HistoryEntry<TLRecord>) => {
       try {
+        if (import.meta.env?.DEV) {
+          // Log every entry the listener sees, including non-user ones, so
+          // we can pinpoint where the bridge breaks if it stops working.
+          const sample = {
+            source: entry.source,
+            added: Object.keys(entry.changes.added).length,
+            updated: Object.keys(entry.changes.updated).length,
+            removed: Object.keys(entry.changes.removed).length,
+            // What types are in the entry — answers "is tldraw emitting
+            // shape changes at all?"
+            types: collectTypeNames(entry),
+          };
+          if (sample.added + sample.updated + sample.removed > 0) {
+            console.debug('[whiteboard] forwarder saw entry', sample);
+          }
+        }
         if (entry.source !== 'user') return;
         // Pre-filter: tldraw emits user-source events for session-scoped
         // records (camera pan/zoom, pointer move, instance state) on every
