@@ -9,6 +9,7 @@ const ALL_ROOM_CAPABILITIES = [
   'code:change-language',
   'whiteboard:view',
   'whiteboard:draw',
+  'whiteboard:annotate',
   'media:audio',
   'media:video',
   'media:screenshare',
@@ -51,6 +52,7 @@ const INTERVIEWER_CAPABILITIES: ReadonlySet<RoomCapability> = new Set<RoomCapabi
   'code:change-language',
   'whiteboard:view',
   'whiteboard:draw',
+  'whiteboard:annotate',
   'media:audio',
   'media:video',
   'media:screenshare',
@@ -69,6 +71,7 @@ const CANDIDATE_CAPABILITIES: ReadonlySet<RoomCapability> = new Set<RoomCapabili
   'code:change-language',
   'whiteboard:view',
   'whiteboard:draw',
+  'whiteboard:annotate',
   'media:audio',
   'media:video',
   'media:screenshare',
@@ -80,6 +83,7 @@ const CANDIDATE_CAPABILITIES: ReadonlySet<RoomCapability> = new Set<RoomCapabili
 const OBSERVER_CAPABILITIES: ReadonlySet<RoomCapability> = new Set<RoomCapability>([
   'code:view',
   'whiteboard:view',
+  'whiteboard:annotate',
   'chat:send',
   'recording:replay',
 ]);

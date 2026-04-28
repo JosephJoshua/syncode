@@ -119,4 +119,30 @@ describe('Room Permissions', () => {
       }
     });
   });
+
+  describe('whiteboard:annotate capability', () => {
+    test('GIVEN observer role WHEN checking whiteboard:annotate THEN returns true', () => {
+      expect(hasRoomPermission(RoomRole.OBSERVER, 'whiteboard:annotate')).toBe(true);
+    });
+
+    test('GIVEN candidate role WHEN checking whiteboard:annotate THEN returns true', () => {
+      expect(hasRoomPermission(RoomRole.CANDIDATE, 'whiteboard:annotate')).toBe(true);
+    });
+
+    test('GIVEN interviewer role WHEN checking whiteboard:annotate THEN returns true', () => {
+      expect(hasRoomPermission(RoomRole.INTERVIEWER, 'whiteboard:annotate')).toBe(true);
+    });
+
+    test('GIVEN observer role WHEN checking whiteboard:draw THEN returns false', () => {
+      expect(hasRoomPermission(RoomRole.OBSERVER, 'whiteboard:draw')).toBe(false);
+    });
+
+    test('GIVEN candidate role WHEN checking whiteboard:draw THEN returns true', () => {
+      expect(hasRoomPermission(RoomRole.CANDIDATE, 'whiteboard:draw')).toBe(true);
+    });
+
+    test('GIVEN observer role WHEN checking whiteboard:view THEN returns true', () => {
+      expect(hasRoomPermission(RoomRole.OBSERVER, 'whiteboard:view')).toBe(true);
+    });
+  });
 });

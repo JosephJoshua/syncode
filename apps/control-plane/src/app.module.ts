@@ -17,6 +17,7 @@ import { ProblemsModule } from './modules/problems/problems.module.js';
 import { RoomsModule } from './modules/rooms/rooms.module.js';
 import { SessionsModule } from './modules/sessions/sessions.module.js';
 import { UsersModule } from './modules/users/users.module.js';
+import { WhiteboardAssetsModule } from './modules/whiteboard-assets/whiteboard-assets.module.js';
 
 const isProd = process.env.NODE_ENV === 'production';
 let hasPinoPretty = false;
@@ -119,6 +120,7 @@ if (!isProd) {
     AuthModule,
     UsersModule,
     RoomsModule,
+    WhiteboardAssetsModule,
     SessionsModule,
     ProblemsModule,
     FeedbackModule,

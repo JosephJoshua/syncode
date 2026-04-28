@@ -68,6 +68,10 @@ import type {
   userProfileResponseSchema,
   userQuotasResponseSchema,
 } from './users.js';
+import type {
+  whiteboardAssetUploadUrlRequestSchema,
+  whiteboardAssetUploadUrlResponseSchema,
+} from './whiteboard-assets.js';
 
 export const CONTROL_API = {
   AUTH: {
@@ -235,6 +239,12 @@ export const CONTROL_API = {
       'sessions/:id/feedback',
       'GET',
     ),
+  },
+  WHITEBOARD_ASSETS: {
+    UPLOAD_URL: defineRoute<
+      z.infer<typeof whiteboardAssetUploadUrlRequestSchema>,
+      z.infer<typeof whiteboardAssetUploadUrlResponseSchema>
+    >()('rooms/:id/whiteboard/assets/upload-url', 'POST'),
   },
   HEALTH: defineRoute<void, z.infer<typeof healthCheckResponseSchema>>()('health', 'GET'),
 };

@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import {
   Separator as ResizableHandle,
@@ -46,9 +47,11 @@ import {
 } from '@/lib/mock-workspace.js';
 import { allRequiredPeersReady } from '@/lib/participant-readiness.js';
 import { buildInviteLink } from '@/lib/room-stage.js';
+import { authorColor } from '@/lib/whiteboard-author-color.js';
 import { codeTextKey } from '@/lib/yjs-collab-provider.js';
 import { CollaborativeEditor } from './collaborative-editor.js';
 import { ExecutionDetailsPanel } from './execution-details-panel.js';
+import { FloatingWhiteboardPanel } from './floating-whiteboard-panel.js';
 import { HostControlPanel } from './host-control-panel.js';
 import { InviteLinkInline } from './invite-link-inline.js';
 import { LanguagePicker } from './language-picker.js';
@@ -58,6 +61,7 @@ import { RoomHeaderBar } from './room-header-bar.js';
 import { type Participant, RoomParticipantCard } from './room-participant-card.js';
 import { type ProblemData, type RoomHintItem, RoomProblemPanel } from './room-problem-panel.js';
 import { RoomStatusBar } from './room-status-bar.js';
+import { RoomWhiteboardPanel } from './room-whiteboard-panel.js';
 import {
   type CaseRunState,
   countPassed,
@@ -298,6 +302,12 @@ export function RoomWorkspace({
   const [rightNarrow, setRightNarrow] = useState(false);
   const [activeRightTab, setActiveRightTab] = useState<'participants' | 'chat'>('participants');
   const [bottomCollapsed, setBottomCollapsed] = useState(false);
+  const [activeCenterTab, setActiveCenterTab] = useState<'code' | 'whiteboard'>('code');
+  const [whiteboardViewMode, setWhiteboardViewMode] = useState<'tab' | 'floating'>('tab');
+  const [inlineWhiteboardHost, setInlineWhiteboardHost] = useState<HTMLDivElement | null>(null);
+  const [floatingWhiteboardHost, setFloatingWhiteboardHost] = useState<HTMLDivElement | null>(null);
+  const [whiteboardParkingHost, setWhiteboardParkingHost] = useState<HTMLDivElement | null>(null);
+  const [activeCommentLine, setActiveCommentLine] = useState(1);
   const rightMountedRef = useRef(false);
   const rightContentRef = useRef<HTMLDivElement>(null);
 
@@ -1038,13 +1048,45 @@ export function RoomWorkspace({
                 {/* Editor toolbar */}
                 <div className="flex h-9 shrink-0 items-center justify-between border-b border-border bg-card px-3">
                   <div className="flex items-center gap-2.5">
-                    <div className="flex items-center gap-1.5 rounded-t-md border border-b-0 border-border bg-background px-2.5 py-1">
-                      <span className="size-2 rounded-full bg-primary/60" />
-                      <span className="font-mono text-[11px] text-foreground/80">
+                    <div
+                      role="tablist"
+                      aria-label="Center workspace tabs"
+                      className="flex items-center"
+                    >
+                      <button
+                        type="button"
+                        role="tab"
+                        aria-selected={activeCenterTab === 'code'}
+                        onClick={() => setActiveCenterTab('code')}
+                        className={cn(
+                          'flex items-center gap-1.5 rounded-t-md border border-b-0 px-2.5 py-1 font-mono text-[11px] transition-colors',
+                          activeCenterTab === 'code'
+                            ? 'border-border bg-background text-foreground/80'
+                            : 'border-transparent bg-transparent text-muted-foreground hover:text-foreground',
+                        )}
+                      >
+                        <span className="size-2 rounded-full bg-primary/60" />
                         solution.{languageExtension(language)}
-                      </span>
+                      </button>
+                      {room.myCapabilities.includes('whiteboard:view') ? (
+                        <button
+                          type="button"
+                          role="tab"
+                          aria-selected={activeCenterTab === 'whiteboard'}
+                          onClick={() => setActiveCenterTab('whiteboard')}
+                          className={cn(
+                            'ml-1 flex items-center gap-1.5 rounded-t-md border border-b-0 px-2.5 py-1 font-mono text-[11px] transition-colors',
+                            activeCenterTab === 'whiteboard'
+                              ? 'border-border bg-background text-foreground/80'
+                              : 'border-transparent bg-transparent text-muted-foreground hover:text-foreground',
+                          )}
+                        >
+                          <span className="size-2 rounded-full bg-amber-400/70" />
+                          {t('tabs.whiteboard')}
+                        </button>
+                      ) : null}
                     </div>
-                    {isEditorReadOnly ? (
+                    {isEditorReadOnly && activeCenterTab === 'code' ? (
                       <Badge variant="neutral" size="sm" className="text-[10px]">
                         {t('workspace.readOnly')}
                       </Badge>
@@ -1106,32 +1148,75 @@ export function RoomWorkspace({
                   </div>
                 ) : null}
 
-                {/* Monaco editor */}
-                <div className="flex-1 overflow-hidden">
-                  {doc && awareness && collabStatus === 'connected' ? (
-                    <CollaborativeEditor
-                      key={doc.clientID}
-                      doc={doc}
-                      awareness={awareness}
-                      language={monacoLanguage}
-                      readOnly={isEditorReadOnly}
-                      comments={comments}
-                      commentLineNumbers={commentLineNumbers}
-                      canAddComments={Boolean(currentUserId) || isMockPreview}
-                      onAddComment={(lineNumber, content) => {
-                        addComment({
-                          authorId: currentUserId ?? 'mock-user',
-                          authorName: currentUserName || 'Mock User',
-                          content,
-                          lineNumber,
-                        });
-                      }}
-                      onRunCode={() => void handleRunCodeRef.current()}
-                      onSubmitCode={() => void requestSubmitCodeRef.current()}
-                    />
-                  ) : (
-                    EDITOR_LOADING
-                  )}
+                {/* Editor / whiteboard surface — kept mounted to preserve
+                    each subtree's local state across tab switches. */}
+                <div className="relative flex-1 overflow-hidden">
+                  <div
+                    className={cn(
+                      'absolute inset-0',
+                      activeCenterTab === 'code' ? 'visible' : 'invisible',
+                    )}
+                  >
+                    {doc && awareness && collabStatus === 'connected' ? (
+                      <CollaborativeEditor
+                        key={doc.clientID}
+                        doc={doc}
+                        awareness={awareness}
+                        language={monacoLanguage}
+                        readOnly={isEditorReadOnly}
+                        comments={comments}
+                        commentLineNumbers={commentLineNumbers}
+                        canAddComments={Boolean(currentUserId) || isMockPreview}
+                        onAddComment={(lineNumber, content) => {
+                          addComment({
+                            authorId: currentUserId ?? 'mock-user',
+                            authorName: currentUserName || 'Mock User',
+                            content,
+                            lineNumber,
+                          });
+                        }}
+                        onRunCode={() => void handleRunCodeRef.current()}
+                        onSubmitCode={() => void requestSubmitCodeRef.current()}
+                      />
+                    ) : (
+                      EDITOR_LOADING
+                    )}
+                  </div>
+                  <div
+                    ref={setInlineWhiteboardHost}
+                    data-testid="inline-whiteboard-host"
+                    className={cn(
+                      'absolute inset-0',
+                      activeCenterTab === 'whiteboard' && whiteboardViewMode === 'tab'
+                        ? 'visible'
+                        : 'invisible',
+                    )}
+                  >
+                    {/* The whiteboard subtree is portaled into this div from
+                        the workspace top-level mount so it survives switching
+                        between the docked tab and the floating PiP without
+                        remounting (preserves tldraw editor state). */}
+                  </div>
+                  {/* Placeholder shown in the tab area when popped out, so
+                      the user knows where the whiteboard went and can dock
+                      it back without going looking for the floating window. */}
+                  {activeCenterTab === 'whiteboard' && whiteboardViewMode === 'floating' ? (
+                    <div className="absolute inset-0 flex items-center justify-center bg-muted/20">
+                      <div className="flex flex-col items-center gap-2 text-center">
+                        <span className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
+                          {t('whiteboard.poppedOut')}
+                        </span>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => setWhiteboardViewMode('tab')}
+                        >
+                          {t('whiteboard.dockBack')}
+                        </Button>
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
 
                 {/* Expand bar shown when bottom panel is collapsed */}
@@ -1419,8 +1504,100 @@ export function RoomWorkspace({
         onCancel={closeSubmissionPreview}
         onConfirm={confirmSubmitPreview}
       />
+
+      {doc && awareness && currentUserId && room.myCapabilities.includes('whiteboard:view') ? (
+        <>
+          {whiteboardViewMode === 'floating' ? (
+            <FloatingWhiteboardPanel
+              persistKey={`${roomId}:${currentUserId}`}
+              title={t('tabs.whiteboard')}
+              onClose={() => setWhiteboardViewMode('tab')}
+              bodyRef={setFloatingWhiteboardHost}
+            />
+          ) : null}
+
+          {/* Off-screen "parking" container that's always present in the DOM.
+              Used as a fallback portal target during the tab <-> floating
+              transition, when the destination host's ref hasn't attached yet.
+              Without this, WhiteboardPortal would briefly receive null and
+              unmount the entire RoomWhiteboardPanel subtree (destroying the
+              tldraw store, undo manager, and any in-flight Yjs observers). */}
+          <div
+            ref={setWhiteboardParkingHost}
+            aria-hidden="true"
+            className="pointer-events-none fixed left-[-9999px] top-[-9999px] h-px w-px overflow-hidden"
+          />
+
+          {/* Single mounted whiteboard panel — its DOM is portaled into
+              either the inline tab host or the floating panel body, swapping
+              targets without ever unmounting the tldraw subtree. */}
+          <WhiteboardPortal
+            target={resolveWhiteboardTarget(
+              whiteboardViewMode,
+              inlineWhiteboardHost,
+              floatingWhiteboardHost,
+              whiteboardParkingHost,
+            )}
+          >
+            <RoomWhiteboardPanel
+              doc={doc}
+              awareness={awareness}
+              roomId={roomId}
+              userId={currentUserId}
+              userName={currentUserName}
+              userColor={authorColor(currentUserId)}
+              canDraw={room.myCapabilities.includes('whiteboard:draw')}
+              canAnnotate={room.myCapabilities.includes('whiteboard:annotate')}
+              participantNames={
+                new Map(
+                  // Use displayName when set, otherwise the user's @username
+                  // — never the raw userId UUID, which leaks an identifier
+                  // and isn't human-readable. Include even inactive
+                  // participants so historical authors still show up in
+                  // the legend with their proper name.
+                  room.participants.map((p) => [p.userId, p.displayName ?? p.username] as const),
+                )
+              }
+              onPopOut={
+                whiteboardViewMode === 'tab' ? () => setWhiteboardViewMode('floating') : undefined
+              }
+              onDock={
+                whiteboardViewMode === 'floating' ? () => setWhiteboardViewMode('tab') : undefined
+              }
+            />
+          </WhiteboardPortal>
+        </>
+      ) : null}
     </div>
   );
+}
+
+function WhiteboardPortal({
+  target,
+  children,
+}: {
+  target: HTMLElement | null;
+  children: React.ReactNode;
+}) {
+  if (!target) return null;
+  return createPortal(children, target);
+}
+
+// Pick the live portal target for the whiteboard subtree. Prefers the
+// destination matching the current view mode, but falls back to the parking
+// host whenever the destination's callback ref hasn't attached yet — the
+// alternative is briefly returning null to the portal, which would unmount
+// the entire tldraw subtree and discard editor state.
+function resolveWhiteboardTarget(
+  viewMode: 'tab' | 'floating',
+  inlineHost: HTMLElement | null,
+  floatingHost: HTMLElement | null,
+  parkingHost: HTMLElement | null,
+): HTMLElement | null {
+  if (viewMode === 'floating') {
+    return floatingHost ?? parkingHost ?? inlineHost;
+  }
+  return inlineHost ?? parkingHost ?? floatingHost;
 }
 
 type ExecutionPollResponse = ExecutionResultResponse | JobStatusResponse;

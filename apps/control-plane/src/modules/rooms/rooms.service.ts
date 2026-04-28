@@ -982,13 +982,14 @@ export class RoomsService {
     });
 
     // Clean up external resources after authorization + DB delete succeed
-    const [collab, mediaDeleted] = await Promise.all([
+    const [collab, mediaDeleted, whiteboardAssetsDeleted] = await Promise.all([
       this.destroyCollabDocument(roomId),
       this.deleteMediaRoom(roomId),
+      this.deleteWhiteboardAssets(roomId),
     ]);
 
     this.logger.log(
-      `Room ${roomId} destroyed. Collab: ${collab ? 'ok' : 'failed'}, media: ${mediaDeleted ? 'ok' : 'failed'}`,
+      `Room ${roomId} destroyed. Collab: ${collab ? 'ok' : 'failed'}, media: ${mediaDeleted ? 'ok' : 'failed'}, whiteboard-assets: ${whiteboardAssetsDeleted ? 'ok' : 'failed'}`,
     );
 
     return { collab, mediaDeleted };
@@ -2450,6 +2451,39 @@ export class RoomsService {
       return true;
     } catch (error) {
       this.logger.warn(`Media room deletion failed for ${roomId}`, error);
+      return false;
+    }
+  }
+
+  // Best-effort sweep of every whiteboard asset uploaded into this room.
+  // Pages through the listing in case there are more keys than the storage
+  // adapter returns in a single call. Failures never block room destroy:
+  // orphaned objects can be reaped by a separate retention job.
+  private async deleteWhiteboardAssets(roomId: string): Promise<boolean> {
+    const prefix = `whiteboard/${roomId}/`;
+    try {
+      const allKeys: string[] = [];
+      let continuationToken: string | undefined;
+      do {
+        const page = await this.storageService.list({ prefix, continuationToken });
+        allKeys.push(...page.keys);
+        continuationToken = page.isTruncated ? page.continuationToken : undefined;
+      } while (continuationToken);
+
+      if (allKeys.length === 0) {
+        return true;
+      }
+
+      const { failed } = await this.storageService.deleteMany(allKeys);
+      if (failed.length > 0) {
+        this.logger.warn(
+          `Whiteboard asset deletion partially failed for room ${roomId}: ${failed.length}/${allKeys.length} keys could not be removed`,
+        );
+        return false;
+      }
+      return true;
+    } catch (error) {
+      this.logger.warn(`Whiteboard asset deletion failed for room ${roomId}`, error);
       return false;
     }
   }

@@ -1,5 +1,5 @@
 import { Injectable, Logger, type OnModuleDestroy } from '@nestjs/common';
-import { INLINE_COMMENTS_KEY } from '@syncode/shared';
+import { INLINE_COMMENTS_KEY, WHITEBOARD_KEY } from '@syncode/shared';
 import * as Y from 'yjs';
 
 export interface CreateDocOptions {
@@ -30,6 +30,14 @@ export class YjsDocumentStore implements OnModuleDestroy {
     }
   }
 
+  // Materialize every top-level CRDT root used by the room so a fresh document
+  // (or a freshly recovered one after a corrupt snapshot) round-trips identical
+  // shape/key sets to one rebuilt from a snapshot.
+  private static initializeSharedRoots(doc: Y.Doc): void {
+    doc.getMap(INLINE_COMMENTS_KEY);
+    doc.getMap(WHITEBOARD_KEY);
+  }
+
   createDoc(roomId: string, options: CreateDocOptions = {}): CreateDocResult {
     const existing = this.docs.get(roomId);
     if (existing) {
@@ -51,6 +59,7 @@ export class YjsDocumentStore implements OnModuleDestroy {
         doc.destroy();
         const fresh = new Y.Doc();
         YjsDocumentStore.seedDoc(fresh, options.initialContentByLanguage);
+        YjsDocumentStore.initializeSharedRoots(fresh);
         this.docs.set(roomId, fresh);
         this.logger.log(`Y.Doc created for room ${roomId}`);
         return { doc: fresh, created: true };
@@ -61,9 +70,7 @@ export class YjsDocumentStore implements OnModuleDestroy {
       YjsDocumentStore.seedDoc(doc, options.initialContentByLanguage);
     }
 
-    // Initialize the comments map so every room snapshot has a stable CRDT root
-    // for inline discussions even before the first comment is created.
-    doc.getMap(INLINE_COMMENTS_KEY);
+    YjsDocumentStore.initializeSharedRoots(doc);
 
     this.docs.set(roomId, doc);
     this.logger.log(`Y.Doc created for room ${roomId}`);

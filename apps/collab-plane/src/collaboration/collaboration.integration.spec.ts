@@ -5,6 +5,7 @@ import { JwtService } from '@nestjs/jwt';
 import { WsAdapter } from '@nestjs/platform-ws';
 import { Test } from '@nestjs/testing';
 import { CONTROL_PLANE_CALLBACK, WsMessageType } from '@syncode/contracts';
+import { WHITEBOARD_KEY } from '@syncode/shared';
 import * as decoding from 'lib0/decoding';
 import * as encoding from 'lib0/encoding';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -258,6 +259,71 @@ describe('Yjs Document Sync (integration)', () => {
 
     verifyDoc.destroy();
     docA.destroy();
+    clientA.ws.close();
+    clientB.ws.close();
+  });
+
+  it('GIVEN two clients WHEN one writes a whiteboard shape THEN the other observes it in the whiteboard map', async () => {
+    await service.createDocument({ roomId: 'room-1' });
+
+    const clientA = await connectAndJoin('room-1', 'user-a');
+    const clientB = await connectAndJoin('room-1', 'user-b');
+
+    const docA = syncClientDoc(clientA.ws, clientA.messages.binary);
+    const docB = syncClientDoc(clientB.ws, clientB.messages.binary);
+    await delay(150);
+
+    // Drain any further sync messages B receives (SyncStep2 with current state)
+    for (const msg of clientB.messages.binary) {
+      if (msg[0] === WsMessageType.SYNC) {
+        const decoder = decoding.createDecoder(msg);
+        decoding.readVarUint(decoder);
+        const enc = encoding.createEncoder();
+        encoding.writeVarUint(enc, WsMessageType.SYNC);
+        syncProtocol.readSyncMessage(decoder, enc, docB, null);
+      }
+    }
+
+    const binaryCountBefore = clientB.messages.binary.length;
+
+    // Client A inserts a tldraw-like record into the whiteboard map
+    let capturedUpdate!: Uint8Array;
+    docA.on('update', (update: Uint8Array) => {
+      capturedUpdate = update;
+    });
+    const whiteboardA = docA.getMap<Y.Map<unknown>>(WHITEBOARD_KEY);
+    const shape = new Y.Map<unknown>();
+    shape.set('typeName', 'shape');
+    shape.set('type', 'geo');
+    shape.set('meta', { authorId: 'user-a', layer: 'drawing', createdAt: 1 });
+    whiteboardA.set('shape:abc', shape);
+
+    clientA.ws.send(encodeYjsUpdate(capturedUpdate));
+
+    await waitFor(() => clientB.messages.binary.length > binaryCountBefore);
+
+    // Apply every new update broadcast to B's local doc and assert the shape appears
+    for (let i = binaryCountBefore; i < clientB.messages.binary.length; i++) {
+      const msg = clientB.messages.binary[i]!;
+      if (msg[0] !== WsMessageType.SYNC) continue;
+      const decoder = decoding.createDecoder(msg);
+      decoding.readVarUint(decoder);
+      const enc = encoding.createEncoder();
+      encoding.writeVarUint(enc, WsMessageType.SYNC);
+      syncProtocol.readSyncMessage(decoder, enc, docB, null);
+    }
+
+    const whiteboardB = docB.getMap<Y.Map<unknown>>(WHITEBOARD_KEY);
+    const observed = whiteboardB.get('shape:abc');
+    expect(observed?.get('type')).toBe('geo');
+    expect(observed?.get('meta')).toEqual({
+      authorId: 'user-a',
+      layer: 'drawing',
+      createdAt: 1,
+    });
+
+    docA.destroy();
+    docB.destroy();
     clientA.ws.close();
     clientB.ws.close();
   });

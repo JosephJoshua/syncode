@@ -13,7 +13,9 @@
   "tabs": {
     "ariaLabel": "Rooms sections",
     "myRooms": "My rooms",
-    "browse": "Browse"
+    "browse": "Browse",
+    "code": "Code",
+    "whiteboard": "Whiteboard"
   },
   "layout": {
     "sub": "Manage your rooms and drop into open interview lobbies."
@@ -362,5 +364,26 @@
     "hintRateLimited": "Hint rate limit exceeded (3 per 5 minutes).",
     "hintUnavailable": "AI hint service is temporarily unavailable.",
     "hintPermissionDenied": "You do not have permission to request AI hints in this room."
+  },
+  "whiteboard": {
+    "layer": "Layer",
+    "layerDrawing": "Draw",
+    "layerAnnotation": "Annotate",
+    "annotatingAs": "Annotating as {{name}}",
+    "undo": "Undo",
+    "redo": "Redo",
+    "authors": "Authors",
+    "showAnnotations": "Show annotations",
+    "hideAnnotations": "Hide annotations",
+    "popOut": "Pop out into a floating window",
+    "dockBack": "Dock to tab",
+    "poppedOut": "Whiteboard is in a floating window",
+    "minimizeFloating": "Minimize floating whiteboard",
+    "restoreFloating": "Restore floating whiteboard",
+    "dockToTab": "Dock to tab",
+    "resizeFromTopLeft": "Resize whiteboard from top left",
+    "resizeFromTopRight": "Resize whiteboard from top right",
+    "resizeFromBottomLeft": "Resize whiteboard from bottom left",
+    "resizeFromBottomRight": "Resize whiteboard from bottom right"
   }
 }

@@ -19,6 +19,10 @@ describe('SnapshotScheduler', () => {
       notifyUserDisconnected: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
       notifySnapshotReady: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
       heartbeatParticipants: vi.fn<() => Promise<null>>().mockResolvedValue(null),
+      authorizeJoin: vi
+        .fn<() => Promise<{ authorized: boolean }>>()
+        .mockResolvedValue({ authorized: true }),
+      persistDocSnapshot: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
     };
     roomRegistry = new RoomRegistry();
     scheduler = new SnapshotScheduler(docStore, callbackClient, roomRegistry);
@@ -71,7 +75,7 @@ describe('SnapshotScheduler', () => {
       );
     });
 
-    it('GIVEN room without an active language WHEN taking snapshot THEN skips emission', async () => {
+    it('GIVEN room without an active language WHEN taking snapshot THEN skips notifySnapshotReady but still persists raw doc state', async () => {
       roomRegistry.createRoom('room-1');
       docStore.createDoc('room-1', {
         initialContentByLanguage: { python: 'const x = 1;' },
@@ -79,7 +83,22 @@ describe('SnapshotScheduler', () => {
 
       await scheduler.takeSnapshot('room-1', 'periodic');
 
+      // The language-aware notifySnapshotReady is skipped (no language to
+      // attach), but raw doc state is still persisted so non-code data such
+      // as whiteboard records survives a server restart.
       expect(callbackClient.notifySnapshotReady).not.toHaveBeenCalled();
+      expect(callbackClient.persistDocSnapshot).toHaveBeenCalledWith(
+        'room-1',
+        expect.objectContaining({ state: expect.any(Array) }),
+      );
+    });
+
+    it('GIVEN room without language AND persistDocSnapshot rejects WHEN taking snapshot THEN does not rethrow', async () => {
+      roomRegistry.createRoom('room-1');
+      docStore.createDoc('room-1');
+      vi.mocked(callbackClient.persistDocSnapshot).mockRejectedValueOnce(new Error('boom'));
+
+      await expect(scheduler.takeSnapshot('room-1', 'periodic')).resolves.toBeUndefined();
     });
 
     it('GIVEN non-existent doc WHEN taking snapshot THEN does nothing', async () => {
