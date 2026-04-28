@@ -107,39 +107,43 @@ describe('clampSize', () => {
 });
 
 describe('readGeom / writeGeom', () => {
-  beforeEach(() => {
-    window.localStorage.clear();
-  });
+  // CI's coverage runner ships a localStorage shim without a `clear()`
+  // method. Use removeItem on each known key so the cleanup works in every
+  // jsdom variant (vitest happy-dom, v8 coverage proxy, etc.).
+  const TEST_KEY = 'whiteboard:floating:geom:room-1:user-1';
+  const reset = () => {
+    try {
+      window.localStorage.removeItem(TEST_KEY);
+    } catch {
+      // ignore environments without localStorage at all
+    }
+  };
 
-  afterEach(() => {
-    window.localStorage.clear();
-  });
+  beforeEach(reset);
+  afterEach(reset);
 
   it('GIVEN no value persisted WHEN reading THEN returns null', () => {
-    expect(readGeom('whiteboard:floating:geom:room-1:user-1')).toBeNull();
+    expect(readGeom(TEST_KEY)).toBeNull();
   });
 
   it('GIVEN written value WHEN reading THEN returns the same geometry object', () => {
     const geom = { x: 50, y: 60, width: 480, height: 360 };
-    writeGeom('whiteboard:floating:geom:room-1:user-1', geom);
-    expect(readGeom('whiteboard:floating:geom:room-1:user-1')).toEqual(geom);
+    writeGeom(TEST_KEY, geom);
+    expect(readGeom(TEST_KEY)).toEqual(geom);
   });
 
   it('GIVEN malformed JSON WHEN reading THEN returns null without throwing', () => {
-    window.localStorage.setItem('whiteboard:floating:geom:room-1:user-1', '{ "broken":');
-    expect(readGeom('whiteboard:floating:geom:room-1:user-1')).toBeNull();
+    window.localStorage.setItem(TEST_KEY, '{ "broken":');
+    expect(readGeom(TEST_KEY)).toBeNull();
   });
 
   it('GIVEN missing fields WHEN reading THEN returns null', () => {
-    window.localStorage.setItem('whiteboard:floating:geom:room-1:user-1', JSON.stringify({ x: 1 }));
-    expect(readGeom('whiteboard:floating:geom:room-1:user-1')).toBeNull();
+    window.localStorage.setItem(TEST_KEY, JSON.stringify({ x: 1 }));
+    expect(readGeom(TEST_KEY)).toBeNull();
   });
 
   it('GIVEN string field instead of number WHEN reading THEN returns null', () => {
-    window.localStorage.setItem(
-      'whiteboard:floating:geom:room-1:user-1',
-      JSON.stringify({ x: '1', y: 2, width: 3, height: 4 }),
-    );
-    expect(readGeom('whiteboard:floating:geom:room-1:user-1')).toBeNull();
+    window.localStorage.setItem(TEST_KEY, JSON.stringify({ x: '1', y: 2, width: 3, height: 4 }));
+    expect(readGeom(TEST_KEY)).toBeNull();
   });
 });
