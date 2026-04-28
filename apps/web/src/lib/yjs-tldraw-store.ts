@@ -418,31 +418,21 @@ export function useYjsTldrawStore(options: UseYjsTldrawStoreOptions): UseYjsTldr
     };
   }, [result]);
 
-  // Tldraw's collaboration mode wants to see status transition from
-  // 'loading' to 'synced-remote' rather than start in 'synced-remote' —
-  // some internal init paths only run on the transition. Start with
-  // 'loading' on mount and flip on the next tick once Tldraw has had a
-  // chance to register its observers.
-  const [storeWithStatus, setStoreWithStatus] = useState<TLStoreWithStatus>({
-    status: 'loading',
-  });
-
-  useEffect(() => {
-    setStoreWithStatus({
-      status: 'loading',
-    });
-    // Flip on next tick so React commits the loading state first, then
-    // transitions to synced-remote on the next render. This matches the
-    // official @tldraw/sync pattern.
-    const handle = setTimeout(() => {
-      setStoreWithStatus({
-        status: 'synced-remote',
-        connectionStatus: 'online',
-        store: result.store,
-      });
-    }, 0);
-    return () => clearTimeout(handle);
-  }, [result.store]);
+  // Mount tldraw straight into 'synced-remote' with our store. An earlier
+  // attempt staged a loading -> synced-remote transition on the next tick,
+  // but in practice tldraw didn't always finish wiring up the editor when
+  // the store changed via setState — the symptom was a blank canvas on
+  // initial load that only appeared after a hot reload (because HMR
+  // re-evaluated with the store already cached). Starting at synced-remote
+  // mounts the editor on its real store from the first render.
+  const storeWithStatus = useMemo<TLStoreWithStatus>(
+    () => ({
+      status: 'synced-remote',
+      connectionStatus: 'online',
+      store: result.store,
+    }),
+    [result.store],
+  );
 
   return {
     storeWithStatus,
