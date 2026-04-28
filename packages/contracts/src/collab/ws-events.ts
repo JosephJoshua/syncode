@@ -38,6 +38,11 @@ export interface LanguageChangeEventData {
   changedBy: string | null;
 }
 
+export const CHAT_MESSAGE_MAX_TEXT_LENGTH = 4000;
+
+export const CHAT_REACTION_PALETTE = ['👍', '🔥', '✅', '💡'] as const;
+export type ChatReactionEmoji = (typeof CHAT_REACTION_PALETTE)[number];
+
 export type ChatMentionKind = 'user' | 'ai';
 
 export interface ChatMention {

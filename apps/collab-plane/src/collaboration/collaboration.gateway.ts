@@ -7,6 +7,8 @@ import {
   WebSocketGateway,
 } from '@nestjs/websockets';
 import {
+  CHAT_MESSAGE_MAX_TEXT_LENGTH,
+  CHAT_REACTION_PALETTE,
   type ChatAttachment,
   type ChatHistoryEventData,
   type ChatMarkReadEventData,
@@ -30,6 +32,16 @@ import type { JoinMessageData, WsMessage } from './ws-message.types.js';
 import { YjsSyncHandler } from './yjs-sync.handler.js';
 
 const HEARTBEAT_INTERVAL_MS = 30_000;
+const CHAT_REACTION_EMOJI_SET: ReadonlySet<string> = new Set(CHAT_REACTION_PALETTE);
+
+function isSafeAttachmentUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
 
 @WebSocketGateway()
 export class CollaborationGateway
@@ -243,7 +255,11 @@ export class CollaborationGateway
       return;
     }
 
-    const text = typeof data?.text === 'string' ? data.text.trim() : '';
+    const rawText = typeof data?.text === 'string' ? data.text.trim() : '';
+    const text =
+      rawText.length > CHAT_MESSAGE_MAX_TEXT_LENGTH
+        ? rawText.slice(0, CHAT_MESSAGE_MAX_TEXT_LENGTH)
+        : rawText;
     const mentions = this.normalizeMentions(data?.mentions);
     const attachments = this.normalizeAttachments(data?.attachments);
 
@@ -320,7 +336,7 @@ export class CollaborationGateway
 
     const messageId = typeof data?.messageId === 'string' ? data.messageId : '';
     const emoji = typeof data?.emoji === 'string' ? data.emoji.trim() : '';
-    if (messageId.length === 0 || emoji.length === 0) {
+    if (messageId.length === 0 || !CHAT_REACTION_EMOJI_SET.has(emoji)) {
       return;
     }
 
@@ -440,6 +456,9 @@ export class CollaborationGateway
           return null;
         }
         if (attachment.sizeBytes <= 0) {
+          return null;
+        }
+        if (!isSafeAttachmentUrl(attachment.url)) {
           return null;
         }
 
