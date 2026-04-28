@@ -455,6 +455,114 @@ describe('POST /rooms/:id/control/transition', () => {
   });
 });
 
+describe('POST /rooms/:id/control/lock-editor', () => {
+  it('GIVEN host WHEN locking editor THEN returns 200 with editorLocked=true and ISO timestamp', async () => {
+    const host = await insertUser(db);
+    const room = await insertRoom(db, host.id);
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+
+    const res = await asUser(
+      request(app.getHttpServer()).post(`/rooms/${room.id}/control/lock-editor`),
+      host,
+    ).expect(200);
+
+    expect(res.body).toMatchObject({
+      roomId: room.id,
+      editorLocked: true,
+      lockedBy: host.id,
+    });
+    expect(res.body.lockedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  });
+
+  it('GIVEN candidate WHEN locking editor THEN returns 403', async () => {
+    const host = await insertUser(db);
+    const candidate = await insertUser(db);
+    const room = await insertRoom(db, host.id);
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+    await insertParticipant(db, room.id, candidate.id, 'candidate');
+
+    const res = await asUser(
+      request(app.getHttpServer()).post(`/rooms/${room.id}/control/lock-editor`),
+      candidate,
+    );
+
+    expect(res.status).toBe(403);
+  });
+
+  it('GIVEN non-participant WHEN locking editor THEN returns 403', async () => {
+    const host = await insertUser(db);
+    const stranger = await insertUser(db);
+    const room = await insertRoom(db, host.id);
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+
+    const res = await asUser(
+      request(app.getHttpServer()).post(`/rooms/${room.id}/control/lock-editor`),
+      stranger,
+    );
+
+    expect(res.status).toBe(403);
+  });
+
+  it('GIVEN finished room WHEN locking editor THEN returns 409', async () => {
+    const host = await insertUser(db);
+    const room = await insertRoom(db, host.id, { status: 'finished' });
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+
+    const res = await asUser(
+      request(app.getHttpServer()).post(`/rooms/${room.id}/control/lock-editor`),
+      host,
+    );
+
+    expect(res.status).toBe(409);
+  });
+
+  it('GIVEN already-locked room WHEN locking editor THEN is idempotent (200)', async () => {
+    const host = await insertUser(db);
+    const room = await insertRoom(db, host.id, { editorLocked: true });
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+
+    const res = await asUser(
+      request(app.getHttpServer()).post(`/rooms/${room.id}/control/lock-editor`),
+      host,
+    ).expect(200);
+
+    expect(res.body.editorLocked).toBe(true);
+  });
+});
+
+describe('POST /rooms/:id/control/unlock-editor', () => {
+  it('GIVEN locked room and host WHEN unlocking THEN returns 200 with editorLocked=false and ISO timestamp', async () => {
+    const host = await insertUser(db);
+    const room = await insertRoom(db, host.id, { editorLocked: true });
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+
+    const res = await asUser(
+      request(app.getHttpServer()).post(`/rooms/${room.id}/control/unlock-editor`),
+      host,
+    ).expect(200);
+
+    expect(res.body).toMatchObject({
+      roomId: room.id,
+      editorLocked: false,
+      unlockedBy: host.id,
+    });
+    expect(res.body.unlockedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  });
+
+  it('GIVEN already-unlocked room WHEN unlocking THEN is idempotent (200)', async () => {
+    const host = await insertUser(db);
+    const room = await insertRoom(db, host.id);
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+
+    const res = await asUser(
+      request(app.getHttpServer()).post(`/rooms/${room.id}/control/unlock-editor`),
+      host,
+    ).expect(200);
+
+    expect(res.body.editorLocked).toBe(false);
+  });
+});
+
 describe('DELETE /rooms/:id', () => {
   it('GIVEN host WHEN destroying room THEN returns 200 with cleanup result', async () => {
     const host = await insertUser(db);

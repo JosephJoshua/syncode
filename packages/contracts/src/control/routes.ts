@@ -33,6 +33,7 @@ import type {
   joinRoomSchema,
   listRoomsQuerySchema,
   listRoomsResponseSchema,
+  lockEditorResponseSchema,
   mediaTokenResponseSchema,
   roomDetailSchema,
   runCodeResponseSchema,
@@ -43,6 +44,7 @@ import type {
   transferRoomOwnershipSchema,
   transitionRoomPhaseResponseSchema,
   transitionRoomPhaseSchema,
+  unlockEditorResponseSchema,
   updateRoomParticipantResponseSchema,
   updateRoomParticipantSchema,
 } from './rooms.js';
@@ -137,6 +139,14 @@ export const CONTROL_API = {
       z.infer<typeof transitionRoomPhaseSchema>,
       z.infer<typeof transitionRoomPhaseResponseSchema>
     >()('rooms/:id/control/transition', 'POST'),
+    LOCK_EDITOR: defineRoute<void, z.infer<typeof lockEditorResponseSchema>>()(
+      'rooms/:id/control/lock-editor',
+      'POST',
+    ),
+    UNLOCK_EDITOR: defineRoute<void, z.infer<typeof unlockEditorResponseSchema>>()(
+      'rooms/:id/control/unlock-editor',
+      'POST',
+    ),
     TOGGLE_READY: defineRoute<void, z.infer<typeof roomDetailSchema>>()('rooms/:id/ready', 'POST'),
     CHANGE_LANGUAGE: defineRoute<
       z.infer<typeof changeRoomLanguageSchema>,

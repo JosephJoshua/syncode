@@ -313,6 +313,24 @@ export const transitionRoomPhaseResponseSchema = z.object({
 
 export type TransitionRoomPhaseResponse = z.infer<typeof transitionRoomPhaseResponseSchema>;
 
+export const lockEditorResponseSchema = z.object({
+  roomId: z.uuid().describe('Room identifier'),
+  editorLocked: z.literal(true).describe('Always true after a successful lock'),
+  lockedAt: z.iso.datetime().describe('ISO 8601 timestamp when the lock was applied'),
+  lockedBy: z.uuid().describe('User ID that applied the lock'),
+});
+
+export type LockEditorResponse = z.infer<typeof lockEditorResponseSchema>;
+
+export const unlockEditorResponseSchema = z.object({
+  roomId: z.uuid().describe('Room identifier'),
+  editorLocked: z.literal(false).describe('Always false after a successful unlock'),
+  unlockedAt: z.iso.datetime().describe('ISO 8601 timestamp when the lock was released'),
+  unlockedBy: z.uuid().describe('User ID that released the lock'),
+});
+
+export type UnlockEditorResponse = z.infer<typeof unlockEditorResponseSchema>;
+
 // ── Browse public rooms ──────────────────────────────────────────────
 
 export const BROWSEABLE_ROOM_STATUSES = ['waiting', 'warmup', 'coding', 'wrapup'] as const;
