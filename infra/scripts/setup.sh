@@ -35,18 +35,20 @@ echo "$GH_PAT" | docker login ghcr.io -u "$GH_USER" --password-stdin
 info "GHCR login successful."
 
 echo ""
-if [ ! -f "$REPO_ROOT/.env" ]; then
-  cp "$REPO_ROOT/.env.example" "$REPO_ROOT/.env"
-  warn ".env created from .env.example. Edit it with your production values before deploying."
-else
-  info ".env already exists, skipping."
-fi
+for env in production staging; do
+  if [ ! -f "$REPO_ROOT/.env.$env" ]; then
+    cp "$REPO_ROOT/.env.example" "$REPO_ROOT/.env.$env"
+    warn ".env.$env created from .env.example. Edit it before deploying."
+  else
+    info ".env.$env already exists, skipping."
+  fi
+done
 
 chmod +x "$REPO_ROOT"/infra/scripts/*.sh
 info "Scripts marked executable."
 
 echo ""
 info "Setup complete. Next steps:"
-echo "  1. Edit .env with production values"
+echo "  1. Edit .env.production and .env.staging with environment-specific values"
 echo "  2. Run: ./infra/scripts/deploy.sh"
 echo "  3. Run: ./infra/scripts/migrate.sh"
