@@ -13,7 +13,12 @@ export interface UseYjsCollabOptions {
   collabUrl: string | null;
   collabToken: string | null;
   roomId: string;
-  userName: string;
+  /**
+   * Pass `null` while auth is loading or briefly absent (e.g. during a token
+   * refresh). The provider holds off on broadcasting awareness state until a
+   * real name is available, so peers never see an "Anonymous" placeholder.
+   */
+  userName: string | null;
   userColor: string;
   onRoomStatePatch: (patch: { status?: RoomStatus; editorLocked?: boolean }) => void;
   onParticipantReady: (userId: string, isReady: boolean) => void;
@@ -146,7 +151,7 @@ export function useYjsCollab({
 
   // Update awareness user info when name/color changes (no reconnection needed).
   useEffect(() => {
-    providerRef.current?.awareness.setLocalStateField('user', {
+    providerRef.current?.setLocalUser({
       name: userName,
       color: userColor,
       colorLight: `${userColor}33`,
