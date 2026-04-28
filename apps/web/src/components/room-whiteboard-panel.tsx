@@ -152,11 +152,17 @@ export function RoomWhiteboardPanel({
     (editor: Editor) => {
       editorRef.current = editor;
 
-      // (C) Z-order: annotations always render on top of drawings. When the
-      // local user creates an annotation shape, bring it to the front on
-      // next tick (so we mutate after the create transaction commits).
-      // Filtered to source==='user' so only the author runs bringToFront,
-      // not every peer reflecting the same record.
+      // (A + C) For locally-authored annotation shapes:
+      //   - Force props.color = 'orange' for an immediate, unmissable visual
+      //     contrast against drawings that use whatever color the author
+      //     chose. The override propagates to peers via Yjs so every client
+      //     sees annotations in the same accent color.
+      //   - Force props.dash = 'dashed' on shape types that support it
+      //     (geo, arrow, line) so the boundary reads as 'commentary' rather
+      //     than 'content'.
+      //   - bringToFront so annotations always render on top of drawings.
+      // Source==='user' filter ensures only the author runs these mutations;
+      // every peer just reflects the resulting record once it lands.
       const cleanup = editor.store.sideEffects.registerAfterCreateHandler(
         'shape',
         (shape, source) => {
@@ -165,7 +171,19 @@ export function RoomWhiteboardPanel({
           if (meta.layer !== 'annotation') return;
           queueMicrotask(() => {
             const current = editor.getShape(shape.id);
-            if (current) editor.bringToFront([shape.id]);
+            if (!current) return;
+            const props = current.props as Record<string, unknown>;
+            const next: Record<string, unknown> = {};
+            if ('color' in props) next.color = 'orange';
+            if ('dash' in props) next.dash = 'dashed';
+            if (Object.keys(next).length > 0) {
+              editor.updateShape({
+                id: shape.id,
+                type: shape.type,
+                props: next,
+              });
+            }
+            editor.bringToFront([shape.id]);
           });
         },
       );
@@ -317,7 +335,12 @@ export function RoomWhiteboardPanel({
   );
 }
 
-const ANNOTATION_TINT_OPACITY = 0.65;
+// Annotations render at a lower opacity than drawings AND in a fixed accent
+// color (set in the after-create handler). The combination — translucent +
+// orange — makes annotations read unambiguously as "commentary" without
+// hiding them entirely. Drawings stay at full opacity in whatever color the
+// author chose.
+const ANNOTATION_TINT_OPACITY = 0.55;
 const DRAWING_OPACITY = 1;
 const HIDDEN_OPACITY = 0;
 
