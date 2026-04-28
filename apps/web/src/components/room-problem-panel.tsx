@@ -38,19 +38,64 @@ const DIFFICULTY_VARIANT: Record<string, 'success' | 'warning' | 'destructive'> 
 };
 
 interface RoomProblemPanelProps {
-  problem: ProblemData | null;
-  loading: boolean;
-  error: string | null;
-  hasProblem: boolean;
-  activeTab: 'problem' | 'hints';
-  onTabChange: (tab: 'problem' | 'hints') => void;
-  hints: RoomHintItem[];
-  hintLoading: boolean;
-  hintError: string | null;
-  onRequestHint: () => void;
-  onSubmitHintReflection: (hintId: string, reflectionResponse: string | null) => void;
-  followUpLoadingHintId: string | null;
-  canRequestHint: boolean;
+  readonly problem: ProblemData | null;
+  readonly loading: boolean;
+  readonly error: string | null;
+  readonly hasProblem: boolean;
+  readonly activeTab: 'problem' | 'hints';
+  readonly onTabChange: (tab: 'problem' | 'hints') => void;
+  readonly hints: RoomHintItem[];
+  readonly hintLoading: boolean;
+  readonly hintError: string | null;
+  readonly onRequestHint: () => void;
+  readonly onSubmitHintReflection: (hintId: string, reflectionResponse: string | null) => void;
+  readonly followUpLoadingHintId: string | null;
+  readonly canRequestHint: boolean;
+}
+
+function RoomProblemBody({
+  problem,
+  loading,
+  error,
+  hasProblem,
+  t,
+}: {
+  readonly problem: ProblemData | null;
+  readonly loading: boolean;
+  readonly error: string | null;
+  readonly hasProblem: boolean;
+  readonly t: (key: string) => string;
+}) {
+  if (!hasProblem) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 text-center">
+        <FileText size={24} className="mb-3 text-muted-foreground/40" />
+        <p className="text-xs text-muted-foreground">{t('problem.noProblem')}</p>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12">
+        <Loader2 size={20} className="animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 text-center">
+        <p className="text-xs text-destructive">{error}</p>
+      </div>
+    );
+  }
+
+  if (problem) {
+    return <ProblemContent problem={problem} />;
+  }
+
+  return null;
 }
 
 export function RoomProblemPanel({
@@ -131,20 +176,7 @@ export function RoomProblemPanel({
       </div>
 
       <div className="flex-1 overflow-y-auto p-4">
-        {!hasProblem ? (
-          <div className="flex flex-col items-center justify-center py-12 text-center">
-            <FileText size={24} className="mb-3 text-muted-foreground/40" />
-            <p className="text-xs text-muted-foreground">{t('problem.noProblem')}</p>
-          </div>
-        ) : loading ? (
-          <div className="flex flex-col items-center justify-center py-12">
-            <Loader2 size={20} className="animate-spin text-primary" />
-          </div>
-        ) : error ? (
-          <div className="flex flex-col items-center justify-center py-12 text-center">
-            <p className="text-xs text-destructive">{error}</p>
-          </div>
-        ) : activeTab === 'hints' ? (
+        {activeTab === 'hints' && hasProblem && !loading && !error ? (
           <HintsContent
             hints={hints}
             loading={hintLoading}
@@ -152,15 +184,21 @@ export function RoomProblemPanel({
             onSubmitHintReflection={onSubmitHintReflection}
             followUpLoadingHintId={followUpLoadingHintId}
           />
-        ) : problem ? (
-          <ProblemContent problem={problem} />
-        ) : null}
+        ) : (
+          <RoomProblemBody
+            problem={problem}
+            loading={loading}
+            error={error}
+            hasProblem={hasProblem}
+            t={t}
+          />
+        )}
       </div>
     </div>
   );
 }
 
-function ProblemContent({ problem }: { problem: ProblemData }) {
+function ProblemContent({ problem }: { readonly problem: ProblemData }) {
   const { t } = useTranslation('rooms');
 
   return (

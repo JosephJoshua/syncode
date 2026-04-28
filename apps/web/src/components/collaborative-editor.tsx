@@ -17,16 +17,17 @@ import {
 } from './room-workspace-utils.js';
 
 interface CollaborativeEditorProps {
-  doc: Y.Doc;
-  awareness: Awareness;
-  language: string;
-  readOnly: boolean;
-  comments?: InlineComment[];
-  commentLineNumbers?: number[];
-  canAddComments?: boolean;
-  onAddComment?: (lineNumber: number, content: string) => void;
-  onRunCode: () => void;
-  onSubmitCode: () => void;
+  readonly doc: Y.Doc;
+  readonly awareness: Awareness;
+  readonly language: string;
+  readonly readOnly: boolean;
+  readonly comments?: InlineComment[];
+  readonly commentLineNumbers?: number[];
+  readonly canAddComments?: boolean;
+  readonly onAddComment?: (lineNumber: number, content: string) => void;
+  readonly onRunCode: () => void;
+  readonly onSubmitCode: () => void;
+  readonly onActiveLineChange?: (lineNumber: number) => void;
 }
 
 interface DisposableLike {
@@ -110,6 +111,7 @@ export function CollaborativeEditor({
   onAddComment = () => {},
   onRunCode,
   onSubmitCode,
+  onActiveLineChange = () => {},
 }: CollaborativeEditorProps) {
   const { t } = useTranslation('rooms');
   const bindingRef = useRef<MonacoBinding | null>(null);
@@ -130,6 +132,8 @@ export function CollaborativeEditor({
   onSubmitCodeRef.current = onSubmitCode;
   const onAddCommentRef = useRef(onAddComment);
   onAddCommentRef.current = onAddComment;
+  const onActiveLineChangeRef = useRef(onActiveLineChange);
+  onActiveLineChangeRef.current = onActiveLineChange;
 
   const editorOptions = useMemo(() => ({ ...EDITOR_OPTIONS_BASE, readOnly }), [readOnly]);
 
@@ -173,17 +177,23 @@ export function CollaborativeEditor({
       id: 'syncode-run',
       label: 'Run Code',
       keybindings: [monacoApi.KeyMod.CtrlCmd | monacoApi.KeyCode.Enter],
-      run: () => void onRunCodeRef.current(),
+      run: () => {
+        onRunCodeRef.current();
+      },
     });
 
     editorInstance.addAction({
       id: 'syncode-submit',
       label: 'Submit Code',
       keybindings: [monacoApi.KeyMod.CtrlCmd | monacoApi.KeyMod.Shift | monacoApi.KeyCode.Enter],
-      run: () => void onSubmitCodeRef.current(),
+      run: () => {
+        onSubmitCodeRef.current();
+      },
     });
 
-    setSelectedLine(editorApi.getPosition()?.lineNumber ?? 1);
+    const initialLine = editorApi.getPosition()?.lineNumber ?? 1;
+    setSelectedLine(initialLine);
+    onActiveLineChangeRef.current(initialLine);
     setEditor(editorInstance);
     setEditorRoot(editorApi.getDomNode());
   };
@@ -214,6 +224,7 @@ export function CollaborativeEditor({
 
     const cursorDisposable = editorApi.onDidChangeCursorPosition((event) => {
       setSelectedLine(event.position.lineNumber);
+      onActiveLineChangeRef.current(event.position.lineNumber);
     });
 
     const mouseDisposable = editorApi.onMouseDown((event) => {
@@ -223,6 +234,7 @@ export function CollaborativeEditor({
       }
 
       setSelectedLine(lineNumber);
+      onActiveLineChangeRef.current(lineNumber);
 
       if (
         event.target.type === mouseTargetType.GUTTER_GLYPH_MARGIN &&
