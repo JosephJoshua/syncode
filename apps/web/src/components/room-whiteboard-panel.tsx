@@ -18,6 +18,7 @@ import { useTranslation } from 'react-i18next';
 import {
   type Editor,
   type TLAssetStore,
+  type TLShape,
   type TLShapeId,
   Tldraw,
   useEditor,
@@ -364,9 +365,9 @@ function VisibilityFilter({
   // Subscribe to the actual shape records — opacity must be re-applied
   // whenever a peer updates a shape (a remote update arrives carrying
   // opacity=1 from the wire), not only when the id set changes.
-  const shapes = useValue('whiteboard-shapes-with-meta', () => {
+  const shapesNeedingUpdate = useValue('whiteboard-shapes-with-meta', () => {
     const ids = editor.getCurrentPageShapeIds();
-    const result: Array<{ id: TLShapeId; opacity: number; type: string }> = [];
+    const result: Array<{ id: TLShapeId; targetOpacity: number }> = [];
     ids.forEach((id: TLShapeId) => {
       const shape = editor.getShape(id);
       if (!shape) return;
@@ -380,26 +381,30 @@ function VisibilityFilter({
             ? ANNOTATION_TINT_OPACITY
             : DRAWING_OPACITY;
       if (shape.opacity !== target) {
-        result.push({ id, opacity: target, type: shape.type });
+        result.push({ id, targetOpacity: target });
       }
     });
     return result;
   }, [editor, showAnnotations, hiddenAuthors]);
 
   useEffect(() => {
-    if (shapes.length === 0) return;
+    if (shapesNeedingUpdate.length === 0) return;
+    // Direct store.put inside mergeRemoteChanges. Going through editor.run
+    // or editor.updateShape can register the change as a 'user' edit on
+    // certain code paths, which would leak the local opacity into Yjs and
+    // ricochet between peers. Direct store.put is the only API guaranteed
+    // to respect the mergeRemoteChanges 'remote' source flag.
     editor.store.mergeRemoteChanges(() => {
-      editor.run(
-        () => {
-          for (const u of shapes) {
-            const shape = editor.getShape(u.id);
-            if (shape) editor.updateShape({ id: u.id, type: shape.type, opacity: u.opacity });
-          }
-        },
-        { history: 'ignore', ignoreShapeLock: true },
-      );
+      const updated: TLShape[] = [];
+      for (const u of shapesNeedingUpdate) {
+        const current = editor.store.get(u.id) as TLShape | undefined;
+        if (!current) continue;
+        if (current.opacity === u.targetOpacity) continue;
+        updated.push({ ...current, opacity: u.targetOpacity });
+      }
+      if (updated.length > 0) editor.store.put(updated);
     });
-  }, [editor, shapes]);
+  }, [editor, shapesNeedingUpdate]);
 
   return null;
 }

@@ -235,6 +235,16 @@ export function createYjsTldrawStore({
   // into multiple smaller transactions instead of one giant one.
   const unsubscribeStore = store.listen(
     (entry: HistoryEntry<TLRecord>) => {
+      if (import.meta.env?.DEV) {
+        const counts = {
+          added: Object.keys(entry.changes.added).length,
+          updated: Object.keys(entry.changes.updated).length,
+          removed: Object.keys(entry.changes.removed).length,
+        };
+        if (counts.added + counts.updated + counts.removed > 0) {
+          console.debug('[whiteboard] local→Yjs', counts);
+        }
+      }
       applyHistoryEntryToYMap(entry, yRecords, (apply) => doc.transact(apply, localOrigin));
     },
     { source: 'user', scope: 'document' },
@@ -255,6 +265,12 @@ export function createYjsTldrawStore({
         }
       }
     });
+    if (import.meta.env?.DEV) {
+      console.debug('[whiteboard] Yjs→local', {
+        put: toPut.length,
+        remove: toRemove.length,
+      });
+    }
     store.mergeRemoteChanges(() => {
       if (toRemove.length > 0) {
         try {
