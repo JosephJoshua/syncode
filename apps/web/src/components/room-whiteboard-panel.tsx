@@ -148,8 +148,43 @@ export function RoomWhiteboardPanel({
   }, []);
 
   const editorRef = useRef<Editor | null>(null);
-  const handleMount = useCallback((editor: Editor) => {
-    editorRef.current = editor;
+  const handleMount = useCallback(
+    (editor: Editor) => {
+      editorRef.current = editor;
+
+      // (C) Z-order: annotations always render on top of drawings. When the
+      // local user creates an annotation shape, bring it to the front on
+      // next tick (so we mutate after the create transaction commits).
+      // Filtered to source==='user' so only the author runs bringToFront,
+      // not every peer reflecting the same record.
+      const cleanup = editor.store.sideEffects.registerAfterCreateHandler(
+        'shape',
+        (shape, source) => {
+          if (source !== 'user') return;
+          const meta = shape.meta as { layer?: 'drawing' | 'annotation' };
+          if (meta.layer !== 'annotation') return;
+          queueMicrotask(() => {
+            const current = editor.getShape(shape.id);
+            if (current) editor.bringToFront([shape.id]);
+          });
+        },
+      );
+      return () => cleanup();
+    },
+    // The handler closes over editor via the argument; React doesn't need to
+    // re-run this when state outside changes.
+    [],
+  );
+
+  // (D) Switch the active tldraw tool when the user toggles layer mode.
+  // Drawing -> freehand draw tool; Annotation -> highlighter (visually
+  // distinct + obvious 'review pen' affordance).
+  const handleSelectLayer = useCallback((layer: WhiteboardLayer) => {
+    setCurrentLayer(layer);
+    layerRef.current = layer;
+    const editor = editorRef.current;
+    if (!editor) return;
+    editor.setCurrentTool(layer === 'annotation' ? 'highlight' : 'draw');
   }, []);
 
   const showLayerToggle = canDraw && canAnnotate;
@@ -170,7 +205,7 @@ export function RoomWhiteboardPanel({
                 size="sm"
                 role="radio"
                 aria-checked={currentLayer === 'drawing'}
-                onClick={() => setCurrentLayer('drawing')}
+                onClick={() => handleSelectLayer('drawing')}
                 className={cn(
                   'h-6 gap-1 px-2 text-[11px]',
                   currentLayer === 'drawing'
@@ -187,7 +222,7 @@ export function RoomWhiteboardPanel({
                 size="sm"
                 role="radio"
                 aria-checked={currentLayer === 'annotation'}
-                onClick={() => setCurrentLayer('annotation')}
+                onClick={() => handleSelectLayer('annotation')}
                 className={cn(
                   'h-6 gap-1 px-2 text-[11px]',
                   currentLayer === 'annotation'
@@ -282,9 +317,18 @@ export function RoomWhiteboardPanel({
   );
 }
 
-// Mounts inside the tldraw context so it can use useEditor/useValue. Watches
-// the relevant filter inputs and toggles each shape's `isLocked` + opacity to
-// achieve a client-local hide effect without writing the preference into Yjs.
+const ANNOTATION_TINT_OPACITY = 0.65;
+const DRAWING_OPACITY = 1;
+const HIDDEN_OPACITY = 0;
+
+// Reactive overlay that maintains a client-local opacity for every shape
+// based on the layer toggle and per-author filter. The mutation runs inside
+// store.mergeRemoteChanges so the user-source listener that bridges to Yjs
+// skips it — the visibility preference never escapes this client.
+//
+// (A) Annotation tint: visible annotations render at reduced opacity so
+// reviewer feedback is instantly recognizable without being hidden, while
+// drawings stay at full opacity.
 function VisibilityFilter({
   showAnnotations,
   hiddenAuthors,
@@ -294,32 +338,45 @@ function VisibilityFilter({
 }) {
   const editor = useEditor();
 
-  const ids = useValue('whiteboard-shape-ids', () => editor.getCurrentPageShapeIds(), [editor]);
-
-  useEffect(() => {
-    const updates: Array<{ id: TLShapeId; opacity: number }> = [];
+  // Subscribe to the actual shape records — opacity must be re-applied
+  // whenever a peer updates a shape (a remote update arrives carrying
+  // opacity=1 from the wire), not only when the id set changes.
+  const shapes = useValue('whiteboard-shapes-with-meta', () => {
+    const ids = editor.getCurrentPageShapeIds();
+    const result: Array<{ id: TLShapeId; opacity: number; type: string }> = [];
     ids.forEach((id: TLShapeId) => {
       const shape = editor.getShape(id);
       if (!shape) return;
       const meta = (shape.meta ?? {}) as { layer?: 'drawing' | 'annotation'; authorId?: string };
       const hideForLayer = meta.layer === 'annotation' && !showAnnotations;
       const hideForAuthor = meta.authorId ? hiddenAuthors.has(meta.authorId) : false;
-      const targetOpacity = hideForLayer || hideForAuthor ? 0 : 1;
-      if (shape.opacity !== targetOpacity) {
-        updates.push({ id, opacity: targetOpacity });
+      const target =
+        hideForLayer || hideForAuthor
+          ? HIDDEN_OPACITY
+          : meta.layer === 'annotation'
+            ? ANNOTATION_TINT_OPACITY
+            : DRAWING_OPACITY;
+      if (shape.opacity !== target) {
+        result.push({ id, opacity: target, type: shape.type });
       }
     });
-    if (updates.length === 0) return;
-    editor.run(
-      () => {
-        for (const u of updates) {
-          const shape = editor.getShape(u.id);
-          if (shape) editor.updateShape({ id: u.id, type: shape.type, opacity: u.opacity });
-        }
-      },
-      { history: 'ignore', ignoreShapeLock: true },
-    );
-  }, [editor, ids, showAnnotations, hiddenAuthors]);
+    return result;
+  }, [editor, showAnnotations, hiddenAuthors]);
+
+  useEffect(() => {
+    if (shapes.length === 0) return;
+    editor.store.mergeRemoteChanges(() => {
+      editor.run(
+        () => {
+          for (const u of shapes) {
+            const shape = editor.getShape(u.id);
+            if (shape) editor.updateShape({ id: u.id, type: shape.type, opacity: u.opacity });
+          }
+        },
+        { history: 'ignore', ignoreShapeLock: true },
+      );
+    });
+  }, [editor, shapes]);
 
   return null;
 }
