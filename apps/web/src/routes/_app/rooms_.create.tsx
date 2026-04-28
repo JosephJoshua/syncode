@@ -36,8 +36,13 @@ import { api, getFieldErrorMessage, readApiError } from '@/lib/api-client.js';
 import i18n from '@/lib/i18n.js';
 import { useAuthStore } from '@/stores/auth.store.js';
 
+const createRoomSearchSchema = z.object({
+  problemId: z.string().min(1).optional(),
+});
+
 export const Route = createFileRoute('/_app/rooms_/create')({
   component: CreateRoomPage,
+  validateSearch: createRoomSearchSchema,
 });
 
 const MIN_PARTICIPANTS = 2;
@@ -170,6 +175,22 @@ function CreateRoomPage() {
 
   const selectedProblemId = watch('problemId');
   const selectedProblemLabel = availableProblems.find((p) => p.value === selectedProblemId)?.label;
+
+  const { problemId: problemIdFromSearch } = Route.useSearch();
+  const [hasAppliedInitialProblem, setHasAppliedInitialProblem] = useState(false);
+
+  useEffect(() => {
+    if (
+      hasAppliedInitialProblem ||
+      !problemIdFromSearch ||
+      !availableProblems.some((p) => p.value === problemIdFromSearch)
+    ) {
+      return;
+    }
+
+    setValue('problemId', problemIdFromSearch, { shouldValidate: true });
+    setHasAppliedInitialProblem(true);
+  }, [availableProblems, hasAppliedInitialProblem, problemIdFromSearch, setValue]);
 
   const createRoomMutation = useMutation({
     mutationFn: (data: CreateRoomFormData) =>
