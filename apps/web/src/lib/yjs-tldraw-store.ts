@@ -86,10 +86,18 @@ const applyRecordsResilient = (store: TLStore, records: TLRecord[]): TLRecord[] 
   return failed;
 };
 
+// Cap the number of retry passes so a record that genuinely fails validation
+// (not just a dependency-ordering issue) doesn't loop forever.
+const MAX_HYDRATION_PASSES = 4;
+
 const hydrateFromRemote = (store: TLStore, records: TLRecord[]): void => {
   store.mergeRemoteChanges(() => {
-    const retry = applyRecordsResilient(store, records);
-    if (retry.length > 0) applyRecordsResilient(store, retry);
+    let pending = records;
+    for (let pass = 0; pass < MAX_HYDRATION_PASSES && pending.length > 0; pass++) {
+      const failed = applyRecordsResilient(store, pending);
+      if (failed.length === pending.length) break; // no progress this pass — stop
+      pending = failed;
+    }
   });
 };
 
@@ -231,12 +239,16 @@ export function createYjsTldrawStore({
         }
       }
       // Per-record put so one validation failure doesn't drop the whole
-      // batch. Two retry passes in case order-of-arrival put a record before
-      // its dependency (e.g. a shape arriving before its parent page); the
-      // second pass picks them up once the dependency lands.
+      // batch. Multiple retry passes resolve deeper dependency chains
+      // (binding -> shape -> page) when records arrive out-of-order in a
+      // single sync update.
       if (toPut.length > 0) {
-        const retry = applyRecordsResilient(store, toPut);
-        if (retry.length > 0) applyRecordsResilient(store, retry);
+        let pending = toPut;
+        for (let pass = 0; pass < MAX_HYDRATION_PASSES && pending.length > 0; pass++) {
+          const failed = applyRecordsResilient(store, pending);
+          if (failed.length === pending.length) break;
+          pending = failed;
+        }
       }
     });
   };
