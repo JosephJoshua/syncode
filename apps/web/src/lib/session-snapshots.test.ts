@@ -20,6 +20,7 @@ describe('fetchSessionSnapshots', () => {
           snapshotId: '550e8400-e29b-41d4-a716-446655440000',
           timestamp: '2026-04-20T14:00:00.000Z',
           trigger: 'phase_change',
+          phase: 'coding',
           language: 'typescript',
           code: 'const answer = 42;',
           linesOfCode: 1,
