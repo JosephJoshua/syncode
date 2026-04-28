@@ -75,6 +75,13 @@
 	}
 }
 
+s3.{$DOMAIN} {
+	header -Server
+	reverse_proxy {$ORIGIN_HOST}:{$ORIGIN_PORT_PROD} {
+		import standard_proxy
+	}
+}
+
 grafana.{$DOMAIN} {
 	header -Server
 
@@ -114,5 +121,12 @@ staging.{$DOMAIN} {
 		reverse_proxy {$ORIGIN_HOST}:{$ORIGIN_PORT_STAGING} {
 			import standard_proxy
 		}
+	}
+}
+
+s3.staging.{$DOMAIN} {
+	header -Server
+	reverse_proxy {$ORIGIN_HOST}:{$ORIGIN_PORT_STAGING} {
+		import standard_proxy
 	}
 }
