@@ -135,15 +135,25 @@ export const sanitizeForYjs = <T>(value: T): T | null => {
 // dependency ordering races).
 const applyRecordsResilient = (store: TLStore, records: TLRecord[]): TLRecord[] => {
   const failed: TLRecord[] = [];
+  let succeeded = 0;
   for (const record of records) {
     try {
       store.put([record]);
+      succeeded++;
     } catch (error) {
       failed.push(record);
       if (import.meta.env?.DEV) {
         console.warn('[whiteboard] failed to apply record', record.id, error);
       }
     }
+  }
+  if (import.meta.env?.DEV && (succeeded > 0 || failed.length > 0)) {
+    console.debug('[whiteboard] applyRecordsResilient', {
+      total: records.length,
+      succeeded,
+      failed: failed.length,
+      storeId: (store as { id?: string }).id,
+    });
   }
   return failed;
 };
@@ -357,6 +367,12 @@ export function createYjsTldrawStore({
     });
   };
 
+  if (import.meta.env?.DEV) {
+    console.debug('[whiteboard] result.store created', {
+      storeId: (store as { id?: string }).id,
+    });
+  }
+
   // The store we mutate on Yjs->local. Defaults to the local result.store,
   // but the room-whiteboard-panel calls setLocalApplyTarget(editor.store)
   // from onMount so remote updates land on the store tldraw is actually
@@ -364,19 +380,28 @@ export function createYjsTldrawStore({
   let applyTarget: TLStore = store;
 
   const setLocalApplyTarget = (target: TLStore | null): void => {
+    if (import.meta.env?.DEV) {
+      console.debug('[whiteboard] setLocalApplyTarget', {
+        targetStoreId: target ? (target as { id?: string }).id : null,
+        sameAsResultStore: target === store,
+      });
+    }
     applyTarget = target ?? store;
-    // Whenever a real editor.store comes online, re-hydrate it from the
-    // current Yjs state. Otherwise the editor would render empty until the
-    // next remote update happened to flip a record we'd already received
-    // during construction-time hydration into result.store (the wrong store).
-    if (target && target !== store) {
+    // Always re-hydrate the new target with whatever's currently in the
+    // Yjs map. Even when target === store (because tldraw passes the
+    // original store through unchanged), repeating the hydration is
+    // idempotent — store.put on an existing record with identical fields
+    // is a no-op. This guarantees the editor sees every record that
+    // arrived between construction and mount, regardless of which store
+    // got the original write.
+    if (target) {
       const records: TLRecord[] = [];
       yRecords.forEach((value, key) => {
         if (isTldrawRecord(value, key)) records.push(value);
       });
       if (records.length > 0) {
         if (import.meta.env?.DEV) {
-          console.debug('[whiteboard] re-hydrating editor.store', { count: records.length });
+          console.debug('[whiteboard] re-hydrating target', { count: records.length });
         }
         hydrateFromRemote(target, records);
       }
