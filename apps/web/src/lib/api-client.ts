@@ -52,6 +52,14 @@ async function refreshAccessToken(): Promise<boolean> {
 
       const data = (await response.json()) as { accessToken: string };
       useAuthStore.getState().setSession({ accessToken: data.accessToken });
+      // Refresh the user profile in the background so any server-side change
+      // (display name, avatar, etc.) propagates after a token refresh. Don't
+      // block the original request retry — the existing user stays in the
+      // store until this resolves, and `setSession`'s patch behavior keeps it
+      // intact while this runs.
+      void api(CONTROL_API.USERS.PROFILE)
+        .then((user) => useAuthStore.getState().setUser(user))
+        .catch(() => undefined);
       return true;
     } catch {
       return false;

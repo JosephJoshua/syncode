@@ -266,6 +266,7 @@ export class SessionsService {
           code: codeSnapshots.code,
           language: codeSnapshots.language,
           trigger: codeSnapshots.trigger,
+          phase: codeSnapshots.phase,
           linesOfCode: codeSnapshots.linesOfCode,
           createdAt: codeSnapshots.createdAt,
         })
@@ -449,6 +450,7 @@ export class SessionsService {
             language: codeSnapshots.language,
             code: codeSnapshots.code,
             linesOfCode: codeSnapshots.linesOfCode,
+            phase: codeSnapshots.phase,
           })
           .from(codeSnapshots)
           .where(and(...conditions))
@@ -462,6 +464,7 @@ export class SessionsService {
           language: snapshot.language,
           code: snapshot.code,
           linesOfCode: snapshot.linesOfCode ?? this.countLinesOfCode(snapshot.code),
+          phase: snapshot.phase,
         }));
       },
     });

@@ -18,7 +18,7 @@ function AppLayout() {
     select: (state) => ({
       pathname: state.location.pathname,
       isSessionFeedbackPage: state.matches.some(
-        (match) => match.routeId === '/_app/sessions/$sessionId/feedback',
+        (match) => match.routeId === '/_app/sessions/$sessionId',
       ),
     }),
   });

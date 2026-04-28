@@ -267,20 +267,11 @@ describe('useLiveKit', () => {
     const { result } = renderHook(() => useLiveKit(defaultOptions()));
     await flushPromises();
 
-    // After connect, mic is auto-enabled
-    expect(result.current.isMicrophoneEnabled).toBe(true);
-
-    // Toggle off — sync the mock participant state with what the hook believes
-    const room = getRoom();
-    room.localParticipant.isMicrophoneEnabled = true;
-
-    await act(async () => {
-      await result.current.toggleMicrophone();
-    });
-
+    // Mic starts off — connect no longer auto-enables it.
     expect(result.current.isMicrophoneEnabled).toBe(false);
 
-    // Toggle back on
+    // Toggle on — sync the mock participant state with what the hook believes
+    const room = getRoom();
     room.localParticipant.isMicrophoneEnabled = false;
 
     await act(async () => {
@@ -288,6 +279,15 @@ describe('useLiveKit', () => {
     });
 
     expect(result.current.isMicrophoneEnabled).toBe(true);
+
+    // Toggle back off
+    room.localParticipant.isMicrophoneEnabled = true;
+
+    await act(async () => {
+      await result.current.toggleMicrophone();
+    });
+
+    expect(result.current.isMicrophoneEnabled).toBe(false);
   });
 
   // -----------------------------------------------------------------------
@@ -439,14 +439,16 @@ describe('useLiveKit', () => {
   });
 
   // -----------------------------------------------------------------------
-  // 8. Auto-enable microphone on first connection
+  // 8. Microphone is off by default on connect
   // -----------------------------------------------------------------------
 
-  it('GIVEN first connection WHEN connect resolves THEN microphone is auto-enabled', async () => {
+  it('GIVEN first connection WHEN connect resolves THEN microphone stays off', async () => {
     const { result } = renderHook(() => useLiveKit(defaultOptions()));
     await flushPromises();
 
-    expect(result.current.isMicrophoneEnabled).toBe(true);
+    expect(result.current.isMicrophoneEnabled).toBe(false);
+    const room = getRoom();
+    expect(room.localParticipant.setMicrophoneEnabled).not.toHaveBeenCalled();
   });
 
   // -----------------------------------------------------------------------

@@ -5,8 +5,8 @@ import { type UseYjsCollabOptions, useYjsCollab } from './use-yjs-collab.js';
 // Mock the provider so we don't create real WebSocket connections
 const mockConnect = vi.fn();
 const mockDestroy = vi.fn();
-const mockSetLocalStateField = vi.fn();
 const mockMarkChatRead = vi.fn();
+const mockSetLocalUser = vi.fn();
 
 vi.mock('@/lib/yjs-collab-provider.js', async () => {
   const Y = await import('yjs');
@@ -16,13 +16,13 @@ vi.mock('@/lib/yjs-collab-provider.js', async () => {
     YjsCollabProvider: vi.fn().mockImplementation(() => {
       const doc = new Y.Doc();
       const awareness = new Awareness(doc);
-      awareness.setLocalStateField = mockSetLocalStateField;
       return {
         doc,
         awareness,
         connect: mockConnect,
         destroy: mockDestroy,
         markChatRead: mockMarkChatRead,
+        setLocalUser: mockSetLocalUser,
       };
     }),
     codeTextKey: (language: string) => `code:${language}`,
@@ -93,8 +93,7 @@ describe('useYjsCollab', () => {
     rerender({ ...opts, userName: 'Bob' });
 
     // Awareness should be updated but no new connection
-    expect(mockSetLocalStateField).toHaveBeenCalledWith(
-      'user',
+    expect(mockSetLocalUser).toHaveBeenCalledWith(
       expect.objectContaining({
         name: 'Bob',
       }),
@@ -112,8 +111,7 @@ describe('useYjsCollab', () => {
 
     rerender({ ...opts, userColor: '#60a5fa' });
 
-    expect(mockSetLocalStateField).toHaveBeenCalledWith(
-      'user',
+    expect(mockSetLocalUser).toHaveBeenCalledWith(
       expect.objectContaining({
         color: '#60a5fa',
       }),

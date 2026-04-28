@@ -59,9 +59,4 @@ export class InternalController {
     const parsedLimit = limit ? Number.parseInt(limit, 10) : undefined;
     return this.collaborationService.getRoomChatHistory(roomId, parsedLimit);
   }
-
-  @Get(COLLAB_INTERNAL.HEALTH.route)
-  health() {
-    return { status: 'ok' as const };
-  }
 }

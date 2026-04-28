@@ -68,15 +68,8 @@
     {
       "idx": 9,
       "version": "7",
-      "when": 1777318676644,
-      "tag": "0006_room_doc_snapshots_backfill",
-      "breakpoints": true
-    },
-    {
-      "idx": 10,
-      "version": "7",
-      "when": 1777328736868,
-      "tag": "0009_room_participants_compat",
+      "when": 1777333913818,
+      "tag": "0009_parched_vapor",
       "breakpoints": true
     }
   ]

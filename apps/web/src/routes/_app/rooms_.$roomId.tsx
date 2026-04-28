@@ -1,4 +1,4 @@
-import { CONTROL_API, defineRoute, ERROR_CODES } from '@syncode/contracts';
+import { CONTROL_API, ERROR_CODES } from '@syncode/contracts';
 import type { RoomRole, RoomStatus } from '@syncode/shared';
 import {
   AlertDialog,
@@ -48,27 +48,6 @@ import type {
 } from '@syncode/contracts';
 
 const ROOM_REFRESH_INTERVAL_MS = 15_000;
-type LockEditorResponse = {
-  roomId?: string;
-  editorLocked?: boolean;
-  lockedAt?: string;
-  lockedBy?: string;
-};
-type UnlockEditorResponse = {
-  roomId?: string;
-  editorLocked?: boolean;
-  unlockedAt?: string;
-  unlockedBy?: string;
-};
-
-const LOCK_EDITOR_ROUTE = defineRoute<void, LockEditorResponse>()(
-  'rooms/:roomId/control/lock-editor',
-  'POST',
-);
-const UNLOCK_EDITOR_ROUTE = defineRoute<void, UnlockEditorResponse>()(
-  'rooms/:roomId/control/unlock-editor',
-  'POST',
-);
 
 const CURSOR_COLORS = [
   '#00e599',
@@ -308,7 +287,7 @@ function RoomPage() {
     const redirectTimer = window.setTimeout(() => {
       shouldRedirectToSessionRef.current = false;
       navigate({
-        to: '/sessions/$sessionId/feedback',
+        to: '/sessions/$sessionId',
         params: { sessionId: finishedSessionId },
       }).catch(() => {});
     }, STAGE_TRANSITION_OVERLAY_DURATION_MS + 2000);
@@ -648,6 +627,7 @@ function RoomPage() {
   const canManageParticipants = room?.myCapabilities.includes('participant:assign-role') ?? false;
   const isWorkspace = room ? isWorkspaceStage(room.status) : false;
   const canPreviewWorkspace =
+    import.meta.env.DEV &&
     room?.status === 'waiting' &&
     (room?.participants.filter((participant) => participant.isActive).length ?? 0) === 1;
   const shouldShowMockWorkspace = !isWorkspace && mockWorkspacePreview;
@@ -755,8 +735,8 @@ function RoomPage() {
 
   const lockEditorMutation = useMutation({
     mutationFn: async () =>
-      api(LOCK_EDITOR_ROUTE, {
-        params: { roomId },
+      api(CONTROL_API.ROOMS.LOCK_EDITOR, {
+        params: { id: roomId },
       }),
     onSuccess: () => {
       setRoom((prev) => (prev ? { ...prev, editorLocked: true } : prev));
@@ -781,8 +761,8 @@ function RoomPage() {
   });
   const unlockEditorMutation = useMutation({
     mutationFn: async () =>
-      api(UNLOCK_EDITOR_ROUTE, {
-        params: { roomId },
+      api(CONTROL_API.ROOMS.UNLOCK_EDITOR, {
+        params: { id: roomId },
       }),
     onSuccess: () => {
       setRoom((prev) => (prev ? { ...prev, editorLocked: false } : prev));
@@ -1054,6 +1034,12 @@ function RoomPage() {
         onPreviewWorkspace={() => setMockWorkspacePreview(true)}
         onRoomUpdated={setRoom}
         mediaControls={mediaControlsElement}
+        localVideoTrack={mediaLocalParticipant?.videoTrack ?? null}
+        hasLocalVideo={mediaLocalParticipant?.hasVideo ?? false}
+        isCameraEnabled={isCameraEnabled}
+        localScreenShareTrack={mediaLocalParticipant?.screenShareTrack ?? null}
+        hasLocalScreenShare={mediaLocalParticipant?.hasScreenShare ?? false}
+        isScreenShareEnabled={isScreenShareEnabled}
         speakingMap={speakingMap}
         mediaConnectedSet={mediaConnectedSet}
         mediaMutedMap={mediaMutedMap}

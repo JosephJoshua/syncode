@@ -10,6 +10,7 @@ import {
   joinRoomSchema,
   listRoomsQuerySchema,
   listRoomsResponseSchema,
+  lockEditorResponseSchema,
   mediaTokenResponseSchema,
   requestRoomAiHintResponseSchema,
   requestRoomAiHintSchema,
@@ -24,6 +25,7 @@ import {
   transferRoomOwnershipSchema,
   transitionRoomPhaseResponseSchema,
   transitionRoomPhaseSchema,
+  unlockEditorResponseSchema,
   updateRoomParticipantResponseSchema,
   updateRoomParticipantSchema,
 } from '@syncode/contracts';
@@ -62,5 +64,7 @@ export class UpdateRoomParticipantResponseDto extends createZodDto(
 export class TransitionRoomPhaseResponseDto extends createZodDto(
   transitionRoomPhaseResponseSchema,
 ) {}
+export class LockEditorResponseDto extends createZodDto(lockEditorResponseSchema) {}
+export class UnlockEditorResponseDto extends createZodDto(unlockEditorResponseSchema) {}
 export class MediaTokenResponseDto extends createZodDto(mediaTokenResponseSchema) {}
 export class EnsureCollabResponseDto extends createZodDto(ensureCollabResponseSchema) {}
