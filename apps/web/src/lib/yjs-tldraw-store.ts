@@ -35,6 +35,12 @@ export interface CreateYjsTldrawStoreResult {
   // Tests assert that remote-origin updates do NOT enter the local undo stack.
   localOrigin: object;
   dispose: () => void;
+  // Attach the local-store -> Yjs forwarder to a different store than the one
+  // returned by createYjsTldrawStore. Use this from inside Tldraw's onMount
+  // callback when the editor exposes a wrapped store: editor.store is the
+  // object that actually emits user-source events, and pre-attaching a
+  // listener to the original store misses them.
+  attachLocalStoreForwarder: (target: TLStore) => () => void;
 }
 
 // Cap mass-create flushes so a paste of hundreds of shapes doesn't lock the
@@ -236,37 +242,45 @@ export function createYjsTldrawStore({
   // into multiple smaller transactions instead of one giant one.
   //
   // Filter via the entry's own `source` field rather than store.listen's
-  // built-in source filter — some tldraw transactions (e.g. those that
-  // happen during default-page initialization or via certain editor
-  // actions) report sources outside the {'user','remote'} pair the
-  // store.listen filter expects, which silently drops them. Reading the
-  // source ourselves catches every case.
-  const unsubscribeStore = store.listen((entry: HistoryEntry<TLRecord>) => {
-    try {
-      const counts = {
-        added: Object.keys(entry.changes.added).length,
-        updated: Object.keys(entry.changes.updated).length,
-        removed: Object.keys(entry.changes.removed).length,
-      };
-      const total = counts.added + counts.updated + counts.removed;
-      if (total === 0) return;
-      if (entry.source !== 'user') {
-        if (import.meta.env?.DEV) {
-          console.debug('[whiteboard] skipping non-user entry', {
-            source: entry.source,
-            ...counts,
-          });
+  // built-in source filter — some tldraw transactions report sources
+  // outside the documented {'user','remote'} pair, which the built-in
+  // filter would silently drop.
+  //
+  // The forwarder is exposed as a function so it can be attached to whichever
+  // store tldraw actually uses internally. Tldraw 4.5 with the
+  // TLStoreWithStatus collaboration mode wraps the provided store, so the
+  // editor.store reachable from onMount is a DIFFERENT object than the one
+  // we created here. Pre-attaching the listener to our store would miss every
+  // user event. The room-whiteboard-panel calls attachLocalStoreForwarder
+  // from inside onMount with editor.store.
+  const attachLocalStoreForwarder = (target: TLStore): (() => void) => {
+    return target.listen((entry: HistoryEntry<TLRecord>) => {
+      try {
+        const counts = {
+          added: Object.keys(entry.changes.added).length,
+          updated: Object.keys(entry.changes.updated).length,
+          removed: Object.keys(entry.changes.removed).length,
+        };
+        const total = counts.added + counts.updated + counts.removed;
+        if (total === 0) return;
+        if (entry.source !== 'user') {
+          if (import.meta.env?.DEV) {
+            console.debug('[whiteboard] skipping non-user entry', {
+              source: entry.source,
+              ...counts,
+            });
+          }
+          return;
         }
-        return;
+        if (import.meta.env?.DEV) {
+          console.debug('[whiteboard] local→Yjs', counts);
+        }
+        applyHistoryEntryToYMap(entry, yRecords, (apply) => doc.transact(apply, localOrigin));
+      } catch (error) {
+        console.error('[whiteboard] local→Yjs handler threw', error);
       }
-      if (import.meta.env?.DEV) {
-        console.debug('[whiteboard] local→Yjs', counts);
-      }
-      applyHistoryEntryToYMap(entry, yRecords, (apply) => doc.transact(apply, localOrigin));
-    } catch (error) {
-      console.error('[whiteboard] local→Yjs handler threw', error);
-    }
-  });
+    });
+  };
 
   // Yjs -> local store: apply remote-origin map changes back to the store.
   const onYRecordsChange = (event: Y.YMapEvent<TLRecord>, transaction: Y.Transaction) => {
@@ -345,8 +359,8 @@ export function createYjsTldrawStore({
     store,
     undoManager,
     localOrigin,
+    attachLocalStoreForwarder,
     dispose: () => {
-      unsubscribeStore();
       beforeShapeCreate();
       beforeAssetCreate();
       yRecords.unobserve(onYRecordsChange);
@@ -366,6 +380,10 @@ export interface UseYjsTldrawStoreResult {
   storeWithStatus: TLStoreWithStatus;
   undoManager: Y.UndoManager;
   status: WhiteboardConnectionStatus;
+  // Attach the local-store -> Yjs forwarder to whichever store the editor
+  // actually uses (call this from <Tldraw onMount>). The returned function
+  // detaches the listener; call it from your onMount cleanup.
+  attachLocalStoreForwarder: (target: TLStore) => () => void;
 }
 
 export function useYjsTldrawStore(options: UseYjsTldrawStoreOptions): UseYjsTldrawStoreResult {
@@ -426,5 +444,10 @@ export function useYjsTldrawStore(options: UseYjsTldrawStoreOptions): UseYjsTldr
     return () => clearTimeout(handle);
   }, [result.store]);
 
-  return { storeWithStatus, undoManager: result.undoManager, status };
+  return {
+    storeWithStatus,
+    undoManager: result.undoManager,
+    status,
+    attachLocalStoreForwarder: result.attachLocalStoreForwarder,
+  };
 }
