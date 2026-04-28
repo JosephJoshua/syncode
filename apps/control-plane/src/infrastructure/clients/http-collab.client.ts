@@ -7,6 +7,8 @@ import type {
   CreateDocumentRequest,
   CreateDocumentResponse,
   DestroyDocumentResponse,
+  GetRoomChatHistoryRequest,
+  GetRoomChatHistoryResponse,
   ICollabClient,
   KickUserRequest,
   KickUserResponse,
@@ -78,6 +80,18 @@ export class HttpCollabClient implements ICollabClient {
         json: request,
       })
       .json<ChangeLanguageResponse>();
+  }
+
+  async getRoomChatHistory(
+    roomId: string,
+    request?: GetRoomChatHistoryRequest,
+  ): Promise<GetRoomChatHistoryResponse> {
+    return this.client
+      .get(buildUrl(COLLAB_INTERNAL.GET_ROOM_CHAT_HISTORY.route, { roomId }), {
+        searchParams:
+          typeof request?.limit === 'number' ? { limit: String(request.limit) } : undefined,
+      })
+      .json<GetRoomChatHistoryResponse>();
   }
 
   async healthCheck(): Promise<boolean> {

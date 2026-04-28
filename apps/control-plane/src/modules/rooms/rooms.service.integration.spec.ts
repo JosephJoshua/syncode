@@ -8,7 +8,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
-import { COLLAB_CLIENT, ERROR_CODES, EXECUTION_CLIENT } from '@syncode/contracts';
+import { AI_CLIENT, COLLAB_CLIENT, ERROR_CODES, EXECUTION_CLIENT } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
 import {
   roomDocSnapshots,
@@ -36,6 +36,7 @@ import {
   insertUser,
 } from '@/test/integration-setup.js';
 import {
+  createMockAiClient,
   createMockCollabClient,
   createMockConfigService,
   createMockExecutionClient,
@@ -71,6 +72,7 @@ beforeEach(async () => {
       ExecutionService,
       { provide: DB_CLIENT, useValue: db },
       { provide: EXECUTION_CLIENT, useValue: mockExecutionClient },
+      { provide: AI_CLIENT, useValue: createMockAiClient() },
       { provide: CACHE_SERVICE, useValue: new InMemoryCacheService() },
       { provide: COLLAB_CLIENT, useValue: mockCollabClient },
       { provide: MEDIA_SERVICE, useValue: createMockMediaService() },

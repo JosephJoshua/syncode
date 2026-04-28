@@ -1,4 +1,10 @@
-import { PROBLEM_DIFFICULTIES, ROOM_MODES, ROOM_ROLES, SUPPORTED_LANGUAGES } from '@syncode/shared';
+import {
+  PROBLEM_DIFFICULTIES,
+  ROOM_MODES,
+  ROOM_ROLES,
+  ROOM_STATUSES,
+  SUPPORTED_LANGUAGES,
+} from '@syncode/shared';
 import { z } from 'zod';
 import { paginationQuerySchema, paginationSchema } from './pagination.js';
 
@@ -154,6 +160,7 @@ export const sessionCodeSnapshotSchema = z.object({
   trigger: z.string(),
   linesOfCode: z.number().int().nullable(),
   createdAt: z.iso.datetime(),
+  phase: z.enum(ROOM_STATUSES).nullable(),
 });
 
 export const sessionPeerFeedbackSchema = z.object({
@@ -214,6 +221,7 @@ export const codeSnapshotSchema = z.object({
   language: z.enum(SUPPORTED_LANGUAGES),
   code: z.string(),
   linesOfCode: z.number().int().nonnegative(),
+  phase: z.enum(ROOM_STATUSES).nullable(),
 });
 
 export const listCodeSnapshotsQuerySchema = paginationQuerySchema.pick({

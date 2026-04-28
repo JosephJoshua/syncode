@@ -1,4 +1,11 @@
 import {
+  type ChatHistoryEventData,
+  type ChatMarkReadEventData,
+  type ChatMessageCreatedEventData,
+  type ChatReactionUpdatedEventData,
+  type ChatReactToggleEventData,
+  type ChatReadUpdatedEventData,
+  type ChatSendEventData,
   COLLAB_WS_EVENTS,
   type CollabWsMessage,
   type EditorLockEventData,
@@ -27,7 +34,12 @@ export interface YjsCollabProviderOptions {
   url: string;
   token: string;
   roomId: string;
-  user: { name: string; color: string; colorLight: string };
+  /**
+   * Local user awareness payload. `name` may be null while auth is loading;
+   * the provider then defers broadcasting a user state until a real name
+   * arrives via `setLocalUser`, so peers never see an "Anonymous" placeholder.
+   */
+  user: { name: string | null; color: string; colorLight: string };
   onConnectionStatusChange: (status: CollabConnectionStatus) => void;
   onRoomStatePatch: (patch: { status?: string; editorLocked?: boolean }) => void;
   onParticipantReady: (userId: string, isReady: boolean) => void;
@@ -40,6 +52,10 @@ export interface YjsCollabProviderOptions {
    * Used to trigger idempotent backend reactivation (e.g. re-hit POST /join).
    */
   onReconnected?: () => void;
+  onChatHistory: (data: ChatHistoryEventData) => void;
+  onChatMessageCreated: (data: ChatMessageCreatedEventData) => void;
+  onChatReactionUpdated: (data: ChatReactionUpdatedEventData) => void;
+  onChatReadUpdated: (data: ChatReadUpdatedEventData) => void;
   onRoomNotFound?: () => Promise<void>;
 }
 
@@ -70,17 +86,34 @@ export class YjsCollabProvider {
   private isAwaitingConnectionSync = false;
   private currentStatus: CollabConnectionStatus = 'disconnected';
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private user: YjsCollabProviderOptions['user'];
   private readonly options: YjsCollabProviderOptions;
 
   constructor(options: YjsCollabProviderOptions) {
     this.options = options;
+    this.user = options.user;
     this.doc = new Y.Doc();
     this.awareness = new awarenessProtocol.Awareness(this.doc);
 
-    this.awareness.setLocalStateField('user', options.user);
+    this.publishLocalUser();
 
     this.doc.on('update', this.handleDocUpdate);
     this.awareness.on('update', this.handleAwarenessUpdate);
+  }
+
+  /**
+   * Update the locally broadcast user awareness payload. Skips the broadcast
+   * when `name` is null so peers don't briefly see an Anonymous placeholder
+   * during auth loading or token refresh.
+   */
+  setLocalUser(user: YjsCollabProviderOptions['user']): void {
+    this.user = user;
+    this.publishLocalUser();
+  }
+
+  private publishLocalUser(): void {
+    if (this.user.name === null) return;
+    this.awareness.setLocalStateField('user', this.user);
   }
 
   connect(): void {
@@ -163,13 +196,21 @@ export class YjsCollabProvider {
   }
 
   destroy(): void {
-    this.disposed = true;
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+
+    // Broadcast our own awareness removal BEFORE tearing down handlers/WS so
+    // peers can drop our cursor/name immediately. Origin `'local'` ensures the
+    // update handler relays it onto the wire (it ignores any other origin to
+    // avoid echoing remote updates).
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      awarenessProtocol.removeAwarenessStates(this.awareness, [this.doc.clientID], 'local');
+    }
+
+    this.disposed = true;
 
     this.doc.off('update', this.handleDocUpdate);
     this.awareness.off('update', this.handleAwarenessUpdate);
 
-    awarenessProtocol.removeAwarenessStates(this.awareness, [this.doc.clientID], null);
     this.awareness.destroy();
     this.doc.destroy();
 
@@ -181,9 +222,27 @@ export class YjsCollabProvider {
     }
   }
 
+  sendChatMessage(data: ChatSendEventData): void {
+    this.sendText(COLLAB_WS_EVENTS.CHAT_SEND, data);
+  }
+
+  toggleChatReaction(data: ChatReactToggleEventData): void {
+    this.sendText(COLLAB_WS_EVENTS.CHAT_REACT_TOGGLE, data);
+  }
+
+  markChatRead(data: ChatMarkReadEventData): void {
+    this.sendText(COLLAB_WS_EVENTS.CHAT_MARK_READ, data);
+  }
+
   private send(data: Uint8Array): void {
     if (!this.disposed && this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(data);
+    }
+  }
+
+  private sendText(type: string, data: unknown): void {
+    if (!this.disposed && this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type, data }));
     }
   }
 
@@ -219,7 +278,7 @@ export class YjsCollabProvider {
       }
     } else {
       this.hasConnected = true;
-      this.awareness.setLocalStateField('user', this.options.user);
+      this.publishLocalUser();
     }
 
     switch (message.type) {
@@ -252,6 +311,26 @@ export class YjsCollabProvider {
         this.options.onLanguageChange?.(data.language, data.changedBy);
         break;
       }
+      case COLLAB_WS_EVENTS.CHAT_HISTORY: {
+        const data = message.data as ChatHistoryEventData;
+        this.options.onChatHistory(data);
+        break;
+      }
+      case COLLAB_WS_EVENTS.CHAT_MESSAGE_CREATED: {
+        const data = message.data as ChatMessageCreatedEventData;
+        this.options.onChatMessageCreated(data);
+        break;
+      }
+      case COLLAB_WS_EVENTS.CHAT_REACTION_UPDATED: {
+        const data = message.data as ChatReactionUpdatedEventData;
+        this.options.onChatReactionUpdated(data);
+        break;
+      }
+      case COLLAB_WS_EVENTS.CHAT_READ_UPDATED: {
+        const data = message.data as ChatReadUpdatedEventData;
+        this.options.onChatReadUpdated(data);
+        break;
+      }
     }
   }
 
@@ -279,7 +358,7 @@ export class YjsCollabProvider {
     if (this.isAwaitingConnectionSync && (syncMessageType === 1 || syncMessageType === 2)) {
       this.isAwaitingConnectionSync = false;
       this.hasConnected = true;
-      this.awareness.setLocalStateField('user', this.options.user);
+      this.publishLocalUser();
       this.setStatus('connected');
     }
 

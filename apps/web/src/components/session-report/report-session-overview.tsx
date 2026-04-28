@@ -7,11 +7,13 @@ import {
   CircleDashed,
   Clock3,
   Code2,
+  MessageSquareText,
   MonitorPlay,
   Radio,
   Send,
   Sparkles,
   UsersRound,
+  Video,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -96,35 +98,40 @@ export function ReportSessionOverview({
               <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
                 {t('details.activity')}
               </p>
-              <div className="mt-4 flex flex-wrap gap-2.5">
-                <ActivityPill
-                  icon={<Radio className="size-3.5" />}
+              <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3">
+                <ActivityStat
+                  icon={<Radio className="size-4 text-primary" />}
                   label={t('details.runs')}
                   value={String(session.runs.length)}
                 />
-                <ActivityPill
-                  icon={<Send className="size-3.5" />}
+                <ActivityStat
+                  icon={<Send className="size-4 text-primary" />}
                   label={t('details.submissions')}
                   value={String(session.submissions.length)}
                 />
-                <ActivityStatusPill
+                <ActivityStatusStat
+                  icon={<Bot className="size-4" />}
                   label={t('details.report')}
                   status={reportStatus}
                   readyText={t('details.available')}
                   pendingText={t('details.pending')}
                   unavailableText={t('details.unavailable')}
                 />
-                <ActivityBooleanPill
+                <ActivityStatusStat
+                  icon={<MessageSquareText className="size-4" />}
                   label={t('details.feedbackStatus')}
-                  enabled={session.hasFeedback}
-                  enabledText={t('details.available')}
-                  disabledText={t('details.unavailable')}
+                  status={session.hasFeedback ? 'ready' : 'unavailable'}
+                  readyText={t('details.available')}
+                  pendingText={t('details.pending')}
+                  unavailableText={t('details.unavailable')}
                 />
-                <ActivityBooleanPill
+                <ActivityStatusStat
+                  icon={<Video className="size-4" />}
                   label={t('details.recording')}
-                  enabled={session.hasRecording}
-                  enabledText={t('details.available')}
-                  disabledText={t('details.unavailable')}
+                  status={session.hasRecording ? 'ready' : 'unavailable'}
+                  readyText={t('details.available')}
+                  pendingText={t('details.pending')}
+                  unavailableText={t('details.unavailable')}
                 />
               </div>
             </div>
@@ -213,67 +220,60 @@ function OverviewStat({ label, value, icon }: { label: string; value: string; ic
   );
 }
 
-function ActivityPill({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
+function ActivityStat({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
   return (
-    <div className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/70 px-3 py-1.5 text-xs text-foreground">
-      <span className="text-primary">{icon}</span>
-      <span className="text-muted-foreground">{label}</span>
-      <span className="font-semibold text-foreground">{value}</span>
+    <div className="flex items-center gap-3 rounded-xl bg-background/50 px-3 py-2.5 ring-1 ring-border/40">
+      <span className="shrink-0 text-muted-foreground">{icon}</span>
+      <div className="min-w-0">
+        <p className="truncate text-[11px] text-muted-foreground">{label}</p>
+        <p className="text-sm font-semibold tabular-nums text-foreground">{value}</p>
+      </div>
     </div>
   );
 }
 
-function ActivityBooleanPill({
-  label,
-  enabled,
-  enabledText,
-  disabledText,
-}: {
-  label: string;
-  enabled: boolean;
-  enabledText: string;
-  disabledText: string;
-}) {
-  return (
-    <ActivityStatusPill
-      label={label}
-      status={enabled ? 'ready' : 'unavailable'}
-      readyText={enabledText}
-      pendingText={enabledText}
-      unavailableText={disabledText}
-    />
-  );
-}
-
-function ActivityStatusPill({
+function ActivityStatusStat({
+  icon,
   label,
   status,
   readyText,
   pendingText,
   unavailableText,
 }: {
+  icon: ReactNode;
   label: string;
   status: ReportStatus;
   readyText: string;
   pendingText: string;
   unavailableText: string;
 }) {
-  const variant = status === 'ready' ? 'success' : status === 'pending' ? 'warning' : 'outline';
-  const icon =
-    status === 'ready' ? (
-      <CircleCheckBig className="size-3.5" />
-    ) : (
-      <CircleDashed className="size-3.5" />
-    );
-
-  const value =
+  const valueText =
     status === 'ready' ? readyText : status === 'pending' ? pendingText : unavailableText;
+  const isReady = status === 'ready';
+  const isPending = status === 'pending';
 
   return (
-    <Badge size="sm" variant={variant}>
-      {icon}
-      {label}: {value}
-    </Badge>
+    <div className="flex items-center gap-3 rounded-xl bg-background/50 px-3 py-2.5 ring-1 ring-border/40">
+      <span
+        className={
+          isReady
+            ? 'shrink-0 text-emerald-400'
+            : isPending
+              ? 'shrink-0 text-amber-400'
+              : 'shrink-0 text-muted-foreground/50'
+        }
+      >
+        {isReady ? <CircleCheckBig className="size-4" /> : <CircleDashed className="size-4" />}
+      </span>
+      <div className="min-w-0">
+        <p className="truncate text-[11px] text-muted-foreground">{label}</p>
+        <p
+          className={`text-sm font-medium ${isReady ? 'text-emerald-400' : isPending ? 'text-amber-400' : 'text-muted-foreground/60'}`}
+        >
+          {valueText}
+        </p>
+      </div>
+    </div>
   );
 }
 

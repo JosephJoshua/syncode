@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
 import {
   type BroadcastParticipantReadyRequest,
   type ChangeLanguageRequest,
@@ -52,5 +52,11 @@ export class InternalController {
   @Post(COLLAB_INTERNAL.CHANGE_LANGUAGE.route)
   changeLanguage(@Param('roomId') roomId: string, @Body() body: ChangeLanguageRequest) {
     return this.collaborationService.changeLanguage({ ...body, roomId });
+  }
+
+  @Get(COLLAB_INTERNAL.GET_ROOM_CHAT_HISTORY.route)
+  getRoomChatHistory(@Param('roomId') roomId: string, @Query('limit') limit?: string) {
+    const parsedLimit = limit ? Number.parseInt(limit, 10) : undefined;
+    return this.collaborationService.getRoomChatHistory(roomId, parsedLimit);
   }
 }

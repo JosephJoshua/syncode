@@ -48,11 +48,17 @@ import {
   CreateRoomResponseDto,
   DestroyRoomResponseDto,
   EnsureCollabResponseDto,
+  GetRoomAiHintResultResponseDto,
   JoinRoomDto,
   JoinRoomResponseDto,
   ListRoomsQueryDto,
   ListRoomsResponseDto,
+  LockEditorResponseDto,
   MediaTokenResponseDto,
+  RequestRoomAiHintDto,
+  RequestRoomAiHintResponseDto,
+  RoomChatMediaUploadDto,
+  RoomChatMediaUploadResponseDto,
   RoomDetailDto,
   RunCodeDto,
   RunCodeResponseDto,
@@ -62,6 +68,7 @@ import {
   TransferRoomOwnershipResponseDto,
   TransitionRoomPhaseDto,
   TransitionRoomPhaseResponseDto,
+  UnlockEditorResponseDto,
   UpdateRoomParticipantDto,
   UpdateRoomParticipantResponseDto,
 } from './dto/rooms.dto.js';
@@ -305,6 +312,104 @@ export class RoomsController {
     return this.roomsService.submitProblem(id, user.id, body);
   }
 
+  @Post(CONTROL_API.ROOMS.AI_HINT.route)
+  @HttpCode(202)
+  @ApiOperation({
+    summary: 'Submit AI hint job for current code',
+    description:
+      'Returns immediately with the job ID. Poll GET /rooms/:id/ai/hint/:jobId for the result.',
+  })
+  @ApiParam({ name: 'id', description: 'Room ID (UUID)' })
+  @ApiBody({ type: RequestRoomAiHintDto })
+  @ApiResponse({
+    status: 202,
+    type: RequestRoomAiHintResponseDto,
+    description: 'Hint job submitted; poll GET /rooms/:id/ai/hint/:jobId for the result',
+  })
+  @ApiResponse({
+    status: 403,
+    type: ErrorResponseDto,
+    description: 'No ai:request-hint capability',
+  })
+  @ApiResponse({
+    status: 404,
+    type: ErrorResponseDto,
+    description: 'No problem selected in room',
+  })
+  @ApiResponse({
+    status: 429,
+    type: ErrorResponseDto,
+    description: 'Hint rate limit exceeded (3 per 5 minutes)',
+  })
+  @ApiResponse({
+    status: 503,
+    type: ErrorResponseDto,
+    description: 'AI service unavailable',
+  })
+  async requestAiHint(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() body: RequestRoomAiHintDto,
+  ): Promise<RequestRoomAiHintResponseDto> {
+    return this.roomsService.requestAiHint(id, user.id, body);
+  }
+
+  @Get(CONTROL_API.ROOMS.AI_HINT_RESULT.route)
+  @ApiOperation({ summary: 'Poll AI hint job result' })
+  @ApiParam({ name: 'id', description: 'Room ID (UUID)' })
+  @ApiParam({ name: 'jobId', description: 'AI hint job ID returned from POST /ai/hint' })
+  @ApiResponse({
+    status: 200,
+    type: GetRoomAiHintResultResponseDto,
+    description: 'Hint job status: pending, ready, or failed',
+  })
+  @ApiResponse({
+    status: 403,
+    type: ErrorResponseDto,
+    description: 'Not a participant of this room',
+  })
+  @ApiResponse({
+    status: 404,
+    type: ErrorResponseDto,
+    description: 'Job not found, expired, or not owned by caller',
+  })
+  async getAiHintResult(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Param('jobId') jobId: string,
+  ): Promise<GetRoomAiHintResultResponseDto> {
+    return this.roomsService.getAiHintResult(id, user.id, jobId);
+  }
+
+  @Post(CONTROL_API.ROOMS.CHAT_MEDIA_UPLOAD_URL.route)
+  @HttpCode(201)
+  @ApiOperation({ summary: 'Get presigned upload URL for room chat media' })
+  @ApiParam({ name: 'id', description: 'Room ID (UUID)' })
+  @ApiBody({ type: RoomChatMediaUploadDto })
+  @ApiResponse({
+    status: 201,
+    type: RoomChatMediaUploadResponseDto,
+    description: 'Presigned upload URL and media metadata',
+  })
+  @ApiResponse({
+    status: 400,
+    type: ErrorResponseDto,
+    description: 'Unsupported file type or file too large',
+  })
+  @ApiResponse({
+    status: 403,
+    type: ErrorResponseDto,
+    description: 'Not a participant or lacks chat capability',
+  })
+  @ApiResponse({ status: 404, type: ErrorResponseDto, description: 'Room not found' })
+  async getChatMediaUploadUrl(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() body: RoomChatMediaUploadDto,
+  ): Promise<RoomChatMediaUploadResponseDto> {
+    return this.roomsService.getRoomChatMediaUploadUrl(id, user.id, body);
+  }
+
   @Post(CONTROL_API.ROOMS.TOGGLE_READY.route)
   @HttpCode(200)
   @ApiOperation({ summary: 'Toggle ready status' })
@@ -349,6 +454,52 @@ export class RoomsController {
   ): Promise<TransitionRoomPhaseResponseDto> {
     const result = await this.roomsService.transitionPhase(id, user.id, body.targetStatus);
     return { ...result, transitionedAt: result.transitionedAt.toISOString() };
+  }
+
+  @Post(CONTROL_API.ROOMS.LOCK_EDITOR.route)
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Lock the collaborative editor for everyone except the host' })
+  @ApiParam({ name: 'id', description: 'Room ID (UUID)' })
+  @ApiResponse({ status: 200, type: LockEditorResponseDto })
+  @ApiResponse({ status: 403, type: ErrorResponseDto })
+  @ApiResponse({ status: 404, type: ErrorResponseDto })
+  @ApiResponse({ status: 409, type: ErrorResponseDto, description: 'Room has already finished' })
+  async lockEditor(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+  ): Promise<LockEditorResponseDto> {
+    const result = await this.roomsService.setEditorLock(id, user.id, true);
+    return {
+      roomId: result.roomId,
+      editorLocked: true,
+      changed: result.changed,
+      ...(result.changed && result.changedAt && result.changedBy
+        ? { lockedAt: result.changedAt.toISOString(), lockedBy: result.changedBy }
+        : {}),
+    };
+  }
+
+  @Post(CONTROL_API.ROOMS.UNLOCK_EDITOR.route)
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Release the collaborative editor lock' })
+  @ApiParam({ name: 'id', description: 'Room ID (UUID)' })
+  @ApiResponse({ status: 200, type: UnlockEditorResponseDto })
+  @ApiResponse({ status: 403, type: ErrorResponseDto })
+  @ApiResponse({ status: 404, type: ErrorResponseDto })
+  @ApiResponse({ status: 409, type: ErrorResponseDto, description: 'Room has already finished' })
+  async unlockEditor(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+  ): Promise<UnlockEditorResponseDto> {
+    const result = await this.roomsService.setEditorLock(id, user.id, false);
+    return {
+      roomId: result.roomId,
+      editorLocked: false,
+      changed: result.changed,
+      ...(result.changed && result.changedAt && result.changedBy
+        ? { unlockedAt: result.changedAt.toISOString(), unlockedBy: result.changedBy }
+        : {}),
+    };
   }
 
   @Post(CONTROL_API.ROOMS.ENSURE_COLLAB.route)

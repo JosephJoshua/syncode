@@ -1,4 +1,4 @@
-import { CONTROL_API, defineRoute, ERROR_CODES } from '@syncode/contracts';
+import { CONTROL_API, ERROR_CODES } from '@syncode/contracts';
 import type { RoomRole, RoomStatus } from '@syncode/shared';
 import {
   AlertDialog,
@@ -12,6 +12,7 @@ import {
 } from '@syncode/ui';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
+import ky from 'ky';
 import { AlertTriangle, Loader2 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -38,30 +39,15 @@ export const Route = createFileRoute('/_app/rooms_/$roomId')({
   component: RoomPage,
 });
 
-import type { JoinRoomResponse, RoomDetail } from '@syncode/contracts';
+import type {
+  ChatAttachment,
+  ChatReactToggleEventData,
+  ChatSendEventData,
+  JoinRoomResponse,
+  RoomDetail,
+} from '@syncode/contracts';
 
 const ROOM_REFRESH_INTERVAL_MS = 15_000;
-type LockEditorResponse = {
-  roomId?: string;
-  editorLocked?: boolean;
-  lockedAt?: string;
-  lockedBy?: string;
-};
-type UnlockEditorResponse = {
-  roomId?: string;
-  editorLocked?: boolean;
-  unlockedAt?: string;
-  unlockedBy?: string;
-};
-
-const LOCK_EDITOR_ROUTE = defineRoute<void, LockEditorResponse>()(
-  'rooms/:roomId/control/lock-editor',
-  'POST',
-);
-const UNLOCK_EDITOR_ROUTE = defineRoute<void, UnlockEditorResponse>()(
-  'rooms/:roomId/control/unlock-editor',
-  'POST',
-);
 
 const CURSOR_COLORS = [
   '#00e599',
@@ -80,6 +66,19 @@ function userCursorColor(participants: { userId: string }[], currentUserId: stri
   if (!currentUserId) return defaultColor;
   const index = participants.findIndex((p) => p.userId === currentUserId);
   return CURSOR_COLORS[index >= 0 ? index % CURSOR_COLORS.length : 0] ?? defaultColor;
+}
+
+function toChatAttachmentKind(contentType: string): ChatAttachment['kind'] {
+  if (contentType.startsWith('image/')) {
+    return 'image';
+  }
+  if (contentType.startsWith('video/')) {
+    return 'video';
+  }
+  if (contentType.startsWith('audio/')) {
+    return 'audio';
+  }
+  return 'file';
 }
 
 interface JoinDeps {
@@ -154,7 +153,12 @@ function RoomPage() {
   const { roomId } = Route.useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const currentUserId = useAuthStore((state) => state.user?.id ?? null);
+  const authUser = useAuthStore((state) => state.user);
+  const currentUserId = authUser?.id ?? null;
+  const [stableCurrentUserId, setStableCurrentUserId] = useState<string | null>(currentUserId);
+  const [stableCurrentUserName, setStableCurrentUserName] = useState<string>(
+    authUser?.displayName ?? authUser?.username ?? 'Anonymous',
+  );
   const [room, setRoom] = useState<RoomDetail | null>(null);
   const [isJoining, setIsJoining] = useState(true);
   const [joinError, setJoinError] = useState<string | null>(null);
@@ -183,6 +187,23 @@ function RoomPage() {
   // post-reconnect /join re-call. Short-circuits further reconnect attempts and
   // redirects away from the now-inaccessible room.
   const kickedRef = useRef(false);
+
+  useEffect(() => {
+    if (!currentUserId) {
+      return;
+    }
+
+    setStableCurrentUserId(currentUserId);
+  }, [currentUserId]);
+
+  useEffect(() => {
+    const nextUserName = authUser?.displayName ?? authUser?.username;
+    if (!nextUserName) {
+      return;
+    }
+
+    setStableCurrentUserName(nextUserName);
+  }, [authUser?.displayName, authUser?.username]);
 
   // Tick clock only when the timer is actively running (coding + not paused)
   const timerActive =
@@ -266,7 +287,7 @@ function RoomPage() {
     const redirectTimer = window.setTimeout(() => {
       shouldRedirectToSessionRef.current = false;
       navigate({
-        to: '/sessions/$sessionId/feedback',
+        to: '/sessions/$sessionId',
         params: { sessionId: finishedSessionId },
       }).catch(() => {});
     }, STAGE_TRANSITION_OVERLAY_DURATION_MS + 2000);
@@ -314,18 +335,22 @@ function RoomPage() {
     collabCredsRef.current = { collabToken: room.collabToken, collabUrl: room.collabUrl };
   }
 
-  const currentUser = useAuthStore((s) => s.user);
-  const cursorColor = userCursorColor(room?.participants ?? [], currentUserId);
+  const cursorColor = userCursorColor(room?.participants ?? [], stableCurrentUserId);
 
   const {
     status: collabStatus,
     doc,
     awareness,
+    chatMessages,
+    chatReadAtByUserId,
+    sendChatMessage,
+    toggleChatReaction,
+    markChatRead,
   } = useYjsCollab({
     collabUrl: collabCredsRef.current?.collabUrl ?? null,
     collabToken: collabCredsRef.current?.collabToken ?? null,
     roomId,
-    userName: currentUser?.displayName ?? currentUser?.username ?? 'Anonymous',
+    userName: stableCurrentUserName,
     userColor: cursorColor,
     onRoomStatePatch: handleRoomStatePatch,
     onParticipantReady: handleParticipantReady,
@@ -356,6 +381,20 @@ function RoomPage() {
       await api(CONTROL_API.ROOMS.ENSURE_COLLAB, { params: { id: roomId } });
     },
   });
+
+  useEffect(() => {
+    if (!stableCurrentUserId || !room) {
+      return;
+    }
+
+    const me = room.participants.find((participant) => participant.userId === stableCurrentUserId);
+    const fallbackName = me?.displayName ?? me?.username;
+    if (!fallbackName) {
+      return;
+    }
+
+    setStableCurrentUserName(fallbackName);
+  }, [room, stableCurrentUserId]);
 
   const mediaCredsRef = useRef<{ token: string; url: string } | null>(null);
   const [mediaReady, setMediaReady] = useState(false);
@@ -540,17 +579,17 @@ function RoomPage() {
   const videoTiles = useMemo(() => {
     const tiles: VideoPanelParticipant[] = [];
 
-    if (mediaLocalParticipant && currentUserId) {
-      const me = room?.participants.find((p) => p.userId === currentUserId);
+    if (mediaLocalParticipant && stableCurrentUserId) {
+      const me = room?.participants.find((p) => p.userId === stableCurrentUserId);
       tiles.push({
-        identity: currentUserId,
+        identity: stableCurrentUserId,
         displayName: me?.displayName ?? me?.username ?? 'You',
         avatarUrl: me?.avatarUrl ?? null,
         hasVideo: mediaLocalParticipant.hasVideo,
         videoTrack: mediaLocalParticipant.videoTrack,
         hasScreenShare: mediaLocalParticipant.hasScreenShare,
         screenShareTrack: mediaLocalParticipant.screenShareTrack,
-        isSpeaking: speakingMap.get(currentUserId) ?? false,
+        isSpeaking: speakingMap.get(stableCurrentUserId) ?? false,
         isLocal: true,
       });
     }
@@ -576,7 +615,7 @@ function RoomPage() {
     mediaLocalParticipant,
     mediaRemoteParticipants,
     speakingMap,
-    currentUserId,
+    stableCurrentUserId,
     room?.participants,
     videoHiddenSet,
   ]);
@@ -588,6 +627,7 @@ function RoomPage() {
   const canManageParticipants = room?.myCapabilities.includes('participant:assign-role') ?? false;
   const isWorkspace = room ? isWorkspaceStage(room.status) : false;
   const canPreviewWorkspace =
+    import.meta.env.DEV &&
     room?.status === 'waiting' &&
     (room?.participants.filter((participant) => participant.isActive).length ?? 0) === 1;
   const shouldShowMockWorkspace = !isWorkspace && mockWorkspacePreview;
@@ -695,8 +735,8 @@ function RoomPage() {
 
   const lockEditorMutation = useMutation({
     mutationFn: async () =>
-      api(LOCK_EDITOR_ROUTE, {
-        params: { roomId },
+      api(CONTROL_API.ROOMS.LOCK_EDITOR, {
+        params: { id: roomId },
       }),
     onSuccess: () => {
       setRoom((prev) => (prev ? { ...prev, editorLocked: true } : prev));
@@ -721,8 +761,8 @@ function RoomPage() {
   });
   const unlockEditorMutation = useMutation({
     mutationFn: async () =>
-      api(UNLOCK_EDITOR_ROUTE, {
-        params: { roomId },
+      api(CONTROL_API.ROOMS.UNLOCK_EDITOR, {
+        params: { id: roomId },
       }),
     onSuccess: () => {
       setRoom((prev) => (prev ? { ...prev, editorLocked: false } : prev));
@@ -764,6 +804,36 @@ function RoomPage() {
       toast.error(apiError?.message ?? t('lobby.readyFailed'));
     }
   }, [roomId, t]);
+
+  const uploadChatMedia = useCallback(
+    async (file: File): Promise<ChatAttachment> => {
+      const metadata = await api(CONTROL_API.ROOMS.CHAT_MEDIA_UPLOAD_URL, {
+        params: { id: roomId },
+        body: {
+          fileName: file.name,
+          contentType: file.type || 'application/octet-stream',
+          sizeBytes: file.size,
+        },
+      });
+
+      await ky.put(metadata.uploadUrl, {
+        body: file,
+        headers: {
+          'Content-Type': metadata.contentType,
+        },
+      });
+
+      return {
+        kind: toChatAttachmentKind(metadata.contentType),
+        key: metadata.key,
+        url: metadata.downloadUrl,
+        fileName: metadata.fileName,
+        mimeType: metadata.contentType,
+        sizeBytes: metadata.sizeBytes,
+      };
+    },
+    [roomId],
+  );
 
   const confirmRemoveParticipant = () => {
     if (!pendingRemoval || removeParticipantMutation.isPending) return;
@@ -870,7 +940,7 @@ function RoomPage() {
         {removeParticipantDialog}
         <RoomWorkspace
           room={workspaceRoom}
-          currentUserId={currentUserId}
+          currentUserId={stableCurrentUserId}
           roomId={roomId}
           elapsedMs={elapsedMs}
           isTransitioning={isTransitioning}
@@ -893,7 +963,13 @@ function RoomPage() {
           collabStatus={collabStatus}
           doc={doc}
           awareness={awareness}
-          currentUserName={currentUser?.displayName ?? currentUser?.username ?? 'Anonymous'}
+          chatMessages={chatMessages}
+          chatReadAtByUserId={chatReadAtByUserId}
+          onSendChatMessage={(data: ChatSendEventData) => sendChatMessage(data)}
+          onToggleChatReaction={(data: ChatReactToggleEventData) => toggleChatReaction(data)}
+          onMarkChatRead={(upTo) => markChatRead(upTo)}
+          onUploadChatMedia={uploadChatMedia}
+          currentUserName={stableCurrentUserName}
           isMockPreview={shouldShowMockWorkspace}
           speakingMap={speakingMap}
           mediaControls={mediaControlsElement}
@@ -939,7 +1015,7 @@ function RoomPage() {
         mode={room.mode}
         status={room.status}
         hostId={room.hostId}
-        currentUserId={currentUserId}
+        currentUserId={stableCurrentUserId}
         participants={room.participants}
         language={room.language}
         myCapabilities={room.myCapabilities}
@@ -958,6 +1034,12 @@ function RoomPage() {
         onPreviewWorkspace={() => setMockWorkspacePreview(true)}
         onRoomUpdated={setRoom}
         mediaControls={mediaControlsElement}
+        localVideoTrack={mediaLocalParticipant?.videoTrack ?? null}
+        hasLocalVideo={mediaLocalParticipant?.hasVideo ?? false}
+        isCameraEnabled={isCameraEnabled}
+        localScreenShareTrack={mediaLocalParticipant?.screenShareTrack ?? null}
+        hasLocalScreenShare={mediaLocalParticipant?.hasScreenShare ?? false}
+        isScreenShareEnabled={isScreenShareEnabled}
         speakingMap={speakingMap}
         mediaConnectedSet={mediaConnectedSet}
         mediaMutedMap={mediaMutedMap}

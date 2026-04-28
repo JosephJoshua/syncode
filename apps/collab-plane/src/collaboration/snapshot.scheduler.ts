@@ -4,9 +4,13 @@ import {
   type IControlPlaneCallbackClient,
   type SnapshotTrigger,
 } from '@syncode/contracts';
-import type { SupportedLanguage } from '@syncode/shared';
+import { ROOM_STATUSES, type RoomStatus, type SupportedLanguage } from '@syncode/shared';
 import { RoomRegistry } from './room-registry.js';
 import { YjsDocumentStore } from './yjs-document-store.js';
+
+function isPersistedPhase(value: string | undefined): value is RoomStatus {
+  return typeof value === 'string' && (ROOM_STATUSES as readonly string[]).includes(value);
+}
 
 @Injectable()
 export class SnapshotScheduler implements OnModuleDestroy {
@@ -43,7 +47,8 @@ export class SnapshotScheduler implements OnModuleDestroy {
     const snapshot = this.docStore.encodeSnapshot(roomId);
     if (!snapshot) return;
 
-    const language = this.roomRegistry.getRoom(roomId)?.language ?? null;
+    const room = this.roomRegistry.getRoom(roomId);
+    const language = room?.language ?? null;
 
     // notifySnapshotReady carries language-specific payload (the code text +
     // the language for session reports). Skip it if no language is set yet —
@@ -52,6 +57,7 @@ export class SnapshotScheduler implements OnModuleDestroy {
     // picked a language.
     if (language) {
       const code = this.docStore.getCodeText(roomId, language);
+      const phase = isPersistedPhase(room?.phase) ? room.phase : null;
       try {
         await this.callbackClient.notifySnapshotReady({
           roomId,
@@ -60,6 +66,7 @@ export class SnapshotScheduler implements OnModuleDestroy {
           language: language as SupportedLanguage,
           timestamp: Date.now(),
           trigger,
+          phase,
         });
       } catch (error) {
         this.logger.warn(

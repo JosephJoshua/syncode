@@ -433,4 +433,110 @@ describe('CollaborationGateway', () => {
       expect(client.terminate).not.toHaveBeenCalled();
     });
   });
+
+  describe('handleChatSend', () => {
+    function setupRoomWithClient() {
+      const fixture = createFixture();
+      fixture.roomRegistry.createRoom('room-1');
+      const client = fakeClient(VALID_PAYLOAD);
+      fixture.roomRegistry.addClient('room-1', 'user-1', client as unknown as AuthenticatedClient);
+      return { ...fixture, client };
+    }
+
+    it('GIVEN attachment with javascript: url WHEN sending THEN drops the attachment', () => {
+      const { gateway, roomRegistry, client } = setupRoomWithClient();
+
+      gateway.handleChatSend(client as unknown as WebSocket, {
+        text: 'check this out',
+        attachments: [
+          {
+            kind: 'image',
+            key: 'rooms/room-1/chat/evil',
+            url: 'javascript:alert(1)',
+            fileName: 'x.png',
+            mimeType: 'image/png',
+            sizeBytes: 1,
+          },
+        ],
+      });
+
+      const messages = roomRegistry.getRoom('room-1')?.chatMessages ?? [];
+      expect(messages).toHaveLength(1);
+      expect(messages[0]!.attachments).toEqual([]);
+    });
+
+    it('GIVEN attachment with https url WHEN sending THEN keeps the attachment', () => {
+      const { gateway, roomRegistry, client } = setupRoomWithClient();
+
+      gateway.handleChatSend(client as unknown as WebSocket, {
+        text: '',
+        attachments: [
+          {
+            kind: 'image',
+            key: 'rooms/room-1/chat/ok',
+            url: 'https://cdn.example.com/rooms/room-1/chat/ok.png',
+            fileName: 'ok.png',
+            mimeType: 'image/png',
+            sizeBytes: 100,
+          },
+        ],
+      });
+
+      const messages = roomRegistry.getRoom('room-1')?.chatMessages ?? [];
+      expect(messages).toHaveLength(1);
+      expect(messages[0]!.attachments).toHaveLength(1);
+    });
+
+    it('GIVEN text longer than the cap WHEN sending THEN truncates to the cap', () => {
+      const { gateway, roomRegistry, client } = setupRoomWithClient();
+      const oversized = 'a'.repeat(5000);
+
+      gateway.handleChatSend(client as unknown as WebSocket, { text: oversized });
+
+      const messages = roomRegistry.getRoom('room-1')?.chatMessages ?? [];
+      expect(messages).toHaveLength(1);
+      expect(messages[0]!.text.length).toBe(4000);
+    });
+  });
+
+  describe('handleChatReactToggle', () => {
+    function setupRoomWithMessage() {
+      const fixture = createFixture();
+      fixture.roomRegistry.createRoom('room-1');
+      const client = fakeClient(VALID_PAYLOAD);
+      fixture.roomRegistry.addClient('room-1', 'user-1', client as unknown as AuthenticatedClient);
+      const message = fixture.roomRegistry.createChatMessage('room-1', {
+        userId: 'user-1',
+        text: 'hi',
+        replyToMessageId: null,
+        mentions: [],
+        attachments: [],
+      });
+      return { ...fixture, client, message };
+    }
+
+    it('GIVEN emoji outside the palette WHEN toggling THEN ignores the request', () => {
+      const { gateway, roomRegistry, client, message } = setupRoomWithMessage();
+
+      gateway.handleChatReactToggle(client as unknown as WebSocket, {
+        messageId: message.messageId,
+        emoji: '🤡',
+      });
+
+      const stored = roomRegistry.getRoom('room-1')?.chatMessages[0];
+      expect(stored?.reactions).toEqual([]);
+    });
+
+    it('GIVEN emoji from the palette WHEN toggling THEN records the reaction', () => {
+      const { gateway, roomRegistry, client, message } = setupRoomWithMessage();
+
+      gateway.handleChatReactToggle(client as unknown as WebSocket, {
+        messageId: message.messageId,
+        emoji: '👍',
+      });
+
+      const stored = roomRegistry.getRoom('room-1')?.chatMessages[0];
+      expect(stored?.reactions).toEqual([{ emoji: '👍', userIds: ['user-1'] }]);
+    });
+  });
 });

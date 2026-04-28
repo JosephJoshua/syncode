@@ -1,4 +1,5 @@
 import { defineRoute } from '../route-utils.js';
+import type { ChatMessage } from './ws-events.js';
 
 export interface CreateDocumentRequest {
   roomId: string;
@@ -62,6 +63,14 @@ export interface ChangeLanguageResponse {
   success: boolean;
 }
 
+export interface GetRoomChatHistoryRequest {
+  limit?: number;
+}
+
+export interface GetRoomChatHistoryResponse {
+  messages: ChatMessage[];
+}
+
 export const COLLAB_INTERNAL = {
   CREATE_DOCUMENT: defineRoute<CreateDocumentRequest, CreateDocumentResponse>()(
     'internal/documents',
@@ -86,6 +95,10 @@ export const COLLAB_INTERNAL = {
   CHANGE_LANGUAGE: defineRoute<ChangeLanguageRequest, ChangeLanguageResponse>()(
     'internal/documents/:roomId/language',
     'POST',
+  ),
+  GET_ROOM_CHAT_HISTORY: defineRoute<void, GetRoomChatHistoryResponse>()(
+    'internal/documents/:roomId/chat',
+    'GET',
   ),
   HEALTH: defineRoute<void, { status: 'ok' }>()('internal/health', 'GET'),
 };

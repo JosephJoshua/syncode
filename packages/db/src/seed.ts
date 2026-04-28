@@ -4,7 +4,7 @@
 
 import { randomBytes, scrypt } from 'node:crypto';
 import { promisify } from 'node:util';
-import { and, inArray, notLike } from 'drizzle-orm';
+import { and, eq, inArray, notLike, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from './schema/index.js';
@@ -776,11 +776,16 @@ async function seed() {
   const tagsBySlug = new Map(allTags.map((t) => [t.slug, t.id]));
 
   // 3. Problems + test cases + tag links
+  // Problems are upserted on the `title` unique index so re-running the seed
+  // refreshes content (description, examples, starter code, etc.) in place,
+  // preserving the row id — and therefore all FK references from submissions,
+  // sessions, rooms, and bookmarks. Test cases have no stable natural key, so
+  // they're rebuilt per problem on each run.
   let problemCount = 0;
   let testCaseCount = 0;
 
   for (const p of problemsData) {
-    const [inserted] = await db
+    const [upserted] = await db
       .insert(schema.problems)
       .values({
         title: p.title,
@@ -793,45 +798,60 @@ async function seed() {
         timeLimit: p.timeLimit,
         memoryLimit: p.memoryLimit,
       })
-      .onConflictDoNothing()
+      .onConflictDoUpdate({
+        target: schema.problems.title,
+        // Match the partial unique index `problems_title_unique`.
+        targetWhere: sql`deleted_at IS NULL`,
+        set: {
+          description: p.description,
+          difficulty: p.difficulty,
+          company: p.company,
+          constraints: p.constraints,
+          examples: p.examples,
+          starterCode: p.starterCode,
+          timeLimit: p.timeLimit,
+          memoryLimit: p.memoryLimit,
+        },
+      })
       .returning({ id: schema.problems.id });
 
-    if (!inserted) {
-      // Already exists — skip test cases and tags for this problem.
+    if (!upserted) {
       continue;
     }
 
     problemCount++;
 
-    // Test cases
+    // Test cases — replace per problem.
+    await db.delete(schema.testCases).where(eq(schema.testCases.problemId, upserted.id));
+
     if (p.testCases.length > 0) {
       const insertedCases = await db
         .insert(schema.testCases)
         .values(
           p.testCases.map((tc) => ({
             ...tc,
-            problemId: inserted.id,
+            problemId: upserted.id,
             timeoutMs: p.timeLimit,
             memoryMb: p.memoryLimit,
           })),
         )
-        .onConflictDoNothing()
         .returning({ id: schema.testCases.id });
       testCaseCount += insertedCases.length;
     }
 
-    // Problem ↔ tag links
+    // Problem ↔ tag links — idempotent insert; stale links from removed tags
+    // are not pruned (tag membership rarely shrinks for a given problem).
     const tagLinks = p.tags
       .map((slug) => tagsBySlug.get(slug))
       .filter((id): id is string => id != null)
-      .map((tagId) => ({ problemId: inserted.id, tagId }));
+      .map((tagId) => ({ problemId: upserted.id, tagId }));
 
     if (tagLinks.length > 0) {
       await db.insert(schema.problemTags).values(tagLinks).onConflictDoNothing();
     }
   }
 
-  console.log(`  Problems: ${problemCount} inserted`);
+  console.log(`  Problems: ${problemCount} upserted`);
   console.log(`  Tests:    ${testCaseCount} inserted`);
 
   // 4. Global limits (ensure defaults exist — table may not exist if migration is pending)

@@ -1,12 +1,13 @@
 import { INLINE_COMMENTS_KEY } from '@syncode/shared';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type * as Y from 'yjs';
 import {
   addInlineComment,
   deleteInlineComment,
-  getInlineCommentLineNumbers,
   type InlineComment,
+  type InlineCommentTextDelta,
   listInlineComments,
+  reconcileInlineCommentsForCodeChange,
   updateInlineComment,
 } from '@/lib/inline-comments.js';
 import { codeTextKey } from '@/lib/yjs-collab-provider.js';
@@ -29,30 +30,49 @@ export function useInlineComments(
   language: string = 'python',
 ): UseInlineCommentsResult {
   const [comments, setComments] = useState<InlineComment[]>([]);
+  const previousCodeRef = useRef('');
 
   useEffect(() => {
     if (!doc) {
       setComments([]);
+      previousCodeRef.current = '';
       return;
     }
 
     const commentsMap = doc.getMap(INLINE_COMMENTS_KEY);
     const codeText = doc.getText(codeTextKey(language));
+    previousCodeRef.current = codeText.toString();
+
     const syncComments = () => {
       setComments(listInlineComments(doc, language));
+    };
+    const handleCodeChange = (event: Y.YTextEvent) => {
+      const previousCode = previousCodeRef.current;
+      const nextCode = codeText.toString();
+      const delta = event.changes.delta as InlineCommentTextDelta;
+
+      reconcileInlineCommentsForCodeChange(doc, language, previousCode, nextCode, delta);
+      previousCodeRef.current = nextCode;
+      syncComments();
     };
 
     syncComments();
     commentsMap.observeDeep(syncComments);
-    codeText.observe(syncComments);
+    codeText.observe(handleCodeChange);
 
     return () => {
       commentsMap.unobserveDeep(syncComments);
-      codeText.unobserve(syncComments);
+      codeText.unobserve(handleCodeChange);
     };
   }, [doc, language]);
 
-  const commentLineNumbers = doc ? getInlineCommentLineNumbers(doc, language) : [];
+  const commentLineNumbers = useMemo(
+    () =>
+      [...new Set(comments.map((comment) => comment.lineNumber))]
+        .filter((lineNumber) => Number.isFinite(lineNumber) && lineNumber > 0)
+        .sort((left, right) => left - right),
+    [comments],
+  );
 
   return {
     comments,

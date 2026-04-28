@@ -1,5 +1,5 @@
 import { index, integer, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
-import { snapshotTriggerEnum, supportedLanguageEnum } from './enums.js';
+import { roomStatusEnum, snapshotTriggerEnum, supportedLanguageEnum } from './enums.js';
 import { rooms } from './rooms.js';
 import { sessions } from './sessions.js';
 
@@ -16,6 +16,7 @@ export const codeSnapshots = pgTable(
     code: text('code').notNull(),
     language: supportedLanguageEnum('language').notNull(),
     trigger: snapshotTriggerEnum('trigger').notNull(),
+    phase: roomStatusEnum('phase'),
     linesOfCode: integer('lines_of_code'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },

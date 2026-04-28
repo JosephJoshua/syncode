@@ -93,6 +93,122 @@ export const submitProblemSchema = runCodeSchema
 
 export type SubmitProblemInput = z.infer<typeof submitProblemSchema>;
 
+export const hintLevelSchema = z.enum(['subtle', 'moderate', 'direct']);
+export type HintLevel = z.infer<typeof hintLevelSchema>;
+
+export const requestRoomAiHintSchema = z
+  .object({
+    code: z
+      .string()
+      .min(1)
+      .describe('Current code snapshot in the editor')
+      .meta({ examples: ['def two_sum(nums, target): ...'] }),
+    language: z
+      .enum(SUPPORTED_LANGUAGES)
+      .describe('Programming language')
+      .meta({ examples: ['python'] }),
+    hintLevel: hintLevelSchema.describe('Hint intensity level'),
+    followUpToHintId: z
+      .uuid()
+      .optional()
+      .describe('Existing hint ID to continue as a stage-2 follow-up'),
+    reflectionResponse: z
+      .string()
+      .max(2000)
+      .optional()
+      .describe('Optional learner reflection response for stage-2 follow-up'),
+    noReply: z
+      .boolean()
+      .optional()
+      .describe('Set true to continue follow-up without user reflection text'),
+  })
+  .refine(
+    (value) => {
+      const hasFollowUpTarget = Boolean(value.followUpToHintId);
+      const hasReflection = Boolean(value.reflectionResponse?.trim());
+
+      if (!hasFollowUpTarget) {
+        return !hasReflection && value.noReply !== true;
+      }
+
+      return hasReflection || value.noReply === true;
+    },
+    {
+      message:
+        'Follow-up hints require followUpToHintId and either reflectionResponse or noReply=true',
+      path: ['followUpToHintId'],
+    },
+  )
+  .strict();
+
+export type RequestRoomAiHintInput = z.infer<typeof requestRoomAiHintSchema>;
+
+export const requestRoomAiHintResponseSchema = z.object({
+  jobId: z.string().describe('AI hint job ID — poll GET /rooms/:id/ai/hint/:jobId for the result'),
+  hintId: z.uuid().describe('Persistent hint identifier'),
+  phase: z.enum(['initial', 'follow_up']).describe('Hint stage'),
+});
+
+export type RequestRoomAiHintResponse = z.infer<typeof requestRoomAiHintResponseSchema>;
+
+export const getRoomAiHintResultResponseSchema = z.discriminatedUnion('status', [
+  z.object({
+    status: z.literal('pending'),
+    jobId: z.string(),
+  }),
+  z.object({
+    status: z.literal('ready'),
+    jobId: z.string(),
+    hintId: z.uuid(),
+    phase: z.enum(['initial', 'follow_up']),
+    hint: z.string(),
+    suggestedApproach: z.string().optional(),
+    reflectionPrompt: z.string().optional(),
+  }),
+  z.object({
+    status: z.literal('failed'),
+    jobId: z.string(),
+  }),
+]);
+
+export type GetRoomAiHintResultResponse = z.infer<typeof getRoomAiHintResultResponseSchema>;
+
+export const roomChatMediaUploadRequestSchema = z
+  .object({
+    fileName: z
+      .string()
+      .min(1)
+      .max(255)
+      .describe('Original file name')
+      .meta({ examples: ['debug-output.png'] }),
+    contentType: z
+      .string()
+      .min(1)
+      .max(255)
+      .describe('MIME type')
+      .meta({ examples: ['image/png'] }),
+    sizeBytes: z
+      .number()
+      .int()
+      .positive()
+      .describe('File size in bytes')
+      .meta({ examples: [204_800] }),
+  })
+  .strict();
+
+export type RoomChatMediaUploadInput = z.infer<typeof roomChatMediaUploadRequestSchema>;
+
+export const roomChatMediaUploadResponseSchema = z.object({
+  key: z.string().describe('Storage object key'),
+  uploadUrl: z.string().describe('Presigned PUT upload URL'),
+  downloadUrl: z.string().describe('Download URL for rendering in chat'),
+  fileName: z.string().describe('Original file name'),
+  contentType: z.string().describe('MIME type'),
+  sizeBytes: z.number().int().positive().describe('File size in bytes'),
+});
+
+export type RoomChatMediaUploadResponse = z.infer<typeof roomChatMediaUploadResponseSchema>;
+
 export const submitResponseSchema = z.object({
   submissionId: z
     .uuid()
@@ -312,6 +428,32 @@ export const transitionRoomPhaseResponseSchema = z.object({
 });
 
 export type TransitionRoomPhaseResponse = z.infer<typeof transitionRoomPhaseResponseSchema>;
+
+export const lockEditorResponseSchema = z.object({
+  roomId: z.uuid().describe('Room identifier'),
+  editorLocked: z.literal(true).describe('Always true after a successful lock'),
+  changed: z.boolean().describe('Whether this call mutated state (false on idempotent no-ops)'),
+  lockedAt: z.iso
+    .datetime()
+    .optional()
+    .describe('ISO 8601 timestamp when the lock was applied. Omitted on no-ops.'),
+  lockedBy: z.uuid().optional().describe('User ID that applied the lock. Omitted on no-ops.'),
+});
+
+export type LockEditorResponse = z.infer<typeof lockEditorResponseSchema>;
+
+export const unlockEditorResponseSchema = z.object({
+  roomId: z.uuid().describe('Room identifier'),
+  editorLocked: z.literal(false).describe('Always false after a successful unlock'),
+  changed: z.boolean().describe('Whether this call mutated state (false on idempotent no-ops)'),
+  unlockedAt: z.iso
+    .datetime()
+    .optional()
+    .describe('ISO 8601 timestamp when the lock was released. Omitted on no-ops.'),
+  unlockedBy: z.uuid().optional().describe('User ID that released the lock. Omitted on no-ops.'),
+});
+
+export type UnlockEditorResponse = z.infer<typeof unlockEditorResponseSchema>;
 
 // ── Browse public rooms ──────────────────────────────────────────────
 

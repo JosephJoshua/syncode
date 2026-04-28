@@ -13,6 +13,7 @@ function createMocks() {
       kickUser: vi.fn(),
       updateRoomState: vi.fn(),
       changeLanguage: vi.fn(),
+      getRoomChatHistory: vi.fn(),
     },
   };
 }
@@ -134,6 +135,34 @@ describe('InternalController', () => {
       });
 
       expect(result).toEqual({ success: false });
+    });
+  });
+
+  describe('getRoomChatHistory', () => {
+    it('GIVEN room with chat messages WHEN fetching chat history THEN returns messages', async () => {
+      const mocks = createMocks();
+      mocks.collaborationService.getRoomChatHistory.mockReturnValue({
+        messages: [
+          {
+            messageId: 'm-1',
+            roomId: 'room-1',
+            userId: 'user-1',
+            text: 'hello',
+            replyToMessageId: null,
+            mentions: [],
+            attachments: [],
+            reactions: [],
+            createdAt: 1,
+            updatedAt: 1,
+          },
+        ],
+      });
+      const controller = await createController(mocks);
+
+      const result = controller.getRoomChatHistory('room-1');
+
+      expect(result.messages).toHaveLength(1);
+      expect(result.messages[0]?.messageId).toBe('m-1');
     });
   });
 });

@@ -495,4 +495,36 @@ describe('CollaborationService', () => {
       vi.useRealTimers();
     });
   });
+
+  describe('getRoomChatHistory', () => {
+    it('GIVEN room with chat messages WHEN requesting history with limit THEN returns most recent messages', async () => {
+      const { service, roomRegistry } = createFixture();
+      await service.createDocument({ roomId: 'room-1' });
+
+      roomRegistry.createChatMessage('room-1', {
+        userId: 'user-1',
+        text: 'message-1',
+        replyToMessageId: null,
+        mentions: [],
+        attachments: [],
+      });
+      roomRegistry.createChatMessage('room-1', {
+        userId: 'user-2',
+        text: 'message-2',
+        replyToMessageId: null,
+        mentions: [],
+        attachments: [],
+      });
+
+      const history = service.getRoomChatHistory('room-1', 1);
+
+      expect(history.messages).toHaveLength(1);
+      expect(history.messages[0]?.text).toBe('message-2');
+    });
+
+    it('GIVEN non-existent room WHEN requesting history THEN throws NotFoundException', async () => {
+      const { service } = createFixture();
+      expect(() => service.getRoomChatHistory('missing-room')).toThrow(NotFoundException);
+    });
+  });
 });

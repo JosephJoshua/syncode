@@ -30,7 +30,7 @@ function buildTimelineItems(
   startedAt: string,
   finishedAt: string | null,
   snapshots: CodeSnapshot[],
-  t: (key: string) => string,
+  t: (key: string, opts?: Record<string, unknown>) => string,
 ) {
   const importantSnapshots = [...snapshots]
     .filter((snapshot) => snapshot.trigger !== 'periodic')
@@ -48,9 +48,18 @@ function buildTimelineItems(
   ];
 
   for (const snapshot of importantSnapshots) {
+    const baseLabel = t(`timeline.events.${snapshot.trigger}`);
+    const label =
+      snapshot.trigger === 'phase_change' && snapshot.phase
+        ? t('timeline.phaseChangeWithTarget', {
+            phase: t(`phase.${snapshot.phase}`),
+            defaultValue: `${baseLabel} → ${snapshot.phase}`,
+          })
+        : baseLabel;
+
     items.push({
       id: snapshot.snapshotId,
-      label: t(`timeline.events.${snapshot.trigger}`),
+      label,
       timestamp: snapshot.timestamp,
       snapshot,
     });

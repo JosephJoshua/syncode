@@ -160,7 +160,6 @@ export function useLiveKit({
 
   const roomRef = useRef<Room | null>(null);
   const audioElementsRef = useRef<Map<string, HTMLAudioElement>>(new Map());
-  const micEnabledOnceRef = useRef(false);
   const videoProcessorRef = useRef<VideoFilterProcessor | null>(null);
   const pendingVideoFilterRef = useRef<VideoFilterSettings | null>(null);
 
@@ -316,7 +315,6 @@ export function useLiveKit({
         roomRef.current = null;
       }
       resetState();
-      micEnabledOnceRef.current = false;
       return;
     }
 
@@ -489,21 +487,11 @@ export function useLiveKit({
 
     room
       .connect(url, token)
-      .then(async () => {
+      .then(() => {
         if (disposed) return;
         setConnectionState('connected');
         refreshParticipants();
         void refreshDevices();
-
-        if (!micEnabledOnceRef.current) {
-          try {
-            await room.localParticipant.setMicrophoneEnabled(true);
-            setIsMicrophoneEnabled(true);
-            micEnabledOnceRef.current = true;
-          } catch (err) {
-            console.warn('[LiveKit] Could not auto-enable microphone:', err);
-          }
-        }
       })
       .catch((err: unknown) => {
         if (disposed) return;
@@ -542,7 +530,6 @@ export function useLiveKit({
       );
     }
     setIsMicrophoneEnabled(!enabled);
-    micEnabledOnceRef.current = true;
   }, []);
 
   const toggleCamera = useCallback(async () => {

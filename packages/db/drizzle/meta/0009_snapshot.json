@@ -1,6 +1,6 @@
 {
-  "id": "25001284-3c12-40a6-b405-c4939e38dc8f",
-  "prevId": "b7670971-4d03-415b-ac18-ff5480a88caf",
+  "id": "73b14bb9-5460-4ec1-abca-fafc144c4040",
+  "prevId": "25001284-3c12-40a6-b405-c4939e38dc8f",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -628,6 +628,13 @@
           "typeSchema": "public",
           "primaryKey": false,
           "notNull": true
+        },
+        "phase": {
+          "name": "phase",
+          "type": "room_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
         },
         "lines_of_code": {
           "name": "lines_of_code",
@@ -2095,14 +2102,14 @@
           "primaryKey": false,
           "notNull": false
         },
-        "last_heartbeat_at": {
-          "name": "last_heartbeat_at",
+        "removed_at": {
+          "name": "removed_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         },
-        "removed_at": {
-          "name": "removed_at",
+        "last_heartbeat_at": {
+          "name": "last_heartbeat_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false

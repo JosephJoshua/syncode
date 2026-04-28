@@ -46,6 +46,7 @@ export function createMockCollabClient() {
     updateRoomState: vi.fn().mockResolvedValue({ success: true }),
     broadcastParticipantReady: vi.fn().mockResolvedValue({ success: true }),
     changeLanguage: vi.fn().mockResolvedValue({ success: true }),
+    getRoomChatHistory: vi.fn().mockResolvedValue({ messages: [] }),
     healthCheck: vi.fn().mockResolvedValue(true),
   };
 }
@@ -73,16 +74,19 @@ export function createMockExecutionClient() {
 
 export function createMockAiClient() {
   return {
-    submitHintRequest: vi.fn().mockResolvedValue({ jobId: 'hint-job' }),
-    getHintResult: vi.fn().mockResolvedValue(null),
-    submitReviewRequest: vi.fn().mockResolvedValue({ jobId: 'review-job' }),
+    submitHintRequest: vi.fn().mockResolvedValue({ jobId: 'ai-hint-job' }),
+    getHintResult: vi.fn().mockResolvedValue({
+      hint: 'Try tracking complements in a hash map to reduce repeated scans.',
+      reflectionPrompt: 'What value do you need to look up at each iteration?',
+    }),
+    submitReviewRequest: vi.fn().mockResolvedValue({ jobId: 'ai-review-job' }),
     getReviewResult: vi.fn().mockResolvedValue(null),
-    submitInterviewResponse: vi.fn().mockResolvedValue({ jobId: 'interview-job' }),
+    submitInterviewResponse: vi.fn().mockResolvedValue({ jobId: 'ai-interview-job' }),
     getInterviewResult: vi.fn().mockResolvedValue(null),
     submitSessionReportRequest: vi.fn().mockResolvedValue({ jobId: 'session-report-job' }),
     getSessionReportResult: vi.fn().mockResolvedValue(null),
     onSessionReportResult: vi.fn(),
-    getHintJobStatus: vi.fn().mockResolvedValue('queued'),
+    getHintJobStatus: vi.fn().mockResolvedValue('completed'),
     getReviewJobStatus: vi.fn().mockResolvedValue('queued'),
     getInterviewJobStatus: vi.fn().mockResolvedValue('queued'),
     getSessionReportJobStatus: vi.fn().mockResolvedValue('queued'),

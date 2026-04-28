@@ -76,6 +76,10 @@ function defaultOptions(
     onEditorLock: vi.fn(),
     onLanguageChange: vi.fn(),
     onReconnected: vi.fn(),
+    onChatHistory: vi.fn(),
+    onChatMessageCreated: vi.fn(),
+    onChatReactionUpdated: vi.fn(),
+    onChatReadUpdated: vi.fn(),
     ...overrides,
   };
 }
@@ -332,6 +336,69 @@ describe('YjsCollabProvider', () => {
       provider.destroy();
     });
 
+    it('GIVEN connected WHEN receiving chat events THEN routes to chat callbacks', () => {
+      const opts = defaultOptions();
+      const { provider, ws } = connectProvider(opts);
+
+      ws.simulateTextMessage(
+        JSON.stringify({
+          type: COLLAB_WS_EVENTS.CHAT_HISTORY,
+          data: { messages: [], readStates: [] },
+          timestamp: Date.now(),
+        }),
+      );
+      expect(opts.onChatHistory).toHaveBeenCalledWith({ messages: [], readStates: [] });
+
+      ws.simulateTextMessage(
+        JSON.stringify({
+          type: COLLAB_WS_EVENTS.CHAT_MESSAGE_CREATED,
+          data: {
+            message: {
+              messageId: 'msg-1',
+              roomId: 'room-1',
+              userId: 'user-1',
+              text: 'hello',
+              replyToMessageId: null,
+              mentions: [],
+              attachments: [],
+              reactions: [],
+              createdAt: Date.now(),
+              updatedAt: Date.now(),
+            },
+          },
+          timestamp: Date.now(),
+        }),
+      );
+      expect(opts.onChatMessageCreated).toHaveBeenCalled();
+
+      ws.simulateTextMessage(
+        JSON.stringify({
+          type: COLLAB_WS_EVENTS.CHAT_REACTION_UPDATED,
+          data: {
+            messageId: 'msg-1',
+            reactions: [{ emoji: '👍', userIds: ['user-1'] }],
+            updatedAt: Date.now(),
+          },
+          timestamp: Date.now(),
+        }),
+      );
+      expect(opts.onChatReactionUpdated).toHaveBeenCalled();
+
+      ws.simulateTextMessage(
+        JSON.stringify({
+          type: COLLAB_WS_EVENTS.CHAT_READ_UPDATED,
+          data: {
+            userId: 'user-1',
+            lastReadAt: Date.now(),
+          },
+          timestamp: Date.now(),
+        }),
+      );
+      expect(opts.onChatReadUpdated).toHaveBeenCalled();
+
+      provider.destroy();
+    });
+
     it('GIVEN connected WHEN receiving malformed JSON THEN does not throw', () => {
       const { provider, ws } = connectProvider(undefined, 'starter code');
       expect(() => ws.simulateTextMessage('not json')).not.toThrow();
@@ -404,6 +471,45 @@ describe('YjsCollabProvider', () => {
       // Verify the sent message starts with SYNC message type (0)
       const lastSent = ws.sent[ws.sent.length - 1] as Uint8Array;
       expect(lastSent[0]).toBe(0); // WsMessageType.SYNC
+
+      provider.destroy();
+    });
+  });
+
+  describe('chat client actions', () => {
+    it('GIVEN connected WHEN sending chat actions THEN emits chat-send and chat-react-toggle text messages', () => {
+      const { provider, ws } = connectProvider();
+      const sentCountBefore = ws.sent.length;
+
+      provider.sendChatMessage({
+        text: 'hello',
+        replyToMessageId: null,
+        mentions: [],
+        attachments: [],
+      });
+      provider.toggleChatReaction({ messageId: 'msg-1', emoji: '👍' });
+      provider.markChatRead({ upTo: 123 });
+
+      const sentPayloads = ws.sent
+        .slice(sentCountBefore)
+        .map((entry) => JSON.parse(entry as string));
+      expect(sentPayloads[0]).toEqual({
+        type: COLLAB_WS_EVENTS.CHAT_SEND,
+        data: {
+          text: 'hello',
+          replyToMessageId: null,
+          mentions: [],
+          attachments: [],
+        },
+      });
+      expect(sentPayloads[1]).toEqual({
+        type: COLLAB_WS_EVENTS.CHAT_REACT_TOGGLE,
+        data: { messageId: 'msg-1', emoji: '👍' },
+      });
+      expect(sentPayloads[2]).toEqual({
+        type: COLLAB_WS_EVENTS.CHAT_MARK_READ,
+        data: { upTo: 123 },
+      });
 
       provider.destroy();
     });

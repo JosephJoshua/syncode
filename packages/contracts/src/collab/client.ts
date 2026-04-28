@@ -6,6 +6,8 @@ import type {
   CreateDocumentRequest,
   CreateDocumentResponse,
   DestroyDocumentResponse,
+  GetRoomChatHistoryRequest,
+  GetRoomChatHistoryResponse,
   KickUserRequest,
   KickUserResponse,
   UpdateRoomStateRequest,
@@ -23,6 +25,10 @@ export interface ICollabClient {
     request: BroadcastParticipantReadyRequest,
   ): Promise<BroadcastParticipantReadyResponse>;
   changeLanguage(request: ChangeLanguageRequest): Promise<ChangeLanguageResponse>;
+  getRoomChatHistory(
+    roomId: string,
+    request?: GetRoomChatHistoryRequest,
+  ): Promise<GetRoomChatHistoryResponse>;
 }
 
 export const COLLAB_CLIENT = Symbol.for('COLLAB_CLIENT');

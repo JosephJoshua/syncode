@@ -1,3 +1,4 @@
+import { ApiProperty } from '@nestjs/swagger';
 import {
   browseRoomsQuerySchema,
   browseRoomsResponseSchema,
@@ -10,7 +11,12 @@ import {
   joinRoomSchema,
   listRoomsQuerySchema,
   listRoomsResponseSchema,
+  lockEditorResponseSchema,
   mediaTokenResponseSchema,
+  requestRoomAiHintResponseSchema,
+  requestRoomAiHintSchema,
+  roomChatMediaUploadRequestSchema,
+  roomChatMediaUploadResponseSchema,
   roomDetailSchema,
   runCodeResponseSchema,
   runCodeSchema,
@@ -20,6 +26,7 @@ import {
   transferRoomOwnershipSchema,
   transitionRoomPhaseResponseSchema,
   transitionRoomPhaseSchema,
+  unlockEditorResponseSchema,
   updateRoomParticipantResponseSchema,
   updateRoomParticipantSchema,
 } from '@syncode/contracts';
@@ -32,6 +39,8 @@ export class BrowseRoomsResponseDto extends createZodDto(browseRoomsResponseSche
 export class ChangeRoomLanguageDto extends createZodDto(changeRoomLanguageSchema) {}
 export class RunCodeDto extends createZodDto(runCodeSchema) {}
 export class SubmitProblemDto extends createZodDto(submitProblemSchema) {}
+export class RequestRoomAiHintDto extends createZodDto(requestRoomAiHintSchema) {}
+export class RoomChatMediaUploadDto extends createZodDto(roomChatMediaUploadRequestSchema) {}
 export class JoinRoomDto extends createZodDto(joinRoomSchema) {}
 export class TransferRoomOwnershipDto extends createZodDto(transferRoomOwnershipSchema) {}
 export class UpdateRoomParticipantDto extends createZodDto(updateRoomParticipantSchema) {}
@@ -42,6 +51,33 @@ export class RoomDetailDto extends createZodDto(roomDetailSchema) {}
 export class DestroyRoomResponseDto extends createZodDto(destroyRoomResponseSchema) {}
 export class RunCodeResponseDto extends createZodDto(runCodeResponseSchema) {}
 export class SubmitCodeResponseDto extends createZodDto(submitResponseSchema) {}
+export class RequestRoomAiHintResponseDto extends createZodDto(requestRoomAiHintResponseSchema) {}
+
+export class GetRoomAiHintResultResponseDto {
+  @ApiProperty({ enum: ['pending', 'ready', 'failed'] })
+  status!: 'pending' | 'ready' | 'failed';
+
+  @ApiProperty({ description: 'AI hint job ID' })
+  jobId!: string;
+
+  @ApiProperty({ required: false, description: 'Persistent hint identifier (when status=ready)' })
+  hintId?: string;
+
+  @ApiProperty({ required: false, enum: ['initial', 'follow_up'] })
+  phase?: 'initial' | 'follow_up';
+
+  @ApiProperty({ required: false, description: 'Generated hint content (when status=ready)' })
+  hint?: string;
+
+  @ApiProperty({ required: false })
+  suggestedApproach?: string;
+
+  @ApiProperty({ required: false })
+  reflectionPrompt?: string;
+}
+export class RoomChatMediaUploadResponseDto extends createZodDto(
+  roomChatMediaUploadResponseSchema,
+) {}
 export class JoinRoomResponseDto extends createZodDto(joinRoomResponseSchema) {}
 export class TransferRoomOwnershipResponseDto extends createZodDto(
   transferRoomOwnershipResponseSchema,
@@ -52,5 +88,7 @@ export class UpdateRoomParticipantResponseDto extends createZodDto(
 export class TransitionRoomPhaseResponseDto extends createZodDto(
   transitionRoomPhaseResponseSchema,
 ) {}
+export class LockEditorResponseDto extends createZodDto(lockEditorResponseSchema) {}
+export class UnlockEditorResponseDto extends createZodDto(unlockEditorResponseSchema) {}
 export class MediaTokenResponseDto extends createZodDto(mediaTokenResponseSchema) {}
 export class EnsureCollabResponseDto extends createZodDto(ensureCollabResponseSchema) {}

@@ -7,8 +7,17 @@ import {
   WebSocketGateway,
 } from '@nestjs/websockets';
 import {
+  CHAT_MESSAGE_MAX_TEXT_LENGTH,
+  CHAT_REACTION_PALETTE,
+  type ChatAttachment,
+  type ChatHistoryEventData,
+  type ChatMarkReadEventData,
+  type ChatMention,
+  type ChatReactToggleEventData,
+  type ChatSendEventData,
   COLLAB_WS_EVENTS,
   CONTROL_PLANE_CALLBACK,
+  type CollabWsMessage,
   type IControlPlaneCallbackClient,
   WsMessageType,
 } from '@syncode/contracts';
@@ -23,6 +32,16 @@ import type { JoinMessageData, WsMessage } from './ws-message.types.js';
 import { YjsSyncHandler } from './yjs-sync.handler.js';
 
 const HEARTBEAT_INTERVAL_MS = 30_000;
+const CHAT_REACTION_EMOJI_SET: ReadonlySet<string> = new Set(CHAT_REACTION_PALETTE);
+
+function isSafeAttachmentUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
 
 @WebSocketGateway()
 export class CollaborationGateway
@@ -215,7 +234,243 @@ export class CollaborationGateway
     };
     client.send(JSON.stringify(roomState));
 
+    const chatHistory: WsMessage<ChatHistoryEventData> = {
+      type: COLLAB_WS_EVENTS.CHAT_HISTORY,
+      data: {
+        messages: this.roomRegistry.listChatMessages(roomId),
+        readStates: this.roomRegistry.listChatReadStates(roomId),
+      },
+      timestamp: Date.now(),
+    };
+    client.send(JSON.stringify(chatHistory));
+
     this.syncHandler.sendInitialSync(roomId, authenticated);
     this.awarenessHandler.sendFullAwareness(roomId, authenticated);
+  }
+
+  @SubscribeMessage(COLLAB_WS_EVENTS.CHAT_SEND)
+  handleChatSend(client: WebSocket, data: ChatSendEventData): void {
+    const authenticated = this.getAuthenticatedRoomClient(client);
+    if (!authenticated) {
+      return;
+    }
+
+    const rawText = typeof data?.text === 'string' ? data.text.trim() : '';
+    const text =
+      rawText.length > CHAT_MESSAGE_MAX_TEXT_LENGTH
+        ? rawText.slice(0, CHAT_MESSAGE_MAX_TEXT_LENGTH)
+        : rawText;
+    const mentions = this.normalizeMentions(data?.mentions);
+    const attachments = this.normalizeAttachments(data?.attachments);
+
+    if (text.length === 0 && attachments.length === 0) {
+      return;
+    }
+
+    try {
+      const message = this.roomRegistry.createChatMessage(authenticated.user.roomId, {
+        userId: authenticated.user.sub,
+        text,
+        replyToMessageId: typeof data?.replyToMessageId === 'string' ? data.replyToMessageId : null,
+        mentions,
+        attachments,
+      });
+
+      this.broadcastToRoom(authenticated.user.roomId, {
+        type: COLLAB_WS_EVENTS.CHAT_MESSAGE_CREATED,
+        data: { message },
+        timestamp: Date.now(),
+      });
+
+      const senderRead = this.roomRegistry.markChatRead(authenticated.user.roomId, {
+        userId: authenticated.user.sub,
+        upTo: message.createdAt,
+      });
+      this.broadcastToRoom(authenticated.user.roomId, {
+        type: COLLAB_WS_EVENTS.CHAT_READ_UPDATED,
+        data: senderRead,
+        timestamp: Date.now(),
+      });
+    } catch (error) {
+      this.logger.debug(
+        `Ignoring chat send failure in room ${authenticated.user.roomId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
+
+  @SubscribeMessage(COLLAB_WS_EVENTS.CHAT_MARK_READ)
+  handleChatMarkRead(client: WebSocket, data: ChatMarkReadEventData): void {
+    const authenticated = this.getAuthenticatedRoomClient(client);
+    if (!authenticated) {
+      return;
+    }
+
+    try {
+      const updated = this.roomRegistry.markChatRead(authenticated.user.roomId, {
+        userId: authenticated.user.sub,
+        upTo: typeof data?.upTo === 'number' ? data.upTo : undefined,
+      });
+
+      this.broadcastToRoom(authenticated.user.roomId, {
+        type: COLLAB_WS_EVENTS.CHAT_READ_UPDATED,
+        data: updated,
+        timestamp: Date.now(),
+      });
+    } catch (error) {
+      this.logger.debug(
+        `Ignoring chat mark-read failure in room ${authenticated.user.roomId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
+
+  @SubscribeMessage(COLLAB_WS_EVENTS.CHAT_REACT_TOGGLE)
+  handleChatReactToggle(client: WebSocket, data: ChatReactToggleEventData): void {
+    const authenticated = this.getAuthenticatedRoomClient(client);
+    if (!authenticated) {
+      return;
+    }
+
+    const messageId = typeof data?.messageId === 'string' ? data.messageId : '';
+    const emoji = typeof data?.emoji === 'string' ? data.emoji.trim() : '';
+    if (messageId.length === 0 || !CHAT_REACTION_EMOJI_SET.has(emoji)) {
+      return;
+    }
+
+    try {
+      const updated = this.roomRegistry.toggleChatReaction(authenticated.user.roomId, {
+        messageId,
+        emoji,
+        userId: authenticated.user.sub,
+      });
+
+      this.broadcastToRoom(authenticated.user.roomId, {
+        type: COLLAB_WS_EVENTS.CHAT_REACTION_UPDATED,
+        data: updated,
+        timestamp: Date.now(),
+      });
+    } catch (error) {
+      this.logger.debug(
+        `Ignoring chat reaction toggle failure in room ${authenticated.user.roomId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
+
+  private getAuthenticatedRoomClient(client: WebSocket): AuthenticatedClient | null {
+    const authenticated = client as AuthenticatedClient;
+    if (!authenticated.user) {
+      client.close(WsCloseCode.UNAUTHORIZED, 'Unauthorized');
+      return null;
+    }
+
+    const { roomId, sub: userId } = authenticated.user;
+    if (!this.roomRegistry.hasClient(roomId, userId)) {
+      return null;
+    }
+
+    return authenticated;
+  }
+
+  private broadcastToRoom(roomId: string, message: CollabWsMessage): void {
+    const room = this.roomRegistry.getRoom(roomId);
+    if (!room) {
+      return;
+    }
+
+    const serialized = JSON.stringify(message);
+    for (const socket of room.clients.values()) {
+      socket.send(serialized);
+    }
+  }
+
+  private normalizeMentions(raw: unknown): ChatMention[] {
+    if (!Array.isArray(raw)) {
+      return [];
+    }
+
+    return raw
+      .map((item) => {
+        if (typeof item !== 'object' || item === null) {
+          return null;
+        }
+
+        const mention = item as { kind?: string; value?: string; userId?: string };
+        if (
+          (mention.kind !== 'user' && mention.kind !== 'ai') ||
+          typeof mention.value !== 'string'
+        ) {
+          return null;
+        }
+
+        const value = mention.value.trim();
+        if (!value) {
+          return null;
+        }
+
+        return {
+          kind: mention.kind,
+          value,
+          ...(typeof mention.userId === 'string' && mention.userId.length > 0
+            ? { userId: mention.userId }
+            : {}),
+        } satisfies ChatMention;
+      })
+      .filter((mention): mention is ChatMention => mention !== null);
+  }
+
+  private normalizeAttachments(raw: unknown): ChatAttachment[] {
+    if (!Array.isArray(raw)) {
+      return [];
+    }
+
+    return raw
+      .map((item) => {
+        if (typeof item !== 'object' || item === null) {
+          return null;
+        }
+
+        const attachment = item as {
+          kind?: string;
+          key?: string;
+          url?: string;
+          fileName?: string;
+          mimeType?: string;
+          sizeBytes?: number;
+        };
+
+        if (!['image', 'video', 'audio', 'file'].includes(String(attachment.kind))) {
+          return null;
+        }
+        if (
+          typeof attachment.key !== 'string' ||
+          typeof attachment.url !== 'string' ||
+          typeof attachment.fileName !== 'string' ||
+          typeof attachment.mimeType !== 'string' ||
+          typeof attachment.sizeBytes !== 'number'
+        ) {
+          return null;
+        }
+        if (attachment.sizeBytes <= 0) {
+          return null;
+        }
+        if (!isSafeAttachmentUrl(attachment.url)) {
+          return null;
+        }
+
+        return {
+          kind: attachment.kind as ChatAttachment['kind'],
+          key: attachment.key,
+          url: attachment.url,
+          fileName: attachment.fileName,
+          mimeType: attachment.mimeType,
+          sizeBytes: attachment.sizeBytes,
+        } satisfies ChatAttachment;
+      })
+      .filter((attachment): attachment is ChatAttachment => attachment !== null);
   }
 }

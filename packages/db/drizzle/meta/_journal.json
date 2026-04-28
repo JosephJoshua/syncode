@@ -64,6 +64,13 @@
       "when": 1776622913755,
       "tag": "0008_nice_menace",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1777333913818,
+      "tag": "0009_parched_vapor",
+      "breakpoints": true
     }
   ]
 }

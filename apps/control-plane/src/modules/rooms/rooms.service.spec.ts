@@ -2,12 +2,14 @@ import { InternalServerErrorException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
-import { COLLAB_CLIENT } from '@syncode/contracts';
-import { MEDIA_SERVICE, STORAGE_SERVICE } from '@syncode/shared/ports';
+import { AI_CLIENT, COLLAB_CLIENT } from '@syncode/contracts';
+import { CACHE_SERVICE, MEDIA_SERVICE, STORAGE_SERVICE } from '@syncode/shared/ports';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
 import { ExecutionService } from '@/modules/execution/execution.service.js';
 import { SessionReportsService } from '@/modules/sessions/session-reports.service.js';
+import { InMemoryCacheService } from '@/test/in-memory-cache.service.js';
 import {
+  createMockAiClient,
   createMockCollabClient,
   createMockConfigService,
   createMockJwtService,
@@ -88,11 +90,13 @@ function createMockDb() {
 describe('RoomsService', () => {
   let service: RoomsService;
   let dbSetup: ReturnType<typeof createMockDb>;
+  let mockAiClient: ReturnType<typeof createMockAiClient>;
   let mockCollabClient: ReturnType<typeof createMockCollabClient>;
   let mockMediaService: ReturnType<typeof createMockMediaService>;
 
   beforeEach(async () => {
     dbSetup = createMockDb();
+    mockAiClient = createMockAiClient();
     mockCollabClient = createMockCollabClient();
     mockMediaService = createMockMediaService();
 
@@ -101,9 +105,11 @@ describe('RoomsService', () => {
         RoomsService,
         { provide: DB_CLIENT, useValue: dbSetup.db },
         { provide: ExecutionService, useValue: { runCode: vi.fn(), submitProblem: vi.fn() } },
+        { provide: AI_CLIENT, useValue: mockAiClient },
         { provide: COLLAB_CLIENT, useValue: mockCollabClient },
         { provide: MEDIA_SERVICE, useValue: mockMediaService },
         { provide: STORAGE_SERVICE, useValue: createMockStorageService() },
+        { provide: CACHE_SERVICE, useValue: new InMemoryCacheService() },
         { provide: JwtService, useValue: createMockJwtService('mock-collab-token') },
         { provide: ConfigService, useValue: createMockConfigService() },
         { provide: SessionReportsService, useValue: createMockSessionReportsService() },
