@@ -119,35 +119,7 @@ export class E2bSandboxAdapter implements ISandboxProvider, OnModuleDestroy {
         memoryUsageMb,
       };
     } catch (error) {
-      const totalElapsed = Date.now() - startTime;
-      const timedOut = totalElapsed >= timeoutMs;
-
-      if (error instanceof CommandExitError) {
-        const durationMs = await this.readDurationMs(sandbox, totalElapsed);
-        const memoryUsageMb = await this.peakMemoryMb(sandbox);
-
-        return {
-          requestId,
-          status: 'failed',
-          stdout: error.stdout,
-          stderr: error.stderr,
-          exitCode: error.exitCode,
-          durationMs,
-          timedOut,
-          memoryUsageMb,
-        };
-      }
-
-      return {
-        requestId,
-        status: 'failed',
-        stdout: '',
-        stderr: '',
-        exitCode: -1,
-        durationMs: totalElapsed,
-        timedOut,
-        error: error instanceof Error ? error.message : String(error),
-      };
+      return await this.buildExecutionFailure(error, sandbox, startTime, timeoutMs, requestId);
     } finally {
       this.activeSandboxes.delete(sandbox);
 
@@ -157,6 +129,43 @@ export class E2bSandboxAdapter implements ISandboxProvider, OnModuleDestroy {
         this.logger.warn('Failed to cleanup E2B sandbox', error);
       }
     }
+  }
+
+  private async buildExecutionFailure(
+    error: unknown,
+    sandbox: Sandbox,
+    startTime: number,
+    timeoutMs: number,
+    requestId: string,
+  ): Promise<ExecutionResult> {
+    const totalElapsed = Date.now() - startTime;
+    const timedOut = totalElapsed >= timeoutMs;
+
+    if (error instanceof CommandExitError) {
+      const durationMs = await this.readDurationMs(sandbox, totalElapsed);
+      const memoryUsageMb = await this.peakMemoryMb(sandbox);
+      return {
+        requestId,
+        status: 'failed',
+        stdout: error.stdout,
+        stderr: error.stderr,
+        exitCode: error.exitCode,
+        durationMs,
+        timedOut,
+        memoryUsageMb,
+      };
+    }
+
+    return {
+      requestId,
+      status: 'failed',
+      stdout: '',
+      stderr: '',
+      exitCode: -1,
+      durationMs: totalElapsed,
+      timedOut,
+      error: error instanceof Error ? error.message : String(error),
+    };
   }
 
   private async readDurationMs(sandbox: Sandbox, fallbackMs: number): Promise<number> {

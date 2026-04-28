@@ -67,18 +67,20 @@ const VALID_CREATE_DOCUMENT_PAYLOAD: CreateDocumentRequest = {
 
 describe('InternalController auth guard', () => {
   it('GIVEN missing X-Internal-Secret header WHEN creating document THEN returns 401', async () => {
-    await request(app.getHttpServer())
+    const res = await request(app.getHttpServer())
       .post('/internal/documents')
-      .send(VALID_CREATE_DOCUMENT_PAYLOAD)
-      .expect(401);
+      .send(VALID_CREATE_DOCUMENT_PAYLOAD);
+
+    expect(res.status).toBe(401);
   });
 
   it('GIVEN wrong X-Internal-Secret header WHEN creating document THEN returns 401', async () => {
-    await request(app.getHttpServer())
+    const res = await request(app.getHttpServer())
       .post('/internal/documents')
       .set('X-Internal-Secret', 'wrong-secret-value')
-      .send(VALID_CREATE_DOCUMENT_PAYLOAD)
-      .expect(401);
+      .send(VALID_CREATE_DOCUMENT_PAYLOAD);
+
+    expect(res.status).toBe(401);
   });
 
   it('GIVEN valid X-Internal-Secret header WHEN creating document THEN returns 201', async () => {
@@ -92,35 +94,41 @@ describe('InternalController auth guard', () => {
   });
 
   it('GIVEN missing header WHEN destroying document THEN returns 401', async () => {
-    await request(app.getHttpServer()).delete(`/internal/documents/${ROOM_ID}`).expect(401);
+    const res = await request(app.getHttpServer()).delete(`/internal/documents/${ROOM_ID}`);
+
+    expect(res.status).toBe(401);
   });
 
   it('GIVEN missing header WHEN kicking user THEN returns 401', async () => {
-    await request(app.getHttpServer())
+    const res = await request(app.getHttpServer())
       .post(`/internal/documents/${ROOM_ID}/kick`)
-      .send({ userId: USER_ID })
-      .expect(401);
+      .send({ userId: USER_ID });
+
+    expect(res.status).toBe(401);
   });
 
   it('GIVEN missing header WHEN updating room state THEN returns 401', async () => {
-    await request(app.getHttpServer())
+    const res = await request(app.getHttpServer())
       .post(`/internal/documents/${ROOM_ID}/state`)
-      .send({ phase: 'coding', editorLocked: false })
-      .expect(401);
+      .send({ phase: 'coding', editorLocked: false });
+
+    expect(res.status).toBe(401);
   });
 
   it('GIVEN missing header WHEN broadcasting participant ready THEN returns 401', async () => {
-    await request(app.getHttpServer())
+    const res = await request(app.getHttpServer())
       .post(`/internal/documents/${ROOM_ID}/participant-ready`)
-      .send({ userId: USER_ID, isReady: true })
-      .expect(401);
+      .send({ userId: USER_ID, isReady: true });
+
+    expect(res.status).toBe(401);
   });
 
   it('GIVEN missing header WHEN changing language THEN returns 401', async () => {
-    await request(app.getHttpServer())
+    const res = await request(app.getHttpServer())
       .post(`/internal/documents/${ROOM_ID}/language`)
-      .send({ language: 'python' })
-      .expect(401);
+      .send({ language: 'python' });
+
+    expect(res.status).toBe(401);
   });
 });
 
