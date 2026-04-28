@@ -8,6 +8,7 @@ import {
   type TLAssetStore,
   type TLRecord,
   type TLStore,
+  type TLStoreWithStatus,
 } from 'tldraw';
 import type { Awareness } from 'y-protocols/awareness';
 import * as Y from 'yjs';
@@ -358,7 +359,11 @@ export function createYjsTldrawStore({
 export interface UseYjsTldrawStoreOptions extends CreateYjsTldrawStoreOptions {}
 
 export interface UseYjsTldrawStoreResult {
-  store: TLStore;
+  // Wrapped TLStoreWithStatus is what tldraw expects for collaborative
+  // sessions. Passing a raw TLStore makes tldraw assume the store is local
+  // and suppresses emission of user-source change events that we rely on
+  // to forward strokes to Yjs.
+  storeWithStatus: TLStoreWithStatus;
   undoManager: Y.UndoManager;
   status: WhiteboardConnectionStatus;
 }
@@ -395,5 +400,14 @@ export function useYjsTldrawStore(options: UseYjsTldrawStoreOptions): UseYjsTldr
     };
   }, [result]);
 
-  return { store: result.store, undoManager: result.undoManager, status };
+  const storeWithStatus = useMemo<TLStoreWithStatus>(
+    () => ({
+      status: 'synced-remote',
+      connectionStatus: 'online',
+      store: result.store,
+    }),
+    [result.store],
+  );
+
+  return { storeWithStatus, undoManager: result.undoManager, status };
 }

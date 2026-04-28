@@ -126,7 +126,7 @@ export function RoomWhiteboardPanel({
 
   const assetStore = useMemo<TLAssetStore>(() => createControlPlaneAssetStore(roomId), [roomId]);
 
-  const { store, undoManager } = useYjsTldrawStore({
+  const { storeWithStatus, undoManager } = useYjsTldrawStore({
     doc,
     awareness,
     assetStore,
@@ -135,6 +135,7 @@ export function RoomWhiteboardPanel({
     userColor,
     getLayer: () => layerRef.current,
   });
+  const store = storeWithStatus.status === 'synced-remote' ? storeWithStatus.store : null;
 
   const handleToggleAuthor = useCallback((authorId: string) => {
     setHiddenAuthors((prev) => {
@@ -309,7 +310,7 @@ export function RoomWhiteboardPanel({
       </div>
       <div className="relative flex-1 overflow-hidden">
         <Tldraw
-          store={store}
+          store={storeWithStatus}
           onMount={handleMount}
           components={{
             // The default page menu, main menu, and document name aren't
@@ -323,14 +324,16 @@ export function RoomWhiteboardPanel({
         >
           <VisibilityFilter showAnnotations={showAnnotations} hiddenAuthors={hiddenAuthors} />
         </Tldraw>
-        <WhiteboardAuthorLegend
-          store={store}
-          participantNames={participantNames}
-          hiddenAuthors={hiddenAuthors}
-          onToggleAuthor={handleToggleAuthor}
-          showAnnotations={showAnnotations}
-          onToggleAnnotations={() => setShowAnnotations((v) => !v)}
-        />
+        {store ? (
+          <WhiteboardAuthorLegend
+            store={store}
+            participantNames={participantNames}
+            hiddenAuthors={hiddenAuthors}
+            onToggleAuthor={handleToggleAuthor}
+            showAnnotations={showAnnotations}
+            onToggleAnnotations={() => setShowAnnotations((v) => !v)}
+          />
+        ) : null}
       </div>
     </div>
   );
