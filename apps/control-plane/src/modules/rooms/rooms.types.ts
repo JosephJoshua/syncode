@@ -118,8 +118,9 @@ export interface TransitionPhaseResult {
 export interface SetEditorLockResult {
   roomId: string;
   editorLocked: boolean;
-  changedAt: Date;
-  changedBy: string;
+  changed: boolean;
+  changedAt?: Date;
+  changedBy?: string;
 }
 
 export interface MediaTokenResult {

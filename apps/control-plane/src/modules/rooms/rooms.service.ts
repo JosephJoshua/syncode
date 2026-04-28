@@ -1345,8 +1345,8 @@ export class RoomsService {
     return {
       roomId,
       editorLocked: locked,
-      changedAt: now,
-      changedBy: userId,
+      changed,
+      ...(changed ? { changedAt: now, changedBy: userId } : {}),
     };
   }
 

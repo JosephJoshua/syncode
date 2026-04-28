@@ -369,8 +369,10 @@ export class RoomsController {
     return {
       roomId: result.roomId,
       editorLocked: true,
-      lockedAt: result.changedAt.toISOString(),
-      lockedBy: result.changedBy,
+      changed: result.changed,
+      ...(result.changed && result.changedAt && result.changedBy
+        ? { lockedAt: result.changedAt.toISOString(), lockedBy: result.changedBy }
+        : {}),
     };
   }
 
@@ -390,8 +392,10 @@ export class RoomsController {
     return {
       roomId: result.roomId,
       editorLocked: false,
-      unlockedAt: result.changedAt.toISOString(),
-      unlockedBy: result.changedBy,
+      changed: result.changed,
+      ...(result.changed && result.changedAt && result.changedBy
+        ? { unlockedAt: result.changedAt.toISOString(), unlockedBy: result.changedBy }
+        : {}),
     };
   }
 

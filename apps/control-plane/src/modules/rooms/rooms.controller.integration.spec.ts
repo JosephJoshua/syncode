@@ -456,7 +456,7 @@ describe('POST /rooms/:id/control/transition', () => {
 });
 
 describe('POST /rooms/:id/control/lock-editor', () => {
-  it('GIVEN host WHEN locking editor THEN returns 200 with editorLocked=true and ISO timestamp', async () => {
+  it('GIVEN host WHEN locking editor THEN returns 200 with editorLocked=true, changed=true, and ISO timestamp', async () => {
     const host = await insertUser(db);
     const room = await insertRoom(db, host.id);
     await insertParticipant(db, room.id, host.id, 'interviewer');
@@ -469,6 +469,7 @@ describe('POST /rooms/:id/control/lock-editor', () => {
     expect(res.body).toMatchObject({
       roomId: room.id,
       editorLocked: true,
+      changed: true,
       lockedBy: host.id,
     });
     expect(res.body.lockedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
@@ -516,7 +517,7 @@ describe('POST /rooms/:id/control/lock-editor', () => {
     expect(res.status).toBe(409);
   });
 
-  it('GIVEN already-locked room WHEN locking editor THEN is idempotent (200)', async () => {
+  it('GIVEN already-locked room WHEN locking editor THEN is idempotent (200, changed=false, no timestamp)', async () => {
     const host = await insertUser(db);
     const room = await insertRoom(db, host.id, { editorLocked: true });
     await insertParticipant(db, room.id, host.id, 'interviewer');
@@ -527,11 +528,14 @@ describe('POST /rooms/:id/control/lock-editor', () => {
     ).expect(200);
 
     expect(res.body.editorLocked).toBe(true);
+    expect(res.body.changed).toBe(false);
+    expect(res.body.lockedAt).toBeUndefined();
+    expect(res.body.lockedBy).toBeUndefined();
   });
 });
 
 describe('POST /rooms/:id/control/unlock-editor', () => {
-  it('GIVEN locked room and host WHEN unlocking THEN returns 200 with editorLocked=false and ISO timestamp', async () => {
+  it('GIVEN locked room and host WHEN unlocking THEN returns 200 with editorLocked=false, changed=true, and ISO timestamp', async () => {
     const host = await insertUser(db);
     const room = await insertRoom(db, host.id, { editorLocked: true });
     await insertParticipant(db, room.id, host.id, 'interviewer');
@@ -544,12 +548,13 @@ describe('POST /rooms/:id/control/unlock-editor', () => {
     expect(res.body).toMatchObject({
       roomId: room.id,
       editorLocked: false,
+      changed: true,
       unlockedBy: host.id,
     });
     expect(res.body.unlockedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   });
 
-  it('GIVEN already-unlocked room WHEN unlocking THEN is idempotent (200)', async () => {
+  it('GIVEN already-unlocked room WHEN unlocking THEN is idempotent (200, changed=false, no timestamp)', async () => {
     const host = await insertUser(db);
     const room = await insertRoom(db, host.id);
     await insertParticipant(db, room.id, host.id, 'interviewer');
@@ -560,6 +565,9 @@ describe('POST /rooms/:id/control/unlock-editor', () => {
     ).expect(200);
 
     expect(res.body.editorLocked).toBe(false);
+    expect(res.body.changed).toBe(false);
+    expect(res.body.unlockedAt).toBeUndefined();
+    expect(res.body.unlockedBy).toBeUndefined();
   });
 });
 
