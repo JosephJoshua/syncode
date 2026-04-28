@@ -1,4 +1,11 @@
 import {
+  type ChatHistoryEventData,
+  type ChatMarkReadEventData,
+  type ChatMessageCreatedEventData,
+  type ChatReactionUpdatedEventData,
+  type ChatReactToggleEventData,
+  type ChatReadUpdatedEventData,
+  type ChatSendEventData,
   COLLAB_WS_EVENTS,
   type CollabWsMessage,
   type EditorLockEventData,
@@ -45,6 +52,10 @@ export interface YjsCollabProviderOptions {
    * Used to trigger idempotent backend reactivation (e.g. re-hit POST /join).
    */
   onReconnected?: () => void;
+  onChatHistory: (data: ChatHistoryEventData) => void;
+  onChatMessageCreated: (data: ChatMessageCreatedEventData) => void;
+  onChatReactionUpdated: (data: ChatReactionUpdatedEventData) => void;
+  onChatReadUpdated: (data: ChatReadUpdatedEventData) => void;
   onRoomNotFound?: () => Promise<void>;
 }
 
@@ -211,9 +222,27 @@ export class YjsCollabProvider {
     }
   }
 
+  sendChatMessage(data: ChatSendEventData): void {
+    this.sendText(COLLAB_WS_EVENTS.CHAT_SEND, data);
+  }
+
+  toggleChatReaction(data: ChatReactToggleEventData): void {
+    this.sendText(COLLAB_WS_EVENTS.CHAT_REACT_TOGGLE, data);
+  }
+
+  markChatRead(data: ChatMarkReadEventData): void {
+    this.sendText(COLLAB_WS_EVENTS.CHAT_MARK_READ, data);
+  }
+
   private send(data: Uint8Array): void {
     if (!this.disposed && this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(data);
+    }
+  }
+
+  private sendText(type: string, data: unknown): void {
+    if (!this.disposed && this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type, data }));
     }
   }
 
@@ -280,6 +309,26 @@ export class YjsCollabProvider {
       case COLLAB_WS_EVENTS.LANGUAGE_CHANGE: {
         const data = message.data as LanguageChangeEventData;
         this.options.onLanguageChange?.(data.language, data.changedBy);
+        break;
+      }
+      case COLLAB_WS_EVENTS.CHAT_HISTORY: {
+        const data = message.data as ChatHistoryEventData;
+        this.options.onChatHistory(data);
+        break;
+      }
+      case COLLAB_WS_EVENTS.CHAT_MESSAGE_CREATED: {
+        const data = message.data as ChatMessageCreatedEventData;
+        this.options.onChatMessageCreated(data);
+        break;
+      }
+      case COLLAB_WS_EVENTS.CHAT_REACTION_UPDATED: {
+        const data = message.data as ChatReactionUpdatedEventData;
+        this.options.onChatReactionUpdated(data);
+        break;
+      }
+      case COLLAB_WS_EVENTS.CHAT_READ_UPDATED: {
+        const data = message.data as ChatReadUpdatedEventData;
+        this.options.onChatReadUpdated(data);
         break;
       }
     }

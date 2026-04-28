@@ -162,10 +162,35 @@ export class StubAiClient implements IAiClient {
         const job = this.jobs.get(jobId);
         if (!job) return;
 
+        const isFollowUp = request.hintStage === 'follow_up';
+        const hintIteration = Math.max(request.hintIteration ?? 1, 1);
+        const allTestsPassed = request.latestSubmissionSummary?.allTestsPassed === true;
+        const reflection = request.reflectionResponse?.trim();
+        const followUpHint = reflection
+          ? `Good reasoning. Build on "${reflection.slice(0, 80)}" and validate that step with a small test case.`
+          : 'No reflection was provided. Re-check your current approach against one failing edge case.';
+
         job.status = 'completed';
         job.hintResult = {
-          hint: HINT_RESPONSES[request.hintLevel] ?? HINT_RESPONSES.gentle,
-          suggestedApproach: 'Consider breaking the problem into smaller subproblems.',
+          hint: allTestsPassed
+            ? 'Great work. Your latest submission passed all available tests, so focus now on readability and edge-case confidence.'
+            : isFollowUp
+              ? followUpHint
+              : (HINT_RESPONSES[request.hintLevel] ?? HINT_RESPONSES.gentle),
+          suggestedApproach: allTestsPassed
+            ? 'Keep the current core logic; add one readability improvement and verify a couple of extra edge cases locally.'
+            : isFollowUp
+              ? 'Update one focused section, re-run tests, then re-check edge cases.'
+              : hintIteration === 1
+                ? 'Focus on what small piece of history should be preserved while scanning from left to right.'
+                : 'Consider breaking the problem into smaller subproblems.',
+          reflectionPrompt:
+            allTestsPassed ||
+            isFollowUp ||
+            request.hintLevel === 'direct' ||
+            hintIteration % 3 !== 0
+              ? undefined
+              : 'What invariant will stay true after each iteration of your loop?',
         };
       }, this.delayMs),
     );

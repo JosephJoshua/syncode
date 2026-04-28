@@ -128,3 +128,31 @@ export interface MediaTokenResult {
   url: string;
   expiresAt: Date;
 }
+
+export interface RequestRoomAiHintResult {
+  jobId: string;
+  hintId: string;
+  phase: 'initial' | 'follow_up';
+}
+
+export type GetRoomAiHintResult =
+  | { status: 'pending'; jobId: string }
+  | {
+      status: 'ready';
+      jobId: string;
+      hintId: string;
+      phase: 'initial' | 'follow_up';
+      hint: string;
+      suggestedApproach?: string;
+      reflectionPrompt?: string;
+    }
+  | { status: 'failed'; jobId: string };
+
+export interface RoomChatMediaUploadResult {
+  key: string;
+  uploadUrl: string;
+  downloadUrl: string;
+  fileName: string;
+  contentType: string;
+  sizeBytes: number;
+}

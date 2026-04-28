@@ -11,6 +11,7 @@ import type {
   CreateDocumentRequest,
   CreateDocumentResponse,
   DestroyDocumentResponse,
+  GetRoomChatHistoryResponse,
   IControlPlaneCallbackClient,
   KickUserRequest,
   KickUserResponse,
@@ -198,6 +199,21 @@ export class CollaborationService implements OnModuleDestroy {
       data: { userId, isReady },
       timestamp: Date.now(),
     });
+  }
+
+  getRoomChatHistory(roomId: string, limit?: number): GetRoomChatHistoryResponse {
+    const room = this.roomRegistry.getRoom(roomId);
+    if (!room) {
+      throw new NotFoundException(`Room ${roomId} not found`);
+    }
+
+    const normalizedLimit = Number.isInteger(limit) ? Number(limit) : undefined;
+    const messages = this.roomRegistry.listChatMessages(roomId);
+    if (!normalizedLimit || normalizedLimit <= 0) {
+      return { messages };
+    }
+
+    return { messages: messages.slice(-normalizedLimit) };
   }
 
   notifyUserDisconnected(payload: UserDisconnectedPayload): void {

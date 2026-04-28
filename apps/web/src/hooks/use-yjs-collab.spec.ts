@@ -5,6 +5,7 @@ import { type UseYjsCollabOptions, useYjsCollab } from './use-yjs-collab.js';
 // Mock the provider so we don't create real WebSocket connections
 const mockConnect = vi.fn();
 const mockDestroy = vi.fn();
+const mockMarkChatRead = vi.fn();
 const mockSetLocalUser = vi.fn();
 
 vi.mock('@/lib/yjs-collab-provider.js', async () => {
@@ -20,6 +21,7 @@ vi.mock('@/lib/yjs-collab-provider.js', async () => {
         awareness,
         connect: mockConnect,
         destroy: mockDestroy,
+        markChatRead: mockMarkChatRead,
         setLocalUser: mockSetLocalUser,
       };
     }),

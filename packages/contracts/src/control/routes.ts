@@ -29,12 +29,17 @@ import type {
   createRoomSchema,
   destroyRoomResponseSchema,
   ensureCollabResponseSchema,
+  getRoomAiHintResultResponseSchema,
   joinRoomResponseSchema,
   joinRoomSchema,
   listRoomsQuerySchema,
   listRoomsResponseSchema,
   lockEditorResponseSchema,
   mediaTokenResponseSchema,
+  requestRoomAiHintResponseSchema,
+  requestRoomAiHintSchema,
+  roomChatMediaUploadRequestSchema,
+  roomChatMediaUploadResponseSchema,
   roomDetailSchema,
   runCodeResponseSchema,
   runCodeSchema,
@@ -135,6 +140,18 @@ export const CONTROL_API = {
       z.infer<typeof submitProblemSchema>,
       z.infer<typeof submitResponseSchema>
     >()('rooms/:id/submit', 'POST'),
+    AI_HINT: defineRoute<
+      z.infer<typeof requestRoomAiHintSchema>,
+      z.infer<typeof requestRoomAiHintResponseSchema>
+    >()('rooms/:id/ai/hint', 'POST'),
+    AI_HINT_RESULT: defineRoute<void, z.infer<typeof getRoomAiHintResultResponseSchema>>()(
+      'rooms/:id/ai/hint/:jobId',
+      'GET',
+    ),
+    CHAT_MEDIA_UPLOAD_URL: defineRoute<
+      z.infer<typeof roomChatMediaUploadRequestSchema>,
+      z.infer<typeof roomChatMediaUploadResponseSchema>
+    >()('rooms/:id/chat/media/upload-url', 'POST'),
     TRANSITION_PHASE: defineRoute<
       z.infer<typeof transitionRoomPhaseSchema>,
       z.infer<typeof transitionRoomPhaseResponseSchema>

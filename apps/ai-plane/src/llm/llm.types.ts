@@ -8,6 +8,7 @@ export interface LlmGenerateTextInput {
   temperature?: number;
   maxOutputTokens?: number;
   jsonMode?: boolean;
+  model?: string;
 }
 
 export interface LlmGenerateTextResult {

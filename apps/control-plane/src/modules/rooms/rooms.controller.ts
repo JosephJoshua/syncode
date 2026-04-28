@@ -48,12 +48,17 @@ import {
   CreateRoomResponseDto,
   DestroyRoomResponseDto,
   EnsureCollabResponseDto,
+  GetRoomAiHintResultResponseDto,
   JoinRoomDto,
   JoinRoomResponseDto,
   ListRoomsQueryDto,
   ListRoomsResponseDto,
   LockEditorResponseDto,
   MediaTokenResponseDto,
+  RequestRoomAiHintDto,
+  RequestRoomAiHintResponseDto,
+  RoomChatMediaUploadDto,
+  RoomChatMediaUploadResponseDto,
   RoomDetailDto,
   RunCodeDto,
   RunCodeResponseDto,
@@ -305,6 +310,104 @@ export class RoomsController {
     @Body() body: SubmitProblemDto,
   ): Promise<SubmitCodeResponseDto> {
     return this.roomsService.submitProblem(id, user.id, body);
+  }
+
+  @Post(CONTROL_API.ROOMS.AI_HINT.route)
+  @HttpCode(202)
+  @ApiOperation({
+    summary: 'Submit AI hint job for current code',
+    description:
+      'Returns immediately with the job ID. Poll GET /rooms/:id/ai/hint/:jobId for the result.',
+  })
+  @ApiParam({ name: 'id', description: 'Room ID (UUID)' })
+  @ApiBody({ type: RequestRoomAiHintDto })
+  @ApiResponse({
+    status: 202,
+    type: RequestRoomAiHintResponseDto,
+    description: 'Hint job submitted; poll GET /rooms/:id/ai/hint/:jobId for the result',
+  })
+  @ApiResponse({
+    status: 403,
+    type: ErrorResponseDto,
+    description: 'No ai:request-hint capability',
+  })
+  @ApiResponse({
+    status: 404,
+    type: ErrorResponseDto,
+    description: 'No problem selected in room',
+  })
+  @ApiResponse({
+    status: 429,
+    type: ErrorResponseDto,
+    description: 'Hint rate limit exceeded (3 per 5 minutes)',
+  })
+  @ApiResponse({
+    status: 503,
+    type: ErrorResponseDto,
+    description: 'AI service unavailable',
+  })
+  async requestAiHint(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() body: RequestRoomAiHintDto,
+  ): Promise<RequestRoomAiHintResponseDto> {
+    return this.roomsService.requestAiHint(id, user.id, body);
+  }
+
+  @Get(CONTROL_API.ROOMS.AI_HINT_RESULT.route)
+  @ApiOperation({ summary: 'Poll AI hint job result' })
+  @ApiParam({ name: 'id', description: 'Room ID (UUID)' })
+  @ApiParam({ name: 'jobId', description: 'AI hint job ID returned from POST /ai/hint' })
+  @ApiResponse({
+    status: 200,
+    type: GetRoomAiHintResultResponseDto,
+    description: 'Hint job status: pending, ready, or failed',
+  })
+  @ApiResponse({
+    status: 403,
+    type: ErrorResponseDto,
+    description: 'Not a participant of this room',
+  })
+  @ApiResponse({
+    status: 404,
+    type: ErrorResponseDto,
+    description: 'Job not found, expired, or not owned by caller',
+  })
+  async getAiHintResult(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Param('jobId') jobId: string,
+  ): Promise<GetRoomAiHintResultResponseDto> {
+    return this.roomsService.getAiHintResult(id, user.id, jobId);
+  }
+
+  @Post(CONTROL_API.ROOMS.CHAT_MEDIA_UPLOAD_URL.route)
+  @HttpCode(201)
+  @ApiOperation({ summary: 'Get presigned upload URL for room chat media' })
+  @ApiParam({ name: 'id', description: 'Room ID (UUID)' })
+  @ApiBody({ type: RoomChatMediaUploadDto })
+  @ApiResponse({
+    status: 201,
+    type: RoomChatMediaUploadResponseDto,
+    description: 'Presigned upload URL and media metadata',
+  })
+  @ApiResponse({
+    status: 400,
+    type: ErrorResponseDto,
+    description: 'Unsupported file type or file too large',
+  })
+  @ApiResponse({
+    status: 403,
+    type: ErrorResponseDto,
+    description: 'Not a participant or lacks chat capability',
+  })
+  @ApiResponse({ status: 404, type: ErrorResponseDto, description: 'Room not found' })
+  async getChatMediaUploadUrl(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() body: RoomChatMediaUploadDto,
+  ): Promise<RoomChatMediaUploadResponseDto> {
+    return this.roomsService.getRoomChatMediaUploadUrl(id, user.id, body);
   }
 
   @Post(CONTROL_API.ROOMS.TOGGLE_READY.route)

@@ -7,6 +7,8 @@ import type {
   CreateDocumentRequest,
   CreateDocumentResponse,
   DestroyDocumentResponse,
+  GetRoomChatHistoryRequest,
+  GetRoomChatHistoryResponse,
   KickUserRequest,
   KickUserResponse,
   UpdateRoomStateRequest,
@@ -97,6 +99,15 @@ export class StubCollabClient implements ICollabClient {
     this.maybeThrow('changeLanguage');
 
     return { success: true };
+  }
+
+  async getRoomChatHistory(
+    _roomId: string,
+    _request?: GetRoomChatHistoryRequest,
+  ): Promise<GetRoomChatHistoryResponse> {
+    await this.delay();
+    this.maybeThrow('getRoomChatHistory');
+    return { messages: [] };
   }
 
   async healthCheck(): Promise<boolean> {
