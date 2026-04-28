@@ -9,7 +9,7 @@ import {
   type ResizeCorner,
   readGeom,
   writeGeom,
-} from './whiteboard-floating-geometry.js';
+} from './floating-panel-geometry.js';
 
 describe('computeResizeFromCorner', () => {
   const origin = { width: 200, height: 150, x: 100, y: 80 };

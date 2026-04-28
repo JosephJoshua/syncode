@@ -1,6 +1,6 @@
-// Pure helpers for the floating whiteboard panel: corner-based resize math
-// and per-room/user geometry persistence. Kept separate from the component
-// so they can be unit-tested without spinning up jsdom + React.
+// Pure helpers for floating, draggable, resizable panels: corner-based
+// resize math, viewport clamping, and per-key geometry persistence. Used
+// by both the floating video panel and the floating whiteboard panel.
 
 export type ResizeCorner = 'tl' | 'tr' | 'bl' | 'br';
 
@@ -11,14 +11,10 @@ export interface PersistedGeom {
   height: number;
 }
 
-export const FLOATING_DEFAULT_WIDTH = 480;
-export const FLOATING_DEFAULT_HEIGHT = 360;
-export const FLOATING_MIN_WIDTH = 320;
-export const FLOATING_MIN_HEIGHT = 240;
-export const FLOATING_HEADER_HEIGHT = 28;
 export const FLOATING_EDGE_PADDING = 8;
 export const FLOATING_VIEWPORT_PADDING = 32;
-export const FLOATING_STORAGE_PREFIX = 'whiteboard:floating:geom';
+export const FLOATING_MIN_WIDTH = 320;
+export const FLOATING_MIN_HEIGHT = 240;
 
 export function readGeom(key: string): PersistedGeom | null {
   if (typeof window === 'undefined') return null;
@@ -112,17 +108,20 @@ export function clampPosition(
 }
 
 // Clamp a candidate size so the panel stays at least minimum-sized AND fits
-// inside the viewport with VIEWPORT_PADDING on each side.
+// inside the viewport with VIEWPORT_PADDING on each side. Min sizes are
+// caller-provided so video and whiteboard panels can use different floors.
 export function clampSize(
   width: number,
   height: number,
   viewportWidth: number,
   viewportHeight: number,
+  minWidth: number = FLOATING_MIN_WIDTH,
+  minHeight: number = FLOATING_MIN_HEIGHT,
 ): { width: number; height: number } {
-  const maxW = Math.max(FLOATING_MIN_WIDTH, viewportWidth - FLOATING_VIEWPORT_PADDING);
-  const maxH = Math.max(FLOATING_MIN_HEIGHT, viewportHeight - FLOATING_VIEWPORT_PADDING);
+  const maxW = Math.max(minWidth, viewportWidth - FLOATING_VIEWPORT_PADDING);
+  const maxH = Math.max(minHeight, viewportHeight - FLOATING_VIEWPORT_PADDING);
   return {
-    width: Math.max(FLOATING_MIN_WIDTH, Math.min(maxW, width)),
-    height: Math.max(FLOATING_MIN_HEIGHT, Math.min(maxH, height)),
+    width: Math.max(minWidth, Math.min(maxW, width)),
+    height: Math.max(minHeight, Math.min(maxH, height)),
   };
 }

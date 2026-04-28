@@ -7,18 +7,18 @@ import {
   clampPosition as clampPositionFor,
   clampSize as clampSizeFor,
   computeResizeFromCorner,
-  FLOATING_DEFAULT_HEIGHT,
-  FLOATING_DEFAULT_WIDTH,
   FLOATING_EDGE_PADDING,
-  FLOATING_HEADER_HEIGHT,
-  FLOATING_STORAGE_PREFIX,
   type PersistedGeom,
   type ResizeCorner,
   readGeom,
   writeGeom,
-} from '@/lib/whiteboard-floating-geometry.js';
+} from '@/lib/floating-panel-geometry.js';
 
 const SPRING_CONFIG = { stiffness: 300, damping: 30 };
+const FLOATING_DEFAULT_WIDTH = 480;
+const FLOATING_DEFAULT_HEIGHT = 360;
+const FLOATING_HEADER_HEIGHT = 28;
+const FLOATING_STORAGE_PREFIX = 'whiteboard:floating:geom';
 
 interface FloatingWhiteboardPanelProps {
   // Stable identity for persisted geometry — we key per room+user so two
