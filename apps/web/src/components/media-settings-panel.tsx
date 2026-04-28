@@ -205,7 +205,14 @@ function useMediaPermissions(
   };
 }
 
-function AudioLevelMeter({ deviceId }: { deviceId: string | null }) {
+function getLevelBarColor(active: boolean, index: number, bars: number): string {
+  if (!active) return 'bg-muted';
+  if (index < bars * 0.6) return 'bg-emerald-400';
+  if (index < bars * 0.85) return 'bg-amber-400';
+  return 'bg-destructive';
+}
+
+function AudioLevelMeter({ deviceId }: { readonly deviceId: string | null }) {
   const [level, setLevel] = useState(0);
   const cleanupRef = useRef<(() => void) | null>(null);
 
@@ -234,7 +241,7 @@ function AudioLevelMeter({ deviceId }: { deviceId: string | null }) {
           if (cancelled) return;
           analyser.getByteFrequencyData(data);
           let sum = 0;
-          for (let i = 0; i < data.length; i++) sum += data[i] ?? 0;
+          for (const v of data) sum += v;
           setLevel(sum / data.length / 255);
           animFrame = requestAnimationFrame(tick);
         };
@@ -271,13 +278,7 @@ function AudioLevelMeter({ deviceId }: { deviceId: string | null }) {
             key={key}
             className={cn(
               'h-2.5 w-1 rounded-full transition-colors duration-75',
-              active
-                ? i < bars * 0.6
-                  ? 'bg-emerald-400'
-                  : i < bars * 0.85
-                    ? 'bg-amber-400'
-                    : 'bg-destructive'
-                : 'bg-muted',
+              getLevelBarColor(active, i, bars),
             )}
           />
         );
@@ -291,9 +292,9 @@ function VideoPreview({
   brightness,
   contrast,
 }: {
-  deviceId: string | null;
-  brightness: number;
-  contrast: number;
+  readonly deviceId: string | null;
+  readonly brightness: number;
+  readonly contrast: number;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [error, setError] = useState(false);
@@ -371,10 +372,10 @@ function NoDevicesPrompt({
   onRefresh,
   refreshing,
 }: {
-  kind: 'audio' | 'video';
-  icon: React.ComponentType<{ className?: string }>;
-  onRefresh: () => void;
-  refreshing: boolean;
+  readonly kind: 'audio' | 'video';
+  readonly icon: React.ComponentType<{ className?: string }>;
+  readonly onRefresh: () => void;
+  readonly refreshing: boolean;
 }) {
   const device = kind === 'audio' ? 'microphone' : 'camera';
   return (
@@ -404,13 +405,15 @@ function GrantPermissionPrompt({
   requesting,
   error,
 }: {
-  kind: 'audio' | 'video';
-  icon: React.ComponentType<{ className?: string }>;
-  onRequest: () => void;
-  requesting: boolean;
-  error: string | null;
+  readonly kind: 'audio' | 'video';
+  readonly icon: React.ComponentType<{ className?: string }>;
+  readonly onRequest: () => void;
+  readonly requesting: boolean;
+  readonly error: string | null;
 }) {
   const isAudio = kind === 'audio';
+  const grantLabel = isAudio ? 'Grant Microphone Permission' : 'Grant Camera Permission';
+  const buttonLabel = requesting ? 'Requesting...' : grantLabel;
   return (
     <div className="space-y-2">
       <p className="text-[11px] text-muted-foreground">
@@ -427,11 +430,7 @@ function GrantPermissionPrompt({
         disabled={requesting}
       >
         <Icon className="size-3" />
-        {requesting
-          ? 'Requesting...'
-          : isAudio
-            ? 'Grant Microphone Permission'
-            : 'Grant Camera Permission'}
+        {buttonLabel}
       </Button>
       {error ? <p className="text-[10px] text-destructive">{error}</p> : null}
     </div>
@@ -444,10 +443,10 @@ function ToggleChip({
   active,
   onClick,
 }: {
-  label: string;
-  icon: React.ComponentType<{ className?: string }>;
-  active: boolean;
-  onClick: () => void;
+  readonly label: string;
+  readonly icon: React.ComponentType<{ className?: string }>;
+  readonly active: boolean;
+  readonly onClick: () => void;
 }) {
   return (
     <button
