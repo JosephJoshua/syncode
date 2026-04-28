@@ -2,7 +2,7 @@ import { Button } from '@syncode/ui';
 import { useQuery } from '@tanstack/react-query';
 import { createFileRoute } from '@tanstack/react-router';
 import { Sparkles } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AiFeedbackMarkdown } from '@/components/session-report/ai-feedback-rich-text.js';
 import {
@@ -375,7 +375,7 @@ function SessionFeedbackPage() {
   );
 }
 
-function SectionGroup({ label, children }: { label: string; children: React.ReactNode }) {
+function SectionGroup({ label, children }: { label: string; children: ReactNode }) {
   return (
     <section className="space-y-3">
       <div className="flex items-center gap-3">
