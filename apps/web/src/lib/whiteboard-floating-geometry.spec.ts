@@ -107,20 +107,46 @@ describe('clampSize', () => {
 });
 
 describe('readGeom / writeGeom', () => {
-  // CI's coverage runner ships a localStorage shim without a `clear()`
-  // method. Use removeItem on each known key so the cleanup works in every
-  // jsdom variant (vitest happy-dom, v8 coverage proxy, etc.).
+  // CI's coverage runner ships a localStorage shim with broken methods
+  // (setItem, removeItem, clear all throw or are undefined). Install a
+  // deterministic in-memory implementation on window for the duration of
+  // this suite so the tests run identically everywhere.
   const TEST_KEY = 'whiteboard:floating:geom:room-1:user-1';
-  const reset = () => {
-    try {
-      window.localStorage.removeItem(TEST_KEY);
-    } catch {
-      // ignore environments without localStorage at all
-    }
-  };
+  let realLocalStorage: Storage | undefined;
+  let store: Map<string, string>;
 
-  beforeEach(reset);
-  afterEach(reset);
+  beforeEach(() => {
+    store = new Map();
+    realLocalStorage = window.localStorage;
+    Object.defineProperty(window, 'localStorage', {
+      configurable: true,
+      writable: true,
+      value: {
+        getItem: (key: string) => store.get(key) ?? null,
+        setItem: (key: string, value: string) => {
+          store.set(key, value);
+        },
+        removeItem: (key: string) => {
+          store.delete(key);
+        },
+        clear: () => store.clear(),
+        key: (i: number) => Array.from(store.keys())[i] ?? null,
+        get length() {
+          return store.size;
+        },
+      } satisfies Storage,
+    });
+  });
+
+  afterEach(() => {
+    if (realLocalStorage !== undefined) {
+      Object.defineProperty(window, 'localStorage', {
+        configurable: true,
+        writable: true,
+        value: realLocalStorage,
+      });
+    }
+  });
 
   it('GIVEN no value persisted WHEN reading THEN returns null', () => {
     expect(readGeom(TEST_KEY)).toBeNull();
