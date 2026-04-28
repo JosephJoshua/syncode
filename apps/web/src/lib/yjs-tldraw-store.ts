@@ -93,6 +93,53 @@ const hydrateFromRemote = (store: TLStore, records: TLRecord[]): void => {
   });
 };
 
+// Forward a tldraw HistoryEntry into the shared Y.Map. Sanitize each record
+// via JSON round-trip so non-cloneable fields don't poison Yjs's internal
+// structuredClone path.
+export const applyHistoryEntryToYMap = (
+  entry: HistoryEntry<TLRecord>,
+  yRecords: Y.Map<TLRecord>,
+): void => {
+  const writes: Array<() => void> = [];
+
+  for (const [id, record] of Object.entries(entry.changes.added)) {
+    const sanitized = sanitizeForYjs(record);
+    if (sanitized) writes.push(() => yRecords.set(id, sanitized));
+  }
+  for (const [id, [, after]] of Object.entries(entry.changes.updated)) {
+    const sanitized = sanitizeForYjs(after);
+    if (sanitized) writes.push(() => yRecords.set(id, sanitized));
+  }
+  for (const id of Object.keys(entry.changes.removed)) {
+    writes.push(() => yRecords.delete(id));
+  }
+
+  for (let i = 0; i < writes.length; i += MAX_BATCH_PER_TRANSACTION) {
+    const slice = writes.slice(i, i + MAX_BATCH_PER_TRANSACTION);
+    for (const write of slice) write();
+  }
+};
+
+// Stamp author metadata onto every locally-created record so the legend and
+// layer-aware UI can derive ownership without any extra plumbing. Returns
+// remote-source records unchanged.
+export const stampMeta = <T extends TLRecord & { meta?: Record<string, unknown> }>(
+  record: T,
+  source: 'remote' | 'user',
+  userId: string,
+  getLayer: () => WhiteboardLayer,
+): T => {
+  if (source !== 'user') return record;
+  const existing = (record.meta ?? {}) as Partial<WhiteboardShapeMeta>;
+  if (existing.authorId && existing.layer && existing.createdAt) return record;
+  const meta: WhiteboardShapeMeta = {
+    authorId: existing.authorId ?? userId,
+    layer: existing.layer ?? getLayer(),
+    createdAt: existing.createdAt ?? Date.now(),
+  };
+  return { ...record, meta: { ...existing, ...meta } };
+};
+
 export function createYjsTldrawStore({
   doc,
   assetStore,
@@ -273,45 +320,4 @@ export function useYjsTldrawStore(options: UseYjsTldrawStoreOptions): UseYjsTldr
   }, [result]);
 
   return { store: result.store, undoManager: result.undoManager, status };
-}
-
-export function applyHistoryEntryToYMap(
-  entry: HistoryEntry<TLRecord>,
-  yRecords: Y.Map<TLRecord>,
-): void {
-  const writes: Array<() => void> = [];
-
-  for (const [id, record] of Object.entries(entry.changes.added)) {
-    const sanitized = sanitizeForYjs(record);
-    if (sanitized) writes.push(() => yRecords.set(id, sanitized));
-  }
-  for (const [id, [, after]] of Object.entries(entry.changes.updated)) {
-    const sanitized = sanitizeForYjs(after);
-    if (sanitized) writes.push(() => yRecords.set(id, sanitized));
-  }
-  for (const id of Object.keys(entry.changes.removed)) {
-    writes.push(() => yRecords.delete(id));
-  }
-
-  for (let i = 0; i < writes.length; i += MAX_BATCH_PER_TRANSACTION) {
-    const slice = writes.slice(i, i + MAX_BATCH_PER_TRANSACTION);
-    for (const write of slice) write();
-  }
-}
-
-export function stampMeta<T extends TLRecord & { meta?: Record<string, unknown> }>(
-  record: T,
-  source: 'remote' | 'user',
-  userId: string,
-  getLayer: () => WhiteboardLayer,
-): T {
-  if (source !== 'user') return record;
-  const existing = (record.meta ?? {}) as Partial<WhiteboardShapeMeta>;
-  if (existing.authorId && existing.layer && existing.createdAt) return record;
-  const meta: WhiteboardShapeMeta = {
-    authorId: existing.authorId ?? userId,
-    layer: existing.layer ?? getLayer(),
-    createdAt: existing.createdAt ?? Date.now(),
-  };
-  return { ...record, meta: { ...existing, ...meta } };
 }
