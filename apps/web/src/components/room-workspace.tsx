@@ -284,6 +284,7 @@ export function RoomWorkspace({
   const [whiteboardViewMode, setWhiteboardViewMode] = useState<'tab' | 'floating'>('tab');
   const [inlineWhiteboardHost, setInlineWhiteboardHost] = useState<HTMLDivElement | null>(null);
   const [floatingWhiteboardHost, setFloatingWhiteboardHost] = useState<HTMLDivElement | null>(null);
+  const [whiteboardParkingHost, setWhiteboardParkingHost] = useState<HTMLDivElement | null>(null);
   const [activeCommentLine, setActiveCommentLine] = useState(1);
   const rightMountedRef = useRef(false);
   const rightContentRef = useRef<HTMLDivElement>(null);
@@ -787,21 +788,23 @@ export function RoomWorkspace({
                         <span className="size-2 rounded-full bg-primary/60" />
                         solution.{languageExtension(language)}
                       </button>
-                      <button
-                        type="button"
-                        role="tab"
-                        aria-selected={activeCenterTab === 'whiteboard'}
-                        onClick={() => setActiveCenterTab('whiteboard')}
-                        className={cn(
-                          'ml-1 flex items-center gap-1.5 rounded-t-md border border-b-0 px-2.5 py-1 font-mono text-[11px] transition-colors',
-                          activeCenterTab === 'whiteboard'
-                            ? 'border-border bg-background text-foreground/80'
-                            : 'border-transparent bg-transparent text-muted-foreground hover:text-foreground',
-                        )}
-                      >
-                        <span className="size-2 rounded-full bg-amber-400/70" />
-                        {t('tabs.whiteboard')}
-                      </button>
+                      {room.myCapabilities.includes('whiteboard:view') ? (
+                        <button
+                          type="button"
+                          role="tab"
+                          aria-selected={activeCenterTab === 'whiteboard'}
+                          onClick={() => setActiveCenterTab('whiteboard')}
+                          className={cn(
+                            'ml-1 flex items-center gap-1.5 rounded-t-md border border-b-0 px-2.5 py-1 font-mono text-[11px] transition-colors',
+                            activeCenterTab === 'whiteboard'
+                              ? 'border-border bg-background text-foreground/80'
+                              : 'border-transparent bg-transparent text-muted-foreground hover:text-foreground',
+                          )}
+                        >
+                          <span className="size-2 rounded-full bg-amber-400/70" />
+                          {t('tabs.whiteboard')}
+                        </button>
+                      ) : null}
                     </div>
                     {isEditorReadOnly && activeCenterTab === 'code' ? (
                       <Badge variant="neutral" size="sm" className="text-[10px]">
@@ -1175,7 +1178,7 @@ export function RoomWorkspace({
         onConfirm={confirmSubmitPreview}
       />
 
-      {doc && awareness && currentUserId ? (
+      {doc && awareness && currentUserId && room.myCapabilities.includes('whiteboard:view') ? (
         <>
           {whiteboardViewMode === 'floating' ? (
             <FloatingWhiteboardPanel
@@ -1186,13 +1189,28 @@ export function RoomWorkspace({
             />
           ) : null}
 
+          {/* Off-screen "parking" container that's always present in the DOM.
+              Used as a fallback portal target during the tab <-> floating
+              transition, when the destination host's ref hasn't attached yet.
+              Without this, WhiteboardPortal would briefly receive null and
+              unmount the entire RoomWhiteboardPanel subtree (destroying the
+              tldraw store, undo manager, and any in-flight Yjs observers). */}
+          <div
+            ref={setWhiteboardParkingHost}
+            aria-hidden="true"
+            className="pointer-events-none fixed left-[-9999px] top-[-9999px] h-px w-px overflow-hidden"
+          />
+
           {/* Single mounted whiteboard panel — its DOM is portaled into
               either the inline tab host or the floating panel body, swapping
               targets without ever unmounting the tldraw subtree. */}
           <WhiteboardPortal
-            target={
-              whiteboardViewMode === 'floating' ? floatingWhiteboardHost : inlineWhiteboardHost
-            }
+            target={resolveWhiteboardTarget(
+              whiteboardViewMode,
+              inlineWhiteboardHost,
+              floatingWhiteboardHost,
+              whiteboardParkingHost,
+            )}
           >
             <RoomWhiteboardPanel
               doc={doc}
@@ -1236,6 +1254,23 @@ function WhiteboardPortal({
 }) {
   if (!target) return null;
   return createPortal(children, target);
+}
+
+// Pick the live portal target for the whiteboard subtree. Prefers the
+// destination matching the current view mode, but falls back to the parking
+// host whenever the destination's callback ref hasn't attached yet — the
+// alternative is briefly returning null to the portal, which would unmount
+// the entire tldraw subtree and discard editor state.
+function resolveWhiteboardTarget(
+  viewMode: 'tab' | 'floating',
+  inlineHost: HTMLElement | null,
+  floatingHost: HTMLElement | null,
+  parkingHost: HTMLElement | null,
+): HTMLElement | null {
+  if (viewMode === 'floating') {
+    return floatingHost ?? parkingHost ?? inlineHost;
+  }
+  return inlineHost ?? parkingHost ?? floatingHost;
 }
 
 type ExecutionPollResponse = ExecutionResultResponse | JobStatusResponse;
