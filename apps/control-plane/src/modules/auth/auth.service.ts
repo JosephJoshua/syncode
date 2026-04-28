@@ -386,7 +386,8 @@ export class AuthService {
       return Number.parseInt(duration, 10);
     }
 
-    const matchedDuration = duration.match(/^(\d+)([smhd])$/);
+    const durationPattern = /^(\d+)([smhd])$/;
+    const matchedDuration = durationPattern.exec(duration);
     if (!matchedDuration) {
       throw new Error(`Unsupported JWT duration format: ${duration}`);
     }

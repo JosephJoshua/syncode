@@ -111,7 +111,8 @@ export function validateEnv(config: Record<string, unknown>): EnvConfig {
 
   if (!parsed.success) {
     const errors = parsed.error.issues.map((err) => `${err.path.join('.')}: ${err.message}`);
-    throw new Error(`Environment validation failed:\n${errors.map((e) => `  - ${e}`).join('\n')}`);
+    const formatted = errors.map((e) => `  - ${e}`).join('\n');
+    throw new Error(`Environment validation failed:\n${formatted}`);
   }
 
   return parsed.data;

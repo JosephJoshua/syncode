@@ -214,11 +214,11 @@ export class UsersService {
     }
 
     const updates = {
-      ...(data.displayName !== undefined
-        ? { displayName: this.normalizeOptionalProfileText(data.displayName) }
-        : {}),
-      ...(data.bio !== undefined ? { bio: this.normalizeOptionalProfileText(data.bio) } : {}),
-      ...(normalizedUsername !== undefined ? { username: normalizedUsername } : {}),
+      ...(data.displayName === undefined
+        ? {}
+        : { displayName: this.normalizeOptionalProfileText(data.displayName) }),
+      ...(data.bio === undefined ? {} : { bio: this.normalizeOptionalProfileText(data.bio) }),
+      ...(normalizedUsername === undefined ? {} : { username: normalizedUsername }),
       updatedAt: new Date(),
     };
 

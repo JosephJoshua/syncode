@@ -157,27 +157,34 @@ describe('GET /sessions/:sessionId/snapshots', () => {
     const session = await insertSession(db, room.id, { language: 'python' });
     await insertSessionParticipant(db, session.id, owner.id);
 
-    await asUser(
+    const res = await asUser(
       request(app.getHttpServer()).get(`/sessions/${session.id}/snapshots`),
       stranger,
-    ).expect(403);
+    );
+
+    expect(res.status).toBe(403);
   });
 
   it('GIVEN non-existent session WHEN getting snapshots THEN returns 404', async () => {
     const user = await insertUser(db);
 
-    await asUser(
+    const res = await asUser(
       request(app.getHttpServer()).get('/sessions/00000000-0000-0000-0000-000000000000/snapshots'),
       user,
-    ).expect(404);
+    );
+
+    expect(res.status).toBe(404);
   });
 
   it('GIVEN malformed session id WHEN getting snapshots THEN returns 400', async () => {
     const user = await insertUser(db);
 
-    await asUser(request(app.getHttpServer()).get('/sessions/{sessionId}/snapshots'), user).expect(
-      400,
+    const res = await asUser(
+      request(app.getHttpServer()).get('/sessions/{sessionId}/snapshots'),
+      user,
     );
+
+    expect(res.status).toBe(400);
   });
 });
 
@@ -222,16 +229,20 @@ describe('GET /sessions/:id', () => {
     const session = await insertSession(db, room.id);
     await insertSessionParticipant(db, session.id, owner.id);
 
-    await asUser(request(app.getHttpServer()).get(`/sessions/${session.id}`), stranger).expect(403);
+    const res = await asUser(request(app.getHttpServer()).get(`/sessions/${session.id}`), stranger);
+
+    expect(res.status).toBe(403);
   });
 
   it('GIVEN non-existent session WHEN getting THEN returns 404', async () => {
     const user = await insertUser(db);
 
-    await asUser(
+    const res = await asUser(
       request(app.getHttpServer()).get('/sessions/00000000-0000-0000-0000-000000000000'),
       user,
-    ).expect(404);
+    );
+
+    expect(res.status).toBe(404);
   });
 });
 
@@ -305,7 +316,9 @@ describe('DELETE /sessions/:id', () => {
     const session = await insertSession(db, room.id);
     await insertSessionParticipant(db, session.id, user.id);
 
-    await asUser(request(app.getHttpServer()).delete(`/sessions/${session.id}`), user).expect(204);
+    const res = await asUser(request(app.getHttpServer()).delete(`/sessions/${session.id}`), user);
+
+    expect(res.status).toBe(204);
   });
 
   it('GIVEN non-participant WHEN deleting session THEN returns 403', async () => {
@@ -315,17 +328,22 @@ describe('DELETE /sessions/:id', () => {
     const session = await insertSession(db, room.id);
     await insertSessionParticipant(db, session.id, owner.id);
 
-    await asUser(request(app.getHttpServer()).delete(`/sessions/${session.id}`), stranger).expect(
-      403,
+    const res = await asUser(
+      request(app.getHttpServer()).delete(`/sessions/${session.id}`),
+      stranger,
     );
+
+    expect(res.status).toBe(403);
   });
 
   it('GIVEN non-existent session WHEN deleting THEN returns 404', async () => {
     const user = await insertUser(db);
 
-    await asUser(
+    const res = await asUser(
       request(app.getHttpServer()).delete('/sessions/00000000-0000-0000-0000-000000000000'),
       user,
-    ).expect(404);
+    );
+
+    expect(res.status).toBe(404);
   });
 });
