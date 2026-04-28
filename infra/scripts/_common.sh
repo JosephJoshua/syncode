@@ -70,23 +70,33 @@ COMPOSE_ARGS=()
 init_compose_args() {
   COMPOSE_ARGS=("-f" "$REPO_ROOT/docker-compose.prod.yml")
 
-  if [ -f "$REPO_ROOT/.env" ]; then
-    COMPOSE_ARGS+=("--env-file" "$REPO_ROOT/.env")
+  local env_file
+  if [ "$STAGING" = true ]; then
+    env_file="$REPO_ROOT/.env.staging"
+    COMPOSE_ARGS+=("-p" "syncode-staging")
+  else
+    env_file="$REPO_ROOT/.env.production"
   fi
 
-  if [ "$STAGING" = true ]; then
-    export IMAGE_TAG=develop
-    export NGINX_PORT=4444
-    export GRAFANA_PORT=3335
-    export GRAFANA_SUBDOMAIN=grafana.staging
-    COMPOSE_ARGS+=("-p" "syncode-staging")
+  if [ ! -f "$env_file" ]; then
+    error "$env_file not found"
+    error "Run setup.sh and populate it with environment-specific secrets."
+    exit 1
   fi
+
+  COMPOSE_ARGS+=("--env-file" "$env_file")
 }
 
 # Other helpers
 require_env() {
-  if [ ! -f "$REPO_ROOT/.env" ]; then
-    error ".env file not found. Run setup.sh first:"
+  local file
+  if [ "$STAGING" = true ]; then
+    file="$REPO_ROOT/.env.staging"
+  else
+    file="$REPO_ROOT/.env.production"
+  fi
+  if [ ! -f "$file" ]; then
+    error "$file not found. Run setup.sh first:"
     echo "  ./infra/scripts/setup.sh"
     exit 1
   fi
