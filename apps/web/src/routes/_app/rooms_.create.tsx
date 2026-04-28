@@ -23,7 +23,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { Bot, Check, Code2, Copy, FileCode2, Globe, Lock, Minus, Plus, Users } from 'lucide-react';
 import { motion } from 'motion/react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
@@ -73,6 +73,29 @@ const createRoomFormSchema = z.object({
   mode: z.enum(ROOM_MODES),
 });
 type CreateRoomFormData = z.infer<typeof createRoomFormSchema>;
+
+type CreateRoomFormSetValue = ReturnType<typeof useForm<CreateRoomFormData>>['setValue'];
+
+async function resolveCreateRoomError(
+  error: unknown,
+  t: (key: string) => string,
+  setValue: CreateRoomFormSetValue,
+): Promise<string> {
+  const apiError = await readApiError(error);
+  if (!apiError) return t('create.createFailed');
+
+  if (apiError.details && typeof apiError.details === 'object') {
+    const details = apiError.details as Record<string, unknown>;
+    const problemError = getFieldErrorMessage(details, 'problemId');
+    const languageError = getFieldErrorMessage(details, 'language');
+    if (problemError) {
+      setValue('problemId', '', { shouldValidate: false });
+    }
+    if (languageError) return languageError;
+  }
+
+  return apiError.message ?? t('create.createFailed');
+}
 
 function isMockProblemId(problemId: string): boolean {
   return problemId.startsWith(MOCK_PROBLEM_PREFIX);
@@ -129,6 +152,7 @@ function CreateRoomPage() {
   const [createdRoomCode, setCreatedRoomCode] = useState<string | null>(null);
   const { copied, copy } = useClipboard();
   const [isProblemOpen, setIsProblemOpen] = useState(false);
+  const problemListboxId = useId();
   const [submissionError, setSubmissionError] = useState<string | null>(null);
   const [submittedData, setSubmittedData] = useState<CreateRoomFormData | null>(null);
 
@@ -163,7 +187,7 @@ function CreateRoomPage() {
         },
       }),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['rooms'] });
+      queryClient.invalidateQueries({ queryKey: ['rooms'] }).catch(() => undefined);
     },
   });
 
@@ -177,33 +201,11 @@ function CreateRoomPage() {
       setCreatedRoomCode(room.roomCode);
       setInviteLink(
         data.isPublic
-          ? `${window.location.origin}/rooms/${room.roomId}`
-          : `${window.location.origin}/rooms/${room.roomId}?code=${room.roomCode}`,
+          ? `${globalThis.window.location.origin}/rooms/${room.roomId}`
+          : `${globalThis.window.location.origin}/rooms/${room.roomId}?code=${room.roomCode}`,
       );
     } catch (error) {
-      const apiError = await readApiError(error);
-
-      if (!apiError) {
-        setSubmissionError(t('create.createFailed'));
-        return;
-      }
-
-      if (apiError.details && typeof apiError.details === 'object') {
-        const details = apiError.details as Record<string, unknown>;
-        const problemError = getFieldErrorMessage(details, 'problemId');
-        const languageError = getFieldErrorMessage(details, 'language');
-
-        if (problemError) {
-          setValue('problemId', '', { shouldValidate: false });
-        }
-
-        if (languageError) {
-          setSubmissionError(languageError);
-          return;
-        }
-      }
-
-      setSubmissionError(apiError.message ?? t('create.createFailed'));
+      setSubmissionError(await resolveCreateRoomError(error, t, setValue));
     }
   };
 
@@ -258,6 +260,8 @@ function CreateRoomPage() {
                       type="button"
                       role="combobox"
                       aria-expanded={isProblemOpen}
+                      aria-controls={problemListboxId}
+                      aria-haspopup="listbox"
                       className={cn(
                         'flex h-11 w-full items-center gap-2 rounded-lg border border-input bg-background px-3.5 text-left text-sm font-medium outline-none transition-[border-color,background-color,box-shadow] focus-visible:border-ring/60 focus-visible:ring-3 focus-visible:ring-ring/40',
                         !selectedProblemLabel && 'text-muted-foreground',
@@ -273,7 +277,7 @@ function CreateRoomPage() {
                   <PopoverContent className="p-0">
                     <Command>
                       <CommandInput placeholder={t('create.problemPlaceholder')} />
-                      <CommandList>
+                      <CommandList id={problemListboxId}>
                         <CommandEmpty>{t('create.noMatchingProblems')}</CommandEmpty>
                         <CommandGroup>
                           {availableProblems.map((problem) => (
@@ -651,14 +655,16 @@ function CreateRoomPage() {
                         const isPublic = submittedData?.isPublic ?? false;
 
                         if (!isPublic && createdRoomCode) {
-                          window.location.assign(`/rooms/${createdRoomId}?code=${createdRoomCode}`);
+                          globalThis.window.location.assign(
+                            `/rooms/${createdRoomId}?code=${createdRoomCode}`,
+                          );
                           return;
                         }
 
-                        void navigate({
+                        navigate({
                           to: '/rooms/$roomId',
                           params: { roomId: createdRoomId },
-                        });
+                        }).catch(() => undefined);
                       }}
                       disabled={!createdRoomId}
                     >
