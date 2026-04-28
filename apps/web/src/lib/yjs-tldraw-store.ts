@@ -41,6 +41,58 @@ export interface CreateYjsTldrawStoreResult {
 // writes spill into subsequent transactions but still preserve ordering.
 const MAX_BATCH_PER_TRANSACTION = 256;
 
+// Defensive runtime guard: only objects with a string id and typeName
+// (matching tldraw's record shape) are treated as records. Filters out
+// legacy Y.Map sub-instances and anything else that ended up in the
+// whiteboard root by accident. Declared as a `const` arrow function so it
+// is fully initialized by the time the closures inside createYjsTldrawStore
+// reference it during HMR/bundler module evaluation.
+const isTldrawRecord = (value: unknown, key: string): value is TLRecord => {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as { id?: unknown; typeName?: unknown };
+  if (typeof candidate.id !== 'string' || typeof candidate.typeName !== 'string') return false;
+  return candidate.id === key;
+};
+
+// JSON round-trip strips functions, undefined, symbols, and any field that
+// would make Yjs's internal structuredClone choke. tldraw records are
+// documented to be JSON-serializable; this is purely defensive against
+// stray non-clonable references getting attached by upstream code paths
+// (e.g. asset preloaders that briefly attach a Promise resolver).
+export const sanitizeForYjs = <T>(value: T): T | null => {
+  try {
+    return JSON.parse(JSON.stringify(value)) as T;
+  } catch {
+    return null;
+  }
+};
+
+// Apply remote records to the local store one-by-one, tolerating per-record
+// validation failures. Returns the records that failed so the caller can
+// retry once the rest of the batch has been applied (resolving simple
+// dependency ordering races).
+const applyRecordsResilient = (store: TLStore, records: TLRecord[]): TLRecord[] => {
+  const failed: TLRecord[] = [];
+  for (const record of records) {
+    try {
+      store.put([record]);
+    } catch (error) {
+      failed.push(record);
+      if (import.meta.env?.DEV) {
+        console.warn('[whiteboard] failed to apply record', record.id, error);
+      }
+    }
+  }
+  return failed;
+};
+
+const hydrateFromRemote = (store: TLStore, records: TLRecord[]): void => {
+  store.mergeRemoteChanges(() => {
+    const retry = applyRecordsResilient(store, records);
+    if (retry.length > 0) applyRecordsResilient(store, retry);
+  });
+};
+
 export function createYjsTldrawStore({
   doc,
   assetStore,
@@ -223,46 +275,6 @@ export function useYjsTldrawStore(options: UseYjsTldrawStoreOptions): UseYjsTldr
   return { store: result.store, undoManager: result.undoManager, status };
 }
 
-// Apply remote records to the local store one-by-one, tolerating per-record
-// validation failures. Returns the records that failed so the caller can
-// retry once the rest of the batch has been applied (resolving simple
-// dependency ordering races).
-function applyRecordsResilient(store: TLStore, records: TLRecord[]): TLRecord[] {
-  const failed: TLRecord[] = [];
-  for (const record of records) {
-    try {
-      store.put([record]);
-    } catch (error) {
-      failed.push(record);
-      if (import.meta.env?.DEV) {
-        console.warn('[whiteboard] failed to apply record', record.id, error);
-      }
-    }
-  }
-  return failed;
-}
-
-// Defensive runtime guard: only objects with a string id and typeName
-// (matching tldraw's record shape) are treated as records. Filters out
-// legacy Y.Map sub-instances and anything else that ended up in the
-// whiteboard root by accident.
-function isTldrawRecord(value: unknown, key: string): value is TLRecord {
-  if (!value || typeof value !== 'object') return false;
-  const candidate = value as { id?: unknown; typeName?: unknown };
-  if (typeof candidate.id !== 'string' || typeof candidate.typeName !== 'string') return false;
-  // Y.Map instances wouldn't pass the shape check above, but we double-check
-  // by ruling out anything whose id doesn't match its map key (a property of
-  // tldraw's id-as-key invariant).
-  return candidate.id === key;
-}
-
-function hydrateFromRemote(store: TLStore, records: TLRecord[]): void {
-  store.mergeRemoteChanges(() => {
-    const retry = applyRecordsResilient(store, records);
-    if (retry.length > 0) applyRecordsResilient(store, retry);
-  });
-}
-
 export function applyHistoryEntryToYMap(
   entry: HistoryEntry<TLRecord>,
   yRecords: Y.Map<TLRecord>,
@@ -284,19 +296,6 @@ export function applyHistoryEntryToYMap(
   for (let i = 0; i < writes.length; i += MAX_BATCH_PER_TRANSACTION) {
     const slice = writes.slice(i, i + MAX_BATCH_PER_TRANSACTION);
     for (const write of slice) write();
-  }
-}
-
-// JSON round-trip strips functions, undefined, symbols, and any field that
-// would make Yjs's internal structuredClone choke. tldraw records are
-// documented to be JSON-serializable; this is purely defensive against
-// stray non-clonable references getting attached by upstream code paths
-// (e.g. asset preloaders that briefly attach a Promise resolver).
-export function sanitizeForYjs<T>(value: T): T | null {
-  try {
-    return JSON.parse(JSON.stringify(value)) as T;
-  } catch {
-    return null;
   }
 }
 
