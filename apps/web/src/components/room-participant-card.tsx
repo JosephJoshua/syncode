@@ -40,14 +40,20 @@ const ASSIGNABLE_ROLES: Array<{ value: RoomRole; labelKey: string }> = [
   { value: 'observer', labelKey: 'roleSelect.observer' },
 ];
 
+function getPresenceDotBg(isMediaConnected: boolean, isActive: boolean): string {
+  if (isMediaConnected) return 'bg-emerald-400';
+  if (isActive) return 'bg-muted-foreground/50';
+  return 'bg-muted-foreground/20';
+}
+
 function getBadgeTranslateClass({
   isHost,
   showParticipantActions,
   isParticipantMenuOpen,
 }: {
-  isHost: boolean;
-  showParticipantActions: boolean;
-  isParticipantMenuOpen: boolean;
+  readonly isHost: boolean;
+  readonly showParticipantActions: boolean;
+  readonly isParticipantMenuOpen: boolean;
 }): string | undefined {
   // No actions slot rendered: no extra gap-1.5 space, so no offset needed.
   if (!showParticipantActions) {
@@ -73,10 +79,10 @@ function PresenceDot({
   isActive,
   size = 'sm',
 }: {
-  isMediaConnected: boolean;
-  isMediaMuted: boolean;
-  isActive: boolean;
-  size?: 'sm' | 'md';
+  readonly isMediaConnected: boolean;
+  readonly isMediaMuted: boolean;
+  readonly isActive: boolean;
+  readonly size?: 'sm' | 'md';
 }) {
   if (isMediaConnected && isMediaMuted) {
     const cls =
@@ -97,11 +103,7 @@ function PresenceDot({
         size === 'sm'
           ? '-bottom-0.5 -right-0.5 size-2 border border-card'
           : '-bottom-0.5 -right-0.5 size-2.5 border-2 border-card',
-        isMediaConnected
-          ? 'bg-emerald-400'
-          : isActive
-            ? 'bg-muted-foreground/50'
-            : 'bg-muted-foreground/20',
+        getPresenceDotBg(isMediaConnected, isActive),
       )}
     />
   );
@@ -115,12 +117,12 @@ function MediaActionsContent({
   onLocalVolumeChange,
   onVideoHiddenToggle,
 }: {
-  isLocallyMuted: boolean;
-  isVideoHidden: boolean;
-  localVolume?: number;
-  onLocalMuteToggle?: (muted: boolean) => void;
-  onLocalVolumeChange?: (volume: number) => void;
-  onVideoHiddenToggle?: (hidden: boolean) => void;
+  readonly isLocallyMuted: boolean;
+  readonly isVideoHidden: boolean;
+  readonly localVolume?: number;
+  readonly onLocalMuteToggle?: (muted: boolean) => void;
+  readonly onLocalVolumeChange?: (volume: number) => void;
+  readonly onVideoHiddenToggle?: (hidden: boolean) => void;
 }) {
   return (
     <>
@@ -162,7 +164,7 @@ function MediaActionsContent({
   );
 }
 
-function ConnectionQualityIcon({ quality }: { quality?: string }) {
+function ConnectionQualityIcon({ quality }: { readonly quality?: string }) {
   if (!quality) return null;
   switch (quality) {
     case 'excellent':
@@ -214,15 +216,51 @@ interface RoomParticipantCardProps {
   compact?: boolean;
 }
 
-export function RoomParticipantCard({
+interface ParticipantViewState {
+  readonly displayName: string;
+  readonly initial: string;
+  readonly isMe: boolean;
+  readonly isHost: boolean;
+  readonly hasManageActions: boolean;
+  readonly hasMediaActions: boolean;
+  readonly hasSelfMicAction: boolean;
+  readonly showParticipantActions: boolean;
+}
+
+function deriveParticipantState(props: RoomParticipantCardProps): ParticipantViewState {
+  const displayName = props.participant.displayName ?? props.participant.username;
+  const isMe = props.participant.userId === props.currentUserId;
+  const isHost = props.participant.userId === props.roomHostId;
+  const hasManageActions = Boolean(
+    props.canManageParticipants &&
+      !isHost &&
+      (props.onTransferOwnership || props.onRemoveParticipant),
+  );
+  const hasMediaActions = Boolean(
+    !isMe && props.isMediaConnected && (props.onLocalMuteToggle || props.onVideoHiddenToggle),
+  );
+  const hasSelfMicAction = Boolean(isMe && props.isMediaConnected && props.onSelfMicrophoneToggle);
+  return {
+    displayName,
+    initial: displayName.charAt(0).toUpperCase(),
+    isMe,
+    isHost,
+    hasManageActions,
+    hasMediaActions,
+    hasSelfMicAction,
+    showParticipantActions: hasManageActions || hasMediaActions || hasSelfMicAction,
+  };
+}
+
+export function RoomParticipantCard(props: RoomParticipantCardProps) {
+  return props.compact ? <CompactParticipantRow {...props} /> : <FullParticipantCard {...props} />;
+}
+
+function CompactParticipantRow({
   participant,
-  currentUserId,
-  roomHostId,
-  canManageParticipants,
   isUpdatingRole,
   isTransferringOwnership,
   isRemovingParticipant = false,
-  rolesLocked = false,
   isSpeaking = false,
   isMediaConnected = false,
   isMediaMuted = false,
@@ -235,52 +273,88 @@ export function RoomParticipantCard({
   onLocalMuteToggle,
   onLocalVolumeChange,
   onVideoHiddenToggle,
-  onRoleChange,
   onTransferOwnership,
   onRemoveParticipant,
-  compact = false,
+  ...rest
 }: RoomParticipantCardProps) {
   const { t } = useTranslation('rooms');
-  const displayName = participant.displayName ?? participant.username;
-  const isMe = participant.userId === currentUserId;
-  const isHost = participant.userId === roomHostId;
-  const initial = displayName.charAt(0).toUpperCase();
-  const hasManageActions =
-    canManageParticipants && !isHost && (onTransferOwnership || onRemoveParticipant);
-  const hasMediaActions = !isMe && isMediaConnected && (onLocalMuteToggle || onVideoHiddenToggle);
-  const hasSelfMicAction = isMe && isMediaConnected && Boolean(onSelfMicrophoneToggle);
-  const showParticipantActions = Boolean(hasManageActions || hasMediaActions || hasSelfMicAction);
+  const props = {
+    participant,
+    isUpdatingRole,
+    isTransferringOwnership,
+    isRemovingParticipant,
+    isSpeaking,
+    isMediaConnected,
+    isMediaMuted,
+    connectionQuality,
+    isLocallyMuted,
+    isVideoHidden,
+    localVolume,
+    isSelfMicrophoneEnabled,
+    onSelfMicrophoneToggle,
+    onLocalMuteToggle,
+    onLocalVolumeChange,
+    onVideoHiddenToggle,
+    onTransferOwnership,
+    onRemoveParticipant,
+    ...rest,
+  };
+  const view = deriveParticipantState(props);
+  const {
+    displayName,
+    initial,
+    isMe,
+    isHost,
+    hasManageActions,
+    hasMediaActions,
+    hasSelfMicAction,
+    showParticipantActions,
+  } = view;
   const [isParticipantMenuOpen, setIsParticipantMenuOpen] = useState(false);
 
-  if (compact) {
-    return (
-      <div className="group flex items-center gap-2.5 py-2">
-        <div className="relative">
-          <Avatar
-            className={cn('size-6 text-[9px] transition-shadow', isSpeaking && 'speaking-ring')}
-          >
-            {participant.avatarUrl ? <AvatarImage src={participant.avatarUrl} /> : null}
-            <AvatarFallback>{initial}</AvatarFallback>
-          </Avatar>
-          <PresenceDot
-            isMediaConnected={isMediaConnected}
-            isMediaMuted={isMediaMuted}
-            isActive={participant.isActive}
-            size="sm"
-          />
-        </div>
-        <div className="flex min-w-0 flex-1 items-center gap-2">
-          <span className="truncate text-sm text-foreground">
-            {displayName}
-            {isMe ? <span className="ml-1 text-xs text-primary">{t('lobby.you')}</span> : null}
-          </span>
-          {isHost ? <Crown className="size-3 shrink-0 text-primary" /> : null}
-          {participant.isReady ? (
-            <CheckCircle2 className="size-3 shrink-0 text-emerald-400" />
+  return (
+    <div className="group flex items-center gap-2.5 py-2">
+      <div className="relative">
+        <Avatar
+          className={cn('size-6 text-[9px] transition-shadow', isSpeaking && 'speaking-ring')}
+        >
+          {participant.avatarUrl ? <AvatarImage src={participant.avatarUrl} /> : null}
+          <AvatarFallback>{initial}</AvatarFallback>
+        </Avatar>
+        <PresenceDot
+          isMediaConnected={isMediaConnected}
+          isMediaMuted={isMediaMuted}
+          isActive={participant.isActive}
+          size="sm"
+        />
+      </div>
+      <div className="flex min-w-0 flex-1 items-center gap-2">
+        <span className="truncate text-sm text-foreground">
+          {displayName}
+          {isMe ? <span className="ml-1 text-xs text-primary">{t('lobby.you')}</span> : null}
+        </span>
+        {isHost ? <Crown className="size-3 shrink-0 text-primary" /> : null}
+        {participant.isReady ? <CheckCircle2 className="size-3 shrink-0 text-emerald-400" /> : null}
+        <ConnectionQualityIcon quality={connectionQuality} />
+      </div>
+      <div className="flex shrink-0 items-center justify-end gap-1.5">
+        <div
+          className={cn(
+            'flex items-center gap-1.5 transition-transform duration-200 ease-out',
+            showParticipantActions &&
+              (isParticipantMenuOpen
+                ? '-translate-x-0.5'
+                : 'group-hover:-translate-x-0.5 group-focus-within:-translate-x-0.5'),
+          )}
+        >
+          <Badge variant={participant.role} className="text-[10px]">
+            {t(ROLE_LABEL_KEYS[participant.role])}
+          </Badge>
+          {isUpdatingRole ? (
+            <Loader2 className="size-3 animate-spin text-muted-foreground" />
           ) : null}
-          <ConnectionQualityIcon quality={connectionQuality} />
         </div>
-        <div className="flex shrink-0 items-center justify-end gap-1.5">
+        {showParticipantActions ? (
           <div
             className={cn(
               'flex items-center gap-1.5 transition-transform duration-200 ease-out',
@@ -291,95 +365,136 @@ export function RoomParticipantCard({
               }),
             )}
           >
-            <Badge variant={participant.role} className="text-[10px]">
-              {t(ROLE_LABEL_KEYS[participant.role])}
-            </Badge>
-            {isUpdatingRole ? (
-              <Loader2 className="size-3 animate-spin text-muted-foreground" />
-            ) : null}
-          </div>
-          {showParticipantActions ? (
-            <div
-              className={cn(
-                'overflow-hidden transition-all duration-200 ease-out',
-                isParticipantMenuOpen ? 'w-6' : 'w-0 group-hover:w-6 group-focus-within:w-6',
-              )}
-            >
-              <DropdownMenu open={isParticipantMenuOpen} onOpenChange={setIsParticipantMenuOpen}>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-xs"
-                    className={cn(
-                      'size-6 text-muted-foreground transition-all duration-200 ease-out',
-                      isParticipantMenuOpen
-                        ? 'translate-x-0 opacity-100'
-                        : 'opacity-0 group-hover:translate-x-0 group-hover:opacity-100 group-focus-within:translate-x-0 group-focus-within:opacity-100',
-                    )}
-                    aria-label={t('workspace.participantActions')}
-                  >
-                    <EllipsisVertical className="size-3" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent
-                  align="end"
-                  side="bottom"
-                  className="min-w-44 rounded-xl border-border/60"
+            <DropdownMenu open={isParticipantMenuOpen} onOpenChange={setIsParticipantMenuOpen}>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-xs"
+                  className={cn(
+                    'size-6 text-muted-foreground transition-all duration-200 ease-out',
+                    isParticipantMenuOpen
+                      ? 'translate-x-0 opacity-100'
+                      : 'opacity-0 group-hover:translate-x-0 group-hover:opacity-100 group-focus-within:translate-x-0 group-focus-within:opacity-100',
+                  )}
+                  aria-label={t('workspace.participantActions')}
                 >
-                  {hasSelfMicAction ? (
-                    <SelfMicMenuItem
-                      enabled={isSelfMicrophoneEnabled}
-                      onToggle={() => onSelfMicrophoneToggle?.()}
-                      t={t}
-                    />
-                  ) : null}
-                  {hasMediaActions ? (
-                    <MediaActionsContent
-                      isLocallyMuted={isLocallyMuted}
-                      isVideoHidden={isVideoHidden}
-                      localVolume={localVolume}
-                      onLocalMuteToggle={onLocalMuteToggle}
-                      onLocalVolumeChange={onLocalVolumeChange}
-                      onVideoHiddenToggle={onVideoHiddenToggle}
-                    />
-                  ) : null}
-                  {hasManageActions ? (
-                    <>
-                      <DropdownMenuItem
-                        disabled={isTransferringOwnership || isRemovingParticipant}
-                        onSelect={() => onTransferOwnership?.(participant.userId, displayName)}
-                      >
-                        {isTransferringOwnership ? (
-                          <Loader2 className="size-3.5 animate-spin text-muted-foreground" />
-                        ) : (
-                          <Crown className="size-3.5 text-muted-foreground" />
-                        )}
-                        {t('workspace.transferOwnership')}
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        disabled={
-                          !onRemoveParticipant || isTransferringOwnership || isRemovingParticipant
-                        }
-                        onSelect={() => onRemoveParticipant?.(participant.userId, displayName)}
-                      >
-                        {isRemovingParticipant ? (
-                          <Loader2 className="size-3.5 animate-spin text-muted-foreground" />
-                        ) : (
-                          <Trash2 className="size-3.5 text-muted-foreground" />
-                        )}
-                        {t('workspace.removeParticipant')}
-                      </DropdownMenuItem>
-                    </>
-                  ) : null}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          ) : null}
-        </div>
+                  <EllipsisVertical className="size-3" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="end"
+                side="bottom"
+                className="min-w-44 rounded-xl border-border/60"
+              >
+                {hasSelfMicAction ? (
+                  <SelfMicMenuItem
+                    enabled={isSelfMicrophoneEnabled}
+                    onToggle={() => onSelfMicrophoneToggle?.()}
+                    t={t}
+                  />
+                ) : null}
+                {hasMediaActions ? (
+                  <MediaActionsContent
+                    isLocallyMuted={isLocallyMuted}
+                    isVideoHidden={isVideoHidden}
+                    localVolume={localVolume}
+                    onLocalMuteToggle={onLocalMuteToggle}
+                    onLocalVolumeChange={onLocalVolumeChange}
+                    onVideoHiddenToggle={onVideoHiddenToggle}
+                  />
+                ) : null}
+                {hasManageActions ? (
+                  <>
+                    <DropdownMenuItem
+                      disabled={isTransferringOwnership || isRemovingParticipant}
+                      onSelect={() => onTransferOwnership?.(participant.userId, displayName)}
+                    >
+                      {isTransferringOwnership ? (
+                        <Loader2 className="size-3.5 animate-spin text-muted-foreground" />
+                      ) : (
+                        <Crown className="size-3.5 text-muted-foreground" />
+                      )}
+                      {t('workspace.transferOwnership')}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      disabled={
+                        !onRemoveParticipant || isTransferringOwnership || isRemovingParticipant
+                      }
+                      onSelect={() => onRemoveParticipant?.(participant.userId, displayName)}
+                    >
+                      {isRemovingParticipant ? (
+                        <Loader2 className="size-3.5 animate-spin text-muted-foreground" />
+                      ) : (
+                        <Trash2 className="size-3.5 text-muted-foreground" />
+                      )}
+                      {t('workspace.removeParticipant')}
+                    </DropdownMenuItem>
+                  </>
+                ) : null}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        ) : null}
       </div>
-    );
-  }
+    </div>
+  );
+}
+
+function FullParticipantCard({
+  participant,
+  isUpdatingRole,
+  isTransferringOwnership,
+  rolesLocked = false,
+  isSpeaking = false,
+  isMediaConnected = false,
+  isMediaMuted = false,
+  isLocallyMuted = false,
+  isVideoHidden = false,
+  localVolume,
+  isSelfMicrophoneEnabled = false,
+  onSelfMicrophoneToggle,
+  onLocalMuteToggle,
+  onLocalVolumeChange,
+  onVideoHiddenToggle,
+  onRoleChange,
+  onTransferOwnership,
+  canManageParticipants,
+  ...rest
+}: RoomParticipantCardProps) {
+  const { t } = useTranslation('rooms');
+  const props = {
+    participant,
+    isUpdatingRole,
+    isTransferringOwnership,
+    rolesLocked,
+    isSpeaking,
+    isMediaConnected,
+    isMediaMuted,
+    isLocallyMuted,
+    isVideoHidden,
+    localVolume,
+    isSelfMicrophoneEnabled,
+    onSelfMicrophoneToggle,
+    onLocalMuteToggle,
+    onLocalVolumeChange,
+    onVideoHiddenToggle,
+    onRoleChange,
+    onTransferOwnership,
+    canManageParticipants,
+    ...rest,
+  };
+  const view = deriveParticipantState(props);
+  const {
+    displayName,
+    initial,
+    isMe,
+    isHost,
+    hasManageActions,
+    hasMediaActions,
+    hasSelfMicAction,
+    showParticipantActions,
+  } = view;
 
   return (
     <div className="rounded-xl border border-border/60 bg-card/80 p-3">
@@ -505,9 +620,9 @@ function SelfMicMenuItem({
   onToggle,
   t,
 }: {
-  enabled: boolean;
-  onToggle: () => void;
-  t: (key: string) => string;
+  readonly enabled: boolean;
+  readonly onToggle: () => void;
+  readonly t: (key: string) => string;
 }) {
   return (
     <DropdownMenuItem onSelect={onToggle}>
