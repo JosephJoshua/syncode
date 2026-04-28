@@ -526,19 +526,29 @@ export function useYjsTldrawStore(options: UseYjsTldrawStoreOptions): UseYjsTldr
   const getLayerRef = useRef(getLayer);
   getLayerRef.current = getLayer;
 
-  const result = useMemo(
-    () =>
-      createYjsTldrawStore({
-        doc,
-        assetStore,
-        awareness,
-        userId,
-        userName,
-        userColor,
-        getLayer: () => getLayerRef.current(),
-      }),
-    [doc, assetStore, awareness, userId, userName, userColor],
-  );
+  // Use a lazy ref instead of useMemo. createYjsTldrawStore registers a
+  // Y.Map observer as a side effect — using useMemo means React 19
+  // StrictMode dev double-renders create two stores AND two observers,
+  // but only the latter's dispose() ever runs. The orphan observer keeps
+  // firing on every Yjs update, writing records to a ghost store while
+  // the editor renders an empty default. The lazy ref ensures the store
+  // is built exactly once per component instance, and the dispose effect
+  // cleans up the SAME store. Across StrictMode unmount/remount React
+  // throws away the ref entirely, so the next mount gets a fresh
+  // store-and-observer pair.
+  const resultRef = useRef<CreateYjsTldrawStoreResult | null>(null);
+  if (resultRef.current === null) {
+    resultRef.current = createYjsTldrawStore({
+      doc,
+      assetStore,
+      awareness,
+      userId,
+      userName,
+      userColor,
+      getLayer: () => getLayerRef.current(),
+    });
+  }
+  const result = resultRef.current;
 
   const [status, setStatus] = useState<WhiteboardConnectionStatus>('ready');
 
@@ -546,6 +556,9 @@ export function useYjsTldrawStore(options: UseYjsTldrawStoreOptions): UseYjsTldr
     setStatus('ready');
     return () => {
       result.dispose();
+      // Clear the ref so a remount (StrictMode or otherwise) creates a
+      // fresh store instead of reusing the disposed one.
+      resultRef.current = null;
     };
   }, [result]);
 
