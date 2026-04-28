@@ -1,4 +1,4 @@
-import { SUPPORTED_LANGUAGES } from '@syncode/shared';
+import { ROOM_STATUSES, SUPPORTED_LANGUAGES } from '@syncode/shared';
 import { z } from 'zod';
 import { defineRoute } from '../route-utils.js';
 
@@ -15,6 +15,10 @@ export const snapshotReadyPayloadSchema = z
     trigger: z
       .enum(['periodic', 'phase_change', 'submission', 'session_end'])
       .describe('What triggered the snapshot'),
+    phase: z
+      .enum(ROOM_STATUSES)
+      .nullable()
+      .describe('Active room phase at the moment of the snapshot. Useful for phase_change events.'),
   })
   .strict();
 

@@ -60,7 +60,7 @@ export class InternalController {
   @ApiExcludeEndpoint()
   async handleSnapshotReady(@Body() payload: SnapshotReadyDto): Promise<{ success: boolean }> {
     try {
-      const { roomId, snapshot, code, language, timestamp, trigger } = payload;
+      const { roomId, snapshot, code, language, timestamp, trigger, phase } = payload;
 
       const [session] = await this.db
         .select({ id: sessions.id, language: sessions.language })
@@ -84,6 +84,7 @@ export class InternalController {
           code,
           language: persistedLanguage,
           trigger,
+          phase,
           linesOfCode: code ? code.split('\n').length : 0,
           createdAt: new Date(timestamp),
         });
