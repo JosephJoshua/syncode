@@ -48,17 +48,52 @@ export interface CreateYjsTldrawStoreResult {
 // writes spill into subsequent transactions but still preserve ordering.
 const MAX_BATCH_PER_TRANSACTION = 256;
 
+// tldraw record types that are part of the SHARED document state and should
+// be replicated through Yjs to every peer. Everything else (camera, pointer,
+// instance state, page state, presence) is per-client session state and must
+// stay local — replicating it would create a feedback loop because tldraw
+// mutates session records on every render tick.
+const DOCUMENT_RECORD_TYPES = new Set(['shape', 'asset', 'page', 'document', 'binding']);
+
+const isDocumentRecord = (record: { typeName: string }): boolean =>
+  DOCUMENT_RECORD_TYPES.has(record.typeName);
+
+// Tally only document-scoped records in a HistoryEntry. Session/presence
+// records are excluded so noisy camera/pointer churn doesn't spam the
+// diagnostic log or trigger empty Yjs forwards.
+const countDocumentRecords = (
+  entry: HistoryEntry<TLRecord>,
+): { added: number; updated: number; removed: number; total: number } => {
+  let added = 0;
+  let updated = 0;
+  let removed = 0;
+  for (const record of Object.values(entry.changes.added)) {
+    if (isDocumentRecord(record as { typeName: string })) added += 1;
+  }
+  for (const [, [before, after]] of Object.entries(entry.changes.updated)) {
+    const r = (after ?? before) as { typeName: string } | undefined;
+    if (r && isDocumentRecord(r)) updated += 1;
+  }
+  for (const record of Object.values(entry.changes.removed)) {
+    if (isDocumentRecord(record as { typeName: string })) removed += 1;
+  }
+  return { added, updated, removed, total: added + updated + removed };
+};
+
 // Defensive runtime guard: only objects with a string id and typeName
-// (matching tldraw's record shape) are treated as records. Filters out
-// legacy Y.Map sub-instances and anything else that ended up in the
-// whiteboard root by accident. Declared as a `const` arrow function so it
-// is fully initialized by the time the closures inside createYjsTldrawStore
-// reference it during HMR/bundler module evaluation.
+// (matching tldraw's record shape) are treated as records. Also filters out
+// session/presence-scoped types (camera, pointer, instance) so we don't
+// replicate per-client state into the shared doc, and rejects legacy Y.Map
+// sub-instances or anything else that ended up in the whiteboard root by
+// accident. Declared as a `const` arrow function so it's fully initialized
+// by the time the closures inside createYjsTldrawStore reference it during
+// HMR/bundler module evaluation.
 const isTldrawRecord = (value: unknown, key: string): value is TLRecord => {
   if (!value || typeof value !== 'object') return false;
   const candidate = value as { id?: unknown; typeName?: unknown };
   if (typeof candidate.id !== 'string' || typeof candidate.typeName !== 'string') return false;
-  return candidate.id === key;
+  if (candidate.id !== key) return false;
+  return DOCUMENT_RECORD_TYPES.has(candidate.typeName);
 };
 
 // JSON round-trip strips functions, undefined, symbols, and any field that
@@ -122,11 +157,14 @@ const normalizeShapeForYjs = <T extends TLRecord>(record: T): T => {
   return { ...record, opacity: 1 } as T;
 };
 
-// Forward a tldraw HistoryEntry into the shared Y.Map. Sanitize each record
-// via JSON round-trip so non-cloneable fields don't poison Yjs's internal
-// structuredClone path. Each MAX_BATCH_PER_TRANSACTION-sized slice runs in
-// its own transaction so a paste of hundreds of shapes doesn't lock the main
-// thread inside one giant Yjs transaction.
+// Forward a tldraw HistoryEntry into the shared Y.Map. Skips any record
+// that isn't part of the shared document (camera, pointer, instance state,
+// presence) — replicating those would corrupt other clients with our local
+// view state and create a feedback loop on every render tick. Sanitize each
+// record via JSON round-trip so non-cloneable fields don't poison Yjs's
+// internal structuredClone path. Each MAX_BATCH_PER_TRANSACTION-sized slice
+// runs in its own transaction so a paste of hundreds of shapes doesn't lock
+// the main thread inside one giant Yjs transaction.
 export const applyHistoryEntryToYMap = (
   entry: HistoryEntry<TLRecord>,
   yRecords: Y.Map<TLRecord>,
@@ -138,16 +176,22 @@ export const applyHistoryEntryToYMap = (
   const writes: Array<() => void> = [];
 
   for (const [id, record] of Object.entries(entry.changes.added)) {
+    if (!isDocumentRecord(record as { typeName: string })) continue;
     const sanitized = sanitizeForYjs(normalizeShapeForYjs(record));
     if (sanitized) writes.push(() => yRecords.set(id, sanitized));
   }
-  for (const [id, [, after]] of Object.entries(entry.changes.updated)) {
+  for (const [id, [before, after]] of Object.entries(entry.changes.updated)) {
+    const next = (after ?? before) as { typeName: string };
+    if (!isDocumentRecord(next)) continue;
     const sanitized = sanitizeForYjs(normalizeShapeForYjs(after));
     if (sanitized) writes.push(() => yRecords.set(id, sanitized));
   }
-  for (const id of Object.keys(entry.changes.removed)) {
+  for (const [id, removed] of Object.entries(entry.changes.removed)) {
+    if (!isDocumentRecord(removed as { typeName: string })) continue;
     writes.push(() => yRecords.delete(id));
   }
+
+  if (writes.length === 0) return;
 
   for (let i = 0; i < writes.length; i += MAX_BATCH_PER_TRANSACTION) {
     const slice = writes.slice(i, i + MAX_BATCH_PER_TRANSACTION);
@@ -256,24 +300,16 @@ export function createYjsTldrawStore({
   const attachLocalStoreForwarder = (target: TLStore): (() => void) => {
     return target.listen((entry: HistoryEntry<TLRecord>) => {
       try {
-        const counts = {
-          added: Object.keys(entry.changes.added).length,
-          updated: Object.keys(entry.changes.updated).length,
-          removed: Object.keys(entry.changes.removed).length,
-        };
-        const total = counts.added + counts.updated + counts.removed;
-        if (total === 0) return;
-        if (entry.source !== 'user') {
-          if (import.meta.env?.DEV) {
-            console.debug('[whiteboard] skipping non-user entry', {
-              source: entry.source,
-              ...counts,
-            });
-          }
-          return;
-        }
+        if (entry.source !== 'user') return;
+        // Pre-filter: tldraw emits user-source events for session-scoped
+        // records (camera pan/zoom, pointer move, instance state) on every
+        // render tick. Forwarding those would (a) corrupt peers with our
+        // local view state and (b) create a feedback loop because the
+        // round-trip through Yjs reads them back as remote updates.
+        const docRecords = countDocumentRecords(entry);
+        if (docRecords.total === 0) return;
         if (import.meta.env?.DEV) {
-          console.debug('[whiteboard] local→Yjs', counts);
+          console.debug('[whiteboard] local→Yjs', docRecords);
         }
         applyHistoryEntryToYMap(entry, yRecords, (apply) => doc.transact(apply, localOrigin));
       } catch (error) {
