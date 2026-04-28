@@ -434,7 +434,7 @@ export function createYjsTldrawStore({
       applyTarget.mergeRemoteChanges(() => {
         if (toRemove.length > 0) {
           try {
-            store.remove(toRemove);
+            applyTarget.remove(toRemove);
           } catch (error) {
             if (import.meta.env?.DEV) {
               console.warn('[whiteboard] failed to remove records', toRemove, error);
@@ -448,7 +448,7 @@ export function createYjsTldrawStore({
         if (toPut.length > 0) {
           let pending = toPut;
           for (let pass = 0; pass < MAX_HYDRATION_PASSES && pending.length > 0; pass++) {
-            const failed = applyRecordsResilient(store, pending);
+            const failed = applyRecordsResilient(applyTarget, pending);
             if (failed.length === pending.length) break;
             pending = failed;
           }
