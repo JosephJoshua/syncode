@@ -1,439 +1,390 @@
-import { CONTROL_API, type SessionDetail, type SessionPeerFeedback } from '@syncode/contracts';
-import { Badge, Button, Card, CardContent, Progress } from '@syncode/ui';
+import { Button } from '@syncode/ui';
 import { useQuery } from '@tanstack/react-query';
-import { createFileRoute, Link } from '@tanstack/react-router';
-import { ArrowLeft, CheckCircle2, Code2, MessageSquareText, XCircle } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { createFileRoute } from '@tanstack/react-router';
+import { Sparkles } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { StarterCodeBlock } from '@/components/problems/starter-code-block.js';
-import { api } from '@/lib/api-client.js';
+import { AiFeedbackMarkdown } from '@/components/session-report/ai-feedback-rich-text.js';
+import {
+  CompactInsightCard,
+  SummaryList,
+} from '@/components/session-report/report-ai-review-sections.js';
+import { ReportDimensionCard } from '@/components/session-report/report-dimension-card.js';
+import { getDimensionIcon } from '@/components/session-report/report-dimension-icon.js';
+import { FeedbackShell, SectionCard } from '@/components/session-report/report-feedback-shell.js';
+import { FinalCodeSection } from '@/components/session-report/report-final-code-section.js';
+import { buildHeaderBadges } from '@/components/session-report/report-header-badges.js';
+import { ReportPageSkeleton } from '@/components/session-report/report-page-skeleton.js';
+import { ReportPeerFeedbackSection } from '@/components/session-report/report-peer-feedback-section.js';
+import { ReportPendingState } from '@/components/session-report/report-pending-state.js';
+import { ReportScoreSummary } from '@/components/session-report/report-score-summary.js';
+import { ReportSessionOverview } from '@/components/session-report/report-session-overview.js';
+import { ReportSessionTimeline } from '@/components/session-report/report-session-timeline.js';
+import { ReportSnapshotHistory } from '@/components/session-report/report-snapshot-history.js';
+import { ReportTestCaseList } from '@/components/session-report/report-test-case-list.js';
+import {
+  formatSessionDateTime,
+  resolveSessionDurationSeconds,
+} from '@/lib/dashboard-session-history.js';
+import { fetchSessionDetail } from '@/lib/session-detail.js';
+import {
+  getDetailedFeedbackPreview,
+  getDimensionEntries,
+  getMostRecentSnapshot,
+  getViewerRole,
+  toSupportedLanguage,
+} from '@/lib/session-feedback.js';
+import { fetchSessionPeerFeedback } from '@/lib/session-peer-feedback.js';
+import { fetchSessionReport } from '@/lib/session-report.js';
+import { fetchSessionSnapshots } from '@/lib/session-snapshots.js';
+import { useAuthStore } from '@/stores/auth.store.js';
 
 export const Route = createFileRoute('/_app/sessions/$sessionId')({
-  component: SessionDetailPage,
+  component: SessionFeedbackPage,
 });
 
-const DATE_FORMAT = new Intl.DateTimeFormat(undefined, {
-  year: 'numeric',
-  month: 'short',
-  day: '2-digit',
-  hour: '2-digit',
-  minute: '2-digit',
-});
-
-function SessionDetailPage() {
-  const { t } = useTranslation('sessionDetail');
-  const { t: tDashboard } = useTranslation('dashboard');
+function SessionFeedbackPage() {
+  const { t } = useTranslation('feedback');
   const { sessionId } = Route.useParams();
+  const currentUserId = useAuthStore((state) => state.user?.id ?? null);
+  const [isFullReviewVisible, setIsFullReviewVisible] = useState(false);
+
   const sessionQuery = useQuery({
-    queryKey: ['session-detail', sessionId],
-    queryFn: () => api(CONTROL_API.SESSIONS.GET, { params: { id: sessionId } }),
+    queryKey: ['sessions', sessionId, 'detail'],
+    queryFn: () => fetchSessionDetail(sessionId),
+    retry: false,
   });
 
-  if (sessionQuery.isLoading) {
-    return <StateView title={t('loading.title')} description={t('loading.description')} />;
+  const reportQuery = useQuery({
+    queryKey: ['sessions', sessionId, 'report'],
+    queryFn: () => fetchSessionReport(sessionId),
+    retry: false,
+    refetchInterval: (query) => (query.state.data?.state === 'pending' ? 10_000 : false),
+    refetchIntervalInBackground: true,
+  });
+
+  const snapshotsQuery = useQuery({
+    queryKey: ['sessions', sessionId, 'snapshots'],
+    queryFn: () => fetchSessionSnapshots(sessionId),
+    retry: false,
+  });
+
+  const peerFeedbackQuery = useQuery({
+    queryKey: ['sessions', sessionId, 'peer-feedback'],
+    queryFn: () => fetchSessionPeerFeedback(sessionId),
+    retry: false,
+  });
+
+  const session = sessionQuery.data;
+  const reportState = reportQuery.data;
+  const report = reportState?.state === 'ready' ? reportState.report : null;
+  const viewerRole = getViewerRole(session, currentUserId);
+  const durationSeconds = session
+    ? resolveSessionDurationSeconds(session.createdAt, session.finishedAt, session.duration)
+    : 0;
+  const reportLanguage = toSupportedLanguage(session?.language);
+  const dimensionEntries = getDimensionEntries(report);
+  const latestSnapshot = getMostRecentSnapshot(snapshotsQuery.data ?? []);
+  const feedbackPreview = report?.detailedFeedback
+    ? getDetailedFeedbackPreview(report.detailedFeedback)
+    : null;
+  const canExpandFeedback = Boolean(
+    report?.detailedFeedback &&
+      feedbackPreview &&
+      feedbackPreview.trim() !== report.detailedFeedback.trim(),
+  );
+
+  const hasStrengths = (report?.strengths?.length ?? 0) > 0;
+  const hasImprovements = (report?.areasForImprovement?.length ?? 0) > 0;
+  const summaryColCount = hasStrengths && hasImprovements ? 2 : 1;
+
+  useEffect(() => {
+    if (sessionId) {
+      setIsFullReviewVisible(false);
+    }
+  }, [sessionId]);
+
+  if (sessionQuery.isLoading || (reportQuery.isLoading && !reportQuery.data)) {
+    return <ReportPageSkeleton />;
   }
 
-  if (sessionQuery.isError) {
+  if (!session || sessionQuery.isError) {
     return (
-      <StateView title={t('error.title')} description={t('error.description')}>
-        <Button variant="outline" onClick={() => void sessionQuery.refetch()}>
-          {t('error.retry')}
-        </Button>
-      </StateView>
+      <FeedbackShell
+        title={t('heading')}
+        eyebrow={t('eyebrow')}
+        metaLine={t('notFound.description')}
+        badges={[]}
+      >
+        <SectionCard title={t('heading')} description={t('notFound.description')}>
+          <p className="text-sm leading-6 text-muted-foreground">
+            {t('notFound.invalidSessionId', { sessionId })}
+          </p>
+          <Button className="mt-5" variant="outline" onClick={() => void sessionQuery.refetch()}>
+            {t('actions.retrySession')}
+          </Button>
+        </SectionCard>
+      </FeedbackShell>
     );
   }
 
-  const session = sessionQuery.data;
-  if (!session) {
-    return <StateView title={t('notFound.title')} description={t('notFound.description')} />;
+  const badges = buildHeaderBadges(t, viewerRole, report, durationSeconds);
+  const reportStatus: 'pending' | 'ready' | 'unavailable' =
+    reportState?.state === 'pending' ? 'pending' : report ? 'ready' : 'unavailable';
+
+  if (reportQuery.isError) {
+    return (
+      <FeedbackShell
+        title={session.problem?.title ?? t('fallbackProblemTitle')}
+        eyebrow={t('eyebrow')}
+        metaLine={formatSessionDateTime(session.finishedAt ?? session.createdAt)}
+        badges={badges}
+        sessionId={session.sessionId}
+      >
+        <div className="space-y-6">
+          <SectionCard title={t('error.title')} description={t('error.description')}>
+            <p className="text-sm leading-6 text-muted-foreground">{t('error.body')}</p>
+            <Button className="mt-5" variant="outline" onClick={() => void reportQuery.refetch()}>
+              {t('actions.retryReport')}
+            </Button>
+          </SectionCard>
+          <ReportSessionOverview
+            session={session}
+            currentUserId={currentUserId}
+            reportStatus="unavailable"
+            reportGeneratedAt={undefined}
+          />
+          <FinalCodeSection
+            snapshot={latestSnapshot}
+            isLoading={snapshotsQuery.isLoading}
+            isError={snapshotsQuery.isError}
+            onRetry={() => void snapshotsQuery.refetch()}
+          />
+          <ReportPeerFeedbackSection
+            feedback={peerFeedbackQuery.data}
+            isLoading={peerFeedbackQuery.isLoading}
+            isError={peerFeedbackQuery.isError}
+            onRetry={() => void peerFeedbackQuery.refetch()}
+          />
+          <ReportSnapshotHistory
+            snapshots={snapshotsQuery.data ?? []}
+            isLoading={snapshotsQuery.isLoading}
+            isError={snapshotsQuery.isError}
+            onRetry={() => void snapshotsQuery.refetch()}
+          />
+        </div>
+      </FeedbackShell>
+    );
   }
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-8 sm:py-10 lg:py-12">
-      <Link
-        to="/dashboard"
-        className="inline-flex items-center gap-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-      >
-        <ArrowLeft className="size-4" />
-        {t('backToDashboard')}
-      </Link>
+    <FeedbackShell
+      title={session.problem?.title ?? t('fallbackProblemTitle')}
+      eyebrow={t('eyebrow')}
+      metaLine={formatSessionDateTime(session.finishedAt ?? session.createdAt)}
+      badges={badges}
+      sessionId={session.sessionId}
+    >
+      <div className="space-y-8">
+        {reportState?.state === 'pending' ? (
+          <ReportPendingState
+            title={t('pending.title')}
+            subtitle={t('pending.subtitle')}
+            body={t('pending.body')}
+            pollingLabel={t('pending.polling')}
+          />
+        ) : report ? (
+          <ReportScoreSummary
+            overallScore={report.overallScore}
+            items={dimensionEntries.map(([key, dimension]) => ({
+              key,
+              label: t(`dimensions.${key}.title`),
+              score: dimension.score,
+            }))}
+          />
+        ) : null}
 
-      <section className="mt-6 max-w-3xl">
-        <h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-          {session.problem?.title ?? t('heading')}
-        </h1>
-        <p className="mt-3 text-sm text-muted-foreground sm:text-base">{t('subheading')}</p>
-      </section>
+        <SectionGroup label={t('details.heading')}>
+          <ReportSessionOverview
+            session={session}
+            currentUserId={currentUserId}
+            reportStatus={reportStatus}
+            reportGeneratedAt={report?.generatedAt}
+          />
+        </SectionGroup>
 
-      <section className="mt-8 grid gap-6 lg:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.8fr)]">
-        <div className="space-y-6">
-          <ReportPanel session={session} />
-          <TestResultsPanel session={session} />
-          <CodeSnapshotPanel session={session} />
-        </div>
-
-        <div className="space-y-6">
-          <OverviewPanel session={session} />
-          <ParticipantsPanel session={session} roleLabel={tDashboard} />
-          <PeerFeedbackPanel feedback={session.peerFeedback} />
-        </div>
-      </section>
-    </div>
-  );
-}
-
-function StateView({
-  title,
-  description,
-  children,
-}: {
-  title: string;
-  description: string;
-  children?: ReactNode;
-}) {
-  return (
-    <div className="mx-auto flex min-h-[calc(100vh-8rem)] max-w-3xl flex-col items-center justify-center px-4 py-12 text-center">
-      <h1 className="text-2xl font-semibold tracking-tight text-foreground">{title}</h1>
-      <p className="mt-3 max-w-md text-sm leading-6 text-muted-foreground">{description}</p>
-      {children ? <div className="mt-6">{children}</div> : null}
-    </div>
-  );
-}
-
-function OverviewPanel({ session }: { session: SessionDetail }) {
-  const { t } = useTranslation('sessionDetail');
-  const rows = [
-    [t('overview.problem'), session.problem?.title ?? t('overview.unknown')],
-    [t('overview.difficulty'), session.problem?.difficulty ?? t('overview.unknown')],
-    [t('overview.mode'), session.mode],
-    [t('overview.language'), session.language ?? t('overview.unknown')],
-    [t('overview.duration'), t('overview.seconds', { count: session.duration })],
-    [t('overview.started'), formatDate(session.createdAt)],
-    [
-      t('overview.finished'),
-      session.finishedAt ? formatDate(session.finishedAt) : t('overview.unknown'),
-    ],
-  ] as const;
-
-  return (
-    <Card className="border border-border/50 bg-card/80 py-0 backdrop-blur-sm">
-      <CardContent className="px-6 py-6">
-        <h2 className="text-lg font-semibold tracking-tight text-foreground">
-          {t('overview.title')}
-        </h2>
-        <dl className="mt-5 space-y-4">
-          {rows.map(([label, value]) => (
-            <div className="space-y-1" key={label}>
-              <dt className="text-xs uppercase tracking-[0.12em] text-muted-foreground">{label}</dt>
-              <dd className="text-sm font-medium text-foreground">{value}</dd>
-            </div>
-          ))}
-        </dl>
-      </CardContent>
-    </Card>
-  );
-}
-
-function ReportPanel({ session }: { session: SessionDetail }) {
-  const { t } = useTranslation('sessionDetail');
-  const report = session.report;
-
-  return (
-    <Card className="border border-border/50 bg-card/80 py-0 backdrop-blur-sm">
-      <CardContent className="px-6 py-6 sm:px-7">
-        <div className="flex flex-col gap-4 border-b border-border/40 pb-5 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <p className="font-mono text-xs uppercase tracking-[0.14em] text-muted-foreground">
-              {t('report.title')}
-            </p>
-            <h2 className="mt-3 text-2xl font-semibold tracking-tight text-foreground">
-              {report ? t('report.overallScore') : t('report.empty')}
-            </h2>
-          </div>
-          {report ? (
-            <div className="text-right">
-              <p className="text-4xl font-semibold tracking-tight text-primary">
-                {report.overallScore}
-              </p>
-              {report.generatedAt ? (
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {t('report.generatedAt')}: {formatDate(report.generatedAt)}
-                </p>
+        {report && (hasStrengths || hasImprovements) ? (
+          <SectionGroup label={t('sections.strengths')}>
+            <div
+              className={`grid gap-4 ${summaryColCount === 2 ? 'lg:grid-cols-2' : 'lg:grid-cols-1'}`}
+            >
+              {hasStrengths ? (
+                <SummaryList title={t('sections.strengths')} items={report.strengths ?? []} />
+              ) : null}
+              {hasImprovements ? (
+                <SummaryList
+                  title={t('sections.areasForImprovement')}
+                  items={report.areasForImprovement ?? []}
+                />
               ) : null}
             </div>
-          ) : null}
-        </div>
+          </SectionGroup>
+        ) : null}
+
+        {report && (report.comparisonToHistory || report.peerFeedbackSummary) ? (
+          <SectionGroup label={t('sections.comparison')}>
+            <div className="grid gap-4 lg:grid-cols-2">
+              {report.comparisonToHistory ? (
+                <CompactInsightCard
+                  title={t('sections.comparison')}
+                  rows={[
+                    [t('comparison.trend'), t(`trend.${report.comparisonToHistory.trend}`)],
+                    [
+                      t('comparison.sessionsCompared'),
+                      String(report.comparisonToHistory.sessionsCompared),
+                    ],
+                    [
+                      t('comparison.averageScore'),
+                      String(Math.round(report.comparisonToHistory.averageScore)),
+                    ],
+                  ]}
+                />
+              ) : null}
+
+              {report.peerFeedbackSummary ? (
+                <CompactInsightCard
+                  title={t('sections.peerFeedback')}
+                  rows={[
+                    [
+                      t('peerFeedback.averageRating'),
+                      String(report.peerFeedbackSummary.averageRating),
+                    ],
+                    [
+                      t('peerFeedback.wouldPairAgain'),
+                      `${Math.round(report.peerFeedbackSummary.wouldPairAgain)}%`,
+                    ],
+                    [
+                      t('peerFeedback.themes'),
+                      report.peerFeedbackSummary.themes.length > 0
+                        ? report.peerFeedbackSummary.themes.join(', ')
+                        : t('peerFeedback.none'),
+                    ],
+                  ]}
+                />
+              ) : null}
+            </div>
+          </SectionGroup>
+        ) : null}
 
         {report ? (
-          <div className="space-y-6 pt-6">
-            <section>
-              <h3 className="text-sm font-semibold text-foreground">{t('report.summary')}</h3>
-              <p className="mt-2 text-sm leading-6 text-muted-foreground">{report.feedback}</p>
-            </section>
-
-            <section className="space-y-3">
-              <h3 className="text-sm font-semibold text-foreground">
-                {t('report.categoryScores')}
-              </h3>
-              {Object.entries(report.categoryScores ?? {}).map(([category, score]) => (
-                <div className="space-y-2" key={category}>
-                  <div className="flex items-center justify-between gap-3 text-sm">
-                    <span className="font-medium text-foreground">
-                      {t(`report.categories.${category}`, {
-                        defaultValue: formatCategory(category),
-                      })}
-                    </span>
-                    <span className="font-mono text-xs text-muted-foreground">{score}</span>
+          <SectionGroup label={t('sections.aiReview')}>
+            <SectionCard
+              title={t('sections.aiReview')}
+              description={t('sections.aiReviewDescription')}
+              icon={<Sparkles className="size-4 text-primary" />}
+            >
+              <div className="space-y-6">
+                {report.detailedFeedback && feedbackPreview ? (
+                  <div className="prose prose-sm max-w-none text-muted-foreground prose-headings:text-foreground prose-p:leading-7 prose-strong:text-foreground prose-li:text-muted-foreground">
+                    <AiFeedbackMarkdown
+                      markdown={isFullReviewVisible ? report.detailedFeedback : feedbackPreview}
+                    />
                   </div>
-                  <Progress value={score} />
-                </div>
-              ))}
-            </section>
+                ) : (
+                  <p className="text-sm leading-6 text-muted-foreground">
+                    {t('sections.noDetailedFeedback')}
+                  </p>
+                )}
 
-            <ListSection title={t('report.strengths')} items={report.strengths ?? []} />
-            <ListSection
-              title={t('report.improvements')}
-              items={report.areasForImprovement ?? []}
+                {canExpandFeedback ? (
+                  <Button
+                    variant="ghost"
+                    className="px-0 text-sm text-muted-foreground hover:bg-transparent hover:text-foreground"
+                    onClick={() => setIsFullReviewVisible((current) => !current)}
+                  >
+                    {isFullReviewVisible
+                      ? t('actions.showLessReview')
+                      : t('actions.showFullReview')}
+                  </Button>
+                ) : null}
+
+                {dimensionEntries.length > 0 ? (
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    {dimensionEntries.map(([key, dimension]) => (
+                      <ReportDimensionCard
+                        key={key}
+                        title={t(`dimensions.${key}.title`)}
+                        dimension={dimension}
+                        language={reportLanguage}
+                        icon={getDimensionIcon(key)}
+                      />
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            </SectionCard>
+          </SectionGroup>
+        ) : null}
+
+        {report ? (
+          <SectionGroup label={t('sections.testCaseBreakdown')}>
+            <SectionCard
+              title={t('sections.testCaseBreakdown')}
+              description={t('sections.testCaseBreakdownDescription')}
+            >
+              <ReportTestCaseList breakdown={report.testCaseBreakdown ?? []} />
+            </SectionCard>
+          </SectionGroup>
+        ) : null}
+
+        <SectionGroup label={t('sections.finalCode')}>
+          <FinalCodeSection
+            snapshot={latestSnapshot}
+            isLoading={snapshotsQuery.isLoading}
+            isError={snapshotsQuery.isError}
+            onRetry={() => void snapshotsQuery.refetch()}
+          />
+        </SectionGroup>
+
+        <SectionGroup label={t('sections.peerFeedbackSection')}>
+          <ReportPeerFeedbackSection
+            feedback={peerFeedbackQuery.data}
+            isLoading={peerFeedbackQuery.isLoading}
+            isError={peerFeedbackQuery.isError}
+            onRetry={() => void peerFeedbackQuery.refetch()}
+          />
+        </SectionGroup>
+
+        <SectionGroup label={t('sections.timeline')}>
+          <div className="grid gap-6 xl:grid-cols-2">
+            <ReportSessionTimeline
+              startedAt={session.createdAt}
+              finishedAt={session.finishedAt}
+              snapshots={snapshotsQuery.data ?? []}
+            />
+            <ReportSnapshotHistory
+              snapshots={snapshotsQuery.data ?? []}
+              isLoading={snapshotsQuery.isLoading}
+              isError={snapshotsQuery.isError}
+              onRetry={() => void snapshotsQuery.refetch()}
             />
           </div>
-        ) : null}
-      </CardContent>
-    </Card>
-  );
-}
-
-function TestResultsPanel({ session }: { session: SessionDetail }) {
-  const { t } = useTranslation('sessionDetail');
-
-  return (
-    <Card className="border border-border/50 bg-card/80 py-0 backdrop-blur-sm">
-      <CardContent className="px-6 py-6 sm:px-7">
-        <h2 className="text-lg font-semibold tracking-tight text-foreground">{t('tests.title')}</h2>
-        {session.submissions.length === 0 ? (
-          <p className="mt-3 text-sm text-muted-foreground">{t('tests.empty')}</p>
-        ) : (
-          <div className="mt-5 space-y-3">
-            {session.submissions.map((submission) => {
-              const completed = submission.status === 'completed';
-              return (
-                <div
-                  className="flex flex-col gap-3 rounded-md border border-border/60 bg-background/45 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
-                  key={submission.submissionId}
-                >
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-foreground">
-                      {t('tests.submission')} {submission.submissionId}
-                    </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {formatDate(submission.createdAt)}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <Badge variant={completed ? 'success' : 'destructive'}>
-                      {completed ? (
-                        <CheckCircle2 className="size-3" />
-                      ) : (
-                        <XCircle className="size-3" />
-                      )}
-                      {completed ? t('tests.completed') : t('tests.failed')}
-                    </Badge>
-                    <span className="font-mono text-sm text-muted-foreground">
-                      {t('tests.passed', { passed: submission.passed, total: submission.total })}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-function CodeSnapshotPanel({ session }: { session: SessionDetail }) {
-  const { t } = useTranslation('sessionDetail');
-  const snapshot = session.latestCodeSnapshot;
-
-  return (
-    <Card className="border border-border/50 bg-card/80 py-0 backdrop-blur-sm">
-      <CardContent className="px-6 py-6 sm:px-7">
-        <div className="flex items-center justify-between gap-4">
-          <h2 className="flex items-center gap-2 text-lg font-semibold tracking-tight text-foreground">
-            <Code2 className="size-5 text-primary" />
-            {t('code.title')}
-          </h2>
-          {snapshot ? <Badge variant="outline">{snapshot.language}</Badge> : null}
-        </div>
-
-        {snapshot ? (
-          <div className="mt-5 space-y-3">
-            <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
-              <span>
-                {t('code.capturedAt')}: {formatDate(snapshot.createdAt)}
-              </span>
-              <span>
-                {t('code.trigger')}: {snapshot.trigger}
-              </span>
-              {snapshot.linesOfCode == null ? null : (
-                <span>{t('code.lines', { count: snapshot.linesOfCode })}</span>
-              )}
-            </div>
-            <StarterCodeBlock code={snapshot.code} language={snapshot.language} />
-          </div>
-        ) : (
-          <p className="mt-3 text-sm text-muted-foreground">{t('code.empty')}</p>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-function ParticipantsPanel({
-  session,
-  roleLabel,
-}: {
-  session: SessionDetail;
-  roleLabel: (key: string) => string;
-}) {
-  const { t } = useTranslation('sessionDetail');
-
-  return (
-    <Card className="border border-border/50 bg-card/80 py-0 backdrop-blur-sm">
-      <CardContent className="px-6 py-6">
-        <h2 className="text-lg font-semibold tracking-tight text-foreground">
-          {t('participants.title')}
-        </h2>
-        <div className="mt-5 space-y-4">
-          {session.participants.map((participant) => (
-            <div
-              className="rounded-md border border-border/60 bg-background/45 p-3"
-              key={participant.userId}
-            >
-              <div className="flex items-center justify-between gap-3">
-                <p className="font-medium text-foreground">
-                  {participant.displayName ?? participant.username}
-                </p>
-                <Badge variant={participant.role}>{roleLabel(`role.${participant.role}`)}</Badge>
-              </div>
-              <p className="mt-2 text-xs text-muted-foreground">
-                {t('participants.joined')}: {formatDate(participant.joinedAt)}
-              </p>
-              {participant.leftAt ? (
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {t('participants.left')}: {formatDate(participant.leftAt)}
-                </p>
-              ) : null}
-            </div>
-          ))}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function PeerFeedbackPanel({ feedback }: { feedback: SessionPeerFeedback[] }) {
-  const { t } = useTranslation('sessionDetail');
-
-  return (
-    <Card className="border border-border/50 bg-card/80 py-0 backdrop-blur-sm">
-      <CardContent className="px-6 py-6">
-        <h2 className="flex items-center gap-2 text-lg font-semibold tracking-tight text-foreground">
-          <MessageSquareText className="size-5 text-primary" />
-          {t('feedback.title')}
-        </h2>
-        {feedback.length === 0 ? (
-          <p className="mt-3 text-sm text-muted-foreground">{t('feedback.empty')}</p>
-        ) : (
-          <div className="mt-5 space-y-4">
-            {feedback.map((item) => (
-              <FeedbackCard feedback={item} key={item.id} />
-            ))}
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-function FeedbackCard({ feedback }: { feedback: SessionPeerFeedback }) {
-  const { t } = useTranslation('sessionDetail');
-  const ratings = [
-    [t('feedback.ratings.problemSolving'), feedback.problemSolvingRating],
-    [t('feedback.ratings.communication'), feedback.communicationRating],
-    [t('feedback.ratings.codeQuality'), feedback.codeQualityRating],
-    [t('feedback.ratings.debugging'), feedback.debuggingRating],
-    [t('feedback.ratings.overall'), feedback.overallRating],
-  ] as const;
-
-  return (
-    <div className="rounded-md border border-border/60 bg-background/45 p-4">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <p className="font-medium text-foreground">
-            {t('feedback.reviewerToCandidate', {
-              reviewer: feedback.reviewerName,
-              candidate: feedback.candidateName,
-            })}
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">{formatDate(feedback.createdAt)}</p>
-        </div>
-        <Badge variant={feedback.wouldPairAgain ? 'success' : 'warning'}>
-          {feedback.wouldPairAgain ? t('feedback.wouldPairAgain') : t('feedback.wouldNotPairAgain')}
-        </Badge>
+        </SectionGroup>
       </div>
-      <div className="mt-4 grid gap-2 sm:grid-cols-2">
-        {ratings.map(([label, value]) => (
-          <div className="flex items-center justify-between gap-3 text-sm" key={label}>
-            <span className="text-muted-foreground">{label}</span>
-            <span className="font-mono text-foreground">
-              {t('feedback.ratingValue', { value, max: 5 })}
-            </span>
-          </div>
-        ))}
-      </div>
-      <div className="mt-4 space-y-3 text-sm">
-        <TextBlock title={t('feedback.strengths')} value={feedback.strengths} />
-        <TextBlock title={t('feedback.improvements')} value={feedback.improvements} />
-      </div>
-    </div>
+    </FeedbackShell>
   );
 }
 
-function ListSection({ title, items }: { title: string; items: string[] }) {
-  if (items.length === 0) {
-    return null;
-  }
-
+function SectionGroup({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <section>
-      <h3 className="text-sm font-semibold text-foreground">{title}</h3>
-      <ul className="mt-2 list-disc space-y-1 pl-5 text-sm leading-6 text-muted-foreground">
-        {items.map((item) => (
-          <li key={item}>{item}</li>
-        ))}
-      </ul>
+    <section className="space-y-3">
+      <div className="flex items-center gap-3">
+        <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-primary/60">
+          {label}
+        </span>
+        <span aria-hidden className="h-px flex-1 bg-border/40" />
+      </div>
+      {children}
     </section>
   );
-}
-
-function TextBlock({ title, value }: { title: string; value: string }) {
-  return (
-    <div>
-      <h3 className="text-xs uppercase tracking-[0.12em] text-muted-foreground">{title}</h3>
-      <p className="mt-1 leading-6 text-foreground/90">{value}</p>
-    </div>
-  );
-}
-
-function formatDate(value: string) {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : DATE_FORMAT.format(date);
-}
-
-function formatCategory(value: string) {
-  return value
-    .replace(/[_-]+/g, ' ')
-    .replace(/([a-z])([A-Z])/g, '$1 $2')
-    .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
