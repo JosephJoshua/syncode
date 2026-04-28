@@ -123,7 +123,7 @@ function BrowseRoomsPage() {
     try {
       await joinMutation.mutateAsync(roomId);
       toast.success(t('browse.joinSuccess'));
-      void navigate({ to: '/rooms/$roomId', params: { roomId } }).catch(() => {});
+      navigate({ to: '/rooms/$roomId', params: { roomId } }).catch(() => undefined);
     } catch (error) {
       const apiError = await readApiError(error);
       toast.error(resolveJoinError(apiError, t, 'browse.joinFailed'));
@@ -283,49 +283,93 @@ function BrowseRoomsPage() {
         </div>
       </motion.div>
 
-      {isInitialLoading ? (
-        <div className="flex items-center justify-center py-24">
-          <Loader2 size={32} className="animate-spin text-primary/60" />
-        </div>
-      ) : accumulated.length === 0 ? (
-        <BrowseEmptyState isFiltered={isFiltered} onClearFilters={handleClearFilters} />
-      ) : (
-        <>
-          <ul
-            aria-label={t('browse.heading')}
-            className="grid list-none gap-4 p-0 sm:grid-cols-2 xl:grid-cols-3"
-          >
-            {accumulated.map((room, index) => (
-              <PublicRoomCard
-                key={room.roomId}
-                room={room}
-                index={index}
-                onJoin={handleJoin}
-                isJoining={joinMutation.isPending && joinMutation.variables === room.roomId}
-              />
-            ))}
-          </ul>
-
-          {hasMore && nextCursor !== null && (
-            <div className="mt-10 flex justify-center">
-              <Button
-                variant="outline"
-                size="lg"
-                disabled={browseQuery.isFetching}
-                onClick={() => setCursor(nextCursor)}
-                className="gap-2"
-              >
-                {browseQuery.isFetching ? (
-                  <Loader2 size={16} className="animate-spin" />
-                ) : (
-                  <Compass size={16} />
-                )}
-                {t('browse.loadMore')}
-              </Button>
-            </div>
-          )}
-        </>
-      )}
+      <BrowseResults
+        isInitialLoading={isInitialLoading}
+        accumulated={accumulated}
+        isFiltered={isFiltered}
+        onClearFilters={handleClearFilters}
+        listLabel={t('browse.heading')}
+        handleJoin={handleJoin}
+        joinPendingRoomId={joinMutation.isPending ? (joinMutation.variables ?? null) : null}
+        hasMore={hasMore}
+        nextCursor={nextCursor}
+        isFetching={browseQuery.isFetching}
+        onLoadMore={(c) => setCursor(c)}
+        loadMoreLabel={t('browse.loadMore')}
+      />
     </div>
+  );
+}
+
+type BrowseResultsProps = {
+  isInitialLoading: boolean;
+  accumulated: PublicRoomSummary[];
+  isFiltered: boolean;
+  onClearFilters: () => void;
+  listLabel: string;
+  handleJoin: (roomId: string) => void;
+  joinPendingRoomId: string | null;
+  hasMore: boolean;
+  nextCursor: string | null;
+  isFetching: boolean;
+  onLoadMore: (cursor: string) => void;
+  loadMoreLabel: string;
+};
+
+function BrowseResults({
+  isInitialLoading,
+  accumulated,
+  isFiltered,
+  onClearFilters,
+  listLabel,
+  handleJoin,
+  joinPendingRoomId,
+  hasMore,
+  nextCursor,
+  isFetching,
+  onLoadMore,
+  loadMoreLabel,
+}: BrowseResultsProps) {
+  if (isInitialLoading) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <Loader2 size={32} className="animate-spin text-primary/60" />
+      </div>
+    );
+  }
+
+  if (accumulated.length === 0) {
+    return <BrowseEmptyState isFiltered={isFiltered} onClearFilters={onClearFilters} />;
+  }
+
+  return (
+    <>
+      <ul aria-label={listLabel} className="grid list-none gap-4 p-0 sm:grid-cols-2 xl:grid-cols-3">
+        {accumulated.map((room, index) => (
+          <PublicRoomCard
+            key={room.roomId}
+            room={room}
+            index={index}
+            onJoin={handleJoin}
+            isJoining={joinPendingRoomId === room.roomId}
+          />
+        ))}
+      </ul>
+
+      {hasMore && nextCursor !== null && (
+        <div className="mt-10 flex justify-center">
+          <Button
+            variant="outline"
+            size="lg"
+            disabled={isFetching}
+            onClick={() => onLoadMore(nextCursor)}
+            className="gap-2"
+          >
+            {isFetching ? <Loader2 size={16} className="animate-spin" /> : <Compass size={16} />}
+            {loadMoreLabel}
+          </Button>
+        </div>
+      )}
+    </>
   );
 }
