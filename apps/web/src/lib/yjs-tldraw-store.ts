@@ -233,67 +233,88 @@ export function createYjsTldrawStore({
   // Local store -> Yjs: forward user-driven changes into the shared map.
   // Each batch slice runs in its own transaction so large pastes are split
   // into multiple smaller transactions instead of one giant one.
-  const unsubscribeStore = store.listen(
-    (entry: HistoryEntry<TLRecord>) => {
-      if (import.meta.env?.DEV) {
-        const counts = {
-          added: Object.keys(entry.changes.added).length,
-          updated: Object.keys(entry.changes.updated).length,
-          removed: Object.keys(entry.changes.removed).length,
-        };
-        if (counts.added + counts.updated + counts.removed > 0) {
-          console.debug('[whiteboard] local→Yjs', counts);
+  //
+  // Filter via the entry's own `source` field rather than store.listen's
+  // built-in source filter — some tldraw transactions (e.g. those that
+  // happen during default-page initialization or via certain editor
+  // actions) report sources outside the {'user','remote'} pair the
+  // store.listen filter expects, which silently drops them. Reading the
+  // source ourselves catches every case.
+  const unsubscribeStore = store.listen((entry: HistoryEntry<TLRecord>) => {
+    try {
+      const counts = {
+        added: Object.keys(entry.changes.added).length,
+        updated: Object.keys(entry.changes.updated).length,
+        removed: Object.keys(entry.changes.removed).length,
+      };
+      const total = counts.added + counts.updated + counts.removed;
+      if (total === 0) return;
+      if (entry.source !== 'user') {
+        if (import.meta.env?.DEV) {
+          console.debug('[whiteboard] skipping non-user entry', {
+            source: entry.source,
+            ...counts,
+          });
         }
+        return;
+      }
+      if (import.meta.env?.DEV) {
+        console.debug('[whiteboard] local→Yjs', counts);
       }
       applyHistoryEntryToYMap(entry, yRecords, (apply) => doc.transact(apply, localOrigin));
-    },
-    { source: 'user', scope: 'document' },
-  );
+    } catch (error) {
+      console.error('[whiteboard] local→Yjs handler threw', error);
+    }
+  });
 
   // Yjs -> local store: apply remote-origin map changes back to the store.
   const onYRecordsChange = (event: Y.YMapEvent<TLRecord>, transaction: Y.Transaction) => {
-    if (transaction.origin === localOrigin) return;
-    const toPut: TLRecord[] = [];
-    const toRemove: TLRecord['id'][] = [];
-    event.changes.keys.forEach((change, key) => {
-      if (change.action === 'delete') {
-        toRemove.push(key as TLRecord['id']);
-      } else {
-        const record = yRecords.get(key);
-        if (isTldrawRecord(record, key)) {
-          toPut.push(record);
-        }
-      }
-    });
-    if (import.meta.env?.DEV) {
-      console.debug('[whiteboard] Yjs→local', {
-        put: toPut.length,
-        remove: toRemove.length,
-      });
-    }
-    store.mergeRemoteChanges(() => {
-      if (toRemove.length > 0) {
-        try {
-          store.remove(toRemove);
-        } catch (error) {
-          if (import.meta.env?.DEV) {
-            console.warn('[whiteboard] failed to remove records', toRemove, error);
+    try {
+      if (transaction.origin === localOrigin) return;
+      const toPut: TLRecord[] = [];
+      const toRemove: TLRecord['id'][] = [];
+      event.changes.keys.forEach((change, key) => {
+        if (change.action === 'delete') {
+          toRemove.push(key as TLRecord['id']);
+        } else {
+          const record = yRecords.get(key);
+          if (isTldrawRecord(record, key)) {
+            toPut.push(record);
           }
         }
+      });
+      if (import.meta.env?.DEV) {
+        console.debug('[whiteboard] Yjs→local', {
+          put: toPut.length,
+          remove: toRemove.length,
+        });
       }
-      // Per-record put so one validation failure doesn't drop the whole
-      // batch. Multiple retry passes resolve deeper dependency chains
-      // (binding -> shape -> page) when records arrive out-of-order in a
-      // single sync update.
-      if (toPut.length > 0) {
-        let pending = toPut;
-        for (let pass = 0; pass < MAX_HYDRATION_PASSES && pending.length > 0; pass++) {
-          const failed = applyRecordsResilient(store, pending);
-          if (failed.length === pending.length) break;
-          pending = failed;
+      store.mergeRemoteChanges(() => {
+        if (toRemove.length > 0) {
+          try {
+            store.remove(toRemove);
+          } catch (error) {
+            if (import.meta.env?.DEV) {
+              console.warn('[whiteboard] failed to remove records', toRemove, error);
+            }
+          }
         }
-      }
-    });
+        // Per-record put so one validation failure doesn't drop the whole
+        // batch. Multiple retry passes resolve deeper dependency chains
+        // (binding -> shape -> page) when records arrive out-of-order in a
+        // single sync update.
+        if (toPut.length > 0) {
+          let pending = toPut;
+          for (let pass = 0; pass < MAX_HYDRATION_PASSES && pending.length > 0; pass++) {
+            const failed = applyRecordsResilient(store, pending);
+            if (failed.length === pending.length) break;
+            pending = failed;
+          }
+        }
+      });
+    } catch (error) {
+      console.error('[whiteboard] Yjs→local handler threw', error);
+    }
   };
   yRecords.observe(onYRecordsChange);
 
