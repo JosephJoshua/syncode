@@ -154,12 +154,52 @@ export function RoomWhiteboardPanel({
     (editor: Editor) => {
       editorRef.current = editor;
 
+      // Expose for ad-hoc browser-console debugging in dev only.
+      if (import.meta.env?.DEV && typeof window !== 'undefined') {
+        (window as unknown as { __whiteboardEditor?: Editor }).__whiteboardEditor = editor;
+      }
+
       // Wire the local-store -> Yjs forwarder onto the editor's actual store.
       // Tldraw 4.5 wraps the TLStoreWithStatus.store internally, so the
       // editor.store object exposed here is what emits user-source change
       // events — pre-attaching a listener to our pre-created store would
       // miss every stroke (the symptom the user diagnostics surfaced).
       const unsubLocalForwarder = attachLocalStoreForwarder(editor.store);
+
+      // After hydration, hop to whichever page actually has shapes. tldraw's
+      // createTLStore creates a default page with id 'page:page', but a
+      // synced doc may carry a page record with a different id (when the
+      // first writer or a previous session generated one). The local default
+      // page would still be the active one, leaving the editor showing an
+      // empty canvas while all shapes sit on the hydrated page.
+      const switchToPopulatedPage = () => {
+        const pages = editor.getPages();
+        if (pages.length === 0) return;
+        const currentId = editor.getCurrentPageId();
+        let bestId = currentId;
+        let bestCount = editor.getPageShapeIds(currentId).size;
+        for (const page of pages) {
+          if (page.id === currentId) continue;
+          const count = editor.getPageShapeIds(page.id).size;
+          if (count > bestCount) {
+            bestId = page.id;
+            bestCount = count;
+          }
+        }
+        if (bestId !== currentId) {
+          if (import.meta.env?.DEV) {
+            console.debug('[whiteboard] switching active page', {
+              from: currentId,
+              to: bestId,
+              shapeCount: bestCount,
+            });
+          }
+          editor.setCurrentPage(bestId);
+        }
+      };
+      // Run after the current microtask settles so initial hydration has a
+      // chance to place every record before we count.
+      queueMicrotask(switchToPopulatedPage);
 
       // (A + C) For locally-authored annotation shapes:
       //   - Force props.color = 'orange' for an immediate, unmissable visual
