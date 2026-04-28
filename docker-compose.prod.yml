@@ -42,7 +42,7 @@ services:
       context: .
       dockerfile: infra/docker/Dockerfile.control-plane
     restart: unless-stopped
-    env_file: .env
+    env_file: .env.${ENV_NAME:-production}
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
     depends_on:
@@ -61,7 +61,7 @@ services:
       context: .
       dockerfile: infra/docker/Dockerfile.collab-plane
     restart: unless-stopped
-    env_file: .env
+    env_file: .env.${ENV_NAME:-production}
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
     depends_on:
@@ -78,7 +78,7 @@ services:
       context: .
       dockerfile: infra/docker/Dockerfile.execution-plane
     restart: unless-stopped
-    env_file: .env
+    env_file: .env.${ENV_NAME:-production}
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
     depends_on:
@@ -94,7 +94,7 @@ services:
       context: .
       dockerfile: infra/docker/Dockerfile.ai-plane
     restart: unless-stopped
-    env_file: .env
+    env_file: .env.${ENV_NAME:-production}
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
     depends_on:
