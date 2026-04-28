@@ -111,13 +111,43 @@ describe('createYjsTldrawStore', () => {
     });
   }
 
-  it('GIVEN fresh doc WHEN creating THEN whiteboard root and records sub-map exist', () => {
+  it('GIVEN fresh doc WHEN creating THEN whiteboard root has no nested records sub-map', () => {
     const doc = new Y.Doc();
     const result = makeStore(doc, 'alice');
     const root = doc.getMap(WHITEBOARD_KEY);
-    expect(root.get('records')).toBeInstanceOf(Y.Map);
+    // Records live directly under the root map (not in a sub-Y.Map) so that
+    // two clients each materializing doc.getMap(WHITEBOARD_KEY) end up with
+    // the same synced reference instead of racing on a sub-map. We assert
+    // the absence of the historical nested layout that caused real-time
+    // sync to silently fail in v1.
+    expect(root.get('records')).toBeUndefined();
+    expect(root.get('schema')).toBeUndefined();
     result.dispose();
     doc.destroy();
+  });
+
+  it('GIVEN two docs syncing via Y.applyUpdate WHEN A writes a record directly to its root THEN B observes it', () => {
+    const docA = new Y.Doc();
+    const docB = new Y.Doc();
+
+    docA.on('update', (update: Uint8Array, origin: unknown) => {
+      if (origin === 'from-b') return;
+      Y.applyUpdate(docB, update, 'from-a');
+    });
+    docB.on('update', (update: Uint8Array, origin: unknown) => {
+      if (origin === 'from-a') return;
+      Y.applyUpdate(docA, update, 'from-b');
+    });
+
+    const aRoot = docA.getMap<{ id: string; typeName: string }>(WHITEBOARD_KEY);
+    const bRoot = docB.getMap<{ id: string; typeName: string }>(WHITEBOARD_KEY);
+
+    aRoot.set('shape:abc', { id: 'shape:abc', typeName: 'shape' });
+
+    expect(bRoot.get('shape:abc')).toEqual({ id: 'shape:abc', typeName: 'shape' });
+
+    docA.destroy();
+    docB.destroy();
   });
 
   it('GIVEN created undo manager WHEN inspecting THEN only localOrigin is tracked', () => {

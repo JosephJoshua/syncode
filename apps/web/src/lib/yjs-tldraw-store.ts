@@ -5,8 +5,6 @@ import {
   defaultBindingUtils,
   defaultShapeUtils,
   type HistoryEntry,
-  type SerializedSchema,
-  type StoreSnapshot,
   type TLAssetStore,
   type TLRecord,
   type TLStore,
@@ -38,14 +36,6 @@ export interface CreateYjsTldrawStoreResult {
   dispose: () => void;
 }
 
-interface PersistedStoreSnapshot {
-  store: StoreSnapshot<TLRecord>['store'];
-  schema: SerializedSchema;
-}
-
-const RECORDS_KEY = 'records';
-const SCHEMA_KEY = 'schema';
-
 // Cap mass-create flushes so a paste of hundreds of shapes doesn't lock the
 // main thread. Each transaction batches up to this many record writes; further
 // writes spill into subsequent transactions but still preserve ordering.
@@ -68,20 +58,25 @@ export function createYjsTldrawStore({
     assets: assetStore,
   });
 
-  const root = doc.getMap<unknown>(WHITEBOARD_KEY);
-  const yRecords = getOrCreateMap<TLRecord>(root, RECORDS_KEY);
-  const ySchema = getOrCreateMap<unknown>(root, SCHEMA_KEY);
+  // Use the top-level whiteboard map directly. The server materializes
+  // doc.getMap(WHITEBOARD_KEY) on document creation, so every client gets
+  // the same synced root reference. Nesting a sub-Y.Map inside it would race
+  // — two clients each creating a fresh sub-map on first connect would lose
+  // one side's writes to last-writer-wins resolution. tldraw record ids are
+  // already prefixed (shape:, asset:, page:, ...) so storing them directly
+  // in the root map collides with nothing.
+  const yRecords = doc.getMap<TLRecord>(WHITEBOARD_KEY);
 
-  // Seed the local store from the Yjs map (after late-joiner sync) or seed
-  // the Yjs map from the empty store if this client is the first writer.
+  // Hydrate the local store from any records already present in the shared
+  // map (late-joiner case). If the shared map is empty, push the local
+  // store's default records (the empty page tldraw seeds on createTLStore)
+  // so the very first writer establishes a baseline. Both clients seeding
+  // the same default ids is fine — the writes are idempotent.
   if (yRecords.size === 0) {
     doc.transact(() => {
-      const records = store.allRecords();
-      for (const record of records) {
+      for (const record of store.allRecords()) {
         yRecords.set(record.id, record as TLRecord);
       }
-      const snapshot = store.getStoreSnapshot();
-      ySchema.set('value', snapshot.schema as unknown);
     }, localOrigin);
   } else {
     const records: TLRecord[] = [];
@@ -256,16 +251,3 @@ export function stampMeta<T extends TLRecord & { meta?: Record<string, unknown> 
   };
   return { ...record, meta: { ...existing, ...meta } };
 }
-
-function getOrCreateMap<V>(parent: Y.Map<unknown>, key: string): Y.Map<V> {
-  let child = parent.get(key) as Y.Map<V> | undefined;
-  if (!child) {
-    child = new Y.Map<V>();
-    parent.set(key, child);
-  }
-  return child;
-}
-
-// Re-export so callers that only need the persisted-snapshot shape don't have
-// to reach into the tldraw module graph directly.
-export type { PersistedStoreSnapshot };
