@@ -17,6 +17,7 @@ import { Route as PublicLoginRouteImport } from './routes/_public/login'
 import { Route as AppProfileRouteImport } from './routes/_app/profile'
 import { Route as AppDashboardRouteImport } from './routes/_app/dashboard'
 import { Route as AppBookmarksRouteImport } from './routes/_app/bookmarks'
+import { Route as AppAdminProblemsRouteImport } from './routes/_app/admin.problems'
 import { Route as AppRoomsRouteRouteImport } from './routes/_app/rooms/route'
 import { Route as AppRoomsIndexRouteImport } from './routes/_app/rooms/index'
 import { Route as AppProblemsIndexRouteImport } from './routes/_app/problems.index'
@@ -65,6 +66,11 @@ const AppDashboardRoute = AppDashboardRouteImport.update({
 const AppBookmarksRoute = AppBookmarksRouteImport.update({
   id: '/bookmarks',
   path: '/bookmarks',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppAdminProblemsRoute = AppAdminProblemsRouteImport.update({
+  id: '/admin/problems',
+  path: '/admin/problems',
   getParentRoute: () => AppRouteRoute,
 } as any)
 const AppRoomsRouteRoute = AppRoomsRouteRouteImport.update({
@@ -127,6 +133,7 @@ export interface FileRoutesByFullPath {
   '/': typeof PublicIndexRoute
   '/rooms': typeof AppRoomsRouteRouteWithChildren
   '/bookmarks': typeof AppBookmarksRoute
+  '/admin/problems': typeof AppAdminProblemsRoute
   '/dashboard': typeof AppDashboardRoute
   '/profile': typeof AppProfileRoute
   '/login': typeof PublicLoginRoute
@@ -145,6 +152,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof PublicIndexRoute
   '/bookmarks': typeof AppBookmarksRoute
+  '/admin/problems': typeof AppAdminProblemsRoute
   '/dashboard': typeof AppDashboardRoute
   '/profile': typeof AppProfileRoute
   '/login': typeof PublicLoginRoute
@@ -166,6 +174,7 @@ export interface FileRoutesById {
   '/_public': typeof PublicRouteRouteWithChildren
   '/_app/rooms': typeof AppRoomsRouteRouteWithChildren
   '/_app/bookmarks': typeof AppBookmarksRoute
+  '/_app/admin/problems': typeof AppAdminProblemsRoute
   '/_app/dashboard': typeof AppDashboardRoute
   '/_app/profile': typeof AppProfileRoute
   '/_public/login': typeof PublicLoginRoute
@@ -188,6 +197,7 @@ export interface FileRouteTypes {
     | '/'
     | '/rooms'
     | '/bookmarks'
+    | '/admin/problems'
     | '/dashboard'
     | '/profile'
     | '/login'
@@ -206,6 +216,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/bookmarks'
+    | '/admin/problems'
     | '/dashboard'
     | '/profile'
     | '/login'
@@ -226,6 +237,7 @@ export interface FileRouteTypes {
     | '/_public'
     | '/_app/rooms'
     | '/_app/bookmarks'
+    | '/_app/admin/problems'
     | '/_app/dashboard'
     | '/_app/profile'
     | '/_public/login'
@@ -304,6 +316,13 @@ declare module '@tanstack/react-router' {
       path: '/bookmarks'
       fullPath: '/bookmarks'
       preLoaderRoute: typeof AppBookmarksRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/_app/admin/problems': {
+      id: '/_app/admin/problems'
+      path: '/admin/problems'
+      fullPath: '/admin/problems'
+      preLoaderRoute: typeof AppAdminProblemsRouteImport
       parentRoute: typeof AppRouteRoute
     }
     '/_app/rooms': {
@@ -405,6 +424,7 @@ const AppRoomsRouteRouteWithChildren = AppRoomsRouteRoute._addFileChildren(
 interface AppRouteRouteChildren {
   AppRoomsRouteRoute: typeof AppRoomsRouteRouteWithChildren
   AppBookmarksRoute: typeof AppBookmarksRoute
+  AppAdminProblemsRoute: typeof AppAdminProblemsRoute
   AppDashboardRoute: typeof AppDashboardRoute
   AppProfileRoute: typeof AppProfileRoute
   AppAdminAuditLogsRoute: typeof AppAdminAuditLogsRoute
@@ -419,6 +439,7 @@ interface AppRouteRouteChildren {
 const AppRouteRouteChildren: AppRouteRouteChildren = {
   AppRoomsRouteRoute: AppRoomsRouteRouteWithChildren,
   AppBookmarksRoute: AppBookmarksRoute,
+  AppAdminProblemsRoute: AppAdminProblemsRoute,
   AppDashboardRoute: AppDashboardRoute,
   AppProfileRoute: AppProfileRoute,
   AppAdminAuditLogsRoute: AppAdminAuditLogsRoute,
