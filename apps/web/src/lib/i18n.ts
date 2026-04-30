@@ -4,6 +4,7 @@ import { initReactI18next } from 'react-i18next';
 
 import enAdmin from '../locales/en/admin.json';
 import enBookmarks from '../locales/en/bookmarks.json';
+import enCodeQuality from '../locales/en/codeQuality.json';
 import enCommon from '../locales/en/common.json';
 import enDashboard from '../locales/en/dashboard.json';
 import enFeedback from '../locales/en/feedback.json';
@@ -18,6 +19,7 @@ import enSessionReport from '../locales/en/sessionReport.json';
 
 import zhAdmin from '../locales/zh/admin.json';
 import zhBookmarks from '../locales/zh/bookmarks.json';
+import zhCodeQuality from '../locales/zh/codeQuality.json';
 import zhCommon from '../locales/zh/common.json';
 import zhDashboard from '../locales/zh/dashboard.json';
 import zhFeedback from '../locales/zh/feedback.json';
@@ -35,6 +37,7 @@ export const supportedLngs = ['en', 'zh'] as const;
 const namespaces = [
   'common',
   'admin',
+  'codeQuality',
   'landing',
   'login',
   'register',
@@ -67,6 +70,7 @@ i18n
     resources: {
       en: {
         admin: enAdmin,
+        codeQuality: enCodeQuality,
         common: enCommon,
         landing: enLanding,
         login: enLogin,
@@ -82,6 +86,7 @@ i18n
       },
       zh: {
         admin: zhAdmin,
+        codeQuality: zhCodeQuality,
         common: zhCommon,
         landing: zhLanding,
         login: zhLogin,
