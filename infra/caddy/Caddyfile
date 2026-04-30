@@ -41,11 +41,24 @@
 	import proxy_headers
 	stream_timeout 3700s # Exceeds origin nginx's 3600s
 	stream_close_delay 5s
+	# Origin nginx terminates TLS on :4443 / :4444 with a self-signed internal
+	# cert. Without `transport http { tls }`, Caddy speaks plain HTTP and origin
+	# returns HTTP 400. Skip-verify because the cert is self-signed; replace with
+	# `tls_trusted_ca_certs` once we have an internal CA (see deployment Phase 5).
+	transport http {
+		tls
+		tls_insecure_skip_verify
+	}
 }
 
 # Standard reverse proxy
 (standard_proxy) {
 	import proxy_headers
+	# See ws_proxy comment above — same upstream-TLS rationale.
+	transport http {
+		tls
+		tls_insecure_skip_verify
+	}
 }
 
 {$DOMAIN} {
