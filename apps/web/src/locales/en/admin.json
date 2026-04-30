@@ -148,6 +148,11 @@
       "medium": "Medium",
       "hard": "Hard"
     },
+    "editor": {
+      "edit": "Edit",
+      "preview": "Preview",
+      "emptyPreview": "Preview appears after writing a description."
+    },
     "testCases": {
       "title": "Test cases",
       "add": "Add case",

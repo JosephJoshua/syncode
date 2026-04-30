@@ -21,6 +21,7 @@ import type React from 'react';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
+import { ProblemMarkdown } from '@/components/problems/problem-markdown.js';
 import { useAuthStore } from '@/stores/auth.store.js';
 
 export const Route = createFileRoute('/_app/admin/problems')({
@@ -42,6 +43,7 @@ function AdminProblemEditorPage() {
   const [difficulty, setDifficulty] = useState<ProblemDifficulty>('medium');
   const [company, setCompany] = useState('');
   const [description, setDescription] = useState('');
+  const [descriptionMode, setDescriptionMode] = useState<'edit' | 'preview'>('edit');
   const [constraints, setConstraints] = useState('');
   const [isPublished, setIsPublished] = useState(false);
   const [testCases, setTestCases] = useState<TestCaseDraft[]>([createTestCase()]);
@@ -144,13 +146,40 @@ function AdminProblemEditorPage() {
               </Field>
 
               <Field label={t('problemEditor.fields.description')} htmlFor="problem-description">
-                <textarea
-                  id="problem-description"
-                  value={description}
-                  placeholder={t('problemEditor.fields.descriptionPlaceholder')}
-                  className="min-h-48 w-full rounded-lg border border-input bg-background px-4 py-3 text-sm outline-none transition-[border-color,box-shadow] focus-visible:border-ring/60 focus-visible:ring-3 focus-visible:ring-ring/40"
-                  onChange={(event) => setDescription(event.target.value)}
-                />
+                <div className="overflow-hidden rounded-lg border border-input bg-background">
+                  <div className="flex items-center border-b border-border/60 bg-muted/30 p-1">
+                    {(['edit', 'preview'] as const).map((mode) => (
+                      <Button
+                        key={mode}
+                        type="button"
+                        size="xs"
+                        variant={descriptionMode === mode ? 'secondary' : 'ghost'}
+                        onClick={() => setDescriptionMode(mode)}
+                      >
+                        {t(`problemEditor.editor.${mode}`)}
+                      </Button>
+                    ))}
+                  </div>
+                  {descriptionMode === 'edit' ? (
+                    <textarea
+                      id="problem-description"
+                      value={description}
+                      placeholder={t('problemEditor.fields.descriptionPlaceholder')}
+                      className="min-h-48 w-full resize-y bg-transparent px-4 py-3 text-sm outline-none"
+                      onChange={(event) => setDescription(event.target.value)}
+                    />
+                  ) : (
+                    <div className="min-h-48 px-4 py-3">
+                      {description.trim() ? (
+                        <ProblemMarkdown content={description} />
+                      ) : (
+                        <p className="text-sm text-muted-foreground">
+                          {t('problemEditor.editor.emptyPreview')}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
               </Field>
 
               <Field label={t('problemEditor.fields.constraints')} htmlFor="problem-constraints">
