@@ -17,7 +17,6 @@ import { Route as PublicLoginRouteImport } from './routes/_public/login'
 import { Route as AppProfileRouteImport } from './routes/_app/profile'
 import { Route as AppDashboardRouteImport } from './routes/_app/dashboard'
 import { Route as AppBookmarksRouteImport } from './routes/_app/bookmarks'
-import { Route as AppAdminProblemsRouteImport } from './routes/_app/admin.problems'
 import { Route as AppRoomsRouteRouteImport } from './routes/_app/rooms/route'
 import { Route as AppRoomsIndexRouteImport } from './routes/_app/rooms/index'
 import { Route as AppProblemsIndexRouteImport } from './routes/_app/problems.index'
@@ -28,6 +27,7 @@ import { Route as AppRoomsMatchmakingRouteImport } from './routes/_app/rooms/mat
 import { Route as AppRoomsBrowseRouteImport } from './routes/_app/rooms/browse'
 import { Route as AppProblemsProblemIdRouteImport } from './routes/_app/problems.$problemId'
 import { Route as AppAdminUsersRouteImport } from './routes/_app/admin.users'
+import { Route as AppAdminProblemsRouteImport } from './routes/_app/admin.problems'
 import { Route as AppAdminAuditLogsRouteImport } from './routes/_app/admin.audit-logs'
 
 const PublicRouteRoute = PublicRouteRouteImport.update({
@@ -66,11 +66,6 @@ const AppDashboardRoute = AppDashboardRouteImport.update({
 const AppBookmarksRoute = AppBookmarksRouteImport.update({
   id: '/bookmarks',
   path: '/bookmarks',
-  getParentRoute: () => AppRouteRoute,
-} as any)
-const AppAdminProblemsRoute = AppAdminProblemsRouteImport.update({
-  id: '/admin/problems',
-  path: '/admin/problems',
   getParentRoute: () => AppRouteRoute,
 } as any)
 const AppRoomsRouteRoute = AppRoomsRouteRouteImport.update({
@@ -123,6 +118,11 @@ const AppAdminUsersRoute = AppAdminUsersRouteImport.update({
   path: '/admin/users',
   getParentRoute: () => AppRouteRoute,
 } as any)
+const AppAdminProblemsRoute = AppAdminProblemsRouteImport.update({
+  id: '/admin/problems',
+  path: '/admin/problems',
+  getParentRoute: () => AppRouteRoute,
+} as any)
 const AppAdminAuditLogsRoute = AppAdminAuditLogsRouteImport.update({
   id: '/admin/audit-logs',
   path: '/admin/audit-logs',
@@ -133,12 +133,12 @@ export interface FileRoutesByFullPath {
   '/': typeof PublicIndexRoute
   '/rooms': typeof AppRoomsRouteRouteWithChildren
   '/bookmarks': typeof AppBookmarksRoute
-  '/admin/problems': typeof AppAdminProblemsRoute
   '/dashboard': typeof AppDashboardRoute
   '/profile': typeof AppProfileRoute
   '/login': typeof PublicLoginRoute
   '/register': typeof PublicRegisterRoute
   '/admin/audit-logs': typeof AppAdminAuditLogsRoute
+  '/admin/problems': typeof AppAdminProblemsRoute
   '/admin/users': typeof AppAdminUsersRoute
   '/problems/$problemId': typeof AppProblemsProblemIdRoute
   '/rooms/browse': typeof AppRoomsBrowseRoute
@@ -152,12 +152,12 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof PublicIndexRoute
   '/bookmarks': typeof AppBookmarksRoute
-  '/admin/problems': typeof AppAdminProblemsRoute
   '/dashboard': typeof AppDashboardRoute
   '/profile': typeof AppProfileRoute
   '/login': typeof PublicLoginRoute
   '/register': typeof PublicRegisterRoute
   '/admin/audit-logs': typeof AppAdminAuditLogsRoute
+  '/admin/problems': typeof AppAdminProblemsRoute
   '/admin/users': typeof AppAdminUsersRoute
   '/problems/$problemId': typeof AppProblemsProblemIdRoute
   '/rooms/browse': typeof AppRoomsBrowseRoute
@@ -174,13 +174,13 @@ export interface FileRoutesById {
   '/_public': typeof PublicRouteRouteWithChildren
   '/_app/rooms': typeof AppRoomsRouteRouteWithChildren
   '/_app/bookmarks': typeof AppBookmarksRoute
-  '/_app/admin/problems': typeof AppAdminProblemsRoute
   '/_app/dashboard': typeof AppDashboardRoute
   '/_app/profile': typeof AppProfileRoute
   '/_public/login': typeof PublicLoginRoute
   '/_public/register': typeof PublicRegisterRoute
   '/_public/': typeof PublicIndexRoute
   '/_app/admin/audit-logs': typeof AppAdminAuditLogsRoute
+  '/_app/admin/problems': typeof AppAdminProblemsRoute
   '/_app/admin/users': typeof AppAdminUsersRoute
   '/_app/problems/$problemId': typeof AppProblemsProblemIdRoute
   '/_app/rooms/browse': typeof AppRoomsBrowseRoute
@@ -197,12 +197,12 @@ export interface FileRouteTypes {
     | '/'
     | '/rooms'
     | '/bookmarks'
-    | '/admin/problems'
     | '/dashboard'
     | '/profile'
     | '/login'
     | '/register'
     | '/admin/audit-logs'
+    | '/admin/problems'
     | '/admin/users'
     | '/problems/$problemId'
     | '/rooms/browse'
@@ -216,12 +216,12 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/bookmarks'
-    | '/admin/problems'
     | '/dashboard'
     | '/profile'
     | '/login'
     | '/register'
     | '/admin/audit-logs'
+    | '/admin/problems'
     | '/admin/users'
     | '/problems/$problemId'
     | '/rooms/browse'
@@ -237,13 +237,13 @@ export interface FileRouteTypes {
     | '/_public'
     | '/_app/rooms'
     | '/_app/bookmarks'
-    | '/_app/admin/problems'
     | '/_app/dashboard'
     | '/_app/profile'
     | '/_public/login'
     | '/_public/register'
     | '/_public/'
     | '/_app/admin/audit-logs'
+    | '/_app/admin/problems'
     | '/_app/admin/users'
     | '/_app/problems/$problemId'
     | '/_app/rooms/browse'
@@ -318,13 +318,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppBookmarksRouteImport
       parentRoute: typeof AppRouteRoute
     }
-    '/_app/admin/problems': {
-      id: '/_app/admin/problems'
-      path: '/admin/problems'
-      fullPath: '/admin/problems'
-      preLoaderRoute: typeof AppAdminProblemsRouteImport
-      parentRoute: typeof AppRouteRoute
-    }
     '/_app/rooms': {
       id: '/_app/rooms'
       path: '/rooms'
@@ -395,6 +388,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAdminUsersRouteImport
       parentRoute: typeof AppRouteRoute
     }
+    '/_app/admin/problems': {
+      id: '/_app/admin/problems'
+      path: '/admin/problems'
+      fullPath: '/admin/problems'
+      preLoaderRoute: typeof AppAdminProblemsRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
     '/_app/admin/audit-logs': {
       id: '/_app/admin/audit-logs'
       path: '/admin/audit-logs'
@@ -424,10 +424,10 @@ const AppRoomsRouteRouteWithChildren = AppRoomsRouteRoute._addFileChildren(
 interface AppRouteRouteChildren {
   AppRoomsRouteRoute: typeof AppRoomsRouteRouteWithChildren
   AppBookmarksRoute: typeof AppBookmarksRoute
-  AppAdminProblemsRoute: typeof AppAdminProblemsRoute
   AppDashboardRoute: typeof AppDashboardRoute
   AppProfileRoute: typeof AppProfileRoute
   AppAdminAuditLogsRoute: typeof AppAdminAuditLogsRoute
+  AppAdminProblemsRoute: typeof AppAdminProblemsRoute
   AppAdminUsersRoute: typeof AppAdminUsersRoute
   AppProblemsProblemIdRoute: typeof AppProblemsProblemIdRoute
   AppRoomsRoomIdRoute: typeof AppRoomsRoomIdRoute
@@ -439,10 +439,10 @@ interface AppRouteRouteChildren {
 const AppRouteRouteChildren: AppRouteRouteChildren = {
   AppRoomsRouteRoute: AppRoomsRouteRouteWithChildren,
   AppBookmarksRoute: AppBookmarksRoute,
-  AppAdminProblemsRoute: AppAdminProblemsRoute,
   AppDashboardRoute: AppDashboardRoute,
   AppProfileRoute: AppProfileRoute,
   AppAdminAuditLogsRoute: AppAdminAuditLogsRoute,
+  AppAdminProblemsRoute: AppAdminProblemsRoute,
   AppAdminUsersRoute: AppAdminUsersRoute,
   AppProblemsProblemIdRoute: AppProblemsProblemIdRoute,
   AppRoomsRoomIdRoute: AppRoomsRoomIdRoute,
