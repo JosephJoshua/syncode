@@ -15,7 +15,8 @@
     "myRooms": "我的房间",
     "browse": "浏览",
     "code": "代码",
-    "whiteboard": "白板"
+    "whiteboard": "白板",
+    "matchmaking": "匹配"
   },
   "layout": {
     "sub": "管理你的房间，或加入开放的面试大厅。"
@@ -59,8 +60,8 @@
     "heading": "加入房间",
     "description": "将搭档分享的邀请链接粘贴到下方即可加入。",
     "button": "加入",
-    "placeholder": "https://\u2026/rooms/abc123?code=A3K7M2",
-    "error": "请粘贴有效的邀请链接（如 https://\u2026/rooms/id?code=XXXXXX）"
+    "placeholder": "https://…/rooms/abc123?code=A3K7M2",
+    "error": "请粘贴有效的邀请链接（如 https://…/rooms/id?code=XXXXXX）"
   },
   "filter": {
     "all": "全部"
@@ -385,5 +386,28 @@
     "resizeFromTopRight": "从右上角调整白板尺寸",
     "resizeFromBottomLeft": "从左下角调整白板尺寸",
     "resizeFromBottomRight": "从右下角调整白板尺寸"
+  },
+  "matchmaking": {
+    "preferencesTitle": "匹配偏好",
+    "statusTitle": "队列状态",
+    "languageLabel": "语言",
+    "difficultyLabel": "难度",
+    "start": "开始匹配",
+    "cancel": "离开队列",
+    "toastMatched": "已找到匹配，正在加入房间。",
+    "joinFailed": "无法加入匹配到的房间。",
+    "idleDescription": "选择偏好后进入队列。",
+    "searchingDescription": "正在寻找符合偏好的公开房间。",
+    "availableRooms": "{{count}} 个候选房间",
+    "status": {
+      "idle": "就绪",
+      "searching": "搜索中",
+      "matched": "已匹配"
+    },
+    "difficulty": {
+      "easy": "简单",
+      "medium": "中等",
+      "hard": "困难"
+    }
   }
 }

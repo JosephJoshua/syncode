@@ -14,11 +14,35 @@
     "ariaLabel": "Rooms sections",
     "myRooms": "My rooms",
     "browse": "Browse",
+    "matchmaking": "Matchmaking",
     "code": "Code",
     "whiteboard": "Whiteboard"
   },
   "layout": {
     "sub": "Manage your rooms and drop into open interview lobbies."
+  },
+  "matchmaking": {
+    "preferencesTitle": "Match preferences",
+    "statusTitle": "Queue status",
+    "languageLabel": "Language",
+    "difficultyLabel": "Difficulty",
+    "start": "Find match",
+    "cancel": "Leave queue",
+    "toastMatched": "Match found. Joining room.",
+    "joinFailed": "Couldn't join the matched room.",
+    "idleDescription": "Choose your preferences and enter the queue.",
+    "searchingDescription": "Looking for a public room that matches your preferences.",
+    "availableRooms": "{{count}} candidates",
+    "status": {
+      "idle": "Ready",
+      "searching": "Searching",
+      "matched": "Matched"
+    },
+    "difficulty": {
+      "easy": "Easy",
+      "medium": "Medium",
+      "hard": "Hard"
+    }
   },
   "browse": {
     "heading": "Public Rooms",
