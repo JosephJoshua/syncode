@@ -150,6 +150,20 @@ describe('PATCH /admin/users/:id/ban', () => {
       actor,
     ).expect(403);
   });
+
+  it('GIVEN admin user WHEN banning their own account THEN rejects the request', async () => {
+    const admin = await insertUser(db, { role: 'admin' });
+
+    const res = await asUser(
+      request(app.getHttpServer()).patch(`/admin/users/${admin.id}/ban`).send({}),
+      admin,
+    ).expect(400);
+
+    expect(res.body).toMatchObject({
+      code: 'VALIDATION_FAILED',
+      message: 'Admins cannot ban their own account',
+    });
+  });
 });
 
 describe('PATCH /admin/users/:id/unban', () => {

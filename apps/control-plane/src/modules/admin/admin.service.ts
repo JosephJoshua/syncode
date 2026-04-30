@@ -1,4 +1,10 @@
-import { ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import {
   type AdminBanUserInput,
   type AdminUser,
@@ -70,6 +76,13 @@ export class AdminService {
     input: AdminBanUserInput,
   ): Promise<AdminUser> {
     await this.assertAdmin(actorId);
+
+    if (actorId === targetUserId) {
+      throw new BadRequestException({
+        message: 'Admins cannot ban their own account',
+        code: ERROR_CODES.VALIDATION_FAILED,
+      });
+    }
 
     const now = new Date();
     const [user] = await this.db
