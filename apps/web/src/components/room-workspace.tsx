@@ -1448,7 +1448,6 @@ export function RoomWorkspace({
                           />
                         ))}
                       </div>
-                      {!rightNarrow ? <InviteLinkInline inviteLink={inviteLink} /> : null}
                     </div>
                   ) : (
                     <div className="h-full p-2">
