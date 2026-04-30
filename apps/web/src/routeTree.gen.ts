@@ -16,6 +16,7 @@ import { Route as PublicRegisterRouteImport } from './routes/_public/register'
 import { Route as PublicLoginRouteImport } from './routes/_public/login'
 import { Route as AppProfileRouteImport } from './routes/_app/profile'
 import { Route as AppDashboardRouteImport } from './routes/_app/dashboard'
+import { Route as AppCodeQualityRouteImport } from './routes/_app/code-quality'
 import { Route as AppBookmarksRouteImport } from './routes/_app/bookmarks'
 import { Route as AppRoomsRouteRouteImport } from './routes/_app/rooms/route'
 import { Route as AppRoomsIndexRouteImport } from './routes/_app/rooms/index'
@@ -61,6 +62,11 @@ const AppProfileRoute = AppProfileRouteImport.update({
 const AppDashboardRoute = AppDashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppCodeQualityRoute = AppCodeQualityRouteImport.update({
+  id: '/code-quality',
+  path: '/code-quality',
   getParentRoute: () => AppRouteRoute,
 } as any)
 const AppBookmarksRoute = AppBookmarksRouteImport.update({
@@ -133,6 +139,7 @@ export interface FileRoutesByFullPath {
   '/': typeof PublicIndexRoute
   '/rooms': typeof AppRoomsRouteRouteWithChildren
   '/bookmarks': typeof AppBookmarksRoute
+  '/code-quality': typeof AppCodeQualityRoute
   '/dashboard': typeof AppDashboardRoute
   '/profile': typeof AppProfileRoute
   '/login': typeof PublicLoginRoute
@@ -152,6 +159,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof PublicIndexRoute
   '/bookmarks': typeof AppBookmarksRoute
+  '/code-quality': typeof AppCodeQualityRoute
   '/dashboard': typeof AppDashboardRoute
   '/profile': typeof AppProfileRoute
   '/login': typeof PublicLoginRoute
@@ -174,6 +182,7 @@ export interface FileRoutesById {
   '/_public': typeof PublicRouteRouteWithChildren
   '/_app/rooms': typeof AppRoomsRouteRouteWithChildren
   '/_app/bookmarks': typeof AppBookmarksRoute
+  '/_app/code-quality': typeof AppCodeQualityRoute
   '/_app/dashboard': typeof AppDashboardRoute
   '/_app/profile': typeof AppProfileRoute
   '/_public/login': typeof PublicLoginRoute
@@ -197,6 +206,7 @@ export interface FileRouteTypes {
     | '/'
     | '/rooms'
     | '/bookmarks'
+    | '/code-quality'
     | '/dashboard'
     | '/profile'
     | '/login'
@@ -216,6 +226,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/bookmarks'
+    | '/code-quality'
     | '/dashboard'
     | '/profile'
     | '/login'
@@ -237,6 +248,7 @@ export interface FileRouteTypes {
     | '/_public'
     | '/_app/rooms'
     | '/_app/bookmarks'
+    | '/_app/code-quality'
     | '/_app/dashboard'
     | '/_app/profile'
     | '/_public/login'
@@ -309,6 +321,13 @@ declare module '@tanstack/react-router' {
       path: '/dashboard'
       fullPath: '/dashboard'
       preLoaderRoute: typeof AppDashboardRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/_app/code-quality': {
+      id: '/_app/code-quality'
+      path: '/code-quality'
+      fullPath: '/code-quality'
+      preLoaderRoute: typeof AppCodeQualityRouteImport
       parentRoute: typeof AppRouteRoute
     }
     '/_app/bookmarks': {
@@ -424,6 +443,7 @@ const AppRoomsRouteRouteWithChildren = AppRoomsRouteRoute._addFileChildren(
 interface AppRouteRouteChildren {
   AppRoomsRouteRoute: typeof AppRoomsRouteRouteWithChildren
   AppBookmarksRoute: typeof AppBookmarksRoute
+  AppCodeQualityRoute: typeof AppCodeQualityRoute
   AppDashboardRoute: typeof AppDashboardRoute
   AppProfileRoute: typeof AppProfileRoute
   AppAdminAuditLogsRoute: typeof AppAdminAuditLogsRoute
@@ -439,6 +459,7 @@ interface AppRouteRouteChildren {
 const AppRouteRouteChildren: AppRouteRouteChildren = {
   AppRoomsRouteRoute: AppRoomsRouteRouteWithChildren,
   AppBookmarksRoute: AppBookmarksRoute,
+  AppCodeQualityRoute: AppCodeQualityRoute,
   AppDashboardRoute: AppDashboardRoute,
   AppProfileRoute: AppProfileRoute,
   AppAdminAuditLogsRoute: AppAdminAuditLogsRoute,
