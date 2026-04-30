@@ -23,8 +23,8 @@ import { Route as AppProblemsIndexRouteImport } from './routes/_app/problems.ind
 import { Route as AppSessionsSessionIdRouteImport } from './routes/_app/sessions.$sessionId'
 import { Route as AppRoomsCreateRouteImport } from './routes/_app/rooms_.create'
 import { Route as AppRoomsRoomIdRouteImport } from './routes/_app/rooms_.$roomId'
-import { Route as AppRoomsBrowseRouteImport } from './routes/_app/rooms/browse'
 import { Route as AppRoomsMatchmakingRouteImport } from './routes/_app/rooms/matchmaking'
+import { Route as AppRoomsBrowseRouteImport } from './routes/_app/rooms/browse'
 import { Route as AppProblemsProblemIdRouteImport } from './routes/_app/problems.$problemId'
 import { Route as AppAdminUsersRouteImport } from './routes/_app/admin.users'
 import { Route as AppAdminAuditLogsRouteImport } from './routes/_app/admin.audit-logs'
@@ -97,14 +97,14 @@ const AppRoomsRoomIdRoute = AppRoomsRoomIdRouteImport.update({
   path: '/rooms/$roomId',
   getParentRoute: () => AppRouteRoute,
 } as any)
-const AppRoomsBrowseRoute = AppRoomsBrowseRouteImport.update({
-  id: '/browse',
-  path: '/browse',
-  getParentRoute: () => AppRoomsRouteRoute,
-} as any)
 const AppRoomsMatchmakingRoute = AppRoomsMatchmakingRouteImport.update({
   id: '/matchmaking',
   path: '/matchmaking',
+  getParentRoute: () => AppRoomsRouteRoute,
+} as any)
+const AppRoomsBrowseRoute = AppRoomsBrowseRouteImport.update({
+  id: '/browse',
+  path: '/browse',
   getParentRoute: () => AppRoomsRouteRoute,
 } as any)
 const AppProblemsProblemIdRoute = AppProblemsProblemIdRouteImport.update({
@@ -348,18 +348,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppRoomsRoomIdRouteImport
       parentRoute: typeof AppRouteRoute
     }
-    '/_app/rooms/browse': {
-      id: '/_app/rooms/browse'
-      path: '/browse'
-      fullPath: '/rooms/browse'
-      preLoaderRoute: typeof AppRoomsBrowseRouteImport
-      parentRoute: typeof AppRoomsRouteRoute
-    }
     '/_app/rooms/matchmaking': {
       id: '/_app/rooms/matchmaking'
       path: '/matchmaking'
       fullPath: '/rooms/matchmaking'
       preLoaderRoute: typeof AppRoomsMatchmakingRouteImport
+      parentRoute: typeof AppRoomsRouteRoute
+    }
+    '/_app/rooms/browse': {
+      id: '/_app/rooms/browse'
+      path: '/browse'
+      fullPath: '/rooms/browse'
+      preLoaderRoute: typeof AppRoomsBrowseRouteImport
       parentRoute: typeof AppRoomsRouteRoute
     }
     '/_app/problems/$problemId': {
