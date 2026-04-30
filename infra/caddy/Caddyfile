@@ -57,6 +57,11 @@
 	}
 }
 
+# Plain-HTTP upstream (docker-published ports not behind origin nginx).
+(plain_proxy) {
+	import proxy_headers
+}
+
 {$DOMAIN} {
 	# Strip Caddy's Server header because origin nginx sets its own headers
 	header -Server
@@ -95,7 +100,7 @@ grafana.{$DOMAIN} {
 	header -Server
 
 	reverse_proxy {$ORIGIN_HOST}:{$ORIGIN_PORT_GRAFANA} {
-		import standard_proxy
+		import plain_proxy
 	}
 }
 
@@ -103,7 +108,7 @@ grafana.staging.{$DOMAIN} {
 	header -Server
 
 	reverse_proxy {$ORIGIN_HOST}:{$ORIGIN_PORT_STAGING_GRAFANA} {
-		import standard_proxy
+		import plain_proxy
 	}
 }
 
