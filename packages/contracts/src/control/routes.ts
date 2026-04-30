@@ -1,6 +1,12 @@
 import type { z } from 'zod';
 import { defineRoute } from '../route-utils.js';
 import type {
+  adminBanUserSchema,
+  adminUserSchema,
+  adminUsersQuerySchema,
+  adminUsersResponseSchema,
+} from './admin.js';
+import type {
   accessTokenResponseSchema,
   loginResponseSchema,
   loginSchema,
@@ -74,6 +80,19 @@ import type {
 } from './whiteboard-assets.js';
 
 export const CONTROL_API = {
+  ADMIN: {
+    USERS: {
+      LIST: defineRoute<
+        z.infer<typeof adminUsersQuerySchema>,
+        z.infer<typeof adminUsersResponseSchema>
+      >()('admin/users', 'GET'),
+      BAN: defineRoute<z.infer<typeof adminBanUserSchema>, z.infer<typeof adminUserSchema>>()(
+        'admin/users/:id/ban',
+        'PATCH',
+      ),
+      UNBAN: defineRoute<void, z.infer<typeof adminUserSchema>>()('admin/users/:id/unban', 'PATCH'),
+    },
+  },
   AUTH: {
     REGISTER: defineRoute<z.infer<typeof registerSchema>, z.infer<typeof registerResponseSchema>>()(
       'auth/register',
