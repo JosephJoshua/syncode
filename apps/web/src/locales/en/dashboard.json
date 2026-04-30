@@ -8,6 +8,43 @@
     "averageScore": "Average Score",
     "practiceTime": "Practice Time"
   },
+  "weakness": {
+    "heading": "Weakness summary",
+    "sub": "Spot repeated practice gaps and review the sessions behind them.",
+    "sessionCount": "{{count}} sessions analyzed",
+    "categoriesTitle": "Frequent categories",
+    "trendTitle": "Improvement trend",
+    "frequency": "{{count}} hits",
+    "loadingTitle": "Loading weaknesses",
+    "loadingDescription": "We're analyzing your recent sessions.",
+    "unavailableTitle": "Weakness summary unavailable",
+    "unavailableDescription": "The summary will appear once your account session is ready.",
+    "noWeaknessTitle": "No repeated weaknesses detected",
+    "noWeaknessDescription": "Your recent candidate sessions do not show a repeated pattern yet.",
+    "noDataTitle": "No session data yet",
+    "noDataDescription": "Complete more interview sessions to unlock weakness trends.",
+    "noTrendTitle": "No scored trend yet",
+    "noTrendDescription": "Candidate sessions with scores will appear here.",
+    "trendPoint": "{{problem}} scored {{score}}",
+    "category": {
+      "correctness": {
+        "title": "Correctness",
+        "description": "Candidate sessions below the passing score."
+      },
+      "consistency": {
+        "title": "Consistency",
+        "description": "Sessions that passed but stayed below a strong score."
+      },
+      "pacing": {
+        "title": "Pacing",
+        "description": "Sessions that ran longer than the target interview window."
+      },
+      "difficulty": {
+        "title": "Hard-problem execution",
+        "description": "Hard problems where the final score left room to improve."
+      }
+    }
+  },
   "recentSessions": "Recent Sessions",
   "search": {
     "placeholder": "Search by problem name"

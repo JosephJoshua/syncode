@@ -5,6 +5,7 @@ import type { LucideIcon } from 'lucide-react';
 import { Calendar, Clock3, Target, TrendingUp } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { DashboardRecentSessions } from '@/components/dashboard-recent-sessions.js';
+import { DashboardWeaknessSummary } from '@/components/dashboard-weakness-summary.js';
 import {
   EMPTY_DASHBOARD_STATS,
   fetchDashboardSessionHistory,
@@ -96,6 +97,12 @@ function DashboardPage() {
           ))}
         </div>
       </section>
+
+      <DashboardWeaknessSummary
+        records={sessionHistory?.records ?? []}
+        isLoading={sessionHistoryQuery.isLoading}
+        isUnavailable={isUnavailable}
+      />
 
       <DashboardRecentSessions
         viewerId={viewerId}

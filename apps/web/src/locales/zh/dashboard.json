@@ -82,5 +82,42 @@
     "noMatchDescription": "尝试调整搜索、筛选或排序条件以查看更多会话历史。",
     "noSessionsTitle": "暂无会话",
     "noSessionsDescription": "完成面试练习后，你的记录将显示在这里。"
+  },
+  "weakness": {
+    "heading": "薄弱项总结",
+    "sub": "找出重复出现的练习短板，并回看相关会话。",
+    "sessionCount": "已分析 {{count}} 场会话",
+    "categoriesTitle": "高频类别",
+    "trendTitle": "提升趋势",
+    "frequency": "{{count}} 次",
+    "loadingTitle": "正在加载薄弱项",
+    "loadingDescription": "正在分析你的近期会话。",
+    "unavailableTitle": "薄弱项总结暂不可用",
+    "unavailableDescription": "账户会话就绪后将显示总结。",
+    "noWeaknessTitle": "未检测到重复薄弱项",
+    "noWeaknessDescription": "你近期的候选人会话暂未呈现重复模式。",
+    "noDataTitle": "暂无会话数据",
+    "noDataDescription": "完成更多面试会话后即可解锁薄弱项趋势。",
+    "noTrendTitle": "暂无评分趋势",
+    "noTrendDescription": "有评分的候选人会话将显示在这里。",
+    "trendPoint": "{{problem}} 得分 {{score}}",
+    "category": {
+      "correctness": {
+        "title": "正确性",
+        "description": "低于通过分的候选人会话。"
+      },
+      "consistency": {
+        "title": "稳定性",
+        "description": "已通过但分数还不够稳的会话。"
+      },
+      "pacing": {
+        "title": "节奏",
+        "description": "超出目标面试时间窗口的会话。"
+      },
+      "difficulty": {
+        "title": "困难题执行",
+        "description": "最终分数仍有提升空间的困难题。"
+      }
+    }
   }
 }
