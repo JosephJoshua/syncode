@@ -88,6 +88,15 @@ function MatchmakingPage() {
       });
   }, [browseQuery.data, joinMutation, matchedRoomId, navigate, status, t]);
 
+  useEffect(() => {
+    if (status !== 'searching' || !browseQuery.isError) {
+      return;
+    }
+
+    toast.error(t('matchmaking.searchFailed'));
+    setStatus('idle');
+  }, [browseQuery.isError, status, t]);
+
   const startQueue = () => {
     setMatchedRoomId(null);
     setStatus('searching');
@@ -181,7 +190,9 @@ function MatchmakingPage() {
               <p className="mt-1 text-sm text-muted-foreground">
                 {status === 'searching'
                   ? t('matchmaking.searchingDescription')
-                  : t('matchmaking.idleDescription')}
+                  : status === 'matched'
+                    ? t('matchmaking.matchedDescription')
+                    : t('matchmaking.idleDescription')}
               </p>
             </div>
             {status === 'matched' ? (

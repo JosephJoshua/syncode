@@ -408,6 +408,8 @@
       "easy": "简单",
       "medium": "中等",
       "hard": "困难"
-    }
+    },
+    "matchedDescription": "已找到匹配房间，正在跳转到工作区。",
+    "searchFailed": "暂时无法搜索匹配。"
   }
 }
