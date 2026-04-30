@@ -11,9 +11,6 @@ else
   info "Deploying PRODUCTION stack"
 fi
 
-info "Pulling latest images..."
-# docker compose "${COMPOSE_ARGS[@]}" pull   # disabled — locally-tagged images preferred during Phase 1 cutover
-
 info "Starting services..."
 docker compose "${COMPOSE_ARGS[@]}" up -d --remove-orphans
 
