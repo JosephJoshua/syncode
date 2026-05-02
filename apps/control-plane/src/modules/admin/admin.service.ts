@@ -22,6 +22,19 @@ interface UsersCursor {
   id: string;
 }
 
+const adminUserSelection = {
+  id: users.id,
+  email: users.email,
+  username: users.username,
+  displayName: users.displayName,
+  role: users.role,
+  avatarUrl: users.avatarUrl,
+  bannedAt: users.bannedAt,
+  bannedReason: users.bannedReason,
+  createdAt: users.createdAt,
+  updatedAt: users.updatedAt,
+};
+
 @Injectable()
 export class AdminService {
   constructor(@Inject(DB_CLIENT) private readonly db: Database) {}
@@ -38,18 +51,7 @@ export class AdminService {
     ].filter((item): item is SQL => Boolean(item));
 
     const rows = await this.db
-      .select({
-        id: users.id,
-        email: users.email,
-        username: users.username,
-        displayName: users.displayName,
-        role: users.role,
-        avatarUrl: users.avatarUrl,
-        bannedAt: users.bannedAt,
-        bannedReason: users.bannedReason,
-        createdAt: users.createdAt,
-        updatedAt: users.updatedAt,
-      })
+      .select(adminUserSelection)
       .from(users)
       .where(and(...filters))
       .orderBy(desc(users.createdAt), desc(users.id))
@@ -93,18 +95,7 @@ export class AdminService {
         updatedAt: now,
       })
       .where(and(eq(users.id, targetUserId), isNull(users.deletedAt)))
-      .returning({
-        id: users.id,
-        email: users.email,
-        username: users.username,
-        displayName: users.displayName,
-        role: users.role,
-        avatarUrl: users.avatarUrl,
-        bannedAt: users.bannedAt,
-        bannedReason: users.bannedReason,
-        createdAt: users.createdAt,
-        updatedAt: users.updatedAt,
-      });
+      .returning(adminUserSelection);
 
     if (!user) {
       throw new NotFoundException({
@@ -128,18 +119,7 @@ export class AdminService {
         updatedAt: now,
       })
       .where(and(eq(users.id, targetUserId), isNull(users.deletedAt)))
-      .returning({
-        id: users.id,
-        email: users.email,
-        username: users.username,
-        displayName: users.displayName,
-        role: users.role,
-        avatarUrl: users.avatarUrl,
-        bannedAt: users.bannedAt,
-        bannedReason: users.bannedReason,
-        createdAt: users.createdAt,
-        updatedAt: users.updatedAt,
-      });
+      .returning(adminUserSelection);
 
     if (!user) {
       throw new NotFoundException({

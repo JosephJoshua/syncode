@@ -111,7 +111,12 @@ describe('GET /admin/users', () => {
   it('GIVEN non-admin user WHEN listing users THEN rejects the request', async () => {
     const user = await insertUser(db);
 
-    await asUser(request(app.getHttpServer()).get('/admin/users'), user).expect(403);
+    const res = await asUser(request(app.getHttpServer()).get('/admin/users'), user).expect(403);
+
+    expect(res.body).toMatchObject({
+      code: 'FORBIDDEN',
+      message: 'Admin access required',
+    });
   });
 });
 
@@ -145,10 +150,15 @@ describe('PATCH /admin/users/:id/ban', () => {
     const actor = await insertUser(db);
     const target = await insertUser(db);
 
-    await asUser(
+    const res = await asUser(
       request(app.getHttpServer()).patch(`/admin/users/${target.id}/ban`).send({}),
       actor,
     ).expect(403);
+
+    expect(res.body).toMatchObject({
+      code: 'FORBIDDEN',
+      message: 'Admin access required',
+    });
   });
 
   it('GIVEN admin user WHEN banning their own account THEN rejects the request', async () => {
