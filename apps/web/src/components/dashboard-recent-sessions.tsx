@@ -9,6 +9,7 @@ import {
   AlertDialogTitle,
   Avatar,
   AvatarFallback,
+  AvatarImage,
   Badge,
   Button,
   Card,
@@ -130,6 +131,7 @@ function ParticipantAvatar({
 
   return (
     <Avatar className="mx-auto size-8">
+      {participant.avatarUrl ? <AvatarImage src={participant.avatarUrl} /> : null}
       <AvatarFallback>{initials}</AvatarFallback>
     </Avatar>
   );

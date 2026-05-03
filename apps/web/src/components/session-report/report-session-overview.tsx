@@ -1,5 +1,15 @@
 import type { SessionDetail } from '@syncode/contracts';
-import { Badge, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@syncode/ui';
+import {
+  Avatar,
+  AvatarFallback,
+  AvatarImage,
+  Badge,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@syncode/ui';
 import {
   Bot,
   CalendarClock,
@@ -163,9 +173,10 @@ export function ReportSessionOverview({
                     key={participant.userId}
                     className="flex items-start gap-3 rounded-2xl bg-background/60 px-3 py-3"
                   >
-                    <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/12 font-semibold text-primary">
-                      {initials}
-                    </div>
+                    <Avatar className="size-10 shrink-0">
+                      {participant.avatarUrl ? <AvatarImage src={participant.avatarUrl} /> : null}
+                      <AvatarFallback>{initials}</AvatarFallback>
+                    </Avatar>
 
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">

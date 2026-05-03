@@ -53,6 +53,7 @@ function SessionFeedbackPage() {
     queryKey: ['sessions', sessionId, 'detail'],
     queryFn: () => fetchSessionDetail(sessionId),
     retry: false,
+    refetchInterval: 10_000,
   });
 
   const reportQuery = useQuery({
@@ -73,6 +74,7 @@ function SessionFeedbackPage() {
     queryKey: ['sessions', sessionId, 'peer-feedback'],
     queryFn: () => fetchSessionPeerFeedback(sessionId),
     retry: false,
+    refetchInterval: 10_000,
   });
 
   const session = sessionQuery.data;

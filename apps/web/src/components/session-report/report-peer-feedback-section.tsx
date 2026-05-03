@@ -1,13 +1,8 @@
-import { Avatar, AvatarFallback, Badge, Button } from '@syncode/ui';
+import { Avatar, AvatarFallback, AvatarImage, Badge, Button } from '@syncode/ui';
 import { MessageSquareQuote } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { formatSessionDateTime } from '@/lib/dashboard-session-history.js';
-import type {
-  FeedbackUser,
-  GetSessionFeedbackResponse,
-  PeerFeedbackEntry,
-  PeerFeedbackRatings,
-} from '@/lib/session-peer-feedback.js';
+import type { GetSessionFeedbackResponse, PeerFeedbackEntry } from '@/lib/session-peer-feedback.js';
 import { SectionCard } from './report-feedback-shell.js';
 
 export function ReportPeerFeedbackSection({
@@ -71,7 +66,7 @@ export function ReportPeerFeedbackSection({
       ) : (
         <div className="space-y-4">
           {entries.map((entry) => (
-            <PeerFeedbackEntryCard key={entry.feedbackId} entry={entry} />
+            <PeerFeedbackEntryCard key={entry.id} entry={entry} />
           ))}
         </div>
       )}
@@ -81,15 +76,16 @@ export function ReportPeerFeedbackSection({
 
 function PeerFeedbackEntryCard({ entry }: { entry: PeerFeedbackEntry }) {
   const { t } = useTranslation('feedback');
-  const fromUserName = resolveFeedbackUserName(entry.fromUser);
-  const targetUserName = resolveFeedbackUserName(entry.targetUser);
+  const fromUserName = entry.reviewerName;
+  const targetUserName = entry.candidateName;
 
   return (
     <article className="rounded-2xl bg-muted/35 p-4 ring-1 ring-border/50 sm:p-5">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="flex min-w-0 gap-3">
           <Avatar className="size-10 shrink-0">
-            <AvatarFallback>{getFeedbackUserInitial(entry.fromUser)}</AvatarFallback>
+            {entry.reviewerAvatarUrl ? <AvatarImage src={entry.reviewerAvatarUrl} /> : null}
+            <AvatarFallback>{getFeedbackUserInitial(entry.reviewerName)}</AvatarFallback>
           </Avatar>
 
           <div className="min-w-0">
@@ -115,7 +111,7 @@ function PeerFeedbackEntryCard({ entry }: { entry: PeerFeedbackEntry }) {
             {t('peerFeedbackSection.submittedAt')}
           </Badge>
           <p className="text-sm text-muted-foreground">
-            {formatFeedbackTimestamp(entry.submittedAt)}
+            {formatFeedbackTimestamp(entry.createdAt)}
           </p>
         </div>
       </div>
@@ -125,19 +121,19 @@ function PeerFeedbackEntryCard({ entry }: { entry: PeerFeedbackEntry }) {
           <div data-slot="peer-feedback-ratings-layout" className="space-y-3">
             <RatingRow
               label={t('peerFeedbackSection.ratings.problemSolving')}
-              score={entry.ratings.problemSolving}
+              score={entry.problemSolvingRating}
             />
             <RatingRow
               label={t('peerFeedbackSection.ratings.communication')}
-              score={entry.ratings.communication}
+              score={entry.communicationRating}
             />
             <RatingRow
               label={t('peerFeedbackSection.ratings.codeQuality')}
-              score={entry.ratings.codeQuality}
+              score={entry.codeQualityRating}
             />
             <RatingRow
               label={t('peerFeedbackSection.ratings.debugging')}
-              score={entry.ratings.debugging}
+              score={entry.debuggingRating}
             />
           </div>
         </div>
@@ -152,7 +148,7 @@ function PeerFeedbackEntryCard({ entry }: { entry: PeerFeedbackEntry }) {
             </p>
             <div className="mt-4 border-t border-border/40 pt-4 pl-4">
               <p className="mt-1 ml-5 font-mono text-4xl font-semibold text-foreground">
-                {entry.ratings.overall}/5
+                {entry.overallRating}/5
               </p>
             </div>
           </div>
@@ -170,13 +166,7 @@ function PeerFeedbackEntryCard({ entry }: { entry: PeerFeedbackEntry }) {
   );
 }
 
-function RatingRow({
-  label,
-  score,
-}: {
-  label: string;
-  score: PeerFeedbackRatings[keyof PeerFeedbackRatings];
-}) {
+function RatingRow({ label, score }: { label: string; score: number }) {
   return (
     <div data-slot="peer-feedback-rating-row" className="space-y-2">
       <div className="space-y-2 sm:grid sm:grid-cols-[minmax(0,150px)_264px_3rem] sm:items-center sm:gap-3 sm:space-y-0">
@@ -192,13 +182,7 @@ function RatingRow({
   );
 }
 
-function SegmentedRatingBar({
-  label,
-  score,
-}: {
-  label: string;
-  score: PeerFeedbackRatings[keyof PeerFeedbackRatings];
-}) {
+function SegmentedRatingBar({ label, score }: { label: string; score: number }) {
   return (
     <div
       data-slot="peer-feedback-rating-bar"
@@ -245,12 +229,8 @@ function WrittenFeedbackBlock({ title, body }: { title: string; body: string }) 
   );
 }
 
-function resolveFeedbackUserName(user: FeedbackUser) {
-  return user.displayName?.trim() || user.username;
-}
-
-function getFeedbackUserInitial(user: FeedbackUser) {
-  const source = resolveFeedbackUserName(user).trim();
+function getFeedbackUserInitial(name: string) {
+  const source = name.trim();
   return source.charAt(0).toUpperCase() || '?';
 }
 
@@ -258,6 +238,6 @@ function getPairAgainBadgeVariant(wouldPairAgain: boolean) {
   return wouldPairAgain ? 'success' : 'warning';
 }
 
-function formatFeedbackTimestamp(submittedAt: string) {
-  return formatSessionDateTime(submittedAt);
+function formatFeedbackTimestamp(createdAt: string) {
+  return formatSessionDateTime(createdAt);
 }

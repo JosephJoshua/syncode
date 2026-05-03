@@ -12,6 +12,7 @@ export type SessionRole = 'candidate' | 'interviewer' | 'observer';
 export type SessionStatus = 'passed' | 'failed' | null;
 
 export type SessionParticipant = {
+  avatarUrl: string | null;
   initials: string;
   isCurrentUser?: boolean;
 };
@@ -378,6 +379,7 @@ function toSessionParticipant(
   }
 
   return {
+    avatarUrl: participant.avatarUrl,
     initials: getParticipantInitials(participant),
     isCurrentUser: currentUserId ? participant.userId === currentUserId : false,
   };

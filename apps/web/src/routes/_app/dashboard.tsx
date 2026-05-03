@@ -29,6 +29,7 @@ function DashboardPage() {
   const sessionHistoryQuery = useQuery({
     queryKey: getDashboardSessionHistoryQueryKey(viewerId),
     enabled: isQueryEnabled,
+    refetchInterval: 10_000,
     queryFn: () => {
       if (!viewerId) {
         throw new Error('Viewer ID is required to fetch dashboard session history');
