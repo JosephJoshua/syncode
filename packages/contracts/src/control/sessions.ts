@@ -61,6 +61,7 @@ export const sessionParticipantSchema = z.object({
   userId: z.uuid(),
   username: z.string(),
   displayName: z.string().nullable(),
+  avatarUrl: z.string().nullable(),
   role: z.enum(ROOM_ROLES),
   joinedAt: z.iso.datetime(),
   leftAt: z.iso.datetime().nullable(),

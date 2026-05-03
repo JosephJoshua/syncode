@@ -244,6 +244,7 @@ export class SessionsService {
           userId: sessionParticipants.userId,
           username: users.username,
           displayName: users.displayName,
+          avatarUrl: users.avatarUrl,
           role: sessionParticipants.role,
           joinedAt: sessionParticipants.joinedAt,
           leftAt: sessionParticipants.leftAt,
@@ -343,6 +344,7 @@ export class SessionsService {
         .filter((participant) => this.isReviewParticipantRole(participant.role))
         .map((participant) => participant.userId),
     );
+    const resolvedParticipantRows = await resolveAvatarUrls(participantRows, this.storageService);
     const reviewFeedbackRows = filterReviewFeedback(feedbackRows, reviewParticipantIds);
     const allReviewFeedbackSubmitted = isAllReviewFeedbackSubmitted(
       reviewParticipantIds.size,
@@ -368,10 +370,11 @@ export class SessionsService {
       problem: problemRow[0] ?? null,
       language: session.language,
       duration: Math.round((session.durationMs ?? 0) / 1000),
-      participants: participantRows.map((p) => ({
+      participants: resolvedParticipantRows.map((p) => ({
         userId: p.userId,
         username: p.username,
         displayName: p.displayName,
+        avatarUrl: p.avatarUrl,
         role: p.role,
         joinedAt: p.joinedAt,
         leftAt: p.leftAt,

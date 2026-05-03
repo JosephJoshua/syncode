@@ -5,11 +5,14 @@ import {
   Inject,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { ERROR_CODES, type SubmitSessionFeedbackInput } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
 import { peerFeedback, sessionParticipants, sessions, users } from '@syncode/db';
+import { type IStorageService, STORAGE_SERVICE } from '@syncode/shared/ports';
 import { and, asc, eq, inArray } from 'drizzle-orm';
+import { resolveAvatarUrls } from '@/common/resolve-avatar-urls.js';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
 import {
   filterReviewFeedback,
@@ -19,7 +22,10 @@ import type { SessionFeedbackEntryResult, SessionFeedbackResult } from './feedba
 
 @Injectable()
 export class FeedbackService {
-  constructor(@Inject(DB_CLIENT) private readonly db: Database) {}
+  constructor(
+    @Inject(DB_CLIENT) private readonly db: Database,
+    @Optional() @Inject(STORAGE_SERVICE) private readonly storageService?: IStorageService,
+  ) {}
 
   async submitSessionFeedback(
     sessionId: string,
@@ -176,6 +182,7 @@ export class FeedbackService {
         reviewerId: peerFeedback.reviewerId,
         reviewerUsername: users.username,
         reviewerDisplayName: users.displayName,
+        reviewerAvatarUrl: users.avatarUrl,
         candidateId: peerFeedback.candidateId,
         problemSolvingRating: peerFeedback.problemSolvingRating,
         communicationRating: peerFeedback.communicationRating,
@@ -192,7 +199,16 @@ export class FeedbackService {
       .where(eq(peerFeedback.sessionId, sessionId))
       .orderBy(asc(peerFeedback.createdAt));
 
-    const candidateNames = await this.getUserNames(rows.map((row) => row.candidateId));
+    const candidateProfiles = await this.getUserProfiles(rows.map((row) => row.candidateId));
+    const resolvedReviewerRows = await this.resolveAvatarRows(
+      rows.map((row) => ({
+        id: row.reviewerId,
+        avatarUrl: row.reviewerAvatarUrl,
+      })),
+    );
+    const reviewerAvatars = new Map(
+      resolvedReviewerRows.map((row) => [row.id, row.avatarUrl] as const),
+    );
 
     return rows.map((row) => ({
       id: row.id,
@@ -200,8 +216,10 @@ export class FeedbackService {
       roomId: row.roomId,
       reviewerId: row.reviewerId,
       reviewerName: row.reviewerDisplayName ?? row.reviewerUsername,
+      reviewerAvatarUrl: reviewerAvatars.get(row.reviewerId) ?? null,
       candidateId: row.candidateId,
-      candidateName: candidateNames.get(row.candidateId) ?? row.candidateId,
+      candidateName: candidateProfiles.get(row.candidateId)?.name ?? row.candidateId,
+      candidateAvatarUrl: candidateProfiles.get(row.candidateId)?.avatarUrl ?? null,
       problemSolvingRating: row.problemSolvingRating,
       communicationRating: row.communicationRating,
       codeQualityRating: row.codeQualityRating,
@@ -214,17 +232,42 @@ export class FeedbackService {
     }));
   }
 
-  private async getUserNames(userIds: string[]): Promise<Map<string, string>> {
+  private async getUserProfiles(
+    userIds: string[],
+  ): Promise<Map<string, { name: string; avatarUrl: string | null }>> {
     if (userIds.length === 0) {
       return new Map();
     }
 
     const rows = await this.db
-      .select({ id: users.id, username: users.username, displayName: users.displayName })
+      .select({
+        id: users.id,
+        username: users.username,
+        displayName: users.displayName,
+        avatarUrl: users.avatarUrl,
+      })
       .from(users)
       .where(inArray(users.id, [...new Set(userIds)]));
 
-    return new Map(rows.map((row) => [row.id, row.displayName ?? row.username]));
+    const resolvedRows = await this.resolveAvatarRows(rows);
+
+    return new Map(
+      resolvedRows.map((row) => [
+        row.id,
+        {
+          name: row.displayName ?? row.username,
+          avatarUrl: row.avatarUrl,
+        },
+      ]),
+    );
+  }
+
+  private async resolveAvatarRows<T extends { avatarUrl: string | null }>(rows: T[]): Promise<T[]> {
+    if (!this.storageService) {
+      return rows;
+    }
+
+    return resolveAvatarUrls(rows, this.storageService);
   }
 }
 
