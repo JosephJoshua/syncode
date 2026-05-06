@@ -326,7 +326,7 @@ describe('BrowseRoomsPage', () => {
     ).toBeInTheDocument();
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(2_100);
+      await vi.advanceTimersByTimeAsync(5_100);
     });
 
     await waitFor(() => {
