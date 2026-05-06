@@ -175,7 +175,7 @@ function mimeTypeForAudioFormat(format: 'mp3' | 'wav') {
 
 function normalizeOpenAiCompatibleBaseUrl(baseUrl: string): string {
   const url = new URL(baseUrl);
-  const pathname = url.pathname.replace(/\/+$/, '');
+  const pathname = stripTrailingSlashes(url.pathname);
 
   if (pathname === '' || pathname === '/') {
     url.pathname = '/v1';
@@ -183,7 +183,17 @@ function normalizeOpenAiCompatibleBaseUrl(baseUrl: string): string {
     url.pathname = pathname;
   }
 
-  return url.toString().replace(/\/+$/, '');
+  return stripTrailingSlashes(url.toString());
+}
+
+function stripTrailingSlashes(value: string): string {
+  let end = value.length;
+
+  while (end > 0 && value[end - 1] === '/') {
+    end -= 1;
+  }
+
+  return value.slice(0, end);
 }
 
 function isRetryableStatus(status: number) {
