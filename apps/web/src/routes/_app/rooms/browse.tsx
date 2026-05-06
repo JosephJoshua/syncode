@@ -40,6 +40,7 @@ export const Route = createFileRoute('/_app/rooms/browse')({
 export { BrowseRoomsPage };
 
 const BROWSE_PAGE_SIZE = 12;
+const BROWSE_REFRESH_INTERVAL_MS = 5_000;
 
 type BrowseFilters = {
   search: string;
@@ -95,6 +96,7 @@ function BrowseRoomsPage() {
     queryKey: ['rooms', 'browse', searchParams],
     queryFn: () => api(CONTROL_API.ROOMS.BROWSE_PUBLIC, { searchParams }),
     placeholderData: (previous) => previous,
+    refetchInterval: BROWSE_REFRESH_INTERVAL_MS,
   });
 
   useEffect(() => {
@@ -107,7 +109,9 @@ function BrowseRoomsPage() {
       }
       const seen = new Set(previous.map((room) => room.roomId));
       const next = data.data.filter((room) => !seen.has(room.roomId));
-      return next.length === 0 ? previous : [...previous, ...next];
+      const updates = new Map(data.data.map((room) => [room.roomId, room]));
+      const merged = previous.map((room) => updates.get(room.roomId) ?? room);
+      return next.length === 0 ? merged : [...merged, ...next];
     });
   }, [browseQuery.data, cursor]);
 

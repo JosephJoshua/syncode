@@ -156,6 +156,7 @@ describe('BrowseRoomsPage', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.clearAllMocks();
   });
 
@@ -309,6 +310,29 @@ describe('BrowseRoomsPage', () => {
         );
       });
       expect(searchedForValue).toBe(true);
+    });
+  });
+
+  it('GIVEN participant count changes on the server WHEN the refresh interval elapses THEN the card updates', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    apiMock
+      .mockResolvedValueOnce(makeResponse([makeRoom({ participantCount: 1, maxParticipants: 2 })]))
+      .mockResolvedValue(makeResponse([makeRoom({ participantCount: 2, maxParticipants: 2 })]));
+
+    renderPage();
+
+    expect(
+      await screen.findByText('browse.card.participantFraction current=1 max=2'),
+    ).toBeInTheDocument();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_100);
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.getByText('browse.card.participantFraction current=2 max=2'),
+      ).toBeInTheDocument();
     });
   });
 
