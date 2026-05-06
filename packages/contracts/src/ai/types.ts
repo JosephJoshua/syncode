@@ -57,10 +57,17 @@ export interface InterviewResponseRequest {
   userMessage: string;
 }
 
+export interface InterviewResponseAudio {
+  audioKey: string;
+  mimeType: string;
+  downloadUrl: string;
+}
+
 export interface InterviewResponseResult {
   message: string;
   followUpQuestion?: string;
   codeAnnotations?: Array<{ line: number; comment: string }>;
+  audio?: InterviewResponseAudio;
 }
 
 export interface SessionReportParticipantContext {

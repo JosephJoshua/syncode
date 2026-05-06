@@ -8,7 +8,19 @@ const envSchema = z.object({
   AI_PLATFORM_API_KEY: z.string().optional(),
   AI_PLATFORM_MODEL: z.string().default('qwen3.5-mini'),
   AI_HINT_MODEL: z.string().default('qwen3.5-mini'),
+  AI_TTS_MODEL: z.string().default('qwen-tts'),
+  AI_TTS_VOICE: z.string().default('Chelsie'),
   AI_REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().default(60_000),
+  S3_ENDPOINT: z.url(),
+  S3_PUBLIC_ENDPOINT: z.url().optional(),
+  S3_ACCESS_KEY: z.string().min(1),
+  S3_SECRET_KEY: z.string().min(1),
+  S3_BUCKET: z.string().min(1),
+  S3_REGION: z.string().default('us-east-1'),
+  S3_FORCE_PATH_STYLE: z
+    .union([z.boolean(), z.string()])
+    .transform((val) => val === true || val === 'true' || val === '1')
+    .default(true),
   OTEL_EXPORTER_OTLP_ENDPOINT: z.url().optional(),
 });
 
