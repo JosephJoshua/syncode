@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { readdir, rm, stat } from 'node:fs/promises';
+import { readdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 
 const ROOTS = ['packages', 'apps'];
