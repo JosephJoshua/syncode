@@ -5,6 +5,7 @@ import type {
   InterviewResponseRequest,
   ReviewCodeRequest,
 } from '@syncode/contracts';
+import type { IStorageService } from '@syncode/shared';
 import { describe, expect, it, vi } from 'vitest';
 import type { ILlmProvider } from '../llm/llm.types.js';
 import { AiService } from './ai.service.js';
@@ -49,9 +50,28 @@ const llmProvider: ILlmProvider = {
     }),
     model: 'qwen3.5-mini',
   }),
+  generateSpeech: vi.fn().mockResolvedValue({
+    audio: Buffer.from('speech-bytes'),
+    model: 'qwen-tts',
+    mimeType: 'audio/mpeg',
+  }),
 };
 
-const service = new AiService(llmProvider);
+const storageService: IStorageService = {
+  upload: vi.fn().mockResolvedValue(undefined),
+  download: vi.fn().mockResolvedValue(Buffer.from('')),
+  delete: vi.fn().mockResolvedValue(undefined),
+  deleteMany: vi.fn().mockResolvedValue({ deleted: [], failed: [] }),
+  exists: vi.fn().mockResolvedValue(true),
+  getMetadata: vi.fn().mockResolvedValue(null),
+  list: vi.fn().mockResolvedValue({ keys: [], isTruncated: false }),
+  copy: vi.fn().mockResolvedValue(undefined),
+  getUploadUrl: vi.fn().mockResolvedValue('https://storage.example/upload'),
+  getDownloadUrl: vi.fn().mockResolvedValue('https://storage.example/interview-audio.mp3'),
+  shutdown: vi.fn().mockResolvedValue(undefined),
+};
+
+const service = new AiService(llmProvider, storageService);
 
 function createServiceWithLlmResponse(
   response: string,
@@ -62,14 +82,32 @@ function createServiceWithLlmResponse(
       text: response,
       model: configValues?.AI_PLATFORM_MODEL ?? 'qwen3.5-mini',
     }),
+    generateSpeech: vi.fn().mockResolvedValue({
+      audio: Buffer.from('speech-bytes'),
+      model: configValues?.AI_TTS_MODEL ?? 'qwen-tts',
+      mimeType: 'audio/mpeg',
+    }),
   };
   const configService = configValues
     ? ({
         get: vi.fn((key: string) => configValues[key]),
       } as unknown as ConfigService)
     : undefined;
-  const service = new AiService(llmProvider, configService);
-  return { service, llmProvider };
+  const storageService: IStorageService = {
+    upload: vi.fn().mockResolvedValue(undefined),
+    download: vi.fn().mockResolvedValue(Buffer.from('')),
+    delete: vi.fn().mockResolvedValue(undefined),
+    deleteMany: vi.fn().mockResolvedValue({ deleted: [], failed: [] }),
+    exists: vi.fn().mockResolvedValue(true),
+    getMetadata: vi.fn().mockResolvedValue(null),
+    list: vi.fn().mockResolvedValue({ keys: [], isTruncated: false }),
+    copy: vi.fn().mockResolvedValue(undefined),
+    getUploadUrl: vi.fn().mockResolvedValue('https://storage.example/upload'),
+    getDownloadUrl: vi.fn().mockResolvedValue('https://storage.example/interview-audio.mp3'),
+    shutdown: vi.fn().mockResolvedValue(undefined),
+  };
+  const service = new AiService(llmProvider, storageService, configService);
+  return { service, llmProvider, storageService };
 }
 
 describe('AiService', () => {
@@ -317,21 +355,49 @@ describe('AiService', () => {
   });
 
   describe('generateInterviewResponse', () => {
-    it('GIVEN interview request WHEN generateInterviewResponse is called THEN returns message and follow-up', async () => {
-      const { service } = createServiceWithLlmResponse(
-        '{"hint":"ignored","suggestedApproach":"ignored"}',
+    it('GIVEN interview request WHEN generateInterviewResponse is called THEN returns message, follow-up, and audio metadata', async () => {
+      const { service, llmProvider, storageService } = createServiceWithLlmResponse(
+        JSON.stringify({
+          message: 'Good direction. I want to understand how you prevent duplicate work here.',
+          followUpQuestion: 'What invariant does your map maintain after each iteration?',
+          codeAnnotations: [{ line: 2, comment: 'Explain what this map stores.' }],
+        }),
       );
       const request: InterviewResponseRequest = {
+        roomId: 'room-1',
+        participantId: 'user-1',
         problemDescription: 'Two Sum',
         currentCode: 'function twoSum() {}',
         conversationHistory: [],
+        language: 'typescript',
+        userMessage: 'I think a map will help.',
       };
 
       const result = await service.generateInterviewResponse(request);
 
-      expect(result.message).toBeTruthy();
-      expect(result.followUpQuestion).toBeTruthy();
-      expect(result.codeAnnotations).toBeInstanceOf(Array);
+      expect(result.message).toContain('Good direction');
+      expect(result.followUpQuestion).toContain('invariant');
+      expect(result.codeAnnotations).toEqual([
+        { line: 2, comment: 'Explain what this map stores.' },
+      ]);
+      expect(result.audio).toEqual({
+        audioKey: expect.stringContaining('ai/interview/room-1/user-1/'),
+        mimeType: 'audio/mpeg',
+        downloadUrl: 'https://storage.example/interview-audio.mp3',
+      });
+      expect(llmProvider.generateSpeech).toHaveBeenCalledWith(
+        expect.objectContaining({
+          text: expect.stringContaining('What invariant does your map maintain'),
+          format: 'mp3',
+        }),
+      );
+      expect(storageService.upload).toHaveBeenCalledWith(
+        expect.stringContaining('ai/interview/room-1/user-1/'),
+        expect.any(Buffer),
+        expect.objectContaining({
+          contentType: 'audio/mpeg',
+        }),
+      );
     });
   });
 
