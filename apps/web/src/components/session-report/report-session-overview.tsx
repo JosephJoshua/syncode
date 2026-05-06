@@ -233,7 +233,7 @@ function ActivityStat({ icon, label, value }: { icon: ReactNode; label: string; 
 }
 
 function ActivityStatusStat({
-  icon,
+  icon: _icon,
   label,
   status,
   readyText,
