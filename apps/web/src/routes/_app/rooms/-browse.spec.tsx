@@ -1,5 +1,5 @@
 import { CONTROL_API } from '@syncode/contracts';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { focusManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { HTTPError } from 'ky';
@@ -156,6 +156,7 @@ describe('BrowseRoomsPage', () => {
   });
 
   afterEach(() => {
+    focusManager.setFocused(undefined);
     vi.useRealTimers();
     vi.clearAllMocks();
   });
@@ -315,6 +316,7 @@ describe('BrowseRoomsPage', () => {
 
   it('GIVEN participant count changes on the server WHEN the refresh interval elapses THEN the card updates', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
+    focusManager.setFocused(true);
     apiMock
       .mockResolvedValueOnce(makeResponse([makeRoom({ participantCount: 1, maxParticipants: 2 })]))
       .mockResolvedValue(makeResponse([makeRoom({ participantCount: 2, maxParticipants: 2 })]));
