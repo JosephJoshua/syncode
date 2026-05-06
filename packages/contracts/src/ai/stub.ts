@@ -253,6 +253,11 @@ export class StubAiClient implements IAiClient {
               comment: 'Consider adding input validation here.',
             },
           ],
+          audio: {
+            audioKey: `ai/interview/${jobId}.mp3`,
+            mimeType: 'audio/mpeg',
+            downloadUrl: `https://example.com/ai/interview/${jobId}.mp3`,
+          },
         };
       }, this.delayMs),
     );
