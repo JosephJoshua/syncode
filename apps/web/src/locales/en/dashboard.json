@@ -8,6 +8,29 @@
     "averageScore": "Average Score",
     "practiceTime": "Practice Time"
   },
+  "quotas": {
+    "heading": "Usage quotas",
+    "description": "Current daily usage across AI, code execution, and active rooms.",
+    "ai": "AI",
+    "execution": "Execution",
+    "rooms": "Rooms",
+    "dailyLimit": "Daily limit",
+    "activeRooms": "Active rooms",
+    "resetsAt": "Resets {{time}}",
+    "soon": "soon",
+    "errorTitle": "Unable to load quotas",
+    "errorDescription": "Quota usage could not be retrieved right now.",
+    "warning": {
+      "ai": "AI quota usage has reached 80%.",
+      "execution": "Execution quota usage has reached 80%.",
+      "rooms": "Room quota usage has reached 80%."
+    },
+    "exceeded": {
+      "ai": "AI quota exceeded. Hints and AI feedback may be unavailable until reset.",
+      "execution": "Execution quota exceeded. Code run and submit may be unavailable until reset.",
+      "rooms": "Room quota exceeded. Creating new rooms may be unavailable until an active room closes."
+    }
+  },
   "weakness": {
     "heading": "Weakness summary",
     "sub": "Spot repeated practice gaps and review the sessions behind them.",

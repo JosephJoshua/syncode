@@ -4,6 +4,7 @@ import { createFileRoute } from '@tanstack/react-router';
 import type { LucideIcon } from 'lucide-react';
 import { Calendar, Clock3, Target, TrendingUp } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { DashboardQuotaUsage } from '@/components/dashboard-quota-usage.js';
 import { DashboardRecentSessions } from '@/components/dashboard-recent-sessions.js';
 import { DashboardWeaknessSummary } from '@/components/dashboard-weakness-summary.js';
 import {
@@ -11,6 +12,7 @@ import {
   fetchDashboardSessionHistory,
   getDashboardSessionHistoryQueryKey,
 } from '@/lib/dashboard-session-history.js';
+import { useUserQuotasQuery } from '@/lib/user-quotas.js';
 import { getUserDisplayName } from '@/lib/user-utils.js';
 import { fetchUserWeaknesses, USER_WEAKNESSES_QUERY_KEY } from '@/lib/user-weaknesses.js';
 import { useAuthStore } from '@/stores/auth.store.js';
@@ -18,6 +20,8 @@ import { useAuthStore } from '@/stores/auth.store.js';
 export const Route = createFileRoute('/_app/dashboard')({
   component: DashboardPage,
 });
+
+export { DashboardPage };
 
 function DashboardPage() {
   const { t } = useTranslation('dashboard');
@@ -37,6 +41,7 @@ function DashboardPage() {
       return fetchDashboardSessionHistory(viewerId);
     },
   });
+  const quotasQuery = useUserQuotasQuery(isQueryEnabled);
   const weaknessesQuery = useQuery({
     queryKey: USER_WEAKNESSES_QUERY_KEY,
     enabled: isQueryEnabled,
@@ -103,6 +108,15 @@ function DashboardPage() {
           ))}
         </div>
       </section>
+
+      <DashboardQuotaUsage
+        quotas={quotasQuery.data}
+        isLoading={quotasQuery.isLoading}
+        isError={quotasQuery.isError}
+        onRetry={() => {
+          quotasQuery.refetch().catch(() => undefined);
+        }}
+      />
 
       <DashboardWeaknessSummary
         weaknesses={weaknessesQuery.data?.data ?? []}
