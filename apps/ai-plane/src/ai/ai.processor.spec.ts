@@ -10,6 +10,8 @@ import {
   AI_REVIEW_RESULT_QUEUE,
   AI_SESSION_REPORT_QUEUE,
   AI_SESSION_REPORT_RESULT_QUEUE,
+  AI_WEAKNESS_ANALYSIS_QUEUE,
+  AI_WEAKNESS_ANALYSIS_RESULT_QUEUE,
 } from '@syncode/contracts';
 import type { IQueueService, IStorageService, QueueJob } from '@syncode/shared/ports';
 import { QUEUE_SERVICE, STORAGE_SERVICE } from '@syncode/shared/ports';
@@ -125,6 +127,28 @@ describe('AiProcessor', () => {
                   };
                 }
 
+                if (input.maxOutputTokens === 900) {
+                  return {
+                    text: JSON.stringify({
+                      summary: 'Edge-case reasoning and communication need repeated attention.',
+                      recurringPatterns: [
+                        'Boundary cases are discussed after implementation instead of before.',
+                      ],
+                      weaknesses: [
+                        {
+                          category: 'edge_cases',
+                          description:
+                            'The candidate should identify boundary cases before submitting.',
+                          evidence:
+                            'The session included a submission before edge cases were named.',
+                          trend: 'stable',
+                        },
+                      ],
+                    }),
+                    model: 'qwen3.5-mini',
+                  };
+                }
+
                 if (input.maxOutputTokens === 2500) {
                   return {
                     text: JSON.stringify({
@@ -172,12 +196,13 @@ describe('AiProcessor', () => {
   });
 
   describe('onModuleInit', () => {
-    it('GIVEN the processor WHEN onModuleInit is called THEN registers handlers on all 5 queues', () => {
+    it('GIVEN the processor WHEN onModuleInit is called THEN registers handlers on all 6 queues', () => {
       processor.onModuleInit();
 
-      expect(mockQueueService.process).toHaveBeenCalledTimes(5);
+      expect(mockQueueService.process).toHaveBeenCalledTimes(6);
       expect(handlers.has(AI_HINT_QUEUE)).toBe(true);
       expect(handlers.has(AI_CODE_ANALYSIS_QUEUE)).toBe(true);
+      expect(handlers.has(AI_WEAKNESS_ANALYSIS_QUEUE)).toBe(true);
       expect(handlers.has(AI_REVIEW_QUEUE)).toBe(true);
       expect(handlers.has(AI_INTERVIEW_QUEUE)).toBe(true);
       expect(handlers.has(AI_SESSION_REPORT_QUEUE)).toBe(true);
@@ -243,6 +268,56 @@ describe('AiProcessor', () => {
           jobId: 'code-analysis-job-1',
           summary: expect.any(String),
           followUpQuestions: expect.any(Array),
+        }),
+      );
+    });
+  });
+
+  describe('weakness analysis job processing', () => {
+    it('GIVEN a weakness analysis job WHEN the handler processes it THEN enqueues result to AI_WEAKNESS_ANALYSIS_RESULT_QUEUE with jobId', async () => {
+      processor.onModuleInit();
+      mockQueueService.enqueue.mockClear();
+
+      const handler = handlers.get(AI_WEAKNESS_ANALYSIS_QUEUE)!;
+      const job = createFakeJob(
+        {
+          sessionId: '550e8400-e29b-41d4-a716-446655440000',
+          roomId: '660e8400-e29b-41d4-a716-446655440000',
+          participantId: '770e8400-e29b-41d4-a716-446655440000',
+          participantRole: 'candidate',
+          problem: {
+            id: '880e8400-e29b-41d4-a716-446655440000',
+            title: 'Two Sum',
+            description: 'Find two numbers.',
+            difficulty: 'easy',
+            constraints: null,
+          },
+          language: 'typescript',
+          durationMs: 120000,
+          snapshots: [],
+          runs: [],
+          submissions: [],
+          peerFeedback: [],
+          aiMessages: [],
+          sessionReportSummary: {
+            overallScore: 72,
+            feedback: 'Candidate solved the main case but discussed edge cases late.',
+          },
+          historicalWeaknesses: [],
+        },
+        'weakness-analysis-job-1',
+      );
+
+      await handler(job);
+
+      expect(mockQueueService.enqueue).toHaveBeenCalledWith(
+        AI_WEAKNESS_ANALYSIS_RESULT_QUEUE,
+        'weakness-analysis-result',
+        expect.objectContaining({
+          jobId: 'weakness-analysis-job-1',
+          summary: expect.any(String),
+          recurringPatterns: expect.any(Array),
+          weaknesses: expect.any(Array),
         }),
       );
     });
