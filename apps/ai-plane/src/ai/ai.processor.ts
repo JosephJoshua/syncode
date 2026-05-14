@@ -1,5 +1,7 @@
 import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import {
+  AI_CODE_ANALYSIS_QUEUE,
+  AI_CODE_ANALYSIS_RESULT_QUEUE,
   AI_HINT_QUEUE,
   AI_HINT_RESULT_QUEUE,
   AI_INTERVIEW_QUEUE,
@@ -8,6 +10,7 @@ import {
   AI_REVIEW_RESULT_QUEUE,
   AI_SESSION_REPORT_QUEUE,
   AI_SESSION_REPORT_RESULT_QUEUE,
+  type AnalyzeCodeRequest,
   type GenerateHintRequest,
   type GenerateSessionReportRequest,
   type InterviewResponseRequest,
@@ -35,6 +38,15 @@ export class AiProcessor implements OnModuleInit {
       { concurrency: 5 },
     );
     this.logger.log(`Registered processor on ${AI_HINT_QUEUE}`);
+
+    this.queueService.process<AnalyzeCodeRequest>(
+      AI_CODE_ANALYSIS_QUEUE,
+      async (job: QueueJob<AnalyzeCodeRequest>) => {
+        await this.handleCodeAnalysisJob(job);
+      },
+      { concurrency: 3 },
+    );
+    this.logger.log(`Registered processor on ${AI_CODE_ANALYSIS_QUEUE}`);
 
     this.queueService.process<ReviewCodeRequest>(
       AI_REVIEW_QUEUE,
@@ -73,6 +85,19 @@ export class AiProcessor implements OnModuleInit {
     await this.queueService.enqueue(AI_HINT_RESULT_QUEUE, 'hint-result', { ...result, jobId });
 
     this.logger.log(`Hint job ${jobId} completed`);
+  }
+
+  private async handleCodeAnalysisJob(job: QueueJob<AnalyzeCodeRequest>): Promise<void> {
+    const { id: jobId, data: request } = job;
+    this.logger.log(`Processing code analysis job ${jobId}`);
+
+    const result = await this.aiService.analyzeCode(request);
+    await this.queueService.enqueue(AI_CODE_ANALYSIS_RESULT_QUEUE, 'code-analysis-result', {
+      ...result,
+      jobId,
+    });
+
+    this.logger.log(`Code analysis job ${jobId} completed`);
   }
 
   private async handleReviewJob(job: QueueJob<ReviewCodeRequest>): Promise<void> {

@@ -1,5 +1,6 @@
 import type { ConfigService } from '@nestjs/config';
 import type {
+  AnalyzeCodeRequest,
   GenerateHintRequest,
   GenerateSessionReportRequest,
   InterviewResponseRequest,
@@ -331,6 +332,65 @@ describe('AiService', () => {
       expect(result.hint.toLowerCase()).not.toContain('fails hidden tests');
       expect(result.suggestedApproach?.toLowerCase()).not.toContain('fix the incorrect');
       expect(result.reflectionPrompt).toBeUndefined();
+    });
+  });
+
+  describe('analyzeCode', () => {
+    it('GIVEN valid JSON from LLM WHEN analyzeCode is called THEN returns summary, focus areas, and follow-up questions', async () => {
+      const { service, llmProvider } = createServiceWithLlmResponse(
+        JSON.stringify({
+          summary:
+            'The code is close, but the next discussion should probe complexity and missing edge cases.',
+          focusAreas: {
+            complexity: 'The candidate should justify whether repeated lookups stay efficient.',
+            edgeCases: 'Ask what happens for empty input and duplicate numbers.',
+            readability:
+              'Probe whether the current variable names explain the tracked state clearly.',
+          },
+          followUpQuestions: [
+            'What is the time and space complexity of this approach?',
+            'Which edge case would you test first and why?',
+            'What would you rename to make the code easier to explain?',
+          ],
+        }),
+      );
+      const request: AnalyzeCodeRequest = {
+        roomId: 'room-1',
+        participantId: 'user-1',
+        problemDescription: 'Two Sum',
+        code: 'function twoSum(nums, target) { return []; }',
+        language: 'typescript',
+      };
+
+      const result = await service.analyzeCode(request);
+
+      expect(result.summary).toContain('probe complexity');
+      expect(result.focusAreas.edgeCases).toContain('empty input');
+      expect(result.followUpQuestions).toHaveLength(3);
+      expect(result.followUpQuestions[0]).toContain('time and space complexity');
+      expect(llmProvider.generateText).toHaveBeenCalledWith(
+        expect.objectContaining({
+          jsonMode: true,
+          model: 'qwen3.5-mini',
+        }),
+      );
+    });
+
+    it('GIVEN malformed model output WHEN analyzeCode is called THEN returns safe fallback questions', async () => {
+      const { service } = createServiceWithLlmResponse('not-json-at-all');
+      const request: AnalyzeCodeRequest = {
+        roomId: 'room-1',
+        participantId: 'user-1',
+        problemDescription: 'Two Sum',
+        code: 'for (const num of nums) { }',
+        language: 'typescript',
+      };
+
+      const result = await service.analyzeCode(request);
+
+      expect(result.summary.length).toBeGreaterThan(20);
+      expect(result.followUpQuestions.length).toBeGreaterThanOrEqual(2);
+      expect(result.focusAreas.complexity).toBeTruthy();
     });
   });
 
