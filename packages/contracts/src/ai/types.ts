@@ -32,6 +32,24 @@ export interface GenerateHintResult {
   reflectionPrompt?: string;
 }
 
+export interface AnalyzeCodeRequest {
+  roomId: string;
+  participantId: string;
+  problemDescription: string;
+  code: string;
+  language: SupportedLanguage;
+}
+
+export interface AnalyzeCodeResult {
+  summary: string;
+  focusAreas: {
+    complexity: string;
+    edgeCases: string;
+    readability: string;
+  };
+  followUpQuestions: string[];
+}
+
 export interface ReviewCodeRequest {
   roomId: string;
   participantId: string;

@@ -1,6 +1,7 @@
 export const EXECUTION_QUEUE = 'execution.run-code';
 
 export const AI_HINT_QUEUE = 'ai.generate-hint';
+export const AI_CODE_ANALYSIS_QUEUE = 'ai.code-analysis';
 export const AI_REVIEW_QUEUE = 'ai.review-code';
 export const AI_INTERVIEW_QUEUE = 'ai.interview-response';
 export const AI_SESSION_REPORT_QUEUE = 'ai.session-report';
@@ -8,6 +9,7 @@ export const AI_SESSION_REPORT_QUEUE = 'ai.session-report';
 export const EXECUTION_RESULT_QUEUE = 'execution.run-code.results';
 
 export const AI_HINT_RESULT_QUEUE = 'ai.generate-hint.results';
+export const AI_CODE_ANALYSIS_RESULT_QUEUE = 'ai.code-analysis.results';
 export const AI_REVIEW_RESULT_QUEUE = 'ai.review-code.results';
 export const AI_INTERVIEW_RESULT_QUEUE = 'ai.interview-response.results';
 export const AI_SESSION_REPORT_RESULT_QUEUE = 'ai.session-report.results';
