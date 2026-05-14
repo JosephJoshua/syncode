@@ -8,6 +8,8 @@ import type {
   GenerateHintResult,
   GenerateSessionReportRequest,
   GenerateSessionReportResult,
+  GenerateWeaknessAnalysisRequest,
+  GenerateWeaknessAnalysisResult,
   InterviewResponseRequest,
   InterviewResponseResult,
   ReviewCodeRequest,
@@ -15,13 +17,20 @@ import type {
 } from './types.js';
 import { toPublicSessionReportTestCaseBreakdown } from './types.js';
 
-type AiJobType = 'hint' | 'code-analysis' | 'review' | 'interview' | 'session-report';
+type AiJobType =
+  | 'hint'
+  | 'code-analysis'
+  | 'weakness-analysis'
+  | 'review'
+  | 'interview'
+  | 'session-report';
 
 interface StubJob {
   status: JobStatus;
   type: AiJobType;
   hintResult?: GenerateHintResult;
   codeAnalysisResult?: AnalyzeCodeResult;
+  weaknessAnalysisResult?: GenerateWeaknessAnalysisResult;
   reviewResult?: ReviewCodeResult;
   interviewResult?: InterviewResponseResult;
   sessionReportResult?: GenerateSessionReportResult;
@@ -89,6 +98,24 @@ export class StubAiClient implements IAiClient {
     return job.codeAnalysisResult ?? null;
   }
 
+  async submitWeaknessAnalysisRequest(
+    request: GenerateWeaknessAnalysisRequest,
+  ): Promise<SubmitResult<'ai:weakness-analysis'>> {
+    const jobId = randomUUID() as JobId<'ai:weakness-analysis'>;
+    this.jobs.set(jobId, { status: 'queued', type: 'weakness-analysis' });
+
+    this.scheduleWeaknessAnalysisCompletion(jobId, request);
+    return { jobId };
+  }
+
+  async getWeaknessAnalysisResult(
+    jobId: JobId<'ai:weakness-analysis'>,
+  ): Promise<GenerateWeaknessAnalysisResult | null> {
+    const job = this.jobs.get(jobId);
+    if (job?.type !== 'weakness-analysis') return null;
+    return job.weaknessAnalysisResult ?? null;
+  }
+
   async submitReviewRequest(_request: ReviewCodeRequest): Promise<SubmitResult<'ai:review'>> {
     const jobId = randomUUID() as JobId<'ai:review'>;
     this.jobs.set(jobId, { status: 'queued', type: 'review' });
@@ -146,6 +173,12 @@ export class StubAiClient implements IAiClient {
   async getCodeAnalysisJobStatus(jobId: JobId<'ai:code-analysis'>): Promise<JobStatus> {
     const job = this.jobs.get(jobId);
     if (job?.type !== 'code-analysis') return 'failed';
+    return job.status;
+  }
+
+  async getWeaknessAnalysisJobStatus(jobId: JobId<'ai:weakness-analysis'>): Promise<JobStatus> {
+    const job = this.jobs.get(jobId);
+    if (job?.type !== 'weakness-analysis') return 'failed';
     return job.status;
   }
 
@@ -261,6 +294,67 @@ export class StubAiClient implements IAiClient {
               ? 'Which boundary case did you design this guard around, and what other edge cases would you still test?'
               : 'What happens for empty input, duplicates, or a case with no valid answer?',
             'If another engineer read this code quickly, which variable or step would you rename or explain first?',
+          ],
+        };
+      }, this.delayMs),
+    );
+  }
+
+  private scheduleWeaknessAnalysisCompletion(
+    jobId: string,
+    request: GenerateWeaknessAnalysisRequest,
+  ): void {
+    this.timers.push(
+      setTimeout(() => {
+        const job = this.jobs.get(jobId);
+        if (job) job.status = 'running';
+      }, this.delayMs / 4),
+      setTimeout(() => {
+        const job = this.jobs.get(jobId);
+        if (!job) return;
+
+        const historicalCommunication = request.historicalWeaknesses.find(
+          (item) => item.category === 'communication',
+        );
+        const peerCommunicationAverage =
+          request.peerFeedback.length > 0
+            ? request.peerFeedback.reduce((sum, item) => sum + item.communicationRating, 0) /
+              request.peerFeedback.length
+            : null;
+
+        job.status = 'completed';
+        job.weaknessAnalysisResult = {
+          summary:
+            'The session suggests a small set of recurring weaknesses that should be tracked across future interviews rather than treated as one-off mistakes.',
+          recurringPatterns: [
+            historicalCommunication
+              ? 'Communication concerns have shown up across multiple sessions.'
+              : 'Session evidence suggests incomplete explanation of decisions under pressure.',
+            'Edge-case confidence still needs to be made more explicit during problem solving.',
+          ],
+          weaknesses: [
+            {
+              category: 'edge_cases',
+              description:
+                'The candidate should make boundary-case reasoning more explicit before final submission.',
+              evidence:
+                request.submissions.length > 0
+                  ? `Observed ${request.submissions.length} submissions before finishing, suggesting additional edge-case clarification would help.`
+                  : 'The session data shows limited explicit edge-case discussion.',
+              trend: request.historicalWeaknesses.some((item) => item.category === 'edge_cases')
+                ? 'worsening'
+                : 'stable',
+            },
+            {
+              category: 'communication',
+              description:
+                'The candidate can improve how they explain trade-offs, invariants, and next debugging steps out loud.',
+              evidence:
+                peerCommunicationAverage != null
+                  ? `Peer communication rating averaged ${peerCommunicationAverage.toFixed(1)}/5 in this session.`
+                  : 'Peer feedback is limited, so the signal is based on sparse discussion evidence.',
+              trend: historicalCommunication?.trend === 'worsening' ? 'worsening' : 'stable',
+            },
           ],
         };
       }, this.delayMs),
