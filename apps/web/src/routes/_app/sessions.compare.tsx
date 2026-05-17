@@ -678,7 +678,43 @@ function SessionComparisonPage() {
                     onHoverSessionIdChange={setHoveredSessionId}
                     noDataLabel={t('sessionComparison:state.noTrendData')}
                   />
+                  <HoverDetailsPanel details={hoverDetails} t={t} />
                   <SessionProgressionRail sessions={chronologicalSessions} t={t} />
+                  {comparisonInsights.length > 0 ? (
+                    <ComparisonInsights insights={comparisonInsights} t={t} />
+                  ) : null}
+                </CardContent>
+              </Card>
+            </motion.div>
+
+            <motion.div {...sectionMotion(5)}>
+              <Card className="border border-border/50 bg-card/80 py-0 backdrop-blur-sm">
+                <CardHeader className="px-6 py-6 pb-3">
+                  <CardTitle>{t('sessionComparison:sections.testCases')}</CardTitle>
+                  <CardDescription>
+                    {t('sessionComparison:sections.testCasesDescription')}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="px-6 pb-6">
+                  <TestCaseComparisonRow summaries={testCaseSummaries} t={t} />
+                </CardContent>
+              </Card>
+            </motion.div>
+
+            <motion.div {...sectionMotion(6)}>
+              <Card className="border border-border/50 bg-card/80 py-0 backdrop-blur-sm">
+                <CardHeader className="px-6 py-6 pb-3">
+                  <CardTitle>{t('sessionComparison:sections.criteriaTrends')}</CardTitle>
+                  <CardDescription>
+                    {t('sessionComparison:sections.criteriaTrendsDescription')}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="px-6 pb-6">
+                  <div className="space-y-1">
+                    {criteriaTrendRows.map((row, index) => (
+                      <CriteriaTrendLane key={row.key} row={row} index={index} t={t} />
+                    ))}
+                  </div>
                 </CardContent>
               </Card>
             </motion.div>
@@ -859,6 +895,62 @@ function HeroTrendChart({
   );
 }
 
+function HoverDetailsPanel({
+  details,
+  t,
+}: {
+  details: HoverDetails | null;
+  t: (key: string, options?: Record<string, unknown>) => string;
+}) {
+  if (!details) {
+    return null;
+  }
+
+  return (
+    <div className="rounded-2xl border border-border/60 bg-background/55 px-5 py-5">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-primary/70">
+            {t('sessionComparison:metrics.inspectSession')}
+          </p>
+          <p className="mt-2 text-lg font-semibold text-foreground">{details.title}</p>
+          <p className="mt-1 text-sm text-muted-foreground">{details.timestamp}</p>
+        </div>
+        <div className="rounded-xl border border-emerald-400/18 bg-emerald-400/8 px-4 py-3">
+          <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-primary/70">
+            {t('sessionComparison:metrics.overallScore')}
+          </p>
+          <p className="mt-1 text-3xl font-semibold tracking-tight text-emerald-300">
+            {formatScore(details.overallScore)}
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-5 grid gap-3 md:grid-cols-3 xl:grid-cols-6">
+        {details.dimensionScores.map((item) => (
+          <div key={item.key} className="rounded-xl border border-border/60 bg-card/40 px-3 py-3">
+            <p className="text-xs text-muted-foreground">
+              {t(`feedback:dimensions.${item.key}.title`)}
+            </p>
+            <p className="mt-2 text-lg font-semibold text-foreground">{formatScore(item.score)}</p>
+          </div>
+        ))}
+        <div className="rounded-xl border border-border/60 bg-card/40 px-3 py-3">
+          <p className="text-xs text-muted-foreground">
+            {t('sessionComparison:sections.testCases')}
+          </p>
+          <p className="mt-2 text-lg font-semibold text-foreground">
+            {t('sessionComparison:metrics.testCasesPassed', {
+              passed: details.testCasePassed,
+              total: details.testCaseTotal,
+            })}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SessionProgressionRail({
   sessions,
   t,
@@ -934,6 +1026,259 @@ function SessionProgressionRail({
         })}
       </div>
     </div>
+  );
+}
+
+function ComparisonInsights({
+  insights,
+  t,
+}: {
+  insights: ComparisonInsight[];
+  t: (key: string, options?: Record<string, unknown>) => string;
+}) {
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-3">
+        <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-primary/60">
+          {t('sessionComparison:sections.notes')}
+        </span>
+        <span aria-hidden className="h-px flex-1 bg-emerald-500/12" />
+      </div>
+      <div className="grid gap-3 lg:grid-cols-3">
+        {insights.map((insight) => (
+          <div
+            key={insight.title}
+            className="rounded-2xl border border-border/60 bg-background/50 px-4 py-4"
+          >
+            <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-primary/60">
+              {insight.title}
+            </p>
+            <p className="mt-2 text-xl font-semibold tracking-tight text-foreground">
+              {insight.value}
+            </p>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">{insight.body}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function TestCaseComparisonRow({
+  summaries,
+  t,
+}: {
+  summaries: Array<{
+    sessionId: string;
+    problemTitle: string;
+    timestamp: string;
+    progressionLabel: 'baseline' | 'checkpoint' | 'latest';
+    summary: TestCaseSummary;
+  }>;
+  t: (key: string, options?: Record<string, unknown>) => string;
+}) {
+  return (
+    <div className={getResponsiveSessionGridClass(summaries.length)}>
+      {summaries.map((item) => (
+        <div
+          key={item.sessionId}
+          className="rounded-2xl border border-border/60 bg-background/50 px-4 py-4"
+        >
+          <div className="flex items-center justify-between gap-3">
+            <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-primary/60">
+              {t(`sessionComparison:metrics.${item.progressionLabel}`)}
+            </span>
+            <span className="text-xs text-muted-foreground">
+              {formatSessionDateTime(item.timestamp)}
+            </span>
+          </div>
+
+          <p className="mt-3 truncate text-sm font-semibold text-foreground">{item.problemTitle}</p>
+          <p className="mt-3 text-2xl font-semibold tracking-tight text-emerald-300">
+            {t('sessionComparison:metrics.testCasesPassed', {
+              passed: item.summary.passed,
+              total: item.summary.total,
+            })}
+          </p>
+
+          {item.summary.total > 0 ? (
+            <div className="mt-4 flex gap-1">
+              {Array.from({ length: item.summary.total }, (_, index) => {
+                const isPassed = index < item.summary.passed;
+                return (
+                  <span
+                    key={`${item.sessionId}-${index}`}
+                    className={cn(
+                      'h-2 flex-1 rounded-full',
+                      isPassed ? 'bg-emerald-400/85' : 'bg-border/70',
+                    )}
+                  />
+                );
+              })}
+            </div>
+          ) : (
+            <p className="mt-4 text-sm text-muted-foreground">
+              {t('sessionComparison:metrics.noTestCaseBreakdown')}
+            </p>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function CriteriaTrendLane({
+  row,
+  index,
+  t,
+}: {
+  row: CriteriaTrendRow;
+  index: number;
+  t: (key: string, options?: Record<string, unknown>) => string;
+}) {
+  const trendMeta = trendMetaByType[row.trend];
+
+  return (
+    <div
+      className={cn(
+        'grid gap-4 py-5 lg:grid-cols-[220px_minmax(0,1fr)]',
+        index < SESSION_COMPARISON_DIMENSION_KEYS.length - 1 ? 'border-b border-border/40' : '',
+      )}
+    >
+      <div className="space-y-2">
+        <p className="text-base font-semibold text-foreground">
+          {t(`feedback:dimensions.${row.key}.title`)}
+        </p>
+        <p className="text-sm text-muted-foreground">
+          {t('sessionComparison:metrics.averageDelta', {
+            value: formatSignedOneDecimal(row.averageDelta),
+          })}
+        </p>
+        <span
+          className={cn(
+            'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.08em]',
+            trendMeta.chipClass,
+          )}
+        >
+          <trendMeta.Icon className="size-3.5" />
+          {t(`feedback:trend.${row.trend}`)}
+        </span>
+      </div>
+
+      <div className="overflow-x-auto">
+        <div
+          className={cn(
+            'grid items-center gap-x-3 gap-y-4 py-1',
+            row.points.length >= 3 ? 'min-w-[30rem] sm:min-w-0' : 'min-w-[22rem] sm:min-w-0',
+          )}
+          style={buildCriteriaLaneGridStyle(row.points.length)}
+        >
+          {row.points.map((point, pointIndex) => {
+            const previousScore = row.points[pointIndex - 1]?.score;
+            const hasDeclined = typeof previousScore === 'number' && point.score < previousScore;
+            const labelKey = resolveProgressionLabelKey(pointIndex, row.points.length);
+            const nextScore = row.points[pointIndex + 1]?.score;
+
+            return (
+              <Fragment key={point.sessionId}>
+                <div className="flex flex-col items-center gap-2 justify-self-center">
+                  <CriteriaScoreRing
+                    delay={0.06 * pointIndex}
+                    hasDeclined={hasDeclined}
+                    score={point.score}
+                  />
+                  <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                    {t(`sessionComparison:metrics.${labelKey}`)}
+                  </span>
+                </div>
+
+                {pointIndex < row.points.length - 1 ? (
+                  <div className="flex items-center">
+                    <div
+                      className={cn(
+                        'h-px w-full',
+                        typeof nextScore === 'number' && nextScore < point.score
+                          ? 'bg-gradient-to-r from-emerald-400/55 to-rose-400/55'
+                          : 'bg-gradient-to-r from-emerald-500/25 via-emerald-400/45 to-emerald-300/65',
+                      )}
+                    />
+                  </div>
+                ) : null}
+              </Fragment>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CriteriaScoreRing({
+  score,
+  hasDeclined,
+  delay,
+}: {
+  score: number;
+  hasDeclined: boolean;
+  delay: number;
+}) {
+  const size = buildCircleSize(score);
+  const strokeWidth = 5;
+  const radius = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const progress = circumference - (score / 100) * circumference;
+  const stroke = hasDeclined ? '#fb7185' : '#62f0a8';
+  const textClass = hasDeclined ? 'text-rose-200' : 'text-emerald-100';
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.8 }}
+      whileInView={{ opacity: 1, scale: 1 }}
+      viewport={{ once: true, amount: 0.4 }}
+      transition={{
+        duration: 0.45,
+        delay,
+        ease: [0.16, 1, 0.3, 1],
+      }}
+      className="relative flex items-center justify-center"
+      style={{ width: `${size}px`, height: `${size}px` }}
+    >
+      <svg
+        aria-hidden="true"
+        className="absolute inset-0 -rotate-90"
+        focusable="false"
+        height={size}
+        width={size}
+        viewBox={`0 0 ${size} ${size}`}
+      >
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          fill="none"
+          r={radius}
+          stroke="rgba(148,163,184,0.22)"
+          strokeWidth={strokeWidth}
+        />
+        <motion.circle
+          cx={size / 2}
+          cy={size / 2}
+          fill="none"
+          initial={{ strokeDashoffset: circumference }}
+          r={radius}
+          stroke={stroke}
+          strokeLinecap="round"
+          strokeWidth={strokeWidth}
+          style={{ strokeDasharray: circumference }}
+          transition={{ duration: 0.95, ease: [0.16, 1, 0.3, 1], delay: delay + 0.08 }}
+          viewport={{ once: true, amount: 0.4 }}
+          whileInView={{ strokeDashoffset: progress }}
+        />
+      </svg>
+
+      <span className={cn('relative text-sm font-semibold tracking-tight', textClass)}>
+        {Math.round(score)}
+      </span>
+    </motion.div>
   );
 }
 
