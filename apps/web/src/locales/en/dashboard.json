@@ -117,7 +117,8 @@
     "actions": "Actions"
   },
   "actions": {
-    "deleteSessionAriaLabel": "Delete session"
+    "deleteSessionAriaLabel": "Delete session",
+    "deleteSessionAriaLabelWithProblem": "Delete session for {{problem}} on {{date}}"
   },
   "deleteDialog": {
     "title": "Delete session?",

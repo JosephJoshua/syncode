@@ -59,7 +59,8 @@
     "actions": "操作"
   },
   "actions": {
-    "deleteSessionAriaLabel": "删除会话"
+    "deleteSessionAriaLabel": "删除会话",
+    "deleteSessionAriaLabelWithProblem": "删除 {{date}} 的 {{problem}} 会话"
   },
   "deleteDialog": {
     "title": "删除会话？",

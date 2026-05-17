@@ -483,7 +483,10 @@ export function DashboardRecentSessions({
                         type="button"
                         variant="ghost"
                         size="icon-xs"
-                        aria-label={t('actions.deleteSessionAriaLabel')}
+                        aria-label={t('actions.deleteSessionAriaLabelWithProblem', {
+                          problem: row.problemName,
+                          date: formatSessionDateTime(row.date),
+                        })}
                         disabled={deleteSessionMutation.isPending || !viewerId}
                         className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive focus-visible:text-destructive focus-visible:ring-destructive/20"
                         onClick={() => handleDeleteSessionClick(row.id)}

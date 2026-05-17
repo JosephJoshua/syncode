@@ -29,10 +29,10 @@ function DashboardPage() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const dashboardName = getUserDisplayName(user);
   const viewerId = user?.id ?? null;
-  const isQueryEnabled = isAuthenticated && Boolean(viewerId);
+  const isDashboardDataQueryEnabled = isAuthenticated && Boolean(viewerId);
   const sessionHistoryQuery = useQuery({
     queryKey: getDashboardSessionHistoryQueryKey(viewerId),
-    enabled: isQueryEnabled,
+    enabled: isDashboardDataQueryEnabled,
     queryFn: () => {
       if (!viewerId) {
         throw new Error('Viewer ID is required to fetch dashboard session history');
@@ -41,14 +41,14 @@ function DashboardPage() {
       return fetchDashboardSessionHistory(viewerId);
     },
   });
-  const quotasQuery = useUserQuotasQuery(isQueryEnabled);
+  const quotasQuery = useUserQuotasQuery(isAuthenticated);
   const weaknessesQuery = useQuery({
     queryKey: USER_WEAKNESSES_QUERY_KEY,
-    enabled: isQueryEnabled,
+    enabled: isDashboardDataQueryEnabled,
     queryFn: fetchUserWeaknesses,
   });
   const sessionHistory = sessionHistoryQuery.data;
-  const isUnavailable = !isQueryEnabled;
+  const isUnavailable = !isDashboardDataQueryEnabled;
   const stats = sessionHistory?.stats ?? EMPTY_DASHBOARD_STATS;
   const getStatValue = (value: string) => {
     if (isUnavailable) {
@@ -112,7 +112,9 @@ function DashboardPage() {
       <DashboardQuotaUsage
         quotas={quotasQuery.data}
         isLoading={quotasQuery.isLoading}
+        isFetching={quotasQuery.isFetching}
         isError={quotasQuery.isError}
+        notificationScope={viewerId}
         onRetry={() => {
           quotasQuery.refetch().catch(() => undefined);
         }}
