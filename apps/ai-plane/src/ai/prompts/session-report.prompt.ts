@@ -8,6 +8,14 @@ export interface SessionReportPrompt {
 export function buildSessionReportPrompt(
   request: GenerateSessionReportRequest,
 ): SessionReportPrompt {
+  const finalCode =
+    request.finalCodeSnapshot?.code ??
+    request.snapshots.at(-1)?.code ??
+    request.submissions.at(-1)?.code ??
+    request.runs.at(-1)?.code ??
+    '';
+  const finalCodeSnapshotWithLines = finalCode ? addLineNumbers(finalCode) : null;
+
   return {
     systemPrompt: [
       'You are an interview evaluator for a collaborative coding platform.',
@@ -31,8 +39,13 @@ export function buildSessionReportPrompt(
       'Each dimension must include score, feedback, and evidence[].',
       'Do not omit dimension.feedback when you include a dimension object.',
       'For correctness, efficiency, and codeQuality, cite exact short code excerpts when code evidence exists.',
-      'Use evidence.type = "code_snippet" for direct code references.',
+      'sessionEvents includes stage transitions and submissions with timestamps; use it for time-based evidence and do not invent events.',
+      'Use evidence.type = "code_line" for line-based code references.',
+      'For code_line evidence.reference, use line numbers from finalCodeSnapshotWithLines in the format "L12" or "L12-L18".',
+      'Use evidence.type = "code_snippet" only when a short verbatim snippet is clearer than line numbers.',
       'For code_snippet evidence.reference, copy a short verbatim snippet from the candidate code (1-3 lines, max 120 chars).',
+      'When citing session events, use evidence.type = "event_timestamp" and set evidence.reference to the ISO timestamp from sessionEvents.',
+      'Each dimension must include at least one evidence item. If sessionEvents exist, include at least one event_timestamp evidence across the report.',
       'Avoid generic evidence.reference values like "Code structure" or "Final snapshot code".',
       'Each evidence item must include type, reference, and description.',
       'Keep the report concise. strengths and areasForImprovement should each contain at most 3 items, and each item should be short.',
@@ -56,10 +69,20 @@ export function buildSessionReportPrompt(
         task: 'Generate a structured training report for one participant in one finished interview session.',
         reportForParticipantId: request.participantId,
         reportForParticipantRole: request.participantRole,
-        session: request,
+        session: {
+          ...request,
+          finalCodeSnapshotWithLines,
+        },
       },
       null,
       2,
     ),
   };
+}
+
+function addLineNumbers(code: string): string {
+  return code
+    .split('\n')
+    .map((line, index) => `${String(index + 1).padStart(3, ' ')}| ${line}`)
+    .join('\n');
 }

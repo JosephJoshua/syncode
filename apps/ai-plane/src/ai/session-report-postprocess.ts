@@ -2,6 +2,7 @@ import type {
   GenerateSessionReportRequest,
   SessionReport,
   SessionReportDimension,
+  SessionReportEventContext,
   SessionReportEvidence,
 } from '@syncode/contracts';
 
@@ -79,6 +80,50 @@ export function postprocessSessionReport(
       finalCode,
       usesPlatformIo,
     );
+  }
+
+  if (nextReport.dimensions) {
+    const sessionEvents = request.sessionEvents ?? [];
+    nextReport.dimensions = {
+      ...nextReport.dimensions,
+      correctness: ensureEvidenceCoverage(
+        nextReport.dimensions.correctness,
+        finalCode,
+        sessionEvents,
+        'correctness',
+        false,
+      ),
+      efficiency: ensureEvidenceCoverage(
+        nextReport.dimensions.efficiency,
+        finalCode,
+        sessionEvents,
+        'efficiency',
+        false,
+      ),
+      codeQuality: ensureEvidenceCoverage(
+        nextReport.dimensions.codeQuality,
+        finalCode,
+        sessionEvents,
+        'code quality',
+        false,
+      ),
+      communication: ensureEvidenceCoverage(
+        nextReport.dimensions.communication,
+        finalCode,
+        sessionEvents,
+        'communication',
+        true,
+      ),
+      problemSolving: ensureEvidenceCoverage(
+        nextReport.dimensions.problemSolving,
+        finalCode,
+        sessionEvents,
+        'problem solving',
+        true,
+      ),
+    };
+
+    nextReport.dimensions = ensureEventEvidenceAcrossReport(nextReport.dimensions, sessionEvents);
   }
 
   if (nextReport.areasForImprovement) {
@@ -268,21 +313,21 @@ function normalizeDetailedFeedback(
 function buildPlatformAwareCodeQualityEvidence(finalCode: string): SessionReportEvidence[] {
   const evidence: SessionReportEvidence[] = [];
 
-  const outputSnippet = extractLineSnippet(finalCode, /print\(/);
-  if (outputSnippet) {
+  const outputReference = extractLineReference(finalCode, /print\(/);
+  if (outputReference) {
     evidence.push({
-      type: 'code_snippet',
-      reference: outputSnippet,
+      type: 'code_line',
+      reference: outputReference,
       description:
         'The stdin/stdout flow is valid here. Improve readability by using clearer formatting on this line.',
     });
   }
 
-  const parsingSnippet = extractLineSnippet(finalCode, /input\(/);
-  if (parsingSnippet) {
+  const parsingReference = extractLineReference(finalCode, /input\(/);
+  if (parsingReference) {
     evidence.push({
-      type: 'code_snippet',
-      reference: parsingSnippet,
+      type: 'code_line',
+      reference: parsingReference,
       description:
         'A tiny parsing helper or guard around this input line would make the solution more robust without changing the platform style.',
     });
@@ -320,6 +365,11 @@ function splitIntoSentences(text: string) {
 }
 
 function getFinalCode(request: GenerateSessionReportRequest) {
+  const finalSnapshot = request.finalCodeSnapshot?.code;
+  if (finalSnapshot && finalSnapshot.trim().length > 0) {
+    return finalSnapshot;
+  }
+
   const lastSnapshot = request.snapshots.at(-1)?.code;
   if (lastSnapshot && lastSnapshot.trim().length > 0) {
     return lastSnapshot;
@@ -357,4 +407,148 @@ function extractLineSnippet(code: string, pattern: RegExp) {
     .find((entry) => pattern.test(entry));
 
   return line?.slice(0, 120) ?? null;
+}
+
+function extractLineReference(code: string, pattern: RegExp) {
+  const lines = code.split('\n');
+  for (let i = 0; i < lines.length; i += 1) {
+    const trimmed = lines[i]?.trim();
+    if (!trimmed || !pattern.test(trimmed)) {
+      continue;
+    }
+
+    return `L${i + 1}: ${trimmed.slice(0, 120)}`;
+  }
+
+  return null;
+}
+
+function ensureEvidenceCoverage(
+  dimension: SessionReportDimension | undefined,
+  finalCode: string,
+  sessionEvents: SessionReportEventContext[],
+  label: string,
+  preferEventEvidence: boolean,
+): SessionReportDimension | undefined {
+  if (!dimension) {
+    return dimension;
+  }
+
+  if (dimension.evidence.length > 0) {
+    return dimension;
+  }
+
+  const evidence: SessionReportEvidence[] = [];
+
+  if (preferEventEvidence) {
+    const eventEvidence = buildEventEvidence(sessionEvents, label);
+    if (eventEvidence) {
+      evidence.push(eventEvidence);
+    }
+  }
+
+  if (evidence.length === 0) {
+    const codeEvidence = buildCodeLineEvidence(finalCode, label);
+    if (codeEvidence) {
+      evidence.push(codeEvidence);
+    }
+  }
+
+  return {
+    ...dimension,
+    evidence: evidence.length > 0 ? evidence : dimension.evidence,
+  };
+}
+
+function buildCodeLineEvidence(finalCode: string, label: string): SessionReportEvidence | null {
+  if (!finalCode.trim()) {
+    return null;
+  }
+
+  const lines = finalCode.split('\n');
+  for (let i = 0; i < lines.length; i += 1) {
+    const trimmed = lines[i]?.trim();
+    if (!trimmed) {
+      continue;
+    }
+
+    return {
+      type: 'code_line',
+      reference: `L${i + 1}: ${trimmed.slice(0, 120)}`,
+      description: `Evidence from the final code related to ${label}.`,
+    };
+  }
+
+  return null;
+}
+
+function buildEventEvidence(
+  sessionEvents: SessionReportEventContext[],
+  label: string,
+): SessionReportEvidence | null {
+  if (sessionEvents.length === 0) {
+    return null;
+  }
+
+  const event = sessionEvents.at(-1);
+  if (!event) {
+    return null;
+  }
+
+  return {
+    type: 'event_timestamp',
+    reference: event.timestamp,
+    description: event.details || `Session event relevant to ${label}.`,
+  };
+}
+
+function ensureEventEvidenceAcrossReport(
+  dimensions: NonNullable<SessionReport['dimensions']>,
+  sessionEvents: SessionReportEventContext[],
+): NonNullable<SessionReport['dimensions']> {
+  if (sessionEvents.length === 0) {
+    return dimensions;
+  }
+
+  const hasEventEvidence = Object.values(dimensions).some((dimension) =>
+    dimension?.evidence?.some((item) => item.type === 'event_timestamp'),
+  );
+
+  if (hasEventEvidence) {
+    return dimensions;
+  }
+
+  const eventEvidence = buildEventEvidence(sessionEvents, 'session timeline');
+  if (!eventEvidence) {
+    return dimensions;
+  }
+
+  const preferredKey = dimensions.communication
+    ? 'communication'
+    : dimensions.problemSolving
+      ? 'problemSolving'
+      : dimensions.correctness
+        ? 'correctness'
+        : dimensions.efficiency
+          ? 'efficiency'
+          : dimensions.codeQuality
+            ? 'codeQuality'
+            : null;
+
+  if (!preferredKey) {
+    return dimensions;
+  }
+
+  const target = dimensions[preferredKey];
+  if (!target) {
+    return dimensions;
+  }
+
+  return {
+    ...dimensions,
+    [preferredKey]: {
+      ...target,
+      evidence: [...target.evidence, eventEvidence],
+    },
+  };
 }
