@@ -346,6 +346,84 @@ describe('handleResult', () => {
     );
   });
 
+  it('GIVEN weakness result is already cached WHEN handling report result THEN persists AI weakness after heuristic fallback', async () => {
+    const user = await insertUser(db);
+    const room = await insertRoom(db, user.id);
+    const session = await insertSession(db, room.id, { status: 'finished' });
+    await insertSessionParticipant(db, session.id, user.id, 'candidate');
+    await insertSessionReport(db, session.id, {
+      userId: user.id,
+      status: 'pending',
+      report: null,
+      overallScore: null,
+      generatedAt: null,
+    });
+    await cacheService.set(
+      'session-report-meta:job-fast-result',
+      { sessionId: session.id, userId: user.id },
+      60,
+    );
+    mockAiClient.submitWeaknessAnalysisRequest.mockResolvedValueOnce({
+      jobId: 'fast-weakness-job',
+    });
+    mockAiClient.getWeaknessAnalysisResult.mockResolvedValueOnce({
+      summary: 'AI result was cached before metadata handling completed.',
+      recurringPatterns: ['Communication needs clearer explanation.'],
+      weaknesses: [
+        {
+          category: 'communication',
+          description: 'Explain invariants out loud before coding.',
+          evidence: 'AI evidence should replace the heuristic time-complexity fallback.',
+          trend: 'stable',
+        },
+      ],
+    });
+
+    await service.handleResult('job-fast-result', {
+      sessionId: session.id,
+      generatedAt: '2026-04-20T06:00:00.000Z',
+      overallScore: 91,
+      dimensions: {
+        efficiency: {
+          score: 62,
+          feedback: 'The solution uses quadratic time complexity.',
+          evidence: [],
+        },
+      },
+      strengths: [],
+      areasForImprovement: ['Improve time complexity.'],
+      detailedFeedback: 'Detailed feedback',
+      comparisonToHistory: null,
+      peerFeedbackSummary: null,
+      testCaseBreakdown: [],
+    });
+
+    const weaknessRows = await db
+      .select({
+        category: userWeaknesses.category,
+        description: userWeaknesses.description,
+        trend: userWeaknesses.trend,
+      })
+      .from(userWeaknesses)
+      .where(eq(userWeaknesses.userId, user.id));
+    const weaknessLinks = await db.select().from(weaknessSessions);
+
+    expect(weaknessRows).toEqual([
+      {
+        category: 'communication',
+        description: 'Explain invariants out loud before coding.',
+        trend: 'stable',
+      },
+    ]);
+    expect(weaknessLinks).toEqual([
+      expect.objectContaining({
+        description: 'AI evidence should replace the heuristic time-complexity fallback.',
+        reportedAt: new Date('2026-04-20T06:00:00.000Z'),
+      }),
+    ]);
+    expect(await cacheService.get('weakness-analysis-meta:fast-weakness-job')).toBeNull();
+  });
+
   it('GIVEN regenerated report WHEN weaknesses change THEN replaces stale weakness links', async () => {
     const user = await insertUser(db);
     const room = await insertRoom(db, user.id);

@@ -175,8 +175,18 @@ export class SessionReportsService {
         and(eq(sessionReports.sessionId, meta.sessionId), eq(sessionReports.userId, meta.userId)),
       );
 
-    await this.enqueueWeaknessAnalysis(meta.sessionId, meta.userId, reportPayload, generatedAt);
+    const weaknessAnalysisRequest = await this.buildWeaknessAnalysisRequest(
+      meta.sessionId,
+      meta.userId,
+      reportPayload,
+    );
     await this.persistWeaknessSignals(meta.sessionId, meta.userId, reportPayload, generatedAt);
+    await this.enqueueWeaknessAnalysis(
+      meta.sessionId,
+      meta.userId,
+      weaknessAnalysisRequest,
+      generatedAt,
+    );
 
     await this.cacheService.del(metaKey);
 
@@ -316,11 +326,10 @@ export class SessionReportsService {
   private async enqueueWeaknessAnalysis(
     sessionId: string,
     userId: string,
-    report: SessionReport,
+    request: Parameters<IAiClient['submitWeaknessAnalysisRequest']>[0] | null,
     reportedAt: Date,
   ): Promise<void> {
     try {
-      const request = await this.buildWeaknessAnalysisRequest(sessionId, userId, report);
       if (!request) {
         return;
       }
@@ -331,6 +340,10 @@ export class SessionReportsService {
         { sessionId, userId, reportedAt: reportedAt.toISOString() },
         WEAKNESS_ANALYSIS_META_TTL_SECONDS,
       );
+      const cachedResult = await this.aiClient.getWeaknessAnalysisResult(jobId);
+      if (cachedResult) {
+        await this.handleWeaknessAnalysisResult(jobId, cachedResult);
+      }
     } catch (error) {
       this.logger.warn(
         `Failed to enqueue weakness analysis for session ${sessionId} and user ${userId}: ${
