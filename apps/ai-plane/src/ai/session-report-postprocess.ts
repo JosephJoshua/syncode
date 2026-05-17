@@ -12,6 +12,26 @@ const FALSE_PLATFORM_CRITIQUE_PATTERN =
 const SUGGESTION_PATTERN =
   /\b(?:consider|try|for example|next step|you can|recommend|suggest|instead|rename|use)\b/i;
 
+const PROMPT_INJECTION_PATTERNS: RegExp[] = [
+  /\bignore\b[\s\S]{0,80}\binstructions?\b/i,
+  /\bignore\b[\s\S]{0,80}\b(developer|system|prior)\s+(rules?|instructions?|prompts?)\b/i,
+  /\bdisregard\b[\s\S]{0,80}\binstructions?\b/i,
+  /\boverride\s+instructions?\b/i,
+  /\b(system|developer)\s+prompt\b/i,
+  /\b(disclose|reveal)\b[\s\S]{0,80}\b(secrets?|system prompt|developer prompt|policy text)\b/i,
+  /\bjailbreak\b/i,
+  /\bprompt\s+injection\b/i,
+  /\boutput\s+exactly\b/i,
+];
+
+const PROFANITY_PATTERN = /\b(fuck|fucking|shit|bitch|asshole|bastard|motherfucker|dick|cunt)\b/i;
+const META_REASONING_PATTERNS: RegExp[] = [
+  /\bwait[, ]/i,
+  /\blet'?s re-?examine\b/i,
+  /\bactually[, ]/i,
+  /\bthe main logical flow is\b/i,
+];
+
 const OPTIMAL_EFFICIENCY_POSITIVE_PATTERNS = [
   /\boptimal\b/i,
   /\bbest(?: possible)? time complexity\b/i,
@@ -27,6 +47,18 @@ const OPTIMAL_EFFICIENCY_NEGATIVE_PATTERNS = [
   /\bnot optimal\b/i,
   /\bcould be faster\b/i,
 ];
+
+const REQUIRED_DIMENSION_KEYS = [
+  'correctness',
+  'efficiency',
+  'codeQuality',
+  'communication',
+  'problemSolving',
+] as const satisfies readonly (keyof NonNullable<SessionReport['dimensions']>)[];
+
+const MAX_REPORT_TEXT_LENGTH = 900;
+const MAX_REPORT_LIST_ITEM_LENGTH = 240;
+const MAX_EVIDENCE_DESCRIPTION_LENGTH = 220;
 
 export function postprocessSessionReport(
   request: GenerateSessionReportRequest,
@@ -90,40 +122,28 @@ export function postprocessSessionReport(
         nextReport.dimensions.correctness,
         finalCode,
         sessionEvents,
-        'correctness',
-        false,
       ),
       efficiency: ensureEvidenceCoverage(
         nextReport.dimensions.efficiency,
         finalCode,
         sessionEvents,
-        'efficiency',
-        false,
       ),
       codeQuality: ensureEvidenceCoverage(
         nextReport.dimensions.codeQuality,
         finalCode,
         sessionEvents,
-        'code quality',
-        false,
       ),
       communication: ensureEvidenceCoverage(
         nextReport.dimensions.communication,
         finalCode,
         sessionEvents,
-        'communication',
-        true,
       ),
       problemSolving: ensureEvidenceCoverage(
         nextReport.dimensions.problemSolving,
         finalCode,
         sessionEvents,
-        'problem solving',
-        true,
       ),
     };
-
-    nextReport.dimensions = ensureEventEvidenceAcrossReport(nextReport.dimensions, sessionEvents);
   }
 
   if (nextReport.areasForImprovement) {
@@ -151,7 +171,120 @@ export function postprocessSessionReport(
     nextReport.feedback = nextReport.detailedFeedback;
   }
 
+  sanitizeReportOutput(nextReport);
+  assertEvidenceBackedDimensions(nextReport, request.sessionEvents ?? []);
   return nextReport;
+}
+
+function assertEvidenceBackedDimensions(
+  report: SessionReport,
+  sessionEvents: SessionReportEventContext[],
+) {
+  if (!report.dimensions) {
+    throw new Error('LLM session report omitted required scored dimensions');
+  }
+
+  const missingOrInvalid = REQUIRED_DIMENSION_KEYS.filter((key) => {
+    const dimension = report.dimensions?.[key];
+    return (
+      !dimension ||
+      !Number.isFinite(dimension.score) ||
+      dimension.score < 0 ||
+      dimension.score > 100 ||
+      dimension.evidence.length === 0
+    );
+  });
+
+  if (missingOrInvalid.length > 0) {
+    throw new Error(
+      `LLM session report omitted evidence-backed scores for: ${missingOrInvalid.join(', ')}`,
+    );
+  }
+
+  if (
+    sessionEvents.length > 0 &&
+    !Object.values(report.dimensions).some((dimension) =>
+      dimension?.evidence.some((item) => item.type === 'event_timestamp'),
+    )
+  ) {
+    throw new Error('LLM session report omitted session event timestamp evidence');
+  }
+}
+
+function sanitizeReportOutput(report: SessionReport) {
+  if (report.dimensions) {
+    for (const [key, dimension] of Object.entries(report.dimensions)) {
+      if (!dimension) {
+        continue;
+      }
+
+      dimension.feedback =
+        sanitizeReportText(dimension.feedback, MAX_REPORT_LIST_ITEM_LENGTH) ??
+        `No safe ${key} feedback was provided.`;
+      dimension.evidence = dimension.evidence
+        .map((item) => {
+          const description = sanitizeReportText(item.description, MAX_EVIDENCE_DESCRIPTION_LENGTH);
+          return description ? { ...item, description } : null;
+        })
+        .filter((item): item is NonNullable<typeof item> => item !== null);
+    }
+  }
+
+  report.strengths = sanitizeReportList(report.strengths);
+  report.areasForImprovement = sanitizeReportList(report.areasForImprovement);
+  report.detailedFeedback = sanitizeReportText(report.detailedFeedback, MAX_REPORT_TEXT_LENGTH);
+  report.feedback = sanitizeReportText(report.feedback, MAX_REPORT_TEXT_LENGTH);
+
+  if (report.peerFeedbackSummary) {
+    report.peerFeedbackSummary.themes = sanitizeReportList(
+      report.peerFeedbackSummary.themes,
+    ) as string[];
+  }
+}
+
+function sanitizeReportList(items: string[] | undefined) {
+  if (!items) {
+    return items;
+  }
+
+  return items
+    .map((item) => sanitizeReportText(item, MAX_REPORT_LIST_ITEM_LENGTH))
+    .filter((item): item is string => Boolean(item));
+}
+
+function sanitizeReportText(value: string | undefined, maxLength: number): string | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  const normalized = Array.from(value)
+    .filter((char) => {
+      const code = char.charCodeAt(0);
+      return code === 9 || code === 10 || (code >= 32 && code !== 127);
+    })
+    .join('')
+    .replaceAll(/\r\n?/g, '\n')
+    .replaceAll(/\n{3,}/g, '\n\n')
+    .replaceAll(/[^\S\n\t]+/g, ' ')
+    .trim();
+
+  if (!normalized || isUnsafeReportText(normalized)) {
+    return undefined;
+  }
+
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+
+  return `${normalized.slice(0, maxLength).trim()}...`;
+}
+
+function isUnsafeReportText(value: string) {
+  return (
+    PROMPT_INJECTION_PATTERNS.some((pattern) => pattern.test(value)) ||
+    PROFANITY_PATTERN.test(value) ||
+    META_REASONING_PATTERNS.some((pattern) => pattern.test(value))
+  );
 }
 
 function normalizeEfficiencyDimension(dimension: SessionReportDimension): SessionReportDimension {
@@ -192,10 +325,6 @@ function normalizeCodeQualityDimension(
       !FALSE_PLATFORM_CRITIQUE_PATTERN.test(item.description) &&
       !FALSE_PLATFORM_CRITIQUE_PATTERN.test(item.reference),
   );
-
-  if (nextDimension.evidence.length === 0) {
-    nextDimension.evidence = buildPlatformAwareCodeQualityEvidence(finalCode);
-  }
 
   if (nextDimension.score < 65) {
     nextDimension.score = 65;
@@ -310,32 +439,6 @@ function normalizeDetailedFeedback(
   return `${normalized} Recommended next step: ${areasForImprovement[0]}`;
 }
 
-function buildPlatformAwareCodeQualityEvidence(finalCode: string): SessionReportEvidence[] {
-  const evidence: SessionReportEvidence[] = [];
-
-  const outputReference = extractLineReference(finalCode, /print\(/);
-  if (outputReference) {
-    evidence.push({
-      type: 'code_line',
-      reference: outputReference,
-      description:
-        'The stdin/stdout flow is valid here. Improve readability by using clearer formatting on this line.',
-    });
-  }
-
-  const parsingReference = extractLineReference(finalCode, /input\(/);
-  if (parsingReference) {
-    evidence.push({
-      type: 'code_line',
-      reference: parsingReference,
-      description:
-        'A tiny parsing helper or guard around this input line would make the solution more robust without changing the platform style.',
-    });
-  }
-
-  return evidence.slice(0, 2);
-}
-
 function shouldBoostEfficiencyScore(text: string) {
   return (
     OPTIMAL_EFFICIENCY_POSITIVE_PATTERNS.some((pattern) => pattern.test(text)) &&
@@ -365,23 +468,7 @@ function splitIntoSentences(text: string) {
 }
 
 function getFinalCode(request: GenerateSessionReportRequest) {
-  const finalSnapshot = request.finalCodeSnapshot?.code;
-  if (finalSnapshot && finalSnapshot.trim().length > 0) {
-    return finalSnapshot;
-  }
-
-  const lastSnapshot = request.snapshots.at(-1)?.code;
-  if (lastSnapshot && lastSnapshot.trim().length > 0) {
-    return lastSnapshot;
-  }
-
-  const lastSubmission = request.submissions.at(-1)?.code;
-  if (lastSubmission && lastSubmission.trim().length > 0) {
-    return lastSubmission;
-  }
-
-  const lastRun = request.runs.at(-1)?.code;
-  return lastRun ?? '';
+  return request.finalCodeSnapshot?.code ?? '';
 }
 
 function usesPlatformIoStyle(code: string, language: GenerateSessionReportRequest['language']) {
@@ -409,146 +496,154 @@ function extractLineSnippet(code: string, pattern: RegExp) {
   return line?.slice(0, 120) ?? null;
 }
 
-function extractLineReference(code: string, pattern: RegExp) {
-  const lines = code.split('\n');
-  for (let i = 0; i < lines.length; i += 1) {
-    const trimmed = lines[i]?.trim();
-    if (!trimmed || !pattern.test(trimmed)) {
-      continue;
-    }
-
-    return `L${i + 1}: ${trimmed.slice(0, 120)}`;
-  }
-
-  return null;
-}
-
 function ensureEvidenceCoverage(
   dimension: SessionReportDimension | undefined,
   finalCode: string,
   sessionEvents: SessionReportEventContext[],
-  label: string,
-  preferEventEvidence: boolean,
 ): SessionReportDimension | undefined {
   if (!dimension) {
     return dimension;
   }
 
-  if (dimension.evidence.length > 0) {
-    return dimension;
-  }
-
-  const evidence: SessionReportEvidence[] = [];
-
-  if (preferEventEvidence) {
-    const eventEvidence = buildEventEvidence(sessionEvents, label);
-    if (eventEvidence) {
-      evidence.push(eventEvidence);
-    }
-  }
-
-  if (evidence.length === 0) {
-    const codeEvidence = buildCodeLineEvidence(finalCode, label);
-    if (codeEvidence) {
-      evidence.push(codeEvidence);
-    }
-  }
+  const evidence = normalizeSpecificEvidence(dimension.evidence, finalCode, sessionEvents);
 
   return {
     ...dimension,
-    evidence: evidence.length > 0 ? evidence : dimension.evidence,
+    evidence,
   };
 }
 
-function buildCodeLineEvidence(finalCode: string, label: string): SessionReportEvidence | null {
-  if (!finalCode.trim()) {
+function normalizeSpecificEvidence(
+  evidence: SessionReportEvidence[],
+  finalCode: string,
+  sessionEvents: SessionReportEventContext[],
+): SessionReportEvidence[] {
+  return evidence
+    .map((item) => normalizeEvidenceItem(item, finalCode, sessionEvents))
+    .filter((item): item is SessionReportEvidence => item !== null);
+}
+
+function normalizeEvidenceItem(
+  item: SessionReportEvidence,
+  finalCode: string,
+  sessionEvents: SessionReportEventContext[],
+): SessionReportEvidence | null {
+  const description = sanitizeReportText(item.description, MAX_EVIDENCE_DESCRIPTION_LENGTH);
+  if (!description) {
     return null;
   }
 
-  const lines = finalCode.split('\n');
-  for (let i = 0; i < lines.length; i += 1) {
-    const trimmed = lines[i]?.trim();
-    if (!trimmed) {
-      continue;
+  if (item.type === 'code_line') {
+    const reference = normalizeLineReference(item.reference, finalCode);
+    return reference ? { ...item, reference, description } : null;
+  }
+
+  if (item.type === 'event_timestamp') {
+    return sessionEvents.some((event) => event.timestamp === item.reference)
+      ? { ...item, description }
+      : null;
+  }
+
+  if (item.type === 'code_snippet') {
+    const reference = item.reference.trim();
+    if (
+      reference.length === 0 ||
+      reference.length > 120 ||
+      isGenericEvidenceReference(reference) ||
+      isUnsafeReportText(reference) ||
+      !finalCode.includes(reference)
+    ) {
+      return null;
     }
 
-    return {
-      type: 'code_line',
-      reference: `L${i + 1}: ${trimmed.slice(0, 120)}`,
-      description: `Evidence from the final code related to ${label}.`,
-    };
+    return { ...item, reference, description };
   }
 
   return null;
 }
 
-function buildEventEvidence(
-  sessionEvents: SessionReportEventContext[],
-  label: string,
-): SessionReportEvidence | null {
-  if (sessionEvents.length === 0) {
+function normalizeLineReference(reference: string, finalCode: string) {
+  const trimmed = reference.trim();
+  if (isGenericEvidenceReference(trimmed)) {
     return null;
   }
 
-  const event = sessionEvents.at(-1);
-  if (!event) {
-    return null;
+  const lines = finalCode.trim().length > 0 ? finalCode.split('\n') : [];
+  const lineCount = lines.length;
+
+  const withSnippet = /^(L\d+(?:-L\d+)?)(?::|\||\s+-\s+|\s+)(.+)$/i.exec(trimmed);
+  if (withSnippet?.[1] && withSnippet[2]) {
+    const normalizedRange = normalizeValidLineRange(withSnippet[1], lineCount);
+    return normalizedRange && snippetMatchesLineRange(withSnippet[2], normalizedRange, lines)
+      ? `${normalizedRange}: ${normalizeCodeExcerpt(withSnippet[2])}`
+      : null;
   }
 
-  return {
-    type: 'event_timestamp',
-    reference: event.timestamp,
-    description: event.details || `Session event relevant to ${label}.`,
-  };
+  const lineWord = /^line\s+(\d+)(?:\s*(?:-|to)\s*(?:line\s*)?(\d+))?(?::|\s+-\s+|\s+)(.+)$/i.exec(
+    trimmed,
+  );
+  if (lineWord?.[1] && lineWord[3]) {
+    const normalizedRange = normalizeValidLineRange(
+      lineWord[2] ? `L${lineWord[1]}-L${lineWord[2]}` : `L${lineWord[1]}`,
+      lineCount,
+    );
+    return normalizedRange && snippetMatchesLineRange(lineWord[3], normalizedRange, lines)
+      ? `${normalizedRange}: ${normalizeCodeExcerpt(lineWord[3])}`
+      : null;
+  }
+
+  return null;
 }
 
-function ensureEventEvidenceAcrossReport(
-  dimensions: NonNullable<SessionReport['dimensions']>,
-  sessionEvents: SessionReportEventContext[],
-): NonNullable<SessionReport['dimensions']> {
-  if (sessionEvents.length === 0) {
-    return dimensions;
+function snippetMatchesLineRange(snippet: string, normalizedRange: string, lines: string[]) {
+  const normalizedSnippet = normalizeCodeExcerpt(snippet);
+  if (normalizedSnippet.length < 6 || isGenericEvidenceReference(normalizedSnippet)) {
+    return false;
   }
 
-  const hasEventEvidence = Object.values(dimensions).some((dimension) =>
-    dimension?.evidence?.some((item) => item.type === 'event_timestamp'),
+  const range = /^L(\d+)(?:-L(\d+))?$/i.exec(normalizedRange);
+  if (!range?.[1]) {
+    return false;
+  }
+
+  const start = Number(range[1]);
+  const end = range[2] ? Number(range[2]) : start;
+  const referencedText = normalizeCodeExcerpt(lines.slice(start - 1, end).join('\n'));
+  return referencedText.includes(normalizedSnippet);
+}
+
+function normalizeCodeExcerpt(value: string) {
+  return value
+    .trim()
+    .replace(/^['"`]+|['"`]+$/g, '')
+    .replace(/\s+/g, ' ');
+}
+
+function normalizeValidLineRange(reference: string, lineCount: number) {
+  if (lineCount === 0) {
+    return null;
+  }
+
+  const match = /^L(\d+)(?:-L(\d+))?$/i.exec(reference);
+  if (!match?.[1]) {
+    return null;
+  }
+
+  const start = Number(match[1]);
+  const end = match[2] ? Number(match[2]) : start;
+  if (!Number.isInteger(start) || !Number.isInteger(end)) {
+    return null;
+  }
+
+  if (start < 1 || end < start || end > lineCount) {
+    return null;
+  }
+
+  return start === end ? `L${start}` : `L${start}-L${end}`;
+}
+
+function isGenericEvidenceReference(reference: string) {
+  return /^(?:code|final code|code structure|final snapshot(?: code)?|solution|session data|overall performance)$/i.test(
+    reference.trim(),
   );
-
-  if (hasEventEvidence) {
-    return dimensions;
-  }
-
-  const eventEvidence = buildEventEvidence(sessionEvents, 'session timeline');
-  if (!eventEvidence) {
-    return dimensions;
-  }
-
-  const preferredKey = dimensions.communication
-    ? 'communication'
-    : dimensions.problemSolving
-      ? 'problemSolving'
-      : dimensions.correctness
-        ? 'correctness'
-        : dimensions.efficiency
-          ? 'efficiency'
-          : dimensions.codeQuality
-            ? 'codeQuality'
-            : null;
-
-  if (!preferredKey) {
-    return dimensions;
-  }
-
-  const target = dimensions[preferredKey];
-  if (!target) {
-    return dimensions;
-  }
-
-  return {
-    ...dimensions,
-    [preferredKey]: {
-      ...target,
-      evidence: [...target.evidence, eventEvidence],
-    },
-  };
 }
