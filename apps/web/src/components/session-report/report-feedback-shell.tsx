@@ -11,6 +11,7 @@ export function FeedbackShell({
   badges,
   children,
   sessionId,
+  actions,
 }: {
   eyebrow: string;
   title: string;
@@ -18,6 +19,7 @@ export function FeedbackShell({
   badges: ReactNode[];
   children: ReactNode;
   sessionId?: string;
+  actions?: ReactNode;
 }) {
   const { t } = useTranslation('common');
 
@@ -28,13 +30,16 @@ export function FeedbackShell({
         className="pointer-events-none absolute -top-24 left-1/2 h-72 w-[600px] -translate-x-1/2 rounded-full bg-primary/6 blur-[120px]"
       />
 
-      <Link
-        to="/dashboard"
-        className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
-      >
-        <ArrowLeft className="size-3.5" />
-        {t('backToDashboard')}
-      </Link>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Link
+          to="/dashboard"
+          className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <ArrowLeft className="size-3.5" />
+          {t('backToDashboard')}
+        </Link>
+        {actions}
+      </div>
 
       <header className="mt-5 space-y-3">
         <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-primary/70">

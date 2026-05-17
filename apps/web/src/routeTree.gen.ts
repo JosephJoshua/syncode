@@ -21,6 +21,7 @@ import { Route as AppBookmarksRouteImport } from './routes/_app/bookmarks'
 import { Route as AppRoomsRouteRouteImport } from './routes/_app/rooms/route'
 import { Route as AppRoomsIndexRouteImport } from './routes/_app/rooms/index'
 import { Route as AppProblemsIndexRouteImport } from './routes/_app/problems.index'
+import { Route as AppSessionsCompareRouteImport } from './routes/_app/sessions.compare'
 import { Route as AppSessionsSessionIdRouteImport } from './routes/_app/sessions.$sessionId'
 import { Route as AppRoomsCreateRouteImport } from './routes/_app/rooms_.create'
 import { Route as AppRoomsRoomIdRouteImport } from './routes/_app/rooms_.$roomId'
@@ -89,6 +90,11 @@ const AppProblemsIndexRoute = AppProblemsIndexRouteImport.update({
   path: '/problems/',
   getParentRoute: () => AppRouteRoute,
 } as any)
+const AppSessionsCompareRoute = AppSessionsCompareRouteImport.update({
+  id: '/sessions/compare',
+  path: '/sessions/compare',
+  getParentRoute: () => AppRouteRoute,
+} as any)
 const AppSessionsSessionIdRoute = AppSessionsSessionIdRouteImport.update({
   id: '/sessions/$sessionId',
   path: '/sessions/$sessionId',
@@ -153,6 +159,7 @@ export interface FileRoutesByFullPath {
   '/rooms/$roomId': typeof AppRoomsRoomIdRoute
   '/rooms/create': typeof AppRoomsCreateRoute
   '/sessions/$sessionId': typeof AppSessionsSessionIdRoute
+  '/sessions/compare': typeof AppSessionsCompareRoute
   '/problems/': typeof AppProblemsIndexRoute
   '/rooms/': typeof AppRoomsIndexRoute
 }
@@ -173,6 +180,7 @@ export interface FileRoutesByTo {
   '/rooms/$roomId': typeof AppRoomsRoomIdRoute
   '/rooms/create': typeof AppRoomsCreateRoute
   '/sessions/$sessionId': typeof AppSessionsSessionIdRoute
+  '/sessions/compare': typeof AppSessionsCompareRoute
   '/problems': typeof AppProblemsIndexRoute
   '/rooms': typeof AppRoomsIndexRoute
 }
@@ -197,6 +205,7 @@ export interface FileRoutesById {
   '/_app/rooms_/$roomId': typeof AppRoomsRoomIdRoute
   '/_app/rooms_/create': typeof AppRoomsCreateRoute
   '/_app/sessions/$sessionId': typeof AppSessionsSessionIdRoute
+  '/_app/sessions/compare': typeof AppSessionsCompareRoute
   '/_app/problems/': typeof AppProblemsIndexRoute
   '/_app/rooms/': typeof AppRoomsIndexRoute
 }
@@ -220,6 +229,7 @@ export interface FileRouteTypes {
     | '/rooms/$roomId'
     | '/rooms/create'
     | '/sessions/$sessionId'
+    | '/sessions/compare'
     | '/problems/'
     | '/rooms/'
   fileRoutesByTo: FileRoutesByTo
@@ -240,6 +250,7 @@ export interface FileRouteTypes {
     | '/rooms/$roomId'
     | '/rooms/create'
     | '/sessions/$sessionId'
+    | '/sessions/compare'
     | '/problems'
     | '/rooms'
   id:
@@ -263,6 +274,7 @@ export interface FileRouteTypes {
     | '/_app/rooms_/$roomId'
     | '/_app/rooms_/create'
     | '/_app/sessions/$sessionId'
+    | '/_app/sessions/compare'
     | '/_app/problems/'
     | '/_app/rooms/'
   fileRoutesById: FileRoutesById
@@ -356,6 +368,13 @@ declare module '@tanstack/react-router' {
       path: '/problems'
       fullPath: '/problems/'
       preLoaderRoute: typeof AppProblemsIndexRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/_app/sessions/compare': {
+      id: '/_app/sessions/compare'
+      path: '/sessions/compare'
+      fullPath: '/sessions/compare'
+      preLoaderRoute: typeof AppSessionsCompareRouteImport
       parentRoute: typeof AppRouteRoute
     }
     '/_app/sessions/$sessionId': {
@@ -453,6 +472,7 @@ interface AppRouteRouteChildren {
   AppRoomsRoomIdRoute: typeof AppRoomsRoomIdRoute
   AppRoomsCreateRoute: typeof AppRoomsCreateRoute
   AppSessionsSessionIdRoute: typeof AppSessionsSessionIdRoute
+  AppSessionsCompareRoute: typeof AppSessionsCompareRoute
   AppProblemsIndexRoute: typeof AppProblemsIndexRoute
 }
 
@@ -469,6 +489,7 @@ const AppRouteRouteChildren: AppRouteRouteChildren = {
   AppRoomsRoomIdRoute: AppRoomsRoomIdRoute,
   AppRoomsCreateRoute: AppRoomsCreateRoute,
   AppSessionsSessionIdRoute: AppSessionsSessionIdRoute,
+  AppSessionsCompareRoute: AppSessionsCompareRoute,
   AppProblemsIndexRoute: AppProblemsIndexRoute,
 }
 
