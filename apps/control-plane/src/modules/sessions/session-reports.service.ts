@@ -5,17 +5,47 @@ import {
   type GenerateSessionReportResult,
   type IAiClient,
   type SessionReport,
+  type SessionReportDimension,
+  USER_WEAKNESS_CATEGORIES,
 } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
-import { problems, sessionParticipants, sessionReports, users } from '@syncode/db';
+import {
+  problems,
+  sessionDeletions,
+  sessionParticipants,
+  sessionReports,
+  sessions,
+  users,
+  userWeaknesses,
+  weaknessSessions,
+} from '@syncode/db';
 import { CACHE_SERVICE, type ICacheService } from '@syncode/shared/ports';
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, ne, sql } from 'drizzle-orm';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
 import { SessionReportRequestBuilderService } from './session-report-request-builder.service.js';
 import { SessionsService } from './sessions.service.js';
 
 const SESSION_REPORT_META_KEY_PREFIX = 'session-report-meta:';
 const SESSION_REPORT_META_TTL_SECONDS = 24 * 60 * 60;
+const WEAKNESS_SCORE_THRESHOLD = 85;
+const PRIOR_TREND_DELTA = 3;
+const RECENT_REPORT_LIMIT = 5;
+
+type WeaknessCategory = (typeof USER_WEAKNESS_CATEGORIES)[number];
+type WeaknessTrend = 'improving' | 'stable' | 'worsening';
+type ReportDimensionKey =
+  | 'correctness'
+  | 'efficiency'
+  | 'codeQuality'
+  | 'communication'
+  | 'problemSolving';
+
+interface WeaknessSignal {
+  category: WeaknessCategory;
+  dimension: ReportDimensionKey;
+  score: number;
+  description: string;
+}
 
 interface SessionReportJobMeta {
   sessionId: string;
@@ -130,6 +160,8 @@ export class SessionReportsService {
         and(eq(sessionReports.sessionId, meta.sessionId), eq(sessionReports.userId, meta.userId)),
       );
 
+    await this.persistWeaknessSignals(meta.sessionId, meta.userId, reportPayload, generatedAt);
+
     await this.cacheService.del(metaKey);
 
     this.logger.debug(
@@ -216,5 +248,339 @@ export class SessionReportsService {
 
       throw error;
     }
+  }
+
+  private async persistWeaknessSignals(
+    sessionId: string,
+    userId: string,
+    report: SessionReport,
+    generatedAt: Date,
+  ): Promise<void> {
+    const signals = this.extractWeaknessSignals(report);
+
+    const signalsWithTrend = await Promise.all(
+      signals.map(async (signal) => ({
+        ...signal,
+        trend: await this.calculateWeaknessTrend(userId, sessionId, signal.dimension, signal.score),
+      })),
+    );
+
+    await this.db.transaction(async (tx) => {
+      const existingLinks = await tx
+        .select({ weaknessId: weaknessSessions.weaknessId })
+        .from(weaknessSessions)
+        .innerJoin(userWeaknesses, eq(userWeaknesses.id, weaknessSessions.weaknessId))
+        .where(and(eq(userWeaknesses.userId, userId), eq(weaknessSessions.sessionId, sessionId)));
+      const touchedWeaknessIds = new Set(existingLinks.map((link) => link.weaknessId));
+
+      if (existingLinks.length > 0) {
+        await tx.delete(weaknessSessions).where(
+          and(
+            eq(weaknessSessions.sessionId, sessionId),
+            inArray(
+              weaknessSessions.weaknessId,
+              existingLinks.map((link) => link.weaknessId),
+            ),
+          ),
+        );
+      }
+
+      for (const signal of signalsWithTrend) {
+        const [weakness] = await tx
+          .insert(userWeaknesses)
+          .values({
+            userId,
+            category: signal.category,
+            description: signal.description,
+            frequency: 1,
+            trend: signal.trend,
+            lastSeenAt: generatedAt,
+          })
+          .onConflictDoUpdate({
+            target: [userWeaknesses.userId, userWeaknesses.category],
+            set: {
+              description: signal.description,
+              trend: signal.trend,
+              lastSeenAt: generatedAt,
+            },
+          })
+          .returning({ id: userWeaknesses.id });
+
+        if (!weakness) {
+          continue;
+        }
+
+        touchedWeaknessIds.add(weakness.id);
+
+        await tx
+          .insert(weaknessSessions)
+          .values({
+            weaknessId: weakness.id,
+            sessionId,
+            description: signal.description,
+            trend: signal.trend,
+            score: signal.score,
+            reportedAt: generatedAt,
+          })
+          .onConflictDoNothing();
+      }
+
+      for (const weaknessId of touchedWeaknessIds) {
+        await tx
+          .update(userWeaknesses)
+          .set({
+            frequency: sql<number>`(
+              SELECT COUNT(*)::int
+              FROM ${weaknessSessions}
+              WHERE ${weaknessSessions.weaknessId} = ${weaknessId}
+            )`,
+          })
+          .where(eq(userWeaknesses.id, weaknessId));
+      }
+
+      if (touchedWeaknessIds.size > 0) {
+        await tx.delete(userWeaknesses).where(
+          and(
+            eq(userWeaknesses.userId, userId),
+            inArray(userWeaknesses.id, [...touchedWeaknessIds]),
+            sql`NOT EXISTS (
+                SELECT 1
+                FROM ${weaknessSessions}
+                WHERE ${weaknessSessions.weaknessId} = ${userWeaknesses.id}
+              )`,
+          ),
+        );
+      }
+    });
+  }
+
+  private extractWeaknessSignals(report: SessionReport): WeaknessSignal[] {
+    const signals = new Map<WeaknessCategory, WeaknessSignal>();
+    const dimensions = report.dimensions ?? {};
+    const areaText = report.areasForImprovement ?? [];
+
+    this.addDimensionSignal(signals, 'correctness', dimensions.correctness, areaText);
+    this.addDimensionSignal(signals, 'efficiency', dimensions.efficiency, areaText);
+    this.addDimensionSignal(signals, 'codeQuality', dimensions.codeQuality, areaText);
+    this.addDimensionSignal(signals, 'communication', dimensions.communication, areaText);
+    this.addDimensionSignal(signals, 'problemSolving', dimensions.problemSolving, areaText);
+
+    for (const text of areaText) {
+      const category = this.classifyWeaknessText(text);
+      if (!category || signals.has(category)) {
+        continue;
+      }
+
+      const dimension = this.dimensionForCategory(category);
+      const score = dimensions[dimension]?.score ?? WEAKNESS_SCORE_THRESHOLD - 1;
+      signals.set(category, {
+        category,
+        dimension,
+        score,
+        description: this.cleanDescription(text),
+      });
+    }
+
+    return [...signals.values()];
+  }
+
+  private addDimensionSignal(
+    signals: Map<WeaknessCategory, WeaknessSignal>,
+    dimension: ReportDimensionKey,
+    dimensionResult: SessionReportDimension | undefined,
+    areaText: string[],
+  ): void {
+    if (!dimensionResult || dimensionResult.score >= WEAKNESS_SCORE_THRESHOLD) {
+      return;
+    }
+
+    const category = this.classifyDimensionWeakness(dimension, [
+      dimensionResult.feedback,
+      ...areaText,
+    ]);
+
+    if (signals.has(category)) {
+      return;
+    }
+
+    signals.set(category, {
+      category,
+      dimension,
+      score: dimensionResult.score,
+      description: this.cleanDescription(dimensionResult.feedback),
+    });
+  }
+
+  private async calculateWeaknessTrend(
+    userId: string,
+    sessionId: string,
+    dimension: ReportDimensionKey,
+    currentScore: number,
+  ): Promise<WeaknessTrend> {
+    const priorReports = await this.db
+      .select({ report: sessionReports.report })
+      .from(sessionReports)
+      .innerJoin(sessions, eq(sessions.id, sessionReports.sessionId))
+      .innerJoin(
+        sessionParticipants,
+        and(
+          eq(sessionParticipants.sessionId, sessionReports.sessionId),
+          eq(sessionParticipants.userId, userId),
+        ),
+      )
+      .leftJoin(
+        sessionDeletions,
+        and(
+          eq(sessionDeletions.sessionId, sessionReports.sessionId),
+          eq(sessionDeletions.userId, userId),
+        ),
+      )
+      .where(
+        and(
+          eq(sessionReports.userId, userId),
+          eq(sessionReports.status, 'completed'),
+          ne(sessionReports.sessionId, sessionId),
+          eq(sessions.status, 'finished'),
+          sql`${sessionDeletions.userId} IS NULL`,
+        ),
+      )
+      .orderBy(desc(sessionReports.generatedAt), desc(sessionReports.requestedAt))
+      .limit(RECENT_REPORT_LIMIT);
+
+    const priorScores = priorReports
+      .map((row) => (row.report as SessionReport | null)?.dimensions?.[dimension]?.score)
+      .filter((score): score is number => typeof score === 'number');
+
+    if (priorScores.length === 0) {
+      return 'stable';
+    }
+
+    const priorAverage = priorScores.reduce((sum, score) => sum + score, 0) / priorScores.length;
+
+    if (currentScore >= priorAverage + PRIOR_TREND_DELTA) {
+      return 'improving';
+    }
+
+    if (currentScore <= priorAverage - PRIOR_TREND_DELTA) {
+      return 'worsening';
+    }
+
+    return 'stable';
+  }
+
+  private classifyDimensionWeakness(
+    dimension: ReportDimensionKey,
+    texts: readonly string[],
+  ): WeaknessCategory {
+    const [primaryText, ...supportingTexts] = texts;
+    const textCategory =
+      this.classifyWeaknessText(primaryText ?? '') ??
+      this.classifyWeaknessText(supportingTexts.join(' '));
+
+    if (textCategory && this.isCategoryCompatibleWithDimension(dimension, textCategory)) {
+      return textCategory;
+    }
+
+    if (dimension === 'correctness') return 'edge_cases';
+    if (dimension === 'efficiency') return 'time_complexity';
+    if (dimension === 'codeQuality') return 'code_structure';
+    if (dimension === 'communication') return 'communication';
+    return 'edge_cases';
+  }
+
+  private classifyWeaknessText(text: string): WeaknessCategory | null {
+    const normalizedText = text.toLowerCase();
+
+    if (/\boff[-\s]?by[-\s]?one\b|\bindex\b|\bboundary\b/.test(normalizedText)) {
+      return 'off_by_one';
+    }
+
+    if (
+      /\binput validation\b|\bvalidate\b|\binvalid input\b|\bempty input\b/.test(normalizedText)
+    ) {
+      return 'input_validation';
+    }
+
+    if (/\bspace\b|\bmemory\b/.test(normalizedText)) {
+      return 'space_complexity';
+    }
+
+    if (
+      /\btime complexity\b|\bruntime\b|\bquadratic\b|\bo\(n\^2\)\b|\boptimi[sz]/.test(
+        normalizedText,
+      )
+    ) {
+      return 'time_complexity';
+    }
+
+    if (/\bvariable\b|\bnaming\b|\bidentifier\b/.test(normalizedText)) {
+      return 'variable_naming';
+    }
+
+    if (
+      /\bstructure\b|\bdead code\b|\bduplication\b|\breadability\b|\bmodular\b/.test(normalizedText)
+    ) {
+      return 'code_structure';
+    }
+
+    if (/\bcommunicat|\bexplain|\btrade[-\s]?off|\breasoning\b/.test(normalizedText)) {
+      return 'communication';
+    }
+
+    if (
+      /\bedge cases?\b|\bcorner cases?\b|\bhidden cases?\b|\bfailing tests?\b/.test(normalizedText)
+    ) {
+      return 'edge_cases';
+    }
+
+    return null;
+  }
+
+  private isCategoryCompatibleWithDimension(
+    dimension: ReportDimensionKey,
+    category: WeaknessCategory,
+  ): boolean {
+    if (dimension === 'efficiency') {
+      return category === 'time_complexity' || category === 'space_complexity';
+    }
+
+    if (dimension === 'codeQuality') {
+      return category === 'variable_naming' || category === 'code_structure';
+    }
+
+    if (dimension === 'communication') {
+      return category === 'communication';
+    }
+
+    if (dimension === 'correctness' || dimension === 'problemSolving') {
+      return ['edge_cases', 'off_by_one', 'input_validation'].includes(category);
+    }
+
+    return false;
+  }
+
+  private dimensionForCategory(category: WeaknessCategory): ReportDimensionKey {
+    if (category === 'time_complexity' || category === 'space_complexity') {
+      return 'efficiency';
+    }
+
+    if (category === 'variable_naming' || category === 'code_structure') {
+      return 'codeQuality';
+    }
+
+    if (category === 'communication') {
+      return 'communication';
+    }
+
+    return 'correctness';
+  }
+
+  private cleanDescription(text: string): string {
+    const strippedText = text
+      .replace(/<\/?(?:green|yellow|orange|red)>/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    return strippedText;
   }
 }
