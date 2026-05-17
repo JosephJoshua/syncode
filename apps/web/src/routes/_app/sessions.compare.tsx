@@ -180,14 +180,7 @@ function SessionComparisonPage() {
     () => sessions.filter((session) => session.hasReport),
     [sessions],
   );
-
-  const sessionById = useMemo(() => {
-    const map = new Map<string, SessionSummary>();
-    for (const session of selectableSessions) {
-      map.set(session.sessionId, session);
-    }
-    return map;
-  }, [selectableSessions]);
+  const sessionById = useMemo(() => buildSessionById(selectableSessions), [selectableSessions]);
 
   const reportQueries = useQueries({
     queries: selectedSessionIds.map((sessionId) => ({
@@ -199,241 +192,46 @@ function SessionComparisonPage() {
   });
 
   const selectedItems = useMemo(
-    () =>
-      selectedSessionIds
-        .map((sessionId, index) => {
-          const session = sessionById.get(sessionId) ?? null;
-          const reportQuery = reportQueries[index];
-          const reportResult = reportQuery?.data;
-
-          return {
-            sessionId,
-            session,
-            reportResult,
-            isLoading: reportQuery?.isLoading ?? false,
-            isError: reportQuery?.isError ?? false,
-          };
-        })
-        .filter((item) => item.session !== null),
+    () => buildSelectedSessionItems(selectedSessionIds, sessionById, reportQueries),
     [reportQueries, selectedSessionIds, sessionById],
   );
 
-  const comparableSessions = useMemo(() => {
-    const readyItems: ComparableSession[] = [];
-
-    for (const item of selectedItems) {
-      if (!item.session || item.reportResult?.state !== 'ready') {
-        continue;
-      }
-
-      readyItems.push({
-        sessionId: item.sessionId,
-        session: item.session,
-        report: item.reportResult.report,
-      });
-    }
-
-    return readyItems;
-  }, [selectedItems]);
+  const comparableSessions = useMemo(() => buildComparableSessions(selectedItems), [selectedItems]);
 
   const chronologicalSessions = useMemo(
-    () =>
-      [...comparableSessions].sort(
-        (left, right) =>
-          new Date(left.session.finishedAt ?? left.session.createdAt).getTime() -
-          new Date(right.session.finishedAt ?? right.session.createdAt).getTime(),
-      ),
+    () => buildChronologicalSessions(comparableSessions),
     [comparableSessions],
   );
 
-  const overallTrendPoints = useMemo(() => {
-    const points: TrendPoint[] = [];
-
-    for (const item of chronologicalSessions) {
-      const score = resolveComparableOverallScore(item);
-      if (typeof score !== 'number') {
-        continue;
-      }
-
-      points.push({
-        sessionId: item.sessionId,
-        label: item.session.problemTitle ?? t('sessionComparison:fallbackProblem'),
-        finishedAt: item.session.finishedAt ?? item.session.createdAt,
-        score,
-      });
-    }
-
-    return points;
-  }, [chronologicalSessions, t]);
+  const overallTrendPoints = useMemo(
+    () => buildOverallTrendPoints(chronologicalSessions, t),
+    [chronologicalSessions, t],
+  );
 
   useEffect(() => {
-    const latestSessionId = overallTrendPoints[overallTrendPoints.length - 1]?.sessionId ?? null;
-    if (!latestSessionId) {
-      if (hoveredSessionId !== null) {
-        setHoveredSessionId(null);
-      }
-      return;
-    }
-
-    const isCurrentHoverStillValid = overallTrendPoints.some(
-      (point) => point.sessionId === hoveredSessionId,
-    );
-
-    if (!isCurrentHoverStillValid) {
-      setHoveredSessionId(latestSessionId);
+    const nextHoveredSessionId = resolveNextHoveredSessionId(overallTrendPoints, hoveredSessionId);
+    if (nextHoveredSessionId !== hoveredSessionId) {
+      setHoveredSessionId(nextHoveredSessionId);
     }
   }, [hoveredSessionId, overallTrendPoints]);
 
-  const criteriaTrendRows = useMemo(() => {
-    const rows: CriteriaTrendRow[] = [];
+  const criteriaTrendRows = useMemo(
+    () => buildCriteriaTrendRows(chronologicalSessions, t),
+    [chronologicalSessions, t],
+  );
 
-    for (const key of SESSION_COMPARISON_DIMENSION_KEYS) {
-      const points: TrendPoint[] = [];
+  const comparisonInsights = useMemo(
+    () => buildComparisonInsights(chronologicalSessions, criteriaTrendRows, t),
+    [chronologicalSessions, criteriaTrendRows, t],
+  );
 
-      for (const item of chronologicalSessions) {
-        const score = resolveComparisonDimensionScore(item.report, key);
-        if (typeof score !== 'number') {
-          continue;
-        }
-
-        points.push({
-          sessionId: item.sessionId,
-          label: item.session.problemTitle ?? t('sessionComparison:fallbackProblem'),
-          finishedAt: item.session.finishedAt ?? item.session.createdAt,
-          score,
-        });
-      }
-
-      const baselineScore = points[0]?.score ?? null;
-      const latestScore = points[points.length - 1]?.score ?? null;
-      const values = points.map((point) => point.score);
-
-      rows.push({
-        key,
-        points,
-        trend: resolveComparisonTrend(values),
-        averageDelta: calculateAverageDelta(values),
-        baselineScore,
-        latestScore,
-      });
-    }
-
-    return rows;
-  }, [chronologicalSessions, t]);
-
-  const comparisonInsights = useMemo(() => {
-    const insights: ComparisonInsight[] = [];
-    const baselineSession = chronologicalSessions[0];
-    const latestSession = chronologicalSessions[chronologicalSessions.length - 1];
-
-    if (!baselineSession || !latestSession) {
-      return insights;
-    }
-
-    const baselineOverall = resolveComparableOverallScore(baselineSession);
-    const latestOverall = resolveComparableOverallScore(latestSession);
-
-    if (typeof baselineOverall === 'number' && typeof latestOverall === 'number') {
-      const overallDelta = latestOverall - baselineOverall;
-      insights.push({
-        title: t('sessionComparison:insights.overallShift.title'),
-        value: formatSignedWhole(overallDelta),
-        body: t('sessionComparison:insights.overallShift.body', {
-          from: Math.round(baselineOverall),
-          to: Math.round(latestOverall),
-        }),
-      });
-    }
-
-    const largestGain = criteriaTrendRows
-      .map((row) => ({
-        key: row.key,
-        delta:
-          row.baselineScore !== null && row.latestScore !== null
-            ? row.latestScore - row.baselineScore
-            : null,
-      }))
-      .filter(
-        (row): row is { key: SessionComparisonDimensionKey; delta: number } =>
-          typeof row.delta === 'number',
-      )
-      .sort((left, right) => right.delta - left.delta)[0];
-
-    if (largestGain) {
-      insights.push({
-        title: t('sessionComparison:insights.biggestSwing.title'),
-        value: t(`feedback:dimensions.${largestGain.key}.title`),
-        body: t('sessionComparison:insights.biggestSwing.body', {
-          delta: formatSignedWhole(largestGain.delta),
-        }),
-      });
-    }
-
-    const latestWeakest = SESSION_COMPARISON_DIMENSION_KEYS.map((key) => ({
-      key,
-      score: resolveComparisonDimensionScore(latestSession.report, key),
-    }))
-      .filter(
-        (row): row is { key: SessionComparisonDimensionKey; score: number } =>
-          typeof row.score === 'number',
-      )
-      .sort((left, right) => left.score - right.score)[0];
-
-    if (latestWeakest) {
-      insights.push({
-        title: t('sessionComparison:insights.currentFocus.title'),
-        value: t(`feedback:dimensions.${latestWeakest.key}.title`),
-        body: t('sessionComparison:insights.currentFocus.body', {
-          score: Math.round(latestWeakest.score),
-        }),
-      });
-    }
-
-    return insights;
-  }, [chronologicalSessions, criteriaTrendRows, t]);
-
-  const hoverDetails = useMemo((): HoverDetails | null => {
-    const targetSessionId =
-      hoveredSessionId ??
-      chronologicalSessions[chronologicalSessions.length - 1]?.sessionId ??
-      null;
-    if (!targetSessionId) {
-      return null;
-    }
-
-    const session = chronologicalSessions.find((item) => item.sessionId === targetSessionId);
-    if (!session) {
-      return null;
-    }
-
-    const testCaseSummary = summarizeTestCaseBreakdown(session.report);
-
-    return {
-      sessionId: session.sessionId,
-      title: session.session.problemTitle ?? t('sessionComparison:fallbackProblem'),
-      timestamp: formatSessionDateTime(session.session.finishedAt ?? session.session.createdAt),
-      overallScore: resolveComparableOverallScore(session),
-      dimensionScores: SESSION_COMPARISON_DIMENSION_KEYS.map((key) => ({
-        key,
-        score: resolveComparisonDimensionScore(session.report, key),
-      })),
-      testCasePassed: testCaseSummary.passed,
-      testCaseTotal: testCaseSummary.total,
-    };
-  }, [chronologicalSessions, hoveredSessionId, t]);
+  const hoverDetails = useMemo(
+    () => buildHoverDetails(chronologicalSessions, hoveredSessionId, t),
+    [chronologicalSessions, hoveredSessionId, t],
+  );
 
   const testCaseSummaries = useMemo(
-    () =>
-      chronologicalSessions.map((item) => ({
-        sessionId: item.sessionId,
-        problemTitle: item.session.problemTitle ?? t('sessionComparison:fallbackProblem'),
-        timestamp: item.session.finishedAt ?? item.session.createdAt,
-        progressionLabel: resolveProgressionLabelKey(
-          chronologicalSessions.findIndex((row) => row.sessionId === item.sessionId),
-          chronologicalSessions.length,
-        ),
-        summary: summarizeTestCaseBreakdown(item.report),
-      })),
+    () => buildTestCaseSummaries(chronologicalSessions, t),
     [chronologicalSessions, t],
   );
 
@@ -448,15 +246,7 @@ function SessionComparisonPage() {
   const updateSelection = (nextIds: string[]) => {
     const trimmedIds = nextIds.slice(0, SESSION_COMPARISON_MAX_SELECTION);
     setSelectedSessionIds(trimmedIds);
-
-    void navigate({
-      to: '.',
-      search: (current) => ({
-        ...current,
-        ids: serializeSessionComparisonIds(trimmedIds),
-      }),
-      replace: true,
-    });
+    syncSelectionSearch(navigate, trimmedIds);
   };
 
   const toggleSessionSelection = (sessionId: string) => {
