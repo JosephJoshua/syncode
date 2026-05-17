@@ -1,0 +1,70 @@
+{
+  "eyebrow": "Session Analytics",
+  "heading": "Compare Session Reports",
+  "subheading": "Select 2-3 sessions and compare report scores side-by-side with trend signals.",
+  "fallbackProblem": "Untitled Problem",
+  "actions": {
+    "compareSessions": "Compare Sessions",
+    "removeSession": "Remove session"
+  },
+  "selector": {
+    "searchPlaceholder": "Search sessions by problem title",
+    "empty": "No sessions with reports found.",
+    "selectionCount": "{{count}} / {{max}} selected",
+    "noneSelected": "No sessions selected yet."
+  },
+  "sections": {
+    "selected": "Selected Sessions",
+    "trend": "Trend Chart",
+    "trendDescription": "Overall score progression across selected sessions (chronological order).",
+    "progression": "Session Progression",
+    "notes": "Notes",
+    "testCases": "Test Cases",
+    "testCasesDescription": "Compare how many test cases each session passed before moving into criteria-level scoring.",
+    "criteriaTrends": "Criteria Trends",
+    "criteriaTrendsDescription": "Larger per-criterion trend views across the same selected sessions.",
+    "sideBySide": "Side-by-Side Metrics",
+    "sideBySideDescription": "Compare overall and dimension scores per session.",
+    "scoreMatrix": "Score Matrix",
+    "scoreMatrixDescription": "Session-by-session score comparison across all criteria."
+  },
+  "metrics": {
+    "overallScore": "Overall Score",
+    "metric": "Metric",
+    "averageDelta": "Avg. Δ {{value}} / session",
+    "baseline": "Baseline",
+    "checkpoint": "Checkpoint",
+    "latest": "Latest",
+    "inspectSession": "Inspect Session",
+    "testCasesPassed": "{{passed}} / {{total}} passed",
+    "noTestCaseBreakdown": "No test case breakdown available.",
+    "baselineScore": "Baseline {{value}}",
+    "latestScore": "Latest {{value}}"
+  },
+  "insights": {
+    "overallShift": {
+      "title": "Overall Shift",
+      "body": "The comparison moves from {{from}} to {{to}} overall."
+    },
+    "biggestSwing": {
+      "title": "Biggest Swing",
+      "body": "This criterion moved {{delta}} from the first session."
+    },
+    "currentFocus": {
+      "title": "Current Focus",
+      "body": "This is the lowest-scoring criterion in the latest selected session at {{score}}."
+    }
+  },
+  "state": {
+    "loadingSessions": "Loading session history",
+    "loadingSessionsBody": "Fetching sessions that have reports available for comparison.",
+    "sessionsLoadFailed": "Could not load sessions",
+    "needMoreSelections": "Select at least 2 sessions",
+    "needMoreSelectionsBody": "Use the green compare button to choose two or three sessions.",
+    "waitingForReports": "Waiting for report data",
+    "waitingForReportsBody": "Selected sessions must have ready reports before comparison can render.",
+    "pendingReports": "{{count}} selected session report(s) are still pending.",
+    "failedReports": "{{count}} selected session report(s) failed to load.",
+    "noTrendData": "Not enough scored sessions to draw a trend chart."
+  }
+}
