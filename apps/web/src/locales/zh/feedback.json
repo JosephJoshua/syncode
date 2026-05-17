@@ -178,8 +178,10 @@
     "type": {
       "code_line": "代码行",
       "code_snippet": "代码片段",
-      "event_timestamp": "会话事件"
-    }
+      "event_timestamp": "会话事件",
+      "unknown": "证据"
+    },
+    "referenceUnavailable": "引用不可用"
   },
   "breakdown": {
     "pass": "通过",

@@ -178,8 +178,10 @@
     "type": {
       "code_line": "Code line",
       "code_snippet": "Code snippet",
-      "event_timestamp": "Session event"
-    }
+      "event_timestamp": "Session event",
+      "unknown": "Evidence"
+    },
+    "referenceUnavailable": "Reference unavailable"
   },
   "breakdown": {
     "pass": "Pass",

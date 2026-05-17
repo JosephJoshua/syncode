@@ -3,7 +3,18 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (key: string, opts?: { defaultValue?: string }) => opts?.defaultValue ?? key,
+    t: (key: string, opts?: { defaultValue?: string }) =>
+      (
+        ({
+          'evidence.type.code_line': 'Code line',
+          'evidence.type.code_snippet': 'Code snippet',
+          'evidence.type.event_timestamp': 'Session event',
+          'evidence.type.unknown': 'Evidence',
+          'evidence.referenceUnavailable': 'Reference unavailable',
+        }) as Record<string, string>
+      )[key] ??
+      opts?.defaultValue ??
+      key,
     i18n: { language: 'en' },
   }),
 }));
@@ -69,6 +80,55 @@ describe('EvidenceCard', () => {
     expect(screen.getByText('Transitioned to wrapup.')).toBeInTheDocument();
   });
 
+  it('GIVEN an invalid event_timestamp reference WHEN rendered THEN shows the raw reference', () => {
+    render(
+      <ul>
+        <EvidenceCard
+          item={{
+            type: 'event_timestamp',
+            reference: 'not-a-date',
+            description: 'Malformed timestamp.',
+          }}
+        />
+      </ul>,
+    );
+
+    expect(screen.getByText('not-a-date')).toBeInTheDocument();
+    expect(screen.queryByText('Invalid Date')).not.toBeInTheDocument();
+  });
+
+  it('GIVEN an empty code_line reference WHEN rendered THEN shows unavailable fallback', () => {
+    render(
+      <ul>
+        <EvidenceCard
+          item={{ type: 'code_line', reference: '   ', description: 'Missing reference.' }}
+        />
+      </ul>,
+    );
+
+    expect(screen.getByText('Reference unavailable')).toBeInTheDocument();
+  });
+
+  it('GIVEN a long code_line reference WHEN rendered THEN allows wrapping inside the card', () => {
+    const longReference = `L1: ${'x'.repeat(160)}`;
+
+    render(
+      <ul>
+        <EvidenceCard
+          item={{
+            type: 'code_line',
+            reference: longReference,
+            description: 'Long line.',
+          }}
+        />
+      </ul>,
+    );
+
+    const reference = screen.getByText(longReference);
+    expect(reference).toHaveClass('whitespace-pre-wrap');
+    expect(reference).toHaveClass('break-words');
+  });
+
   it('GIVEN an unknown evidence type WHEN rendered THEN shows raw reference as fallback', () => {
     render(
       <ul>
@@ -79,6 +139,8 @@ describe('EvidenceCard', () => {
     );
 
     expect(screen.getByText('Some description.')).toBeInTheDocument();
+    expect(screen.getByText('Evidence')).toBeInTheDocument();
     expect(screen.getByText('some-ref')).toBeInTheDocument();
+    expect(screen.queryByText('unknown_type')).not.toBeInTheDocument();
   });
 });
