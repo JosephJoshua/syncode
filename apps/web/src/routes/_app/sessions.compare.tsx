@@ -304,155 +304,30 @@ function SessionComparisonPage() {
       </motion.header>
 
       <main className="mt-8 space-y-6">
-        <motion.div {...sectionMotion(2)}>
-          <Card className="border border-border/50 bg-card/80 py-0 backdrop-blur-sm">
-            <CardHeader className="px-6 py-6 pb-4">
-              <CardTitle className="text-base">
-                {t('sessionComparison:sections.selected')}
-              </CardTitle>
-              <CardDescription>
-                {t('sessionComparison:selector.selectionCount', {
-                  count: selectedSessionIds.length,
-                  max: SESSION_COMPARISON_MAX_SELECTION,
-                })}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="px-6 pb-6">
-              {selectedItems.length > 0 ? (
-                <div className="flex flex-wrap gap-2">
-                  {selectedItems.map((item) => (
-                    <Badge
-                      key={item.sessionId}
-                      variant="secondary"
-                      className="flex items-center gap-1 rounded-full border border-border/60 bg-background/60 px-3 py-1"
-                    >
-                      <span className="max-w-62 truncate">
-                        {item.session?.problemTitle ?? t('sessionComparison:fallbackProblem')}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => toggleSessionSelection(item.sessionId)}
-                        aria-label={t('sessionComparison:actions.removeSession')}
-                        className="rounded-full p-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                      >
-                        <X className="size-3" />
-                      </button>
-                    </Badge>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  {t('sessionComparison:selector.noneSelected')}
-                </p>
-              )}
-            </CardContent>
-          </Card>
-        </motion.div>
-
-        {sessionHistoryQuery.isLoading ? (
-          <motion.div {...sectionMotion(3)}>
-            <InfoCard
-              title={t('sessionComparison:state.loadingSessions')}
-              body={t('sessionComparison:state.loadingSessionsBody')}
-              loading
-            />
-          </motion.div>
-        ) : sessionHistoryQuery.isError ? (
-          <motion.div {...sectionMotion(3)}>
-            <InfoCard
-              title={t('sessionComparison:state.sessionsLoadFailed')}
-              body={t('common:genericError')}
-            />
-          </motion.div>
-        ) : !hasEnoughSelections ? (
-          <motion.div {...sectionMotion(3)}>
-            <InfoCard
-              title={t('sessionComparison:state.needMoreSelections')}
-              body={t('sessionComparison:state.needMoreSelectionsBody')}
-            />
-          </motion.div>
-        ) : !hasComparableSessions ? (
-          <motion.div {...sectionMotion(3)}>
-            <InfoCard
-              title={t('sessionComparison:state.waitingForReports')}
-              body={t('sessionComparison:state.waitingForReportsBody')}
-              loading={selectedItems.some((item) => item.isLoading)}
-            />
-          </motion.div>
-        ) : (
-          <>
-            {(pendingCount > 0 || erroredCount > 0) && (
-              <motion.div
-                {...sectionMotion(3)}
-                className="rounded-xl border border-border/60 bg-background/40 px-4 py-3 text-sm text-muted-foreground"
-              >
-                {pendingCount > 0 ? (
-                  <p>{t('sessionComparison:state.pendingReports', { count: pendingCount })}</p>
-                ) : null}
-                {erroredCount > 0 ? (
-                  <p>{t('sessionComparison:state.failedReports', { count: erroredCount })}</p>
-                ) : null}
-              </motion.div>
-            )}
-
-            <motion.div {...sectionMotion(4)}>
-              <Card className="border border-emerald-500/12 bg-card/80 py-0 backdrop-blur-sm">
-                <CardHeader className="px-6 py-6 pb-3">
-                  <CardTitle>{t('sessionComparison:sections.trend')}</CardTitle>
-                  <CardDescription>
-                    {t('sessionComparison:sections.trendDescription')}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6 px-6 pb-6">
-                  <HeroTrendChart
-                    points={overallTrendPoints}
-                    inspectLabel={t('sessionComparison:metrics.inspectTrendChart')}
-                    hoveredSessionId={hoveredSessionId}
-                    onHoverSessionIdChange={setHoveredSessionId}
-                    noDataLabel={t('sessionComparison:state.noTrendData')}
-                  />
-                  <HoverDetailsPanel details={hoverDetails} t={t} />
-                  <SessionProgressionRail sessions={chronologicalSessions} t={t} />
-                  {comparisonInsights.length > 0 ? (
-                    <ComparisonInsights insights={comparisonInsights} t={t} />
-                  ) : null}
-                </CardContent>
-              </Card>
-            </motion.div>
-
-            <motion.div {...sectionMotion(5)}>
-              <Card className="border border-border/50 bg-card/80 py-0 backdrop-blur-sm">
-                <CardHeader className="px-6 py-6 pb-3">
-                  <CardTitle>{t('sessionComparison:sections.testCases')}</CardTitle>
-                  <CardDescription>
-                    {t('sessionComparison:sections.testCasesDescription')}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="px-6 pb-6">
-                  <TestCaseComparisonRow summaries={testCaseSummaries} t={t} />
-                </CardContent>
-              </Card>
-            </motion.div>
-
-            <motion.div {...sectionMotion(6)}>
-              <Card className="border border-border/50 bg-card/80 py-0 backdrop-blur-sm">
-                <CardHeader className="px-6 py-6 pb-3">
-                  <CardTitle>{t('sessionComparison:sections.criteriaTrends')}</CardTitle>
-                  <CardDescription>
-                    {t('sessionComparison:sections.criteriaTrendsDescription')}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="px-6 pb-6">
-                  <div className="space-y-1">
-                    {criteriaTrendRows.map((row, index) => (
-                      <CriteriaTrendLane key={row.key} row={row} index={index} t={t} />
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </motion.div>
-          </>
-        )}
+        <SelectedSessionsCard
+          selectedCount={selectedSessionIds.length}
+          selectedItems={selectedItems}
+          onRemoveSession={toggleSessionSelection}
+          t={t}
+        />
+        <SessionComparisonContent
+          sessionHistoryIsLoading={sessionHistoryQuery.isLoading}
+          sessionHistoryIsError={sessionHistoryQuery.isError}
+          hasEnoughSelections={hasEnoughSelections}
+          hasComparableSessions={hasComparableSessions}
+          selectedItems={selectedItems}
+          pendingCount={pendingCount}
+          erroredCount={erroredCount}
+          overallTrendPoints={overallTrendPoints}
+          hoveredSessionId={hoveredSessionId}
+          onHoverSessionIdChange={setHoveredSessionId}
+          hoverDetails={hoverDetails}
+          chronologicalSessions={chronologicalSessions}
+          comparisonInsights={comparisonInsights}
+          testCaseSummaries={testCaseSummaries}
+          criteriaTrendRows={criteriaTrendRows}
+          t={t}
+        />
       </main>
     </div>
   );
@@ -564,6 +439,225 @@ function SessionSelectorOption({
     </CommandItem>
   );
 }
+
+function SelectedSessionsCard({
+  selectedCount,
+  selectedItems,
+  onRemoveSession,
+  t,
+}: {
+  selectedCount: number;
+  selectedItems: SelectedSessionItem[];
+  onRemoveSession: (sessionId: string) => void;
+  t: TranslationFn;
+}) {
+  return (
+    <motion.div {...sectionMotion(2)}>
+      <Card className="border border-border/50 bg-card/80 py-0 backdrop-blur-sm">
+        <CardHeader className="px-6 py-6 pb-4">
+          <CardTitle className="text-base">{t('sessionComparison:sections.selected')}</CardTitle>
+          <CardDescription>
+            {t('sessionComparison:selector.selectionCount', {
+              count: selectedCount,
+              max: SESSION_COMPARISON_MAX_SELECTION,
+            })}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="px-6 pb-6">
+          {selectedItems.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {selectedItems.map((item) => (
+                <Badge
+                  key={item.sessionId}
+                  variant="secondary"
+                  className="flex items-center gap-1 rounded-full border border-border/60 bg-background/60 px-3 py-1"
+                >
+                  <span className="max-w-62 truncate">
+                    {item.session.problemTitle ?? t('sessionComparison:fallbackProblem')}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => onRemoveSession(item.sessionId)}
+                    aria-label={t('sessionComparison:actions.removeSession')}
+                    className="rounded-full p-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  >
+                    <X className="size-3" />
+                  </button>
+                </Badge>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              {t('sessionComparison:selector.noneSelected')}
+            </p>
+          )}
+        </CardContent>
+      </Card>
+    </motion.div>
+  );
+}
+
+function SessionComparisonContent({
+  sessionHistoryIsLoading,
+  sessionHistoryIsError,
+  hasEnoughSelections,
+  hasComparableSessions,
+  selectedItems,
+  pendingCount,
+  erroredCount,
+  overallTrendPoints,
+  hoveredSessionId,
+  onHoverSessionIdChange,
+  hoverDetails,
+  chronologicalSessions,
+  comparisonInsights,
+  testCaseSummaries,
+  criteriaTrendRows,
+  t,
+}: {
+  sessionHistoryIsLoading: boolean;
+  sessionHistoryIsError: boolean;
+  hasEnoughSelections: boolean;
+  hasComparableSessions: boolean;
+  selectedItems: SelectedSessionItem[];
+  pendingCount: number;
+  erroredCount: number;
+  overallTrendPoints: TrendPoint[];
+  hoveredSessionId: string | null;
+  onHoverSessionIdChange: (sessionId: string) => void;
+  hoverDetails: HoverDetails | null;
+  chronologicalSessions: ComparableSession[];
+  comparisonInsights: ComparisonInsight[];
+  testCaseSummaries: Array<{
+    sessionId: string;
+    problemTitle: string;
+    timestamp: string;
+    progressionLabel: 'baseline' | 'checkpoint' | 'latest';
+    summary: TestCaseSummary;
+  }>;
+  criteriaTrendRows: CriteriaTrendRow[];
+  t: TranslationFn;
+}) {
+  if (sessionHistoryIsLoading) {
+    return (
+      <motion.div {...sectionMotion(3)}>
+        <InfoCard
+          title={t('sessionComparison:state.loadingSessions')}
+          body={t('sessionComparison:state.loadingSessionsBody')}
+          loading
+        />
+      </motion.div>
+    );
+  }
+
+  if (sessionHistoryIsError) {
+    return (
+      <motion.div {...sectionMotion(3)}>
+        <InfoCard
+          title={t('sessionComparison:state.sessionsLoadFailed')}
+          body={t('common:genericError')}
+        />
+      </motion.div>
+    );
+  }
+
+  if (!hasEnoughSelections) {
+    return (
+      <motion.div {...sectionMotion(3)}>
+        <InfoCard
+          title={t('sessionComparison:state.needMoreSelections')}
+          body={t('sessionComparison:state.needMoreSelectionsBody')}
+        />
+      </motion.div>
+    );
+  }
+
+  if (!hasComparableSessions) {
+    return (
+      <motion.div {...sectionMotion(3)}>
+        <InfoCard
+          title={t('sessionComparison:state.waitingForReports')}
+          body={t('sessionComparison:state.waitingForReportsBody')}
+          loading={selectedItems.some((item) => item.isLoading)}
+        />
+      </motion.div>
+    );
+  }
+
+  return (
+    <>
+      {pendingCount > 0 || erroredCount > 0 ? (
+        <motion.div
+          {...sectionMotion(3)}
+          className="rounded-xl border border-border/60 bg-background/40 px-4 py-3 text-sm text-muted-foreground"
+        >
+          {pendingCount > 0 ? (
+            <p>{t('sessionComparison:state.pendingReports', { count: pendingCount })}</p>
+          ) : null}
+          {erroredCount > 0 ? (
+            <p>{t('sessionComparison:state.failedReports', { count: erroredCount })}</p>
+          ) : null}
+        </motion.div>
+      ) : null}
+
+      <motion.div {...sectionMotion(4)}>
+        <Card className="border border-emerald-500/12 bg-card/80 py-0 backdrop-blur-sm">
+          <CardHeader className="px-6 py-6 pb-3">
+            <CardTitle>{t('sessionComparison:sections.trend')}</CardTitle>
+            <CardDescription>{t('sessionComparison:sections.trendDescription')}</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6 px-6 pb-6">
+            <HeroTrendChart
+              points={overallTrendPoints}
+              inspectLabel={t('sessionComparison:metrics.inspectTrendChart')}
+              hoveredSessionId={hoveredSessionId}
+              onHoverSessionIdChange={onHoverSessionIdChange}
+              noDataLabel={t('sessionComparison:state.noTrendData')}
+            />
+            <HoverDetailsPanel details={hoverDetails} t={t} />
+            <SessionProgressionRail sessions={chronologicalSessions} t={t} />
+            {comparisonInsights.length > 0 ? (
+              <ComparisonInsights insights={comparisonInsights} t={t} />
+            ) : null}
+          </CardContent>
+        </Card>
+      </motion.div>
+
+      <motion.div {...sectionMotion(5)}>
+        <Card className="border border-border/50 bg-card/80 py-0 backdrop-blur-sm">
+          <CardHeader className="px-6 py-6 pb-3">
+            <CardTitle>{t('sessionComparison:sections.testCases')}</CardTitle>
+            <CardDescription>
+              {t('sessionComparison:sections.testCasesDescription')}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="px-6 pb-6">
+            <TestCaseComparisonRow summaries={testCaseSummaries} t={t} />
+          </CardContent>
+        </Card>
+      </motion.div>
+
+      <motion.div {...sectionMotion(6)}>
+        <Card className="border border-border/50 bg-card/80 py-0 backdrop-blur-sm">
+          <CardHeader className="px-6 py-6 pb-3">
+            <CardTitle>{t('sessionComparison:sections.criteriaTrends')}</CardTitle>
+            <CardDescription>
+              {t('sessionComparison:sections.criteriaTrendsDescription')}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="px-6 pb-6">
+            <div className="space-y-1">
+              {criteriaTrendRows.map((row, index) => (
+                <CriteriaTrendLane key={row.key} row={row} index={index} t={t} />
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </motion.div>
+    </>
+  );
+}
+
 function HeroTrendChart({
   inspectLabel,
   points,
