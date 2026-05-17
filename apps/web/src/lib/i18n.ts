@@ -14,6 +14,7 @@ import enProblems from '../locales/en/problems.json';
 import enProfile from '../locales/en/profile.json';
 import enRegister from '../locales/en/register.json';
 import enRooms from '../locales/en/rooms.json';
+import enSessionComparison from '../locales/en/sessionComparison.json';
 import enSessionDetail from '../locales/en/sessionDetail.json';
 import enSessionReport from '../locales/en/sessionReport.json';
 
@@ -29,6 +30,7 @@ import zhProblems from '../locales/zh/problems.json';
 import zhProfile from '../locales/zh/profile.json';
 import zhRegister from '../locales/zh/register.json';
 import zhRooms from '../locales/zh/rooms.json';
+import zhSessionComparison from '../locales/zh/sessionComparison.json';
 import zhSessionDetail from '../locales/zh/sessionDetail.json';
 import zhSessionReport from '../locales/zh/sessionReport.json';
 
@@ -48,6 +50,7 @@ const namespaces = [
   'profile',
   'feedback',
   'sessionDetail',
+  'sessionComparison',
   'sessionReport',
 ] as const;
 
@@ -82,6 +85,7 @@ i18n
         profile: enProfile,
         feedback: enFeedback,
         sessionDetail: enSessionDetail,
+        sessionComparison: enSessionComparison,
         sessionReport: enSessionReport,
       },
       zh: {
@@ -98,6 +102,7 @@ i18n
         profile: zhProfile,
         feedback: zhFeedback,
         sessionDetail: zhSessionDetail,
+        sessionComparison: zhSessionComparison,
         sessionReport: zhSessionReport,
       },
     },

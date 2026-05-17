@@ -60,6 +60,7 @@
   },
   "actions": {
     "deleteSessionAriaLabel": "删除会话",
+    "compareSessions": "对比会话",
     "deleteSessionAriaLabelWithProblem": "删除 {{date}} 的 {{problem}} 会话"
   },
   "deleteDialog": {

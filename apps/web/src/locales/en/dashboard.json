@@ -118,6 +118,7 @@
   },
   "actions": {
     "deleteSessionAriaLabel": "Delete session",
+    "compareSessions": "Compare Sessions",
     "deleteSessionAriaLabelWithProblem": "Delete session for {{problem}} on {{date}}"
   },
   "deleteDialog": {

@@ -34,7 +34,7 @@ import {
 } from '@syncode/ui';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { Loader2, Search, Trash2 } from 'lucide-react';
+import { GitCompareArrows, Loader2, Search, Trash2 } from 'lucide-react';
 import { useDeferredValue, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
@@ -310,9 +310,21 @@ export function DashboardRecentSessions({
   return (
     <section className="mt-10 sm:mt-12">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-        <h2 className="shrink-0 text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
-          {t('recentSessions')}
-        </h2>
+        <div className="flex items-center gap-3">
+          <h2 className="shrink-0 text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
+            {t('recentSessions')}
+          </h2>
+          <Button
+            asChild
+            className="h-9 gap-2 bg-emerald-600 text-white hover:bg-emerald-500"
+            size="sm"
+          >
+            <Link to="/sessions/compare">
+              <GitCompareArrows className="size-4" />
+              {t('actions.compareSessions')}
+            </Link>
+          </Button>
+        </div>
 
         <div className="flex flex-1 flex-col gap-3 md:flex-row md:items-center xl:justify-end xl:gap-4">
           <div className="relative w-full md:min-w-[320px] md:flex-1 xl:max-w-100">
@@ -453,7 +465,7 @@ export function DashboardRecentSessions({
                       <Badge variant={getRoleBadgeVariant(row.role)}>{t(`role.${row.role}`)}</Badge>
                     </TableCell>
                     <TableCell className="text-center">
-                      {row.role === 'candidate' && row.status ? (
+                      {row.status ? (
                         <Badge variant={getStatusBadgeVariant(row.status)}>
                           {row.status === 'passed' ? t('status.pass') : t('status.failed')}
                         </Badge>
@@ -462,14 +474,14 @@ export function DashboardRecentSessions({
                       )}
                     </TableCell>
                     <TableCell className="text-center">
-                      {row.role === 'candidate' && typeof row.score === 'number' ? (
+                      {typeof row.score === 'number' ? (
                         <span
                           className={cn(
                             'font-medium',
                             row.status === 'passed' ? 'text-primary' : 'text-amber-400',
                           )}
                         >
-                          {row.score}
+                          {Math.round(row.score)}
                         </span>
                       ) : (
                         <span className="text-muted-foreground">-</span>

@@ -1,7 +1,7 @@
 import { Button } from '@syncode/ui';
 import { useQuery } from '@tanstack/react-query';
-import { createFileRoute } from '@tanstack/react-router';
-import { Sparkles } from 'lucide-react';
+import { createFileRoute, Link } from '@tanstack/react-router';
+import { GitCompareArrows, Sparkles } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AiFeedbackMarkdown } from '@/components/session-report/ai-feedback-rich-text.js';
@@ -44,7 +44,7 @@ export const Route = createFileRoute('/_app/sessions/$sessionId')({
 });
 
 function SessionFeedbackPage() {
-  const { t } = useTranslation('feedback');
+  const { t } = useTranslation(['feedback', 'sessionComparison']);
   const { sessionId } = Route.useParams();
   const currentUserId = useAuthStore((state) => state.user?.id ?? null);
   const [isFullReviewVisible, setIsFullReviewVisible] = useState(false);
@@ -132,6 +132,19 @@ function SessionFeedbackPage() {
   const badges = buildHeaderBadges(t, viewerRole, report, durationSeconds);
   const reportStatus: 'pending' | 'ready' | 'unavailable' =
     reportState?.state === 'pending' ? 'pending' : report ? 'ready' : 'unavailable';
+  const compareSessionsAction =
+    reportState?.state === 'ready' ? (
+      <Button
+        asChild
+        className="h-9 gap-2 bg-emerald-600 text-white hover:bg-emerald-500"
+        size="sm"
+      >
+        <Link to="/sessions/compare" search={{ ids: sessionId }}>
+          <GitCompareArrows className="size-4" />
+          {t('sessionComparison:actions.compareSessions')}
+        </Link>
+      </Button>
+    ) : null;
 
   if (reportQuery.isError) {
     return (
@@ -141,6 +154,7 @@ function SessionFeedbackPage() {
         metaLine={formatSessionDateTime(session.finishedAt ?? session.createdAt)}
         badges={badges}
         sessionId={session.sessionId}
+        actions={compareSessionsAction}
       >
         <div className="space-y-6">
           <SectionCard title={t('error.title')} description={t('error.description')}>
@@ -185,6 +199,7 @@ function SessionFeedbackPage() {
       metaLine={formatSessionDateTime(session.finishedAt ?? session.createdAt)}
       badges={badges}
       sessionId={session.sessionId}
+      actions={compareSessionsAction}
     >
       <div className="space-y-8">
         {reportState?.state === 'pending' ? (
