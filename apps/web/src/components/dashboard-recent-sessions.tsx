@@ -465,7 +465,7 @@ export function DashboardRecentSessions({
                       <Badge variant={getRoleBadgeVariant(row.role)}>{t(`role.${row.role}`)}</Badge>
                     </TableCell>
                     <TableCell className="text-center">
-                      {row.role === 'candidate' && row.status ? (
+                      {row.status ? (
                         <Badge variant={getStatusBadgeVariant(row.status)}>
                           {row.status === 'passed' ? t('status.pass') : t('status.failed')}
                         </Badge>
@@ -474,14 +474,14 @@ export function DashboardRecentSessions({
                       )}
                     </TableCell>
                     <TableCell className="text-center">
-                      {row.role === 'candidate' && typeof row.score === 'number' ? (
+                      {typeof row.score === 'number' ? (
                         <span
                           className={cn(
                             'font-medium',
                             row.status === 'passed' ? 'text-primary' : 'text-amber-400',
                           )}
                         >
-                          {row.score}
+                          {Math.round(row.score)}
                         </span>
                       ) : (
                         <span className="text-muted-foreground">-</span>

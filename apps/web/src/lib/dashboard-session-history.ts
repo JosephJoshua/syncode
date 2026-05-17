@@ -247,7 +247,7 @@ export function normalizeSessionSummary(
     hasFeedback: session.hasFeedback,
     viewerRole,
     role: displayRole,
-    status: getSessionStatus(viewerRole, session.overallScore),
+    status: getSessionStatus(session.overallScore),
     partner: getPartnerParticipant(viewerRole, interviewer, candidate, currentUserId),
     observer:
       viewerRole === 'observer'
@@ -340,8 +340,8 @@ async function fetchSessionHistoryPage(query: SessionHistoryQuery) {
   return parseSessionHistoryResponse(response);
 }
 
-function getSessionStatus(role: SessionRole | null, overallScore: number | null) {
-  if (role !== 'candidate' || overallScore === null) {
+function getSessionStatus(overallScore: number | null) {
+  if (overallScore === null) {
     return null;
   }
 
