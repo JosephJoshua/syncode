@@ -82,6 +82,24 @@ describe('submitProblem', () => {
     expect(row.status).toBe('pending');
   });
 
+  it('GIVEN problem default limits WHEN test cases omit limits THEN enqueues with defaults', async () => {
+    const user = await insertUser(db);
+    const problem = await insertProblem(db, { timeLimit: 1500, memoryLimit: 256 });
+    await insertTestCase(db, problem.id, { timeoutMs: null, memoryMb: null });
+    const room = await insertRoom(db, user.id, { problemId: problem.id });
+
+    await service.submitProblem(user.id, {
+      language: 'python',
+      code: 'print(input())',
+      problemId: problem.id,
+      roomId: room.id,
+    });
+
+    expect(mockExecutionClient.submit).toHaveBeenCalledWith(
+      expect.objectContaining({ timeoutMs: 1500, memoryMb: 256 }),
+    );
+  });
+
   it('GIVEN non-existent problem WHEN submitting THEN throws NotFoundException', async () => {
     const user = await insertUser(db);
     const room = await insertRoom(db, user.id);
@@ -99,6 +117,22 @@ describe('submitProblem', () => {
   it('GIVEN soft-deleted problem WHEN submitting THEN throws NotFoundException', async () => {
     const user = await insertUser(db);
     const problem = await insertProblem(db, { deletedAt: new Date() });
+    await insertTestCase(db, problem.id);
+    const room = await insertRoom(db, user.id, { problemId: problem.id });
+
+    await expect(
+      service.submitProblem(user.id, {
+        language: 'python',
+        code: 'print("hello")',
+        problemId: problem.id,
+        roomId: room.id,
+      }),
+    ).rejects.toThrow(NotFoundException);
+  });
+
+  it('GIVEN draft problem WHEN submitting THEN throws NotFoundException', async () => {
+    const user = await insertUser(db);
+    const problem = await insertProblem(db, { isPublished: false });
     await insertTestCase(db, problem.id);
     const room = await insertRoom(db, user.id, { problemId: problem.id });
 

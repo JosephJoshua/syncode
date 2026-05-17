@@ -170,6 +170,9 @@ export function AdminUsersPage() {
         </div>
         <div className="flex flex-wrap gap-2 self-start md:self-auto">
           <Button variant="outline" asChild>
+            <Link to="/admin/problems">{t('navLinks.problems')}</Link>
+          </Button>
+          <Button variant="outline" asChild>
             <Link to="/admin/audit-logs">{t('navLinks.auditLogs')}</Link>
           </Button>
           <Button

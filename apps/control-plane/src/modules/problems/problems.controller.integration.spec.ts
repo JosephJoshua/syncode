@@ -83,3 +83,78 @@ describe('GET /problems', () => {
     expect(res.body.data[1].id).toBe(hard.id);
   });
 });
+
+describe('POST /problems', () => {
+  const payload = {
+    title: 'Admin Two Sum',
+    description: 'Return indices of two values.',
+    difficulty: 'easy',
+    isPublished: false,
+    company: 'syncode',
+    constraints: 'n >= 2',
+    starterCode: { typescript: 'function solve() {}' },
+    timeLimit: 1500,
+    memoryLimit: 256,
+    testCases: [
+      {
+        input: 'nums = [2,7,11,15], target = 9',
+        expectedOutput: '[0,1]',
+        isHidden: false,
+      },
+      {
+        input: 'nums = [3,2,4], target = 6',
+        expectedOutput: '[1,2]',
+        isHidden: true,
+      },
+    ],
+  };
+
+  it('GIVEN admin user WHEN creating a draft problem THEN persists problem and test cases', async () => {
+    const admin = await insertUser(db, { role: 'admin' });
+
+    const res = await asUser(request(app.getHttpServer()).post('/problems'), admin)
+      .send(payload)
+      .expect(201);
+
+    expect(res.body).toMatchObject({
+      title: payload.title,
+      description: payload.description,
+      difficulty: payload.difficulty,
+      isPublished: false,
+      company: payload.company,
+      constraints: payload.constraints,
+      starterCode: payload.starterCode,
+      timeLimit: payload.timeLimit,
+      memoryLimit: payload.memoryLimit,
+    });
+    expect(res.body.testCases).toHaveLength(1);
+    expect(res.body.testCases[0]).toMatchObject({
+      input: payload.testCases[0].input,
+      expectedOutput: payload.testCases[0].expectedOutput,
+      isHidden: false,
+    });
+  });
+
+  it('GIVEN non-admin user WHEN creating a problem THEN returns 403', async () => {
+    const user = await insertUser(db, { role: 'user' });
+
+    await asUser(request(app.getHttpServer()).post('/problems'), user).send(payload).expect(403);
+  });
+
+  it('GIVEN draft problem WHEN regular user fetches it THEN returns 404 but admin can fetch it', async () => {
+    const admin = await insertUser(db, { role: 'admin' });
+    const user = await insertUser(db, { role: 'user' });
+
+    const created = await asUser(request(app.getHttpServer()).post('/problems'), admin)
+      .send(payload)
+      .expect(201);
+
+    await asUser(request(app.getHttpServer()).get(`/problems/${created.body.id}`), user).expect(
+      404,
+    );
+
+    await asUser(request(app.getHttpServer()).get(`/problems/${created.body.id}`), admin).expect(
+      200,
+    );
+  });
+});

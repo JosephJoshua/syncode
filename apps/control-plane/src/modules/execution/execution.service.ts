@@ -48,9 +48,19 @@ export class ExecutionService {
   ): Promise<SubmitResponse> {
     const [problemRow, cases] = await Promise.all([
       this.db
-        .select({ id: problems.id })
+        .select({
+          id: problems.id,
+          timeLimit: problems.timeLimit,
+          memoryLimit: problems.memoryLimit,
+        })
         .from(problems)
-        .where(and(eq(problems.id, input.problemId), isNull(problems.deletedAt)))
+        .where(
+          and(
+            eq(problems.id, input.problemId),
+            isNull(problems.deletedAt),
+            eq(problems.isPublished, true),
+          ),
+        )
         .limit(1)
         .then(([row]) => row),
       this.db
@@ -98,12 +108,14 @@ export class ExecutionService {
 
     const results = await Promise.allSettled(
       cases.map((tc, i) => {
+        const timeoutMs = tc.timeoutMs ?? problemRow.timeLimit;
+        const memoryMb = tc.memoryMb ?? problemRow.memoryLimit;
         const request: RunCodeRequest = {
           code: input.code,
           language: input.language,
           stdin: tc.input,
-          ...(tc.timeoutMs != null && { timeoutMs: tc.timeoutMs }),
-          ...(tc.memoryMb != null && { memoryMb: tc.memoryMb }),
+          ...(timeoutMs != null && { timeoutMs }),
+          ...(memoryMb != null && { memoryMb }),
         };
 
         return this.executionClient.submit(request).then(async ({ jobId }) => {

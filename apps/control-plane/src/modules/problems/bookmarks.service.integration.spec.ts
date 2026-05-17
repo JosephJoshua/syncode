@@ -72,6 +72,13 @@ describe('addBookmark', () => {
 
     await expect(service.addBookmark(user.id, problem.id)).rejects.toThrow(NotFoundException);
   });
+
+  it('GIVEN draft problem WHEN adding bookmark THEN throws NotFoundException', async () => {
+    const user = await insertUser(db);
+    const problem = await insertProblem(db, { isPublished: false });
+
+    await expect(service.addBookmark(user.id, problem.id)).rejects.toThrow(NotFoundException);
+  });
 });
 
 describe('removeBookmark', () => {

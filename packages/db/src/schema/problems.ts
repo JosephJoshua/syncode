@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import {
+  boolean,
   index,
   integer,
   jsonb,
@@ -20,6 +21,7 @@ export const problems = pgTable(
     title: varchar('title', { length: 200 }).notNull(),
     description: text('description').notNull(),
     difficulty: difficultyEnum('difficulty').notNull(),
+    isPublished: boolean('is_published').notNull().default(true),
     company: varchar('company', { length: 100 }),
     constraints: text('constraints'),
     examples: jsonb('examples'),

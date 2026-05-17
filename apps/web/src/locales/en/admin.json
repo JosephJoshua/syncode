@@ -141,6 +141,14 @@
       "descriptionPlaceholder": "Write the problem statement in Markdown.",
       "constraints": "Constraints",
       "constraintsPlaceholder": "Add constraints, edge cases, and input limits.",
+      "timeLimit": "Time limit (ms)",
+      "timeLimitPlaceholder": "Default",
+      "memoryLimit": "Memory limit (MB)",
+      "memoryLimitPlaceholder": "Default",
+      "examples": "Examples JSON",
+      "examplesPlaceholder": "[{\"input\":\"...\",\"output\":\"...\",\"explanation\":\"...\"}]",
+      "starterCode": "Starter code JSON",
+      "starterCodePlaceholder": "{\"typescript\":\"function solve() {\\n  // ...\\n}\"}",
       "published": "Published"
     },
     "difficulty": {
@@ -160,24 +168,39 @@
       "input": "Input",
       "output": "Expected output",
       "inputPlaceholder": "nums = [2,7,11,15], target = 9",
-      "outputPlaceholder": "[0,1]"
+      "outputPlaceholder": "[0,1]",
+      "description": "Description",
+      "descriptionPlaceholder": "Visible sample or hidden edge case",
+      "timeoutMs": "Timeout (ms)",
+      "timeoutPlaceholder": "Problem default",
+      "memoryMb": "Memory (MB)",
+      "memoryPlaceholder": "Problem default",
+      "hidden": "Hidden"
     },
     "preview": {
       "title": "Publish preview",
       "statusDraft": "Draft",
       "statusPublished": "Published",
-      "caseCount": "{{count}} cases"
+      "caseCount_one": "{{count}} case",
+      "caseCount_other": "{{count}} cases"
     },
     "actions": {
-      "save": "Save draft"
+      "save": "Save problem",
+      "saving": "Saving..."
     },
     "validation": {
       "title": "Title is required.",
       "description": "Description is required.",
-      "testCases": "Every test case needs input and expected output."
+      "testCases": "Every test case needs input and expected output.",
+      "examples": "Examples must be a JSON array.",
+      "starterCode": "Starter code must be a JSON object with string values.",
+      "timeLimit": "Time limit must be a positive integer up to 60000.",
+      "memoryLimit": "Memory limit must be a positive integer up to 4096.",
+      "testCaseLimits": "Test case limits must be positive integers within the allowed maximums."
     },
     "toast": {
-      "saved": "Problem draft validated."
+      "saved": "Problem saved.",
+      "saveFailed": "Could not save problem."
     }
   }
 }
