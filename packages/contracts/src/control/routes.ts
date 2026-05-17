@@ -38,6 +38,7 @@ import type {
   destroyRoomResponseSchema,
   ensureCollabResponseSchema,
   getRoomAiHintResultResponseSchema,
+  getRoomCodeAnalysisResultResponseSchema,
   joinRoomResponseSchema,
   joinRoomSchema,
   listRoomsQuerySchema,
@@ -46,6 +47,8 @@ import type {
   mediaTokenResponseSchema,
   requestRoomAiHintResponseSchema,
   requestRoomAiHintSchema,
+  requestRoomCodeAnalysisResponseSchema,
+  requestRoomCodeAnalysisSchema,
   roomChatMediaUploadRequestSchema,
   roomChatMediaUploadResponseSchema,
   roomDetailSchema,
@@ -182,6 +185,14 @@ export const CONTROL_API = {
       'rooms/:id/ai/hint/:jobId',
       'GET',
     ),
+    CODE_ANALYSIS: defineRoute<
+      z.infer<typeof requestRoomCodeAnalysisSchema>,
+      z.infer<typeof requestRoomCodeAnalysisResponseSchema>
+    >()('rooms/:id/ai/code-analysis', 'POST'),
+    CODE_ANALYSIS_RESULT: defineRoute<
+      void,
+      z.infer<typeof getRoomCodeAnalysisResultResponseSchema>
+    >()('rooms/:id/ai/code-analysis/:jobId', 'GET'),
     CHAT_MEDIA_UPLOAD_URL: defineRoute<
       z.infer<typeof roomChatMediaUploadRequestSchema>,
       z.infer<typeof roomChatMediaUploadResponseSchema>

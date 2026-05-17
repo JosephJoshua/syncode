@@ -29,6 +29,7 @@ import {
   type JoinRoomInput,
   type ListRoomsQuery,
   type RequestRoomAiHintInput,
+  type RequestRoomCodeAnalysisInput,
   type RoleAssignmentReason,
   type RoomChatMediaUploadInput,
   type RoomConfig,
@@ -88,10 +89,12 @@ import type {
   CreateRoomResult,
   DestroyRoomResult,
   GetRoomAiHintResult,
+  GetRoomCodeAnalysisResult,
   JoinRoomResult,
   MediaTokenResult,
   PublicRoomSummaryResult,
   RequestRoomAiHintResult,
+  RequestRoomCodeAnalysisResult,
   RoomChatMediaUploadResult,
   RoomDetailResult,
   RoomSummaryResult,
@@ -108,6 +111,11 @@ interface HintJobMapping {
   phase: 'initial' | 'follow_up';
   previousHint?: string;
   reflectionResponse: string | null;
+}
+
+interface CodeAnalysisJobMapping {
+  roomId: string;
+  userId: string;
 }
 
 @Injectable()
@@ -1290,6 +1298,160 @@ export class RoomsService {
     };
   }
 
+  async requestCodeAnalysis(
+    roomId: string,
+    userId: string,
+    body: RequestRoomCodeAnalysisInput,
+  ): Promise<RequestRoomCodeAnalysisResult> {
+    const [room, participant] = await this.getRoomContext(roomId, userId);
+
+    if (!participant) {
+      throw new ForbiddenException({
+        message: 'Not a participant of this room',
+        code: ERROR_CODES.ROOM_ACCESS_DENIED,
+      });
+    }
+
+    const capabilities = resolveRoomPermissions(participant.role, {
+      isHost: room.hostId === userId,
+    });
+
+    if (!capabilities.has('ai:request-hint')) {
+      throw new ForbiddenException({
+        message: 'No ai:request-hint capability',
+        code: ERROR_CODES.ROOM_PERMISSION_DENIED,
+      });
+    }
+
+    if (!room.problemId) {
+      throw new NotFoundException({
+        message: 'No problem selected in room',
+        code: ERROR_CODES.PROBLEM_NOT_FOUND,
+      });
+    }
+
+    if (room.language && body.language !== room.language) {
+      throw new BadRequestException({
+        message: `Analysis language must match room language (${room.language})`,
+        code: ERROR_CODES.VALIDATION_FAILED,
+      });
+    }
+
+    if (body.code.length > RoomsService.AI_CODE_ANALYSIS_MAX_CODE_LENGTH) {
+      throw new BadRequestException({
+        message: `Code snapshot must be at most ${RoomsService.AI_CODE_ANALYSIS_MAX_CODE_LENGTH} characters`,
+        code: ERROR_CODES.VALIDATION_FAILED,
+      });
+    }
+
+    const [problem] = await this.db
+      .select({
+        title: problems.title,
+        description: problems.description,
+      })
+      .from(problems)
+      .where(eq(problems.id, room.problemId))
+      .limit(1);
+
+    if (!problem) {
+      throw new NotFoundException({
+        message: 'No problem selected in room',
+        code: ERROR_CODES.PROBLEM_NOT_FOUND,
+      });
+    }
+
+    const problemDescription = [problem.title, problem.description].filter(Boolean).join('\n\n');
+    const activeLanguage = room.language ?? body.language;
+    let submitted: { jobId: JobId<'ai:code-analysis'> };
+    const limitKey = `${RoomsService.AI_CODE_ANALYSIS_LIMIT_PREFIX}${roomId}:${userId}`;
+    const usage = await this.cacheService.incrBy(
+      limitKey,
+      1,
+      RoomsService.AI_CODE_ANALYSIS_LIMIT_WINDOW_SECONDS,
+    );
+
+    if (usage > RoomsService.AI_CODE_ANALYSIS_LIMIT_COUNT) {
+      throw new HttpException(
+        {
+          message: 'Code analysis rate limit exceeded (10 per 5 minutes)',
+          code: ERROR_CODES.AI_CODE_ANALYSIS_RATE_LIMIT,
+        },
+        429,
+      );
+    }
+
+    try {
+      submitted = await this.aiClient.submitCodeAnalysisRequest({
+        roomId,
+        participantId: userId,
+        problemDescription,
+        code: body.code,
+        language: activeLanguage,
+      });
+    } catch (error) {
+      await this.cacheService.incrBy(limitKey, -1);
+      this.logger.warn(`AI code analysis submission failed for room ${roomId}`, error);
+      throw new ServiceUnavailableException({
+        message: 'AI service unavailable',
+        code: ERROR_CODES.AI_SERVICE_UNAVAILABLE,
+      });
+    }
+
+    await this.cacheService.set<CodeAnalysisJobMapping>(
+      `${RoomsService.AI_CODE_ANALYSIS_JOB_CACHE_PREFIX}${submitted.jobId}`,
+      {
+        roomId,
+        userId,
+      },
+      RoomsService.AI_CODE_ANALYSIS_JOB_CACHE_TTL_SECONDS,
+    );
+
+    return { jobId: submitted.jobId };
+  }
+
+  async getCodeAnalysisResult(
+    roomId: string,
+    userId: string,
+    jobId: string,
+  ): Promise<GetRoomCodeAnalysisResult> {
+    const [, participant] = await this.getRoomContext(roomId, userId);
+    if (!participant) {
+      throw new ForbiddenException({
+        message: 'Not a participant of this room',
+        code: ERROR_CODES.ROOM_ACCESS_DENIED,
+      });
+    }
+
+    const mapping = await this.cacheService.get<CodeAnalysisJobMapping>(
+      `${RoomsService.AI_CODE_ANALYSIS_JOB_CACHE_PREFIX}${jobId}`,
+    );
+    if (!mapping || mapping.roomId !== roomId || mapping.userId !== userId) {
+      throw new NotFoundException({
+        message: 'Code analysis job not found',
+        code: ERROR_CODES.VALIDATION_FAILED,
+      });
+    }
+
+    const typedJobId = jobId as JobId<'ai:code-analysis'>;
+    const analysisResult = await this.aiClient.getCodeAnalysisResult(typedJobId);
+
+    if (!analysisResult) {
+      const status = await this.aiClient.getCodeAnalysisJobStatus(typedJobId);
+      if (status === 'failed') {
+        return { status: 'failed', jobId };
+      }
+      return { status: 'pending', jobId };
+    }
+
+    return {
+      status: 'ready',
+      jobId,
+      summary: analysisResult.summary,
+      focusAreas: analysisResult.focusAreas,
+      followUpQuestions: analysisResult.followUpQuestions,
+    };
+  }
+
   async getRoomChatMediaUploadUrl(
     roomId: string,
     userId: string,
@@ -1380,6 +1542,12 @@ export class RoomsService {
   private static readonly AI_HINT_CHAT_HISTORY_LIMIT = 50;
   private static readonly AI_HINT_JOB_CACHE_PREFIX = 'ai-hint-job:';
   private static readonly AI_HINT_JOB_CACHE_TTL_SECONDS = 60 * 60;
+  private static readonly AI_CODE_ANALYSIS_MAX_CODE_LENGTH = 16_000;
+  private static readonly AI_CODE_ANALYSIS_LIMIT_COUNT = 10;
+  private static readonly AI_CODE_ANALYSIS_LIMIT_WINDOW_SECONDS = 5 * 60;
+  private static readonly AI_CODE_ANALYSIS_LIMIT_PREFIX = 'ai-code-analysis-limit:';
+  private static readonly AI_CODE_ANALYSIS_JOB_CACHE_PREFIX = 'ai-code-analysis-job:';
+  private static readonly AI_CODE_ANALYSIS_JOB_CACHE_TTL_SECONDS = 60 * 60;
 
   async generateMediaToken(roomId: string, userId: string): Promise<MediaTokenResult> {
     const [room, participant] = await this.getRoomContext(roomId, userId);

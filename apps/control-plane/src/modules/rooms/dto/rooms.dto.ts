@@ -15,6 +15,8 @@ import {
   mediaTokenResponseSchema,
   requestRoomAiHintResponseSchema,
   requestRoomAiHintSchema,
+  requestRoomCodeAnalysisResponseSchema,
+  requestRoomCodeAnalysisSchema,
   roomChatMediaUploadRequestSchema,
   roomChatMediaUploadResponseSchema,
   roomDetailSchema,
@@ -40,6 +42,7 @@ export class ChangeRoomLanguageDto extends createZodDto(changeRoomLanguageSchema
 export class RunCodeDto extends createZodDto(runCodeSchema) {}
 export class SubmitProblemDto extends createZodDto(submitProblemSchema) {}
 export class RequestRoomAiHintDto extends createZodDto(requestRoomAiHintSchema) {}
+export class RequestRoomCodeAnalysisDto extends createZodDto(requestRoomCodeAnalysisSchema) {}
 export class RoomChatMediaUploadDto extends createZodDto(roomChatMediaUploadRequestSchema) {}
 export class JoinRoomDto extends createZodDto(joinRoomSchema) {}
 export class TransferRoomOwnershipDto extends createZodDto(transferRoomOwnershipSchema) {}
@@ -52,6 +55,9 @@ export class DestroyRoomResponseDto extends createZodDto(destroyRoomResponseSche
 export class RunCodeResponseDto extends createZodDto(runCodeResponseSchema) {}
 export class SubmitCodeResponseDto extends createZodDto(submitResponseSchema) {}
 export class RequestRoomAiHintResponseDto extends createZodDto(requestRoomAiHintResponseSchema) {}
+export class RequestRoomCodeAnalysisResponseDto extends createZodDto(
+  requestRoomCodeAnalysisResponseSchema,
+) {}
 
 export class GetRoomAiHintResultResponseDto {
   @ApiProperty({ enum: ['pending', 'ready', 'failed'] })
@@ -74,6 +80,30 @@ export class GetRoomAiHintResultResponseDto {
 
   @ApiProperty({ required: false })
   reflectionPrompt?: string;
+}
+
+export class GetRoomCodeAnalysisResultResponseDto {
+  @ApiProperty({ enum: ['pending', 'ready', 'failed'] })
+  status!: 'pending' | 'ready' | 'failed';
+
+  @ApiProperty({ description: 'AI code analysis job ID' })
+  jobId!: string;
+
+  @ApiProperty({ required: false, description: 'Generated analysis summary (when status=ready)' })
+  summary?: string;
+
+  @ApiProperty({
+    required: false,
+    description: 'Complexity, edge-case, and readability focus areas (when status=ready)',
+  })
+  focusAreas?: {
+    complexity: string;
+    edgeCases: string;
+    readability: string;
+  };
+
+  @ApiProperty({ required: false, type: [String] })
+  followUpQuestions?: string[];
 }
 export class RoomChatMediaUploadResponseDto extends createZodDto(
   roomChatMediaUploadResponseSchema,

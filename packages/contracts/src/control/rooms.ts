@@ -173,6 +173,57 @@ export const getRoomAiHintResultResponseSchema = z.discriminatedUnion('status', 
 
 export type GetRoomAiHintResultResponse = z.infer<typeof getRoomAiHintResultResponseSchema>;
 
+export const requestRoomCodeAnalysisSchema = z
+  .object({
+    code: z
+      .string()
+      .min(1)
+      .max(16_000)
+      .describe('Current code snapshot in the editor')
+      .meta({ examples: ['def two_sum(nums, target): ...'] }),
+    language: z
+      .enum(SUPPORTED_LANGUAGES)
+      .describe('Programming language')
+      .meta({ examples: ['python'] }),
+  })
+  .strict();
+
+export type RequestRoomCodeAnalysisInput = z.infer<typeof requestRoomCodeAnalysisSchema>;
+
+export const requestRoomCodeAnalysisResponseSchema = z.object({
+  jobId: z
+    .string()
+    .describe('AI code analysis job ID - poll GET /rooms/:id/ai/code-analysis/:jobId'),
+});
+
+export type RequestRoomCodeAnalysisResponse = z.infer<typeof requestRoomCodeAnalysisResponseSchema>;
+
+export const getRoomCodeAnalysisResultResponseSchema = z.discriminatedUnion('status', [
+  z.object({
+    status: z.literal('pending'),
+    jobId: z.string(),
+  }),
+  z.object({
+    status: z.literal('ready'),
+    jobId: z.string(),
+    summary: z.string(),
+    focusAreas: z.object({
+      complexity: z.string(),
+      edgeCases: z.string(),
+      readability: z.string(),
+    }),
+    followUpQuestions: z.array(z.string()),
+  }),
+  z.object({
+    status: z.literal('failed'),
+    jobId: z.string(),
+  }),
+]);
+
+export type GetRoomCodeAnalysisResultResponse = z.infer<
+  typeof getRoomCodeAnalysisResultResponseSchema
+>;
+
 export const roomChatMediaUploadRequestSchema = z
   .object({
     fileName: z

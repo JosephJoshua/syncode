@@ -148,6 +148,25 @@ export type GetRoomAiHintResult =
     }
   | { status: 'failed'; jobId: string };
 
+export interface RequestRoomCodeAnalysisResult {
+  jobId: string;
+}
+
+export type GetRoomCodeAnalysisResult =
+  | { status: 'pending'; jobId: string }
+  | {
+      status: 'ready';
+      jobId: string;
+      summary: string;
+      focusAreas: {
+        complexity: string;
+        edgeCases: string;
+        readability: string;
+      };
+      followUpQuestions: string[];
+    }
+  | { status: 'failed'; jobId: string };
+
 export interface RoomChatMediaUploadResult {
   key: string;
   uploadUrl: string;
