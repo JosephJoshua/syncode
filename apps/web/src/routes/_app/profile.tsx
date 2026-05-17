@@ -18,6 +18,7 @@ import { QuotasPanel } from '@/components/profile/quotas-panel.js';
 import { api, getFieldErrorMessage, readApiError } from '@/lib/api-client.js';
 import { validateImageFile } from '@/lib/crop-image.js';
 import i18n from '@/lib/i18n.js';
+import { useUserQuotasQuery } from '@/lib/user-quotas.js';
 import { useAuthStore } from '@/stores/auth.store.js';
 
 export const Route = createFileRoute('/_app/profile')({
@@ -25,7 +26,6 @@ export const Route = createFileRoute('/_app/profile')({
 });
 
 const profileQueryKey = ['users', 'me'] as const;
-const quotasQueryKey = ['users', 'me', 'quotas'] as const;
 
 function invalidateAvatarConsumers(queryClient: ReturnType<typeof useQueryClient>) {
   void queryClient.invalidateQueries({ queryKey: ['dashboard', 'session-history'] });
@@ -73,11 +73,7 @@ function ProfilePage() {
     queryFn: () => api(CONTROL_API.USERS.PROFILE),
   });
 
-  const quotasQuery = useQuery({
-    queryKey: quotasQueryKey,
-    enabled: isAuthenticated,
-    queryFn: () => api(CONTROL_API.USERS.QUOTAS),
-  });
+  const quotasQuery = useUserQuotasQuery(isAuthenticated);
 
   useEffect(() => {
     if (!profileQuery.data) {

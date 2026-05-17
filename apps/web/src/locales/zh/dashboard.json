@@ -8,6 +8,29 @@
     "averageScore": "平均分",
     "practiceTime": "练习时长"
   },
+  "quotas": {
+    "heading": "使用配额",
+    "description": "AI、代码执行和活跃房间的当前每日用量。",
+    "ai": "AI",
+    "execution": "执行",
+    "rooms": "房间",
+    "dailyLimit": "每日限额",
+    "activeRooms": "活跃房间",
+    "resetsAt": "{{time}} 重置",
+    "soon": "即将",
+    "errorTitle": "无法加载配额",
+    "errorDescription": "当前无法获取配额用量。",
+    "warning": {
+      "ai": "AI 配额用量已达到 80%。",
+      "execution": "执行配额用量已达到 80%。",
+      "rooms": "房间配额用量已达到 80%。"
+    },
+    "exceeded": {
+      "ai": "AI 配额已用尽。提示和 AI 反馈可能要等到重置后才能使用。",
+      "execution": "执行配额已用尽。代码运行和提交可能要等到重置后才能使用。",
+      "rooms": "房间配额已用尽。创建新房间可能要等到活跃房间关闭后才能使用。"
+    }
+  },
   "recentSessions": "近期会话",
   "search": {
     "placeholder": "按题目名称搜索"
@@ -36,7 +59,8 @@
     "actions": "操作"
   },
   "actions": {
-    "deleteSessionAriaLabel": "删除会话"
+    "deleteSessionAriaLabel": "删除会话",
+    "deleteSessionAriaLabelWithProblem": "删除 {{date}} 的 {{problem}} 会话"
   },
   "deleteDialog": {
     "title": "删除会话？",

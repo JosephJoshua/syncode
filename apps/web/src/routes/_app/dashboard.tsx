@@ -4,6 +4,7 @@ import { createFileRoute } from '@tanstack/react-router';
 import type { LucideIcon } from 'lucide-react';
 import { Calendar, Clock3, Target, TrendingUp } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { DashboardQuotaUsage } from '@/components/dashboard-quota-usage.js';
 import { DashboardRecentSessions } from '@/components/dashboard-recent-sessions.js';
 import { DashboardWeaknessSummary } from '@/components/dashboard-weakness-summary.js';
 import {
@@ -11,6 +12,7 @@ import {
   fetchDashboardSessionHistory,
   getDashboardSessionHistoryQueryKey,
 } from '@/lib/dashboard-session-history.js';
+import { useUserQuotasQuery } from '@/lib/user-quotas.js';
 import { getUserDisplayName } from '@/lib/user-utils.js';
 import { fetchUserWeaknesses, USER_WEAKNESSES_QUERY_KEY } from '@/lib/user-weaknesses.js';
 import { useAuthStore } from '@/stores/auth.store.js';
@@ -19,16 +21,18 @@ export const Route = createFileRoute('/_app/dashboard')({
   component: DashboardPage,
 });
 
+export { DashboardPage };
+
 function DashboardPage() {
   const { t } = useTranslation('dashboard');
   const user = useAuthStore((state) => state.user);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const dashboardName = getUserDisplayName(user);
   const viewerId = user?.id ?? null;
-  const isQueryEnabled = isAuthenticated && Boolean(viewerId);
+  const isDashboardDataQueryEnabled = isAuthenticated && Boolean(viewerId);
   const sessionHistoryQuery = useQuery({
     queryKey: getDashboardSessionHistoryQueryKey(viewerId),
-    enabled: isQueryEnabled,
+    enabled: isDashboardDataQueryEnabled,
     queryFn: () => {
       if (!viewerId) {
         throw new Error('Viewer ID is required to fetch dashboard session history');
@@ -37,13 +41,14 @@ function DashboardPage() {
       return fetchDashboardSessionHistory(viewerId);
     },
   });
+  const quotasQuery = useUserQuotasQuery(isAuthenticated);
   const weaknessesQuery = useQuery({
     queryKey: USER_WEAKNESSES_QUERY_KEY,
-    enabled: isQueryEnabled,
+    enabled: isDashboardDataQueryEnabled,
     queryFn: fetchUserWeaknesses,
   });
   const sessionHistory = sessionHistoryQuery.data;
-  const isUnavailable = !isQueryEnabled;
+  const isUnavailable = !isDashboardDataQueryEnabled;
   const stats = sessionHistory?.stats ?? EMPTY_DASHBOARD_STATS;
   const getStatValue = (value: string) => {
     if (isUnavailable) {
@@ -103,6 +108,17 @@ function DashboardPage() {
           ))}
         </div>
       </section>
+
+      <DashboardQuotaUsage
+        quotas={quotasQuery.data}
+        isLoading={quotasQuery.isLoading}
+        isFetching={quotasQuery.isFetching}
+        isError={quotasQuery.isError}
+        notificationScope={viewerId}
+        onRetry={() => {
+          quotasQuery.refetch().catch(() => undefined);
+        }}
+      />
 
       <DashboardWeaknessSummary
         weaknesses={weaknessesQuery.data?.data ?? []}
