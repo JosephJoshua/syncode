@@ -762,6 +762,38 @@ describe('AiService', () => {
         snapshots: [],
         runs: [],
         submissions: [],
+        finalCodeSnapshot: {
+          snapshotId: '990e8400-e29b-41d4-a716-446655440000',
+          timestamp: '2026-04-20T01:01:50.000Z',
+          trigger: 'session_end',
+          language: 'typescript',
+          code: 'function twoSum() { return [0, 1]; }',
+          linesOfCode: 1,
+          phase: 'finished',
+        },
+        sessionEvents: [
+          {
+            eventType: 'stage_transition',
+            timestamp: '2026-04-20T01:01:00.000Z',
+            details: 'coding -> wrapup',
+            metadata: {
+              fromStage: 'coding',
+              toStage: 'wrapup',
+              trigger: 'phase_change',
+            },
+          },
+          {
+            eventType: 'submission',
+            timestamp: '2026-04-20T01:01:30.000Z',
+            details: 'completed submission (5/5)',
+            metadata: {
+              submissionId: 'submission-1',
+              status: 'completed',
+              passed: 5,
+              total: 5,
+            },
+          },
+        ],
         finalTestCaseBreakdown: [
           {
             testCaseIndex: 0,
@@ -810,6 +842,142 @@ describe('AiService', () => {
         expect.objectContaining({
           jsonMode: true,
         }),
+      );
+    });
+
+    it('GIVEN no event evidence WHEN sessionEvents exist THEN postprocess adds event timestamp evidence', async () => {
+      llmProvider.generateText.mockResolvedValueOnce({
+        text: JSON.stringify({
+          overallScore: 80,
+          dimensions: {
+            correctness: {
+              score: 80,
+              feedback: 'Correctness feedback.',
+              evidence: [
+                {
+                  type: 'code_line',
+                  reference: 'L1',
+                  description: 'Handles base case.',
+                },
+              ],
+            },
+            efficiency: {
+              score: 80,
+              feedback: 'Efficiency feedback.',
+              evidence: [
+                {
+                  type: 'code_line',
+                  reference: 'L2',
+                  description: 'Single-pass loop.',
+                },
+              ],
+            },
+            codeQuality: {
+              score: 80,
+              feedback: 'Code quality feedback.',
+              evidence: [
+                {
+                  type: 'code_line',
+                  reference: 'L3',
+                  description: 'Clear naming.',
+                },
+              ],
+            },
+            communication: {
+              score: 80,
+              feedback: 'Communication feedback.',
+              evidence: [
+                {
+                  type: 'code_line',
+                  reference: 'L4',
+                  description: 'Explained steps.',
+                },
+              ],
+            },
+            problemSolving: {
+              score: 80,
+              feedback: 'Problem solving feedback.',
+              evidence: [
+                {
+                  type: 'code_line',
+                  reference: 'L5',
+                  description: 'Chose hash map.',
+                },
+              ],
+            },
+          },
+          strengths: ['Good structure'],
+          areasForImprovement: ['Add edge-case checks'],
+          detailedFeedback: 'Detailed feedback',
+          comparisonToHistory: null,
+          peerFeedbackSummary: null,
+        }),
+        model: 'qwen3.5-mini',
+      });
+
+      const request: GenerateSessionReportRequest = {
+        sessionId: '550e8400-e29b-41d4-a716-446655440000',
+        roomId: '660e8400-e29b-41d4-a716-446655440000',
+        participantId: '770e8400-e29b-41d4-a716-446655440000',
+        participantRole: 'candidate',
+        participants: [
+          {
+            userId: '770e8400-e29b-41d4-a716-446655440000',
+            username: 'alice',
+            displayName: 'Alice',
+            role: 'candidate',
+          },
+        ],
+        problem: {
+          id: '880e8400-e29b-41d4-a716-446655440000',
+          title: 'Two Sum',
+          description: 'Find two numbers.',
+          difficulty: 'easy',
+          constraints: null,
+        },
+        language: 'typescript',
+        durationMs: 120000,
+        startedAt: '2026-04-20T01:00:00.000Z',
+        finishedAt: '2026-04-20T01:02:00.000Z',
+        snapshots: [],
+        runs: [],
+        submissions: [],
+        finalCodeSnapshot: {
+          snapshotId: '990e8400-e29b-41d4-a716-446655440000',
+          timestamp: '2026-04-20T01:01:50.000Z',
+          trigger: 'session_end',
+          language: 'typescript',
+          code: 'function twoSum() { return [0, 1]; }',
+          linesOfCode: 1,
+          phase: 'finished',
+        },
+        sessionEvents: [
+          {
+            eventType: 'stage_transition',
+            timestamp: '2026-04-20T01:01:00.000Z',
+            details: 'coding -> wrapup',
+            metadata: {
+              fromStage: 'coding',
+              toStage: 'wrapup',
+              trigger: 'phase_change',
+            },
+          },
+        ],
+        finalTestCaseBreakdown: [],
+        peerFeedback: [],
+        aiMessages: [],
+        historicalContext: null,
+      };
+
+      const result = await service.generateSessionReport(request);
+
+      expect(result.dimensions?.communication?.evidence).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            type: 'event_timestamp',
+            reference: '2026-04-20T01:01:00.000Z',
+          }),
+        ]),
       );
     });
 
@@ -894,10 +1062,44 @@ describe('AiService', () => {
               '  maps[target-int(num)] = idx',
             ].join('\n'),
             linesOfCode: 10,
+            phase: 'coding',
           },
         ],
         runs: [],
         submissions: [],
+        finalCodeSnapshot: {
+          snapshotId: '990e8400-e29b-41d4-a716-446655440000',
+          timestamp: '2026-04-20T01:01:30.000Z',
+          trigger: 'submission',
+          language: 'python',
+          code: [
+            's = input()[1:-1].split(",")',
+            'nums = [int(x) for x in s]',
+            'target = int(input())',
+            'maps = {}',
+            '',
+            'for idx, num in enumerate(nums):',
+            '  if num in maps:',
+            '    print("[" + str(maps[num]) + "," + str(idx) + "]")',
+            '    break',
+            '',
+            '  maps[target-int(num)] = idx',
+          ].join('\n'),
+          linesOfCode: 10,
+          phase: 'coding',
+        },
+        sessionEvents: [
+          {
+            eventType: 'stage_transition',
+            timestamp: '2026-04-20T01:00:10.000Z',
+            details: 'warmup -> coding',
+            metadata: {
+              fromStage: 'warmup',
+              toStage: 'coding',
+              trigger: 'phase_change',
+            },
+          },
+        ],
         finalTestCaseBreakdown: [],
         peerFeedback: [],
         aiMessages: [],

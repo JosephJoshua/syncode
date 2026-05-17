@@ -15,6 +15,7 @@ import { DB_CLIENT } from '@/modules/db/db.module.js';
 import { InMemoryCacheService } from '@/test/in-memory-cache.service.js';
 import {
   createTestDb,
+  insertCodeSnapshot,
   insertPeerFeedbackRow,
   insertProblem,
   insertRoom,
@@ -120,6 +121,24 @@ describe('enqueueForFinishedSession', () => {
       durationMs: 16,
       stdout: '[0,1]\n',
     });
+    await insertCodeSnapshot(db, {
+      sessionId: session.id,
+      roomId: room.id,
+      code: 'def two_sum(nums, target): return [0, 1]',
+      language: 'python',
+      trigger: 'phase_change',
+      phase: 'wrapup',
+      createdAt: new Date('2026-04-20T01:01:00.000Z'),
+    });
+    await insertCodeSnapshot(db, {
+      sessionId: session.id,
+      roomId: room.id,
+      code: 'def two_sum(nums, target): return [0, 1]',
+      language: 'python',
+      trigger: 'session_end',
+      phase: 'finished',
+      createdAt: new Date('2026-04-20T01:02:00.000Z'),
+    });
     await insertPeerFeedbackRow(db, {
       sessionId: session.id,
       roomId: room.id,
@@ -173,6 +192,23 @@ describe('enqueueForFinishedSession', () => {
         participantId: candidate.id,
         participantRole: 'candidate',
         language: 'python',
+        sessionEvents: expect.arrayContaining([
+          expect.objectContaining({
+            eventType: 'stage_transition',
+          }),
+          expect.objectContaining({
+            eventType: 'submission',
+            metadata: expect.objectContaining({
+              passed: 1,
+              total: 1,
+            }),
+          }),
+        ]),
+        finalCodeSnapshot: expect.objectContaining({
+          trigger: 'session_end',
+          language: 'python',
+          phase: 'finished',
+        }),
         participants: expect.arrayContaining([
           expect.objectContaining({ userId: interviewer.id, role: 'interviewer' }),
           expect.objectContaining({ userId: candidate.id, role: 'candidate' }),
