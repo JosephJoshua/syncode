@@ -1,4 +1,4 @@
-import { ERROR_CODES } from '@syncode/contracts';
+import { ERROR_CODES, type UserWeaknessesResponse } from '@syncode/contracts';
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -52,6 +52,10 @@ import {
   removeSessionFromDashboardHistory,
 } from '@/lib/dashboard-session-history.js';
 import { getUserInitial } from '@/lib/user-utils.js';
+import {
+  removeSessionFromUserWeaknesses,
+  USER_WEAKNESSES_QUERY_KEY,
+} from '@/lib/user-weaknesses.js';
 import { useAuthStore } from '@/stores/auth.store.js';
 
 type SessionFilter = 'all' | 'passed' | 'failed';
@@ -224,38 +228,58 @@ export function DashboardRecentSessions({
     void,
     unknown,
     { sessionId: string },
-    { previousHistory?: DashboardSessionHistory }
+    { previousHistory?: DashboardSessionHistory; previousWeaknesses?: UserWeaknessesResponse }
   >({
     mutationFn: async ({ sessionId }) => {
       await deleteSession(sessionId);
     },
     onMutate: async ({ sessionId }) => {
-      await queryClient.cancelQueries({ queryKey: sessionHistoryQueryKey });
+      await Promise.all([
+        queryClient.cancelQueries({ queryKey: sessionHistoryQueryKey }),
+        queryClient.cancelQueries({ queryKey: USER_WEAKNESSES_QUERY_KEY }),
+      ]);
 
       const previousHistory =
         queryClient.getQueryData<DashboardSessionHistory>(sessionHistoryQueryKey);
+      const previousWeaknesses =
+        queryClient.getQueryData<UserWeaknessesResponse>(USER_WEAKNESSES_QUERY_KEY);
 
       queryClient.setQueryData<DashboardSessionHistory>(sessionHistoryQueryKey, (currentHistory) =>
         currentHistory
           ? removeSessionFromDashboardHistory(currentHistory, sessionId)
           : currentHistory,
       );
+      queryClient.setQueryData<UserWeaknessesResponse>(
+        USER_WEAKNESSES_QUERY_KEY,
+        (currentWeaknesses) =>
+          currentWeaknesses
+            ? removeSessionFromUserWeaknesses(currentWeaknesses, sessionId)
+            : currentWeaknesses,
+      );
 
-      return { previousHistory };
+      return { previousHistory, previousWeaknesses };
     },
     onSuccess: () => {
       // Close the dialog only after the request lands so the in-dialog
       // pending UI ('Deleting...') is actually visible.
       setPendingDeleteSessionId(null);
+      void queryClient.invalidateQueries({ queryKey: USER_WEAKNESSES_QUERY_KEY });
     },
     onError: (error, _variables, context) => {
       if (context?.previousHistory) {
         queryClient.setQueryData(sessionHistoryQueryKey, context.previousHistory);
       }
 
+      if (context?.previousWeaknesses) {
+        queryClient.setQueryData(USER_WEAKNESSES_QUERY_KEY, context.previousWeaknesses);
+      }
+
       // Refetch only on error so the optimistic update is reconciled with
       // server truth. The success path already removed the row optimistically.
-      void queryClient.invalidateQueries({ queryKey: sessionHistoryQueryKey });
+      void Promise.all([
+        queryClient.invalidateQueries({ queryKey: sessionHistoryQueryKey }),
+        queryClient.invalidateQueries({ queryKey: USER_WEAKNESSES_QUERY_KEY }),
+      ]);
       toast.error(getDeleteSessionErrorMessage(error, t));
     },
   });

@@ -12,6 +12,7 @@ import {
   getDashboardSessionHistoryQueryKey,
 } from '@/lib/dashboard-session-history.js';
 import { getUserDisplayName } from '@/lib/user-utils.js';
+import { fetchUserWeaknesses, USER_WEAKNESSES_QUERY_KEY } from '@/lib/user-weaknesses.js';
 import { useAuthStore } from '@/stores/auth.store.js';
 
 export const Route = createFileRoute('/_app/dashboard')({
@@ -35,6 +36,11 @@ function DashboardPage() {
 
       return fetchDashboardSessionHistory(viewerId);
     },
+  });
+  const weaknessesQuery = useQuery({
+    queryKey: USER_WEAKNESSES_QUERY_KEY,
+    enabled: isQueryEnabled,
+    queryFn: fetchUserWeaknesses,
   });
   const sessionHistory = sessionHistoryQuery.data;
   const isUnavailable = !isQueryEnabled;
@@ -99,9 +105,10 @@ function DashboardPage() {
       </section>
 
       <DashboardWeaknessSummary
-        records={sessionHistory?.records ?? []}
-        isLoading={sessionHistoryQuery.isLoading}
+        weaknesses={weaknessesQuery.data?.data ?? []}
+        isLoading={weaknessesQuery.isLoading}
         isUnavailable={isUnavailable}
+        isError={weaknessesQuery.isError}
       />
 
       <DashboardRecentSessions

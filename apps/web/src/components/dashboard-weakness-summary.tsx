@@ -1,30 +1,54 @@
+import type { UserWeakness } from '@syncode/contracts';
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Progress } from '@syncode/ui';
 import { Link } from '@tanstack/react-router';
 import { Activity, ArrowUpRight, BarChart3, Target } from 'lucide-react';
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { DashboardSessionRecord } from '@/lib/dashboard-session-history.js';
 
-type WeaknessCategory = 'correctness' | 'consistency' | 'pacing' | 'difficulty';
+type WeaknessCategory = UserWeakness['category'];
 
-type WeaknessSummaryItem = {
-  category: WeaknessCategory;
-  frequency: number;
-  sessions: DashboardSessionRecord[];
-};
+interface TrendHistoryPoint {
+  sessionId: string;
+  problemName: string | null;
+  reportedAt: string;
+  score: number;
+  categoryCount: number;
+}
 
 export function DashboardWeaknessSummary({
-  records,
+  weaknesses,
   isLoading,
   isUnavailable,
+  isError,
 }: {
-  readonly records: DashboardSessionRecord[];
+  readonly weaknesses: UserWeakness[];
   readonly isLoading?: boolean;
   readonly isUnavailable?: boolean;
+  readonly isError?: boolean;
 }) {
   const { t } = useTranslation('dashboard');
-  const { weaknesses, trend } = useMemo(() => buildWeaknessSummary(records), [records]);
-  const hasData = records.length > 0;
+  const sortedWeaknesses = useMemo(
+    () =>
+      [...weaknesses].sort(
+        (a, b) =>
+          b.frequency - a.frequency ||
+          new Date(b.lastSeenAt).getTime() - new Date(a.lastSeenAt).getTime(),
+      ),
+    [weaknesses],
+  );
+  const trendHistory = useMemo(() => buildTrendHistory(sortedWeaknesses), [sortedWeaknesses]);
+  const maxFrequency = Math.max(...sortedWeaknesses.map((item) => item.frequency), 0);
+  const isBlocked = isLoading || isUnavailable || isError;
+  const blockedTitle = isLoading
+    ? t('weakness.loadingTitle')
+    : isUnavailable
+      ? t('weakness.unavailableTitle')
+      : t('weakness.errorTitle');
+  const blockedDescription = isLoading
+    ? t('weakness.loadingDescription')
+    : isUnavailable
+      ? t('weakness.unavailableDescription')
+      : t('weakness.errorDescription');
 
   return (
     <section className="mt-8 sm:mt-10">
@@ -37,7 +61,7 @@ export function DashboardWeaknessSummary({
         </div>
         <Badge variant="outline" className="w-fit">
           <Activity className="size-3.5" />
-          {t('weakness.sessionCount', { count: records.length })}
+          {t('weakness.sessionCount', { count: sortedWeaknesses.length })}
         </Badge>
       </div>
 
@@ -50,29 +74,21 @@ export function DashboardWeaknessSummary({
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4 px-5 pb-6 sm:px-6">
-            {isLoading || isUnavailable ? (
+            {isBlocked ? (
+              <EmptyState title={blockedTitle} description={blockedDescription} />
+            ) : null}
+
+            {!isBlocked && sortedWeaknesses.length === 0 ? (
               <EmptyState
-                title={isLoading ? t('weakness.loadingTitle') : t('weakness.unavailableTitle')}
-                description={
-                  isLoading
-                    ? t('weakness.loadingDescription')
-                    : t('weakness.unavailableDescription')
-                }
+                title={t('weakness.noDataTitle')}
+                description={t('weakness.noDataDescription')}
               />
             ) : null}
 
-            {!isLoading && !isUnavailable && weaknesses.length === 0 ? (
-              <EmptyState
-                title={hasData ? t('weakness.noWeaknessTitle') : t('weakness.noDataTitle')}
-                description={
-                  hasData ? t('weakness.noWeaknessDescription') : t('weakness.noDataDescription')
-                }
-              />
-            ) : null}
-
-            {weaknesses.map((item) => (
-              <WeaknessCategoryRow key={item.category} item={item} totalSessions={records.length} />
-            ))}
+            {!isBlocked &&
+              sortedWeaknesses.map((item) => (
+                <WeaknessCategoryRow key={item.id} item={item} maxFrequency={maxFrequency} />
+              ))}
           </CardContent>
         </Card>
 
@@ -84,27 +100,12 @@ export function DashboardWeaknessSummary({
             </CardTitle>
           </CardHeader>
           <CardContent className="px-5 pb-6 sm:px-6">
-            {trend.length > 0 ? (
-              <div className="flex h-56 items-end gap-2">
-                {trend.map((point) => (
-                  <div
-                    key={point.sessionId}
-                    className="flex min-w-0 flex-1 flex-col items-center gap-2"
-                  >
-                    <div className="flex h-40 w-full items-end rounded-t-md bg-muted/40">
-                      <div
-                        className="w-full rounded-t-md bg-primary/75"
-                        style={{ height: `${Math.max(8, point.score)}%` }}
-                        title={t('weakness.trendPoint', {
-                          problem: point.problemName,
-                          score: point.score,
-                        })}
-                      />
-                    </div>
-                    <span className="max-w-full truncate text-[11px] text-muted-foreground">
-                      {point.score}
-                    </span>
-                  </div>
+            {isBlocked ? (
+              <EmptyState title={blockedTitle} description={blockedDescription} />
+            ) : trendHistory.length > 0 ? (
+              <div className="space-y-4">
+                {trendHistory.map((point) => (
+                  <TrendHistoryRow key={point.sessionId} point={point} />
                 ))}
               </div>
             ) : (
@@ -122,14 +123,14 @@ export function DashboardWeaknessSummary({
 
 function WeaknessCategoryRow({
   item,
-  totalSessions,
+  maxFrequency,
 }: {
-  readonly item: WeaknessSummaryItem;
-  readonly totalSessions: number;
+  readonly item: UserWeakness;
+  readonly maxFrequency: number;
 }) {
   const { t } = useTranslation('dashboard');
-  const percentage = totalSessions > 0 ? Math.round((item.frequency / totalSessions) * 100) : 0;
-  const linkedSessions = item.sessions.filter((session) => session.hasReport).slice(0, 3);
+  const percentage = maxFrequency > 0 ? Math.round((item.frequency / maxFrequency) * 100) : 0;
+  const linkedSessions = item.sessions.slice(0, 3);
 
   return (
     <div className="rounded-lg border border-border/50 bg-background/45 p-4">
@@ -139,26 +140,70 @@ function WeaknessCategoryRow({
             {t(`weakness.category.${item.category}.title`)}
           </h3>
           <p className="mt-1 text-sm text-muted-foreground">
-            {t(`weakness.category.${item.category}.description`)}
+            {item.description || t('weakness.descriptionFallback')}
           </p>
         </div>
-        <Badge variant={percentage >= 50 ? 'warning' : 'outline'}>
-          {t('weakness.frequency', { count: item.frequency })}
-        </Badge>
+        <div className="flex flex-wrap gap-2 sm:justify-end">
+          <Badge variant={item.trend === 'worsening' ? 'warning' : 'outline'}>
+            {t(`weakness.trend.${item.trend}`)}
+          </Badge>
+          <Badge variant="outline">{t('weakness.frequency', { count: item.frequency })}</Badge>
+        </div>
       </div>
-      <Progress value={percentage} className="mt-4 h-2" />
+      <Progress
+        value={percentage}
+        className="mt-4 h-2"
+        aria-label={t('weakness.frequencyProgress', {
+          category: t(`weakness.category.${item.category}.title`),
+          count: item.frequency,
+        })}
+      />
       {linkedSessions.length > 0 ? (
         <div className="mt-4 flex flex-wrap gap-2">
           {linkedSessions.map((session) => (
-            <Button key={session.id} asChild size="xs" variant="outline">
-              <Link to="/sessions/$sessionId" params={{ sessionId: session.id }}>
+            <Button key={session.sessionId} asChild size="xs" variant="outline">
+              <Link to="/sessions/$sessionId" params={{ sessionId: session.sessionId }}>
                 <ArrowUpRight className="size-3" />
-                {session.problemName}
+                {session.problemName ?? t('weakness.unknownProblem')}
               </Link>
             </Button>
           ))}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function TrendHistoryRow({ point }: { readonly point: TrendHistoryPoint }) {
+  const { t, i18n } = useTranslation('dashboard');
+  const reportedAt = new Date(point.reportedAt);
+  const dateLabel = new Intl.DateTimeFormat(i18n.language, {
+    month: 'short',
+    day: 'numeric',
+  }).format(reportedAt);
+  const problemName = point.problemName ?? t('weakness.unknownProblem');
+
+  return (
+    <div>
+      <div className="mb-2 flex items-center justify-between gap-3 text-sm">
+        <div className="min-w-0">
+          <span className="block truncate font-medium text-foreground">{problemName}</span>
+          <span className="text-xs text-muted-foreground">{dateLabel}</span>
+        </div>
+        <span className="text-muted-foreground">
+          {t('weakness.trendScore', { score: point.score })}
+        </span>
+      </div>
+      <Progress
+        value={point.score}
+        aria-label={t('weakness.trendPoint', {
+          problem: problemName,
+          score: point.score,
+        })}
+      />
+      <p className="mt-1 text-xs text-muted-foreground">
+        {t('weakness.categoryCount', { count: point.categoryCount })}
+      </p>
     </div>
   );
 }
@@ -178,52 +223,52 @@ function EmptyState({
   );
 }
 
-function buildWeaknessSummary(records: DashboardSessionRecord[]) {
-  const scoredCandidateRecords = records
-    .filter((record) => record.viewerRole === 'candidate' && typeof record.score === 'number')
-    .sort(
-      (a, b) =>
-        new Date(a.finishedAt ?? a.createdAt).getTime() -
-        new Date(b.finishedAt ?? b.createdAt).getTime(),
-    );
+function buildTrendHistory(weaknesses: UserWeakness[]): TrendHistoryPoint[] {
+  const sessionsById = new Map<
+    string,
+    {
+      problemName: string | null;
+      reportedAt: string;
+      scores: number[];
+      categories: Set<WeaknessCategory>;
+    }
+  >();
 
-  const categories: WeaknessSummaryItem[] = (
-    [
-      {
-        category: 'correctness',
-        sessions: scoredCandidateRecords.filter((record) => (record.score ?? 0) < 60),
-        frequency: 0,
-      },
-      {
-        category: 'consistency',
-        sessions: scoredCandidateRecords.filter(
-          (record) => (record.score ?? 0) >= 60 && (record.score ?? 0) < 75,
-        ),
-        frequency: 0,
-      },
-      {
-        category: 'pacing',
-        sessions: records.filter((record) => record.durationSeconds > 45 * 60),
-        frequency: 0,
-      },
-      {
-        category: 'difficulty',
-        sessions: scoredCandidateRecords.filter(
-          (record) => record.difficulty === 'hard' && (record.score ?? 0) < 80,
-        ),
-        frequency: 0,
-      },
-    ] satisfies WeaknessSummaryItem[]
-  ).map((item) => ({ ...item, frequency: item.sessions.length }));
+  for (const weakness of weaknesses) {
+    for (const session of weakness.sessions) {
+      if (session.score == null) {
+        continue;
+      }
 
-  return {
-    weaknesses: categories
-      .filter((item) => item.frequency > 0)
-      .sort((a, b) => b.frequency - a.frequency),
-    trend: scoredCandidateRecords.slice(-8).map((record) => ({
-      sessionId: record.id,
-      problemName: record.problemName,
-      score: Math.max(0, Math.min(100, Math.round(record.score ?? 0))),
-    })),
-  };
+      const existing = sessionsById.get(session.sessionId);
+
+      if (!existing) {
+        sessionsById.set(session.sessionId, {
+          problemName: session.problemName,
+          reportedAt: session.reportedAt,
+          scores: [session.score],
+          categories: new Set([weakness.category]),
+        });
+        continue;
+      }
+
+      existing.scores.push(session.score);
+      existing.categories.add(weakness.category);
+
+      if (new Date(session.reportedAt).getTime() > new Date(existing.reportedAt).getTime()) {
+        existing.reportedAt = session.reportedAt;
+      }
+    }
+  }
+
+  return [...sessionsById.entries()]
+    .map(([sessionId, item]) => ({
+      sessionId,
+      problemName: item.problemName,
+      reportedAt: item.reportedAt,
+      score: Math.round(item.scores.reduce((sum, score) => sum + score, 0) / item.scores.length),
+      categoryCount: item.categories.size,
+    }))
+    .sort((a, b) => new Date(a.reportedAt).getTime() - new Date(b.reportedAt).getTime())
+    .slice(-6);
 }

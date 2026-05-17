@@ -11,37 +11,58 @@
   "weakness": {
     "heading": "Weakness summary",
     "sub": "Spot repeated practice gaps and review the sessions behind them.",
-    "sessionCount": "{{count}} sessions analyzed",
+    "sessionCount_one": "{{count}} category tracked",
+    "sessionCount_other": "{{count}} categories tracked",
     "categoriesTitle": "Frequent categories",
-    "trendTitle": "Improvement trend",
-    "frequency": "{{count}} hits",
+    "trendTitle": "Improvement over time",
+    "unknownProblem": "Untitled problem",
+    "descriptionFallback": "Review this pattern in the linked session report.",
+    "frequency_one": "{{count}} hit",
+    "frequency_other": "{{count}} hits",
+    "frequencyProgress": "{{category}} appeared {{count}} times",
+    "trendScore": "{{score}}%",
+    "categoryCount_one": "{{count}} weakness category",
+    "categoryCount_other": "{{count}} weakness categories",
     "loadingTitle": "Loading weaknesses",
-    "loadingDescription": "We're analyzing your recent sessions.",
+    "loadingDescription": "We're loading your tracked weakness categories.",
     "unavailableTitle": "Weakness summary unavailable",
     "unavailableDescription": "The summary will appear once your account session is ready.",
-    "noWeaknessTitle": "No repeated weaknesses detected",
-    "noWeaknessDescription": "Your recent candidate sessions do not show a repeated pattern yet.",
-    "noDataTitle": "No session data yet",
-    "noDataDescription": "Complete more interview sessions to unlock weakness trends.",
-    "noTrendTitle": "No scored trend yet",
-    "noTrendDescription": "Candidate sessions with scores will appear here.",
-    "trendPoint": "{{problem}} scored {{score}}",
+    "errorTitle": "Unable to load weakness summary",
+    "errorDescription": "Weakness trends could not be retrieved right now. Try again in a moment.",
+    "noDataTitle": "No weaknesses tracked yet",
+    "noDataDescription": "Weakness categories will appear here after session reports identify repeated patterns.",
+    "noTrendTitle": "No trend data yet",
+    "noTrendDescription": "Score history will appear once linked session reports are available.",
+    "trendPoint": "{{problem}} weakness score was {{score}}%",
+    "trend": {
+      "improving": "Improving",
+      "stable": "Stable",
+      "worsening": "Worsening"
+    },
     "category": {
-      "correctness": {
-        "title": "Correctness",
-        "description": "Candidate sessions below the passing score."
+      "edge_cases": {
+        "title": "Edge cases"
       },
-      "consistency": {
-        "title": "Consistency",
-        "description": "Sessions that passed but stayed below a strong score."
+      "time_complexity": {
+        "title": "Time complexity"
       },
-      "pacing": {
-        "title": "Pacing",
-        "description": "Sessions that ran longer than the target interview window."
+      "space_complexity": {
+        "title": "Space complexity"
       },
-      "difficulty": {
-        "title": "Hard-problem execution",
-        "description": "Hard problems where the final score left room to improve."
+      "variable_naming": {
+        "title": "Variable naming"
+      },
+      "code_structure": {
+        "title": "Code structure"
+      },
+      "off_by_one": {
+        "title": "Off-by-one errors"
+      },
+      "input_validation": {
+        "title": "Input validation"
+      },
+      "communication": {
+        "title": "Communication"
       }
     }
   },
