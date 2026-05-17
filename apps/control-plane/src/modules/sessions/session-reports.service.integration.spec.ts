@@ -2,7 +2,13 @@ import { NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { AI_CLIENT, ERROR_CODES } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
-import { aiMessages, executionResults, sessionReports } from '@syncode/db';
+import {
+  aiMessages,
+  executionResults,
+  sessionReports,
+  userWeaknesses,
+  weaknessSessions,
+} from '@syncode/db';
 import { CACHE_SERVICE, STORAGE_SERVICE } from '@syncode/shared/ports';
 import { and, asc, eq } from 'drizzle-orm';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
@@ -196,6 +202,32 @@ describe('handleResult', () => {
     const room = await insertRoom(db, user.id);
     const session = await insertSession(db, room.id, { status: 'finished' });
     await insertSessionParticipant(db, session.id, user.id, 'candidate');
+    const previousRoom = await insertRoom(db, user.id);
+    const previousSession = await insertSession(db, previousRoom.id, { status: 'finished' });
+    await insertSessionParticipant(db, previousSession.id, user.id, 'candidate');
+    await insertSessionReport(db, previousSession.id, {
+      userId: user.id,
+      status: 'completed',
+      overallScore: 82,
+      report: {
+        sessionId: previousSession.id,
+        generatedAt: '2026-04-19T07:00:00.000Z',
+        overallScore: 82,
+        dimensions: {
+          efficiency: {
+            score: 88,
+            feedback: 'Efficient solution.',
+            evidence: [],
+          },
+        },
+        strengths: [],
+        areasForImprovement: [],
+        detailedFeedback: 'Prior report',
+        comparisonToHistory: null,
+        peerFeedbackSummary: null,
+        testCaseBreakdown: [],
+      },
+    });
     await insertSessionReport(db, session.id, {
       userId: user.id,
       status: 'pending',
@@ -214,8 +246,20 @@ describe('handleResult', () => {
       sessionId: session.id,
       generatedAt: '2026-04-20T06:00:00.000Z',
       overallScore: 91,
+      dimensions: {
+        efficiency: {
+          score: 62,
+          feedback: 'The solution uses quadratic time complexity.',
+          evidence: [],
+        },
+        correctness: {
+          score: 78,
+          feedback: 'Misses edge cases around duplicate values.',
+          evidence: [],
+        },
+      },
       strengths: ['Clear reasoning'],
-      areasForImprovement: ['Trim dead code'],
+      areasForImprovement: ['Improve time complexity and cover edge cases.'],
       detailedFeedback: 'Detailed feedback',
       comparisonToHistory: null,
       peerFeedbackSummary: null,
@@ -244,6 +288,124 @@ describe('handleResult', () => {
       strengths: ['Clear reasoning'],
     });
     expect(await cacheService.get('session-report-meta:job-123')).toBeNull();
+
+    const weaknessRows = await db
+      .select({
+        id: userWeaknesses.id,
+        category: userWeaknesses.category,
+        frequency: userWeaknesses.frequency,
+        trend: userWeaknesses.trend,
+      })
+      .from(userWeaknesses)
+      .where(eq(userWeaknesses.userId, user.id))
+      .orderBy(asc(userWeaknesses.category));
+    const weaknessLinks = await db
+      .select({
+        weaknessId: weaknessSessions.weaknessId,
+        sessionId: weaknessSessions.sessionId,
+      })
+      .from(weaknessSessions);
+
+    expect(weaknessRows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          category: 'edge_cases',
+          frequency: 1,
+        }),
+        expect.objectContaining({
+          category: 'time_complexity',
+          frequency: 1,
+          trend: 'worsening',
+        }),
+      ]),
+    );
+    expect(weaknessLinks).toEqual(
+      expect.arrayContaining(
+        weaknessRows.map((weakness) => ({
+          weaknessId: weakness.id,
+          sessionId: session.id,
+        })),
+      ),
+    );
+  });
+
+  it('GIVEN regenerated report WHEN weaknesses change THEN replaces stale weakness links', async () => {
+    const user = await insertUser(db);
+    const room = await insertRoom(db, user.id);
+    const session = await insertSession(db, room.id, { status: 'finished' });
+    await insertSessionParticipant(db, session.id, user.id, 'candidate');
+    await insertSessionReport(db, session.id, {
+      userId: user.id,
+      status: 'pending',
+      report: null,
+      overallScore: null,
+      generatedAt: null,
+    });
+    await cacheService.set(
+      'session-report-meta:first-job',
+      { sessionId: session.id, userId: user.id },
+      60,
+    );
+
+    await service.handleResult('first-job', {
+      sessionId: session.id,
+      generatedAt: '2026-04-20T06:00:00.000Z',
+      overallScore: 70,
+      dimensions: {
+        efficiency: {
+          score: 60,
+          feedback: 'Use an index map to optimize lookup.',
+          evidence: [],
+        },
+      },
+      strengths: [],
+      areasForImprovement: [],
+      detailedFeedback: 'Initial report',
+      comparisonToHistory: null,
+      peerFeedbackSummary: null,
+      testCaseBreakdown: [],
+    });
+
+    const initialWeaknessRows = await db
+      .select({ category: userWeaknesses.category })
+      .from(userWeaknesses)
+      .where(eq(userWeaknesses.userId, user.id));
+
+    expect(initialWeaknessRows).toEqual([{ category: 'time_complexity' }]);
+
+    await cacheService.set(
+      'session-report-meta:second-job',
+      { sessionId: session.id, userId: user.id },
+      60,
+    );
+
+    await service.handleResult('second-job', {
+      sessionId: session.id,
+      generatedAt: '2026-04-20T07:00:00.000Z',
+      overallScore: 96,
+      dimensions: {
+        efficiency: {
+          score: 96,
+          feedback: 'The solution now uses efficient lookup.',
+          evidence: [],
+        },
+      },
+      strengths: ['Improved lookup strategy'],
+      areasForImprovement: [],
+      detailedFeedback: 'Clean regenerated report',
+      comparisonToHistory: null,
+      peerFeedbackSummary: null,
+      testCaseBreakdown: [],
+    });
+
+    const regeneratedWeaknessRows = await db
+      .select({ id: userWeaknesses.id })
+      .from(userWeaknesses)
+      .where(eq(userWeaknesses.userId, user.id));
+    const regeneratedWeaknessLinks = await db.select().from(weaknessSessions);
+
+    expect(regeneratedWeaknessRows).toEqual([]);
+    expect(regeneratedWeaknessLinks).toEqual([]);
   });
 });
 
