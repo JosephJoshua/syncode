@@ -430,6 +430,11 @@ describe('handleResult', () => {
     const room = await insertRoom(db, user.id);
     const session = await insertSession(db, room.id, { status: 'finished' });
     await insertSessionParticipant(db, session.id, user.id, 'candidate');
+    await insertSessionReport(db, session.id, {
+      userId: user.id,
+      status: 'completed',
+      generatedAt: new Date('2026-04-20T06:05:00.000Z'),
+    });
     const [staleWeakness] = await db
       .insert(userWeaknesses)
       .values({
@@ -536,6 +541,85 @@ describe('handleResult', () => {
       ]),
     );
     expect(await cacheService.get('weakness-analysis-meta:weakness-job-1')).toBeNull();
+  });
+
+  it('GIVEN stale weakness analysis metadata WHEN handling result THEN keeps newer weakness links', async () => {
+    const user = await insertUser(db);
+    const room = await insertRoom(db, user.id);
+    const session = await insertSession(db, room.id, { status: 'finished' });
+    await insertSessionParticipant(db, session.id, user.id, 'candidate');
+    await insertSessionReport(db, session.id, {
+      userId: user.id,
+      status: 'completed',
+      generatedAt: new Date('2026-04-20T06:10:00.000Z'),
+    });
+    const [currentWeakness] = await db
+      .insert(userWeaknesses)
+      .values({
+        userId: user.id,
+        category: 'communication',
+        description: 'Current weakness from newer analysis',
+        frequency: 1,
+        trend: 'stable',
+        lastSeenAt: new Date('2026-04-20T06:10:00.000Z'),
+      })
+      .returning({ id: userWeaknesses.id });
+    await db.insert(weaknessSessions).values({
+      weaknessId: currentWeakness!.id,
+      sessionId: session.id,
+      description: 'Current evidence',
+      trend: 'stable',
+      score: null,
+      reportedAt: new Date('2026-04-20T06:10:00.000Z'),
+    });
+    await cacheService.set(
+      'weakness-analysis-meta:stale-weakness-job',
+      {
+        sessionId: session.id,
+        userId: user.id,
+        reportedAt: '2026-04-20T06:05:00.000Z',
+      },
+      60,
+    );
+
+    await service.handleWeaknessAnalysisResult('stale-weakness-job', {
+      summary: 'Older analysis should not overwrite newer data.',
+      recurringPatterns: ['Older edge-case finding.'],
+      weaknesses: [
+        {
+          category: 'edge_cases',
+          description: 'Old edge-case weakness',
+          evidence: 'Old evidence',
+          trend: 'worsening',
+        },
+      ],
+    });
+
+    const weaknessRows = await db
+      .select({
+        category: userWeaknesses.category,
+        description: userWeaknesses.description,
+        trend: userWeaknesses.trend,
+      })
+      .from(userWeaknesses)
+      .where(eq(userWeaknesses.userId, user.id));
+    const weaknessLinks = await db.select().from(weaknessSessions);
+
+    expect(weaknessRows).toEqual([
+      {
+        category: 'communication',
+        description: 'Current weakness from newer analysis',
+        trend: 'stable',
+      },
+    ]);
+    expect(weaknessLinks).toEqual([
+      expect.objectContaining({
+        weaknessId: currentWeakness!.id,
+        description: 'Current evidence',
+        reportedAt: new Date('2026-04-20T06:10:00.000Z'),
+      }),
+    ]);
+    expect(await cacheService.get('weakness-analysis-meta:stale-weakness-job')).toBeNull();
   });
 });
 

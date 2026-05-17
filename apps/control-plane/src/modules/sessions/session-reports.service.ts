@@ -197,6 +197,12 @@ export class SessionReportsService {
       return;
     }
 
+    if (!(await this.isCurrentWeaknessAnalysisGeneration(meta))) {
+      this.logger.warn(`Stale weakness-analysis job ${jobId}, skipping DB persistence`);
+      await this.cacheService.del(metaKey);
+      return;
+    }
+
     await this.persistWeaknessAnalysisResult(
       meta.sessionId,
       meta.userId,
@@ -208,6 +214,22 @@ export class SessionReportsService {
     this.logger.debug(
       `Persisted weakness analysis for session ${meta.sessionId} and user ${meta.userId}`,
     );
+  }
+
+  private async isCurrentWeaknessAnalysisGeneration(
+    meta: WeaknessAnalysisJobMeta,
+  ): Promise<boolean> {
+    const row = await this.db.query.sessionReports.findFirst({
+      columns: { generatedAt: true, status: true },
+      where: (table, { and, eq }) =>
+        and(
+          eq(table.sessionId, meta.sessionId),
+          eq(table.userId, meta.userId),
+          eq(table.status, 'completed'),
+        ),
+    });
+
+    return row?.generatedAt?.toISOString() === meta.reportedAt;
   }
 
   async getReport(sessionId: string, userId: string, isAdmin: boolean): Promise<SessionReport> {
