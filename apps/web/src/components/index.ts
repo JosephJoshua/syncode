@@ -4,6 +4,7 @@ export {
   type CodeQualityDuplication,
   type CodeQualityLintIssue,
   CodeQualityPanel,
+  type CodeQualityPanelProps,
   type CodeQualitySeverity,
 } from './code-quality-panel';
 export { LanguageSelector, type LanguageSelectorProps } from './language-selector';

@@ -37,7 +37,7 @@ function buildSummary(cases) {
   return { passed, failed };
 }`;
 
-function CodeQualityPreviewPage() {
+export function CodeQualityPreviewPage() {
   const { t } = useTranslation('codeQuality');
   const analysis: CodeQualityAnalysis = {
     lintIssues: [
@@ -69,7 +69,7 @@ function CodeQualityPreviewPage() {
       {
         id: 'complexity-2',
         functionName: 'buildSummary',
-        line: 16,
+        line: 17,
         cyclomatic: 4,
         cognitive: 5,
       },
@@ -79,8 +79,8 @@ function CodeQualityPreviewPage() {
         id: 'duplication-1',
         startLine: 4,
         endLine: 12,
-        duplicateOfStartLine: 20,
-        duplicateOfEndLine: 26,
+        duplicateOfStartLine: 21,
+        duplicateOfEndLine: 27,
         similarity: 82,
         snippet: previewCode.split('\n').slice(3, 12).join('\n'),
       },

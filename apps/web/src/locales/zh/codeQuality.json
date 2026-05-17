@@ -5,7 +5,8 @@
   },
   "summary": {
     "clean": "\u6682\u65e0\u8d28\u91cf\u95ee\u9898",
-    "issueCount": "{{count}} \u4e2a\u95ee\u9898",
+    "issueCount_one": "{{count}} \u4e2a\u95ee\u9898",
+    "issueCount_other": "{{count}} \u4e2a\u95ee\u9898",
     "lint": "Lint \u95ee\u9898",
     "complexity": "\u590d\u6742\u51fd\u6570",
     "duplication": "\u91cd\u590d\u4ee3\u7801"
@@ -26,6 +27,7 @@
     "empty": "\u672a\u68c0\u6d4b\u5230\u590d\u6742\u51fd\u6570\u3002",
     "cyclomatic": "\u5708\u590d\u6742\u5ea6 {{value}}",
     "cognitive": "\u8ba4\u77e5\u590d\u6742\u5ea6 {{value}}",
+    "scoreLabel": "{{functionName}} \u590d\u6742\u5ea6\u5206\u6570 {{score}}",
     "status": {
       "healthy": "\u5065\u5eb7",
       "moderate": "\u4e2d\u7b49",

@@ -5,7 +5,8 @@
   },
   "summary": {
     "clean": "No quality issues",
-    "issueCount": "{{count}} issues",
+    "issueCount_one": "{{count}} issue",
+    "issueCount_other": "{{count}} issues",
     "lint": "Lint issues",
     "complexity": "Complex functions",
     "duplication": "Duplications"
@@ -26,6 +27,7 @@
     "empty": "No complex functions detected.",
     "cyclomatic": "Cyclomatic {{value}}",
     "cognitive": "Cognitive {{value}}",
+    "scoreLabel": "{{functionName}} complexity score {{score}}",
     "status": {
       "healthy": "Healthy",
       "moderate": "Moderate",

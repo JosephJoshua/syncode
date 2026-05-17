@@ -48,7 +48,7 @@ export interface CodeQualityAnalysis {
   readonly duplications: CodeQualityDuplication[];
 }
 
-interface CodeQualityPanelProps {
+export interface CodeQualityPanelProps {
   readonly analysis: CodeQualityAnalysis;
   readonly code: string;
   readonly className?: string;
@@ -101,8 +101,8 @@ export function CodeQualityPanel({
             <SummaryTile
               icon={<Gauge className="size-4" />}
               label={t('summary.complexity')}
-              value={summary.highComplexityCount}
-              tone={summary.highComplexityCount > 0 ? 'warning' : 'success'}
+              value={summary.complexityIssueCount}
+              tone={summary.complexityIssueCount > 0 ? 'warning' : 'success'}
             />
             <SummaryTile
               icon={<Copy className="size-4" />}
@@ -128,7 +128,9 @@ export function CodeQualityPanel({
                         {t(`severity.${issue.severity}`)}
                       </Badge>
                       <span className="font-mono text-xs text-muted-foreground">
-                        {t('lineColumn', { line: issue.line, column: issue.column ?? 1 })}
+                        {issue.column
+                          ? t('lineColumn', { line: issue.line, column: issue.column })
+                          : t('line', { line: issue.line })}
                       </span>
                       <span className="font-mono text-xs text-muted-foreground">{issue.rule}</span>
                     </div>
@@ -167,7 +169,14 @@ export function CodeQualityPanel({
                           {t(`complexity.status.${getComplexityStatus(score)}`)}
                         </Badge>
                       </div>
-                      <Progress className="mt-3 h-2" value={Math.min(score, 100)} />
+                      <Progress
+                        aria-label={t('complexity.scoreLabel', {
+                          functionName: metric.functionName,
+                          score: Math.min(score, 100),
+                        })}
+                        className="mt-3 h-2"
+                        value={Math.min(score, 100)}
+                      />
                       <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
                         <span>{t('complexity.cyclomatic', { value: metric.cyclomatic })}</span>
                         <span>{t('complexity.cognitive', { value: metric.cognitive })}</span>
@@ -200,6 +209,7 @@ export function CodeQualityPanel({
                       highlight,
                     )}
                     aria-label={t('editor.selectLine', { line: lineNumber })}
+                    aria-pressed={lineNumber === selectedLine}
                     onClick={() => selectLine(lineNumber)}
                   >
                     <span className="select-none text-right text-muted-foreground/60">
@@ -299,13 +309,13 @@ const severityVariant: Record<CodeQualitySeverity, 'destructive' | 'warning' | '
 };
 
 function summarizeAnalysis(analysis: CodeQualityAnalysis) {
+  const complexityIssueCount = analysis.complexity.filter(
+    (metric) => getComplexityScore(metric) >= 40,
+  ).length;
+
   return {
-    issueCount:
-      analysis.lintIssues.length +
-      analysis.duplications.length +
-      analysis.complexity.filter((metric) => getComplexityScore(metric) >= 70).length,
-    highComplexityCount: analysis.complexity.filter((metric) => getComplexityScore(metric) >= 70)
-      .length,
+    issueCount: analysis.lintIssues.length + analysis.duplications.length + complexityIssueCount,
+    complexityIssueCount,
   };
 }
 
@@ -335,19 +345,19 @@ function getLineHighlight(
     return 'bg-primary/15 ring-1 ring-primary/30';
   }
 
-  if (analysis.lintIssues.some((issue) => issue.line === line)) {
-    return 'bg-warning/10';
+  const hasLintIssue = analysis.lintIssues.some((issue) => issue.line === line);
+  const hasDuplication = analysis.duplications.some(
+    (item) =>
+      (line >= item.startLine && line <= item.endLine) ||
+      (line >= item.duplicateOfStartLine && line <= item.duplicateOfEndLine),
+  );
+
+  if (hasLintIssue && hasDuplication) {
+    return 'bg-warning/10 ring-1 ring-destructive/30';
   }
 
-  if (
-    analysis.duplications.some(
-      (item) =>
-        (line >= item.startLine && line <= item.endLine) ||
-        (line >= item.duplicateOfStartLine && line <= item.duplicateOfEndLine),
-    )
-  ) {
-    return 'bg-destructive/10';
-  }
+  if (hasLintIssue) return 'bg-warning/10';
+  if (hasDuplication) return 'bg-destructive/10';
 
   return 'hover:bg-muted/50';
 }
