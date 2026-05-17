@@ -26,6 +26,7 @@ import { Route as AppRoomsRoomIdRouteImport } from './routes/_app/rooms_.$roomId
 import { Route as AppRoomsBrowseRouteImport } from './routes/_app/rooms/browse'
 import { Route as AppProblemsProblemIdRouteImport } from './routes/_app/problems.$problemId'
 import { Route as AppAdminUsersRouteImport } from './routes/_app/admin.users'
+import { Route as AppAdminAuditLogsRouteImport } from './routes/_app/admin.audit-logs'
 
 const PublicRouteRoute = PublicRouteRouteImport.update({
   id: '/_public',
@@ -110,6 +111,11 @@ const AppAdminUsersRoute = AppAdminUsersRouteImport.update({
   path: '/admin/users',
   getParentRoute: () => AppRouteRoute,
 } as any)
+const AppAdminAuditLogsRoute = AppAdminAuditLogsRouteImport.update({
+  id: '/admin/audit-logs',
+  path: '/admin/audit-logs',
+  getParentRoute: () => AppRouteRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof PublicIndexRoute
@@ -119,6 +125,7 @@ export interface FileRoutesByFullPath {
   '/profile': typeof AppProfileRoute
   '/login': typeof PublicLoginRoute
   '/register': typeof PublicRegisterRoute
+  '/admin/audit-logs': typeof AppAdminAuditLogsRoute
   '/admin/users': typeof AppAdminUsersRoute
   '/problems/$problemId': typeof AppProblemsProblemIdRoute
   '/rooms/browse': typeof AppRoomsBrowseRoute
@@ -135,6 +142,7 @@ export interface FileRoutesByTo {
   '/profile': typeof AppProfileRoute
   '/login': typeof PublicLoginRoute
   '/register': typeof PublicRegisterRoute
+  '/admin/audit-logs': typeof AppAdminAuditLogsRoute
   '/admin/users': typeof AppAdminUsersRoute
   '/problems/$problemId': typeof AppProblemsProblemIdRoute
   '/rooms/browse': typeof AppRoomsBrowseRoute
@@ -155,6 +163,7 @@ export interface FileRoutesById {
   '/_public/login': typeof PublicLoginRoute
   '/_public/register': typeof PublicRegisterRoute
   '/_public/': typeof PublicIndexRoute
+  '/_app/admin/audit-logs': typeof AppAdminAuditLogsRoute
   '/_app/admin/users': typeof AppAdminUsersRoute
   '/_app/problems/$problemId': typeof AppProblemsProblemIdRoute
   '/_app/rooms/browse': typeof AppRoomsBrowseRoute
@@ -174,6 +183,7 @@ export interface FileRouteTypes {
     | '/profile'
     | '/login'
     | '/register'
+    | '/admin/audit-logs'
     | '/admin/users'
     | '/problems/$problemId'
     | '/rooms/browse'
@@ -190,6 +200,7 @@ export interface FileRouteTypes {
     | '/profile'
     | '/login'
     | '/register'
+    | '/admin/audit-logs'
     | '/admin/users'
     | '/problems/$problemId'
     | '/rooms/browse'
@@ -209,6 +220,7 @@ export interface FileRouteTypes {
     | '/_public/login'
     | '/_public/register'
     | '/_public/'
+    | '/_app/admin/audit-logs'
     | '/_app/admin/users'
     | '/_app/problems/$problemId'
     | '/_app/rooms/browse'
@@ -345,6 +357,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAdminUsersRouteImport
       parentRoute: typeof AppRouteRoute
     }
+    '/_app/admin/audit-logs': {
+      id: '/_app/admin/audit-logs'
+      path: '/admin/audit-logs'
+      fullPath: '/admin/audit-logs'
+      preLoaderRoute: typeof AppAdminAuditLogsRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
   }
 }
 
@@ -367,6 +386,7 @@ interface AppRouteRouteChildren {
   AppBookmarksRoute: typeof AppBookmarksRoute
   AppDashboardRoute: typeof AppDashboardRoute
   AppProfileRoute: typeof AppProfileRoute
+  AppAdminAuditLogsRoute: typeof AppAdminAuditLogsRoute
   AppAdminUsersRoute: typeof AppAdminUsersRoute
   AppProblemsProblemIdRoute: typeof AppProblemsProblemIdRoute
   AppRoomsRoomIdRoute: typeof AppRoomsRoomIdRoute
@@ -380,6 +400,7 @@ const AppRouteRouteChildren: AppRouteRouteChildren = {
   AppBookmarksRoute: AppBookmarksRoute,
   AppDashboardRoute: AppDashboardRoute,
   AppProfileRoute: AppProfileRoute,
+  AppAdminAuditLogsRoute: AppAdminAuditLogsRoute,
   AppAdminUsersRoute: AppAdminUsersRoute,
   AppProblemsProblemIdRoute: AppProblemsProblemIdRoute,
   AppRoomsRoomIdRoute: AppRoomsRoomIdRoute,

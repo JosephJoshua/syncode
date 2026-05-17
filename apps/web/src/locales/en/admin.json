@@ -1,5 +1,9 @@
 {
   "nav": "Admin",
+  "navLinks": {
+    "users": "Users",
+    "auditLogs": "Audit logs"
+  },
   "users": {
     "heading": "User management",
     "sub": "Review accounts, search by identity, and control access for banned users.",
@@ -63,5 +67,60 @@
       "next": "Next",
       "ariaLabel": "User pages"
     }
+  },
+  "audit": {
+    "heading": "Audit logs",
+    "sub": "Search sensitive activity across authentication, account, and admin operations.",
+    "forbidden": {
+      "title": "Admin access required",
+      "description": "This area is only available to SynCode administrators."
+    },
+    "filters": {
+      "searchLabel": "Search",
+      "searchPlaceholder": "Search actor, action, or target",
+      "actionLabel": "Action",
+      "actionPlaceholder": "auth.login",
+      "fromLabel": "From",
+      "toLabel": "To",
+      "datePlaceholder": "Pick date",
+      "previousMonth": "Previous month",
+      "nextMonth": "Next month",
+      "selectDate": "Select {{date}}",
+      "clearDate": "Clear date",
+      "clear": "Clear"
+    },
+    "table": {
+      "timestamp": "Timestamp",
+      "actor": "Actor",
+      "action": "Action",
+      "target": "Target",
+      "ip": "IP",
+      "details": "Details"
+    },
+    "actions": {
+      "refresh": "Refresh",
+      "expand": "Show details",
+      "collapse": "Hide details"
+    },
+    "empty": {
+      "title": "No audit logs found",
+      "description": "Try widening your search or date range."
+    },
+    "feedback": {
+      "loadErrorTitle": "Audit logs failed to load",
+      "loadError": "Could not load audit logs."
+    },
+    "metadata": {
+      "title": "Metadata",
+      "empty": "No metadata"
+    },
+    "pagination": {
+      "summary": "{{count}} logs on this page",
+      "previous": "Previous",
+      "next": "Next",
+      "ariaLabel": "Audit log pages"
+    },
+    "unknownActor": "System",
+    "emptyValue": "None"
   }
 }
