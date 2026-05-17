@@ -259,7 +259,7 @@ function sanitizeReportText(value: string | undefined, maxLength: number): strin
 
   const normalized = Array.from(value)
     .filter((char) => {
-      const code = char.charCodeAt(0);
+      const code = char.codePointAt(0) ?? 0;
       return code === 9 || code === 10 || (code >= 32 && code !== 127);
     })
     .join('')
@@ -571,28 +571,126 @@ function normalizeLineReference(reference: string, finalCode: string) {
   const lines = finalCode.trim().length > 0 ? finalCode.split('\n') : [];
   const lineCount = lines.length;
 
-  const withSnippet = /^(L\d+(?:-L\d+)?)(?::|\||\s+-\s+|\s+)(.+)$/i.exec(trimmed);
-  if (withSnippet?.[1] && withSnippet[2]) {
-    const normalizedRange = normalizeValidLineRange(withSnippet[1], lineCount);
-    return normalizedRange && snippetMatchesLineRange(withSnippet[2], normalizedRange, lines)
-      ? `${normalizedRange}: ${normalizeCodeExcerpt(withSnippet[2])}`
+  const lineMarker = parseLineMarkerReference(trimmed);
+  if (lineMarker) {
+    const normalizedRange = normalizeValidLineRange(lineMarker.range, lineCount);
+    return normalizedRange && snippetMatchesLineRange(lineMarker.snippet, normalizedRange, lines)
+      ? `${normalizedRange}: ${normalizeCodeExcerpt(lineMarker.snippet)}`
       : null;
   }
 
-  const lineWord = /^line\s+(\d+)(?:\s*(?:-|to)\s*(?:line\s*)?(\d+))?(?::|\s+-\s+|\s+)(.+)$/i.exec(
-    trimmed,
-  );
-  if (lineWord?.[1] && lineWord[3]) {
+  const lineWord = parseLineWordReference(trimmed);
+  if (lineWord) {
     const normalizedRange = normalizeValidLineRange(
-      lineWord[2] ? `L${lineWord[1]}-L${lineWord[2]}` : `L${lineWord[1]}`,
+      lineWord.endLine ? `L${lineWord.startLine}-L${lineWord.endLine}` : `L${lineWord.startLine}`,
       lineCount,
     );
-    return normalizedRange && snippetMatchesLineRange(lineWord[3], normalizedRange, lines)
-      ? `${normalizedRange}: ${normalizeCodeExcerpt(lineWord[3])}`
+    return normalizedRange && snippetMatchesLineRange(lineWord.snippet, normalizedRange, lines)
+      ? `${normalizedRange}: ${normalizeCodeExcerpt(lineWord.snippet)}`
       : null;
   }
 
   return null;
+}
+
+function parseLineMarkerReference(reference: string): { range: string; snippet: string } | null {
+  if (!reference.startsWith('L') && !reference.startsWith('l')) {
+    return null;
+  }
+
+  const start = readDigits(reference, 1);
+  if (!start) {
+    return null;
+  }
+
+  let range = `L${start.value}`;
+  let index = start.nextIndex;
+  if (reference[index] === '-' && isLineMarker(reference[index + 1])) {
+    const end = readDigits(reference, index + 2);
+    if (!end) {
+      return null;
+    }
+    range = `${range}-L${end.value}`;
+    index = end.nextIndex;
+  }
+
+  const snippet = parseLineReferenceSnippet(reference.slice(index));
+  return snippet ? { range, snippet } : null;
+}
+
+function parseLineWordReference(
+  reference: string,
+): { startLine: string; endLine?: string; snippet: string } | null {
+  if (!reference.slice(0, 4).toLowerCase().startsWith('line')) {
+    return null;
+  }
+
+  let index = skipWhitespace(reference, 4);
+  if (index === 4) {
+    return null;
+  }
+
+  const start = readDigits(reference, index);
+  if (!start) {
+    return null;
+  }
+  index = skipWhitespace(reference, start.nextIndex);
+
+  const range = parseLineWordRange(reference, index);
+  if (range) {
+    return buildParsedLineWordReference(start.value, range.endLine, range.remainder);
+  }
+
+  return buildParsedLineWordReference(start.value, undefined, reference.slice(index));
+}
+
+function parseLineWordRange(
+  reference: string,
+  index: number,
+): { endLine: string; remainder: string } | null {
+  let nextIndex = index;
+  if (reference[nextIndex] === '-') {
+    nextIndex = skipWhitespace(reference, nextIndex + 1);
+  } else if (reference.slice(nextIndex, nextIndex + 2).toLowerCase() === 'to') {
+    nextIndex = skipWhitespace(reference, nextIndex + 2);
+  } else {
+    return null;
+  }
+
+  if (reference.slice(nextIndex, nextIndex + 4).toLowerCase() === 'line') {
+    nextIndex = skipWhitespace(reference, nextIndex + 4);
+  }
+
+  const end = readDigits(reference, nextIndex);
+  if (!end) {
+    return null;
+  }
+
+  return {
+    endLine: end.value,
+    remainder: reference.slice(skipWhitespace(reference, end.nextIndex)),
+  };
+}
+
+function buildParsedLineWordReference(
+  startLine: string,
+  endLine: string | undefined,
+  rawSnippet: string,
+) {
+  const snippet = parseLineReferenceSnippet(rawSnippet);
+  return snippet ? { startLine, endLine, snippet } : null;
+}
+
+function parseLineReferenceSnippet(value: string) {
+  if (!value || (!isWhitespace(value[0]) && value[0] !== ':' && value[0] !== '|')) {
+    return null;
+  }
+
+  const trimmed = value.trimStart();
+  if (trimmed.startsWith(':') || trimmed.startsWith('|') || trimmed.startsWith('-')) {
+    return trimmed.slice(1).trim();
+  }
+  return trimmed.trim();
 }
 
 function snippetMatchesLineRange(snippet: string, normalizedRange: string, lines: string[]) {
@@ -613,10 +711,33 @@ function snippetMatchesLineRange(snippet: string, normalizedRange: string, lines
 }
 
 function normalizeCodeExcerpt(value: string) {
-  return value
-    .trim()
-    .replace(/^['"`]+|['"`]+$/g, '')
-    .replace(/\s+/g, ' ');
+  return collapseWhitespace(stripWrappingQuoteChars(value.trim()));
+}
+
+function stripWrappingQuoteChars(value: string) {
+  let start = 0;
+  let end = value.length;
+  while (start < end && isQuoteChar(value[start])) {
+    start += 1;
+  }
+  while (end > start && isQuoteChar(value[end - 1])) {
+    end -= 1;
+  }
+  return value.slice(start, end);
+}
+
+function collapseWhitespace(value: string) {
+  return value.split('').reduce(
+    (state, char) => {
+      if (isWhitespace(char)) {
+        return state.previousWasWhitespace
+          ? state
+          : { text: `${state.text} `, previousWasWhitespace: true };
+      }
+      return { text: `${state.text}${char}`, previousWasWhitespace: false };
+    },
+    { text: '', previousWasWhitespace: false },
+  ).text;
 }
 
 function normalizeValidLineRange(reference: string, lineCount: number) {
@@ -624,13 +745,12 @@ function normalizeValidLineRange(reference: string, lineCount: number) {
     return null;
   }
 
-  const match = /^L(\d+)(?:-L(\d+))?$/i.exec(reference);
-  if (!match?.[1]) {
+  const range = parseNormalizedLineRange(reference);
+  if (!range) {
     return null;
   }
 
-  const start = Number(match[1]);
-  const end = match[2] ? Number(match[2]) : start;
+  const { start, end } = range;
   if (!Number.isInteger(start) || !Number.isInteger(end)) {
     return null;
   }
@@ -640,6 +760,76 @@ function normalizeValidLineRange(reference: string, lineCount: number) {
   }
 
   return start === end ? `L${start}` : `L${start}-L${end}`;
+}
+
+function parseNormalizedLineRange(reference: string): { start: number; end: number } | null {
+  if (!isLineMarker(reference[0])) {
+    return null;
+  }
+
+  const start = readDigits(reference, 1);
+  if (!start) {
+    return null;
+  }
+
+  if (start.nextIndex === reference.length) {
+    const line = Number(start.value);
+    return { start: line, end: line };
+  }
+
+  if (reference[start.nextIndex] !== '-' || !isLineMarker(reference[start.nextIndex + 1])) {
+    return null;
+  }
+
+  const end = readDigits(reference, start.nextIndex + 2);
+  if (!end || end.nextIndex !== reference.length) {
+    return null;
+  }
+
+  return { start: Number(start.value), end: Number(end.value) };
+}
+
+function readDigits(
+  value: string,
+  startIndex: number,
+): { value: string; nextIndex: number } | null {
+  let index = startIndex;
+  while (index < value.length && isDigit(value[index])) {
+    index += 1;
+  }
+
+  if (index === startIndex) {
+    return null;
+  }
+
+  return {
+    value: value.slice(startIndex, index),
+    nextIndex: index,
+  };
+}
+
+function skipWhitespace(value: string, startIndex: number) {
+  let index = startIndex;
+  while (index < value.length && isWhitespace(value[index])) {
+    index += 1;
+  }
+  return index;
+}
+
+function isLineMarker(value: string | undefined) {
+  return value === 'L' || value === 'l';
+}
+
+function isDigit(value: string | undefined) {
+  return value !== undefined && value >= '0' && value <= '9';
+}
+
+function isQuoteChar(value: string | undefined) {
+  return value === "'" || value === '"' || value === '`';
+}
+
+function isWhitespace(value: string | undefined) {
+  return value === ' ' || value === '\t' || value === '\n' || value === '\r';
 }
 
 function isGenericEvidenceReference(reference: string) {

@@ -163,7 +163,7 @@ function sanitizeUntrustedText(
 ): string {
   const withoutControlChars = Array.from(rawValue ?? '')
     .filter((char) => {
-      const code = char.charCodeAt(0);
+      const code = char.codePointAt(0) ?? 0;
       return code === 9 || code === 10 || (code >= 32 && code !== 127);
     })
     .join('');
