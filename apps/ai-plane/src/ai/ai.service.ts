@@ -80,7 +80,7 @@ interface HintProcessingContext {
 
 interface ParsedInterviewResponse {
   message: string;
-  followUpQuestion?: string;
+  followUpQuestion: string;
   codeAnnotations?: Array<{ line: number; comment: string }>;
 }
 
@@ -94,7 +94,7 @@ export class AiService {
   });
   private static readonly interviewResponseSchema = z.object({
     message: z.string().min(1),
-    followUpQuestion: z.string().min(1).optional(),
+    followUpQuestion: z.string().min(1),
     codeAnnotations: z
       .array(
         z.object({
@@ -856,68 +856,101 @@ export class AiService {
   }
 
   private postProcessInterviewResponse(response: ParsedInterviewResponse): ParsedInterviewResponse {
-    const message = this.normalizeHintText(response.message, 'hint');
-    const followUpQuestion = this.normalizeHintText(response.followUpQuestion, 'reflectionPrompt');
+    const message = this.sanitizeInterviewOutputText(
+      response.message,
+      "That's a reasonable direction. Talk me through the invariant your approach maintains.",
+      'message',
+    );
+    const followUpQuestion = this.sanitizeInterviewOutputText(
+      response.followUpQuestion,
+      'Which state are you updating each iteration, and why does it stay correct?',
+      'followUpQuestion',
+    );
     const codeAnnotations = response.codeAnnotations
       ?.map((annotation) => ({
         line: annotation.line,
-        comment:
-          this.normalizeHintText(annotation.comment, 'suggestedApproach') ??
+        comment: this.sanitizeInterviewOutputText(
+          annotation.comment,
           'Consider clarifying this step.',
+          'codeAnnotation',
+        ),
       }))
       .filter((annotation) => annotation.comment.length > 0)
       .slice(0, 3);
 
     return {
-      message: this.truncateHintText(
-        message ??
-          "That's a reasonable direction. Talk me through the invariant your approach maintains.",
-        MAX_INTERVIEW_MESSAGE_LENGTH,
-      ),
-      followUpQuestion: followUpQuestion
-        ? this.truncateHintText(followUpQuestion, MAX_INTERVIEW_QUESTION_LENGTH)
-        : undefined,
+      message: this.truncateHintText(message, MAX_INTERVIEW_MESSAGE_LENGTH),
+      followUpQuestion: this.truncateHintText(followUpQuestion, MAX_INTERVIEW_QUESTION_LENGTH),
       codeAnnotations: codeAnnotations && codeAnnotations.length > 0 ? codeAnnotations : undefined,
     };
+  }
+
+  private sanitizeInterviewOutputText(
+    value: string | undefined,
+    fallback: string,
+    field: 'message' | 'followUpQuestion' | 'codeAnnotation',
+  ): string {
+    const normalized = this.normalizeHintText(
+      value,
+      field === 'message'
+        ? 'hint'
+        : field === 'followUpQuestion'
+          ? 'reflectionPrompt'
+          : 'suggestedApproach',
+    );
+    if (!normalized || this.isUnsafeModelText(normalized)) {
+      this.logger.warn(`Using safe fallback for unsafe or empty interview ${field}`);
+      return fallback;
+    }
+    return normalized;
   }
 
   private async generateInterviewAudio(
     request: InterviewResponseRequest,
     response: ParsedInterviewResponse,
-  ): Promise<InterviewResponseAudio> {
+  ): Promise<InterviewResponseAudio | undefined> {
     const spokenText = [response.message, response.followUpQuestion].filter(Boolean).join(' ');
-    const speech = await this.llmProvider.generateSpeech({
-      text: spokenText,
-      format: 'mp3',
-    });
+    try {
+      const speech = await this.llmProvider.generateSpeech({
+        text: spokenText,
+        format: 'mp3',
+      });
 
-    const audioKey = [
-      'ai',
-      'interview',
-      request.roomId,
-      request.participantId,
-      `${randomUUID()}.mp3`,
-    ].join('/');
+      const audioKey = [
+        'ai',
+        'interview',
+        request.roomId,
+        request.participantId,
+        `${randomUUID()}.mp3`,
+      ].join('/');
 
-    await this.storageService.upload(audioKey, speech.audio, {
-      contentType: speech.mimeType,
-      metadata: {
-        roomId: request.roomId,
-        participantId: request.participantId,
-        model: speech.model,
-      },
-    });
+      await this.storageService.upload(audioKey, speech.audio, {
+        contentType: speech.mimeType,
+        metadata: {
+          roomId: request.roomId,
+          participantId: request.participantId,
+          model: speech.model,
+        },
+      });
 
-    const downloadUrl = await this.storageService.getDownloadUrl(
-      audioKey,
-      INTERVIEW_AUDIO_URL_TTL_SECS,
-    );
+      const downloadUrl = await this.storageService.getDownloadUrl(
+        audioKey,
+        INTERVIEW_AUDIO_URL_TTL_SECS,
+      );
 
-    return {
-      audioKey,
-      mimeType: speech.mimeType,
-      downloadUrl,
-    };
+      return {
+        audioKey,
+        mimeType: speech.mimeType,
+        downloadUrl,
+      };
+    } catch (error) {
+      this.logger.warn(
+        `Interview audio generation failed for room ${request.roomId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      return undefined;
+    }
   }
 
   private resolveInterviewModel(): string {

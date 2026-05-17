@@ -39,7 +39,7 @@ export class OpenAiCompatibleLlmProvider implements ILlmProvider {
   static fromEnv(config: EnvConfig): OpenAiCompatibleLlmProvider {
     return new OpenAiCompatibleLlmProvider({
       baseUrl: config.AI_PLATFORM_BASE_URL,
-      apiKey: config.AI_PLATFORM_API_KEY ?? '',
+      apiKey: config.AI_PLATFORM_API_KEY,
       model: config.AI_PLATFORM_MODEL,
       ttsModel: config.AI_TTS_MODEL,
       ttsVoice: config.AI_TTS_VOICE,

@@ -24,6 +24,7 @@
     "infra:down": "docker compose down",
     "infra:full": "docker compose up -d",
     "infra:logs": "docker compose logs -f",
+    "test:ai-api": "pnpm --filter @syncode/ai-plane exec tsx ../../scripts/testing-ai-api.ts",
     "clean": "node scripts/clean.mjs",
     "prepare": "husky"
   },

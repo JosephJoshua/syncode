@@ -1,5 +1,5 @@
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 interface EnvMap {
@@ -65,6 +65,7 @@ async function main() {
 
   if (options.saveAudio) {
     const outputPath = resolve(rootDir, options.saveAudio);
+    mkdirSync(dirname(outputPath), { recursive: true });
     writeFileSync(outputPath, audioResponse.audio);
     console.log(`saved: ${outputPath}`);
   }
@@ -183,7 +184,7 @@ function parseArgs(args: string[]): CliOptions {
   for (let index = 0; index < args.length; index += 1) {
     const value = args[index];
 
-    if (!value) {
+    if (!value || value === '--') {
       continue;
     }
 
@@ -265,9 +266,9 @@ function parseArgs(args: string[]): CliOptions {
 
 function printUsage() {
   console.log(`Usage:
-  pnpm.cmd exec tsx scripts/testing-ai-api.ts --prompt "Explain two pointers"
-  pnpm.cmd exec tsx scripts/testing-ai-api.ts "Explain two pointers"
-  pnpm.cmd exec tsx scripts/testing-ai-api.ts --prompt "Ask one interview follow-up" --tts --save-audio tmp/interview.mp3
+  pnpm test:ai-api -- --prompt "Explain two pointers"
+  pnpm test:ai-api -- "Explain two pointers"
+  pnpm test:ai-api -- --prompt "Ask one interview follow-up" --tts --save-audio tmp/interview.mp3
 
 Options:
   --prompt <text>        Prompt sent as the user message

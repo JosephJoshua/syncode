@@ -65,7 +65,7 @@ export interface InterviewResponseAudio {
 
 export interface InterviewResponseResult {
   message: string;
-  followUpQuestion?: string;
+  followUpQuestion: string;
   codeAnnotations?: Array<{ line: number; comment: string }>;
   audio?: InterviewResponseAudio;
 }

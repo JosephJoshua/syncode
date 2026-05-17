@@ -89,38 +89,50 @@ describe('AiProcessor', () => {
         {
           provide: LLM_PROVIDER,
           useValue: {
-            generateText: vi.fn().mockImplementation(async (input: { jsonMode?: boolean }) => {
-              if (input.jsonMode) {
+            generateText: vi
+              .fn()
+              .mockImplementation(async (input: { maxOutputTokens?: number }) => {
+                if (input.maxOutputTokens === 600) {
+                  return {
+                    text: JSON.stringify({
+                      message: 'Can you explain the invariant your map maintains?',
+                      followUpQuestion:
+                        'Why is checking the complement before inserting the current value safe?',
+                      codeAnnotations: [{ line: 1, comment: 'Name the state you are tracking.' }],
+                    }),
+                    model: 'qwen3.5-mini',
+                  };
+                }
+
+                if (input.maxOutputTokens === 2500) {
+                  return {
+                    text: JSON.stringify({
+                      overallScore: 82,
+                      dimensions: {
+                        correctness: { score: 84, feedback: 'Correctness', evidence: [] },
+                        efficiency: { score: 78, feedback: 'Efficiency', evidence: [] },
+                        codeQuality: { score: 80, feedback: 'Code quality', evidence: [] },
+                        communication: { score: 76, feedback: 'Communication', evidence: [] },
+                        problemSolving: { score: 83, feedback: 'Problem solving', evidence: [] },
+                      },
+                      strengths: ['Strong iteration'],
+                      areasForImprovement: ['Explain tradeoffs earlier'],
+                      detailedFeedback: 'Detailed feedback',
+                      comparisonToHistory: null,
+                      peerFeedbackSummary: null,
+                    }),
+                    model: 'qwen3.5-mini',
+                  };
+                }
+
                 return {
                   text: JSON.stringify({
-                    overallScore: 82,
-                    dimensions: {
-                      correctness: { score: 84, feedback: 'Correctness', evidence: [] },
-                      efficiency: { score: 78, feedback: 'Efficiency', evidence: [] },
-                      codeQuality: { score: 80, feedback: 'Code quality', evidence: [] },
-                      communication: { score: 76, feedback: 'Communication', evidence: [] },
-                      problemSolving: { score: 83, feedback: 'Problem solving', evidence: [] },
-                    },
-                    strengths: ['Strong iteration'],
-                    areasForImprovement: ['Explain tradeoffs earlier'],
-                    detailedFeedback: 'Detailed feedback',
-                    comparisonToHistory: null,
-                    peerFeedbackSummary: null,
+                    hint: 'Consider storing seen values in a map.',
+                    suggestedApproach: 'Track complement values while iterating.',
                   }),
                   model: 'qwen3.5-mini',
                 };
-              }
-
-              return {
-                text: JSON.stringify({
-                  message: 'Can you explain the invariant your map maintains?',
-                  followUpQuestion:
-                    'Why is checking the complement before inserting the current value safe?',
-                  codeAnnotations: [{ line: 1, comment: 'Name the state you are tracking.' }],
-                }),
-                model: 'qwen3.5-mini',
-              };
-            }),
+              }),
             generateSpeech: vi.fn().mockResolvedValue({
               audio: Buffer.from('speech-bytes'),
               model: 'qwen-tts',
@@ -240,7 +252,13 @@ describe('AiProcessor', () => {
         'interview-result',
         expect.objectContaining({
           jobId: 'interview-job-1',
-          message: expect.any(String),
+          message: 'Can you explain the invariant your map maintains?',
+          followUpQuestion:
+            'Why is checking the complement before inserting the current value safe?',
+          codeAnnotations: [{ line: 1, comment: 'Name the state you are tracking.' }],
+          audio: expect.objectContaining({
+            downloadUrl: 'https://storage.example/interview-audio.mp3',
+          }),
         }),
       );
     });
