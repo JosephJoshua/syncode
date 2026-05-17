@@ -49,6 +49,7 @@ import {
   DestroyRoomResponseDto,
   EnsureCollabResponseDto,
   GetRoomAiHintResultResponseDto,
+  GetRoomCodeAnalysisResultResponseDto,
   JoinRoomDto,
   JoinRoomResponseDto,
   ListRoomsQueryDto,
@@ -57,6 +58,8 @@ import {
   MediaTokenResponseDto,
   RequestRoomAiHintDto,
   RequestRoomAiHintResponseDto,
+  RequestRoomCodeAnalysisDto,
+  RequestRoomCodeAnalysisResponseDto,
   RoomChatMediaUploadDto,
   RoomChatMediaUploadResponseDto,
   RoomDetailDto,
@@ -379,6 +382,83 @@ export class RoomsController {
     @Param('jobId') jobId: string,
   ): Promise<GetRoomAiHintResultResponseDto> {
     return this.roomsService.getAiHintResult(id, user.id, jobId);
+  }
+
+  @Post(CONTROL_API.ROOMS.CODE_ANALYSIS.route)
+  @HttpCode(202)
+  @ApiOperation({
+    summary: 'Submit AI code analysis job for current code',
+    description:
+      'Returns immediately with the job ID. Poll GET /rooms/:id/ai/code-analysis/:jobId for the result.',
+  })
+  @ApiParam({ name: 'id', description: 'Room ID (UUID)' })
+  @ApiBody({ type: RequestRoomCodeAnalysisDto })
+  @ApiResponse({
+    status: 202,
+    type: RequestRoomCodeAnalysisResponseDto,
+    description: 'Code analysis job submitted',
+  })
+  @ApiResponse({
+    status: 403,
+    type: ErrorResponseDto,
+    description: 'No ai:request-hint capability',
+  })
+  @ApiResponse({
+    status: 400,
+    type: ErrorResponseDto,
+    description: 'Validation failed',
+  })
+  @ApiResponse({
+    status: 404,
+    type: ErrorResponseDto,
+    description: 'No problem selected in room',
+  })
+  @ApiResponse({
+    status: 429,
+    type: ErrorResponseDto,
+    description: 'Code analysis rate limit exceeded (10 per 5 minutes)',
+  })
+  @ApiResponse({
+    status: 503,
+    type: ErrorResponseDto,
+    description: 'AI service unavailable',
+  })
+  async requestCodeAnalysis(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() body: RequestRoomCodeAnalysisDto,
+  ): Promise<RequestRoomCodeAnalysisResponseDto> {
+    return this.roomsService.requestCodeAnalysis(id, user.id, body);
+  }
+
+  @Get(CONTROL_API.ROOMS.CODE_ANALYSIS_RESULT.route)
+  @ApiOperation({ summary: 'Poll AI code analysis job result' })
+  @ApiParam({ name: 'id', description: 'Room ID (UUID)' })
+  @ApiParam({
+    name: 'jobId',
+    description: 'AI code analysis job ID returned from POST /ai/code-analysis',
+  })
+  @ApiResponse({
+    status: 200,
+    type: GetRoomCodeAnalysisResultResponseDto,
+    description: 'Code analysis job status: pending, ready, or failed',
+  })
+  @ApiResponse({
+    status: 403,
+    type: ErrorResponseDto,
+    description: 'Not a participant of this room',
+  })
+  @ApiResponse({
+    status: 404,
+    type: ErrorResponseDto,
+    description: 'Job not found, expired, or not owned by caller',
+  })
+  async getCodeAnalysisResult(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Param('jobId') jobId: string,
+  ): Promise<GetRoomCodeAnalysisResultResponseDto> {
+    return this.roomsService.getCodeAnalysisResult(id, user.id, jobId);
   }
 
   @Post(CONTROL_API.ROOMS.CHAT_MEDIA_UPLOAD_URL.route)

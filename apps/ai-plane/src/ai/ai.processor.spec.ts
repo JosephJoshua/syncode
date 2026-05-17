@@ -1,5 +1,7 @@
 import { Test } from '@nestjs/testing';
 import {
+  AI_CODE_ANALYSIS_QUEUE,
+  AI_CODE_ANALYSIS_RESULT_QUEUE,
   AI_HINT_QUEUE,
   AI_HINT_RESULT_QUEUE,
   AI_INTERVIEW_QUEUE,
@@ -104,6 +106,25 @@ describe('AiProcessor', () => {
                   };
                 }
 
+                if (input.maxOutputTokens === 700) {
+                  return {
+                    text: JSON.stringify({
+                      summary:
+                        'The implementation should be discussed through complexity, edge cases, and readability.',
+                      focusAreas: {
+                        complexity: 'Ask the candidate to justify the dominant operation.',
+                        edgeCases: 'Probe empty input and duplicate-value behavior.',
+                        readability: 'Ask which state names make the approach easiest to explain.',
+                      },
+                      followUpQuestions: [
+                        'What operation dominates the time complexity?',
+                        'Which duplicate-value case would you test first?',
+                      ],
+                    }),
+                    model: 'qwen3.5-mini',
+                  };
+                }
+
                 if (input.maxOutputTokens === 2500) {
                   return {
                     text: JSON.stringify({
@@ -151,11 +172,12 @@ describe('AiProcessor', () => {
   });
 
   describe('onModuleInit', () => {
-    it('GIVEN the processor WHEN onModuleInit is called THEN registers handlers on all 4 queues', () => {
+    it('GIVEN the processor WHEN onModuleInit is called THEN registers handlers on all 5 queues', () => {
       processor.onModuleInit();
 
-      expect(mockQueueService.process).toHaveBeenCalledTimes(4);
+      expect(mockQueueService.process).toHaveBeenCalledTimes(5);
       expect(handlers.has(AI_HINT_QUEUE)).toBe(true);
+      expect(handlers.has(AI_CODE_ANALYSIS_QUEUE)).toBe(true);
       expect(handlers.has(AI_REVIEW_QUEUE)).toBe(true);
       expect(handlers.has(AI_INTERVIEW_QUEUE)).toBe(true);
       expect(handlers.has(AI_SESSION_REPORT_QUEUE)).toBe(true);
@@ -191,6 +213,37 @@ describe('AiProcessor', () => {
         AI_HINT_RESULT_QUEUE,
         'hint-result',
         expect.objectContaining({ jobId: 'hint-job-1', hint: expect.any(String) }),
+      );
+    });
+  });
+
+  describe('code analysis job processing', () => {
+    it('GIVEN a code analysis job WHEN the handler processes it THEN enqueues result to AI_CODE_ANALYSIS_RESULT_QUEUE with jobId', async () => {
+      processor.onModuleInit();
+      mockQueueService.enqueue.mockClear();
+
+      const handler = handlers.get(AI_CODE_ANALYSIS_QUEUE)!;
+      const job = createFakeJob(
+        {
+          roomId: 'room-1',
+          participantId: 'user-1',
+          problemDescription: 'Two Sum',
+          code: 'function twoSum(nums, target) { return []; }',
+          language: 'typescript',
+        },
+        'code-analysis-job-1',
+      );
+
+      await handler(job);
+
+      expect(mockQueueService.enqueue).toHaveBeenCalledWith(
+        AI_CODE_ANALYSIS_RESULT_QUEUE,
+        'code-analysis-result',
+        expect.objectContaining({
+          jobId: 'code-analysis-job-1',
+          summary: expect.any(String),
+          followUpQuestions: expect.any(Array),
+        }),
       );
     });
   });

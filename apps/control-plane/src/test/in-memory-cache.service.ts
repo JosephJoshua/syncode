@@ -66,10 +66,13 @@ export class InMemoryCacheService implements ICacheService {
       : { state: 'permanent' };
   }
 
-  async incrBy(key: string, amount = 1): Promise<number> {
+  async incrBy(key: string, amount = 1, ttlSeconds?: number): Promise<number> {
     const entry = this.getEntry(key);
     const nextValue = (Number(entry?.value ?? 0) || 0) + amount;
-    this.entries.set(key, { value: nextValue, expiresAt: entry?.expiresAt ?? null });
+    this.entries.set(key, {
+      value: nextValue,
+      expiresAt: entry?.expiresAt ?? (ttlSeconds ? Date.now() + ttlSeconds * 1_000 : null),
+    });
     return nextValue;
   }
 
@@ -82,8 +85,17 @@ export class InMemoryCacheService implements ICacheService {
     return true;
   }
 
-  async expire(key: string): Promise<boolean> {
-    return this.getEntry(key) !== undefined;
+  async expire(key: string, ttlSeconds: number): Promise<boolean> {
+    const entry = this.getEntry(key);
+    if (!entry) {
+      return false;
+    }
+
+    this.entries.set(key, {
+      value: entry.value,
+      expiresAt: Date.now() + ttlSeconds * 1_000,
+    });
+    return true;
   }
 
   async shutdown(): Promise<void> {}

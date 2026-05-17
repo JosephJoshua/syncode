@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 import type { JobId, JobStatus, SubmitResult } from '../queues.js';
 import type { IAiClient } from './client.js';
 import type {
+  AnalyzeCodeRequest,
+  AnalyzeCodeResult,
   GenerateHintRequest,
   GenerateHintResult,
   GenerateSessionReportRequest,
@@ -13,12 +15,13 @@ import type {
 } from './types.js';
 import { toPublicSessionReportTestCaseBreakdown } from './types.js';
 
-type AiJobType = 'hint' | 'review' | 'interview' | 'session-report';
+type AiJobType = 'hint' | 'code-analysis' | 'review' | 'interview' | 'session-report';
 
 interface StubJob {
   status: JobStatus;
   type: AiJobType;
   hintResult?: GenerateHintResult;
+  codeAnalysisResult?: AnalyzeCodeResult;
   reviewResult?: ReviewCodeResult;
   interviewResult?: InterviewResponseResult;
   sessionReportResult?: GenerateSessionReportResult;
@@ -68,6 +71,22 @@ export class StubAiClient implements IAiClient {
     const job = this.jobs.get(jobId);
     if (job?.type !== 'hint') return null;
     return job.hintResult ?? null;
+  }
+
+  async submitCodeAnalysisRequest(
+    request: AnalyzeCodeRequest,
+  ): Promise<SubmitResult<'ai:code-analysis'>> {
+    const jobId = randomUUID() as JobId<'ai:code-analysis'>;
+    this.jobs.set(jobId, { status: 'queued', type: 'code-analysis' });
+
+    this.scheduleCodeAnalysisCompletion(jobId, request);
+    return { jobId };
+  }
+
+  async getCodeAnalysisResult(jobId: JobId<'ai:code-analysis'>): Promise<AnalyzeCodeResult | null> {
+    const job = this.jobs.get(jobId);
+    if (job?.type !== 'code-analysis') return null;
+    return job.codeAnalysisResult ?? null;
   }
 
   async submitReviewRequest(_request: ReviewCodeRequest): Promise<SubmitResult<'ai:review'>> {
@@ -121,6 +140,12 @@ export class StubAiClient implements IAiClient {
   async getHintJobStatus(jobId: JobId<'ai:hint'>): Promise<JobStatus> {
     const job = this.jobs.get(jobId);
     if (job?.type !== 'hint') return 'failed';
+    return job.status;
+  }
+
+  async getCodeAnalysisJobStatus(jobId: JobId<'ai:code-analysis'>): Promise<JobStatus> {
+    const job = this.jobs.get(jobId);
+    if (job?.type !== 'code-analysis') return 'failed';
     return job.status;
   }
 
@@ -191,6 +216,52 @@ export class StubAiClient implements IAiClient {
             hintIteration % 3 !== 0
               ? undefined
               : 'What invariant will stay true after each iteration of your loop?',
+        };
+      }, this.delayMs),
+    );
+  }
+
+  private scheduleCodeAnalysisCompletion(jobId: string, request: AnalyzeCodeRequest): void {
+    this.timers.push(
+      setTimeout(() => {
+        const job = this.jobs.get(jobId);
+        if (job) job.status = 'running';
+      }, this.delayMs / 4),
+      setTimeout(() => {
+        const job = this.jobs.get(jobId);
+        if (!job) return;
+
+        const codeLower = request.code.toLowerCase();
+        const usesNestedLoops =
+          (codeLower.match(/\bfor\b/g)?.length ?? 0) >= 2 ||
+          (codeLower.match(/\bwhile\b/g)?.length ?? 0) >= 2;
+        const hasNullGuard = /\bnull\b|\bundefined\b|\breturn\s+\[\]|\breturn\s+null\b/.test(
+          codeLower,
+        );
+
+        job.status = 'completed';
+        job.codeAnalysisResult = {
+          summary:
+            'The solution has a workable core direction, but the next interview questions should probe complexity trade-offs, edge-case coverage, and how clearly the state is expressed.',
+          focusAreas: {
+            complexity: usesNestedLoops
+              ? 'The implementation appears to revisit work in nested iteration, so the candidate should justify whether the time complexity is acceptable.'
+              : 'The implementation looks close to a linear scan, so the candidate should explain why each operation stays efficient.',
+            edgeCases: hasNullGuard
+              ? 'Some guard logic is present, but it is still useful to ask which boundary inputs were considered explicitly.'
+              : 'There is little visible defensive handling, so ask which empty, duplicate, or no-solution cases were considered.',
+            readability:
+              'Ask the candidate to explain what each piece of tracked state represents and which names or comments would make the intent easier to follow.',
+          },
+          followUpQuestions: [
+            usesNestedLoops
+              ? 'What is the time complexity of this approach, and where does the repeated work come from?'
+              : 'Why does this approach avoid re-checking earlier work on each iteration?',
+            hasNullGuard
+              ? 'Which boundary case did you design this guard around, and what other edge cases would you still test?'
+              : 'What happens for empty input, duplicates, or a case with no valid answer?',
+            'If another engineer read this code quickly, which variable or step would you rename or explain first?',
+          ],
         };
       }, this.delayMs),
     );

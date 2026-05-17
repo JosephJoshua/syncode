@@ -1,5 +1,7 @@
 import { Inject, Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import {
+  AI_CODE_ANALYSIS_QUEUE,
+  AI_CODE_ANALYSIS_RESULT_QUEUE,
   AI_HINT_QUEUE,
   AI_HINT_RESULT_QUEUE,
   AI_INTERVIEW_QUEUE,
@@ -8,6 +10,8 @@ import {
   AI_REVIEW_RESULT_QUEUE,
   AI_SESSION_REPORT_QUEUE,
   AI_SESSION_REPORT_RESULT_QUEUE,
+  type AnalyzeCodeRequest,
+  type AnalyzeCodeResult,
   type GenerateHintRequest,
   type GenerateHintResult,
   type GenerateSessionReportRequest,
@@ -36,6 +40,11 @@ import { QueueClientHelper } from './queue-client.helpers.js';
 export class QueueAiClient implements IAiClient, OnModuleInit {
   private readonly logger = new Logger(QueueAiClient.name);
   private readonly helper: QueueClientHelper;
+  private static readonly HINT_RESULT_NAMESPACE = 'hint';
+  private static readonly CODE_ANALYSIS_RESULT_NAMESPACE = 'code-analysis';
+  private static readonly REVIEW_RESULT_NAMESPACE = 'review';
+  private static readonly INTERVIEW_RESULT_NAMESPACE = 'interview';
+  private static readonly SESSION_REPORT_RESULT_NAMESPACE = 'session-report';
   private sessionReportResultCallback?: (
     jobId: string,
     result: GenerateSessionReportResult,
@@ -49,9 +58,26 @@ export class QueueAiClient implements IAiClient, OnModuleInit {
   }
 
   async onModuleInit(): Promise<void> {
-    this.helper.processResultQueue<GenerateHintResult>(AI_HINT_RESULT_QUEUE, 'hint');
-    this.helper.processResultQueue<ReviewCodeResult>(AI_REVIEW_RESULT_QUEUE, 'review');
-    this.helper.processResultQueue<InterviewResponseResult>(AI_INTERVIEW_RESULT_QUEUE, 'interview');
+    this.helper.processResultQueue<GenerateHintResult>(
+      AI_HINT_RESULT_QUEUE,
+      'hint',
+      QueueAiClient.HINT_RESULT_NAMESPACE,
+    );
+    this.helper.processResultQueue<AnalyzeCodeResult>(
+      AI_CODE_ANALYSIS_RESULT_QUEUE,
+      'code-analysis',
+      QueueAiClient.CODE_ANALYSIS_RESULT_NAMESPACE,
+    );
+    this.helper.processResultQueue<ReviewCodeResult>(
+      AI_REVIEW_RESULT_QUEUE,
+      'review',
+      QueueAiClient.REVIEW_RESULT_NAMESPACE,
+    );
+    this.helper.processResultQueue<InterviewResponseResult>(
+      AI_INTERVIEW_RESULT_QUEUE,
+      'interview',
+      QueueAiClient.INTERVIEW_RESULT_NAMESPACE,
+    );
     this.queueService.process<GenerateSessionReportResult & { jobId: string }>(
       AI_SESSION_REPORT_RESULT_QUEUE,
       async (job) => {
@@ -60,7 +86,11 @@ export class QueueAiClient implements IAiClient, OnModuleInit {
           return;
         }
 
-        await this.cacheService.set(`ai-result:${job.data.jobId}`, job.data, 24 * 60 * 60);
+        await this.cacheService.set(
+          `ai-result:${QueueAiClient.SESSION_REPORT_RESULT_NAMESPACE}:${job.data.jobId}`,
+          job.data,
+          24 * 60 * 60,
+        );
         this.logger.debug(`Cached session-report result for job ${job.data.jobId}`);
 
         if (this.sessionReportResultCallback) {
@@ -83,7 +113,27 @@ export class QueueAiClient implements IAiClient, OnModuleInit {
   }
 
   async getHintResult(jobId: JobId<'ai:hint'>): Promise<GenerateHintResult | null> {
-    return this.helper.getResult<GenerateHintResult>(jobId);
+    return this.helper.getResult<GenerateHintResult>(jobId, QueueAiClient.HINT_RESULT_NAMESPACE);
+  }
+
+  async submitCodeAnalysisRequest(
+    request: AnalyzeCodeRequest,
+  ): Promise<SubmitResult<'ai:code-analysis'>> {
+    const jobId = await this.queueService.enqueue(AI_CODE_ANALYSIS_QUEUE, 'analyze-code', request, {
+      attempts: 3,
+      backoff: { type: 'exponential', delay: 1500 },
+      removeOnComplete: 100,
+      removeOnFail: false,
+    });
+
+    return { jobId };
+  }
+
+  async getCodeAnalysisResult(jobId: JobId<'ai:code-analysis'>): Promise<AnalyzeCodeResult | null> {
+    return this.helper.getResult<AnalyzeCodeResult>(
+      jobId,
+      QueueAiClient.CODE_ANALYSIS_RESULT_NAMESPACE,
+    );
   }
 
   async submitReviewRequest(request: ReviewCodeRequest): Promise<SubmitResult<'ai:review'>> {
@@ -98,7 +148,7 @@ export class QueueAiClient implements IAiClient, OnModuleInit {
   }
 
   async getReviewResult(jobId: JobId<'ai:review'>): Promise<ReviewCodeResult | null> {
-    return this.helper.getResult<ReviewCodeResult>(jobId);
+    return this.helper.getResult<ReviewCodeResult>(jobId, QueueAiClient.REVIEW_RESULT_NAMESPACE);
   }
 
   async submitInterviewResponse(
@@ -120,7 +170,10 @@ export class QueueAiClient implements IAiClient, OnModuleInit {
   }
 
   async getInterviewResult(jobId: JobId<'ai:interview'>): Promise<InterviewResponseResult | null> {
-    return this.helper.getResult<InterviewResponseResult>(jobId);
+    return this.helper.getResult<InterviewResponseResult>(
+      jobId,
+      QueueAiClient.INTERVIEW_RESULT_NAMESPACE,
+    );
   }
 
   async submitSessionReportRequest(
@@ -144,23 +197,42 @@ export class QueueAiClient implements IAiClient, OnModuleInit {
   async getSessionReportResult(
     jobId: JobId<'ai:session-report'>,
   ): Promise<GenerateSessionReportResult | null> {
-    return this.helper.getResult<GenerateSessionReportResult>(jobId);
+    return this.helper.getResult<GenerateSessionReportResult>(
+      jobId,
+      QueueAiClient.SESSION_REPORT_RESULT_NAMESPACE,
+    );
   }
 
   async getHintJobStatus(jobId: JobId<'ai:hint'>): Promise<JobStatus> {
-    return this.helper.getJobStatus(AI_HINT_QUEUE, jobId);
+    return this.helper.getJobStatus(AI_HINT_QUEUE, jobId, QueueAiClient.HINT_RESULT_NAMESPACE);
+  }
+
+  async getCodeAnalysisJobStatus(jobId: JobId<'ai:code-analysis'>): Promise<JobStatus> {
+    return this.helper.getJobStatus(
+      AI_CODE_ANALYSIS_QUEUE,
+      jobId,
+      QueueAiClient.CODE_ANALYSIS_RESULT_NAMESPACE,
+    );
   }
 
   async getReviewJobStatus(jobId: JobId<'ai:review'>): Promise<JobStatus> {
-    return this.helper.getJobStatus(AI_REVIEW_QUEUE, jobId);
+    return this.helper.getJobStatus(AI_REVIEW_QUEUE, jobId, QueueAiClient.REVIEW_RESULT_NAMESPACE);
   }
 
   async getInterviewJobStatus(jobId: JobId<'ai:interview'>): Promise<JobStatus> {
-    return this.helper.getJobStatus(AI_INTERVIEW_QUEUE, jobId);
+    return this.helper.getJobStatus(
+      AI_INTERVIEW_QUEUE,
+      jobId,
+      QueueAiClient.INTERVIEW_RESULT_NAMESPACE,
+    );
   }
 
   async getSessionReportJobStatus(jobId: JobId<'ai:session-report'>): Promise<JobStatus> {
-    return this.helper.getJobStatus(AI_SESSION_REPORT_QUEUE, jobId);
+    return this.helper.getJobStatus(
+      AI_SESSION_REPORT_QUEUE,
+      jobId,
+      QueueAiClient.SESSION_REPORT_RESULT_NAMESPACE,
+    );
   }
 
   onSessionReportResult(
@@ -171,15 +243,18 @@ export class QueueAiClient implements IAiClient, OnModuleInit {
 
   async healthCheck(): Promise<boolean> {
     try {
-      const [hintStats, reviewStats, interviewStats, sessionReportStats] = await Promise.all([
-        this.queueService.getQueueStats(AI_HINT_QUEUE),
-        this.queueService.getQueueStats(AI_REVIEW_QUEUE),
-        this.queueService.getQueueStats(AI_INTERVIEW_QUEUE),
-        this.queueService.getQueueStats(AI_SESSION_REPORT_QUEUE),
-      ]);
+      const [hintStats, codeAnalysisStats, reviewStats, interviewStats, sessionReportStats] =
+        await Promise.all([
+          this.queueService.getQueueStats(AI_HINT_QUEUE),
+          this.queueService.getQueueStats(AI_CODE_ANALYSIS_QUEUE),
+          this.queueService.getQueueStats(AI_REVIEW_QUEUE),
+          this.queueService.getQueueStats(AI_INTERVIEW_QUEUE),
+          this.queueService.getQueueStats(AI_SESSION_REPORT_QUEUE),
+        ]);
 
       return (
         hintStats != null &&
+        codeAnalysisStats != null &&
         reviewStats != null &&
         interviewStats != null &&
         sessionReportStats != null
