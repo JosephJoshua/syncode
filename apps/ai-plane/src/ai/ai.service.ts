@@ -48,9 +48,11 @@ const MAX_CODE_ANALYSIS_QUESTION_LENGTH = 140;
 
 const PROMPT_INJECTION_PATTERNS: RegExp[] = [
   /\bignore\b[\s\S]{0,80}\binstructions?\b/i,
+  /\bignore\b[\s\S]{0,80}\b(developer|system|prior)\s+(rules?|instructions?|prompts?)\b/i,
   /\bdisregard\b[\s\S]{0,80}\binstructions?\b/i,
   /\boverride\s+instructions?\b/i,
   /\b(system|developer)\s+prompt\b/i,
+  /\b(disclose|reveal)\b[\s\S]{0,80}\b(secrets?|system prompt|developer prompt|policy text)\b/i,
   /\bjailbreak\b/i,
   /\bprompt\s+injection\b/i,
   /\bdo\s+not\s+output\s+hints?\b/i,
@@ -446,7 +448,7 @@ export class AiService {
 
   private wrapUntrustedBlock(label: string, rawValue: string): string {
     const safeLabel = label.replaceAll(/[^A-Z0-9_]/g, '_');
-    const value = this.sanitizeUntrustedText(rawValue);
+    const value = this.escapeUntrustedBlockDelimiters(this.sanitizeUntrustedText(rawValue));
     return `<UNTRUSTED_${safeLabel}>\n${value}\n</UNTRUSTED_${safeLabel}>`;
   }
 
@@ -463,6 +465,12 @@ export class AiService {
       .replaceAll(/[^\S\n\t]+/g, ' ')
       .trim();
     return normalized.slice(0, MAX_UNTRUSTED_BLOCK_LENGTH);
+  }
+
+  private escapeUntrustedBlockDelimiters(value: string): string {
+    return value.replaceAll(/<\/?UNTRUSTED_[A-Z0-9_]+>/g, (match) =>
+      match.replaceAll('<', '&lt;').replaceAll('>', '&gt;'),
+    );
   }
 
   private parseHintOutput(rawText: string, context: HintProcessingContext): GenerateHintResult {
@@ -902,19 +910,30 @@ export class AiService {
     response: ParsedCodeAnalysisResponse,
   ): ParsedCodeAnalysisResponse {
     const summary =
-      this.normalizeHintText(response.summary, 'hint') ??
+      this.sanitizeCodeAnalysisOutputText(response.summary, 'hint', 'summary') ??
       'The code is close, but the interview should probe efficiency, edge cases, and readability next.';
     const complexity =
-      this.normalizeHintText(response.focusAreas.complexity, 'suggestedApproach') ??
-      'Ask the candidate to justify the current complexity trade-offs.';
+      this.sanitizeCodeAnalysisOutputText(
+        response.focusAreas.complexity,
+        'suggestedApproach',
+        'complexity',
+      ) ?? 'Ask the candidate to justify the current complexity trade-offs.';
     const edgeCases =
-      this.normalizeHintText(response.focusAreas.edgeCases, 'suggestedApproach') ??
-      'Ask which edge cases were considered explicitly.';
+      this.sanitizeCodeAnalysisOutputText(
+        response.focusAreas.edgeCases,
+        'suggestedApproach',
+        'edgeCases',
+      ) ?? 'Ask which edge cases were considered explicitly.';
     const readability =
-      this.normalizeHintText(response.focusAreas.readability, 'suggestedApproach') ??
-      'Ask how the code could be made easier to explain quickly.';
+      this.sanitizeCodeAnalysisOutputText(
+        response.focusAreas.readability,
+        'suggestedApproach',
+        'readability',
+      ) ?? 'Ask how the code could be made easier to explain quickly.';
     const followUpQuestions = response.followUpQuestions
-      .map((question) => this.normalizeHintText(question, 'reflectionPrompt'))
+      .map((question) =>
+        this.sanitizeCodeAnalysisOutputText(question, 'reflectionPrompt', 'followUpQuestion'),
+      )
       .filter((question): question is string => Boolean(question))
       .map((question) => this.truncateHintText(question, MAX_CODE_ANALYSIS_QUESTION_LENGTH))
       .slice(0, 3);
@@ -934,6 +953,24 @@ export class AiService {
               'Which edge case would you test first and why?',
             ],
     };
+  }
+
+  private sanitizeCodeAnalysisOutputText(
+    value: string | undefined,
+    field: 'hint' | 'suggestedApproach' | 'reflectionPrompt',
+    label: string,
+  ): string | undefined {
+    const normalized = this.normalizeHintText(value, field);
+    if (!normalized) {
+      return undefined;
+    }
+
+    if (this.isUnsafeModelText(normalized)) {
+      this.logger.warn(`Discarding unsafe code analysis ${label} output`);
+      return undefined;
+    }
+
+    return normalized;
   }
 
   private resolveAnalysisModel(): string {
