@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { GenerateSessionReportRequest } from '@syncode/contracts';
+import type { GenerateSessionReportRequest, SessionReportEventContext } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
 import {
   aiMessages,
@@ -63,6 +63,7 @@ export class SessionReportRequestBuilderService {
             language: codeSnapshots.language,
             code: codeSnapshots.code,
             linesOfCode: codeSnapshots.linesOfCode,
+            phase: codeSnapshots.phase,
           })
           .from(codeSnapshots)
           .where(eq(codeSnapshots.sessionId, sessionRow.id))
@@ -168,6 +169,19 @@ export class SessionReportRequestBuilderService {
         )
       : [];
 
+    const snapshotContexts = snapshotRows.map((snapshot) => ({
+      snapshotId: snapshot.snapshotId,
+      timestamp: snapshot.timestamp.toISOString(),
+      trigger: snapshot.trigger,
+      language: snapshot.language,
+      code: snapshot.code,
+      linesOfCode: snapshot.linesOfCode ?? snapshot.code.split('\n').length,
+      phase: snapshot.phase ?? null,
+    }));
+
+    const finalCodeSnapshot = this.selectFinalSnapshot(snapshotContexts);
+    const sessionEvents = this.buildSessionEvents(snapshotRows, submissionRows);
+
     const priorScores = historicalRows
       .map((row) => row.overallScore)
       .filter((score): score is number => score != null);
@@ -194,14 +208,7 @@ export class SessionReportRequestBuilderService {
       durationMs: sessionRow.durationMs ?? 0,
       startedAt: sessionRow.startedAt.toISOString(),
       finishedAt: sessionRow.finishedAt?.toISOString() ?? null,
-      snapshots: snapshotRows.map((snapshot) => ({
-        snapshotId: snapshot.snapshotId,
-        timestamp: snapshot.timestamp.toISOString(),
-        trigger: snapshot.trigger,
-        language: snapshot.language,
-        code: snapshot.code,
-        linesOfCode: snapshot.linesOfCode ?? snapshot.code.split('\n').length,
-      })),
+      snapshots: snapshotContexts,
       runs: runRows.map((run) => ({
         jobId: run.jobId,
         createdAt: run.createdAt.toISOString(),
@@ -225,6 +232,8 @@ export class SessionReportRequestBuilderService {
         total: submission.total,
         totalDurationMs: submission.totalDurationMs,
       })),
+      finalCodeSnapshot,
+      sessionEvents,
       finalTestCaseBreakdown,
       peerFeedback: feedbackRows.map((feedback) => ({
         reviewerId: feedback.reviewerId,
@@ -256,6 +265,77 @@ export class SessionReportRequestBuilderService {
             }
           : null,
     };
+  }
+
+  private selectFinalSnapshot(
+    snapshots: GenerateSessionReportRequest['snapshots'],
+  ): GenerateSessionReportRequest['finalCodeSnapshot'] {
+    for (let i = snapshots.length - 1; i >= 0; i -= 1) {
+      if (snapshots[i]?.trigger === 'session_end') {
+        return snapshots[i] ?? null;
+      }
+    }
+
+    return snapshots.at(-1) ?? null;
+  }
+
+  private buildSessionEvents(
+    snapshots: Array<{
+      timestamp: Date;
+      trigger: string;
+      phase: string | null;
+    }>,
+    submissions: Array<{
+      submissionId: string;
+      createdAt: Date;
+      status: string;
+      passed: number;
+      total: number;
+    }>,
+  ): SessionReportEventContext[] {
+    const events: SessionReportEventContext[] = [];
+    let lastPhase: string | null = null;
+
+    for (const snapshot of snapshots) {
+      if (snapshot.trigger !== 'phase_change' && snapshot.trigger !== 'session_end') {
+        continue;
+      }
+
+      const toStage = snapshot.phase ?? null;
+      const fromStage = lastPhase;
+      if (toStage) {
+        lastPhase = toStage;
+      }
+
+      const toStageLabel = toStage ?? 'unknown';
+      events.push({
+        eventType: 'stage_transition',
+        timestamp: snapshot.timestamp.toISOString(),
+        details: fromStage ? `${fromStage} -> ${toStageLabel}` : `Entered ${toStageLabel}`,
+        metadata: {
+          fromStage,
+          toStage,
+          trigger: snapshot.trigger,
+        },
+      });
+    }
+
+    for (const submission of submissions) {
+      events.push({
+        eventType: 'submission',
+        timestamp: submission.createdAt.toISOString(),
+        details: `${submission.status} submission (${submission.passed}/${submission.total})`,
+        metadata: {
+          submissionId: submission.submissionId,
+          status: submission.status,
+          passed: submission.passed,
+          total: submission.total,
+        },
+      });
+    }
+
+    events.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    return events;
   }
 
   private async loadFinalTestCaseBreakdown(submissionId: string, problemId: string) {

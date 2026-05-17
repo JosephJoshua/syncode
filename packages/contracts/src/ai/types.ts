@@ -1,4 +1,10 @@
-import type { RoomRole, SupportedLanguage, WeaknessCategory, WeaknessTrend } from '@syncode/shared';
+import type {
+  RoomRole,
+  RoomStatus,
+  SupportedLanguage,
+  WeaknessCategory,
+  WeaknessTrend,
+} from '@syncode/shared';
 import type { CodeSnapshotTrigger, SessionReport } from '../control/sessions.js';
 
 export interface HintSubmissionSummary {
@@ -152,6 +158,14 @@ export interface SessionReportSnapshotContext {
   language: SupportedLanguage;
   code: string;
   linesOfCode: number;
+  phase?: RoomStatus | null;
+}
+
+export interface SessionReportEventContext {
+  eventType: 'stage_transition' | 'submission';
+  timestamp: string;
+  details: string;
+  metadata?: Record<string, string | number | boolean | null>;
 }
 
 export interface SessionReportRunContext {
@@ -242,6 +256,8 @@ export interface GenerateSessionReportRequest {
   snapshots: SessionReportSnapshotContext[];
   runs: SessionReportRunContext[];
   submissions: SessionReportSubmissionContext[];
+  finalCodeSnapshot: SessionReportSnapshotContext | null;
+  sessionEvents: SessionReportEventContext[];
   finalTestCaseBreakdown: SessionReportTestCaseContext[];
   peerFeedback: SessionReportPeerFeedbackContext[];
   aiMessages: SessionReportAiMessageContext[];

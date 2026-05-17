@@ -15,6 +15,7 @@ export type {
   InterviewResponseResult,
   ReviewCodeRequest,
   ReviewCodeResult,
+  SessionReportEventContext,
   WeaknessAnalysisItem,
 } from './types.js';
 export { toPublicSessionReportTestCaseBreakdown } from './types.js';
