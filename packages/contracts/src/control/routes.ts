@@ -23,6 +23,7 @@ import type {
 import type { sessionFeedbackResponseSchema, submitSessionFeedbackSchema } from './feedback.js';
 import type { healthCheckResponseSchema } from './health.js';
 import type {
+  createProblemSchema,
   problemDetailSchema,
   problemsListQuerySchema,
   problemsListResponseSchema,
@@ -232,7 +233,10 @@ export const CONTROL_API = {
     >()('problems', 'GET'),
     GET_BY_ID: defineRoute<void, z.infer<typeof problemDetailSchema>>()('problems/:id', 'GET'),
     TAGS: defineRoute<void, z.infer<typeof problemsTagsResponseSchema>>()('problems/tags', 'GET'),
-    CREATE: defineRoute<void, void>()('problems', 'POST'),
+    CREATE: defineRoute<z.infer<typeof createProblemSchema>, z.infer<typeof problemDetailSchema>>()(
+      'problems',
+      'POST',
+    ),
     DELETE: defineRoute<void, void>()('problems/:id', 'DELETE'),
   },
   BOOKMARKS: {

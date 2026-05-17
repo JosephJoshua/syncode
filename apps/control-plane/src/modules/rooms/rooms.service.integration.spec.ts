@@ -134,6 +134,19 @@ describe('createRoom', () => {
     );
   });
 
+  it('GIVEN draft problemId WHEN creating room THEN rejects it as unavailable', async () => {
+    const user = await insertUser(db);
+    const problem = await insertProblem(db, { isPublished: false });
+
+    await expect(
+      service.createRoom(user.id, {
+        mode: 'peer',
+        problemId: problem.id,
+        config: { maxParticipants: 2, maxDuration: 120, isPrivate: true },
+      }),
+    ).rejects.toThrow(NotFoundException);
+  });
+
   it('GIVEN no problemId WHEN creating room THEN passes no initialContentByLanguage to collab', async () => {
     const user = await insertUser(db);
 
@@ -1391,6 +1404,29 @@ describe('browsePublicRooms', () => {
     expect(result.data).toHaveLength(1);
     expect(result.data[0]!.roomId).toBe(easyRoom.id);
     expect(result.data[0]!.problemDifficulty).toBe('easy');
+  });
+
+  it('GIVEN public room linked to draft problem WHEN browsing THEN excludes it', async () => {
+    const browser = await insertUser(db);
+    const host = await insertUser(db);
+    const publishedProblem = await insertProblem(db, { title: 'Published', isPublished: true });
+    const draftProblem = await insertProblem(db, { title: 'Draft', isPublished: false });
+    const publishedRoom = await insertRoom(db, host.id, {
+      isPrivate: false,
+      status: 'waiting',
+      problemId: publishedProblem.id,
+    });
+    await insertParticipant(db, publishedRoom.id, host.id, 'interviewer');
+    const draftRoom = await insertRoom(db, host.id, {
+      isPrivate: false,
+      status: 'waiting',
+      problemId: draftProblem.id,
+    });
+    await insertParticipant(db, draftRoom.id, host.id, 'interviewer');
+
+    const result = await service.browsePublicRooms(browser.id, defaultQuery);
+
+    expect(result.data.map((room) => room.roomId)).toEqual([publishedRoom.id]);
   });
 
   it('GIVEN public rooms with different problem titles WHEN searching by substring THEN matches case-insensitively', async () => {

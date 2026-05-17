@@ -2,6 +2,7 @@ import {
   PROBLEM_ATTEMPT_STATUSES,
   PROBLEM_DIFFICULTIES,
   PROBLEMS_SORT_BY_OPTIONS,
+  SUPPORTED_LANGUAGES,
 } from '@syncode/shared';
 import { z } from 'zod';
 import { paginationQuerySchema, paginationSchema } from './pagination.js';
@@ -47,6 +48,7 @@ export const problemSummarySchema = z.object({
   id: z.string(),
   title: z.string(),
   difficulty: z.enum(PROBLEM_DIFFICULTIES),
+  isPublished: z.boolean().describe('Whether this problem is visible to non-admin users'),
   tags: z.array(z.string()),
   company: z.string().nullable(),
   acceptanceRate: z
@@ -98,9 +100,11 @@ export const problemDetailSchema = problemSummarySchema.extend({
   examples: z.array(problemExampleSchema),
   testCases: z.array(problemTestCaseSchema).describe('Only visible (non-hidden) test cases'),
   starterCode: z
-    .record(z.string(), z.string())
+    .partialRecord(z.enum(SUPPORTED_LANGUAGES), z.string())
     .nullable()
     .describe('Map of SupportedLanguage to starter code string'),
+  timeLimit: z.number().nullable().describe('Default execution timeout in milliseconds'),
+  memoryLimit: z.number().nullable().describe('Default execution memory limit in MB'),
   totalSubmissions: z.number(),
   userAttempts: z.number(),
   createdAt: z.string(),
@@ -108,6 +112,37 @@ export const problemDetailSchema = problemSummarySchema.extend({
 });
 
 export type ProblemDetail = z.infer<typeof problemDetailSchema>;
+
+export const createProblemTestCaseSchema = z
+  .object({
+    input: z.string().trim().min(1).max(20_000),
+    expectedOutput: z.string().trim().min(1).max(20_000),
+    description: z.string().trim().max(255).optional(),
+    isHidden: z.boolean().default(false),
+    timeoutMs: z.number().int().positive().max(60_000).optional(),
+    memoryMb: z.number().int().positive().max(4096).optional(),
+  })
+  .strict();
+
+export type CreateProblemTestCase = z.infer<typeof createProblemTestCaseSchema>;
+
+export const createProblemSchema = z
+  .object({
+    title: z.string().trim().min(1).max(200),
+    description: z.string().trim().min(1).max(100_000),
+    difficulty: z.enum(PROBLEM_DIFFICULTIES),
+    isPublished: z.boolean().default(false),
+    company: z.string().trim().min(1).max(100).nullable().optional(),
+    constraints: z.string().trim().min(1).max(50_000).nullable().optional(),
+    examples: z.array(problemExampleSchema).default([]),
+    starterCode: z.partialRecord(z.enum(SUPPORTED_LANGUAGES), z.string()).nullable().optional(),
+    timeLimit: z.number().int().positive().max(60_000).nullable().optional(),
+    memoryLimit: z.number().int().positive().max(4096).nullable().optional(),
+    testCases: z.array(createProblemTestCaseSchema).min(1).max(100),
+  })
+  .strict();
+
+export type CreateProblemInput = z.infer<typeof createProblemSchema>;
 
 export const tagInfoSchema = z.object({
   slug: z.string(),

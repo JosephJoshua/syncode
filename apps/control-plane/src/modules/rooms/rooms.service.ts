@@ -78,7 +78,7 @@ import {
   STORAGE_SERVICE,
 } from '@syncode/shared/ports';
 import { type PaginatedResult, paginate } from '@syncode/shared/server';
-import { and, asc, desc, eq, gt, gte, inArray, lt, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, or, sql } from 'drizzle-orm';
 import { resolveAvatarUrls } from '@/common/resolve-avatar-urls.js';
 import type { EnvConfig } from '@/config/env.config.js';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
@@ -133,6 +133,10 @@ export class RoomsService {
   ) {}
 
   async createRoom(hostId: string, input: CreateRoomInput): Promise<CreateRoomResult> {
+    if (input.problemId) {
+      await this.assertPublishedProblem(input.problemId);
+    }
+
     const room = await this.db.transaction(async (tx) => {
       const inserted = await this.insertRoomWithRetry(hostId, input, tx);
       await tx.insert(roomParticipants).values({
@@ -271,6 +275,7 @@ export class RoomsService {
         const conditions = [
           eq(rooms.isPrivate, false),
           inArray(rooms.status, [...BROWSEABLE_ROOM_STATUSES]),
+          or(isNull(rooms.problemId), eq(problems.isPublished, true))!,
           sql`(select count(*)::int from room_participants rp
                where rp.room_id = ${rooms.id} and rp.is_active = true) < ${rooms.maxParticipants}`,
         ];
@@ -2410,6 +2415,23 @@ export class RoomsService {
     );
 
     return { recreated: response.created };
+  }
+
+  private async assertPublishedProblem(problemId: string): Promise<void> {
+    const [problem] = await this.db
+      .select({ id: problems.id })
+      .from(problems)
+      .where(
+        and(eq(problems.id, problemId), isNull(problems.deletedAt), eq(problems.isPublished, true)),
+      )
+      .limit(1);
+
+    if (!problem) {
+      throw new NotFoundException({
+        message: 'Problem not found',
+        code: ERROR_CODES.PROBLEM_NOT_FOUND,
+      });
+    }
   }
 
   private async resolveStarterContentMap(

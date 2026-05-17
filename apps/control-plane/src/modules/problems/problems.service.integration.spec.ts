@@ -40,6 +40,19 @@ describe('listProblems', () => {
     expect(result.pagination.hasMore).toBe(false);
   });
 
+  it('GIVEN draft problem WHEN listing THEN regular users cannot see it but admins can', async () => {
+    const user = await insertUser(db, { role: 'user' });
+    const admin = await insertUser(db, { role: 'admin' });
+    await insertProblem(db, { title: 'Published', isPublished: true });
+    await insertProblem(db, { title: 'Draft', isPublished: false });
+
+    const regularResult = await service.listProblems(user.id, { limit: 20, sortOrder: 'desc' });
+    const adminResult = await service.listProblems(admin.id, { limit: 20, sortOrder: 'desc' });
+
+    expect(regularResult.data.map((problem) => problem.title)).toEqual(['Published']);
+    expect(adminResult.data.map((problem) => problem.title).sort()).toEqual(['Draft', 'Published']);
+  });
+
   it('GIVEN single difficulty filter WHEN listing THEN returns only matching difficulty', async () => {
     const user = await insertUser(db);
     await insertProblem(db, { difficulty: 'easy' });

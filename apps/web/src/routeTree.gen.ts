@@ -27,6 +27,7 @@ import { Route as AppRoomsMatchmakingRouteImport } from './routes/_app/rooms/mat
 import { Route as AppRoomsBrowseRouteImport } from './routes/_app/rooms/browse'
 import { Route as AppProblemsProblemIdRouteImport } from './routes/_app/problems.$problemId'
 import { Route as AppAdminUsersRouteImport } from './routes/_app/admin.users'
+import { Route as AppAdminProblemsRouteImport } from './routes/_app/admin.problems'
 import { Route as AppAdminAuditLogsRouteImport } from './routes/_app/admin.audit-logs'
 
 const PublicRouteRoute = PublicRouteRouteImport.update({
@@ -117,6 +118,11 @@ const AppAdminUsersRoute = AppAdminUsersRouteImport.update({
   path: '/admin/users',
   getParentRoute: () => AppRouteRoute,
 } as any)
+const AppAdminProblemsRoute = AppAdminProblemsRouteImport.update({
+  id: '/admin/problems',
+  path: '/admin/problems',
+  getParentRoute: () => AppRouteRoute,
+} as any)
 const AppAdminAuditLogsRoute = AppAdminAuditLogsRouteImport.update({
   id: '/admin/audit-logs',
   path: '/admin/audit-logs',
@@ -132,6 +138,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof PublicLoginRoute
   '/register': typeof PublicRegisterRoute
   '/admin/audit-logs': typeof AppAdminAuditLogsRoute
+  '/admin/problems': typeof AppAdminProblemsRoute
   '/admin/users': typeof AppAdminUsersRoute
   '/problems/$problemId': typeof AppProblemsProblemIdRoute
   '/rooms/browse': typeof AppRoomsBrowseRoute
@@ -150,6 +157,7 @@ export interface FileRoutesByTo {
   '/login': typeof PublicLoginRoute
   '/register': typeof PublicRegisterRoute
   '/admin/audit-logs': typeof AppAdminAuditLogsRoute
+  '/admin/problems': typeof AppAdminProblemsRoute
   '/admin/users': typeof AppAdminUsersRoute
   '/problems/$problemId': typeof AppProblemsProblemIdRoute
   '/rooms/browse': typeof AppRoomsBrowseRoute
@@ -172,6 +180,7 @@ export interface FileRoutesById {
   '/_public/register': typeof PublicRegisterRoute
   '/_public/': typeof PublicIndexRoute
   '/_app/admin/audit-logs': typeof AppAdminAuditLogsRoute
+  '/_app/admin/problems': typeof AppAdminProblemsRoute
   '/_app/admin/users': typeof AppAdminUsersRoute
   '/_app/problems/$problemId': typeof AppProblemsProblemIdRoute
   '/_app/rooms/browse': typeof AppRoomsBrowseRoute
@@ -193,6 +202,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/register'
     | '/admin/audit-logs'
+    | '/admin/problems'
     | '/admin/users'
     | '/problems/$problemId'
     | '/rooms/browse'
@@ -211,6 +221,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/register'
     | '/admin/audit-logs'
+    | '/admin/problems'
     | '/admin/users'
     | '/problems/$problemId'
     | '/rooms/browse'
@@ -232,6 +243,7 @@ export interface FileRouteTypes {
     | '/_public/register'
     | '/_public/'
     | '/_app/admin/audit-logs'
+    | '/_app/admin/problems'
     | '/_app/admin/users'
     | '/_app/problems/$problemId'
     | '/_app/rooms/browse'
@@ -376,6 +388,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAdminUsersRouteImport
       parentRoute: typeof AppRouteRoute
     }
+    '/_app/admin/problems': {
+      id: '/_app/admin/problems'
+      path: '/admin/problems'
+      fullPath: '/admin/problems'
+      preLoaderRoute: typeof AppAdminProblemsRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
     '/_app/admin/audit-logs': {
       id: '/_app/admin/audit-logs'
       path: '/admin/audit-logs'
@@ -408,6 +427,7 @@ interface AppRouteRouteChildren {
   AppDashboardRoute: typeof AppDashboardRoute
   AppProfileRoute: typeof AppProfileRoute
   AppAdminAuditLogsRoute: typeof AppAdminAuditLogsRoute
+  AppAdminProblemsRoute: typeof AppAdminProblemsRoute
   AppAdminUsersRoute: typeof AppAdminUsersRoute
   AppProblemsProblemIdRoute: typeof AppProblemsProblemIdRoute
   AppRoomsRoomIdRoute: typeof AppRoomsRoomIdRoute
@@ -422,6 +442,7 @@ const AppRouteRouteChildren: AppRouteRouteChildren = {
   AppDashboardRoute: AppDashboardRoute,
   AppProfileRoute: AppProfileRoute,
   AppAdminAuditLogsRoute: AppAdminAuditLogsRoute,
+  AppAdminProblemsRoute: AppAdminProblemsRoute,
   AppAdminUsersRoute: AppAdminUsersRoute,
   AppProblemsProblemIdRoute: AppProblemsProblemIdRoute,
   AppRoomsRoomIdRoute: AppRoomsRoomIdRoute,
