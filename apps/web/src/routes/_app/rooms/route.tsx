@@ -20,6 +20,11 @@ function RoomsLayout() {
       to: '/rooms/browse',
       isActive: pathname === '/rooms/browse',
     },
+    {
+      label: t('tabs.matchmaking'),
+      to: '/rooms/matchmaking',
+      isActive: pathname === '/rooms/matchmaking',
+    },
   ] as const;
 
   return (

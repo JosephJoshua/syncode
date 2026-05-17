@@ -23,6 +23,7 @@ import { Route as AppProblemsIndexRouteImport } from './routes/_app/problems.ind
 import { Route as AppSessionsSessionIdRouteImport } from './routes/_app/sessions.$sessionId'
 import { Route as AppRoomsCreateRouteImport } from './routes/_app/rooms_.create'
 import { Route as AppRoomsRoomIdRouteImport } from './routes/_app/rooms_.$roomId'
+import { Route as AppRoomsMatchmakingRouteImport } from './routes/_app/rooms/matchmaking'
 import { Route as AppRoomsBrowseRouteImport } from './routes/_app/rooms/browse'
 import { Route as AppProblemsProblemIdRouteImport } from './routes/_app/problems.$problemId'
 import { Route as AppAdminUsersRouteImport } from './routes/_app/admin.users'
@@ -96,6 +97,11 @@ const AppRoomsRoomIdRoute = AppRoomsRoomIdRouteImport.update({
   path: '/rooms/$roomId',
   getParentRoute: () => AppRouteRoute,
 } as any)
+const AppRoomsMatchmakingRoute = AppRoomsMatchmakingRouteImport.update({
+  id: '/matchmaking',
+  path: '/matchmaking',
+  getParentRoute: () => AppRoomsRouteRoute,
+} as any)
 const AppRoomsBrowseRoute = AppRoomsBrowseRouteImport.update({
   id: '/browse',
   path: '/browse',
@@ -129,6 +135,7 @@ export interface FileRoutesByFullPath {
   '/admin/users': typeof AppAdminUsersRoute
   '/problems/$problemId': typeof AppProblemsProblemIdRoute
   '/rooms/browse': typeof AppRoomsBrowseRoute
+  '/rooms/matchmaking': typeof AppRoomsMatchmakingRoute
   '/rooms/$roomId': typeof AppRoomsRoomIdRoute
   '/rooms/create': typeof AppRoomsCreateRoute
   '/sessions/$sessionId': typeof AppSessionsSessionIdRoute
@@ -146,6 +153,7 @@ export interface FileRoutesByTo {
   '/admin/users': typeof AppAdminUsersRoute
   '/problems/$problemId': typeof AppProblemsProblemIdRoute
   '/rooms/browse': typeof AppRoomsBrowseRoute
+  '/rooms/matchmaking': typeof AppRoomsMatchmakingRoute
   '/rooms/$roomId': typeof AppRoomsRoomIdRoute
   '/rooms/create': typeof AppRoomsCreateRoute
   '/sessions/$sessionId': typeof AppSessionsSessionIdRoute
@@ -167,6 +175,7 @@ export interface FileRoutesById {
   '/_app/admin/users': typeof AppAdminUsersRoute
   '/_app/problems/$problemId': typeof AppProblemsProblemIdRoute
   '/_app/rooms/browse': typeof AppRoomsBrowseRoute
+  '/_app/rooms/matchmaking': typeof AppRoomsMatchmakingRoute
   '/_app/rooms_/$roomId': typeof AppRoomsRoomIdRoute
   '/_app/rooms_/create': typeof AppRoomsCreateRoute
   '/_app/sessions/$sessionId': typeof AppSessionsSessionIdRoute
@@ -187,6 +196,7 @@ export interface FileRouteTypes {
     | '/admin/users'
     | '/problems/$problemId'
     | '/rooms/browse'
+    | '/rooms/matchmaking'
     | '/rooms/$roomId'
     | '/rooms/create'
     | '/sessions/$sessionId'
@@ -204,6 +214,7 @@ export interface FileRouteTypes {
     | '/admin/users'
     | '/problems/$problemId'
     | '/rooms/browse'
+    | '/rooms/matchmaking'
     | '/rooms/$roomId'
     | '/rooms/create'
     | '/sessions/$sessionId'
@@ -224,6 +235,7 @@ export interface FileRouteTypes {
     | '/_app/admin/users'
     | '/_app/problems/$problemId'
     | '/_app/rooms/browse'
+    | '/_app/rooms/matchmaking'
     | '/_app/rooms_/$roomId'
     | '/_app/rooms_/create'
     | '/_app/sessions/$sessionId'
@@ -336,6 +348,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppRoomsRoomIdRouteImport
       parentRoute: typeof AppRouteRoute
     }
+    '/_app/rooms/matchmaking': {
+      id: '/_app/rooms/matchmaking'
+      path: '/matchmaking'
+      fullPath: '/rooms/matchmaking'
+      preLoaderRoute: typeof AppRoomsMatchmakingRouteImport
+      parentRoute: typeof AppRoomsRouteRoute
+    }
     '/_app/rooms/browse': {
       id: '/_app/rooms/browse'
       path: '/browse'
@@ -369,11 +388,13 @@ declare module '@tanstack/react-router' {
 
 interface AppRoomsRouteRouteChildren {
   AppRoomsBrowseRoute: typeof AppRoomsBrowseRoute
+  AppRoomsMatchmakingRoute: typeof AppRoomsMatchmakingRoute
   AppRoomsIndexRoute: typeof AppRoomsIndexRoute
 }
 
 const AppRoomsRouteRouteChildren: AppRoomsRouteRouteChildren = {
   AppRoomsBrowseRoute: AppRoomsBrowseRoute,
+  AppRoomsMatchmakingRoute: AppRoomsMatchmakingRoute,
   AppRoomsIndexRoute: AppRoomsIndexRoute,
 }
 
