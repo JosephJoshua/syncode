@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Ip,
   Param,
   ParseUUIDPipe,
   Patch,
@@ -60,8 +61,9 @@ export class AdminController {
     @CurrentUser() user: { id: string },
     @Param('id', ParseUUIDPipe) id: string,
     @Body() body: AdminBanUserDto,
+    @Ip() ipAddress: string,
   ): Promise<AdminUserDto> {
-    return this.adminService.banUser(user.id, id, body);
+    return this.adminService.banUser(user.id, id, body, ipAddress);
   }
 
   @Patch(CONTROL_API.ADMIN.USERS.UNBAN.route)
@@ -75,7 +77,8 @@ export class AdminController {
   async unbanUser(
     @CurrentUser() user: { id: string },
     @Param('id', ParseUUIDPipe) id: string,
+    @Ip() ipAddress: string,
   ): Promise<AdminUserDto> {
-    return this.adminService.unbanUser(user.id, id);
+    return this.adminService.unbanUser(user.id, id, ipAddress);
   }
 }

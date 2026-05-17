@@ -13,9 +13,10 @@ import {
   ERROR_CODES,
 } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
-import { users } from '@syncode/db';
+import { auditLogs, users } from '@syncode/db';
 import { and, desc, eq, ilike, isNotNull, isNull, lt, or, type SQL } from 'drizzle-orm';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
+import type { AuditLogInput } from './audit.service.js';
 
 interface UsersCursor {
   createdAt: string;
@@ -78,6 +79,7 @@ export class AdminService {
     actorId: string,
     targetUserId: string,
     input: AdminBanUserInput,
+    ipAddress?: string,
   ): Promise<AdminUser> {
     await this.assertAdmin(actorId);
 
@@ -88,49 +90,82 @@ export class AdminService {
       });
     }
 
-    const now = new Date();
-    const [user] = await this.db
-      .update(users)
-      .set({
-        bannedAt: now,
-        bannedReason: input.reason?.trim() || null,
-        updatedAt: now,
-      })
-      .where(and(eq(users.id, targetUserId), isNull(users.deletedAt)))
-      .returning(adminUserSelection);
+    return this.db.transaction(async (tx) => {
+      const now = new Date();
+      const reason = input.reason?.trim() || null;
+      const [user] = await tx
+        .update(users)
+        .set({
+          bannedAt: now,
+          bannedReason: reason,
+          updatedAt: now,
+        })
+        .where(and(eq(users.id, targetUserId), isNull(users.deletedAt)))
+        .returning(adminUserSelection);
 
-    if (!user) {
-      throw new NotFoundException({
-        message: 'User not found',
-        code: ERROR_CODES.USER_NOT_FOUND,
+      if (!user) {
+        throw new NotFoundException({
+          message: 'User not found',
+          code: ERROR_CODES.USER_NOT_FOUND,
+        });
+      }
+
+      await this.logAdminAudit(tx, {
+        actorId,
+        action: 'admin.user.ban',
+        targetType: 'user',
+        targetId: targetUserId,
+        metadata: { reason },
+        ipAddress,
       });
-    }
 
-    return this.toAdminUser(user);
+      return this.toAdminUser(user);
+    });
   }
 
-  async unbanUser(actorId: string, targetUserId: string): Promise<AdminUser> {
+  async unbanUser(actorId: string, targetUserId: string, ipAddress?: string): Promise<AdminUser> {
     await this.assertAdmin(actorId);
 
-    const now = new Date();
-    const [user] = await this.db
-      .update(users)
-      .set({
-        bannedAt: null,
-        bannedReason: null,
-        updatedAt: now,
-      })
-      .where(and(eq(users.id, targetUserId), isNull(users.deletedAt)))
-      .returning(adminUserSelection);
+    return this.db.transaction(async (tx) => {
+      const now = new Date();
+      const [user] = await tx
+        .update(users)
+        .set({
+          bannedAt: null,
+          bannedReason: null,
+          updatedAt: now,
+        })
+        .where(and(eq(users.id, targetUserId), isNull(users.deletedAt)))
+        .returning(adminUserSelection);
 
-    if (!user) {
-      throw new NotFoundException({
-        message: 'User not found',
-        code: ERROR_CODES.USER_NOT_FOUND,
+      if (!user) {
+        throw new NotFoundException({
+          message: 'User not found',
+          code: ERROR_CODES.USER_NOT_FOUND,
+        });
+      }
+
+      await this.logAdminAudit(tx, {
+        actorId,
+        action: 'admin.user.unban',
+        targetType: 'user',
+        targetId: targetUserId,
+        ipAddress,
       });
-    }
 
-    return this.toAdminUser(user);
+      return this.toAdminUser(user);
+    });
+  }
+
+  private async logAdminAudit(db: Pick<Database, 'insert'>, input: AuditLogInput): Promise<void> {
+    await db.insert(auditLogs).values({
+      actorId: input.actorId,
+      action: input.action,
+      targetType: input.targetType,
+      targetId: input.targetId,
+      metadata: input.metadata ?? null,
+      ipAddress: input.ipAddress ?? null,
+    });
   }
 
   private async assertAdmin(userId: string): Promise<void> {
