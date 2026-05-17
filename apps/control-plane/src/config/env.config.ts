@@ -9,6 +9,16 @@ const booleanEnv = z
   .union([z.boolean(), z.string()])
   .transform((val) => val === true || val === 'true' || val === '1');
 
+const commaSeparatedListEnv = z
+  .string()
+  .default('')
+  .transform((val) =>
+    val
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean),
+  );
+
 /**
  * Environment variable validation schema
  */
@@ -59,6 +69,9 @@ const envSchema = z
       .string()
       .default('http://localhost:5173,https://syncode.anggita.org')
       .transform((val) => val.split(',').map((origin) => origin.trim())),
+    TRUSTED_PROXIES: commaSeparatedListEnv.describe(
+      'Comma-separated Express trust proxy values. Leave empty to ignore forwarded IP headers.',
+    ),
 
     THROTTLE_TTL_SECS: z.coerce
       .number()

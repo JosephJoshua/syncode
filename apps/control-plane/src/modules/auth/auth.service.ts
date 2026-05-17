@@ -5,6 +5,7 @@ import {
   Inject,
   Injectable,
   Logger,
+  Optional,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -23,6 +24,7 @@ import { resolveAvatarUrls } from '@/common/resolve-avatar-urls.js';
 import type { EnvConfig } from '@/config/env.config.js';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
 import { toUserProfile } from '@/modules/users/user-profile.mapper.js';
+import { type AuditLogInput, AuditService } from '../admin/audit.service.js';
 
 const scryptAsync = promisify(scrypt);
 
@@ -48,12 +50,14 @@ export class AuthService {
     @Inject(STORAGE_SERVICE) private readonly storageService: IStorageService,
     private readonly jwtService: JwtService,
     private readonly config: ConfigService<EnvConfig>,
+    @Optional() private readonly auditService?: AuditService,
   ) {}
 
   async register(
     username: string,
     email: string,
     password: string,
+    ipAddress?: string,
   ): Promise<{
     accessToken: string;
     refreshToken: string;
@@ -111,6 +115,14 @@ export class AuthService {
       }
 
       const tokenPair = await this.issueTokenPair(createdUser.id, createdUser.email);
+      await this.logAuthAudit({
+        actorId: createdUser.id,
+        action: 'auth.register',
+        targetType: 'user',
+        targetId: createdUser.id,
+        metadata: { email: createdUser.email, username: createdUser.username },
+        ipAddress,
+      });
 
       return {
         ...tokenPair,
@@ -137,6 +149,7 @@ export class AuthService {
   async login(
     identifier: string,
     password: string,
+    ipAddress?: string,
   ): Promise<{
     accessToken: string;
     refreshToken: string;
@@ -188,6 +201,14 @@ export class AuthService {
     }
 
     const tokenPair = await this.issueTokenPair(user.id, user.email);
+    await this.logAuthAudit({
+      actorId: user.id,
+      action: 'auth.login',
+      targetType: 'user',
+      targetId: user.id,
+      metadata: { identifierType: normalizedIdentifier.includes('@') ? 'email' : 'username' },
+      ipAddress,
+    });
 
     return {
       ...tokenPair,
@@ -223,9 +244,17 @@ export class AuthService {
     return this.issueTokenPair(user.id, user.email);
   }
 
-  async logout(refreshToken: string): Promise<void> {
+  async logout(refreshToken: string, ipAddress?: string): Promise<void> {
     const payload = await this.verifyRefreshToken(refreshToken);
     await this.revokeRefreshTokenByPayload(payload);
+    await this.logAuthAudit({
+      actorId: payload.sub,
+      action: 'auth.logout',
+      targetType: 'user',
+      targetId: payload.sub,
+      metadata: { tokenId: payload.jti },
+      ipAddress,
+    });
   }
 
   async revokeAllRefreshTokensForUser(userId: string): Promise<void> {
@@ -244,6 +273,19 @@ export class AuthService {
 
   async cleanupExpiredRefreshTokens(): Promise<void> {
     await this.db.delete(refreshTokens).where(lt(refreshTokens.expiresAt, new Date()));
+  }
+
+  private async logAuthAudit(input: AuditLogInput): Promise<void> {
+    if (!this.auditService) {
+      return;
+    }
+
+    try {
+      await this.auditService.log(input);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`Failed to write auth audit log for ${input.action}: ${message}`);
+    }
   }
 
   private async issueTokenPair(

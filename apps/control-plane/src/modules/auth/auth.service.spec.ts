@@ -9,6 +9,7 @@ import { refreshTokens, users } from '@syncode/db';
 import type { ICacheService, IStorageService } from '@syncode/shared/ports';
 import { describe, expect, it, vi } from 'vitest';
 import { createMockStorageService } from '@/test/mock-factories.js';
+import type { AuditService } from '../admin/audit.service.js';
 import { AuthService } from './auth.service.js';
 
 const scryptAsync = promisify(scrypt);
@@ -48,7 +49,7 @@ async function createPasswordHash(password: string): Promise<string> {
   return `${salt}:${derivedKey.toString('hex')}`;
 }
 
-function createAuthServiceFixture() {
+function createAuthServiceFixture(options?: { auditService?: Pick<AuditService, 'log'> }) {
   const findFirst = vi.fn();
   const usersReturning = vi.fn();
   const usersValues = vi.fn(() => ({ returning: usersReturning }));
@@ -142,6 +143,7 @@ function createAuthServiceFixture() {
     createMockStorageService() as unknown as IStorageService,
     jwtService as unknown as JwtService,
     configService as unknown as ConfigService,
+    options?.auditService as AuditService,
   );
 
   return {
@@ -156,6 +158,7 @@ function createAuthServiceFixture() {
       updateWhere,
       cacheService,
       jwtService,
+      auditService: options?.auditService,
     },
   };
 }
@@ -204,6 +207,40 @@ describe('AuthService', () => {
     };
     expect(insertedUserValues.email).toBe('alice@example.com');
     expect(insertedUserValues.passwordHash).not.toBe('secret123');
+  });
+
+  it('GIVEN audit log failure WHEN registering THEN still returns auth payload', async () => {
+    const auditService = {
+      log: vi.fn(async () => {
+        throw new Error('audit unavailable');
+      }),
+    } satisfies Pick<AuditService, 'log'>;
+    const { service, mocks } = createAuthServiceFixture({ auditService });
+
+    mocks.findFirst.mockResolvedValueOnce(null);
+    mocks.usersReturning.mockResolvedValueOnce([
+      {
+        id: '497f6eca-6276-4993-bfeb-53cbbbba6f08',
+        email: 'alice@example.com',
+        username: 'alice',
+        displayName: null,
+        role: 'user',
+        avatarUrl: null,
+        bio: null,
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      },
+    ]);
+
+    const result = await service.register(
+      'alice',
+      'Alice@Example.com',
+      'secret123',
+      '203.0.113.10',
+    );
+
+    expect(result.accessToken).toBe('access-token');
+    expect(result.user.email).toBe('alice@example.com');
   });
 
   it('GIVEN existing email WHEN registering THEN throws conflict with AUTH_EMAIL_TAKEN', async () => {
@@ -316,6 +353,35 @@ describe('AuthService', () => {
     expect(result.user.username).toBe('alice');
   });
 
+  it('GIVEN audit log failure WHEN logging in THEN still returns auth payload', async () => {
+    const auditService = {
+      log: vi.fn(async () => {
+        throw new Error('audit unavailable');
+      }),
+    } satisfies Pick<AuditService, 'log'>;
+    const { service, mocks } = createAuthServiceFixture({ auditService });
+    const passwordHash = await createPasswordHash('secret123');
+
+    mocks.findFirst.mockResolvedValueOnce({
+      id: '497f6eca-6276-4993-bfeb-53cbbbba6f08',
+      email: 'alice@example.com',
+      username: 'alice',
+      displayName: null,
+      role: 'user',
+      avatarUrl: null,
+      bio: null,
+      passwordHash,
+      bannedAt: null,
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+    });
+
+    const result = await service.login('alice', 'secret123', '203.0.113.10');
+
+    expect(result.accessToken).toBe('access-token');
+    expect(result.user.username).toBe('alice');
+  });
+
   it('GIVEN invalid refresh token WHEN refreshing THEN throws unauthorized', async () => {
     const { service, mocks } = createAuthServiceFixture();
     mocks.jwtService.verifyAsync.mockRejectedValueOnce(new Error('invalid'));
@@ -355,6 +421,17 @@ describe('AuthService', () => {
     const { service } = createAuthServiceFixture();
 
     await expect(service.logout('refresh-token')).resolves.toBeUndefined();
+  });
+
+  it('GIVEN audit log failure WHEN logging out THEN still completes', async () => {
+    const auditService = {
+      log: vi.fn(async () => {
+        throw new Error('audit unavailable');
+      }),
+    } satisfies Pick<AuditService, 'log'>;
+    const { service } = createAuthServiceFixture({ auditService });
+
+    await expect(service.logout('refresh-token', '203.0.113.10')).resolves.toBeUndefined();
   });
 
   it('GIVEN expired refresh tokens WHEN cleanup runs THEN completes without error', async () => {
