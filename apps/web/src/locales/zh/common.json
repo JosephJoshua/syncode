@@ -4,7 +4,8 @@
     "dashboard": "仪表盘",
     "rooms": "房间",
     "problems": "题库",
-    "bookmarks": "收藏夹"
+    "bookmarks": "收藏夹",
+    "primaryAria": "主导航"
   },
   "auth": {
     "register": "注册",
