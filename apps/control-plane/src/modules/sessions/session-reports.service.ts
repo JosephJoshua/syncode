@@ -3,6 +3,7 @@ import {
   AI_CLIENT,
   ERROR_CODES,
   type GenerateSessionReportResult,
+  type GenerateWeaknessAnalysisResult,
   type IAiClient,
   type SessionReport,
   type SessionReportDimension,
@@ -26,7 +27,9 @@ import { SessionReportRequestBuilderService } from './session-report-request-bui
 import { SessionsService } from './sessions.service.js';
 
 const SESSION_REPORT_META_KEY_PREFIX = 'session-report-meta:';
+const WEAKNESS_ANALYSIS_META_KEY_PREFIX = 'weakness-analysis-meta:';
 const SESSION_REPORT_META_TTL_SECONDS = 24 * 60 * 60;
+const WEAKNESS_ANALYSIS_META_TTL_SECONDS = 24 * 60 * 60;
 const WEAKNESS_SCORE_THRESHOLD = 85;
 const PRIOR_TREND_DELTA = 3;
 const RECENT_REPORT_LIMIT = 5;
@@ -47,9 +50,24 @@ interface WeaknessSignal {
   description: string;
 }
 
+interface WeaknessPersistenceRecord {
+  category: WeaknessCategory;
+  description: string;
+  sessionDescription?: string | null;
+  trend: WeaknessTrend;
+  score: number | null;
+}
+
 interface SessionReportJobMeta {
   sessionId: string;
   userId: string;
+  requestedAt: string;
+}
+
+interface WeaknessAnalysisJobMeta {
+  sessionId: string;
+  userId: string;
+  reportedAt: string;
 }
 
 @Injectable()
@@ -143,6 +161,12 @@ export class SessionReportsService {
       return;
     }
 
+    if (!(await this.isCurrentSessionReportGeneration(meta))) {
+      this.logger.warn(`Stale session-report job ${jobId}, skipping DB persistence`);
+      await this.cacheService.del(metaKey);
+      return;
+    }
+
     const { model, ...reportPayload } = result;
     const generatedAt = result.generatedAt ? new Date(result.generatedAt) : new Date();
 
@@ -160,13 +184,87 @@ export class SessionReportsService {
         and(eq(sessionReports.sessionId, meta.sessionId), eq(sessionReports.userId, meta.userId)),
       );
 
+    const weaknessAnalysisRequest = await this.buildWeaknessAnalysisRequest(
+      meta.sessionId,
+      meta.userId,
+      reportPayload,
+      generatedAt,
+    );
     await this.persistWeaknessSignals(meta.sessionId, meta.userId, reportPayload, generatedAt);
+    await this.enqueueWeaknessAnalysis(
+      meta.sessionId,
+      meta.userId,
+      weaknessAnalysisRequest,
+      generatedAt,
+    );
 
     await this.cacheService.del(metaKey);
 
     this.logger.debug(
       `Persisted session report for session ${meta.sessionId} and user ${meta.userId}`,
     );
+  }
+
+  private async isCurrentSessionReportGeneration(meta: SessionReportJobMeta): Promise<boolean> {
+    const row = await this.db.query.sessionReports.findFirst({
+      columns: { requestedAt: true },
+      where: (table, { and, eq }) =>
+        and(eq(table.sessionId, meta.sessionId), eq(table.userId, meta.userId)),
+    });
+
+    return row?.requestedAt?.toISOString() === meta.requestedAt;
+  }
+
+  async handleWeaknessAnalysisResult(
+    jobId: string,
+    result: GenerateWeaknessAnalysisResult,
+  ): Promise<void> {
+    const metaKey = `${WEAKNESS_ANALYSIS_META_KEY_PREFIX}${jobId}`;
+    const meta = await this.cacheService.get<WeaknessAnalysisJobMeta>(metaKey);
+
+    const context = meta ?? {
+      sessionId: result.sessionId,
+      userId: result.participantId,
+      reportedAt: result.reportedAt,
+    };
+
+    if (!(await this.isCurrentWeaknessAnalysisGeneration(context))) {
+      this.logger.warn(`Stale weakness-analysis job ${jobId}, skipping DB persistence`);
+      if (meta) {
+        await this.cacheService.del(metaKey);
+      }
+      return;
+    }
+
+    await this.persistWeaknessAnalysisResult(
+      context.sessionId,
+      context.userId,
+      result,
+      new Date(context.reportedAt),
+    );
+    if (meta) {
+      await this.cacheService.del(metaKey);
+    }
+
+    this.logger.debug(
+      `Persisted weakness analysis for session ${context.sessionId} and user ${context.userId}`,
+    );
+  }
+
+  private async isCurrentWeaknessAnalysisGeneration(
+    meta: WeaknessAnalysisJobMeta,
+  ): Promise<boolean> {
+    const row = await this.db.query.sessionReports.findFirst({
+      columns: { generatedAt: true, status: true },
+      where: (table, { and, eq }) =>
+        and(
+          eq(table.sessionId, meta.sessionId),
+          eq(table.userId, meta.userId),
+          eq(table.status, 'completed'),
+        ),
+    });
+
+    return row?.generatedAt?.toISOString() === meta.reportedAt;
   }
 
   async getReport(sessionId: string, userId: string, isAdmin: boolean): Promise<SessionReport> {
@@ -234,9 +332,13 @@ export class SessionReportsService {
       const { jobId } = await this.aiClient.submitSessionReportRequest(request);
       await this.cacheService.set<SessionReportJobMeta>(
         `${SESSION_REPORT_META_KEY_PREFIX}${jobId}`,
-        { sessionId, userId },
+        { sessionId, userId, requestedAt: requestedAt.toISOString() },
         SESSION_REPORT_META_TTL_SECONDS,
       );
+      const cachedResult = await this.aiClient.getSessionReportResult(jobId);
+      if (cachedResult) {
+        await this.handleResult(jobId, cachedResult);
+      }
     } catch (error) {
       await this.db
         .update(sessionReports)
@@ -250,6 +352,155 @@ export class SessionReportsService {
     }
   }
 
+  private async enqueueWeaknessAnalysis(
+    sessionId: string,
+    userId: string,
+    request: Parameters<IAiClient['submitWeaknessAnalysisRequest']>[0] | null,
+    reportedAt: Date,
+  ): Promise<void> {
+    try {
+      if (!request) {
+        return;
+      }
+
+      const { jobId } = await this.aiClient.submitWeaknessAnalysisRequest(request);
+      await this.cacheService.set<WeaknessAnalysisJobMeta>(
+        `${WEAKNESS_ANALYSIS_META_KEY_PREFIX}${jobId}`,
+        { sessionId, userId, reportedAt: reportedAt.toISOString() },
+        WEAKNESS_ANALYSIS_META_TTL_SECONDS,
+      );
+      const cachedResult = await this.aiClient.getWeaknessAnalysisResult(jobId);
+      if (cachedResult) {
+        await this.handleWeaknessAnalysisResult(jobId, cachedResult);
+      }
+    } catch (error) {
+      this.logger.warn(
+        `Failed to enqueue weakness analysis for session ${sessionId} and user ${userId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
+
+  private async buildWeaknessAnalysisRequest(
+    sessionId: string,
+    userId: string,
+    report: SessionReport,
+    reportGeneratedAt: Date,
+  ): Promise<Parameters<IAiClient['submitWeaknessAnalysisRequest']>[0] | null> {
+    const sessionRow = await this.db.query.sessions.findFirst({
+      columns: {
+        id: true,
+        roomId: true,
+        problemId: true,
+        mode: true,
+        language: true,
+        durationMs: true,
+        startedAt: true,
+        finishedAt: true,
+      },
+      where: (table, { eq }) => eq(table.id, sessionId),
+    });
+
+    if (!sessionRow) {
+      this.logger.warn(`Skipping weakness analysis for missing session ${sessionId}`);
+      return null;
+    }
+
+    const participants = await this.db
+      .select({
+        userId: sessionParticipants.userId,
+        username: users.username,
+        displayName: users.displayName,
+        role: sessionParticipants.role,
+      })
+      .from(sessionParticipants)
+      .innerJoin(users, eq(users.id, sessionParticipants.userId))
+      .where(eq(sessionParticipants.sessionId, sessionId))
+      .orderBy(asc(sessionParticipants.joinedAt), asc(sessionParticipants.userId));
+
+    const participant = participants.find((item) => item.userId === userId);
+    if (!participant) {
+      this.logger.warn(
+        `Skipping weakness analysis for session ${sessionId}: user ${userId} is not a participant`,
+      );
+      return null;
+    }
+
+    const [problemRow] = sessionRow.problemId
+      ? await this.db
+          .select({
+            id: problems.id,
+            title: problems.title,
+            description: problems.description,
+            difficulty: problems.difficulty,
+            constraints: problems.constraints,
+          })
+          .from(problems)
+          .where(eq(problems.id, sessionRow.problemId))
+          .limit(1)
+      : [];
+
+    const reportRequest = await this.requestBuilder.buildReportRequest(
+      sessionRow,
+      participants,
+      participant,
+      problemRow ?? null,
+    );
+    const historicalWeaknesses = await this.loadHistoricalWeaknesses(userId);
+
+    return {
+      sessionId: reportRequest.sessionId,
+      roomId: reportRequest.roomId,
+      participantId: reportRequest.participantId,
+      participantRole: reportRequest.participantRole,
+      sessionReportGeneratedAt: reportGeneratedAt.toISOString(),
+      problem: {
+        id: reportRequest.problem.id,
+        title: reportRequest.problem.title,
+        description: reportRequest.problem.description,
+        difficulty: reportRequest.problem.difficulty,
+      },
+      language: reportRequest.language,
+      durationMs: reportRequest.durationMs,
+      snapshots: reportRequest.snapshots,
+      runs: reportRequest.runs,
+      submissions: reportRequest.submissions,
+      peerFeedback: reportRequest.peerFeedback,
+      aiMessages: reportRequest.aiMessages,
+      sessionReportSummary: {
+        overallScore: report.overallScore ?? null,
+        feedback: report.detailedFeedback ?? null,
+      },
+      historicalWeaknesses,
+    };
+  }
+
+  private async loadHistoricalWeaknesses(
+    userId: string,
+  ): Promise<Parameters<IAiClient['submitWeaknessAnalysisRequest']>[0]['historicalWeaknesses']> {
+    const rows = await this.db
+      .select({
+        category: userWeaknesses.category,
+        description: userWeaknesses.description,
+        frequency: userWeaknesses.frequency,
+        trend: userWeaknesses.trend,
+        lastSeenAt: userWeaknesses.lastSeenAt,
+      })
+      .from(userWeaknesses)
+      .where(eq(userWeaknesses.userId, userId))
+      .orderBy(desc(userWeaknesses.lastSeenAt), desc(userWeaknesses.frequency))
+      .limit(10);
+
+    return rows.map((row) => ({
+      category: row.category,
+      description: row.description,
+      frequency: row.frequency,
+      trend: row.trend,
+      lastSeenAt: row.lastSeenAt.toISOString(),
+    }));
+  }
+
   private async persistWeaknessSignals(
     sessionId: string,
     userId: string,
@@ -258,13 +509,42 @@ export class SessionReportsService {
   ): Promise<void> {
     const signals = this.extractWeaknessSignals(report);
 
-    const signalsWithTrend = await Promise.all(
+    const records = await Promise.all(
       signals.map(async (signal) => ({
-        ...signal,
+        category: signal.category,
+        description: signal.description,
+        sessionDescription: signal.description,
+        score: signal.score,
         trend: await this.calculateWeaknessTrend(userId, sessionId, signal.dimension, signal.score),
       })),
     );
 
+    await this.persistWeaknessRecords(sessionId, userId, records, generatedAt);
+  }
+
+  private async persistWeaknessAnalysisResult(
+    sessionId: string,
+    userId: string,
+    result: GenerateWeaknessAnalysisResult,
+    generatedAt: Date,
+  ): Promise<void> {
+    const records = result.weaknesses.map((weakness) => ({
+      category: weakness.category,
+      description: weakness.description,
+      sessionDescription: weakness.evidence,
+      trend: weakness.trend,
+      score: null,
+    }));
+
+    await this.persistWeaknessRecords(sessionId, userId, records, generatedAt);
+  }
+
+  private async persistWeaknessRecords(
+    sessionId: string,
+    userId: string,
+    records: WeaknessPersistenceRecord[],
+    generatedAt: Date,
+  ): Promise<void> {
     await this.db.transaction(async (tx) => {
       const existingLinks = await tx
         .select({ weaknessId: weaknessSessions.weaknessId })
@@ -285,22 +565,22 @@ export class SessionReportsService {
         );
       }
 
-      for (const signal of signalsWithTrend) {
+      for (const record of records) {
         const [weakness] = await tx
           .insert(userWeaknesses)
           .values({
             userId,
-            category: signal.category,
-            description: signal.description,
+            category: record.category,
+            description: record.description,
             frequency: 1,
-            trend: signal.trend,
+            trend: record.trend,
             lastSeenAt: generatedAt,
           })
           .onConflictDoUpdate({
             target: [userWeaknesses.userId, userWeaknesses.category],
             set: {
-              description: signal.description,
-              trend: signal.trend,
+              description: record.description,
+              trend: record.trend,
               lastSeenAt: generatedAt,
             },
           })
@@ -317,9 +597,9 @@ export class SessionReportsService {
           .values({
             weaknessId: weakness.id,
             sessionId,
-            description: signal.description,
-            trend: signal.trend,
-            score: signal.score,
+            description: record.sessionDescription ?? record.description,
+            trend: record.trend,
+            score: record.score,
             reportedAt: generatedAt,
           })
           .onConflictDoNothing();

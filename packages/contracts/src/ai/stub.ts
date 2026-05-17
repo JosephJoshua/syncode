@@ -8,6 +8,8 @@ import type {
   GenerateHintResult,
   GenerateSessionReportRequest,
   GenerateSessionReportResult,
+  GenerateWeaknessAnalysisRequest,
+  GenerateWeaknessAnalysisResult,
   InterviewResponseRequest,
   InterviewResponseResult,
   ReviewCodeRequest,
@@ -15,13 +17,20 @@ import type {
 } from './types.js';
 import { toPublicSessionReportTestCaseBreakdown } from './types.js';
 
-type AiJobType = 'hint' | 'code-analysis' | 'review' | 'interview' | 'session-report';
+type AiJobType =
+  | 'hint'
+  | 'code-analysis'
+  | 'weakness-analysis'
+  | 'review'
+  | 'interview'
+  | 'session-report';
 
 interface StubJob {
   status: JobStatus;
   type: AiJobType;
   hintResult?: GenerateHintResult;
   codeAnalysisResult?: AnalyzeCodeResult;
+  weaknessAnalysisResult?: GenerateWeaknessAnalysisResult;
   reviewResult?: ReviewCodeResult;
   interviewResult?: InterviewResponseResult;
   sessionReportResult?: GenerateSessionReportResult;
@@ -47,6 +56,10 @@ export class StubAiClient implements IAiClient {
   private sessionReportResultCallback?: (
     jobId: string,
     result: GenerateSessionReportResult,
+  ) => Promise<void>;
+  private weaknessAnalysisResultCallback?: (
+    jobId: string,
+    result: GenerateWeaknessAnalysisResult,
   ) => Promise<void>;
 
   constructor(options: StubAiClientOptions = {}) {
@@ -87,6 +100,24 @@ export class StubAiClient implements IAiClient {
     const job = this.jobs.get(jobId);
     if (job?.type !== 'code-analysis') return null;
     return job.codeAnalysisResult ?? null;
+  }
+
+  async submitWeaknessAnalysisRequest(
+    request: GenerateWeaknessAnalysisRequest,
+  ): Promise<SubmitResult<'ai:weakness-analysis'>> {
+    const jobId = randomUUID() as JobId<'ai:weakness-analysis'>;
+    this.jobs.set(jobId, { status: 'queued', type: 'weakness-analysis' });
+
+    this.scheduleWeaknessAnalysisCompletion(jobId, request);
+    return { jobId };
+  }
+
+  async getWeaknessAnalysisResult(
+    jobId: JobId<'ai:weakness-analysis'>,
+  ): Promise<GenerateWeaknessAnalysisResult | null> {
+    const job = this.jobs.get(jobId);
+    if (job?.type !== 'weakness-analysis') return null;
+    return job.weaknessAnalysisResult ?? null;
   }
 
   async submitReviewRequest(_request: ReviewCodeRequest): Promise<SubmitResult<'ai:review'>> {
@@ -149,6 +180,12 @@ export class StubAiClient implements IAiClient {
     return job.status;
   }
 
+  async getWeaknessAnalysisJobStatus(jobId: JobId<'ai:weakness-analysis'>): Promise<JobStatus> {
+    const job = this.jobs.get(jobId);
+    if (job?.type !== 'weakness-analysis') return 'failed';
+    return job.status;
+  }
+
   async getReviewJobStatus(jobId: JobId<'ai:review'>): Promise<JobStatus> {
     const job = this.jobs.get(jobId);
     if (job?.type !== 'review') return 'failed';
@@ -175,6 +212,12 @@ export class StubAiClient implements IAiClient {
     callback: (jobId: string, result: GenerateSessionReportResult) => Promise<void>,
   ): void {
     this.sessionReportResultCallback = callback;
+  }
+
+  onWeaknessAnalysisResult(
+    callback: (jobId: string, result: GenerateWeaknessAnalysisResult) => Promise<void>,
+  ): void {
+    this.weaknessAnalysisResultCallback = callback;
   }
 
   private scheduleHintCompletion(jobId: string, request: GenerateHintRequest): void {
@@ -263,6 +306,72 @@ export class StubAiClient implements IAiClient {
             'If another engineer read this code quickly, which variable or step would you rename or explain first?',
           ],
         };
+      }, this.delayMs),
+    );
+  }
+
+  private scheduleWeaknessAnalysisCompletion(
+    jobId: string,
+    request: GenerateWeaknessAnalysisRequest,
+  ): void {
+    this.timers.push(
+      setTimeout(() => {
+        const job = this.jobs.get(jobId);
+        if (job) job.status = 'running';
+      }, this.delayMs / 4),
+      setTimeout(() => {
+        const job = this.jobs.get(jobId);
+        if (!job) return;
+
+        const historicalCommunication = request.historicalWeaknesses.find(
+          (item) => item.category === 'communication',
+        );
+        const peerCommunicationAverage =
+          request.peerFeedback.length > 0
+            ? request.peerFeedback.reduce((sum, item) => sum + item.communicationRating, 0) /
+              request.peerFeedback.length
+            : null;
+
+        job.status = 'completed';
+        job.weaknessAnalysisResult = {
+          sessionId: request.sessionId,
+          participantId: request.participantId,
+          reportedAt: request.sessionReportGeneratedAt,
+          summary:
+            'The session suggests a small set of recurring weaknesses that should be tracked across future interviews rather than treated as one-off mistakes.',
+          recurringPatterns: [
+            historicalCommunication
+              ? 'Communication concerns have shown up across multiple sessions.'
+              : 'Session evidence suggests incomplete explanation of decisions under pressure.',
+            'Edge-case confidence still needs to be made more explicit during problem solving.',
+          ],
+          weaknesses: [
+            {
+              category: 'edge_cases',
+              description:
+                'The candidate should make boundary-case reasoning more explicit before final submission.',
+              evidence:
+                request.submissions.length > 0
+                  ? `Observed ${request.submissions.length} submissions before finishing, suggesting additional edge-case clarification would help.`
+                  : 'The session data shows limited explicit edge-case discussion.',
+              trend: request.historicalWeaknesses.some((item) => item.category === 'edge_cases')
+                ? 'worsening'
+                : 'stable',
+            },
+            {
+              category: 'communication',
+              description:
+                'The candidate can improve how they explain trade-offs, invariants, and next debugging steps out loud.',
+              evidence:
+                peerCommunicationAverage != null
+                  ? `Peer communication rating averaged ${peerCommunicationAverage.toFixed(1)}/5 in this session.`
+                  : 'Peer feedback is limited, so the signal is based on sparse discussion evidence.',
+              trend: historicalCommunication?.trend === 'worsening' ? 'worsening' : 'stable',
+            },
+          ],
+        };
+
+        this.weaknessAnalysisResultCallback?.(jobId, job.weaknessAnalysisResult).catch(() => {});
       }, this.delayMs),
     );
   }

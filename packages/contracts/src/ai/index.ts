@@ -7,10 +7,14 @@ export type {
   GenerateHintResult,
   GenerateSessionReportRequest,
   GenerateSessionReportResult,
+  GenerateWeaknessAnalysisRequest,
+  GenerateWeaknessAnalysisResult,
+  HistoricalWeaknessContext,
   InterviewResponseAudio,
   InterviewResponseRequest,
   InterviewResponseResult,
   ReviewCodeRequest,
   ReviewCodeResult,
+  WeaknessAnalysisItem,
 } from './types.js';
 export { toPublicSessionReportTestCaseBreakdown } from './types.js';

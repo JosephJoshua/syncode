@@ -1,8 +1,10 @@
 import {
   AI_CODE_ANALYSIS_RESULT_QUEUE,
   AI_HINT_RESULT_QUEUE,
+  AI_WEAKNESS_ANALYSIS_RESULT_QUEUE,
   type AnalyzeCodeResult,
   type GenerateHintResult,
+  type GenerateWeaknessAnalysisResult,
   type JobId,
 } from '@syncode/contracts';
 import type { ICacheService, IQueueService, QueueJob } from '@syncode/shared/ports';
@@ -49,6 +51,22 @@ describe('QueueAiClient', () => {
       },
       followUpQuestions: ['What is the complexity?'],
     };
+    const weaknessResult: GenerateWeaknessAnalysisResult & { jobId: string } = {
+      jobId: '1',
+      sessionId: 'session-1',
+      participantId: 'user-1',
+      reportedAt: '2026-04-20T06:00:00.000Z',
+      summary: 'Track edge-case reasoning over time.',
+      recurringPatterns: ['Edge cases are discussed after implementation.'],
+      weaknesses: [
+        {
+          category: 'edge_cases',
+          description: 'Boundary cases should be named before final submission.',
+          evidence: 'The session did not show explicit empty-input validation.',
+          trend: 'stable',
+        },
+      ],
+    };
 
     await handlers.get(AI_HINT_RESULT_QUEUE)!({ data: hintResult } as QueueJob<
       Record<string, unknown>
@@ -56,6 +74,9 @@ describe('QueueAiClient', () => {
     await handlers.get(AI_CODE_ANALYSIS_RESULT_QUEUE)!({ data: analysisResult } as QueueJob<
       Record<string, unknown>
     >);
+    await handlers.get(AI_WEAKNESS_ANALYSIS_RESULT_QUEUE)!({
+      data: weaknessResult,
+    } as QueueJob<Record<string, unknown>>);
 
     expect(cacheService.set).toHaveBeenCalledWith('ai-result:hint:1', hintResult, 86_400);
     expect(cacheService.set).toHaveBeenCalledWith(
@@ -63,9 +84,17 @@ describe('QueueAiClient', () => {
       analysisResult,
       86_400,
     );
+    expect(cacheService.set).toHaveBeenCalledWith(
+      'ai-result:weakness-analysis:1',
+      weaknessResult,
+      86_400,
+    );
     await expect(client.getHintResult('1' as JobId<'ai:hint'>)).resolves.toEqual(hintResult);
     await expect(client.getCodeAnalysisResult('1' as JobId<'ai:code-analysis'>)).resolves.toEqual(
       analysisResult,
     );
+    await expect(
+      client.getWeaknessAnalysisResult('1' as JobId<'ai:weakness-analysis'>),
+    ).resolves.toEqual(weaknessResult);
   });
 });

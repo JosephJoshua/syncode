@@ -36,6 +36,8 @@ export {
   VALID_STATUS_TRANSITIONS,
 } from './room.js';
 export { UserRole } from './user.js';
+export type { WeaknessCategory, WeaknessTrend } from './weakness.js';
+export { WEAKNESS_CATEGORIES, WEAKNESS_TRENDS } from './weakness.js';
 export type {
   WhiteboardAllowedContentType,
   WhiteboardAllowedImageType,

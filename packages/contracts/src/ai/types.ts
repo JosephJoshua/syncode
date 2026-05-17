@@ -1,4 +1,4 @@
-import type { RoomRole, SupportedLanguage } from '@syncode/shared';
+import type { RoomRole, SupportedLanguage, WeaknessCategory, WeaknessTrend } from '@syncode/shared';
 import type { CodeSnapshotTrigger, SessionReport } from '../control/sessions.js';
 
 export interface HintSubmissionSummary {
@@ -48,6 +48,56 @@ export interface AnalyzeCodeResult {
     readability: string;
   };
   followUpQuestions: string[];
+}
+
+export interface HistoricalWeaknessContext {
+  category: WeaknessCategory;
+  description: string;
+  frequency: number;
+  trend: WeaknessTrend;
+  lastSeenAt: string;
+}
+
+export interface GenerateWeaknessAnalysisRequest {
+  sessionId: string;
+  roomId: string;
+  participantId: string;
+  participantRole: RoomRole;
+  sessionReportGeneratedAt: string;
+  problem: {
+    id: string | null;
+    title: string | null;
+    description: string | null;
+    difficulty: string | null;
+  };
+  language: SupportedLanguage | null;
+  durationMs: number;
+  snapshots: SessionReportSnapshotContext[];
+  runs: SessionReportRunContext[];
+  submissions: SessionReportSubmissionContext[];
+  peerFeedback: SessionReportPeerFeedbackContext[];
+  aiMessages: SessionReportAiMessageContext[];
+  sessionReportSummary: {
+    overallScore: number | null;
+    feedback: string | null;
+  } | null;
+  historicalWeaknesses: HistoricalWeaknessContext[];
+}
+
+export interface WeaknessAnalysisItem {
+  category: WeaknessCategory;
+  description: string;
+  evidence: string;
+  trend: WeaknessTrend;
+}
+
+export interface GenerateWeaknessAnalysisResult {
+  sessionId: string;
+  participantId: string;
+  reportedAt: string;
+  summary: string;
+  recurringPatterns: string[];
+  weaknesses: WeaknessAnalysisItem[];
 }
 
 export interface ReviewCodeRequest {

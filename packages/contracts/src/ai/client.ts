@@ -6,6 +6,8 @@ import type {
   GenerateHintResult,
   GenerateSessionReportRequest,
   GenerateSessionReportResult,
+  GenerateWeaknessAnalysisRequest,
+  GenerateWeaknessAnalysisResult,
   InterviewResponseRequest,
   InterviewResponseResult,
   ReviewCodeRequest,
@@ -17,6 +19,12 @@ export interface IAiClient {
   getHintResult(jobId: JobId<'ai:hint'>): Promise<GenerateHintResult | null>;
   submitCodeAnalysisRequest(request: AnalyzeCodeRequest): Promise<SubmitResult<'ai:code-analysis'>>;
   getCodeAnalysisResult(jobId: JobId<'ai:code-analysis'>): Promise<AnalyzeCodeResult | null>;
+  submitWeaknessAnalysisRequest(
+    request: GenerateWeaknessAnalysisRequest,
+  ): Promise<SubmitResult<'ai:weakness-analysis'>>;
+  getWeaknessAnalysisResult(
+    jobId: JobId<'ai:weakness-analysis'>,
+  ): Promise<GenerateWeaknessAnalysisResult | null>;
   submitReviewRequest(request: ReviewCodeRequest): Promise<SubmitResult<'ai:review'>>;
   getReviewResult(jobId: JobId<'ai:review'>): Promise<ReviewCodeResult | null>;
   submitInterviewResponse(request: InterviewResponseRequest): Promise<SubmitResult<'ai:interview'>>;
@@ -30,8 +38,12 @@ export interface IAiClient {
   onSessionReportResult(
     callback: (jobId: string, result: GenerateSessionReportResult) => Promise<void>,
   ): void;
+  onWeaknessAnalysisResult(
+    callback: (jobId: string, result: GenerateWeaknessAnalysisResult) => Promise<void>,
+  ): void;
   getHintJobStatus(jobId: JobId<'ai:hint'>): Promise<JobStatus>;
   getCodeAnalysisJobStatus(jobId: JobId<'ai:code-analysis'>): Promise<JobStatus>;
+  getWeaknessAnalysisJobStatus(jobId: JobId<'ai:weakness-analysis'>): Promise<JobStatus>;
   getReviewJobStatus(jobId: JobId<'ai:review'>): Promise<JobStatus>;
   getInterviewJobStatus(jobId: JobId<'ai:interview'>): Promise<JobStatus>;
   getSessionReportJobStatus(jobId: JobId<'ai:session-report'>): Promise<JobStatus>;

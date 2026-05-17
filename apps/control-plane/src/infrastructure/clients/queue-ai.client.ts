@@ -10,12 +10,16 @@ import {
   AI_REVIEW_RESULT_QUEUE,
   AI_SESSION_REPORT_QUEUE,
   AI_SESSION_REPORT_RESULT_QUEUE,
+  AI_WEAKNESS_ANALYSIS_QUEUE,
+  AI_WEAKNESS_ANALYSIS_RESULT_QUEUE,
   type AnalyzeCodeRequest,
   type AnalyzeCodeResult,
   type GenerateHintRequest,
   type GenerateHintResult,
   type GenerateSessionReportRequest,
   type GenerateSessionReportResult,
+  type GenerateWeaknessAnalysisRequest,
+  type GenerateWeaknessAnalysisResult,
   type IAiClient,
   type InterviewResponseRequest,
   type InterviewResponseResult,
@@ -42,12 +46,17 @@ export class QueueAiClient implements IAiClient, OnModuleInit {
   private readonly helper: QueueClientHelper;
   private static readonly HINT_RESULT_NAMESPACE = 'hint';
   private static readonly CODE_ANALYSIS_RESULT_NAMESPACE = 'code-analysis';
+  private static readonly WEAKNESS_ANALYSIS_RESULT_NAMESPACE = 'weakness-analysis';
   private static readonly REVIEW_RESULT_NAMESPACE = 'review';
   private static readonly INTERVIEW_RESULT_NAMESPACE = 'interview';
   private static readonly SESSION_REPORT_RESULT_NAMESPACE = 'session-report';
   private sessionReportResultCallback?: (
     jobId: string,
     result: GenerateSessionReportResult,
+  ) => Promise<void>;
+  private weaknessAnalysisResultCallback?: (
+    jobId: string,
+    result: GenerateWeaknessAnalysisResult,
   ) => Promise<void>;
 
   constructor(
@@ -67,6 +76,27 @@ export class QueueAiClient implements IAiClient, OnModuleInit {
       AI_CODE_ANALYSIS_RESULT_QUEUE,
       'code-analysis',
       QueueAiClient.CODE_ANALYSIS_RESULT_NAMESPACE,
+    );
+    this.queueService.process<GenerateWeaknessAnalysisResult & { jobId: string }>(
+      AI_WEAKNESS_ANALYSIS_RESULT_QUEUE,
+      async (job) => {
+        if (!job.data.jobId) {
+          this.logger.warn('Received weakness-analysis result without jobId, skipping');
+          return;
+        }
+
+        await this.cacheService.set(
+          `ai-result:${QueueAiClient.WEAKNESS_ANALYSIS_RESULT_NAMESPACE}:${job.data.jobId}`,
+          job.data,
+          24 * 60 * 60,
+        );
+        this.logger.debug(`Cached weakness-analysis result for job ${job.data.jobId}`);
+
+        if (this.weaknessAnalysisResultCallback) {
+          await this.weaknessAnalysisResultCallback(job.data.jobId, job.data);
+        }
+      },
+      { concurrency: 10 },
     );
     this.helper.processResultQueue<ReviewCodeResult>(
       AI_REVIEW_RESULT_QUEUE,
@@ -133,6 +163,33 @@ export class QueueAiClient implements IAiClient, OnModuleInit {
     return this.helper.getResult<AnalyzeCodeResult>(
       jobId,
       QueueAiClient.CODE_ANALYSIS_RESULT_NAMESPACE,
+    );
+  }
+
+  async submitWeaknessAnalysisRequest(
+    request: GenerateWeaknessAnalysisRequest,
+  ): Promise<SubmitResult<'ai:weakness-analysis'>> {
+    const jobId = await this.queueService.enqueue(
+      AI_WEAKNESS_ANALYSIS_QUEUE,
+      'generate-weakness-analysis',
+      request,
+      {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 1500 },
+        removeOnComplete: 100,
+        removeOnFail: false,
+      },
+    );
+
+    return { jobId: jobId as JobId<'ai:weakness-analysis'> };
+  }
+
+  async getWeaknessAnalysisResult(
+    jobId: JobId<'ai:weakness-analysis'>,
+  ): Promise<GenerateWeaknessAnalysisResult | null> {
+    return this.helper.getResult<GenerateWeaknessAnalysisResult>(
+      jobId,
+      QueueAiClient.WEAKNESS_ANALYSIS_RESULT_NAMESPACE,
     );
   }
 
@@ -215,6 +272,14 @@ export class QueueAiClient implements IAiClient, OnModuleInit {
     );
   }
 
+  async getWeaknessAnalysisJobStatus(jobId: JobId<'ai:weakness-analysis'>): Promise<JobStatus> {
+    return this.helper.getJobStatus(
+      AI_WEAKNESS_ANALYSIS_QUEUE,
+      jobId,
+      QueueAiClient.WEAKNESS_ANALYSIS_RESULT_NAMESPACE,
+    );
+  }
+
   async getReviewJobStatus(jobId: JobId<'ai:review'>): Promise<JobStatus> {
     return this.helper.getJobStatus(AI_REVIEW_QUEUE, jobId, QueueAiClient.REVIEW_RESULT_NAMESPACE);
   }
@@ -241,20 +306,34 @@ export class QueueAiClient implements IAiClient, OnModuleInit {
     this.sessionReportResultCallback = callback;
   }
 
+  onWeaknessAnalysisResult(
+    callback: (jobId: string, result: GenerateWeaknessAnalysisResult) => Promise<void>,
+  ): void {
+    this.weaknessAnalysisResultCallback = callback;
+  }
+
   async healthCheck(): Promise<boolean> {
     try {
-      const [hintStats, codeAnalysisStats, reviewStats, interviewStats, sessionReportStats] =
-        await Promise.all([
-          this.queueService.getQueueStats(AI_HINT_QUEUE),
-          this.queueService.getQueueStats(AI_CODE_ANALYSIS_QUEUE),
-          this.queueService.getQueueStats(AI_REVIEW_QUEUE),
-          this.queueService.getQueueStats(AI_INTERVIEW_QUEUE),
-          this.queueService.getQueueStats(AI_SESSION_REPORT_QUEUE),
-        ]);
+      const [
+        hintStats,
+        codeAnalysisStats,
+        weaknessAnalysisStats,
+        reviewStats,
+        interviewStats,
+        sessionReportStats,
+      ] = await Promise.all([
+        this.queueService.getQueueStats(AI_HINT_QUEUE),
+        this.queueService.getQueueStats(AI_CODE_ANALYSIS_QUEUE),
+        this.queueService.getQueueStats(AI_WEAKNESS_ANALYSIS_QUEUE),
+        this.queueService.getQueueStats(AI_REVIEW_QUEUE),
+        this.queueService.getQueueStats(AI_INTERVIEW_QUEUE),
+        this.queueService.getQueueStats(AI_SESSION_REPORT_QUEUE),
+      ]);
 
       return (
         hintStats != null &&
         codeAnalysisStats != null &&
+        weaknessAnalysisStats != null &&
         reviewStats != null &&
         interviewStats != null &&
         sessionReportStats != null
