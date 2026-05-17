@@ -127,6 +127,25 @@ type TestCaseSummary = {
   total: number;
 };
 
+type SessionReportResult = Awaited<ReturnType<typeof fetchSessionReport>>;
+
+type ReportQueryLike = {
+  data?: SessionReportResult;
+  isLoading?: boolean;
+  isError?: boolean;
+};
+
+type SelectedSessionItem = {
+  sessionId: string;
+  session: SessionSummary;
+  reportResult?: SessionReportResult;
+  isLoading: boolean;
+  isError: boolean;
+};
+
+type TranslationFn = (key: string, options?: Record<string, unknown>) => string;
+type NavigateFn = ReturnType<typeof useNavigate>;
+
 export const Route = createFileRoute('/_app/sessions/compare')({
   validateSearch: compareSearchSchema,
   component: SessionComparisonPage,
@@ -1300,6 +1319,254 @@ function InfoCard({
       </CardContent>
     </Card>
   );
+}
+
+function buildSessionById(sessions: SessionSummary[]) {
+  return new Map(sessions.map((session) => [session.sessionId, session]));
+}
+
+function buildSelectedSessionItems(
+  selectedSessionIds: string[],
+  sessionById: Map<string, SessionSummary>,
+  reportQueries: ReportQueryLike[],
+) {
+  return selectedSessionIds.flatMap((sessionId, index) => {
+    const session = sessionById.get(sessionId);
+    if (!session) {
+      return [];
+    }
+
+    const reportQuery = reportQueries[index];
+    return [
+      {
+        sessionId,
+        session,
+        reportResult: reportQuery?.data,
+        isLoading: reportQuery?.isLoading ?? false,
+        isError: reportQuery?.isError ?? false,
+      } satisfies SelectedSessionItem,
+    ];
+  });
+}
+
+function buildComparableSessions(selectedItems: SelectedSessionItem[]) {
+  return selectedItems.flatMap((item) =>
+    item.reportResult?.state === 'ready'
+      ? [
+          {
+            sessionId: item.sessionId,
+            session: item.session,
+            report: item.reportResult.report,
+          } satisfies ComparableSession,
+        ]
+      : [],
+  );
+}
+
+function buildChronologicalSessions(comparableSessions: ComparableSession[]) {
+  return [...comparableSessions].sort(
+    (left, right) =>
+      new Date(left.session.finishedAt ?? left.session.createdAt).getTime() -
+      new Date(right.session.finishedAt ?? right.session.createdAt).getTime(),
+  );
+}
+
+function buildTrendPoint(session: ComparableSession, score: number, t: TranslationFn): TrendPoint {
+  return {
+    sessionId: session.sessionId,
+    label: session.session.problemTitle ?? t('sessionComparison:fallbackProblem'),
+    finishedAt: session.session.finishedAt ?? session.session.createdAt,
+    score,
+  };
+}
+
+function buildOverallTrendPoints(chronologicalSessions: ComparableSession[], t: TranslationFn) {
+  return chronologicalSessions.flatMap((session) => {
+    const score = resolveComparableOverallScore(session);
+    return typeof score === 'number' ? [buildTrendPoint(session, score, t)] : [];
+  });
+}
+
+function resolveNextHoveredSessionId(points: TrendPoint[], hoveredSessionId: string | null) {
+  const latestSessionId = points.at(-1)?.sessionId ?? null;
+  if (!latestSessionId) {
+    return null;
+  }
+
+  return points.some((point) => point.sessionId === hoveredSessionId)
+    ? hoveredSessionId
+    : latestSessionId;
+}
+
+function buildCriteriaTrendRows(chronologicalSessions: ComparableSession[], t: TranslationFn) {
+  return SESSION_COMPARISON_DIMENSION_KEYS.map((key) => {
+    const points = chronologicalSessions.flatMap((session) => {
+      const score = resolveComparisonDimensionScore(session.report, key);
+      return typeof score === 'number' ? [buildTrendPoint(session, score, t)] : [];
+    });
+    const values = points.map((point) => point.score);
+
+    return {
+      key,
+      points,
+      trend: resolveComparisonTrend(values),
+      averageDelta: calculateAverageDelta(values),
+      baselineScore: points[0]?.score ?? null,
+      latestScore: points.at(-1)?.score ?? null,
+    } satisfies CriteriaTrendRow;
+  });
+}
+
+function buildComparisonInsights(
+  chronologicalSessions: ComparableSession[],
+  criteriaTrendRows: CriteriaTrendRow[],
+  t: TranslationFn,
+) {
+  const baselineSession = chronologicalSessions[0];
+  const latestSession = chronologicalSessions.at(-1);
+  if (!baselineSession || !latestSession) {
+    return [];
+  }
+
+  const insights: ComparisonInsight[] = [];
+  const overallInsight = buildOverallShiftInsight(baselineSession, latestSession, t);
+  const biggestSwingInsight = buildBiggestSwingInsight(criteriaTrendRows, t);
+  const currentFocusInsight = buildCurrentFocusInsight(latestSession, t);
+
+  if (overallInsight) {
+    insights.push(overallInsight);
+  }
+
+  if (biggestSwingInsight) {
+    insights.push(biggestSwingInsight);
+  }
+
+  if (currentFocusInsight) {
+    insights.push(currentFocusInsight);
+  }
+
+  return insights;
+}
+
+function buildOverallShiftInsight(
+  baselineSession: ComparableSession,
+  latestSession: ComparableSession,
+  t: TranslationFn,
+) {
+  const baselineOverall = resolveComparableOverallScore(baselineSession);
+  const latestOverall = resolveComparableOverallScore(latestSession);
+  if (typeof baselineOverall !== 'number' || typeof latestOverall !== 'number') {
+    return null;
+  }
+
+  const overallDelta = latestOverall - baselineOverall;
+  return {
+    title: t('sessionComparison:insights.overallShift.title'),
+    value: formatSignedWhole(overallDelta),
+    body: t('sessionComparison:insights.overallShift.body', {
+      from: Math.round(baselineOverall),
+      to: Math.round(latestOverall),
+    }),
+  } satisfies ComparisonInsight;
+}
+
+function buildBiggestSwingInsight(criteriaTrendRows: CriteriaTrendRow[], t: TranslationFn) {
+  const largestGain = criteriaTrendRows
+    .map((row) => ({
+      key: row.key,
+      delta:
+        row.baselineScore !== null && row.latestScore !== null
+          ? row.latestScore - row.baselineScore
+          : null,
+    }))
+    .filter(
+      (row): row is { key: SessionComparisonDimensionKey; delta: number } =>
+        typeof row.delta === 'number',
+    )
+    .sort((left, right) => right.delta - left.delta)[0];
+
+  if (!largestGain) {
+    return null;
+  }
+
+  return {
+    title: t('sessionComparison:insights.biggestSwing.title'),
+    value: t(`feedback:dimensions.${largestGain.key}.title`),
+    body: t('sessionComparison:insights.biggestSwing.body', {
+      delta: formatSignedWhole(largestGain.delta),
+    }),
+  } satisfies ComparisonInsight;
+}
+
+function buildCurrentFocusInsight(latestSession: ComparableSession, t: TranslationFn) {
+  const latestWeakest = SESSION_COMPARISON_DIMENSION_KEYS.map((key) => ({
+    key,
+    score: resolveComparisonDimensionScore(latestSession.report, key),
+  }))
+    .filter(
+      (row): row is { key: SessionComparisonDimensionKey; score: number } =>
+        typeof row.score === 'number',
+    )
+    .sort((left, right) => left.score - right.score)[0];
+
+  if (!latestWeakest) {
+    return null;
+  }
+
+  return {
+    title: t('sessionComparison:insights.currentFocus.title'),
+    value: t(`feedback:dimensions.${latestWeakest.key}.title`),
+    body: t('sessionComparison:insights.currentFocus.body', {
+      score: Math.round(latestWeakest.score),
+    }),
+  } satisfies ComparisonInsight;
+}
+
+function buildHoverDetails(
+  chronologicalSessions: ComparableSession[],
+  hoveredSessionId: string | null,
+  t: TranslationFn,
+) {
+  const targetSessionId = hoveredSessionId ?? chronologicalSessions.at(-1)?.sessionId ?? null;
+  const session = chronologicalSessions.find((item) => item.sessionId === targetSessionId);
+  if (!session) {
+    return null;
+  }
+
+  const testCaseSummary = summarizeTestCaseBreakdown(session.report);
+  return {
+    sessionId: session.sessionId,
+    title: session.session.problemTitle ?? t('sessionComparison:fallbackProblem'),
+    timestamp: formatSessionDateTime(session.session.finishedAt ?? session.session.createdAt),
+    overallScore: resolveComparableOverallScore(session),
+    dimensionScores: SESSION_COMPARISON_DIMENSION_KEYS.map((key) => ({
+      key,
+      score: resolveComparisonDimensionScore(session.report, key),
+    })),
+    testCasePassed: testCaseSummary.passed,
+    testCaseTotal: testCaseSummary.total,
+  } satisfies HoverDetails;
+}
+
+function buildTestCaseSummaries(chronologicalSessions: ComparableSession[], t: TranslationFn) {
+  return chronologicalSessions.map((item, index) => ({
+    sessionId: item.sessionId,
+    problemTitle: item.session.problemTitle ?? t('sessionComparison:fallbackProblem'),
+    timestamp: item.session.finishedAt ?? item.session.createdAt,
+    progressionLabel: resolveProgressionLabelKey(index, chronologicalSessions.length),
+    summary: summarizeTestCaseBreakdown(item.report),
+  }));
+}
+
+function syncSelectionSearch(navigate: NavigateFn, selectedSessionIds: string[]) {
+  navigate({
+    to: '.',
+    search: (current) => ({
+      ...current,
+      ids: serializeSessionComparisonIds(selectedSessionIds),
+    }),
+    replace: true,
+  }).catch(() => undefined);
 }
 
 function resolveComparableOverallScore(session: ComparableSession) {
