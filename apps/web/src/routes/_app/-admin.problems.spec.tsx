@@ -77,6 +77,35 @@ function renderPage() {
   );
 }
 
+function changeField(label: string, value: string) {
+  fireEvent.change(screen.getByLabelText(label), {
+    target: { value },
+  });
+}
+
+async function fillValidProblemForm(user: ReturnType<typeof userEvent.setup>) {
+  changeField('problemEditor.fields.title', 'Two Sum');
+  changeField('problemEditor.fields.company', 'syncode');
+  changeField('problemEditor.fields.description', 'Find a pair.');
+  changeField('problemEditor.fields.constraints', 'n >= 2');
+  changeField('problemEditor.fields.timeLimit', '1500');
+  changeField('problemEditor.fields.memoryLimit', '256');
+  changeField(
+    'problemEditor.fields.examples',
+    '[{"input":"1 2","output":"3","explanation":"sum"}]',
+  );
+  changeField('problemEditor.fields.starterCode', '{"typescript":"function solve() {}"}');
+  changeField('problemEditor.testCases.input', '1 2');
+  changeField('problemEditor.testCases.output', '3');
+  changeField('problemEditor.testCases.description', 'sample');
+  changeField('problemEditor.testCases.timeoutMs', '1200');
+  changeField('problemEditor.testCases.memoryMb', '128');
+
+  await user.click(screen.getByRole('switch', { name: 'problemEditor.testCases.hidden' }));
+  await user.click(screen.getByRole('switch', { name: 'problemEditor.fields.published' }));
+  await user.click(screen.getByRole('button', { name: 'problemEditor.actions.save' }));
+}
+
 describe('AdminProblemEditorPage', () => {
   beforeEach(() => {
     globalThis.ResizeObserver = ResizeObserverMock;
@@ -117,26 +146,7 @@ describe('AdminProblemEditorPage', () => {
 
     renderPage();
 
-    await user.type(screen.getByLabelText('problemEditor.fields.title'), 'Two Sum');
-    await user.type(screen.getByLabelText('problemEditor.fields.company'), 'syncode');
-    await user.type(screen.getByLabelText('problemEditor.fields.description'), 'Find a pair.');
-    await user.type(screen.getByLabelText('problemEditor.fields.constraints'), 'n >= 2');
-    await user.type(screen.getByLabelText('problemEditor.fields.timeLimit'), '1500');
-    await user.type(screen.getByLabelText('problemEditor.fields.memoryLimit'), '256');
-    fireEvent.change(screen.getByLabelText('problemEditor.fields.examples'), {
-      target: { value: '[{"input":"1 2","output":"3","explanation":"sum"}]' },
-    });
-    fireEvent.change(screen.getByLabelText('problemEditor.fields.starterCode'), {
-      target: { value: '{"typescript":"function solve() {}"}' },
-    });
-    await user.type(screen.getByLabelText('problemEditor.testCases.input'), '1 2');
-    await user.type(screen.getByLabelText('problemEditor.testCases.output'), '3');
-    await user.type(screen.getByLabelText('problemEditor.testCases.description'), 'sample');
-    await user.type(screen.getByLabelText('problemEditor.testCases.timeoutMs'), '1200');
-    await user.type(screen.getByLabelText('problemEditor.testCases.memoryMb'), '128');
-    await user.click(screen.getByRole('switch', { name: 'problemEditor.testCases.hidden' }));
-    await user.click(screen.getByRole('switch', { name: 'problemEditor.fields.published' }));
-    await user.click(screen.getByRole('button', { name: 'problemEditor.actions.save' }));
+    await fillValidProblemForm(user);
 
     await waitFor(() => {
       expect(apiMock).toHaveBeenCalledWith(CONTROL_API.PROBLEMS.CREATE, {
@@ -189,13 +199,11 @@ describe('AdminProblemEditorPage', () => {
 
     renderPage();
 
-    await user.type(screen.getByLabelText('problemEditor.fields.title'), 'Two Sum');
-    await user.type(screen.getByLabelText('problemEditor.fields.description'), 'Find a pair.');
-    await user.type(screen.getByLabelText('problemEditor.testCases.input'), '1 2');
-    await user.type(screen.getByLabelText('problemEditor.testCases.output'), '3');
-    fireEvent.change(screen.getByLabelText('problemEditor.fields.starterCode'), {
-      target: { value: '{"js":"function solve() {}"}' },
-    });
+    changeField('problemEditor.fields.title', 'Two Sum');
+    changeField('problemEditor.fields.description', 'Find a pair.');
+    changeField('problemEditor.testCases.input', '1 2');
+    changeField('problemEditor.testCases.output', '3');
+    changeField('problemEditor.fields.starterCode', '{"js":"function solve() {}"}');
     await user.click(screen.getByRole('button', { name: 'problemEditor.actions.save' }));
 
     expect(await screen.findByText('problemEditor.validation.starterCode')).toBeInTheDocument();
@@ -207,13 +215,11 @@ describe('AdminProblemEditorPage', () => {
 
     renderPage();
 
-    await user.type(screen.getByLabelText('problemEditor.fields.title'), 'Two Sum');
-    await user.type(screen.getByLabelText('problemEditor.fields.description'), 'Find a pair.');
-    await user.type(screen.getByLabelText('problemEditor.testCases.input'), '1 2');
-    await user.type(screen.getByLabelText('problemEditor.testCases.output'), '3');
-    fireEvent.change(screen.getByLabelText('problemEditor.fields.examples'), {
-      target: { value: '[{"input":"1 2"}]' },
-    });
+    changeField('problemEditor.fields.title', 'Two Sum');
+    changeField('problemEditor.fields.description', 'Find a pair.');
+    changeField('problemEditor.testCases.input', '1 2');
+    changeField('problemEditor.testCases.output', '3');
+    changeField('problemEditor.fields.examples', '[{"input":"1 2"}]');
     await user.click(screen.getByRole('button', { name: 'problemEditor.actions.save' }));
 
     expect(await screen.findByText('problemEditor.validation.examples')).toBeInTheDocument();
