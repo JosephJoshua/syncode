@@ -132,14 +132,19 @@ function SessionFeedbackPage() {
   const badges = buildHeaderBadges(t, viewerRole, report, durationSeconds);
   const reportStatus: 'pending' | 'ready' | 'unavailable' =
     reportState?.state === 'pending' ? 'pending' : report ? 'ready' : 'unavailable';
-  const compareSessionsAction = (
-    <Button asChild className="h-9 gap-2 bg-emerald-600 text-white hover:bg-emerald-500" size="sm">
-      <Link to="/sessions/compare" search={{ ids: sessionId }}>
-        <GitCompareArrows className="size-4" />
-        {t('sessionComparison:actions.compareSessions')}
-      </Link>
-    </Button>
-  );
+  const compareSessionsAction =
+    reportState?.state === 'ready' ? (
+      <Button
+        asChild
+        className="h-9 gap-2 bg-emerald-600 text-white hover:bg-emerald-500"
+        size="sm"
+      >
+        <Link to="/sessions/compare" search={{ ids: sessionId }}>
+          <GitCompareArrows className="size-4" />
+          {t('sessionComparison:actions.compareSessions')}
+        </Link>
+      </Button>
+    ) : null;
 
   if (reportQuery.isError) {
     return (

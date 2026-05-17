@@ -35,6 +35,7 @@
     "baseline": "起点",
     "checkpoint": "中段",
     "latest": "最新",
+    "inspectTrendChart": "查看趋势图",
     "inspectSession": "查看会话",
     "testCasesPassed": "通过 {{passed}} / {{total}}",
     "noTestCaseBreakdown": "暂无测试用例拆分数据。",
@@ -65,6 +66,8 @@
     "waitingForReportsBody": "所选会话需要有可用报告后才能展示对比结果。",
     "pendingReports": "有 {{count}} 个已选会话报告仍在生成中。",
     "failedReports": "有 {{count}} 个已选会话报告加载失败。",
-    "noTrendData": "可用于绘制趋势图的评分数据不足。"
+    "noTrendData": "可用于绘制趋势图的评分数据不足。",
+    "noCriteriaData": "所选报告暂无维度评分数据。",
+    "noCriteriaTrendData": "该维度目前只有一场会话有评分。"
   }
 }

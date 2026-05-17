@@ -26,7 +26,7 @@ export function parseSessionComparisonIds(rawIds: string | undefined): string[] 
   const seen = new Set<string>();
 
   for (const value of rawIds.split(',')) {
-    const sessionId = value.trim();
+    const sessionId = value.trim().toLowerCase();
     if (!SESSION_ID_PATTERN.test(sessionId) || seen.has(sessionId)) {
       continue;
     }

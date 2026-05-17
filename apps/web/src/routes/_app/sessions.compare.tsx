@@ -646,11 +646,22 @@ function SessionComparisonContent({
             </CardDescription>
           </CardHeader>
           <CardContent className="px-6 pb-6">
-            <div className="space-y-1">
-              {criteriaTrendRows.map((row, index) => (
-                <CriteriaTrendLane key={row.key} row={row} index={index} t={t} />
-              ))}
-            </div>
+            {criteriaTrendRows.length > 0 ? (
+              <div className="space-y-1">
+                {criteriaTrendRows.map((row, index) => (
+                  <CriteriaTrendLane
+                    key={row.key}
+                    isLast={index === criteriaTrendRows.length - 1}
+                    row={row}
+                    t={t}
+                  />
+                ))}
+              </div>
+            ) : (
+              <p className="rounded-xl border border-dashed border-border/60 bg-background/45 px-4 py-8 text-center text-sm text-muted-foreground">
+                {t('sessionComparison:state.noCriteriaData')}
+              </p>
+            )}
           </CardContent>
         </Card>
       </motion.div>
@@ -1084,40 +1095,49 @@ function TestCaseComparisonRow({
 
 function CriteriaTrendLane({
   row,
-  index,
+  isLast,
   t,
 }: Readonly<{
   row: CriteriaTrendRow;
-  index: number;
+  isLast: boolean;
   t: TranslationFn;
 }>) {
   const trendMeta = trendMetaByType[row.trend];
+  const hasTrendData = row.points.length >= 2;
 
   return (
     <div
       className={cn(
         'grid gap-4 py-5 lg:grid-cols-[220px_minmax(0,1fr)]',
-        index < SESSION_COMPARISON_DIMENSION_KEYS.length - 1 ? 'border-b border-border/40' : '',
+        !isLast ? 'border-b border-border/40' : '',
       )}
     >
       <div className="space-y-2">
         <p className="text-base font-semibold text-foreground">
           {t(`feedback:dimensions.${row.key}.title`)}
         </p>
-        <p className="text-sm text-muted-foreground">
-          {t('sessionComparison:metrics.averageDelta', {
-            value: formatSignedOneDecimal(row.averageDelta),
-          })}
-        </p>
-        <span
-          className={cn(
-            'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.08em]',
-            trendMeta.chipClass,
-          )}
-        >
-          <trendMeta.Icon className="size-3.5" />
-          {t(`feedback:trend.${row.trend}`)}
-        </span>
+        {hasTrendData ? (
+          <>
+            <p className="text-sm text-muted-foreground">
+              {t('sessionComparison:metrics.averageDelta', {
+                value: formatSignedOneDecimal(row.averageDelta),
+              })}
+            </p>
+            <span
+              className={cn(
+                'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.08em]',
+                trendMeta.chipClass,
+              )}
+            >
+              <trendMeta.Icon className="size-3.5" />
+              {t(`feedback:trend.${row.trend}`)}
+            </span>
+          </>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            {t('sessionComparison:state.noCriteriaTrendData')}
+          </p>
+        )}
       </div>
 
       <div className="overflow-x-auto">
@@ -1335,21 +1355,28 @@ function resolveNextHoveredSessionId(points: TrendPoint[], hoveredSessionId: str
 }
 
 function buildCriteriaTrendRows(chronologicalSessions: ComparableSession[], t: TranslationFn) {
-  return SESSION_COMPARISON_DIMENSION_KEYS.map((key) => {
+  return SESSION_COMPARISON_DIMENSION_KEYS.flatMap((key) => {
     const points = chronologicalSessions.flatMap((session) => {
       const score = resolveComparisonDimensionScore(session.report, key);
       return typeof score === 'number' ? [buildTrendPoint(session, score, t)] : [];
     });
+
+    if (points.length === 0) {
+      return [];
+    }
+
     const values = points.map((point) => point.score);
 
-    return {
-      key,
-      points,
-      trend: resolveComparisonTrend(values),
-      averageDelta: calculateAverageDelta(values),
-      baselineScore: points[0]?.score ?? null,
-      latestScore: points.at(-1)?.score ?? null,
-    } satisfies CriteriaTrendRow;
+    return [
+      {
+        key,
+        points,
+        trend: resolveComparisonTrend(values),
+        averageDelta: calculateAverageDelta(values),
+        baselineScore: points[0]?.score ?? null,
+        latestScore: points.at(-1)?.score ?? null,
+      } satisfies CriteriaTrendRow,
+    ];
   });
 }
 

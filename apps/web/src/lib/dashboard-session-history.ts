@@ -231,6 +231,8 @@ export function normalizeSessionSummary(
     session.finishedAt,
     session.duration,
   );
+  const score =
+    viewerRole === 'candidate' || viewerRole === 'interviewer' ? session.overallScore : null;
 
   return {
     id: session.sessionId,
@@ -242,12 +244,12 @@ export function normalizeSessionSummary(
     createdAt: session.createdAt,
     finishedAt: session.finishedAt,
     durationSeconds,
-    score: session.overallScore,
+    score,
     hasReport: session.hasReport,
     hasFeedback: session.hasFeedback,
     viewerRole,
     role: displayRole,
-    status: getSessionStatus(session.overallScore),
+    status: getSessionStatus(score),
     partner: getPartnerParticipant(viewerRole, interviewer, candidate, currentUserId),
     observer:
       viewerRole === 'observer'
