@@ -31,7 +31,7 @@ import {
   TableRow,
 } from '@syncode/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, Link } from '@tanstack/react-router';
 import { Ban, Loader2, RefreshCw, Search, ShieldAlert, ShieldCheck } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -168,17 +168,22 @@ export function AdminUsersPage() {
           </h1>
           <p className="mt-3 text-sm text-muted-foreground sm:text-base">{t('users.sub')}</p>
         </div>
-        <Button
-          variant="outline"
-          className="gap-2 self-start md:self-auto"
-          disabled={isUsersFetching}
-          onClick={() => {
-            usersQuery.refetch().catch(() => undefined);
-          }}
-        >
-          <RefreshCw className="size-4" />
-          {t('users.actions.refresh')}
-        </Button>
+        <div className="flex flex-wrap gap-2 self-start md:self-auto">
+          <Button variant="outline" asChild>
+            <Link to="/admin/audit-logs">{t('navLinks.auditLogs')}</Link>
+          </Button>
+          <Button
+            variant="outline"
+            className="gap-2"
+            disabled={isUsersFetching}
+            onClick={() => {
+              usersQuery.refetch().catch(() => undefined);
+            }}
+          >
+            <RefreshCw className="size-4" />
+            {t('users.actions.refresh')}
+          </Button>
+        </div>
       </section>
 
       <section className="mt-8 grid gap-4 rounded-xl border border-border/50 bg-card/50 p-4 backdrop-blur-sm md:grid-cols-[minmax(0,1fr)_220px]">
