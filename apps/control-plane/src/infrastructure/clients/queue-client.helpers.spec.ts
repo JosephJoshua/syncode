@@ -60,6 +60,21 @@ describe('QueueClientHelper', () => {
       );
     });
 
+    test('GIVEN result namespace WHEN registering processor THEN caches results under namespaced key', async () => {
+      helper.processResultQueue('other-results-queue', 'ai-code-analysis', 'code-analysis');
+      const namespacedHandler = process.mock.calls[1][1] as (
+        job: QueueJob<QueueResultData>,
+      ) => Promise<void>;
+
+      await namespacedHandler(toQueueJob({ jobId: 'job-1', summary: 'analysis' }));
+
+      expect(set).toHaveBeenCalledWith(
+        'exec:result:code-analysis:job-1',
+        { jobId: 'job-1', summary: 'analysis' },
+        RESULT_TTL_SECONDS,
+      );
+    });
+
     test('GIVEN result without jobId WHEN processor invoked THEN skips caching', async () => {
       await handler(toQueueJob({}));
 
@@ -102,6 +117,15 @@ describe('QueueClientHelper', () => {
       expect(get).toHaveBeenCalledWith('exec:result:job-1');
     });
 
+    test('GIVEN namespace WHEN looking up cached result THEN uses namespaced key', async () => {
+      get.mockResolvedValue({ summary: 'analysis' });
+
+      const result = await helper.getResult('job-1', 'code-analysis');
+
+      expect(result).toEqual({ summary: 'analysis' });
+      expect(get).toHaveBeenCalledWith('exec:result:code-analysis:job-1');
+    });
+
     test('GIVEN no cached result WHEN looking up THEN returns null', async () => {
       get.mockResolvedValue(null);
 
@@ -118,6 +142,16 @@ describe('QueueClientHelper', () => {
       const status = await helper.getJobStatus('run-queue', 'job-1');
 
       expect(status).toBe('completed');
+      expect(getJob).not.toHaveBeenCalled();
+    });
+
+    test('GIVEN namespace WHEN checking status THEN checks namespaced cache key', async () => {
+      exists.mockResolvedValue(true);
+
+      const status = await helper.getJobStatus('run-queue', 'job-1', 'code-analysis');
+
+      expect(status).toBe('completed');
+      expect(exists).toHaveBeenCalledWith('exec:result:code-analysis:job-1');
       expect(getJob).not.toHaveBeenCalled();
     });
 
