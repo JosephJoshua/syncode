@@ -1,3 +1,4 @@
+import { WEAKNESS_CATEGORIES, WEAKNESS_TRENDS } from '@syncode/shared';
 import { pgEnum } from 'drizzle-orm/pg-core';
 
 export const userRoleEnum = pgEnum('user_role', ['user', 'admin']);
@@ -75,15 +76,6 @@ export const roleSwapStatusEnum = pgEnum('role_swap_status', [
   'expired',
 ]);
 
-export const weaknessCategoryEnum = pgEnum('weakness_category', [
-  'edge_cases',
-  'time_complexity',
-  'space_complexity',
-  'variable_naming',
-  'code_structure',
-  'off_by_one',
-  'input_validation',
-  'communication',
-]);
+export const weaknessCategoryEnum = pgEnum('weakness_category', WEAKNESS_CATEGORIES);
 
-export const weaknessTrendEnum = pgEnum('weakness_trend', ['improving', 'stable', 'worsening']);
+export const weaknessTrendEnum = pgEnum('weakness_trend', WEAKNESS_TRENDS);

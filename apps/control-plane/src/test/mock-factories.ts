@@ -90,6 +90,7 @@ export function createMockAiClient() {
     submitSessionReportRequest: vi.fn().mockResolvedValue({ jobId: 'session-report-job' }),
     getSessionReportResult: vi.fn().mockResolvedValue(null),
     onSessionReportResult: vi.fn(),
+    onWeaknessAnalysisResult: vi.fn(),
     getHintJobStatus: vi.fn().mockResolvedValue('completed'),
     getCodeAnalysisJobStatus: vi.fn().mockResolvedValue('queued'),
     getWeaknessAnalysisJobStatus: vi.fn().mockResolvedValue('queued'),
@@ -104,6 +105,7 @@ export function createMockSessionReportsService() {
   return {
     enqueueForFinishedSession: vi.fn().mockResolvedValue(undefined),
     handleResult: vi.fn().mockResolvedValue(undefined),
+    handleWeaknessAnalysisResult: vi.fn().mockResolvedValue(undefined),
     getReport: vi.fn(),
   };
 }

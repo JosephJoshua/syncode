@@ -54,6 +54,10 @@ export class QueueAiClient implements IAiClient, OnModuleInit {
     jobId: string,
     result: GenerateSessionReportResult,
   ) => Promise<void>;
+  private weaknessAnalysisResultCallback?: (
+    jobId: string,
+    result: GenerateWeaknessAnalysisResult,
+  ) => Promise<void>;
 
   constructor(
     @Inject(QUEUE_SERVICE) private readonly queueService: IQueueService,
@@ -73,10 +77,26 @@ export class QueueAiClient implements IAiClient, OnModuleInit {
       'code-analysis',
       QueueAiClient.CODE_ANALYSIS_RESULT_NAMESPACE,
     );
-    this.helper.processResultQueue<GenerateWeaknessAnalysisResult>(
+    this.queueService.process<GenerateWeaknessAnalysisResult & { jobId: string }>(
       AI_WEAKNESS_ANALYSIS_RESULT_QUEUE,
-      'weakness-analysis',
-      QueueAiClient.WEAKNESS_ANALYSIS_RESULT_NAMESPACE,
+      async (job) => {
+        if (!job.data.jobId) {
+          this.logger.warn('Received weakness-analysis result without jobId, skipping');
+          return;
+        }
+
+        await this.cacheService.set(
+          `ai-result:${QueueAiClient.WEAKNESS_ANALYSIS_RESULT_NAMESPACE}:${job.data.jobId}`,
+          job.data,
+          24 * 60 * 60,
+        );
+        this.logger.debug(`Cached weakness-analysis result for job ${job.data.jobId}`);
+
+        if (this.weaknessAnalysisResultCallback) {
+          await this.weaknessAnalysisResultCallback(job.data.jobId, job.data);
+        }
+      },
+      { concurrency: 10 },
     );
     this.helper.processResultQueue<ReviewCodeResult>(
       AI_REVIEW_RESULT_QUEUE,
@@ -284,6 +304,12 @@ export class QueueAiClient implements IAiClient, OnModuleInit {
     callback: (jobId: string, result: GenerateSessionReportResult) => Promise<void>,
   ): void {
     this.sessionReportResultCallback = callback;
+  }
+
+  onWeaknessAnalysisResult(
+    callback: (jobId: string, result: GenerateWeaknessAnalysisResult) => Promise<void>,
+  ): void {
+    this.weaknessAnalysisResultCallback = callback;
   }
 
   async healthCheck(): Promise<boolean> {

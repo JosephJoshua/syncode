@@ -288,6 +288,23 @@ describe('handleResult', () => {
       strengths: ['Clear reasoning'],
     });
     expect(await cacheService.get('session-report-meta:job-123')).toBeNull();
+    expect(mockAiClient.submitWeaknessAnalysisRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: session.id,
+        participantId: user.id,
+        participantRole: 'candidate',
+        sessionReportSummary: {
+          overallScore: 91,
+          feedback: 'Detailed feedback',
+        },
+        historicalWeaknesses: [],
+      }),
+    );
+    expect(await cacheService.get('weakness-analysis-meta:ai-weakness-analysis-job')).toEqual({
+      sessionId: session.id,
+      userId: user.id,
+      reportedAt: '2026-04-20T06:00:00.000Z',
+    });
 
     const weaknessRows = await db
       .select({
@@ -406,6 +423,119 @@ describe('handleResult', () => {
 
     expect(regeneratedWeaknessRows).toEqual([]);
     expect(regeneratedWeaknessLinks).toEqual([]);
+  });
+
+  it('GIVEN cached weakness analysis metadata WHEN handling weakness result THEN replaces session weakness links with AI evidence', async () => {
+    const user = await insertUser(db);
+    const room = await insertRoom(db, user.id);
+    const session = await insertSession(db, room.id, { status: 'finished' });
+    await insertSessionParticipant(db, session.id, user.id, 'candidate');
+    const [staleWeakness] = await db
+      .insert(userWeaknesses)
+      .values({
+        userId: user.id,
+        category: 'time_complexity',
+        description: 'Stale heuristic weakness',
+        frequency: 1,
+        trend: 'stable',
+        lastSeenAt: new Date('2026-04-20T06:00:00.000Z'),
+      })
+      .returning({ id: userWeaknesses.id });
+    await db.insert(weaknessSessions).values({
+      weaknessId: staleWeakness!.id,
+      sessionId: session.id,
+      description: 'Stale link',
+      trend: 'stable',
+      score: 62,
+      reportedAt: new Date('2026-04-20T06:00:00.000Z'),
+    });
+    await cacheService.set(
+      'weakness-analysis-meta:weakness-job-1',
+      {
+        sessionId: session.id,
+        userId: user.id,
+        reportedAt: '2026-04-20T06:05:00.000Z',
+      },
+      60,
+    );
+
+    await service.handleWeaknessAnalysisResult('weakness-job-1', {
+      summary: 'Communication and edge-case patterns should be tracked.',
+      recurringPatterns: ['Explanation of trade-offs remains inconsistent.'],
+      weaknesses: [
+        {
+          category: 'communication',
+          description: 'Explain trade-offs and invariants more explicitly.',
+          evidence: 'Peer feedback highlighted unclear explanation during the session.',
+          trend: 'worsening',
+        },
+        {
+          category: 'edge_cases',
+          description: 'Name boundary cases before final submission.',
+          evidence: 'The session did not show explicit duplicate-input validation.',
+          trend: 'stable',
+        },
+      ],
+    });
+
+    const weaknessRows = await db
+      .select({
+        id: userWeaknesses.id,
+        category: userWeaknesses.category,
+        description: userWeaknesses.description,
+        frequency: userWeaknesses.frequency,
+        trend: userWeaknesses.trend,
+      })
+      .from(userWeaknesses)
+      .where(eq(userWeaknesses.userId, user.id))
+      .orderBy(asc(userWeaknesses.category));
+    const weaknessLinks = await db
+      .select({
+        weaknessId: weaknessSessions.weaknessId,
+        description: weaknessSessions.description,
+        score: weaknessSessions.score,
+        trend: weaknessSessions.trend,
+        reportedAt: weaknessSessions.reportedAt,
+      })
+      .from(weaknessSessions)
+      .orderBy(asc(weaknessSessions.description));
+
+    expect(weaknessRows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          category: 'communication',
+          description: 'Explain trade-offs and invariants more explicitly.',
+          frequency: 1,
+          trend: 'worsening',
+        }),
+        expect.objectContaining({
+          category: 'edge_cases',
+          description: 'Name boundary cases before final submission.',
+          frequency: 1,
+          trend: 'stable',
+        }),
+      ]),
+    );
+    expect(weaknessRows).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ category: 'time_complexity' })]),
+    );
+    expect(weaknessLinks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          description: 'Peer feedback highlighted unclear explanation during the session.',
+          score: null,
+          trend: 'worsening',
+          reportedAt: new Date('2026-04-20T06:05:00.000Z'),
+        }),
+        expect.objectContaining({
+          description: 'The session did not show explicit duplicate-input validation.',
+          score: null,
+          trend: 'stable',
+          reportedAt: new Date('2026-04-20T06:05:00.000Z'),
+        }),
+      ]),
+    );
+    expect(await cacheService.get('weakness-analysis-meta:weakness-job-1')).toBeNull();
   });
 });
 

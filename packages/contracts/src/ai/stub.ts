@@ -57,6 +57,10 @@ export class StubAiClient implements IAiClient {
     jobId: string,
     result: GenerateSessionReportResult,
   ) => Promise<void>;
+  private weaknessAnalysisResultCallback?: (
+    jobId: string,
+    result: GenerateWeaknessAnalysisResult,
+  ) => Promise<void>;
 
   constructor(options: StubAiClientOptions = {}) {
     this.delayMs = options.delayMs ?? 800;
@@ -210,6 +214,12 @@ export class StubAiClient implements IAiClient {
     this.sessionReportResultCallback = callback;
   }
 
+  onWeaknessAnalysisResult(
+    callback: (jobId: string, result: GenerateWeaknessAnalysisResult) => Promise<void>,
+  ): void {
+    this.weaknessAnalysisResultCallback = callback;
+  }
+
   private scheduleHintCompletion(jobId: string, request: GenerateHintRequest): void {
     this.timers.push(
       setTimeout(() => {
@@ -357,6 +367,8 @@ export class StubAiClient implements IAiClient {
             },
           ],
         };
+
+        this.weaknessAnalysisResultCallback?.(jobId, job.weaknessAnalysisResult).catch(() => {});
       }, this.delayMs),
     );
   }

@@ -1,18 +1,9 @@
-import { UserRole } from '@syncode/shared';
+import { UserRole, WEAKNESS_CATEGORIES, WEAKNESS_TRENDS } from '@syncode/shared';
 import { z } from 'zod';
 
-export const USER_WEAKNESS_CATEGORIES = [
-  'edge_cases',
-  'time_complexity',
-  'space_complexity',
-  'variable_naming',
-  'code_structure',
-  'off_by_one',
-  'input_validation',
-  'communication',
-] as const;
+export const USER_WEAKNESS_CATEGORIES = WEAKNESS_CATEGORIES;
 
-export const USER_WEAKNESS_TRENDS = ['improving', 'stable', 'worsening'] as const;
+export const USER_WEAKNESS_TRENDS = WEAKNESS_TRENDS;
 
 export const updateUserSchema = z
   .object({
