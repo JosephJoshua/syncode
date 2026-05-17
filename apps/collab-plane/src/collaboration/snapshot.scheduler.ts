@@ -43,9 +43,18 @@ export class SnapshotScheduler implements OnModuleDestroy {
     }
   }
 
-  async takeSnapshot(roomId: string, trigger: SnapshotTrigger): Promise<void> {
+  async takeSnapshot(
+    roomId: string,
+    trigger: SnapshotTrigger,
+    options: { strict?: boolean } = {},
+  ): Promise<void> {
     const snapshot = this.docStore.encodeSnapshot(roomId);
-    if (!snapshot) return;
+    if (!snapshot) {
+      if (options.strict) {
+        throw new Error(`Cannot take strict snapshot for missing document ${roomId}`);
+      }
+      return;
+    }
 
     const room = this.roomRegistry.getRoom(roomId);
     const language = room?.language ?? null;
@@ -72,6 +81,9 @@ export class SnapshotScheduler implements OnModuleDestroy {
         this.logger.warn(
           `Failed to send snapshot for room ${roomId}: ${error instanceof Error ? error.message : String(error)}`,
         );
+        if (options.strict) {
+          throw error;
+        }
       }
       return;
     }
@@ -85,6 +97,9 @@ export class SnapshotScheduler implements OnModuleDestroy {
       this.logger.warn(
         `Failed to persist doc snapshot for room ${roomId}: ${error instanceof Error ? error.message : String(error)}`,
       );
+      if (options.strict) {
+        throw error;
+      }
     }
   }
 

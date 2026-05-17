@@ -56,6 +56,13 @@ export class CollaborationService implements OnModuleDestroy {
         editorLocked: request.editorLocked,
         language: request.initialLanguage,
       });
+    if (
+      existingRoom &&
+      request.initialLanguage &&
+      existingRoom.language !== request.initialLanguage
+    ) {
+      this.roomRegistry.updateLanguage(request.roomId, request.initialLanguage);
+    }
 
     const snapshot = request.snapshot ? new Uint8Array(request.snapshot) : undefined;
     const { created } = this.docStore.createDoc(request.roomId, {
@@ -122,8 +129,24 @@ export class CollaborationService implements OnModuleDestroy {
         editorLocked: request.editorLocked,
       },
     );
+    if (request.language && room.language !== request.language) {
+      this.roomRegistry.updateLanguage(request.roomId, request.language);
+    }
 
     const now = Date.now();
+    const phaseChanged = previousPhase !== request.phase;
+
+    if (phaseChanged && request.phase === 'finished') {
+      try {
+        await this.snapshotScheduler.takeSnapshot(request.roomId, 'session_end', { strict: true });
+      } catch (error) {
+        this.roomRegistry.updateRoomState(request.roomId, {
+          phase: previousPhase,
+          editorLocked: previousEditorLocked,
+        });
+        throw error;
+      }
+    }
 
     this.broadcastJson(room, {
       type: COLLAB_WS_EVENTS.ROOM_STATE,
@@ -131,14 +154,16 @@ export class CollaborationService implements OnModuleDestroy {
       timestamp: now,
     });
 
-    if (previousPhase !== request.phase) {
+    if (phaseChanged) {
       this.broadcastJson(room, {
         type: COLLAB_WS_EVENTS.PHASE_CHANGE,
         data: { phase: request.phase, previousPhase },
         timestamp: now,
       });
 
-      void this.snapshotScheduler.takeSnapshot(request.roomId, 'phase_change');
+      if (request.phase !== 'finished') {
+        void this.snapshotScheduler.takeSnapshot(request.roomId, 'phase_change');
+      }
     }
 
     if (previousEditorLocked !== request.editorLocked) {

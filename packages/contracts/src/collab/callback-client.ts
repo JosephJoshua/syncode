@@ -10,10 +10,9 @@ import type {
 /**
  * Port interface for collab-plane -> control-plane callbacks.
  *
- * Notification methods are fire-and-forget; implementations must catch errors
- * internally. `authorizeJoin` is synchronous in intent: callers await it to
- * make a security decision, so failures must be handled at the call site
- * (default to denying on error).
+ * Best-effort callers catch delivery errors at the call site. `authorizeJoin`
+ * is synchronous in intent: callers await it to make a security decision, so
+ * failures must be handled at the call site (default to denying on error).
  */
 export interface IControlPlaneCallbackClient {
   notifyUserDisconnected(payload: UserDisconnectedPayload): Promise<void>;

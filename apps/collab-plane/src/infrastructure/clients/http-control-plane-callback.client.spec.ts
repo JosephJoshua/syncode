@@ -1,6 +1,8 @@
 import {
   CONTROL_INTERNAL,
   type ParticipantHeartbeatRequest,
+  type PersistDocSnapshotPayload,
+  type SnapshotReadyPayload,
   type UserDisconnectedPayload,
 } from '@syncode/contracts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -20,6 +22,20 @@ const HEARTBEAT_REQUEST: ParticipantHeartbeatRequest = {
     { roomId: 'room-1', userId: 'user-1' },
     { roomId: 'room-2', userId: 'user-2' },
   ],
+};
+
+const SNAPSHOT_READY_PAYLOAD: SnapshotReadyPayload = {
+  roomId: 'room-1',
+  snapshot: [1, 2, 3],
+  code: 'print("ok")',
+  language: 'python',
+  timestamp: Date.now(),
+  trigger: 'session_end',
+  phase: 'finished',
+};
+
+const DOC_SNAPSHOT_PAYLOAD: PersistDocSnapshotPayload = {
+  state: [1, 2, 3],
 };
 
 // Mock ky at the module level
@@ -59,6 +75,38 @@ describe('HttpControlPlaneCallbackClient', () => {
     mockPost.mockRejectedValueOnce(new Error('Connection refused'));
 
     await expect(client.notifyUserDisconnected(PAYLOAD)).resolves.toBeUndefined();
+  });
+
+  it('GIVEN reachable control-plane WHEN notifying snapshot ready THEN posts to snapshot endpoint', async () => {
+    mockPost.mockReturnValueOnce({
+      json: vi.fn().mockResolvedValueOnce({ success: true }),
+    });
+
+    await client.notifySnapshotReady(SNAPSHOT_READY_PAYLOAD);
+
+    expect(mockPost).toHaveBeenCalledWith(CONTROL_INTERNAL.SNAPSHOT_READY.route, {
+      json: SNAPSHOT_READY_PAYLOAD,
+    });
+  });
+
+  it('GIVEN control-plane rejects snapshot ready WHEN notifying THEN rethrows', async () => {
+    mockPost.mockReturnValueOnce({
+      json: vi.fn().mockResolvedValueOnce({ success: false }),
+    });
+
+    await expect(client.notifySnapshotReady(SNAPSHOT_READY_PAYLOAD)).rejects.toThrow(
+      'Control-plane rejected code snapshot for room room-1',
+    );
+  });
+
+  it('GIVEN unreachable control-plane WHEN notifying snapshot ready THEN rethrows', async () => {
+    mockPost.mockReturnValueOnce({
+      json: vi.fn().mockRejectedValueOnce(new Error('Connection refused')),
+    });
+
+    await expect(client.notifySnapshotReady(SNAPSHOT_READY_PAYLOAD)).rejects.toThrow(
+      'Connection refused',
+    );
   });
 
   it('GIVEN reachable control-plane WHEN heartbeating participants THEN posts to heartbeat endpoint and returns body', async () => {
@@ -103,5 +151,37 @@ describe('HttpControlPlaneCallbackClient', () => {
     const result = await client.authorizeJoin('room-abc', 'user-xyz');
 
     expect(result).toEqual({ authorized: false });
+  });
+
+  it('GIVEN reachable control-plane WHEN persisting doc snapshot THEN posts to room-scoped endpoint', async () => {
+    mockPost.mockReturnValueOnce({
+      json: vi.fn().mockResolvedValueOnce({ success: true }),
+    });
+
+    await client.persistDocSnapshot('room-abc', DOC_SNAPSHOT_PAYLOAD);
+
+    expect(mockPost).toHaveBeenCalledWith('internal/rooms/room-abc/doc-snapshot', {
+      json: DOC_SNAPSHOT_PAYLOAD,
+    });
+  });
+
+  it('GIVEN control-plane rejects doc snapshot WHEN persisting THEN rethrows', async () => {
+    mockPost.mockReturnValueOnce({
+      json: vi.fn().mockResolvedValueOnce({ success: false }),
+    });
+
+    await expect(client.persistDocSnapshot('room-abc', DOC_SNAPSHOT_PAYLOAD)).rejects.toThrow(
+      'Control-plane rejected doc snapshot for room room-abc',
+    );
+  });
+
+  it('GIVEN unreachable control-plane WHEN persisting doc snapshot THEN rethrows', async () => {
+    mockPost.mockReturnValueOnce({
+      json: vi.fn().mockRejectedValueOnce(new Error('Connection refused')),
+    });
+
+    await expect(client.persistDocSnapshot('room-abc', DOC_SNAPSHOT_PAYLOAD)).rejects.toThrow(
+      'Connection refused',
+    );
   });
 });

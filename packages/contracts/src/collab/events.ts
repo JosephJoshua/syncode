@@ -25,6 +25,10 @@ export const snapshotReadyPayloadSchema = z
 export type SnapshotReadyPayload = z.infer<typeof snapshotReadyPayloadSchema>;
 export type SnapshotTrigger = SnapshotReadyPayload['trigger'];
 
+export interface SnapshotReadyResponse {
+  success: boolean;
+}
+
 export const userDisconnectedPayloadSchema = z
   .object({
     roomId: z.uuid().describe('Room identifier'),
@@ -89,7 +93,7 @@ export interface PersistDocSnapshotResponse {
 }
 
 export const CONTROL_INTERNAL = {
-  SNAPSHOT_READY: defineRoute<SnapshotReadyPayload, { success: boolean }>()(
+  SNAPSHOT_READY: defineRoute<SnapshotReadyPayload, SnapshotReadyResponse>()(
     'internal/collab/snapshot',
     'POST',
   ),
