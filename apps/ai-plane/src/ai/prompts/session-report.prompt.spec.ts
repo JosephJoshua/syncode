@@ -149,4 +149,19 @@ describe('buildSessionReportPrompt', () => {
     expect(prompt.userPrompt).toContain('L2|     if True:');
     expect(prompt.userPrompt).toContain('L3|         return 1');
   });
+
+  it('GIVEN legacy queue payload omits new report context WHEN building prompt THEN uses empty blocks', () => {
+    const legacyRequest = createReportRequest() as unknown as GenerateSessionReportRequest & {
+      finalCodeSnapshot?: undefined;
+      sessionEvents?: undefined;
+    };
+    delete legacyRequest.finalCodeSnapshot;
+    delete legacyRequest.sessionEvents;
+
+    const prompt = buildSessionReportPrompt(legacyRequest);
+
+    expect(prompt.userPrompt).toContain('<UNTRUSTED_FINAL_CODE_SNAPSHOT>');
+    expect(prompt.userPrompt).toContain('"finalCodeSnapshotWithLines": null');
+    expect(prompt.userPrompt).toContain('<UNTRUSTED_SESSION_EVENTS>');
+  });
 });

@@ -146,7 +146,7 @@ function buildFinalSnapshotMetadata(snapshot: GenerateSessionReportRequest['fina
 
 function wrapUntrustedBlock(
   label: string,
-  rawValue: string,
+  rawValue: string | null | undefined,
   options: { maxLength: number; truncate?: 'end' | 'middle' },
 ): string {
   const safeLabel = label.replaceAll(/[^A-Z0-9_]/g, '_');
@@ -157,11 +157,11 @@ function wrapUntrustedBlock(
 }
 
 function sanitizeUntrustedText(
-  rawValue: string,
+  rawValue: string | null | undefined,
   maxLength: number,
   truncate: 'end' | 'middle',
 ): string {
-  const withoutControlChars = Array.from(rawValue)
+  const withoutControlChars = Array.from(rawValue ?? '')
     .filter((char) => {
       const code = char.charCodeAt(0);
       return code === 9 || code === 10 || (code >= 32 && code !== 127);
