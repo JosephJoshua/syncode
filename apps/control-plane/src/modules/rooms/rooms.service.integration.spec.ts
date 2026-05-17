@@ -20,7 +20,7 @@ import {
 } from '@syncode/db';
 import { INVITE_CODE_LENGTH } from '@syncode/shared';
 import { CACHE_SERVICE, MEDIA_SERVICE, STORAGE_SERVICE } from '@syncode/shared/ports';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
 import { ExecutionService } from '@/modules/execution/execution.service.js';
 import { SessionReportsService } from '@/modules/sessions/session-reports.service.js';
@@ -1008,7 +1008,7 @@ describe('transitionPhase (multi-step)', () => {
   it('GIVEN wrapup room WHEN transitioning to finished THEN finalizes session', async () => {
     const host = await insertUser(db);
     const candidate = await insertUser(db);
-    const room = await insertRoom(db, host.id, { status: 'wrapup' });
+    const room = await insertRoom(db, host.id, { status: 'wrapup', language: 'python' });
     await insertParticipant(db, room.id, host.id, 'interviewer');
     await insertParticipant(db, room.id, candidate.id, 'candidate');
 
@@ -1023,7 +1023,7 @@ describe('transitionPhase (multi-step)', () => {
   it('GIVEN session finishes WHEN transitioning to finished THEN enqueues participant reports for that session', async () => {
     const host = await insertUser(db);
     const candidate = await insertUser(db);
-    const room = await insertRoom(db, host.id, { status: 'wrapup' });
+    const room = await insertRoom(db, host.id, { status: 'wrapup', language: 'python' });
     await insertParticipant(db, room.id, host.id, 'interviewer');
     await insertParticipant(db, room.id, candidate.id, 'candidate');
 
@@ -1036,10 +1036,239 @@ describe('transitionPhase (multi-step)', () => {
     expect(mockSessionReportsService.enqueueForFinishedSession).toHaveBeenCalledWith(session.id);
   });
 
+  it('GIVEN session finishes WHEN transitioning to finished THEN waits for final collab snapshot before enqueuing reports', async () => {
+    const host = await insertUser(db);
+    const candidate = await insertUser(db);
+    const room = await insertRoom(db, host.id, { status: 'wrapup', language: 'python' });
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+    await insertParticipant(db, room.id, candidate.id, 'candidate');
+
+    const session = await insertSession(db, room.id, { status: 'ongoing' });
+    await insertSessionParticipant(db, session.id, host.id, 'interviewer');
+    await insertSessionParticipant(db, session.id, candidate.id, 'candidate');
+
+    await service.transitionPhase(room.id, host.id, 'finished');
+
+    expect(mockCollabClient.updateRoomState).toHaveBeenCalledWith(
+      expect.objectContaining({
+        roomId: room.id,
+        phase: 'finished',
+        language: 'python',
+      }),
+    );
+    expect(mockCollabClient.updateRoomState.mock.invocationCallOrder[0]).toBeLessThan(
+      mockSessionReportsService.enqueueForFinishedSession.mock.invocationCallOrder[0] ?? 0,
+    );
+  });
+
+  it('GIVEN cleaned-up collab room has stored snapshot WHEN transitioning to finished THEN recreates doc before final snapshot', async () => {
+    const host = await insertUser(db);
+    const candidate = await insertUser(db);
+    const room = await insertRoom(db, host.id, { status: 'wrapup', language: 'python' });
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+    await insertParticipant(db, room.id, candidate.id, 'candidate');
+
+    const session = await insertSession(db, room.id, { status: 'ongoing' });
+    await insertSessionParticipant(db, session.id, host.id, 'interviewer');
+    await insertSessionParticipant(db, session.id, candidate.id, 'candidate');
+    await db.insert(roomDocSnapshots).values({
+      roomId: room.id,
+      state: new Uint8Array([1, 2, 3]),
+    });
+
+    await service.transitionPhase(room.id, host.id, 'finished');
+
+    expect(mockCollabClient.createDocument).toHaveBeenCalledWith(
+      expect.objectContaining({
+        roomId: room.id,
+        initialPhase: 'wrapup',
+        editorLocked: room.editorLocked,
+        snapshot: [1, 2, 3],
+        initialLanguage: 'python',
+      }),
+    );
+    expect(mockCollabClient.createDocument.mock.invocationCallOrder[0]).toBeLessThan(
+      mockCollabClient.updateRoomState.mock.invocationCallOrder[0] ?? 0,
+    );
+    expect(mockSessionReportsService.enqueueForFinishedSession).toHaveBeenCalledWith(session.id);
+  });
+
+  it('GIVEN wrapup room has no language WHEN transitioning to finished THEN rejects before collab update', async () => {
+    const host = await insertUser(db);
+    const candidate = await insertUser(db);
+    const room = await insertRoom(db, host.id, { status: 'wrapup', language: null });
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+    await insertParticipant(db, room.id, candidate.id, 'candidate');
+
+    const session = await insertSession(db, room.id, { status: 'ongoing', language: null });
+    await insertSessionParticipant(db, session.id, host.id, 'interviewer');
+    await insertSessionParticipant(db, session.id, candidate.id, 'candidate');
+
+    await expect(service.transitionPhase(room.id, host.id, 'finished')).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: ERROR_CODES.VALIDATION_FAILED,
+      }),
+    });
+
+    expect(mockCollabClient.updateRoomState).not.toHaveBeenCalled();
+    expect(mockSessionReportsService.enqueueForFinishedSession).not.toHaveBeenCalledWith(
+      session.id,
+    );
+
+    const [roomAfterFailure] = await db.select().from(rooms).where(eq(rooms.id, room.id));
+    const [sessionAfterFailure] = await db
+      .select()
+      .from(sessions)
+      .where(eq(sessions.id, session.id));
+    expect(roomAfterFailure?.status).toBe('wrapup');
+    expect(sessionAfterFailure?.status).toBe('ongoing');
+  });
+
+  it('GIVEN final collab snapshot update fails WHEN transitioning to finished THEN does not enqueue reports', async () => {
+    const host = await insertUser(db);
+    const candidate = await insertUser(db);
+    const room = await insertRoom(db, host.id, { status: 'wrapup', language: 'python' });
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+    await insertParticipant(db, room.id, candidate.id, 'candidate');
+
+    const session = await insertSession(db, room.id, { status: 'ongoing' });
+    await insertSessionParticipant(db, session.id, host.id, 'interviewer');
+    await insertSessionParticipant(db, session.id, candidate.id, 'candidate');
+    mockCollabClient.updateRoomState.mockRejectedValueOnce(new Error('collab down'));
+
+    await expect(service.transitionPhase(room.id, host.id, 'finished')).rejects.toThrow(
+      ServiceUnavailableException,
+    );
+
+    expect(mockSessionReportsService.enqueueForFinishedSession).not.toHaveBeenCalledWith(
+      session.id,
+    );
+
+    const [roomAfterFailure] = await db.select().from(rooms).where(eq(rooms.id, room.id));
+    const [sessionAfterFailure] = await db
+      .select()
+      .from(sessions)
+      .where(eq(sessions.id, session.id));
+    expect(roomAfterFailure?.status).toBe('wrapup');
+    expect(sessionAfterFailure?.status).toBe('ongoing');
+  });
+
+  it('GIVEN DB update fails after final collab snapshot WHEN transitioning to finished THEN restores collab phase', async () => {
+    const host = await insertUser(db);
+    const candidate = await insertUser(db);
+    const room = await insertRoom(db, host.id, { status: 'wrapup', language: 'python' });
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+    await insertParticipant(db, room.id, candidate.id, 'candidate');
+
+    const session = await insertSession(db, room.id, { status: 'ongoing' });
+    await insertSessionParticipant(db, session.id, host.id, 'interviewer');
+    await insertSessionParticipant(db, session.id, candidate.id, 'candidate');
+    await db.execute(sql`
+      CREATE FUNCTION fail_room_finish_update()
+      RETURNS trigger AS $$
+      BEGIN
+        IF NEW.status = 'finished' THEN
+          RAISE EXCEPTION 'forced room update failure';
+        END IF;
+        RETURN NEW;
+      END;
+      $$ LANGUAGE plpgsql;
+    `);
+    await db.execute(sql`
+      CREATE TRIGGER fail_room_finish_update
+      BEFORE UPDATE ON rooms
+      FOR EACH ROW
+      EXECUTE FUNCTION fail_room_finish_update();
+    `);
+
+    await expect(service.transitionPhase(room.id, host.id, 'finished')).rejects.toThrow();
+
+    expect(mockCollabClient.updateRoomState).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ roomId: room.id, phase: 'finished', language: 'python' }),
+    );
+    expect(mockCollabClient.updateRoomState).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ roomId: room.id, phase: 'wrapup' }),
+    );
+    expect(mockSessionReportsService.enqueueForFinishedSession).not.toHaveBeenCalledWith(
+      session.id,
+    );
+
+    const [roomAfterFailure] = await db.select().from(rooms).where(eq(rooms.id, room.id));
+    const [sessionAfterFailure] = await db
+      .select()
+      .from(sessions)
+      .where(eq(sessions.id, session.id));
+    expect(roomAfterFailure?.status).toBe('wrapup');
+    expect(sessionAfterFailure?.status).toBe('ongoing');
+  });
+
+  it('GIVEN DB update and collab rollback fail WHEN transitioning to finished THEN surfaces rollback failure', async () => {
+    const host = await insertUser(db);
+    const candidate = await insertUser(db);
+    const room = await insertRoom(db, host.id, { status: 'wrapup', language: 'python' });
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+    await insertParticipant(db, room.id, candidate.id, 'candidate');
+
+    const session = await insertSession(db, room.id, { status: 'ongoing' });
+    await insertSessionParticipant(db, session.id, host.id, 'interviewer');
+    await insertSessionParticipant(db, session.id, candidate.id, 'candidate');
+    await db.execute(sql`
+      CREATE FUNCTION fail_room_finish_update_restore()
+      RETURNS trigger AS $$
+      BEGIN
+        IF NEW.status = 'finished' THEN
+          RAISE EXCEPTION 'forced room update failure';
+        END IF;
+        RETURN NEW;
+      END;
+      $$ LANGUAGE plpgsql;
+    `);
+    await db.execute(sql`
+      CREATE TRIGGER fail_room_finish_update_restore
+      BEFORE UPDATE ON rooms
+      FOR EACH ROW
+      EXECUTE FUNCTION fail_room_finish_update_restore();
+    `);
+    mockCollabClient.updateRoomState
+      .mockResolvedValueOnce({ success: true })
+      .mockRejectedValueOnce(new Error('rollback down'));
+
+    try {
+      await expect(service.transitionPhase(room.id, host.id, 'finished')).rejects.toThrow(
+        ServiceUnavailableException,
+      );
+    } finally {
+      await db.execute(sql`DROP TRIGGER IF EXISTS fail_room_finish_update_restore ON rooms;`);
+      await db.execute(sql`DROP FUNCTION IF EXISTS fail_room_finish_update_restore();`);
+    }
+
+    expect(mockCollabClient.updateRoomState).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ roomId: room.id, phase: 'finished', language: 'python' }),
+    );
+    expect(mockCollabClient.updateRoomState).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ roomId: room.id, phase: 'wrapup' }),
+    );
+    expect(mockSessionReportsService.enqueueForFinishedSession).not.toHaveBeenCalledWith(
+      session.id,
+    );
+
+    const [roomAfterFailure] = await db.select().from(rooms).where(eq(rooms.id, room.id));
+    const [sessionAfterFailure] = await db
+      .select()
+      .from(sessions)
+      .where(eq(sessions.id, session.id));
+    expect(roomAfterFailure?.status).toBe('wrapup');
+    expect(sessionAfterFailure?.status).toBe('ongoing');
+  });
+
   it('GIVEN peer room with 2 active participants WHEN transitioning to finished THEN all participants flip to inactive with leftAt', async () => {
     const host = await insertUser(db);
     const candidate = await insertUser(db);
-    const room = await insertRoom(db, host.id, { status: 'wrapup' });
+    const room = await insertRoom(db, host.id, { status: 'wrapup', language: 'python' });
     await insertParticipant(db, room.id, host.id, 'interviewer');
     await insertParticipant(db, room.id, candidate.id, 'candidate');
 
