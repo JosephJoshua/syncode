@@ -15,6 +15,7 @@ import { DB_CLIENT } from '@/modules/db/db.module.js';
 import { InMemoryCacheService } from '@/test/in-memory-cache.service.js';
 import {
   createTestDb,
+  insertCodeSnapshot,
   insertPeerFeedbackRow,
   insertProblem,
   insertRoom,
@@ -63,6 +64,22 @@ afterEach(async () => {
   await cleanup();
 });
 
+async function insertRequiredSessionEndSnapshot(
+  sessionId: string,
+  roomId: string,
+  code = 'def solution(): return [0, 1]',
+): Promise<void> {
+  await insertCodeSnapshot(db, {
+    sessionId,
+    roomId,
+    code,
+    language: 'python',
+    trigger: 'session_end',
+    phase: 'finished',
+    createdAt: new Date('2026-04-20T06:00:00.000Z'),
+  });
+}
+
 describe('enqueueForFinishedSession', () => {
   it('GIVEN finished session data WHEN enqueuing reports THEN creates pending rows and submits participant-scoped evidence to AI', async () => {
     const interviewer = await insertUser(db, { username: 'interviewer' });
@@ -93,10 +110,17 @@ describe('enqueueForFinishedSession', () => {
       description: 'Basic happy path',
       isHidden: false,
     });
+    const hiddenTestCase = await insertTestCase(db, problem.id, {
+      sortOrder: 1,
+      input: 'secret hidden input',
+      expectedOutput: 'secret expected output',
+      description: 'Hidden edge case',
+      isHidden: true,
+    });
     const submission = await insertSubmission(db, candidate.id, room.id, problem.id, {
       code: 'def two_sum(nums, target): return [0, 1]',
       language: 'python',
-      totalTestCases: 1,
+      totalTestCases: 3,
       passedTestCases: 1,
       totalDurationMs: 18,
     });
@@ -114,11 +138,57 @@ describe('enqueueForFinishedSession', () => {
       timedOut: false,
       errorMessage: null,
     });
+    await db.insert(executionResults).values({
+      submissionId: submission.id,
+      testCaseIndex: hiddenTestCase.sortOrder,
+      passed: false,
+      expected: hiddenTestCase.expectedOutput,
+      actual: 'secret actual output',
+      stdout: 'secret hidden stdout\n',
+      stderr: 'secret hidden stderr',
+      exitCode: 1,
+      durationMs: 18,
+      memoryUsageMb: 8.2,
+      timedOut: false,
+      errorMessage: 'secret hidden error',
+    });
+    await db.insert(executionResults).values({
+      submissionId: submission.id,
+      testCaseIndex: 2,
+      passed: false,
+      expected: 'missing metadata expected output',
+      actual: 'missing metadata actual output',
+      stdout: 'missing metadata stdout\n',
+      stderr: 'missing metadata stderr',
+      exitCode: 1,
+      durationMs: 18,
+      memoryUsageMb: 8.2,
+      timedOut: false,
+      errorMessage: 'missing metadata error',
+    });
     await insertRun(db, room.id, candidate.id, {
       code: 'def two_sum(nums, target): return [0, 1]',
       language: 'python',
       durationMs: 16,
       stdout: '[0,1]\n',
+    });
+    await insertCodeSnapshot(db, {
+      sessionId: session.id,
+      roomId: room.id,
+      code: 'def two_sum(nums, target): return [0, 1]',
+      language: 'python',
+      trigger: 'phase_change',
+      phase: 'wrapup',
+      createdAt: new Date('2026-04-20T01:01:00.000Z'),
+    });
+    await insertCodeSnapshot(db, {
+      sessionId: session.id,
+      roomId: room.id,
+      code: 'def two_sum(nums, target): return [0, 1]',
+      language: 'python',
+      trigger: 'session_end',
+      phase: 'finished',
+      createdAt: new Date('2026-04-20T01:02:00.000Z'),
     });
     await insertPeerFeedbackRow(db, {
       sessionId: session.id,
@@ -167,12 +237,40 @@ describe('enqueueForFinishedSession', () => {
     );
 
     expect(mockAiClient.submitSessionReportRequest).toHaveBeenCalledTimes(2);
+    const candidateRequest = mockAiClient.submitSessionReportRequest.mock.calls.find(
+      ([request]) => request.participantId === candidate.id,
+    )?.[0];
+    expect(candidateRequest?.sessionEvents).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          eventType: 'stage_transition',
+          metadata: expect.objectContaining({ trigger: 'session_end' }),
+        }),
+      ]),
+    );
     expect(mockAiClient.submitSessionReportRequest).toHaveBeenCalledWith(
       expect.objectContaining({
         sessionId: session.id,
         participantId: candidate.id,
         participantRole: 'candidate',
         language: 'python',
+        sessionEvents: expect.arrayContaining([
+          expect.objectContaining({
+            eventType: 'stage_transition',
+          }),
+          expect.objectContaining({
+            eventType: 'submission',
+            metadata: expect.objectContaining({
+              passed: 1,
+              total: 3,
+            }),
+          }),
+        ]),
+        finalCodeSnapshot: expect.objectContaining({
+          trigger: 'session_end',
+          language: 'python',
+          phase: 'finished',
+        }),
         participants: expect.arrayContaining([
           expect.objectContaining({ userId: interviewer.id, role: 'interviewer' }),
           expect.objectContaining({ userId: candidate.id, role: 'candidate' }),
@@ -190,9 +288,65 @@ describe('enqueueForFinishedSession', () => {
             expectedOutput: null,
             actualOutput: null,
           }),
+          expect.objectContaining({
+            testCaseIndex: 1,
+            input: null,
+            description: null,
+            passed: false,
+            expectedOutput: null,
+            actualOutput: null,
+            stdout: null,
+            stderr: null,
+            errorMessage: 'Hidden test failed',
+          }),
+          expect.objectContaining({
+            testCaseIndex: 2,
+            input: null,
+            description: null,
+            isHidden: true,
+            passed: false,
+            expectedOutput: null,
+            actualOutput: null,
+            stdout: null,
+            stderr: null,
+            errorMessage: 'Hidden test failed',
+          }),
         ],
       }),
     );
+  });
+
+  it('GIVEN no session_end snapshot WHEN enqueuing reports THEN fails closed before submitting AI jobs', async () => {
+    const interviewer = await insertUser(db, { username: 'interviewer' });
+    const candidate = await insertUser(db, { username: 'candidate' });
+    const room = await insertRoom(db, interviewer.id, { language: 'python' });
+    const session = await insertSession(db, room.id, {
+      language: 'python',
+      status: 'finished',
+      durationMs: 120000,
+    });
+    await insertSessionParticipant(db, session.id, interviewer.id, 'interviewer');
+    await insertSessionParticipant(db, session.id, candidate.id, 'candidate');
+    await insertCodeSnapshot(db, {
+      sessionId: session.id,
+      roomId: room.id,
+      code: 'def stale(): return None',
+      language: 'python',
+      trigger: 'phase_change',
+      phase: 'wrapup',
+      createdAt: new Date('2026-04-20T01:01:00.000Z'),
+    });
+
+    await expect(service.enqueueForFinishedSession(session.id)).rejects.toThrow(
+      'Cannot build session report without a session_end code snapshot',
+    );
+
+    expect(mockAiClient.submitSessionReportRequest).not.toHaveBeenCalled();
+    const reportRows = await db
+      .select({ id: sessionReports.id })
+      .from(sessionReports)
+      .where(eq(sessionReports.sessionId, session.id));
+    expect(reportRows).toHaveLength(0);
   });
 
   it('GIVEN session report result is already cached WHEN enqueuing report THEN persists it after metadata is stored', async () => {
@@ -203,6 +357,7 @@ describe('enqueueForFinishedSession', () => {
       durationMs: 90000,
     });
     await insertSessionParticipant(db, session.id, user.id, 'candidate');
+    await insertRequiredSessionEndSnapshot(session.id, room.id);
 
     mockAiClient.submitSessionReportRequest.mockResolvedValueOnce({
       jobId: 'fast-report-job',
@@ -258,6 +413,7 @@ describe('handleResult', () => {
     const room = await insertRoom(db, user.id);
     const session = await insertSession(db, room.id, { status: 'finished' });
     await insertSessionParticipant(db, session.id, user.id, 'candidate');
+    await insertRequiredSessionEndSnapshot(session.id, room.id);
     const previousRoom = await insertRoom(db, user.id);
     const previousSession = await insertSession(db, previousRoom.id, { status: 'finished' });
     await insertSessionParticipant(db, previousSession.id, user.id, 'candidate');
@@ -410,6 +566,7 @@ describe('handleResult', () => {
     const room = await insertRoom(db, user.id);
     const session = await insertSession(db, room.id, { status: 'finished' });
     await insertSessionParticipant(db, session.id, user.id, 'candidate');
+    await insertRequiredSessionEndSnapshot(session.id, room.id);
     const requestedAt = new Date('2026-04-20T05:59:00.000Z');
     await insertSessionReport(db, session.id, {
       userId: user.id,
@@ -493,6 +650,7 @@ describe('handleResult', () => {
     const room = await insertRoom(db, user.id);
     const session = await insertSession(db, room.id, { status: 'finished' });
     await insertSessionParticipant(db, session.id, user.id, 'candidate');
+    await insertRequiredSessionEndSnapshot(session.id, room.id);
     const firstRequestedAt = new Date('2026-04-20T05:59:00.000Z');
     const secondRequestedAt = new Date('2026-04-20T06:59:00.000Z');
     await insertSessionReport(db, session.id, {

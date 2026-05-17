@@ -84,6 +84,19 @@ describe('CollaborationService', () => {
       expect(roomRegistry.getRoom('room-1')?.language).toBeNull();
     });
 
+    it('GIVEN existing document and initialLanguage WHEN creating duplicate THEN repairs registry language', async () => {
+      const { service, roomRegistry, docStore } = createFixture();
+      docStore.createDoc
+        .mockReturnValueOnce({ doc: new Y.Doc(), created: true })
+        .mockReturnValueOnce({ doc: new Y.Doc(), created: false });
+
+      await service.createDocument({ roomId: 'room-1' });
+      const result = await service.createDocument({ roomId: 'room-1', initialLanguage: 'python' });
+
+      expect(result.created).toBe(false);
+      expect(roomRegistry.getRoom('room-1')?.language).toBe('python');
+    });
+
     it('GIVEN existing document WHEN creating duplicate THEN returns created=false without throwing', async () => {
       const { service, docStore } = createFixture();
       docStore.createDoc
@@ -231,6 +244,99 @@ describe('CollaborationService', () => {
       });
 
       expect(snapshotScheduler.takeSnapshot).toHaveBeenCalledWith('room-1', 'phase_change');
+    });
+
+    it('GIVEN transition to finished WHEN updating state THEN awaits a session_end snapshot', async () => {
+      const { service, snapshotScheduler } = createFixture();
+      await service.createDocument({ roomId: 'room-1', initialPhase: 'wrapup' });
+
+      await service.updateRoomState({
+        roomId: 'room-1',
+        phase: 'finished',
+        editorLocked: false,
+      });
+
+      expect(snapshotScheduler.takeSnapshot).toHaveBeenCalledWith('room-1', 'session_end', {
+        strict: true,
+      });
+      expect(snapshotScheduler.takeSnapshot).not.toHaveBeenCalledWith('room-1', 'phase_change');
+    });
+
+    it('GIVEN stale room language WHEN updating to finished with language THEN repairs before snapshot', async () => {
+      const { service, roomRegistry, snapshotScheduler } = createFixture();
+      await service.createDocument({ roomId: 'room-1', initialPhase: 'wrapup' });
+
+      await service.updateRoomState({
+        roomId: 'room-1',
+        phase: 'finished',
+        editorLocked: false,
+        language: 'python',
+      });
+
+      expect(roomRegistry.getRoom('room-1')?.language).toBe('python');
+      expect(snapshotScheduler.takeSnapshot).toHaveBeenCalledWith('room-1', 'session_end', {
+        strict: true,
+      });
+    });
+
+    it('GIVEN session_end snapshot fails WHEN updating to finished THEN restores previous live state', async () => {
+      const { service, roomRegistry, snapshotScheduler } = createFixture();
+      await service.createDocument({ roomId: 'room-1', initialPhase: 'wrapup' });
+      snapshotScheduler.takeSnapshot = vi
+        .fn<() => Promise<void>>()
+        .mockRejectedValue(new Error('boom'));
+
+      await expect(
+        service.updateRoomState({
+          roomId: 'room-1',
+          phase: 'finished',
+          editorLocked: false,
+        }),
+      ).rejects.toThrow('boom');
+
+      expect(roomRegistry.getRoom('room-1')).toEqual(
+        expect.objectContaining({ phase: 'wrapup', editorLocked: false }),
+      );
+
+      snapshotScheduler.takeSnapshot = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
+      await service.updateRoomState({
+        roomId: 'room-1',
+        phase: 'finished',
+        editorLocked: false,
+      });
+
+      expect(snapshotScheduler.takeSnapshot).toHaveBeenCalledWith('room-1', 'session_end', {
+        strict: true,
+      });
+    });
+
+    it('GIVEN session_end snapshot is slow WHEN updating to finished THEN waits before returning', async () => {
+      const { service, snapshotScheduler } = createFixture();
+      await service.createDocument({ roomId: 'room-1', initialPhase: 'wrapup' });
+      let resolveSnapshot!: () => void;
+      snapshotScheduler.takeSnapshot = vi.fn(
+        () =>
+          new Promise<void>((resolve) => {
+            resolveSnapshot = resolve;
+          }),
+      );
+
+      let returned = false;
+      const update = service
+        .updateRoomState({
+          roomId: 'room-1',
+          phase: 'finished',
+          editorLocked: false,
+        })
+        .then(() => {
+          returned = true;
+        });
+
+      await Promise.resolve();
+      expect(returned).toBe(false);
+      resolveSnapshot();
+      await update;
+      expect(returned).toBe(true);
     });
 
     it('GIVEN editorLocked changes false to true WHEN updating state THEN takes submission snapshot', async () => {

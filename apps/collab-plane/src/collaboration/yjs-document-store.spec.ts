@@ -40,14 +40,15 @@ describe('YjsDocumentStore', () => {
       expect(doc.getMap(WHITEBOARD_KEY).size).toBe(0);
     });
 
-    it('GIVEN corrupt snapshot WHEN creating THEN inline comments and whiteboard roots exist on the recovered doc', () => {
+    it('GIVEN corrupt snapshot WHEN creating THEN throws without storing a doc', () => {
       const store = new YjsDocumentStore();
       const corrupt = new Uint8Array([0xff, 0x00]);
 
-      const { doc } = store.createDoc('room-1', { snapshot: corrupt });
+      expect(() => store.createDoc('room-1', { snapshot: corrupt })).toThrow(
+        'Invalid Y.Doc snapshot for room room-1',
+      );
 
-      expect(doc.getMap(INLINE_COMMENTS_KEY).size).toBe(0);
-      expect(doc.getMap(WHITEBOARD_KEY).size).toBe(0);
+      expect(store.getDoc('room-1')).toBeUndefined();
     });
 
     it('GIVEN no initialContentByLanguage WHEN creating THEN all language Y.Texts are empty', () => {
@@ -84,32 +85,6 @@ describe('YjsDocumentStore', () => {
       });
 
       expect(doc.getText('code:python').toString()).toBe('from-snapshot');
-    });
-
-    it('GIVEN corrupt snapshot WHEN creating THEN does not throw and returns a usable Y.Doc', () => {
-      const store = new YjsDocumentStore();
-      const corrupt = new Uint8Array([0xff, 0x00]);
-
-      const result = store.createDoc('room-1', { snapshot: corrupt });
-
-      expect(result.created).toBe(true);
-      expect(result.doc).toBeInstanceOf(Y.Doc);
-      // doc is still usable
-      result.doc.getText('code').insert(0, 'after-recovery');
-      expect(result.doc.getText('code').toString()).toBe('after-recovery');
-    });
-
-    it('GIVEN corrupt snapshot with initialContentByLanguage WHEN creating THEN seeds the starter content', () => {
-      const store = new YjsDocumentStore();
-      const corrupt = new Uint8Array([0xff, 0x00]);
-
-      const { doc, created } = store.createDoc('room-1', {
-        snapshot: corrupt,
-        initialContentByLanguage: { python: 'fallback-starter' },
-      });
-
-      expect(created).toBe(true);
-      expect(doc.getText('code:python').toString()).toBe('fallback-starter');
     });
 
     it('GIVEN existing doc WHEN creating duplicate THEN returns existing doc with created=false', () => {

@@ -71,6 +71,7 @@ export class InternalController {
       // Prefer the payload language (reflects mid-session switches); fall back to
       // the session's initial language only if the payload omitted it.
       const persistedLanguage = language ?? session?.language ?? null;
+      let codeSnapshotInserted = false;
 
       if (session && persistedLanguage) {
         if (!language) {
@@ -88,6 +89,7 @@ export class InternalController {
           linesOfCode: code ? code.split('\n').length : 0,
           createdAt: new Date(timestamp),
         });
+        codeSnapshotInserted = true;
       } else {
         this.logger.warn(
           `Skipping DB insert for room ${roomId}: ${session ? 'no language' : 'no session'}`,
@@ -98,6 +100,10 @@ export class InternalController {
       // recovery relies on. The S3 blob is a recoverable mirror, so a transient
       // S3 failure should not block the DB write.
       await this.roomsService.persistDocSnapshot(roomId, new Uint8Array(snapshot));
+
+      if (trigger === 'session_end' && !codeSnapshotInserted) {
+        return { success: false };
+      }
 
       const snapshotBuffer = Buffer.from(snapshot);
       const key = `snapshots/${roomId}/${timestamp}.yjs`;

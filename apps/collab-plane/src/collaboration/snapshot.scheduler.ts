@@ -43,12 +43,18 @@ export class SnapshotScheduler implements OnModuleDestroy {
     }
   }
 
-  async takeSnapshot(roomId: string, trigger: SnapshotTrigger): Promise<void> {
-    const snapshot = this.docStore.encodeSnapshot(roomId);
-    if (!snapshot) return;
+  async takeSnapshot(
+    roomId: string,
+    trigger: SnapshotTrigger,
+    options: { strict?: boolean } = {},
+  ): Promise<void> {
+    const snapshot = this.encodeSnapshot(roomId, options.strict === true);
+    if (!snapshot) {
+      return;
+    }
 
     const room = this.roomRegistry.getRoom(roomId);
-    const language = room?.language ?? null;
+    const language = (room?.language ?? null) as SupportedLanguage | null;
 
     // notifySnapshotReady carries language-specific payload (the code text +
     // the language for session reports). Skip it if no language is set yet —
@@ -56,35 +62,72 @@ export class SnapshotScheduler implements OnModuleDestroy {
     // whiteboard records survives a server restart even before the user has
     // picked a language.
     if (language) {
-      const code = this.docStore.getCodeText(roomId, language);
-      const phase = isPersistedPhase(room?.phase) ? room.phase : null;
-      try {
-        await this.callbackClient.notifySnapshotReady({
-          roomId,
-          snapshot: Array.from(snapshot),
-          code,
-          language: language as SupportedLanguage,
-          timestamp: Date.now(),
-          trigger,
-          phase,
-        });
-      } catch (error) {
-        this.logger.warn(
-          `Failed to send snapshot for room ${roomId}: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
+      await this.notifyCodeSnapshot(roomId, snapshot, language, room?.phase, trigger, options);
       return;
     }
 
     // No language selected yet, but the doc may already hold whiteboard
     // (or future non-code) state. Persist the raw bytes so a refresh after
     // a server restart doesn't drop everything.
+    await this.persistRawSnapshot(roomId, snapshot, options);
+  }
+
+  private encodeSnapshot(roomId: string, strict: boolean) {
+    const snapshot = this.docStore.encodeSnapshot(roomId);
+    if (snapshot || !strict) {
+      return snapshot;
+    }
+    throw new Error(`Cannot take strict snapshot for missing document ${roomId}`);
+  }
+
+  private async notifyCodeSnapshot(
+    roomId: string,
+    snapshot: Uint8Array,
+    language: SupportedLanguage,
+    phase: string | undefined,
+    trigger: SnapshotTrigger,
+    options: { strict?: boolean },
+  ): Promise<void> {
+    const code = this.docStore.getCodeText(roomId, language);
+    const persistedPhase = isPersistedPhase(phase) ? phase : null;
+    await this.withSnapshotErrorHandling(roomId, options, 'send snapshot', () =>
+      this.callbackClient.notifySnapshotReady({
+        roomId,
+        snapshot: Array.from(snapshot),
+        code,
+        language,
+        timestamp: Date.now(),
+        trigger,
+        phase: persistedPhase,
+      }),
+    );
+  }
+
+  private async persistRawSnapshot(
+    roomId: string,
+    snapshot: Uint8Array,
+    options: { strict?: boolean },
+  ): Promise<void> {
+    await this.withSnapshotErrorHandling(roomId, options, 'persist doc snapshot', () =>
+      this.callbackClient.persistDocSnapshot(roomId, { state: Array.from(snapshot) }),
+    );
+  }
+
+  private async withSnapshotErrorHandling(
+    roomId: string,
+    options: { strict?: boolean },
+    action: string,
+    callback: () => Promise<unknown>,
+  ): Promise<void> {
     try {
-      await this.callbackClient.persistDocSnapshot(roomId, { state: Array.from(snapshot) });
+      await callback();
     } catch (error) {
       this.logger.warn(
-        `Failed to persist doc snapshot for room ${roomId}: ${error instanceof Error ? error.message : String(error)}`,
+        `Failed to ${action} for room ${roomId}: ${error instanceof Error ? error.message : String(error)}`,
       );
+      if (options.strict) {
+        throw error;
+      }
     }
   }
 

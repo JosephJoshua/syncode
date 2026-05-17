@@ -8,7 +8,9 @@ import {
   type ParticipantHeartbeatRequest,
   type ParticipantHeartbeatResponse,
   type PersistDocSnapshotPayload,
+  type PersistDocSnapshotResponse,
   type SnapshotReadyPayload,
+  type SnapshotReadyResponse,
   type UserDisconnectedPayload,
 } from '@syncode/contracts';
 import ky, { type KyInstance } from 'ky';
@@ -35,7 +37,12 @@ export class HttpControlPlaneCallbackClient implements IControlPlaneCallbackClie
 
   async notifySnapshotReady(payload: SnapshotReadyPayload): Promise<void> {
     try {
-      await this.client.post(CONTROL_INTERNAL.SNAPSHOT_READY.route, { json: payload });
+      const response = await this.client
+        .post(CONTROL_INTERNAL.SNAPSHOT_READY.route, { json: payload })
+        .json<SnapshotReadyResponse>();
+      if (!response.success) {
+        throw new Error(`Control-plane rejected code snapshot for room ${payload.roomId}`);
+      }
       this.logger.debug(
         `Snapshot delivered for room ${payload.roomId} (trigger=${payload.trigger})`,
       );
@@ -43,6 +50,7 @@ export class HttpControlPlaneCallbackClient implements IControlPlaneCallbackClie
       this.logger.warn(
         `Failed to deliver snapshot (roomId=${payload.roomId}): ${(error as Error).message}`,
       );
+      throw error;
     }
   }
 
@@ -95,7 +103,12 @@ export class HttpControlPlaneCallbackClient implements IControlPlaneCallbackClie
   async persistDocSnapshot(roomId: string, payload: PersistDocSnapshotPayload): Promise<void> {
     try {
       const path = buildUrl(CONTROL_INTERNAL.PERSIST_DOC_SNAPSHOT.route, { roomId });
-      await this.client.post(path, { json: payload });
+      const response = await this.client
+        .post(path, { json: payload })
+        .json<PersistDocSnapshotResponse>();
+      if (!response.success) {
+        throw new Error(`Control-plane rejected doc snapshot for room ${roomId}`);
+      }
       this.logger.debug(
         `Persisted doc snapshot for room ${roomId} (${payload.state.length} bytes)`,
       );
@@ -103,6 +116,7 @@ export class HttpControlPlaneCallbackClient implements IControlPlaneCallbackClie
       this.logger.warn(
         `Failed to persist doc snapshot (roomId=${roomId}): ${(error as Error).message}`,
       );
+      throw error;
     }
   }
 }

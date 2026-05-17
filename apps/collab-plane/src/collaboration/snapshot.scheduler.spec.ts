@@ -101,10 +101,26 @@ describe('SnapshotScheduler', () => {
       await expect(scheduler.takeSnapshot('room-1', 'periodic')).resolves.toBeUndefined();
     });
 
+    it('GIVEN room without language AND strict final persistence rejects WHEN taking snapshot THEN rethrows', async () => {
+      roomRegistry.createRoom('room-1');
+      docStore.createDoc('room-1');
+      vi.mocked(callbackClient.persistDocSnapshot).mockRejectedValueOnce(new Error('boom'));
+
+      await expect(
+        scheduler.takeSnapshot('room-1', 'session_end', { strict: true }),
+      ).rejects.toThrow('boom');
+    });
+
     it('GIVEN non-existent doc WHEN taking snapshot THEN does nothing', async () => {
       await scheduler.takeSnapshot('non-existent', 'periodic');
 
       expect(callbackClient.notifySnapshotReady).not.toHaveBeenCalled();
+    });
+
+    it('GIVEN non-existent doc WHEN taking strict snapshot THEN rethrows', async () => {
+      await expect(
+        scheduler.takeSnapshot('non-existent', 'session_end', { strict: true }),
+      ).rejects.toThrow('Cannot take strict snapshot for missing document non-existent');
     });
 
     it('GIVEN callbackClient throws WHEN taking snapshot THEN does not rethrow', async () => {
@@ -115,6 +131,28 @@ describe('SnapshotScheduler', () => {
       );
 
       await expect(scheduler.takeSnapshot('room-1', 'submission')).resolves.toBeUndefined();
+    });
+
+    it('GIVEN final snapshot callback throws WHEN taking best-effort session_end snapshot THEN does not rethrow', async () => {
+      roomRegistry.createRoom('room-1', { language: 'python' });
+      docStore.createDoc('room-1', { initialContentByLanguage: { python: 'const x = 1;' } });
+      vi.mocked(callbackClient.notifySnapshotReady).mockRejectedValueOnce(
+        new Error('Network error'),
+      );
+
+      await expect(scheduler.takeSnapshot('room-1', 'session_end')).resolves.toBeUndefined();
+    });
+
+    it('GIVEN final snapshot callback throws WHEN taking strict session_end snapshot THEN rethrows', async () => {
+      roomRegistry.createRoom('room-1', { language: 'python' });
+      docStore.createDoc('room-1', { initialContentByLanguage: { python: 'const x = 1;' } });
+      vi.mocked(callbackClient.notifySnapshotReady).mockRejectedValueOnce(
+        new Error('Network error'),
+      );
+
+      await expect(
+        scheduler.takeSnapshot('room-1', 'session_end', { strict: true }),
+      ).rejects.toThrow('Network error');
     });
   });
 

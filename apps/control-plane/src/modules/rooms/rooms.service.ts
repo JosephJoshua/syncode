@@ -1581,9 +1581,10 @@ export class RoomsService {
     targetStatus: RoomStatus,
   ): Promise<TransitionPhaseResult> {
     const now = new Date();
+    let restoreFinalCollabState: { phase: RoomStatus; editorLocked: boolean } | null = null;
 
-    const { previousStatus, editorLocked, finishedSessionId } = await this.db.transaction(
-      async (tx) => {
+    const transactionResult = await this.db
+      .transaction(async (tx) => {
         const [lockedRoom] = await tx
           .select()
           .from(rooms)
@@ -1597,34 +1598,8 @@ export class RoomsService {
           });
         }
 
-        // Auth check against the locked row to prevent TOCTOU race with ownership transfer
-        const [participant] = await tx
-          .select({ role: roomParticipants.role, isActive: roomParticipants.isActive })
-          .from(roomParticipants)
-          .where(and(eq(roomParticipants.roomId, roomId), eq(roomParticipants.userId, userId)));
-
-        if (!participant?.isActive) {
-          throw new ForbiddenException({
-            message: 'Not a participant of this room',
-            code: ERROR_CODES.ROOM_ACCESS_DENIED,
-          });
-        }
-
-        if (lockedRoom.hostId !== userId && participant.role !== RoomRole.INTERVIEWER) {
-          throw new ForbiddenException({
-            message: 'You do not have permission to change the room phase',
-            code: ERROR_CODES.ROOM_PERMISSION_DENIED,
-          });
-        }
-
         const lockedStatus = lockedRoom.status;
-
-        if (!isValidStatusTransition(lockedStatus, targetStatus)) {
-          throw new BadRequestException({
-            message: `Cannot transition from '${lockedStatus}' to '${targetStatus}'`,
-            code: ERROR_CODES.ROOM_INVALID_TRANSITION,
-          });
-        }
+        await this.assertPhaseTransitionAllowed(tx, lockedRoom, userId, targetStatus);
 
         const computedElapsedMs =
           lockedStatus === RoomStatus.CODING && lockedRoom.phaseStartedAt && !lockedRoom.timerPaused
@@ -1632,78 +1607,48 @@ export class RoomsService {
               Math.max(0, now.getTime() - lockedRoom.phaseStartedAt.getTime())
             : lockedRoom.elapsedMs;
 
-        if (lockedStatus === RoomStatus.WAITING && targetStatus === RoomStatus.WARMUP) {
-          const activeParticipants = await this.fetchActiveParticipants(tx, lockedRoom);
-          this.assertActiveRoleConfiguration(
-            lockedRoom.mode,
-            RoomStatus.WARMUP,
-            activeParticipants,
-            { strict: true },
-          );
-          this.assertRequiredParticipantsReady(lockedRoom.mode, activeParticipants);
-        }
+        restoreFinalCollabState = await this.prepareFinalCollabSnapshot(
+          lockedRoom,
+          targetStatus,
+          userId,
+        );
 
-        const roomUpdate: Partial<typeof rooms.$inferInsert> = {
-          status: targetStatus,
-          phaseStartedAt: now,
-          elapsedMs: computedElapsedMs,
-        };
-
-        if (lockedStatus === RoomStatus.CODING || targetStatus === RoomStatus.CODING) {
-          roomUpdate.timerPaused = false;
-        }
-
-        if (targetStatus === RoomStatus.FINISHED) {
-          roomUpdate.endedAt = now;
-        }
-
+        const roomUpdate = this.buildPhaseTransitionUpdate(
+          lockedStatus,
+          targetStatus,
+          now,
+          computedElapsedMs,
+        );
         await tx.update(rooms).set(roomUpdate).where(eq(rooms.id, roomId));
-
-        if (targetStatus === RoomStatus.FINISHED) {
-          // Cascade: mark any remaining active participants as inactive. They
-          // weren't kicked — the room just ended — so we set leftAt but NOT
-          // removedAt.
-          await tx
-            .update(roomParticipants)
-            .set({ isActive: false, leftAt: now })
-            .where(and(eq(roomParticipants.roomId, roomId), eq(roomParticipants.isActive, true)));
-        }
-
-        // Reset all participants' ready status when leaving the lobby
-        if (lockedStatus === RoomStatus.WAITING) {
-          await tx
-            .update(roomParticipants)
-            .set({ isReady: false })
-            .where(eq(roomParticipants.roomId, roomId));
-        }
-
-        if (lockedStatus === RoomStatus.WAITING && targetStatus === RoomStatus.WARMUP) {
-          await this.startSessionForRoom(tx, lockedRoom, now);
-        }
-
-        let completedSessionId: string | null = null;
-
-        if (targetStatus === RoomStatus.FINISHED && lockedStatus !== RoomStatus.WAITING) {
-          const [finishedSession] = await tx
-            .update(sessions)
-            .set({
-              status: 'finished',
-              finishedAt: now,
-              durationMs: computedElapsedMs,
-            })
-            .where(eq(sessions.roomId, roomId))
-            .returning({ id: sessions.id });
-
-          completedSessionId = finishedSession?.id ?? null;
-        }
+        await this.applyPhaseTransitionSideEffects(tx, lockedRoom, lockedStatus, targetStatus, now);
+        const completedSessionId = await this.finishSessionForPhaseTransition(
+          tx,
+          roomId,
+          lockedStatus,
+          targetStatus,
+          now,
+          computedElapsedMs,
+        );
 
         return {
           previousStatus: lockedStatus,
           editorLocked: lockedRoom.editorLocked,
           finishedSessionId: completedSessionId,
         };
-      },
-    );
+      })
+      .catch(async (error: unknown) => {
+        if (restoreFinalCollabState) {
+          await this.restoreCollabRoomStateStrict(
+            roomId,
+            restoreFinalCollabState.phase,
+            restoreFinalCollabState.editorLocked,
+            userId,
+          );
+        }
+        throw error;
+      });
+
+    const { previousStatus, editorLocked, finishedSessionId } = transactionResult;
 
     this.logger.log(
       `Room ${roomId} transitioned from '${previousStatus}' to '${targetStatus}' by user ${userId}`,
@@ -1721,7 +1666,9 @@ export class RoomsService {
     }
 
     // Fire-and-forget collab notification stays outside the transaction.
-    void this.updateCollabRoomState(roomId, targetStatus, editorLocked, userId);
+    if (targetStatus !== RoomStatus.FINISHED) {
+      void this.updateCollabRoomState(roomId, targetStatus, editorLocked, userId);
+    }
 
     return {
       roomId,
@@ -1730,6 +1677,158 @@ export class RoomsService {
       transitionedAt: now,
       transitionedBy: userId,
     };
+  }
+
+  private async assertPhaseTransitionAllowed(
+    tx: Parameters<Parameters<Database['transaction']>[0]>[0],
+    lockedRoom: typeof rooms.$inferSelect,
+    userId: string,
+    targetStatus: RoomStatus,
+  ): Promise<void> {
+    // Auth check against the locked row to prevent TOCTOU race with ownership transfer.
+    const [participant] = await tx
+      .select({ role: roomParticipants.role, isActive: roomParticipants.isActive })
+      .from(roomParticipants)
+      .where(and(eq(roomParticipants.roomId, lockedRoom.id), eq(roomParticipants.userId, userId)));
+
+    if (!participant?.isActive) {
+      throw new ForbiddenException({
+        message: 'Not a participant of this room',
+        code: ERROR_CODES.ROOM_ACCESS_DENIED,
+      });
+    }
+
+    if (lockedRoom.hostId !== userId && participant.role !== RoomRole.INTERVIEWER) {
+      throw new ForbiddenException({
+        message: 'You do not have permission to change the room phase',
+        code: ERROR_CODES.ROOM_PERMISSION_DENIED,
+      });
+    }
+
+    if (!isValidStatusTransition(lockedRoom.status, targetStatus)) {
+      throw new BadRequestException({
+        message: `Cannot transition from '${lockedRoom.status}' to '${targetStatus}'`,
+        code: ERROR_CODES.ROOM_INVALID_TRANSITION,
+      });
+    }
+
+    if (lockedRoom.status === RoomStatus.WAITING && targetStatus === RoomStatus.WARMUP) {
+      const activeParticipants = await this.fetchActiveParticipants(tx, lockedRoom);
+      this.assertActiveRoleConfiguration(lockedRoom.mode, RoomStatus.WARMUP, activeParticipants, {
+        strict: true,
+      });
+      this.assertRequiredParticipantsReady(lockedRoom.mode, activeParticipants);
+    }
+  }
+
+  private async prepareFinalCollabSnapshot(
+    lockedRoom: typeof rooms.$inferSelect,
+    targetStatus: RoomStatus,
+    userId: string,
+  ): Promise<{ phase: RoomStatus; editorLocked: boolean } | null> {
+    if (targetStatus !== RoomStatus.FINISHED) {
+      return null;
+    }
+
+    const language = this.requireLanguageForFinalSnapshot(lockedRoom);
+    await this.ensureCollabDocumentForFinalSnapshot(lockedRoom);
+    await this.updateCollabRoomStateStrict(
+      lockedRoom.id,
+      targetStatus,
+      lockedRoom.editorLocked,
+      language,
+      userId,
+    );
+
+    return {
+      phase: lockedRoom.status,
+      editorLocked: lockedRoom.editorLocked,
+    };
+  }
+
+  private requireLanguageForFinalSnapshot(room: typeof rooms.$inferSelect): SupportedLanguage {
+    if (room.language) {
+      return room.language;
+    }
+
+    throw new BadRequestException({
+      message: 'Cannot finish a room before selecting a programming language',
+      code: ERROR_CODES.VALIDATION_FAILED,
+    });
+  }
+
+  private buildPhaseTransitionUpdate(
+    previousStatus: RoomStatus,
+    targetStatus: RoomStatus,
+    now: Date,
+    elapsedMs: number,
+  ): Partial<typeof rooms.$inferInsert> {
+    return {
+      status: targetStatus,
+      phaseStartedAt: now,
+      elapsedMs,
+      ...(previousStatus === RoomStatus.CODING || targetStatus === RoomStatus.CODING
+        ? { timerPaused: false }
+        : {}),
+      ...(targetStatus === RoomStatus.FINISHED ? { endedAt: now } : {}),
+    };
+  }
+
+  private async applyPhaseTransitionSideEffects(
+    tx: Parameters<Parameters<Database['transaction']>[0]>[0],
+    lockedRoom: typeof rooms.$inferSelect,
+    previousStatus: RoomStatus,
+    targetStatus: RoomStatus,
+    now: Date,
+  ): Promise<void> {
+    if (targetStatus === RoomStatus.FINISHED) {
+      // Cascade: mark any remaining active participants as inactive. They
+      // weren't kicked — the room just ended — so we set leftAt but NOT
+      // removedAt.
+      await tx
+        .update(roomParticipants)
+        .set({ isActive: false, leftAt: now })
+        .where(
+          and(eq(roomParticipants.roomId, lockedRoom.id), eq(roomParticipants.isActive, true)),
+        );
+    }
+
+    // Reset all participants' ready status when leaving the lobby.
+    if (previousStatus === RoomStatus.WAITING) {
+      await tx
+        .update(roomParticipants)
+        .set({ isReady: false })
+        .where(eq(roomParticipants.roomId, lockedRoom.id));
+    }
+
+    if (previousStatus === RoomStatus.WAITING && targetStatus === RoomStatus.WARMUP) {
+      await this.startSessionForRoom(tx, lockedRoom, now);
+    }
+  }
+
+  private async finishSessionForPhaseTransition(
+    tx: Parameters<Parameters<Database['transaction']>[0]>[0],
+    roomId: string,
+    previousStatus: RoomStatus,
+    targetStatus: RoomStatus,
+    now: Date,
+    durationMs: number,
+  ): Promise<string | null> {
+    if (targetStatus !== RoomStatus.FINISHED || previousStatus === RoomStatus.WAITING) {
+      return null;
+    }
+
+    const [finishedSession] = await tx
+      .update(sessions)
+      .set({
+        status: 'finished',
+        finishedAt: now,
+        durationMs,
+      })
+      .where(eq(sessions.roomId, roomId))
+      .returning({ id: sessions.id });
+
+    return finishedSession?.id ?? null;
   }
 
   async setEditorLock(
@@ -2183,6 +2282,42 @@ export class RoomsService {
     }
   }
 
+  private async updateCollabRoomStateStrict(
+    roomId: string,
+    phase: RoomStatus,
+    editorLocked: boolean,
+    language: SupportedLanguage,
+    changedBy?: string,
+  ): Promise<void> {
+    try {
+      await this.collabClient.updateRoomState({ roomId, phase, editorLocked, changedBy, language });
+    } catch (error) {
+      this.logger.error(`Failed to update collab room state for finished room ${roomId}`, error);
+      throw new ServiceUnavailableException({
+        message:
+          'Collab plane did not confirm the final room snapshot; session reports were not enqueued',
+        code: ERROR_CODES.COLLAB_SERVICE_UNAVAILABLE,
+      });
+    }
+  }
+
+  private async restoreCollabRoomStateStrict(
+    roomId: string,
+    phase: RoomStatus,
+    editorLocked: boolean,
+    changedBy?: string,
+  ): Promise<void> {
+    try {
+      await this.collabClient.updateRoomState({ roomId, phase, editorLocked, changedBy });
+    } catch (error) {
+      this.logger.error(`Failed to restore collab room state for room ${roomId}`, error);
+      throw new ServiceUnavailableException({
+        message: 'Collab plane did not restore room state after aborted finish transition',
+        code: ERROR_CODES.COLLAB_SERVICE_UNAVAILABLE,
+      });
+    }
+  }
+
   private async broadcastParticipantReady(
     roomId: string,
     userId: string,
@@ -2479,6 +2614,23 @@ export class RoomsService {
       this.logger.warn(`Collab document creation failed for ${roomId}`, error);
       return false;
     }
+  }
+
+  private async ensureCollabDocumentForFinalSnapshot(
+    room: typeof rooms.$inferSelect,
+  ): Promise<void> {
+    const snapshot = await this.loadDocSnapshot(room.id);
+    if (!snapshot) {
+      return;
+    }
+
+    await this.collabClient.createDocument({
+      roomId: room.id,
+      initialPhase: room.status,
+      editorLocked: room.editorLocked,
+      snapshot: Array.from(snapshot),
+      initialLanguage: room.language ?? undefined,
+    });
   }
 
   private async loadDocSnapshot(roomId: string): Promise<Uint8Array | null> {

@@ -270,6 +270,28 @@ describe('InternalController', () => {
     expect(mocks.db.insert).not.toHaveBeenCalled();
   });
 
+  it('GIVEN final snapshot for room without session WHEN handleSnapshotReady THEN returns success false', async () => {
+    const mocks = createMocks();
+    mocks.db.limit.mockResolvedValueOnce([]);
+    const controller = await createController(mocks);
+
+    const payload: SnapshotReadyPayload = {
+      roomId: 'room-123',
+      snapshot: [1, 2, 3],
+      code: 'const x = 1;',
+      language: 'typescript',
+      timestamp: 1712500000000,
+      trigger: 'session_end',
+    };
+
+    const result = await controller.handleSnapshotReady(payload);
+
+    expect(result).toEqual({ success: false });
+    expect(mocks.roomsService.persistDocSnapshot).toHaveBeenCalledOnce();
+    expect(mocks.storageService.upload).not.toHaveBeenCalled();
+    expect(mocks.db.insert).not.toHaveBeenCalled();
+  });
+
   it('GIVEN valid doc snapshot payload WHEN handlePersistDocSnapshot THEN calls RoomsService.persistDocSnapshot and returns success', async () => {
     const mocks = createMocks();
     const controller = await createController(mocks);

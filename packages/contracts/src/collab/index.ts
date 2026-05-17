@@ -16,6 +16,7 @@ export {
   participantHeartbeatRequestSchema,
   persistDocSnapshotPayloadSchema,
   type SnapshotReadyPayload,
+  type SnapshotReadyResponse,
   type SnapshotTrigger,
   snapshotReadyPayloadSchema,
   type UserDisconnectedPayload,

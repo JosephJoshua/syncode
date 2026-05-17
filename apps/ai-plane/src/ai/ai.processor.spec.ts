@@ -154,11 +154,61 @@ describe('AiProcessor', () => {
                     text: JSON.stringify({
                       overallScore: 82,
                       dimensions: {
-                        correctness: { score: 84, feedback: 'Correctness', evidence: [] },
-                        efficiency: { score: 78, feedback: 'Efficiency', evidence: [] },
-                        codeQuality: { score: 80, feedback: 'Code quality', evidence: [] },
-                        communication: { score: 76, feedback: 'Communication', evidence: [] },
-                        problemSolving: { score: 83, feedback: 'Problem solving', evidence: [] },
+                        correctness: {
+                          score: 84,
+                          feedback: 'Correctness',
+                          evidence: [
+                            {
+                              type: 'code_line',
+                              reference: 'L1: function twoSum() { return [0, 1]; }',
+                              description: 'The final code returns a pair of indices.',
+                            },
+                          ],
+                        },
+                        efficiency: {
+                          score: 78,
+                          feedback: 'Efficiency',
+                          evidence: [
+                            {
+                              type: 'code_line',
+                              reference: 'L1: function twoSum() { return [0, 1]; }',
+                              description: 'The final code is compact enough to inspect.',
+                            },
+                          ],
+                        },
+                        codeQuality: {
+                          score: 80,
+                          feedback: 'Code quality',
+                          evidence: [
+                            {
+                              type: 'code_line',
+                              reference: 'L1: function twoSum() { return [0, 1]; }',
+                              description: 'The final code is readable in the final snapshot.',
+                            },
+                          ],
+                        },
+                        communication: {
+                          score: 76,
+                          feedback: 'Communication',
+                          evidence: [
+                            {
+                              type: 'event_timestamp',
+                              reference: '2026-04-20T01:01:00.000Z',
+                              description: 'The session timeline includes a wrap-up transition.',
+                            },
+                          ],
+                        },
+                        problemSolving: {
+                          score: 83,
+                          feedback: 'Problem solving',
+                          evidence: [
+                            {
+                              type: 'code_line',
+                              reference: 'L1: function twoSum() { return [0, 1]; }',
+                              description: 'The final code shows the selected approach.',
+                            },
+                          ],
+                        },
                       },
                       strengths: ['Strong iteration'],
                       areasForImprovement: ['Explain tradeoffs earlier'],
@@ -430,6 +480,27 @@ describe('AiProcessor', () => {
           snapshots: [],
           runs: [],
           submissions: [],
+          finalCodeSnapshot: {
+            snapshotId: '990e8400-e29b-41d4-a716-446655440000',
+            timestamp: '2026-04-20T01:01:50.000Z',
+            trigger: 'session_end',
+            language: 'typescript',
+            code: 'function twoSum() { return [0, 1]; }',
+            linesOfCode: 1,
+            phase: 'finished',
+          },
+          sessionEvents: [
+            {
+              eventType: 'stage_transition',
+              timestamp: '2026-04-20T01:01:00.000Z',
+              details: 'coding -> wrapup',
+              metadata: {
+                fromStage: 'coding',
+                toStage: 'wrapup',
+                trigger: 'phase_change',
+              },
+            },
+          ],
           finalTestCaseBreakdown: [
             {
               testCaseIndex: 0,

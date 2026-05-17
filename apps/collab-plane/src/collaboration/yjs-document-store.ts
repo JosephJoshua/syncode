@@ -31,8 +31,7 @@ export class YjsDocumentStore implements OnModuleDestroy {
   }
 
   // Materialize every top-level CRDT root used by the room so a fresh document
-  // (or a freshly recovered one after a corrupt snapshot) round-trips identical
-  // shape/key sets to one rebuilt from a snapshot.
+  // round-trips identical shape/key sets to one rebuilt from a snapshot.
   private static initializeSharedRoots(doc: Y.Doc): void {
     doc.getMap(INLINE_COMMENTS_KEY);
     doc.getMap(WHITEBOARD_KEY);
@@ -54,15 +53,10 @@ export class YjsDocumentStore implements OnModuleDestroy {
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         this.logger.warn(
-          `Failed to apply snapshot for room ${roomId} (${options.snapshot.byteLength} bytes): ${message}. Falling back to empty doc with starter content.`,
+          `Failed to apply snapshot for room ${roomId} (${options.snapshot.byteLength} bytes): ${message}`,
         );
         doc.destroy();
-        const fresh = new Y.Doc();
-        YjsDocumentStore.seedDoc(fresh, options.initialContentByLanguage);
-        YjsDocumentStore.initializeSharedRoots(fresh);
-        this.docs.set(roomId, fresh);
-        this.logger.log(`Y.Doc created for room ${roomId}`);
-        return { doc: fresh, created: true };
+        throw new Error(`Invalid Y.Doc snapshot for room ${roomId}`);
       }
     }
 
