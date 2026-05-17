@@ -63,6 +63,7 @@ export interface GenerateWeaknessAnalysisRequest {
   roomId: string;
   participantId: string;
   participantRole: RoomRole;
+  sessionReportGeneratedAt: string;
   problem: {
     id: string | null;
     title: string | null;
@@ -91,6 +92,9 @@ export interface WeaknessAnalysisItem {
 }
 
 export interface GenerateWeaknessAnalysisResult {
+  sessionId: string;
+  participantId: string;
+  reportedAt: string;
   summary: string;
   recurringPatterns: string[];
   weaknesses: WeaknessAnalysisItem[];

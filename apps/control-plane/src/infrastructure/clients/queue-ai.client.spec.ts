@@ -53,6 +53,9 @@ describe('QueueAiClient', () => {
     };
     const weaknessResult: GenerateWeaknessAnalysisResult & { jobId: string } = {
       jobId: '1',
+      sessionId: 'session-1',
+      participantId: 'user-1',
+      reportedAt: '2026-04-20T06:00:00.000Z',
       summary: 'Track edge-case reasoning over time.',
       recurringPatterns: ['Edge cases are discussed after implementation.'],
       weaknesses: [

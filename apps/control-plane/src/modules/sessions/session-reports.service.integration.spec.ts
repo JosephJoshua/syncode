@@ -228,9 +228,11 @@ describe('handleResult', () => {
         testCaseBreakdown: [],
       },
     });
+    const requestedAt = new Date('2026-04-20T05:59:00.000Z');
     await insertSessionReport(db, session.id, {
       userId: user.id,
       status: 'pending',
+      requestedAt,
       report: null,
       overallScore: null,
       generatedAt: null,
@@ -238,7 +240,7 @@ describe('handleResult', () => {
 
     await cacheService.set(
       'session-report-meta:job-123',
-      { sessionId: session.id, userId: user.id },
+      { sessionId: session.id, userId: user.id, requestedAt: requestedAt.toISOString() },
       60,
     );
 
@@ -293,6 +295,7 @@ describe('handleResult', () => {
         sessionId: session.id,
         participantId: user.id,
         participantRole: 'candidate',
+        sessionReportGeneratedAt: '2026-04-20T06:00:00.000Z',
         sessionReportSummary: {
           overallScore: 91,
           feedback: 'Detailed feedback',
@@ -351,22 +354,27 @@ describe('handleResult', () => {
     const room = await insertRoom(db, user.id);
     const session = await insertSession(db, room.id, { status: 'finished' });
     await insertSessionParticipant(db, session.id, user.id, 'candidate');
+    const requestedAt = new Date('2026-04-20T05:59:00.000Z');
     await insertSessionReport(db, session.id, {
       userId: user.id,
       status: 'pending',
+      requestedAt,
       report: null,
       overallScore: null,
       generatedAt: null,
     });
     await cacheService.set(
       'session-report-meta:job-fast-result',
-      { sessionId: session.id, userId: user.id },
+      { sessionId: session.id, userId: user.id, requestedAt: requestedAt.toISOString() },
       60,
     );
     mockAiClient.submitWeaknessAnalysisRequest.mockResolvedValueOnce({
       jobId: 'fast-weakness-job',
     });
     mockAiClient.getWeaknessAnalysisResult.mockResolvedValueOnce({
+      sessionId: session.id,
+      participantId: user.id,
+      reportedAt: '2026-04-20T06:00:00.000Z',
       summary: 'AI result was cached before metadata handling completed.',
       recurringPatterns: ['Communication needs clearer explanation.'],
       weaknesses: [
@@ -429,16 +437,19 @@ describe('handleResult', () => {
     const room = await insertRoom(db, user.id);
     const session = await insertSession(db, room.id, { status: 'finished' });
     await insertSessionParticipant(db, session.id, user.id, 'candidate');
+    const firstRequestedAt = new Date('2026-04-20T05:59:00.000Z');
+    const secondRequestedAt = new Date('2026-04-20T06:59:00.000Z');
     await insertSessionReport(db, session.id, {
       userId: user.id,
       status: 'pending',
+      requestedAt: firstRequestedAt,
       report: null,
       overallScore: null,
       generatedAt: null,
     });
     await cacheService.set(
       'session-report-meta:first-job',
-      { sessionId: session.id, userId: user.id },
+      { sessionId: session.id, userId: user.id, requestedAt: firstRequestedAt.toISOString() },
       60,
     );
 
@@ -468,9 +479,22 @@ describe('handleResult', () => {
 
     expect(initialWeaknessRows).toEqual([{ category: 'time_complexity' }]);
 
+    await db
+      .update(sessionReports)
+      .set({
+        status: 'pending',
+        requestedAt: secondRequestedAt,
+        generatedAt: null,
+        overallScore: null,
+        report: null,
+        model: null,
+        errorMessage: null,
+      })
+      .where(and(eq(sessionReports.sessionId, session.id), eq(sessionReports.userId, user.id)));
+
     await cacheService.set(
       'session-report-meta:second-job',
-      { sessionId: session.id, userId: user.id },
+      { sessionId: session.id, userId: user.id, requestedAt: secondRequestedAt.toISOString() },
       60,
     );
 
@@ -501,6 +525,113 @@ describe('handleResult', () => {
 
     expect(regeneratedWeaknessRows).toEqual([]);
     expect(regeneratedWeaknessLinks).toEqual([]);
+  });
+
+  it('GIVEN stale session report metadata WHEN handling result THEN keeps newer report and weakness links', async () => {
+    const user = await insertUser(db);
+    const room = await insertRoom(db, user.id);
+    const session = await insertSession(db, room.id, { status: 'finished' });
+    await insertSessionParticipant(db, session.id, user.id, 'candidate');
+    const currentRequestedAt = new Date('2026-04-20T06:59:00.000Z');
+    await insertSessionReport(db, session.id, {
+      userId: user.id,
+      status: 'completed',
+      requestedAt: currentRequestedAt,
+      generatedAt: new Date('2026-04-20T07:00:00.000Z'),
+      overallScore: 96,
+      report: {
+        sessionId: session.id,
+        generatedAt: '2026-04-20T07:00:00.000Z',
+        overallScore: 96,
+        strengths: ['Current report'],
+        areasForImprovement: [],
+        detailedFeedback: 'Current report',
+        comparisonToHistory: null,
+        peerFeedbackSummary: null,
+        testCaseBreakdown: [],
+      },
+    });
+    const [currentWeakness] = await db
+      .insert(userWeaknesses)
+      .values({
+        userId: user.id,
+        category: 'communication',
+        description: 'Current weakness from newer report',
+        frequency: 1,
+        trend: 'stable',
+        lastSeenAt: new Date('2026-04-20T07:00:00.000Z'),
+      })
+      .returning({ id: userWeaknesses.id });
+    await db.insert(weaknessSessions).values({
+      weaknessId: currentWeakness!.id,
+      sessionId: session.id,
+      description: 'Current report evidence',
+      trend: 'stable',
+      score: null,
+      reportedAt: new Date('2026-04-20T07:00:00.000Z'),
+    });
+    await cacheService.set(
+      'session-report-meta:stale-report-job',
+      {
+        sessionId: session.id,
+        userId: user.id,
+        requestedAt: '2026-04-20T05:59:00.000Z',
+      },
+      60,
+    );
+
+    await service.handleResult('stale-report-job', {
+      sessionId: session.id,
+      generatedAt: '2026-04-20T06:00:00.000Z',
+      overallScore: 70,
+      dimensions: {
+        efficiency: {
+          score: 60,
+          feedback: 'Stale time complexity critique.',
+          evidence: [],
+        },
+      },
+      strengths: [],
+      areasForImprovement: ['Stale improvement'],
+      detailedFeedback: 'Stale report',
+      comparisonToHistory: null,
+      peerFeedbackSummary: null,
+      testCaseBreakdown: [],
+    });
+
+    const [reportRow] = await db
+      .select({
+        overallScore: sessionReports.overallScore,
+        generatedAt: sessionReports.generatedAt,
+        report: sessionReports.report,
+      })
+      .from(sessionReports)
+      .where(and(eq(sessionReports.sessionId, session.id), eq(sessionReports.userId, user.id)));
+    const weaknessRows = await db
+      .select({
+        category: userWeaknesses.category,
+        description: userWeaknesses.description,
+      })
+      .from(userWeaknesses)
+      .where(eq(userWeaknesses.userId, user.id));
+    const weaknessLinks = await db.select().from(weaknessSessions);
+
+    expect(reportRow.overallScore).toBe(96);
+    expect(reportRow.generatedAt?.toISOString()).toBe('2026-04-20T07:00:00.000Z');
+    expect(reportRow.report).toMatchObject({ detailedFeedback: 'Current report' });
+    expect(weaknessRows).toEqual([
+      {
+        category: 'communication',
+        description: 'Current weakness from newer report',
+      },
+    ]);
+    expect(weaknessLinks).toEqual([
+      expect.objectContaining({
+        weaknessId: currentWeakness!.id,
+        description: 'Current report evidence',
+      }),
+    ]);
+    expect(await cacheService.get('session-report-meta:stale-report-job')).toBeNull();
   });
 
   it('GIVEN cached weakness analysis metadata WHEN handling weakness result THEN replaces session weakness links with AI evidence', async () => {
@@ -543,6 +674,9 @@ describe('handleResult', () => {
     );
 
     await service.handleWeaknessAnalysisResult('weakness-job-1', {
+      sessionId: session.id,
+      participantId: user.id,
+      reportedAt: '2026-04-20T06:05:00.000Z',
       summary: 'Communication and edge-case patterns should be tracked.',
       recurringPatterns: ['Explanation of trade-offs remains inconsistent.'],
       weaknesses: [
@@ -661,6 +795,9 @@ describe('handleResult', () => {
     );
 
     await service.handleWeaknessAnalysisResult('stale-weakness-job', {
+      sessionId: session.id,
+      participantId: user.id,
+      reportedAt: '2026-04-20T06:05:00.000Z',
       summary: 'Older analysis should not overwrite newer data.',
       recurringPatterns: ['Older edge-case finding.'],
       weaknesses: [
@@ -698,6 +835,58 @@ describe('handleResult', () => {
       }),
     ]);
     expect(await cacheService.get('weakness-analysis-meta:stale-weakness-job')).toBeNull();
+  });
+
+  it('GIVEN weakness analysis result has no metadata WHEN handling result THEN uses self-identifying result context', async () => {
+    const user = await insertUser(db);
+    const room = await insertRoom(db, user.id);
+    const session = await insertSession(db, room.id, { status: 'finished' });
+    await insertSessionParticipant(db, session.id, user.id, 'candidate');
+    await insertSessionReport(db, session.id, {
+      userId: user.id,
+      status: 'completed',
+      generatedAt: new Date('2026-04-20T06:00:00.000Z'),
+    });
+
+    await service.handleWeaknessAnalysisResult('orphaned-but-self-identifying-job', {
+      sessionId: session.id,
+      participantId: user.id,
+      reportedAt: '2026-04-20T06:00:00.000Z',
+      summary: 'Result can persist without side-channel metadata.',
+      recurringPatterns: ['Communication needs clearer explanation.'],
+      weaknesses: [
+        {
+          category: 'communication',
+          description: 'Explain invariants out loud before coding.',
+          evidence: 'The result carried enough context to persist safely.',
+          trend: 'stable',
+        },
+      ],
+    });
+
+    const weaknessRows = await db
+      .select({
+        category: userWeaknesses.category,
+        description: userWeaknesses.description,
+        trend: userWeaknesses.trend,
+      })
+      .from(userWeaknesses)
+      .where(eq(userWeaknesses.userId, user.id));
+    const weaknessLinks = await db.select().from(weaknessSessions);
+
+    expect(weaknessRows).toEqual([
+      {
+        category: 'communication',
+        description: 'Explain invariants out loud before coding.',
+        trend: 'stable',
+      },
+    ]);
+    expect(weaknessLinks).toEqual([
+      expect.objectContaining({
+        description: 'The result carried enough context to persist safely.',
+        reportedAt: new Date('2026-04-20T06:00:00.000Z'),
+      }),
+    ]);
   });
 });
 

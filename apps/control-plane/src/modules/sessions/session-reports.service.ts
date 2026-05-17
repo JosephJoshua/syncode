@@ -61,9 +61,12 @@ interface WeaknessPersistenceRecord {
 interface SessionReportJobMeta {
   sessionId: string;
   userId: string;
+  requestedAt: string;
 }
 
-interface WeaknessAnalysisJobMeta extends SessionReportJobMeta {
+interface WeaknessAnalysisJobMeta {
+  sessionId: string;
+  userId: string;
   reportedAt: string;
 }
 
@@ -158,6 +161,12 @@ export class SessionReportsService {
       return;
     }
 
+    if (!(await this.isCurrentSessionReportGeneration(meta))) {
+      this.logger.warn(`Stale session-report job ${jobId}, skipping DB persistence`);
+      await this.cacheService.del(metaKey);
+      return;
+    }
+
     const { model, ...reportPayload } = result;
     const generatedAt = result.generatedAt ? new Date(result.generatedAt) : new Date();
 
@@ -179,6 +188,7 @@ export class SessionReportsService {
       meta.sessionId,
       meta.userId,
       reportPayload,
+      generatedAt,
     );
     await this.persistWeaknessSignals(meta.sessionId, meta.userId, reportPayload, generatedAt);
     await this.enqueueWeaknessAnalysis(
@@ -195,6 +205,16 @@ export class SessionReportsService {
     );
   }
 
+  private async isCurrentSessionReportGeneration(meta: SessionReportJobMeta): Promise<boolean> {
+    const row = await this.db.query.sessionReports.findFirst({
+      columns: { requestedAt: true },
+      where: (table, { and, eq }) =>
+        and(eq(table.sessionId, meta.sessionId), eq(table.userId, meta.userId)),
+    });
+
+    return row?.requestedAt?.toISOString() === meta.requestedAt;
+  }
+
   async handleWeaknessAnalysisResult(
     jobId: string,
     result: GenerateWeaknessAnalysisResult,
@@ -202,27 +222,32 @@ export class SessionReportsService {
     const metaKey = `${WEAKNESS_ANALYSIS_META_KEY_PREFIX}${jobId}`;
     const meta = await this.cacheService.get<WeaknessAnalysisJobMeta>(metaKey);
 
-    if (!meta) {
-      this.logger.warn(`No metadata for weakness-analysis job ${jobId}, skipping DB persistence`);
-      return;
-    }
+    const context = meta ?? {
+      sessionId: result.sessionId,
+      userId: result.participantId,
+      reportedAt: result.reportedAt,
+    };
 
-    if (!(await this.isCurrentWeaknessAnalysisGeneration(meta))) {
+    if (!(await this.isCurrentWeaknessAnalysisGeneration(context))) {
       this.logger.warn(`Stale weakness-analysis job ${jobId}, skipping DB persistence`);
-      await this.cacheService.del(metaKey);
+      if (meta) {
+        await this.cacheService.del(metaKey);
+      }
       return;
     }
 
     await this.persistWeaknessAnalysisResult(
-      meta.sessionId,
-      meta.userId,
+      context.sessionId,
+      context.userId,
       result,
-      new Date(meta.reportedAt),
+      new Date(context.reportedAt),
     );
-    await this.cacheService.del(metaKey);
+    if (meta) {
+      await this.cacheService.del(metaKey);
+    }
 
     this.logger.debug(
-      `Persisted weakness analysis for session ${meta.sessionId} and user ${meta.userId}`,
+      `Persisted weakness analysis for session ${context.sessionId} and user ${context.userId}`,
     );
   }
 
@@ -307,7 +332,7 @@ export class SessionReportsService {
       const { jobId } = await this.aiClient.submitSessionReportRequest(request);
       await this.cacheService.set<SessionReportJobMeta>(
         `${SESSION_REPORT_META_KEY_PREFIX}${jobId}`,
-        { sessionId, userId },
+        { sessionId, userId, requestedAt: requestedAt.toISOString() },
         SESSION_REPORT_META_TTL_SECONDS,
       );
     } catch (error) {
@@ -357,6 +382,7 @@ export class SessionReportsService {
     sessionId: string,
     userId: string,
     report: SessionReport,
+    reportGeneratedAt: Date,
   ): Promise<Parameters<IAiClient['submitWeaknessAnalysisRequest']>[0] | null> {
     const sessionRow = await this.db.query.sessions.findFirst({
       columns: {
@@ -424,6 +450,7 @@ export class SessionReportsService {
       roomId: reportRequest.roomId,
       participantId: reportRequest.participantId,
       participantRole: reportRequest.participantRole,
+      sessionReportGeneratedAt: reportGeneratedAt.toISOString(),
       problem: {
         id: reportRequest.problem.id,
         title: reportRequest.problem.title,

@@ -120,6 +120,7 @@ function createWeaknessAnalysisRequest(
     roomId: 'room-1',
     participantId: 'user-1',
     participantRole: 'candidate',
+    sessionReportGeneratedAt: '2026-04-20T06:00:00.000Z',
     problem: {
       id: 'problem-1',
       title: 'Two Sum',

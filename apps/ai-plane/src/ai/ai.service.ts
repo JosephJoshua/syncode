@@ -17,7 +17,7 @@ import type {
   ReviewCodeResult,
 } from '@syncode/contracts';
 import { toPublicSessionReportTestCaseBreakdown } from '@syncode/contracts';
-import { type IStorageService, STORAGE_SERVICE } from '@syncode/shared';
+import { type IStorageService, STORAGE_SERVICE, WEAKNESS_CATEGORIES } from '@syncode/shared';
 import { z } from 'zod';
 import type { EnvConfig } from '../config/env.config.js';
 import { LLM_PROVIDER } from '../llm/llm.constants.js';
@@ -112,6 +112,11 @@ interface ParsedWeaknessAnalysisResponse {
   weaknesses: GenerateWeaknessAnalysisResult['weaknesses'];
 }
 
+type WeaknessAnalysisPayload = Pick<
+  GenerateWeaknessAnalysisResult,
+  'summary' | 'recurringPatterns' | 'weaknesses'
+>;
+
 @Injectable()
 export class AiService {
   private readonly logger = new Logger(AiService.name);
@@ -148,16 +153,7 @@ export class AiService {
     weaknesses: z
       .array(
         z.object({
-          category: z.enum([
-            'edge_cases',
-            'time_complexity',
-            'space_complexity',
-            'variable_naming',
-            'code_structure',
-            'off_by_one',
-            'input_validation',
-            'communication',
-          ]),
+          category: z.enum(WEAKNESS_CATEGORIES),
           description: z.string().min(1),
           evidence: z.string().min(1),
           trend: z.enum(['improving', 'stable', 'worsening']),
@@ -254,7 +250,12 @@ export class AiService {
       model: this.resolveAnalysisModel(),
     });
 
-    return this.parseWeaknessAnalysisOutput(llmResult.text, request);
+    return {
+      ...this.parseWeaknessAnalysisOutput(llmResult.text, request),
+      sessionId: request.sessionId,
+      participantId: request.participantId,
+      reportedAt: request.sessionReportGeneratedAt,
+    };
   }
 
   async reviewCode(_request: ReviewCodeRequest): Promise<ReviewCodeResult> {
@@ -1040,7 +1041,7 @@ export class AiService {
       '{ "summary": "string", "recurringPatterns": ["string"], "weaknesses": [{"category":"string","description":"string","evidence":"string","trend":"string"}] }',
       'Formatting rules:',
       '- summary must stay under 60 words.',
-      '- Use only these categories: edge_cases, time_complexity, space_complexity, variable_naming, code_structure, off_by_one, input_validation, communication.',
+      `- Use only these categories: ${WEAKNESS_CATEGORIES.join(', ')}.`,
       '- Use only these trends: improving, stable, worsening.',
       '- Return 1 to 4 weaknesses and 1 to 3 recurringPatterns.',
       '- Keep each weakness grounded in specific session or historical evidence.',
@@ -1081,7 +1082,7 @@ export class AiService {
   private parseWeaknessAnalysisOutput(
     rawText: string,
     request: GenerateWeaknessAnalysisRequest,
-  ): GenerateWeaknessAnalysisResult {
+  ): WeaknessAnalysisPayload {
     const cleaned = this.stripCodeFence(rawText).trim();
     const candidates = [cleaned];
 
@@ -1106,7 +1107,7 @@ export class AiService {
 
   private postProcessWeaknessAnalysis(
     response: ParsedWeaknessAnalysisResponse,
-  ): GenerateWeaknessAnalysisResult {
+  ): WeaknessAnalysisPayload {
     const summary =
       this.sanitizeWeaknessOutputText(response.summary, 'hint', 'summary') ??
       'The session suggests a small set of recurring weaknesses worth tracking over time.';
@@ -1180,7 +1181,7 @@ export class AiService {
 
   private buildFallbackWeaknessAnalysis(
     request: GenerateWeaknessAnalysisRequest,
-  ): GenerateWeaknessAnalysisResult {
+  ): WeaknessAnalysisPayload {
     const communicationHistory = request.historicalWeaknesses.find(
       (item) => item.category === 'communication',
     );

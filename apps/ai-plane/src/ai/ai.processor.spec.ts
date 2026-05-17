@@ -285,6 +285,7 @@ describe('AiProcessor', () => {
           roomId: '660e8400-e29b-41d4-a716-446655440000',
           participantId: '770e8400-e29b-41d4-a716-446655440000',
           participantRole: 'candidate',
+          sessionReportGeneratedAt: '2026-04-20T06:00:00.000Z',
           problem: {
             id: '880e8400-e29b-41d4-a716-446655440000',
             title: 'Two Sum',
@@ -315,6 +316,9 @@ describe('AiProcessor', () => {
         'weakness-analysis-result',
         expect.objectContaining({
           jobId: 'weakness-analysis-job-1',
+          sessionId: '550e8400-e29b-41d4-a716-446655440000',
+          participantId: '770e8400-e29b-41d4-a716-446655440000',
+          reportedAt: '2026-04-20T06:00:00.000Z',
           summary: expect.any(String),
           recurringPatterns: expect.any(Array),
           weaknesses: expect.any(Array),

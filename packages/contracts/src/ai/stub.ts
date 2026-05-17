@@ -334,6 +334,9 @@ export class StubAiClient implements IAiClient {
 
         job.status = 'completed';
         job.weaknessAnalysisResult = {
+          sessionId: request.sessionId,
+          participantId: request.participantId,
+          reportedAt: request.sessionReportGeneratedAt,
           summary:
             'The session suggests a small set of recurring weaknesses that should be tracked across future interviews rather than treated as one-off mistakes.',
           recurringPatterns: [
