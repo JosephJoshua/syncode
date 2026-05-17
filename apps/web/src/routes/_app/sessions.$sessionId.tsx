@@ -73,6 +73,7 @@ function SessionFeedbackPage() {
     queryKey: ['sessions', sessionId, 'peer-feedback'],
     queryFn: () => fetchSessionPeerFeedback(sessionId),
     retry: false,
+    refetchInterval: (query) => (query.state.data?.allSubmitted === false ? 10_000 : false),
   });
 
   const session = sessionQuery.data;

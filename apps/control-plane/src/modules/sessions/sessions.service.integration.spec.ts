@@ -290,8 +290,8 @@ describe('listSessions', () => {
   });
 
   it('GIVEN hasFeedback flag WHEN session has peer feedback THEN returns true', async () => {
-    const user1 = await insertUser(db);
-    const user2 = await insertUser(db);
+    const user1 = await insertUser(db, { avatarUrl: 'avatars/user-1.webp' });
+    const user2 = await insertUser(db, { avatarUrl: 'avatars/user-2.webp' });
 
     const room = await insertRoom(db, user1.id);
     const session = await insertSession(db, room.id);
@@ -338,8 +338,8 @@ describe('listSessions', () => {
 
 describe('getSession', () => {
   it('GIVEN session with all related data WHEN getting detail THEN returns complete result', async () => {
-    const user1 = await insertUser(db);
-    const user2 = await insertUser(db);
+    const user1 = await insertUser(db, { avatarUrl: 'avatars/user-1.webp' });
+    const user2 = await insertUser(db, { avatarUrl: 'avatars/user-2.webp' });
     const problem = await insertProblem(db);
 
     const room = await insertRoom(db, user1.id);
@@ -396,6 +396,18 @@ describe('getSession', () => {
     expect(result.duration).toBe(5400);
     expect(result.problem).toMatchObject({ id: problem.id, title: problem.title });
     expect(result.participants).toHaveLength(2);
+    expect(result.participants).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          userId: user1.id,
+          avatarUrl: 'https://s3.example.com/presigned-get',
+        }),
+        expect.objectContaining({
+          userId: user2.id,
+          avatarUrl: 'https://s3.example.com/presigned-get',
+        }),
+      ]),
+    );
     expect(result.hasReport).toBe(true);
     expect(result.hasFeedback).toBe(true);
     expect(result.hasRecording).toBe(true);
@@ -413,7 +425,9 @@ describe('getSession', () => {
     expect(result.peerFeedback).toHaveLength(1);
     expect(result.peerFeedback[0]).toMatchObject({
       reviewerId: user1.id,
+      reviewerAvatarUrl: 'https://s3.example.com/presigned-get',
       candidateId: user2.id,
+      candidateAvatarUrl: 'https://s3.example.com/presigned-get',
     });
 
     // Only terminal runs/submissions

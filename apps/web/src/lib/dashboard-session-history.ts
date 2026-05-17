@@ -12,6 +12,8 @@ export type SessionRole = 'candidate' | 'interviewer' | 'observer';
 export type SessionStatus = 'passed' | 'failed' | null;
 
 export type SessionParticipant = {
+  avatarUrl: string | null;
+  name: string;
   initials: string;
   isCurrentUser?: boolean;
 };
@@ -378,13 +380,19 @@ function toSessionParticipant(
   }
 
   return {
+    avatarUrl: participant.avatarUrl,
+    name: getParticipantName(participant),
     initials: getParticipantInitials(participant),
     isCurrentUser: currentUserId ? participant.userId === currentUserId : false,
   };
 }
 
+function getParticipantName(participant: SessionHistoryParticipant) {
+  return participant.displayName?.trim() || participant.username?.trim() || 'Unknown participant';
+}
+
 function getParticipantInitials(participant: SessionHistoryParticipant) {
-  const source = participant.displayName?.trim() || participant.username?.trim() || '??';
+  const source = getParticipantName(participant);
   const words = source.split(/\s+/).filter(Boolean);
 
   if (words.length === 0) {

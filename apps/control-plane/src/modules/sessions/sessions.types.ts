@@ -61,6 +61,7 @@ export interface SessionDetailParticipantResult {
   userId: string;
   username: string;
   displayName: string | null;
+  avatarUrl: string | null;
   role: RoomRole;
   joinedAt: Date;
   leftAt: Date | null;
@@ -108,8 +109,10 @@ export interface SessionPeerFeedbackResult {
   id: string;
   reviewerId: string;
   reviewerName: string;
+  reviewerAvatarUrl: string | null;
   candidateId: string;
   candidateName: string;
+  candidateAvatarUrl: string | null;
   problemSolvingRating: number;
   communicationRating: number;
   codeQualityRating: number;

@@ -244,6 +244,7 @@ export class SessionsService {
           userId: sessionParticipants.userId,
           username: users.username,
           displayName: users.displayName,
+          avatarUrl: users.avatarUrl,
           role: sessionParticipants.role,
           joinedAt: sessionParticipants.joinedAt,
           leftAt: sessionParticipants.leftAt,
@@ -280,6 +281,7 @@ export class SessionsService {
           reviewerId: peerFeedback.reviewerId,
           reviewerUsername: users.username,
           reviewerDisplayName: users.displayName,
+          reviewerAvatarUrl: users.avatarUrl,
           candidateId: peerFeedback.candidateId,
           problemSolvingRating: peerFeedback.problemSolvingRating,
           communicationRating: peerFeedback.communicationRating,
@@ -343,6 +345,26 @@ export class SessionsService {
         .filter((participant) => this.isReviewParticipantRole(participant.role))
         .map((participant) => participant.userId),
     );
+    const resolvedParticipantRows = await resolveAvatarUrls(participantRows, this.storageService);
+    const resolvedFeedbackReviewerRows = await resolveAvatarUrls(
+      feedbackRows.map((feedback) => ({
+        id: feedback.reviewerId,
+        avatarUrl: feedback.reviewerAvatarUrl,
+      })),
+      this.storageService,
+    );
+    const participantProfiles = new Map(
+      resolvedParticipantRows.map((participant) => [
+        participant.userId,
+        {
+          name: participant.displayName ?? participant.username,
+          avatarUrl: participant.avatarUrl,
+        },
+      ]),
+    );
+    const reviewerAvatarUrls = new Map(
+      resolvedFeedbackReviewerRows.map((reviewer) => [reviewer.id, reviewer.avatarUrl] as const),
+    );
     const reviewFeedbackRows = filterReviewFeedback(feedbackRows, reviewParticipantIds);
     const allReviewFeedbackSubmitted = isAllReviewFeedbackSubmitted(
       reviewParticipantIds.size,
@@ -368,10 +390,11 @@ export class SessionsService {
       problem: problemRow[0] ?? null,
       language: session.language,
       duration: Math.round((session.durationMs ?? 0) / 1000),
-      participants: participantRows.map((p) => ({
+      participants: resolvedParticipantRows.map((p) => ({
         userId: p.userId,
         username: p.username,
         displayName: p.displayName,
+        avatarUrl: p.avatarUrl,
         role: p.role,
         joinedAt: p.joinedAt,
         leftAt: p.leftAt,
@@ -394,8 +417,10 @@ export class SessionsService {
         id: feedback.id,
         reviewerId: feedback.reviewerId,
         reviewerName: feedback.reviewerDisplayName ?? feedback.reviewerUsername,
+        reviewerAvatarUrl: reviewerAvatarUrls.get(feedback.reviewerId) ?? null,
         candidateId: feedback.candidateId,
-        candidateName: this.getParticipantName(participantRows, feedback.candidateId),
+        candidateName: participantProfiles.get(feedback.candidateId)?.name ?? feedback.candidateId,
+        candidateAvatarUrl: participantProfiles.get(feedback.candidateId)?.avatarUrl ?? null,
         problemSolvingRating: feedback.problemSolvingRating,
         communicationRating: feedback.communicationRating,
         codeQualityRating: feedback.codeQualityRating,
@@ -641,14 +666,6 @@ export class SessionsService {
 
   private isNullableSortColumn(sortBy: SortBy): boolean {
     return sortBy === 'overallScore' || sortBy === 'finishedAt' || sortBy === 'duration';
-  }
-
-  private getParticipantName(
-    participants: Array<{ userId: string; username: string; displayName: string | null }>,
-    userId: string,
-  ): string {
-    const participant = participants.find((item) => item.userId === userId);
-    return participant?.displayName ?? participant?.username ?? userId;
   }
 
   private isReviewParticipantRole(role: string): role is 'candidate' | 'interviewer' {

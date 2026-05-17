@@ -27,6 +27,11 @@ export const Route = createFileRoute('/_app/profile')({
 const profileQueryKey = ['users', 'me'] as const;
 const quotasQueryKey = ['users', 'me', 'quotas'] as const;
 
+function invalidateAvatarConsumers(queryClient: ReturnType<typeof useQueryClient>) {
+  void queryClient.invalidateQueries({ queryKey: ['dashboard', 'session-history'] });
+  void queryClient.invalidateQueries({ queryKey: ['sessions'] });
+}
+
 function ProfilePage() {
   const { t } = useTranslation('profile');
   const navigate = useNavigate();
@@ -138,6 +143,7 @@ function ProfilePage() {
     onSuccess: (user) => {
       queryClient.setQueryData(profileQueryKey, user);
       setUser(user);
+      invalidateAvatarConsumers(queryClient);
       if (cropImageSrc) URL.revokeObjectURL(cropImageSrc);
       setCropImageSrc(null);
       toast.success(t('avatar.uploadSuccess'));
@@ -157,6 +163,7 @@ function ProfilePage() {
       if (currentUser) {
         setUser({ ...currentUser, avatarUrl: null });
       }
+      invalidateAvatarConsumers(queryClient);
       toast.success(t('avatar.deleteSuccess'));
     },
     onError: () => {
