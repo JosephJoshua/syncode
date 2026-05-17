@@ -1581,9 +1581,10 @@ export class RoomsService {
     targetStatus: RoomStatus,
   ): Promise<TransitionPhaseResult> {
     const now = new Date();
+    let restoreFinalCollabState: { phase: RoomStatus; editorLocked: boolean } | null = null;
 
-    const { previousStatus, editorLocked, finishedSessionId } = await this.db.transaction(
-      async (tx) => {
+    const transactionResult = await this.db
+      .transaction(async (tx) => {
         const [lockedRoom] = await tx
           .select()
           .from(rooms)
@@ -1641,6 +1642,27 @@ export class RoomsService {
             { strict: true },
           );
           this.assertRequiredParticipantsReady(lockedRoom.mode, activeParticipants);
+        }
+
+        if (targetStatus === RoomStatus.FINISHED) {
+          if (!lockedRoom.language) {
+            throw new BadRequestException({
+              message: 'Cannot finish a room before selecting a programming language',
+              code: ERROR_CODES.VALIDATION_FAILED,
+            });
+          }
+          await this.ensureCollabDocumentForFinalSnapshot(lockedRoom);
+          await this.updateCollabRoomStateStrict(
+            roomId,
+            targetStatus,
+            lockedRoom.editorLocked,
+            lockedRoom.language,
+            userId,
+          );
+          restoreFinalCollabState = {
+            phase: lockedStatus,
+            editorLocked: lockedRoom.editorLocked,
+          };
         }
 
         const roomUpdate: Partial<typeof rooms.$inferInsert> = {
@@ -1702,8 +1724,20 @@ export class RoomsService {
           editorLocked: lockedRoom.editorLocked,
           finishedSessionId: completedSessionId,
         };
-      },
-    );
+      })
+      .catch(async (error: unknown) => {
+        if (restoreFinalCollabState) {
+          await this.restoreCollabRoomStateStrict(
+            roomId,
+            restoreFinalCollabState.phase,
+            restoreFinalCollabState.editorLocked,
+            userId,
+          );
+        }
+        throw error;
+      });
+
+    const { previousStatus, editorLocked, finishedSessionId } = transactionResult;
 
     this.logger.log(
       `Room ${roomId} transitioned from '${previousStatus}' to '${targetStatus}' by user ${userId}`,
@@ -1721,7 +1755,9 @@ export class RoomsService {
     }
 
     // Fire-and-forget collab notification stays outside the transaction.
-    void this.updateCollabRoomState(roomId, targetStatus, editorLocked, userId);
+    if (targetStatus !== RoomStatus.FINISHED) {
+      void this.updateCollabRoomState(roomId, targetStatus, editorLocked, userId);
+    }
 
     return {
       roomId,
@@ -2183,6 +2219,42 @@ export class RoomsService {
     }
   }
 
+  private async updateCollabRoomStateStrict(
+    roomId: string,
+    phase: RoomStatus,
+    editorLocked: boolean,
+    language: SupportedLanguage,
+    changedBy?: string,
+  ): Promise<void> {
+    try {
+      await this.collabClient.updateRoomState({ roomId, phase, editorLocked, changedBy, language });
+    } catch (error) {
+      this.logger.error(`Failed to update collab room state for finished room ${roomId}`, error);
+      throw new ServiceUnavailableException({
+        message:
+          'Collab plane did not confirm the final room snapshot; session reports were not enqueued',
+        code: ERROR_CODES.COLLAB_SERVICE_UNAVAILABLE,
+      });
+    }
+  }
+
+  private async restoreCollabRoomStateStrict(
+    roomId: string,
+    phase: RoomStatus,
+    editorLocked: boolean,
+    changedBy?: string,
+  ): Promise<void> {
+    try {
+      await this.collabClient.updateRoomState({ roomId, phase, editorLocked, changedBy });
+    } catch (error) {
+      this.logger.error(`Failed to restore collab room state for room ${roomId}`, error);
+      throw new ServiceUnavailableException({
+        message: 'Collab plane did not restore room state after aborted finish transition',
+        code: ERROR_CODES.COLLAB_SERVICE_UNAVAILABLE,
+      });
+    }
+  }
+
   private async broadcastParticipantReady(
     roomId: string,
     userId: string,
@@ -2479,6 +2551,23 @@ export class RoomsService {
       this.logger.warn(`Collab document creation failed for ${roomId}`, error);
       return false;
     }
+  }
+
+  private async ensureCollabDocumentForFinalSnapshot(
+    room: typeof rooms.$inferSelect,
+  ): Promise<void> {
+    const snapshot = await this.loadDocSnapshot(room.id);
+    if (!snapshot) {
+      return;
+    }
+
+    await this.collabClient.createDocument({
+      roomId: room.id,
+      initialPhase: room.status,
+      editorLocked: room.editorLocked,
+      snapshot: Array.from(snapshot),
+      initialLanguage: room.language ?? undefined,
+    });
   }
 
   private async loadDocSnapshot(roomId: string): Promise<Uint8Array | null> {

@@ -276,7 +276,7 @@ export class SessionReportRequestBuilderService {
       }
     }
 
-    return snapshots.at(-1) ?? null;
+    throw new Error('Cannot build session report without a session_end code snapshot');
   }
 
   private buildSessionEvents(
@@ -297,7 +297,7 @@ export class SessionReportRequestBuilderService {
     let lastPhase: string | null = null;
 
     for (const snapshot of snapshots) {
-      if (snapshot.trigger !== 'phase_change' && snapshot.trigger !== 'session_end') {
+      if (snapshot.trigger !== 'phase_change') {
         continue;
       }
 
@@ -367,21 +367,43 @@ export class SessionReportRequestBuilderService {
       .where(eq(executionResults.submissionId, submissionId))
       .orderBy(asc(executionResults.testCaseIndex));
 
-    return rows.map((row) => ({
-      testCaseIndex: row.testCaseIndex,
-      input: null,
-      description: row.isHidden ? null : (row.description ?? null),
-      isHidden: row.isHidden ?? false,
-      passed: row.passed,
-      expectedOutput: null,
-      actualOutput: null,
-      stdout: null,
-      stderr: row.stderr,
-      exitCode: row.exitCode,
-      durationMs: row.durationMs,
-      memoryUsageMb: row.memoryUsageMb,
-      timedOut: row.timedOut,
-      errorMessage: row.errorMessage,
-    }));
+    return rows.map((row) => {
+      const shouldRedact = row.isHidden !== false;
+
+      return {
+        testCaseIndex: row.testCaseIndex,
+        input: null,
+        description: shouldRedact ? null : (row.description ?? null),
+        isHidden: shouldRedact,
+        passed: row.passed,
+        expectedOutput: null,
+        actualOutput: null,
+        stdout: null,
+        stderr: shouldRedact ? null : row.stderr,
+        exitCode: row.exitCode,
+        durationMs: row.durationMs,
+        memoryUsageMb: row.memoryUsageMb,
+        timedOut: row.timedOut,
+        errorMessage: shouldRedact ? this.redactHiddenTestError(row) : row.errorMessage,
+      };
+    });
+  }
+
+  private redactHiddenTestError(row: {
+    passed: boolean | null;
+    exitCode: number | null;
+    timedOut: boolean;
+    errorMessage: string | null;
+    stderr: string | null;
+  }) {
+    if (row.timedOut) {
+      return 'Time limit exceeded';
+    }
+
+    if (row.passed === false || row.exitCode !== 0 || row.errorMessage || row.stderr) {
+      return 'Hidden test failed';
+    }
+
+    return null;
   }
 }
