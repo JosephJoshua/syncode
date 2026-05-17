@@ -31,6 +31,7 @@ type AuthServiceDatabaseMock = {
       where: (...args: unknown[]) => unknown;
     };
   };
+  transaction: <T>(callback: (tx: AuthServiceDatabaseMock) => Promise<T>) => Promise<T>;
 };
 
 type AuthServiceJwtServiceMock = {
@@ -49,7 +50,9 @@ async function createPasswordHash(password: string): Promise<string> {
   return `${salt}:${derivedKey.toString('hex')}`;
 }
 
-function createAuthServiceFixture(options?: { auditService?: Pick<AuditService, 'log'> }) {
+type AuthAuditServiceMock = Pick<AuditService, 'log' | 'logWithClient'>;
+
+function createAuthServiceFixture(options?: { auditService?: AuthAuditServiceMock }) {
   const findFirst = vi.fn();
   const usersReturning = vi.fn();
   const usersValues = vi.fn(() => ({ returning: usersReturning }));
@@ -74,7 +77,7 @@ function createAuthServiceFixture(options?: { auditService?: Pick<AuditService, 
     throw new Error('Unexpected table in mock db.insert');
   });
 
-  const db = {
+  const db: AuthServiceDatabaseMock = {
     query: {
       users: {
         findFirst,
@@ -99,7 +102,10 @@ function createAuthServiceFixture(options?: { auditService?: Pick<AuditService, 
 
       throw new Error('Unexpected table in mock db.delete');
     }),
-  } satisfies AuthServiceDatabaseMock;
+    transaction: vi.fn(async (callback: (tx: AuthServiceDatabaseMock) => Promise<unknown>) =>
+      callback(db),
+    ),
+  };
 
   const cacheService: Partial<ICacheService> = {
     get: vi.fn(async () => null),
@@ -137,13 +143,20 @@ function createAuthServiceFixture(options?: { auditService?: Pick<AuditService, 
     }),
   } satisfies AuthServiceConfigServiceMock;
 
+  const auditService =
+    options?.auditService ??
+    ({
+      log: vi.fn(async () => undefined),
+      logWithClient: vi.fn(async () => undefined),
+    } satisfies AuthAuditServiceMock);
+
   const service = new AuthService(
     db as unknown as Database,
     cacheService as ICacheService,
     createMockStorageService() as unknown as IStorageService,
     jwtService as unknown as JwtService,
     configService as unknown as ConfigService,
-    options?.auditService as AuditService,
+    auditService as AuditService,
   );
 
   return {
@@ -158,7 +171,7 @@ function createAuthServiceFixture(options?: { auditService?: Pick<AuditService, 
       updateWhere,
       cacheService,
       jwtService,
-      auditService: options?.auditService,
+      auditService,
     },
   };
 }
@@ -209,12 +222,13 @@ describe('AuthService', () => {
     expect(insertedUserValues.passwordHash).not.toBe('secret123');
   });
 
-  it('GIVEN audit log failure WHEN registering THEN still returns auth payload', async () => {
+  it('GIVEN audit log failure WHEN registering THEN rejects before issuing tokens', async () => {
     const auditService = {
-      log: vi.fn(async () => {
+      log: vi.fn(async () => undefined),
+      logWithClient: vi.fn(async () => {
         throw new Error('audit unavailable');
       }),
-    } satisfies Pick<AuditService, 'log'>;
+    } satisfies AuthAuditServiceMock;
     const { service, mocks } = createAuthServiceFixture({ auditService });
 
     mocks.findFirst.mockResolvedValueOnce(null);
@@ -232,15 +246,10 @@ describe('AuthService', () => {
       },
     ]);
 
-    const result = await service.register(
-      'alice',
-      'Alice@Example.com',
-      'secret123',
-      '203.0.113.10',
-    );
-
-    expect(result.accessToken).toBe('access-token');
-    expect(result.user.email).toBe('alice@example.com');
+    await expect(
+      service.register('alice', 'Alice@Example.com', 'secret123', '203.0.113.10'),
+    ).rejects.toThrow('audit unavailable');
+    expect(mocks.jwtService.signAsync).not.toHaveBeenCalled();
   });
 
   it('GIVEN existing email WHEN registering THEN throws conflict with AUTH_EMAIL_TAKEN', async () => {
@@ -353,12 +362,13 @@ describe('AuthService', () => {
     expect(result.user.username).toBe('alice');
   });
 
-  it('GIVEN audit log failure WHEN logging in THEN still returns auth payload', async () => {
+  it('GIVEN audit log failure WHEN logging in THEN rejects before issuing tokens', async () => {
     const auditService = {
       log: vi.fn(async () => {
         throw new Error('audit unavailable');
       }),
-    } satisfies Pick<AuditService, 'log'>;
+      logWithClient: vi.fn(async () => undefined),
+    } satisfies AuthAuditServiceMock;
     const { service, mocks } = createAuthServiceFixture({ auditService });
     const passwordHash = await createPasswordHash('secret123');
 
@@ -376,10 +386,10 @@ describe('AuthService', () => {
       updatedAt: new Date('2026-01-01T00:00:00.000Z'),
     });
 
-    const result = await service.login('alice', 'secret123', '203.0.113.10');
-
-    expect(result.accessToken).toBe('access-token');
-    expect(result.user.username).toBe('alice');
+    await expect(service.login('alice', 'secret123', '203.0.113.10')).rejects.toThrow(
+      'audit unavailable',
+    );
+    expect(mocks.jwtService.signAsync).not.toHaveBeenCalled();
   });
 
   it('GIVEN invalid refresh token WHEN refreshing THEN throws unauthorized', async () => {
@@ -423,15 +433,18 @@ describe('AuthService', () => {
     await expect(service.logout('refresh-token')).resolves.toBeUndefined();
   });
 
-  it('GIVEN audit log failure WHEN logging out THEN still completes', async () => {
+  it('GIVEN audit log failure WHEN logging out THEN rejects', async () => {
     const auditService = {
       log: vi.fn(async () => {
         throw new Error('audit unavailable');
       }),
-    } satisfies Pick<AuditService, 'log'>;
+      logWithClient: vi.fn(async () => undefined),
+    } satisfies AuthAuditServiceMock;
     const { service } = createAuthServiceFixture({ auditService });
 
-    await expect(service.logout('refresh-token', '203.0.113.10')).resolves.toBeUndefined();
+    await expect(service.logout('refresh-token', '203.0.113.10')).rejects.toThrow(
+      'audit unavailable',
+    );
   });
 
   it('GIVEN expired refresh tokens WHEN cleanup runs THEN completes without error', async () => {

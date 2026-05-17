@@ -14,10 +14,11 @@ import {
   ApiBody,
   ApiOperation,
   ApiParam,
+  ApiQuery,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { CONTROL_API } from '@syncode/contracts';
+import { adminUserStatusOptions, CONTROL_API } from '@syncode/contracts';
 import { CurrentUser } from '@/common/decorators/current-user.decorator.js';
 import { ErrorResponseDto } from '@/common/dto/error-response.dto.js';
 import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard.js';
@@ -39,6 +40,16 @@ export class AdminController {
   @Get(CONTROL_API.ADMIN.USERS.LIST.route)
   @ApiOperation({ summary: 'List users for admin management' })
   @ApiResponse({ status: 200, type: AdminUsersResponseDto, description: 'Paginated users' })
+  @ApiQuery({ name: 'cursor', required: false, description: 'Opaque pagination cursor' })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Page size' })
+  @ApiQuery({ name: 'search', required: false, description: 'Search by username, email, or name' })
+  @ApiQuery({
+    name: 'status',
+    required: false,
+    enum: adminUserStatusOptions,
+    description: 'Account status filter',
+  })
+  @ApiResponse({ status: 400, type: ErrorResponseDto, description: 'Validation error' })
   @ApiResponse({ status: 401, type: ErrorResponseDto, description: 'Unauthorized' })
   @ApiResponse({ status: 403, type: ErrorResponseDto, description: 'Admin access required' })
   async listUsers(

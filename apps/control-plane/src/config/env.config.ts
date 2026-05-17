@@ -105,7 +105,11 @@ const envSchema = z
         'INTERNAL_CALLBACK_SECRET must be explicitly set in production and must not use the development default.',
       path: ['INTERNAL_CALLBACK_SECRET'],
     },
-  );
+  )
+  .refine((env) => env.NODE_ENV !== 'production' || env.TRUSTED_PROXIES.length > 0, {
+    message: 'TRUSTED_PROXIES must be explicitly set in production.',
+    path: ['TRUSTED_PROXIES'],
+  });
 
 /**
  * Validated environment configuration type

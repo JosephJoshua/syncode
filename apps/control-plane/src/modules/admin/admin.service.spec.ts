@@ -2,6 +2,7 @@ import { InternalServerErrorException } from '@nestjs/common';
 import type { Database } from '@syncode/db';
 import { describe, expect, it, vi } from 'vitest';
 import { AdminService } from './admin.service.js';
+import type { AuditService } from './audit.service.js';
 
 function createServiceWithAuditFailure() {
   const returning = vi.fn().mockResolvedValue([
@@ -31,6 +32,10 @@ function createServiceWithAuditFailure() {
     }),
   }));
   const tx = { update, insert };
+  const auditService = {
+    log: vi.fn(async () => undefined),
+    logWithClient: vi.fn(async (client: typeof tx) => client.insert({}).values({})),
+  };
   const db = {
     query: {
       users: {
@@ -43,8 +48,8 @@ function createServiceWithAuditFailure() {
   };
 
   return {
-    service: new AdminService(db as unknown as Database),
-    mocks: { db, tx, returning, update, insert },
+    service: new AdminService(db as unknown as Database, auditService as unknown as AuditService),
+    mocks: { db, tx, returning, update, insert, auditService },
   };
 }
 
@@ -63,7 +68,7 @@ describe('AdminService', () => {
     ).rejects.toThrow('audit unavailable');
 
     expect(mocks.db.transaction).toHaveBeenCalledTimes(1);
-    expect(mocks.tx.insert).toHaveBeenCalledTimes(1);
+    expect(mocks.auditService.logWithClient).toHaveBeenCalledTimes(1);
   });
 
   it('GIVEN audit insert fails WHEN unbanning a user THEN rejects instead of silently applying an unaudited admin mutation', async () => {
@@ -77,6 +82,6 @@ describe('AdminService', () => {
     ).rejects.toThrow('audit unavailable');
 
     expect(mocks.db.transaction).toHaveBeenCalledTimes(1);
-    expect(mocks.tx.insert).toHaveBeenCalledTimes(1);
+    expect(mocks.auditService.logWithClient).toHaveBeenCalledTimes(1);
   });
 });

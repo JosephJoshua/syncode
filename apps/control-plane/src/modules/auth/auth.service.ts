@@ -5,7 +5,6 @@ import {
   Inject,
   Injectable,
   Logger,
-  Optional,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -50,7 +49,7 @@ export class AuthService {
     @Inject(STORAGE_SERVICE) private readonly storageService: IStorageService,
     private readonly jwtService: JwtService,
     private readonly config: ConfigService<EnvConfig>,
-    @Optional() private readonly auditService?: AuditService,
+    private readonly auditService: AuditService,
   ) {}
 
   async register(
@@ -91,38 +90,43 @@ export class AuthService {
     const passwordHash = await this.hashPassword(password);
 
     try {
-      const [createdUser] = await this.db
-        .insert(users)
-        .values({
-          username: normalizedUsername,
-          email: normalizedEmail,
-          passwordHash,
-        })
-        .returning({
-          id: users.id,
-          email: users.email,
-          username: users.username,
-          displayName: users.displayName,
-          role: users.role,
-          avatarUrl: users.avatarUrl,
-          bio: users.bio,
-          createdAt: users.createdAt,
-          updatedAt: users.updatedAt,
+      const createdUser = await this.db.transaction(async (tx) => {
+        const [user] = await tx
+          .insert(users)
+          .values({
+            username: normalizedUsername,
+            email: normalizedEmail,
+            passwordHash,
+          })
+          .returning({
+            id: users.id,
+            email: users.email,
+            username: users.username,
+            displayName: users.displayName,
+            role: users.role,
+            avatarUrl: users.avatarUrl,
+            bio: users.bio,
+            createdAt: users.createdAt,
+            updatedAt: users.updatedAt,
+          });
+
+        if (!user) {
+          throw new Error('Failed to create user');
+        }
+
+        await this.auditService.logWithClient(tx, {
+          actorId: user.id,
+          action: 'auth.register',
+          targetType: 'user',
+          targetId: user.id,
+          metadata: { email: user.email, username: user.username },
+          ipAddress,
         });
 
-      if (!createdUser) {
-        throw new Error('Failed to create user');
-      }
+        return user;
+      });
 
       const tokenPair = await this.issueTokenPair(createdUser.id, createdUser.email);
-      await this.logAuthAudit({
-        actorId: createdUser.id,
-        action: 'auth.register',
-        targetType: 'user',
-        targetId: createdUser.id,
-        metadata: { email: createdUser.email, username: createdUser.username },
-        ipAddress,
-      });
 
       return {
         ...tokenPair,
@@ -200,7 +204,6 @@ export class AuthService {
       });
     }
 
-    const tokenPair = await this.issueTokenPair(user.id, user.email);
     await this.logAuthAudit({
       actorId: user.id,
       action: 'auth.login',
@@ -209,6 +212,7 @@ export class AuthService {
       metadata: { identifierType: normalizedIdentifier.includes('@') ? 'email' : 'username' },
       ipAddress,
     });
+    const tokenPair = await this.issueTokenPair(user.id, user.email);
 
     return {
       ...tokenPair,
@@ -276,16 +280,7 @@ export class AuthService {
   }
 
   private async logAuthAudit(input: AuditLogInput): Promise<void> {
-    if (!this.auditService) {
-      return;
-    }
-
-    try {
-      await this.auditService.log(input);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      this.logger.warn(`Failed to write auth audit log for ${input.action}: ${message}`);
-    }
+    await this.auditService.log(input);
   }
 
   private async issueTokenPair(

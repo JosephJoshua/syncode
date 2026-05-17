@@ -31,7 +31,11 @@ export class AuditService {
   constructor(@Inject(DB_CLIENT) private readonly db: Database) {}
 
   async log(input: AuditLogInput): Promise<void> {
-    await this.db.insert(auditLogs).values({
+    await this.logWithClient(this.db, input);
+  }
+
+  async logWithClient(db: Pick<Database, 'insert'>, input: AuditLogInput): Promise<void> {
+    await db.insert(auditLogs).values({
       actorId: input.actorId,
       action: input.action,
       targetType: input.targetType,

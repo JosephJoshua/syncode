@@ -13,10 +13,10 @@ import {
   ERROR_CODES,
 } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
-import { auditLogs, users } from '@syncode/db';
+import { users } from '@syncode/db';
 import { and, desc, eq, ilike, isNotNull, isNull, lt, or, type SQL } from 'drizzle-orm';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
-import type { AuditLogInput } from './audit.service.js';
+import { AuditService } from './audit.service.js';
 
 interface UsersCursor {
   createdAt: string;
@@ -40,7 +40,10 @@ const adminUserSelection = {
 
 @Injectable()
 export class AdminService {
-  constructor(@Inject(DB_CLIENT) private readonly db: Database) {}
+  constructor(
+    @Inject(DB_CLIENT) private readonly db: Database,
+    private readonly auditService: AuditService,
+  ) {}
 
   async listUsers(actorId: string, query: AdminUsersQuery): Promise<AdminUsersResponse> {
     await this.assertAdmin(actorId);
@@ -110,7 +113,7 @@ export class AdminService {
         });
       }
 
-      await this.logAdminAudit(tx, {
+      await this.auditService.logWithClient(tx, {
         actorId,
         action: 'admin.user.ban',
         targetType: 'user',
@@ -145,7 +148,7 @@ export class AdminService {
         });
       }
 
-      await this.logAdminAudit(tx, {
+      await this.auditService.logWithClient(tx, {
         actorId,
         action: 'admin.user.unban',
         targetType: 'user',
@@ -154,17 +157,6 @@ export class AdminService {
       });
 
       return this.toAdminUser(user);
-    });
-  }
-
-  private async logAdminAudit(db: Pick<Database, 'insert'>, input: AuditLogInput): Promise<void> {
-    await db.insert(auditLogs).values({
-      actorId: input.actorId,
-      action: input.action,
-      targetType: input.targetType,
-      targetId: input.targetId,
-      metadata: input.metadata ?? null,
-      ipAddress: input.ipAddress ?? null,
     });
   }
 

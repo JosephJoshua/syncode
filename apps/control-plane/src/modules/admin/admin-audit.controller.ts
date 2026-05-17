@@ -21,14 +21,31 @@ export class AdminAuditController {
     type: AdminAuditLogsResponseDto,
     description: 'Paginated audit logs',
   })
-  @ApiQuery({ name: 'cursor', required: false, description: 'Pagination cursor' })
-  @ApiQuery({ name: 'limit', required: false, description: 'Page size' })
+  @ApiQuery({ name: 'cursor', required: false, description: 'Opaque pagination cursor' })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Page size' })
   @ApiQuery({ name: 'search', required: false, description: 'Search action, target, or actor' })
   @ApiQuery({ name: 'action', required: false, description: 'Filter by action' })
-  @ApiQuery({ name: 'actorId', required: false, description: 'Filter by actor user ID' })
+  @ApiQuery({
+    name: 'actorId',
+    required: false,
+    format: 'uuid',
+    description: 'Filter by actor user ID',
+  })
   @ApiQuery({ name: 'targetId', required: false, description: 'Filter by target ID' })
-  @ApiQuery({ name: 'from', required: false, description: 'Created-at lower bound' })
-  @ApiQuery({ name: 'to', required: false, description: 'Created-at upper bound' })
+  @ApiQuery({
+    name: 'from',
+    required: false,
+    type: String,
+    format: 'date-time',
+    description: 'Created-at lower bound',
+  })
+  @ApiQuery({
+    name: 'to',
+    required: false,
+    type: String,
+    format: 'date-time',
+    description: 'Created-at upper bound',
+  })
   @ApiResponse({ status: 400, type: ErrorResponseDto, description: 'Validation error' })
   @ApiResponse({ status: 401, type: ErrorResponseDto, description: 'Unauthorized' })
   @ApiResponse({ status: 403, type: ErrorResponseDto, description: 'Admin access required' })
