@@ -1,0 +1,67 @@
+{
+  "nav": "Admin",
+  "users": {
+    "heading": "User management",
+    "sub": "Review accounts, search by identity, and control access for banned users.",
+    "forbidden": {
+      "title": "Admin access required",
+      "description": "This area is only available to SynCode administrators."
+    },
+    "search": {
+      "label": "Search users",
+      "placeholder": "Search username, email, or display name"
+    },
+    "status": {
+      "label": "Status",
+      "all": "All",
+      "active": "Active",
+      "banned": "Banned"
+    },
+    "table": {
+      "user": "User",
+      "role": "Role",
+      "status": "Status",
+      "created": "Created",
+      "reason": "Ban reason",
+      "actions": "Actions"
+    },
+    "role": {
+      "admin": "Admin",
+      "user": "User"
+    },
+    "statusBadge": {
+      "active": "Active",
+      "banned": "Banned"
+    },
+    "actions": {
+      "ban": "Ban",
+      "unban": "Unban",
+      "refresh": "Refresh",
+      "currentUser": "Current user"
+    },
+    "banDialog": {
+      "title": "Ban {{username}}?",
+      "description": "Banned users cannot log in until an admin unbans the account.",
+      "reasonLabel": "Reason",
+      "reasonPlaceholder": "Optional internal reason",
+      "confirm": "Ban user"
+    },
+    "empty": {
+      "title": "No users found",
+      "description": "Try another search or status filter."
+    },
+    "emptyValue": "None",
+    "feedback": {
+      "banSuccess": "User banned.",
+      "unbanSuccess": "User unbanned.",
+      "mutationError": "Could not update the user.",
+      "loadError": "Could not load users."
+    },
+    "pagination": {
+      "summary": "{{count}} users on this page",
+      "previous": "Previous",
+      "next": "Next",
+      "ariaLabel": "User pages"
+    }
+  }
+}

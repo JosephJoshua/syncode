@@ -25,6 +25,7 @@ import { Route as AppRoomsCreateRouteImport } from './routes/_app/rooms_.create'
 import { Route as AppRoomsRoomIdRouteImport } from './routes/_app/rooms_.$roomId'
 import { Route as AppRoomsBrowseRouteImport } from './routes/_app/rooms/browse'
 import { Route as AppProblemsProblemIdRouteImport } from './routes/_app/problems.$problemId'
+import { Route as AppAdminUsersRouteImport } from './routes/_app/admin.users'
 
 const PublicRouteRoute = PublicRouteRouteImport.update({
   id: '/_public',
@@ -104,6 +105,11 @@ const AppProblemsProblemIdRoute = AppProblemsProblemIdRouteImport.update({
   path: '/problems/$problemId',
   getParentRoute: () => AppRouteRoute,
 } as any)
+const AppAdminUsersRoute = AppAdminUsersRouteImport.update({
+  id: '/admin/users',
+  path: '/admin/users',
+  getParentRoute: () => AppRouteRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof PublicIndexRoute
@@ -113,6 +119,7 @@ export interface FileRoutesByFullPath {
   '/profile': typeof AppProfileRoute
   '/login': typeof PublicLoginRoute
   '/register': typeof PublicRegisterRoute
+  '/admin/users': typeof AppAdminUsersRoute
   '/problems/$problemId': typeof AppProblemsProblemIdRoute
   '/rooms/browse': typeof AppRoomsBrowseRoute
   '/rooms/$roomId': typeof AppRoomsRoomIdRoute
@@ -128,6 +135,7 @@ export interface FileRoutesByTo {
   '/profile': typeof AppProfileRoute
   '/login': typeof PublicLoginRoute
   '/register': typeof PublicRegisterRoute
+  '/admin/users': typeof AppAdminUsersRoute
   '/problems/$problemId': typeof AppProblemsProblemIdRoute
   '/rooms/browse': typeof AppRoomsBrowseRoute
   '/rooms/$roomId': typeof AppRoomsRoomIdRoute
@@ -147,6 +155,7 @@ export interface FileRoutesById {
   '/_public/login': typeof PublicLoginRoute
   '/_public/register': typeof PublicRegisterRoute
   '/_public/': typeof PublicIndexRoute
+  '/_app/admin/users': typeof AppAdminUsersRoute
   '/_app/problems/$problemId': typeof AppProblemsProblemIdRoute
   '/_app/rooms/browse': typeof AppRoomsBrowseRoute
   '/_app/rooms_/$roomId': typeof AppRoomsRoomIdRoute
@@ -165,6 +174,7 @@ export interface FileRouteTypes {
     | '/profile'
     | '/login'
     | '/register'
+    | '/admin/users'
     | '/problems/$problemId'
     | '/rooms/browse'
     | '/rooms/$roomId'
@@ -180,6 +190,7 @@ export interface FileRouteTypes {
     | '/profile'
     | '/login'
     | '/register'
+    | '/admin/users'
     | '/problems/$problemId'
     | '/rooms/browse'
     | '/rooms/$roomId'
@@ -198,6 +209,7 @@ export interface FileRouteTypes {
     | '/_public/login'
     | '/_public/register'
     | '/_public/'
+    | '/_app/admin/users'
     | '/_app/problems/$problemId'
     | '/_app/rooms/browse'
     | '/_app/rooms_/$roomId'
@@ -326,6 +338,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppProblemsProblemIdRouteImport
       parentRoute: typeof AppRouteRoute
     }
+    '/_app/admin/users': {
+      id: '/_app/admin/users'
+      path: '/admin/users'
+      fullPath: '/admin/users'
+      preLoaderRoute: typeof AppAdminUsersRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
   }
 }
 
@@ -348,6 +367,7 @@ interface AppRouteRouteChildren {
   AppBookmarksRoute: typeof AppBookmarksRoute
   AppDashboardRoute: typeof AppDashboardRoute
   AppProfileRoute: typeof AppProfileRoute
+  AppAdminUsersRoute: typeof AppAdminUsersRoute
   AppProblemsProblemIdRoute: typeof AppProblemsProblemIdRoute
   AppRoomsRoomIdRoute: typeof AppRoomsRoomIdRoute
   AppRoomsCreateRoute: typeof AppRoomsCreateRoute
@@ -360,6 +380,7 @@ const AppRouteRouteChildren: AppRouteRouteChildren = {
   AppBookmarksRoute: AppBookmarksRoute,
   AppDashboardRoute: AppDashboardRoute,
   AppProfileRoute: AppProfileRoute,
+  AppAdminUsersRoute: AppAdminUsersRoute,
   AppProblemsProblemIdRoute: AppProblemsProblemIdRoute,
   AppRoomsRoomIdRoute: AppRoomsRoomIdRoute,
   AppRoomsCreateRoute: AppRoomsCreateRoute,

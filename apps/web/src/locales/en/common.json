@@ -4,7 +4,8 @@
     "dashboard": "Dashboard",
     "rooms": "Rooms",
     "problems": "Problems",
-    "bookmarks": "Bookmarks"
+    "bookmarks": "Bookmarks",
+    "primaryAria": "Primary navigation"
   },
   "auth": {
     "register": "Register",

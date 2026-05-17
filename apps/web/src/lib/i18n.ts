@@ -2,6 +2,7 @@ import i18n from 'i18next';
 import LanguageDetector from 'i18next-browser-languagedetector';
 import { initReactI18next } from 'react-i18next';
 
+import enAdmin from '../locales/en/admin.json';
 import enBookmarks from '../locales/en/bookmarks.json';
 import enCommon from '../locales/en/common.json';
 import enDashboard from '../locales/en/dashboard.json';
@@ -15,6 +16,7 @@ import enRooms from '../locales/en/rooms.json';
 import enSessionDetail from '../locales/en/sessionDetail.json';
 import enSessionReport from '../locales/en/sessionReport.json';
 
+import zhAdmin from '../locales/zh/admin.json';
 import zhBookmarks from '../locales/zh/bookmarks.json';
 import zhCommon from '../locales/zh/common.json';
 import zhDashboard from '../locales/zh/dashboard.json';
@@ -32,6 +34,7 @@ export const supportedLngs = ['en', 'zh'] as const;
 
 const namespaces = [
   'common',
+  'admin',
   'landing',
   'login',
   'register',
@@ -63,6 +66,7 @@ i18n
     },
     resources: {
       en: {
+        admin: enAdmin,
         common: enCommon,
         landing: enLanding,
         login: enLogin,
@@ -77,6 +81,7 @@ i18n
         sessionReport: enSessionReport,
       },
       zh: {
+        admin: zhAdmin,
         common: zhCommon,
         landing: zhLanding,
         login: zhLogin,
