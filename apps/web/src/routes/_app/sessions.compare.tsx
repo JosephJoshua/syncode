@@ -340,14 +340,14 @@ function SessionSelectorPopover({
   selectedSessionIds,
   onToggleSession,
   t,
-}: {
+}: Readonly<{
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
   selectableSessions: SessionSummary[];
   selectedSessionIds: string[];
   onToggleSession: (sessionId: string) => void;
   t: TranslationFn;
-}) {
+}>) {
   return (
     <Popover open={isOpen} onOpenChange={onOpenChange}>
       <PopoverTrigger asChild>
@@ -384,12 +384,12 @@ function SessionSelectorOption({
   selectedSessionIds,
   onToggleSession,
   t,
-}: {
+}: Readonly<{
   session: SessionSummary;
   selectedSessionIds: string[];
   onToggleSession: (sessionId: string) => void;
   t: TranslationFn;
-}) {
+}>) {
   const selected = selectedSessionIds.includes(session.sessionId);
   const disabled = !selected && selectedSessionIds.length >= SESSION_COMPARISON_MAX_SELECTION;
   const status = resolveSessionSummaryStatus(session);
@@ -445,12 +445,12 @@ function SelectedSessionsCard({
   selectedItems,
   onRemoveSession,
   t,
-}: {
+}: Readonly<{
   selectedCount: number;
   selectedItems: SelectedSessionItem[];
   onRemoveSession: (sessionId: string) => void;
   t: TranslationFn;
-}) {
+}>) {
   return (
     <motion.div {...sectionMotion(2)}>
       <Card className="border border-border/50 bg-card/80 py-0 backdrop-blur-sm">
@@ -514,7 +514,7 @@ function SessionComparisonContent({
   testCaseSummaries,
   criteriaTrendRows,
   t,
-}: {
+}: Readonly<{
   sessionHistoryIsLoading: boolean;
   sessionHistoryIsError: boolean;
   hasEnoughSelections: boolean;
@@ -537,7 +537,7 @@ function SessionComparisonContent({
   }>;
   criteriaTrendRows: CriteriaTrendRow[];
   t: TranslationFn;
-}) {
+}>) {
   if (sessionHistoryIsLoading) {
     return (
       <motion.div {...sectionMotion(3)}>
@@ -664,13 +664,13 @@ function HeroTrendChart({
   hoveredSessionId,
   onHoverSessionIdChange,
   noDataLabel,
-}: {
+}: Readonly<{
   inspectLabel: string;
   points: TrendPoint[];
   hoveredSessionId: string | null;
   onHoverSessionIdChange: (sessionId: string) => void;
   noDataLabel: string;
-}) {
+}>) {
   if (points.length < 2) {
     return (
       <div className="rounded-2xl border border-dashed border-border/60 bg-background/45 px-5 py-12 text-center text-sm text-muted-foreground">
@@ -696,12 +696,13 @@ function HeroTrendChart({
   }));
 
   const linePoints = chartPoints.map((point) => `${point.x},${point.y}`).join(' ');
+  const lastChartPointX = chartPoints.at(-1)?.x ?? width - paddingRight;
   const polygonPoints = [
     `${chartPoints[0]?.x ?? paddingLeft},${baselineY}`,
     linePoints,
-    `${chartPoints[chartPoints.length - 1]?.x ?? width - paddingRight},${baselineY}`,
+    `${lastChartPointX},${baselineY}`,
   ].join(' ');
-  const latestSessionId = points[points.length - 1]?.sessionId ?? null;
+  const latestSessionId = points.at(-1)?.sessionId ?? null;
 
   const updateNearestPoint = (clientX: number, rect: DOMRect) => {
     if (rect.width <= 0) {
@@ -709,9 +710,18 @@ function HeroTrendChart({
     }
 
     const relativeX = ((clientX - rect.left) / rect.width) * width;
-    const nearestPoint = chartPoints.reduce((closest, point) =>
-      Math.abs(point.x - relativeX) < Math.abs(closest.x - relativeX) ? point : closest,
-    );
+    const firstPoint = chartPoints[0];
+    if (!firstPoint) {
+      return;
+    }
+
+    const nearestPoint = chartPoints
+      .slice(1)
+      .reduce(
+        (closest, point) =>
+          Math.abs(point.x - relativeX) < Math.abs(closest.x - relativeX) ? point : closest,
+        firstPoint,
+      );
 
     if (nearestPoint.sessionId !== hoveredSessionId) {
       onHoverSessionIdChange(nearestPoint.sessionId);
@@ -764,6 +774,18 @@ function HeroTrendChart({
           {chartPoints.map((point, index) => {
             const isLatest = index === chartPoints.length - 1;
             const isHovered = point.sessionId === hoveredSessionId;
+            let pointRadius = '5.5';
+            let pointFill = '#86efac';
+
+            if (isLatest) {
+              pointRadius = '7';
+              pointFill = '#a7f3d0';
+            }
+
+            if (isHovered) {
+              pointRadius = '9';
+              pointFill = '#d1fae5';
+            }
 
             return (
               <g key={point.sessionId}>
@@ -777,8 +799,8 @@ function HeroTrendChart({
                 <circle
                   cx={point.x}
                   cy={point.y}
-                  r={isHovered ? '9' : isLatest ? '7' : '5.5'}
-                  fill={isHovered ? '#d1fae5' : isLatest ? '#a7f3d0' : '#86efac'}
+                  r={pointRadius}
+                  fill={pointFill}
                   stroke="#022c22"
                   strokeWidth="2"
                 />
@@ -831,10 +853,10 @@ function HeroTrendChart({
 function HoverDetailsPanel({
   details,
   t,
-}: {
+}: Readonly<{
   details: HoverDetails | null;
-  t: (key: string, options?: Record<string, unknown>) => string;
-}) {
+  t: TranslationFn;
+}>) {
   if (!details) {
     return null;
   }
@@ -887,10 +909,10 @@ function HoverDetailsPanel({
 function SessionProgressionRail({
   sessions,
   t,
-}: {
+}: Readonly<{
   sessions: ComparableSession[];
-  t: (key: string, options?: Record<string, unknown>) => string;
-}) {
+  t: TranslationFn;
+}>) {
   if (sessions.length === 0) {
     return null;
   }
@@ -965,10 +987,10 @@ function SessionProgressionRail({
 function ComparisonInsights({
   insights,
   t,
-}: {
+}: Readonly<{
   insights: ComparisonInsight[];
-  t: (key: string, options?: Record<string, unknown>) => string;
-}) {
+  t: TranslationFn;
+}>) {
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-3">
@@ -1000,7 +1022,7 @@ function ComparisonInsights({
 function TestCaseComparisonRow({
   summaries,
   t,
-}: {
+}: Readonly<{
   summaries: Array<{
     sessionId: string;
     problemTitle: string;
@@ -1008,8 +1030,8 @@ function TestCaseComparisonRow({
     progressionLabel: 'baseline' | 'checkpoint' | 'latest';
     summary: TestCaseSummary;
   }>;
-  t: (key: string, options?: Record<string, unknown>) => string;
-}) {
+  t: TranslationFn;
+}>) {
   return (
     <div className={getResponsiveSessionGridClass(summaries.length)}>
       {summaries.map((item) => (
@@ -1064,11 +1086,11 @@ function CriteriaTrendLane({
   row,
   index,
   t,
-}: {
+}: Readonly<{
   row: CriteriaTrendRow;
   index: number;
-  t: (key: string, options?: Record<string, unknown>) => string;
-}) {
+  t: TranslationFn;
+}>) {
   const trendMeta = trendMetaByType[row.trend];
 
   return (
@@ -1150,11 +1172,11 @@ function CriteriaScoreRing({
   score,
   hasDeclined,
   delay,
-}: {
+}: Readonly<{
   score: number;
   hasDeclined: boolean;
   delay: number;
-}) {
+}>) {
   const size = buildCircleSize(score);
   const strokeWidth = 5;
   const radius = (size - strokeWidth) / 2;
@@ -1219,11 +1241,11 @@ function InfoCard({
   title,
   body,
   loading = false,
-}: {
+}: Readonly<{
   title: string;
   body: string;
   loading?: boolean;
-}) {
+}>) {
   return (
     <Card className="border border-border/50 bg-card/80 py-0 backdrop-blur-sm">
       <CardContent className="flex min-h-52 flex-col items-center justify-center px-6 py-10 text-center">
@@ -1550,11 +1572,15 @@ function getSessionStatusBadgeVariant(status: 'passed' | 'failed' | null) {
 }
 
 function getSessionScoreTextClass(status: 'passed' | 'failed' | null) {
-  return status === 'passed'
-    ? 'text-primary'
-    : status === 'failed'
-      ? 'text-amber-400'
-      : 'text-foreground';
+  if (status === 'passed') {
+    return 'text-primary';
+  }
+
+  if (status === 'failed') {
+    return 'text-amber-400';
+  }
+
+  return 'text-foreground';
 }
 
 function getResponsiveSessionGridClass(count: number) {
