@@ -2,7 +2,7 @@ import type { SessionReportDimension } from '@syncode/contracts';
 import type { SupportedLanguage } from '@syncode/shared';
 import type { ReactNode } from 'react';
 import { AiFeedbackText } from './ai-feedback-rich-text.js';
-import { ReportSnapshotCodeViewer } from './report-snapshot-code-viewer.js';
+import { EvidenceCard } from './report-evidence-card.js';
 
 export function ReportDimensionCard({
   title,
@@ -41,22 +41,11 @@ export function ReportDimensionCard({
       {dimension.evidence.length > 0 ? (
         <ul className="mt-4 space-y-2 text-sm text-muted-foreground">
           {dimension.evidence.slice(0, 2).map((item, index) => (
-            <li
+            <EvidenceCard
               key={`${item.type}-${item.reference}-${index}`}
-              className="rounded-xl bg-background/60 px-3 py-2.5"
-            >
-              <p className="font-medium text-foreground">
-                <AiFeedbackText text={item.description} />
-              </p>
-              {item.type === 'code_snippet' && language ? (
-                <ReportSnapshotCodeViewer
-                  code={item.reference}
-                  language={language}
-                  linesOfCode={Math.max(item.reference.split('\n').length, 1)}
-                  compact
-                />
-              ) : null}
-            </li>
+              item={item}
+              language={language}
+            />
           ))}
         </ul>
       ) : null}
