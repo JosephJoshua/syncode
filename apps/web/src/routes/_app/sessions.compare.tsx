@@ -132,15 +132,15 @@ export const Route = createFileRoute('/_app/sessions/compare')({
   component: SessionComparisonPage,
 });
 
-
 function SessionComparisonPage() {
-  const { t } = useTranslation(['sessionComparison', 'feedback', 'common']);
+  const { t } = useTranslation(['sessionComparison', 'feedback', 'common', 'dashboard']);
   const navigate = useNavigate({ from: Route.fullPath });
   const search = Route.useSearch();
   const [isSelectorOpen, setIsSelectorOpen] = useState(false);
   const [selectedSessionIds, setSelectedSessionIds] = useState<string[]>(() =>
     parseSessionComparisonIds(search.ids),
   );
+  const [hoveredSessionId, setHoveredSessionId] = useState<string | null>(null);
 
   useEffect(() => {
     setSelectedSessionIds(parseSessionComparisonIds(search.ids));
@@ -247,8 +247,182 @@ function SessionComparisonPage() {
     return points;
   }, [chronologicalSessions, t]);
 
-  const pendingCount = selectedItems.filter((item) => item.reportResult?.state === 'pending').length;
+  useEffect(() => {
+    const latestSessionId = overallTrendPoints[overallTrendPoints.length - 1]?.sessionId ?? null;
+    if (!latestSessionId) {
+      if (hoveredSessionId !== null) {
+        setHoveredSessionId(null);
+      }
+      return;
+    }
+
+    const isCurrentHoverStillValid = overallTrendPoints.some(
+      (point) => point.sessionId === hoveredSessionId,
+    );
+
+    if (!isCurrentHoverStillValid) {
+      setHoveredSessionId(latestSessionId);
+    }
+  }, [hoveredSessionId, overallTrendPoints]);
+
+  const criteriaTrendRows = useMemo(() => {
+    const rows: CriteriaTrendRow[] = [];
+
+    for (const key of SESSION_COMPARISON_DIMENSION_KEYS) {
+      const points: TrendPoint[] = [];
+
+      for (const item of chronologicalSessions) {
+        const score = resolveComparisonDimensionScore(item.report, key);
+        if (typeof score !== 'number') {
+          continue;
+        }
+
+        points.push({
+          sessionId: item.sessionId,
+          label: item.session.problemTitle ?? t('sessionComparison:fallbackProblem'),
+          finishedAt: item.session.finishedAt ?? item.session.createdAt,
+          score,
+        });
+      }
+
+      const baselineScore = points[0]?.score ?? null;
+      const latestScore = points[points.length - 1]?.score ?? null;
+      const values = points.map((point) => point.score);
+
+      rows.push({
+        key,
+        points,
+        trend: resolveComparisonTrend(values),
+        averageDelta: calculateAverageDelta(values),
+        baselineScore,
+        latestScore,
+      });
+    }
+
+    return rows;
+  }, [chronologicalSessions, t]);
+
+  const comparisonInsights = useMemo(() => {
+    const insights: ComparisonInsight[] = [];
+    const baselineSession = chronologicalSessions[0];
+    const latestSession = chronologicalSessions[chronologicalSessions.length - 1];
+
+    if (!baselineSession || !latestSession) {
+      return insights;
+    }
+
+    const baselineOverall = resolveComparableOverallScore(baselineSession);
+    const latestOverall = resolveComparableOverallScore(latestSession);
+
+    if (typeof baselineOverall === 'number' && typeof latestOverall === 'number') {
+      const overallDelta = latestOverall - baselineOverall;
+      insights.push({
+        title: t('sessionComparison:insights.overallShift.title'),
+        value: formatSignedWhole(overallDelta),
+        body: t('sessionComparison:insights.overallShift.body', {
+          from: Math.round(baselineOverall),
+          to: Math.round(latestOverall),
+        }),
+      });
+    }
+
+    const largestGain = criteriaTrendRows
+      .map((row) => ({
+        key: row.key,
+        delta:
+          row.baselineScore !== null && row.latestScore !== null
+            ? row.latestScore - row.baselineScore
+            : null,
+      }))
+      .filter(
+        (row): row is { key: SessionComparisonDimensionKey; delta: number } =>
+          typeof row.delta === 'number',
+      )
+      .sort((left, right) => right.delta - left.delta)[0];
+
+    if (largestGain) {
+      insights.push({
+        title: t('sessionComparison:insights.biggestSwing.title'),
+        value: t(`feedback:dimensions.${largestGain.key}.title`),
+        body: t('sessionComparison:insights.biggestSwing.body', {
+          delta: formatSignedWhole(largestGain.delta),
+        }),
+      });
+    }
+
+    const latestWeakest = SESSION_COMPARISON_DIMENSION_KEYS.map((key) => ({
+      key,
+      score: resolveComparisonDimensionScore(latestSession.report, key),
+    }))
+      .filter(
+        (row): row is { key: SessionComparisonDimensionKey; score: number } =>
+          typeof row.score === 'number',
+      )
+      .sort((left, right) => left.score - right.score)[0];
+
+    if (latestWeakest) {
+      insights.push({
+        title: t('sessionComparison:insights.currentFocus.title'),
+        value: t(`feedback:dimensions.${latestWeakest.key}.title`),
+        body: t('sessionComparison:insights.currentFocus.body', {
+          score: Math.round(latestWeakest.score),
+        }),
+      });
+    }
+
+    return insights;
+  }, [chronologicalSessions, criteriaTrendRows, t]);
+
+  const hoverDetails = useMemo((): HoverDetails | null => {
+    const targetSessionId =
+      hoveredSessionId ??
+      chronologicalSessions[chronologicalSessions.length - 1]?.sessionId ??
+      null;
+    if (!targetSessionId) {
+      return null;
+    }
+
+    const session = chronologicalSessions.find((item) => item.sessionId === targetSessionId);
+    if (!session) {
+      return null;
+    }
+
+    const testCaseSummary = summarizeTestCaseBreakdown(session.report);
+
+    return {
+      sessionId: session.sessionId,
+      title: session.session.problemTitle ?? t('sessionComparison:fallbackProblem'),
+      timestamp: formatSessionDateTime(session.session.finishedAt ?? session.session.createdAt),
+      overallScore: resolveComparableOverallScore(session),
+      dimensionScores: SESSION_COMPARISON_DIMENSION_KEYS.map((key) => ({
+        key,
+        score: resolveComparisonDimensionScore(session.report, key),
+      })),
+      testCasePassed: testCaseSummary.passed,
+      testCaseTotal: testCaseSummary.total,
+    };
+  }, [chronologicalSessions, hoveredSessionId, t]);
+
+  const testCaseSummaries = useMemo(
+    () =>
+      chronologicalSessions.map((item) => ({
+        sessionId: item.sessionId,
+        problemTitle: item.session.problemTitle ?? t('sessionComparison:fallbackProblem'),
+        timestamp: item.session.finishedAt ?? item.session.createdAt,
+        progressionLabel: resolveProgressionLabelKey(
+          chronologicalSessions.findIndex((row) => row.sessionId === item.sessionId),
+          chronologicalSessions.length,
+        ),
+        summary: summarizeTestCaseBreakdown(item.report),
+      })),
+    [chronologicalSessions, t],
+  );
+
+  const pendingCount = selectedItems.filter(
+    (item) => item.reportResult?.state === 'pending',
+  ).length;
   const erroredCount = selectedItems.filter((item) => item.isError).length;
+
   const hasEnoughSelections = selectedSessionIds.length >= SESSION_COMPARISON_MIN_SELECTION;
   const hasComparableSessions = comparableSessions.length >= SESSION_COMPARISON_MIN_SELECTION;
 
@@ -286,7 +460,10 @@ function SessionComparisonPage() {
         className="pointer-events-none absolute -top-24 left-1/2 h-72 w-[640px] -translate-x-1/2 rounded-full bg-primary/6 blur-[120px]"
       />
 
-      <motion.div {...sectionMotion(0)} className="flex flex-wrap items-center justify-between gap-4">
+      <motion.div
+        {...sectionMotion(0)}
+        className="flex flex-wrap items-center justify-between gap-4"
+      >
         <Link
           to="/dashboard"
           className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
@@ -302,7 +479,11 @@ function SessionComparisonPage() {
               {t('sessionComparison:actions.compareSessions')}
             </Button>
           </PopoverTrigger>
-          <PopoverContent className="w-[360px] p-0" align="end" sideOffset={8}>
+          <PopoverContent
+            className="w-[420px] max-w-[calc(100vw-2rem)] p-0"
+            align="end"
+            sideOffset={8}
+          >
             <Command>
               <CommandInput placeholder={t('sessionComparison:selector.searchPlaceholder')} />
               <CommandList>
@@ -310,7 +491,9 @@ function SessionComparisonPage() {
                 <CommandGroup>
                   {selectableSessions.map((session) => {
                     const selected = selectedSessionIds.includes(session.sessionId);
-                    const disabled = !selected && selectedSessionIds.length >= SESSION_COMPARISON_MAX_SELECTION;
+                    const disabled =
+                      !selected && selectedSessionIds.length >= SESSION_COMPARISON_MAX_SELECTION;
+                    const status = resolveSessionSummaryStatus(session);
 
                     return (
                       <CommandItem
@@ -318,22 +501,53 @@ function SessionComparisonPage() {
                         value={`${session.problemTitle ?? ''} ${session.sessionId}`}
                         disabled={disabled}
                         onSelect={() => toggleSessionSelection(session.sessionId)}
-                        className="flex items-start justify-between gap-3 px-3 py-3"
+                        className={cn(
+                          'flex items-start justify-between gap-3 px-3 py-3',
+                          selected && 'bg-emerald-500/8',
+                        )}
                       >
-                        <div className="min-w-0">
+                        <div className="min-w-0 flex-1">
                           <p className="truncate text-sm font-medium text-foreground">
                             {session.problemTitle ?? t('sessionComparison:fallbackProblem')}
                           </p>
                           <p className="mt-1 truncate text-xs text-muted-foreground">
                             {formatSessionDateTime(session.finishedAt ?? session.createdAt)}
                           </p>
+                          {status || typeof session.overallScore === 'number' ? (
+                            <div className="mt-2 flex flex-wrap items-center gap-2">
+                              {status ? (
+                                <Badge
+                                  variant={getSessionStatusBadgeVariant(status)}
+                                  className="px-2 py-0.5"
+                                >
+                                  {status === 'passed'
+                                    ? t('dashboard:status.pass')
+                                    : t('dashboard:status.failed')}
+                                </Badge>
+                              ) : null}
+                              {typeof session.overallScore === 'number' ? (
+                                <span
+                                  className={cn(
+                                    'text-xs font-medium',
+                                    getSessionScoreTextClass(status),
+                                  )}
+                                >
+                                  {Math.round(session.overallScore)} / 100
+                                </span>
+                              ) : null}
+                            </div>
+                          ) : null}
                         </div>
-                        <Check
+                        <span
                           className={cn(
-                            'mt-0.5 size-4 shrink-0',
-                            selected ? 'opacity-100 text-emerald-500' : 'opacity-0',
+                            'mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full border transition-colors',
+                            selected
+                              ? 'border-emerald-400/20 bg-emerald-500 text-white'
+                              : 'border-border/60 bg-background/70 text-transparent',
                           )}
-                        />
+                        >
+                          <Check className="size-3.5" />
+                        </span>
                       </CommandItem>
                     );
                   })}
@@ -360,7 +574,9 @@ function SessionComparisonPage() {
         <motion.div {...sectionMotion(2)}>
           <Card className="border border-border/50 bg-card/80 py-0 backdrop-blur-sm">
             <CardHeader className="px-6 py-6 pb-4">
-              <CardTitle className="text-base">{t('sessionComparison:sections.selected')}</CardTitle>
+              <CardTitle className="text-base">
+                {t('sessionComparison:sections.selected')}
+              </CardTitle>
               <CardDescription>
                 {t('sessionComparison:selector.selectionCount', {
                   count: selectedSessionIds.length,
@@ -392,7 +608,9 @@ function SessionComparisonPage() {
                   ))}
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground">{t('sessionComparison:selector.noneSelected')}</p>
+                <p className="text-sm text-muted-foreground">
+                  {t('sessionComparison:selector.noneSelected')}
+                </p>
               )}
             </CardContent>
           </Card>
@@ -400,19 +618,33 @@ function SessionComparisonPage() {
 
         {sessionHistoryQuery.isLoading ? (
           <motion.div {...sectionMotion(3)}>
-            <InfoCard title={t('sessionComparison:state.loadingSessions')} body={t('sessionComparison:state.loadingSessionsBody')} loading />
+            <InfoCard
+              title={t('sessionComparison:state.loadingSessions')}
+              body={t('sessionComparison:state.loadingSessionsBody')}
+              loading
+            />
           </motion.div>
         ) : sessionHistoryQuery.isError ? (
           <motion.div {...sectionMotion(3)}>
-            <InfoCard title={t('sessionComparison:state.sessionsLoadFailed')} body={t('common:genericError')} />
+            <InfoCard
+              title={t('sessionComparison:state.sessionsLoadFailed')}
+              body={t('common:genericError')}
+            />
           </motion.div>
         ) : !hasEnoughSelections ? (
           <motion.div {...sectionMotion(3)}>
-            <InfoCard title={t('sessionComparison:state.needMoreSelections')} body={t('sessionComparison:state.needMoreSelectionsBody')} />
+            <InfoCard
+              title={t('sessionComparison:state.needMoreSelections')}
+              body={t('sessionComparison:state.needMoreSelectionsBody')}
+            />
           </motion.div>
         ) : !hasComparableSessions ? (
           <motion.div {...sectionMotion(3)}>
-            <InfoCard title={t('sessionComparison:state.waitingForReports')} body={t('sessionComparison:state.waitingForReportsBody')} loading={selectedItems.some((item) => item.isLoading)} />
+            <InfoCard
+              title={t('sessionComparison:state.waitingForReports')}
+              body={t('sessionComparison:state.waitingForReportsBody')}
+              loading={selectedItems.some((item) => item.isLoading)}
+            />
           </motion.div>
         ) : (
           <>
@@ -421,8 +653,12 @@ function SessionComparisonPage() {
                 {...sectionMotion(3)}
                 className="rounded-xl border border-border/60 bg-background/40 px-4 py-3 text-sm text-muted-foreground"
               >
-                {pendingCount > 0 ? <p>{t('sessionComparison:state.pendingReports', { count: pendingCount })}</p> : null}
-                {erroredCount > 0 ? <p>{t('sessionComparison:state.failedReports', { count: erroredCount })}</p> : null}
+                {pendingCount > 0 ? (
+                  <p>{t('sessionComparison:state.pendingReports', { count: pendingCount })}</p>
+                ) : null}
+                {erroredCount > 0 ? (
+                  <p>{t('sessionComparison:state.failedReports', { count: erroredCount })}</p>
+                ) : null}
               </motion.div>
             )}
 
@@ -430,10 +666,18 @@ function SessionComparisonPage() {
               <Card className="border border-emerald-500/12 bg-card/80 py-0 backdrop-blur-sm">
                 <CardHeader className="px-6 py-6 pb-3">
                   <CardTitle>{t('sessionComparison:sections.trend')}</CardTitle>
-                  <CardDescription>{t('sessionComparison:sections.trendDescription')}</CardDescription>
+                  <CardDescription>
+                    {t('sessionComparison:sections.trendDescription')}
+                  </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6 px-6 pb-6">
-                  <SimpleTrendSummary points={overallTrendPoints} t={t} />
+                  <HeroTrendChart
+                    points={overallTrendPoints}
+                    inspectLabel={t('sessionComparison:metrics.inspectTrendChart')}
+                    hoveredSessionId={hoveredSessionId}
+                    onHoverSessionIdChange={setHoveredSessionId}
+                    noDataLabel={t('sessionComparison:state.noTrendData')}
+                  />
                   <SessionProgressionRail sessions={chronologicalSessions} t={t} />
                 </CardContent>
               </Card>
@@ -445,33 +689,172 @@ function SessionComparisonPage() {
   );
 }
 
-function SimpleTrendSummary({
+function HeroTrendChart({
+  inspectLabel,
   points,
-  t,
+  hoveredSessionId,
+  onHoverSessionIdChange,
+  noDataLabel,
 }: {
+  inspectLabel: string;
   points: TrendPoint[];
-  t: (key: string, options?: Record<string, unknown>) => string;
+  hoveredSessionId: string | null;
+  onHoverSessionIdChange: (sessionId: string) => void;
+  noDataLabel: string;
 }) {
   if (points.length < 2) {
     return (
       <div className="rounded-2xl border border-dashed border-border/60 bg-background/45 px-5 py-12 text-center text-sm text-muted-foreground">
-        {t('sessionComparison:state.noTrendData')}
+        {noDataLabel}
       </div>
     );
   }
 
+  const width = 960;
+  const height = 340;
+  const paddingLeft = 8;
+  const paddingRight = 4;
+  const paddingTop = 20;
+  const paddingBottom = 36;
+  const usableWidth = width - paddingLeft - paddingRight;
+  const usableHeight = height - paddingTop - paddingBottom;
+  const baselineY = height - paddingBottom;
+
+  const chartPoints = points.map((point, index) => ({
+    ...point,
+    x: paddingLeft + (usableWidth * index) / (points.length - 1),
+    y: paddingTop + ((100 - point.score) / 100) * usableHeight,
+  }));
+
+  const linePoints = chartPoints.map((point) => `${point.x},${point.y}`).join(' ');
+  const polygonPoints = [
+    `${chartPoints[0]?.x ?? paddingLeft},${baselineY}`,
+    linePoints,
+    `${chartPoints[chartPoints.length - 1]?.x ?? width - paddingRight},${baselineY}`,
+  ].join(' ');
+  const latestSessionId = points[points.length - 1]?.sessionId ?? null;
+
+  const updateNearestPoint = (clientX: number, rect: DOMRect) => {
+    if (rect.width <= 0) {
+      return;
+    }
+
+    const relativeX = ((clientX - rect.left) / rect.width) * width;
+    const nearestPoint = chartPoints.reduce((closest, point) =>
+      Math.abs(point.x - relativeX) < Math.abs(closest.x - relativeX) ? point : closest,
+    );
+
+    if (nearestPoint.sessionId !== hoveredSessionId) {
+      onHoverSessionIdChange(nearestPoint.sessionId);
+    }
+  };
+
   return (
-    <div className="grid gap-3 md:grid-cols-3">
-      {points.map((point, index) => (
-        <div key={point.sessionId} className="rounded-2xl border border-border/60 bg-background/50 px-4 py-4">
-          <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-primary/60">
-            {t(`sessionComparison:metrics.${resolveProgressionLabelKey(index, points.length)}`)}
-          </p>
-          <p className="mt-3 truncate text-sm font-semibold text-foreground">{point.label}</p>
-          <p className="mt-1 text-xs text-muted-foreground">{formatSessionDateTime(point.finishedAt)}</p>
-          <p className="mt-4 text-3xl font-semibold tracking-tight text-emerald-300">{Math.round(point.score)}</p>
-        </div>
-      ))}
+    <div className="rounded-2xl border border-emerald-500/12 bg-gradient-to-b from-emerald-500/8 via-background/40 to-background/70 p-3">
+      <div className="relative">
+        <svg
+          viewBox={`0 0 ${width} ${height}`}
+          className="h-72 w-full"
+          role="img"
+          aria-hidden="true"
+        >
+          <defs>
+            <linearGradient id="comparison-overall-area" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="rgba(110,231,183,0.28)" />
+              <stop offset="100%" stopColor="rgba(16,185,129,0)" />
+            </linearGradient>
+          </defs>
+
+          {[0, 25, 50, 75, 100].map((tick) => {
+            const y = paddingTop + ((100 - tick) / 100) * usableHeight;
+            return (
+              <g key={tick}>
+                <line
+                  x1={paddingLeft}
+                  y1={y}
+                  x2={width - paddingRight}
+                  y2={y}
+                  stroke="rgba(52,211,153,0.12)"
+                  strokeDasharray="4 7"
+                />
+                <text
+                  x="0"
+                  y={y + 3}
+                  textAnchor="start"
+                  className="fill-muted-foreground text-[10px]"
+                >
+                  {tick}
+                </text>
+              </g>
+            );
+          })}
+
+          <polygon fill="url(#comparison-overall-area)" points={polygonPoints} />
+          <polyline fill="none" stroke="#6ee7b7" strokeWidth="3.5" points={linePoints} />
+
+          {chartPoints.map((point, index) => {
+            const isLatest = index === chartPoints.length - 1;
+            const isHovered = point.sessionId === hoveredSessionId;
+
+            return (
+              <g key={point.sessionId}>
+                <line
+                  x1={point.x}
+                  y1={point.y}
+                  x2={point.x}
+                  y2={baselineY}
+                  stroke={isHovered ? 'rgba(167,243,208,0.4)' : 'rgba(52,211,153,0.08)'}
+                />
+                <circle
+                  cx={point.x}
+                  cy={point.y}
+                  r={isHovered ? '9' : isLatest ? '7' : '5.5'}
+                  fill={isHovered ? '#d1fae5' : isLatest ? '#a7f3d0' : '#86efac'}
+                  stroke="#022c22"
+                  strokeWidth="2"
+                />
+              </g>
+            );
+          })}
+        </svg>
+
+        <button
+          type="button"
+          className="absolute inset-0 z-10 rounded-xl bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300/70"
+          aria-label={inspectLabel}
+          onFocus={() => {
+            if (latestSessionId) {
+              onHoverSessionIdChange(latestSessionId);
+            }
+          }}
+          onKeyDown={(event) => {
+            const currentIndex = chartPoints.findIndex(
+              (point) => point.sessionId === hoveredSessionId,
+            );
+            const safeIndex = currentIndex >= 0 ? currentIndex : chartPoints.length - 1;
+            const previousPoint = chartPoints[safeIndex - 1];
+            const nextPoint = chartPoints[safeIndex + 1];
+
+            if (event.key === 'ArrowLeft' && previousPoint) {
+              event.preventDefault();
+              onHoverSessionIdChange(previousPoint.sessionId);
+            }
+
+            if (event.key === 'ArrowRight' && nextPoint) {
+              event.preventDefault();
+              onHoverSessionIdChange(nextPoint.sessionId);
+            }
+          }}
+          onMouseLeave={() => {
+            if (latestSessionId) {
+              onHoverSessionIdChange(latestSessionId);
+            }
+          }}
+          onMouseMove={(event) =>
+            updateNearestPoint(event.clientX, event.currentTarget.getBoundingClientRect())
+          }
+        />
+      </div>
     </div>
   );
 }
@@ -659,4 +1042,3 @@ function buildCriteriaLaneGridStyle(pointCount: number): CSSProperties {
     ).join(' '),
   };
 }
-
