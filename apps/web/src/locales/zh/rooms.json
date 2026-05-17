@@ -364,7 +364,18 @@
     "hintFollowUpFailed": "生成 AI 追问提示失败。",
     "hintRateLimited": "提示请求过于频繁（5 分钟内最多 3 次）。",
     "hintUnavailable": "AI 提示服务暂时不可用。",
-    "hintPermissionDenied": "你没有权限在此房间请求 AI 提示。"
+    "hintPermissionDenied": "你没有权限在此房间请求 AI 提示。",
+    "aiInterviewHeading": "AI 面试官",
+    "aiInterviewPlaceholder": "输入你对面试官的回复...",
+    "aiInterviewSend": "发送",
+    "aiInterviewSending": "发送中...",
+    "aiInterviewYou": "你",
+    "aiInterviewAi": "AI 面试官",
+    "aiInterviewEmpty": "AI 面试官将就题目向你提问，请在下方输入你的回复。",
+    "aiInterviewFailed": "获取 AI 面试官回复失败。",
+    "aiInterviewUnavailable": "AI 面试官服务暂时不可用。",
+    "aiInterviewFollowUp": "追问",
+    "aiInterviewAnnotations": "代码注释"
   },
   "whiteboard": {
     "layer": "图层",

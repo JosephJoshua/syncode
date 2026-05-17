@@ -56,6 +56,7 @@ import { HostControlPanel } from './host-control-panel.js';
 import { InviteLinkInline } from './invite-link-inline.js';
 import { LanguagePicker } from './language-picker.js';
 import { LANGUAGE_VERSIONED_LABELS } from './language-selector.data.js';
+import { type AiInterviewMessage, RoomAiInterviewPanel } from './room-ai-interview-panel.js';
 import { RoomChatPanel } from './room-chat-panel.js';
 import { RoomHeaderBar } from './room-header-bar.js';
 import { type Participant, RoomParticipantCard } from './room-participant-card.js';
@@ -265,6 +266,10 @@ export function RoomWorkspace({
   const [hintFollowUpLoadingHintId, setHintFollowUpLoadingHintId] = useState<string | null>(null);
   const [hintError, setHintError] = useState<string | null>(null);
 
+  const [aiInterviewMessages, setAiInterviewMessages] = useState<AiInterviewMessage[]>([]);
+  const [aiInterviewLoading, setAiInterviewLoading] = useState(false);
+  const [aiInterviewError, setAiInterviewError] = useState<string | null>(null);
+
   useEffect(() => {
     if (!room.problemId) return;
     let cancelled = false;
@@ -300,7 +305,9 @@ export function RoomWorkspace({
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
   const [rightNarrow, setRightNarrow] = useState(false);
-  const [activeRightTab, setActiveRightTab] = useState<'participants' | 'chat'>('participants');
+  const [activeRightTab, setActiveRightTab] = useState<'participants' | 'chat' | 'interview'>(
+    'participants',
+  );
   const [bottomCollapsed, setBottomCollapsed] = useState(false);
   const [activeCenterTab, setActiveCenterTab] = useState<'code' | 'whiteboard'>('code');
   const [whiteboardViewMode, setWhiteboardViewMode] = useState<'tab' | 'floating'>('tab');
@@ -957,6 +964,75 @@ export function RoomWorkspace({
     [getCode, language, roomId, t],
   );
 
+  const handleSendInterviewMessage = useCallback(
+    async (userMessage: string) => {
+      setAiInterviewError(null);
+      setAiInterviewLoading(true);
+
+      const userEntry: AiInterviewMessage = { role: 'user', content: userMessage };
+      setAiInterviewMessages((prev) => [...prev, userEntry]);
+
+      const history = aiInterviewMessages.map((m) => ({ role: m.role, content: m.content }));
+
+      try {
+        const submission = await api(CONTROL_API.ROOMS.AI_INTERVIEW, {
+          params: { id: roomId },
+          body: {
+            userMessage,
+            conversationHistory: history,
+            currentCode: getCode(),
+          },
+        });
+
+        const POLL_INTERVAL_MS = 1500;
+        const MAX_POLLS = 40;
+        let polls = 0;
+
+        const poll = async (): Promise<void> => {
+          if (polls >= MAX_POLLS) {
+            setAiInterviewError(t('workspace.aiInterviewFailed'));
+            setAiInterviewLoading(false);
+            return;
+          }
+          polls += 1;
+
+          const result = await api(CONTROL_API.ROOMS.AI_INTERVIEW_RESULT, {
+            params: { id: roomId, jobId: submission.jobId },
+          });
+
+          if (result.status === 'pending') {
+            setTimeout(() => void poll(), POLL_INTERVAL_MS);
+            return;
+          }
+
+          if (result.status === 'failed') {
+            setAiInterviewError(t('workspace.aiInterviewFailed'));
+            setAiInterviewLoading(false);
+            return;
+          }
+
+          setAiInterviewMessages((prev) => [
+            ...prev,
+            {
+              role: 'assistant',
+              content: result.message,
+              followUpQuestion: result.followUpQuestion,
+              codeAnnotations: result.codeAnnotations,
+              audioUrl: result.audioUrl,
+            },
+          ]);
+          setAiInterviewLoading(false);
+        };
+
+        void poll();
+      } catch {
+        setAiInterviewError(t('workspace.aiInterviewUnavailable'));
+        setAiInterviewLoading(false);
+      }
+    },
+    [aiInterviewMessages, getCode, roomId, t],
+  );
+
   return (
     <div className="fixed inset-0 z-40 flex flex-col overflow-hidden bg-background">
       <StageTransitionOverlay status={room.status} />
@@ -1342,7 +1418,9 @@ export function RoomWorkspace({
                 <div
                   className={`border-b border-border ${rightNarrow ? 'px-2 py-2' : 'px-3 py-2.5'}`}
                 >
-                  <div className="grid grid-cols-2 gap-1 rounded-md border border-border/70 bg-background/40 p-1">
+                  <div
+                    className={`grid gap-1 rounded-md border border-border/70 bg-background/40 p-1 ${room.mode === 'ai' ? 'grid-cols-3' : 'grid-cols-2'}`}
+                  >
                     <button
                       type="button"
                       onClick={() => setActiveRightTab('participants')}
@@ -1372,6 +1450,20 @@ export function RoomWorkspace({
                         </span>
                       ) : null}
                     </button>
+                    {room.mode === 'ai' ? (
+                      <button
+                        type="button"
+                        onClick={() => setActiveRightTab('interview')}
+                        className={cn(
+                          'rounded px-2 py-1 text-xs font-medium transition-colors',
+                          activeRightTab === 'interview'
+                            ? 'bg-primary/20 text-primary'
+                            : 'text-muted-foreground hover:bg-background/70 hover:text-foreground',
+                        )}
+                      >
+                        {t('workspace.aiInterviewHeading')}
+                      </button>
+                    ) : null}
                   </div>
                 </div>
                 <div className="min-h-0 flex-1 overflow-y-auto">
@@ -1449,7 +1541,7 @@ export function RoomWorkspace({
                         ))}
                       </div>
                     </div>
-                  ) : (
+                  ) : activeRightTab === 'chat' ? (
                     <div className="h-full p-2">
                       <RoomChatPanel
                         currentUserId={currentUserId}
@@ -1463,6 +1555,14 @@ export function RoomWorkspace({
                         readAt={currentUserReadAt}
                       />
                     </div>
+                  ) : (
+                    <RoomAiInterviewPanel
+                      messages={aiInterviewMessages}
+                      isLoading={aiInterviewLoading}
+                      error={aiInterviewError}
+                      onSendMessage={(msg) => void handleSendInterviewMessage(msg)}
+                      canSendMessage={canRequestHint}
+                    />
                   )}
                 </div>
               </motion.div>
