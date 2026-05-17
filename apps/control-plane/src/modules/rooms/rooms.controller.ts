@@ -49,6 +49,7 @@ import {
   DestroyRoomResponseDto,
   EnsureCollabResponseDto,
   GetRoomAiHintResultResponseDto,
+  GetRoomAiInterviewResultResponseDto,
   JoinRoomDto,
   JoinRoomResponseDto,
   ListRoomsQueryDto,
@@ -57,6 +58,8 @@ import {
   MediaTokenResponseDto,
   RequestRoomAiHintDto,
   RequestRoomAiHintResponseDto,
+  RequestRoomAiInterviewDto,
+  RequestRoomAiInterviewResponseDto,
   RoomChatMediaUploadDto,
   RoomChatMediaUploadResponseDto,
   RoomDetailDto,
@@ -379,6 +382,58 @@ export class RoomsController {
     @Param('jobId') jobId: string,
   ): Promise<GetRoomAiHintResultResponseDto> {
     return this.roomsService.getAiHintResult(id, user.id, jobId);
+  }
+
+  @Post(CONTROL_API.ROOMS.AI_INTERVIEW.route)
+  @HttpCode(202)
+  @ApiOperation({
+    summary: 'Submit AI interview response',
+    description:
+      'Returns immediately with the job ID. Poll GET /rooms/:id/ai/interview/:jobId for the result.',
+  })
+  @ApiParam({ name: 'id', description: 'Room ID (UUID)' })
+  @ApiBody({ type: RequestRoomAiInterviewDto })
+  @ApiResponse({
+    status: 202,
+    type: RequestRoomAiInterviewResponseDto,
+    description: 'Interview job submitted; poll GET /rooms/:id/ai/interview/:jobId for the result',
+  })
+  @ApiResponse({
+    status: 403,
+    type: ErrorResponseDto,
+    description: 'No ai:request-hint capability',
+  })
+  @ApiResponse({ status: 404, type: ErrorResponseDto, description: 'No problem selected in room' })
+  @ApiResponse({ status: 503, type: ErrorResponseDto, description: 'AI service unavailable' })
+  async requestAiInterview(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() body: RequestRoomAiInterviewDto,
+  ): Promise<RequestRoomAiInterviewResponseDto> {
+    return this.roomsService.requestAiInterview(id, user.id, body);
+  }
+
+  @Get(CONTROL_API.ROOMS.AI_INTERVIEW_RESULT.route)
+  @ApiOperation({ summary: 'Poll AI interview job result' })
+  @ApiParam({ name: 'id', description: 'Room ID (UUID)' })
+  @ApiParam({ name: 'jobId', description: 'AI interview job ID returned from POST /ai/interview' })
+  @ApiResponse({
+    status: 200,
+    type: GetRoomAiInterviewResultResponseDto,
+    description: 'Interview job status: pending, ready, or failed',
+  })
+  @ApiResponse({
+    status: 403,
+    type: ErrorResponseDto,
+    description: 'Not a participant of this room',
+  })
+  @ApiResponse({ status: 404, type: ErrorResponseDto, description: 'Job not found or expired' })
+  async getAiInterviewResult(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Param('jobId') jobId: string,
+  ): Promise<GetRoomAiInterviewResultResponseDto> {
+    return this.roomsService.getAiInterviewResult(id, user.id, jobId);
   }
 
   @Post(CONTROL_API.ROOMS.CHAT_MEDIA_UPLOAD_URL.route)

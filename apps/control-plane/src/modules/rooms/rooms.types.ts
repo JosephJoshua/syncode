@@ -156,3 +156,19 @@ export interface RoomChatMediaUploadResult {
   contentType: string;
   sizeBytes: number;
 }
+
+export interface RequestRoomAiInterviewResult {
+  jobId: string;
+}
+
+export type GetRoomAiInterviewResult =
+  | { status: 'pending'; jobId: string }
+  | {
+      status: 'ready';
+      jobId: string;
+      message: string;
+      followUpQuestion?: string;
+      codeAnnotations?: Array<{ line: number; comment: string }>;
+      audioUrl?: string;
+    }
+  | { status: 'failed'; jobId: string };

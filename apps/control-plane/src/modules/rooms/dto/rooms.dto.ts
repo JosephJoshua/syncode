@@ -15,6 +15,8 @@ import {
   mediaTokenResponseSchema,
   requestRoomAiHintResponseSchema,
   requestRoomAiHintSchema,
+  requestRoomAiInterviewResponseSchema,
+  requestRoomAiInterviewSchema,
   roomChatMediaUploadRequestSchema,
   roomChatMediaUploadResponseSchema,
   roomDetailSchema,
@@ -52,6 +54,38 @@ export class DestroyRoomResponseDto extends createZodDto(destroyRoomResponseSche
 export class RunCodeResponseDto extends createZodDto(runCodeResponseSchema) {}
 export class SubmitCodeResponseDto extends createZodDto(submitResponseSchema) {}
 export class RequestRoomAiHintResponseDto extends createZodDto(requestRoomAiHintResponseSchema) {}
+
+export class RequestRoomAiInterviewDto extends createZodDto(requestRoomAiInterviewSchema) {}
+export class RequestRoomAiInterviewResponseDto extends createZodDto(
+  requestRoomAiInterviewResponseSchema,
+) {}
+
+export class GetRoomAiInterviewResultResponseDto {
+  @ApiProperty({ enum: ['pending', 'ready', 'failed'] })
+  status!: 'pending' | 'ready' | 'failed';
+
+  @ApiProperty({ description: 'AI interview job ID' })
+  jobId!: string;
+
+  @ApiProperty({ required: false, description: 'AI interviewer message (when status=ready)' })
+  message?: string;
+
+  @ApiProperty({ required: false })
+  followUpQuestion?: string;
+
+  @ApiProperty({
+    required: false,
+    type: 'array',
+    items: {
+      type: 'object',
+      properties: { line: { type: 'number' }, comment: { type: 'string' } },
+    },
+  })
+  codeAnnotations?: Array<{ line: number; comment: string }>;
+
+  @ApiProperty({ required: false, description: 'Presigned audio URL (when status=ready)' })
+  audioUrl?: string;
+}
 
 export class GetRoomAiHintResultResponseDto {
   @ApiProperty({ enum: ['pending', 'ready', 'failed'] })

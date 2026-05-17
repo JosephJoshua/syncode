@@ -29,6 +29,7 @@ import {
   type JoinRoomInput,
   type ListRoomsQuery,
   type RequestRoomAiHintInput,
+  type RequestRoomAiInterviewInput,
   type RoleAssignmentReason,
   type RoomChatMediaUploadInput,
   type RoomConfig,
@@ -88,10 +89,12 @@ import type {
   CreateRoomResult,
   DestroyRoomResult,
   GetRoomAiHintResult,
+  GetRoomAiInterviewResult,
   JoinRoomResult,
   MediaTokenResult,
   PublicRoomSummaryResult,
   RequestRoomAiHintResult,
+  RequestRoomAiInterviewResult,
   RoomChatMediaUploadResult,
   RoomDetailResult,
   RoomSummaryResult,
@@ -1285,6 +1288,124 @@ export class RoomsService {
     };
   }
 
+  async requestAiInterview(
+    roomId: string,
+    userId: string,
+    body: RequestRoomAiInterviewInput,
+  ): Promise<RequestRoomAiInterviewResult> {
+    const [room, participant] = await this.getRoomContext(roomId, userId);
+
+    if (!participant) {
+      throw new ForbiddenException({
+        message: 'Not a participant of this room',
+        code: ERROR_CODES.ROOM_ACCESS_DENIED,
+      });
+    }
+
+    const capabilities = resolveRoomPermissions(participant.role, {
+      isHost: room.hostId === userId,
+    });
+
+    if (!capabilities.has('ai:request-hint')) {
+      throw new ForbiddenException({
+        message: 'No ai:request-hint capability',
+        code: ERROR_CODES.ROOM_PERMISSION_DENIED,
+      });
+    }
+
+    if (!room.problemId) {
+      throw new NotFoundException({
+        message: 'No problem selected in room',
+        code: ERROR_CODES.PROBLEM_NOT_FOUND,
+      });
+    }
+
+    const [problem] = await this.db
+      .select({ title: problems.title, description: problems.description })
+      .from(problems)
+      .where(eq(problems.id, room.problemId))
+      .limit(1);
+
+    if (!problem) {
+      throw new NotFoundException({
+        message: 'No problem selected in room',
+        code: ERROR_CODES.PROBLEM_NOT_FOUND,
+      });
+    }
+
+    const problemDescription = [problem.title, problem.description].filter(Boolean).join('\n\n');
+
+    let submitted: { jobId: JobId<'ai:interview'> };
+    try {
+      submitted = await this.aiClient.submitInterviewResponse({
+        roomId,
+        participantId: userId,
+        problemDescription,
+        currentCode: body.currentCode,
+        language: room.language ?? 'python',
+        userMessage: body.userMessage,
+        conversationHistory: body.conversationHistory,
+      });
+    } catch {
+      throw new ServiceUnavailableException({
+        message: 'AI service unavailable',
+        code: ERROR_CODES.AI_SERVICE_UNAVAILABLE,
+      });
+    }
+
+    await this.cacheService.set(
+      `${RoomsService.AI_INTERVIEW_JOB_CACHE_PREFIX}${submitted.jobId}`,
+      { roomId, userId },
+      RoomsService.AI_INTERVIEW_JOB_CACHE_TTL_SECONDS,
+    );
+
+    return { jobId: submitted.jobId };
+  }
+
+  async getAiInterviewResult(
+    roomId: string,
+    userId: string,
+    jobId: string,
+  ): Promise<GetRoomAiInterviewResult> {
+    const [, participant] = await this.getRoomContext(roomId, userId);
+    if (!participant) {
+      throw new ForbiddenException({
+        message: 'Not a participant of this room',
+        code: ERROR_CODES.ROOM_ACCESS_DENIED,
+      });
+    }
+
+    const mapping = await this.cacheService.get<{ roomId: string; userId: string }>(
+      `${RoomsService.AI_INTERVIEW_JOB_CACHE_PREFIX}${jobId}`,
+    );
+    if (!mapping || mapping.roomId !== roomId || mapping.userId !== userId) {
+      throw new NotFoundException({
+        message: 'Interview job not found',
+        code: ERROR_CODES.VALIDATION_FAILED,
+      });
+    }
+
+    const typedJobId = jobId as JobId<'ai:interview'>;
+    const result = await this.aiClient.getInterviewResult(typedJobId);
+
+    if (!result) {
+      const status = await this.aiClient.getInterviewJobStatus(typedJobId);
+      if (status === 'failed') {
+        return { status: 'failed', jobId };
+      }
+      return { status: 'pending', jobId };
+    }
+
+    return {
+      status: 'ready',
+      jobId,
+      message: result.message,
+      followUpQuestion: result.followUpQuestion,
+      codeAnnotations: result.codeAnnotations,
+      audioUrl: result.audio?.downloadUrl,
+    };
+  }
+
   async getRoomChatMediaUploadUrl(
     roomId: string,
     userId: string,
@@ -1375,6 +1496,8 @@ export class RoomsService {
   private static readonly AI_HINT_CHAT_HISTORY_LIMIT = 50;
   private static readonly AI_HINT_JOB_CACHE_PREFIX = 'ai-hint-job:';
   private static readonly AI_HINT_JOB_CACHE_TTL_SECONDS = 60 * 60;
+  private static readonly AI_INTERVIEW_JOB_CACHE_PREFIX = 'ai-interview-job:';
+  private static readonly AI_INTERVIEW_JOB_CACHE_TTL_SECONDS = 60 * 60;
 
   async generateMediaToken(roomId: string, userId: string): Promise<MediaTokenResult> {
     const [room, participant] = await this.getRoomContext(roomId, userId);
