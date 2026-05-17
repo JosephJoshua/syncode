@@ -5,12 +5,14 @@ import type { LucideIcon } from 'lucide-react';
 import { Calendar, Clock3, Target, TrendingUp } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { DashboardRecentSessions } from '@/components/dashboard-recent-sessions.js';
+import { DashboardWeaknessSummary } from '@/components/dashboard-weakness-summary.js';
 import {
   EMPTY_DASHBOARD_STATS,
   fetchDashboardSessionHistory,
   getDashboardSessionHistoryQueryKey,
 } from '@/lib/dashboard-session-history.js';
 import { getUserDisplayName } from '@/lib/user-utils.js';
+import { fetchUserWeaknesses, USER_WEAKNESSES_QUERY_KEY } from '@/lib/user-weaknesses.js';
 import { useAuthStore } from '@/stores/auth.store.js';
 
 export const Route = createFileRoute('/_app/dashboard')({
@@ -34,6 +36,11 @@ function DashboardPage() {
 
       return fetchDashboardSessionHistory(viewerId);
     },
+  });
+  const weaknessesQuery = useQuery({
+    queryKey: USER_WEAKNESSES_QUERY_KEY,
+    enabled: isQueryEnabled,
+    queryFn: fetchUserWeaknesses,
   });
   const sessionHistory = sessionHistoryQuery.data;
   const isUnavailable = !isQueryEnabled;
@@ -96,6 +103,13 @@ function DashboardPage() {
           ))}
         </div>
       </section>
+
+      <DashboardWeaknessSummary
+        weaknesses={weaknessesQuery.data?.data ?? []}
+        isLoading={weaknessesQuery.isLoading}
+        isUnavailable={isUnavailable}
+        isError={weaknessesQuery.isError}
+      />
 
       <DashboardRecentSessions
         viewerId={viewerId}

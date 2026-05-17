@@ -12,6 +12,7 @@ import {
   type UpdateUserInput,
   type UserProfileResponse,
   type UserQuotasResponse,
+  type UserWeaknessesResponse,
 } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
 import {
@@ -19,14 +20,21 @@ import {
   aiMessages,
   aiReviews,
   GLOBAL_LIMIT_KEYS,
+  problems,
   rooms,
   runs,
+  sessionDeletions,
+  sessionParticipants,
+  sessionReports,
+  sessions,
   submissions,
   users,
+  userWeaknesses,
+  weaknessSessions,
 } from '@syncode/db';
 import { ROOM_STATUSES, RoomStatus } from '@syncode/shared';
 import { type IStorageService, STORAGE_SERVICE } from '@syncode/shared/ports';
-import { and, eq, gte, inArray, isNull, ne, type SQL, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, isNull, ne, type SQL, sql } from 'drizzle-orm';
 import type { AnyPgTable } from 'drizzle-orm/pg-core';
 import { resolveAvatarUrls } from '@/common/resolve-avatar-urls.js';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
@@ -183,6 +191,134 @@ export class UsersService {
         activeCount: roomCount,
         maxActive: limits[GLOBAL_LIMIT_KEYS.ROOMS_MAX_ACTIVE] ?? 0,
       },
+    };
+  }
+
+  async getWeaknesses(userId: string): Promise<UserWeaknessesResponse> {
+    const weaknessRows = await this.db
+      .select({
+        id: userWeaknesses.id,
+        category: userWeaknesses.category,
+        description: userWeaknesses.description,
+        frequency: userWeaknesses.frequency,
+        trend: userWeaknesses.trend,
+        lastSeenAt: userWeaknesses.lastSeenAt,
+      })
+      .from(userWeaknesses)
+      .where(eq(userWeaknesses.userId, userId))
+      .orderBy(desc(userWeaknesses.frequency), desc(userWeaknesses.lastSeenAt));
+
+    if (weaknessRows.length === 0) {
+      return { data: [] };
+    }
+
+    const weaknessIds = weaknessRows.map((weakness) => weakness.id);
+    const linkedSessionRows = await this.db
+      .select({
+        weaknessId: weaknessSessions.weaknessId,
+        sessionId: weaknessSessions.sessionId,
+        description: weaknessSessions.description,
+        trend: weaknessSessions.trend,
+        problemName: problems.title,
+        reportedAt: sql<Date>`COALESCE(${weaknessSessions.reportedAt}, ${sessionReports.generatedAt}, ${sessions.finishedAt}, ${sessions.startedAt})`,
+        score: sql<
+          number | null
+        >`COALESCE(${weaknessSessions.score}, ${sessionReports.overallScore})`,
+        startedAt: sessions.startedAt,
+        finishedAt: sessions.finishedAt,
+      })
+      .from(weaknessSessions)
+      .innerJoin(sessions, eq(sessions.id, weaknessSessions.sessionId))
+      .innerJoin(
+        sessionParticipants,
+        and(eq(sessionParticipants.sessionId, sessions.id), eq(sessionParticipants.userId, userId)),
+      )
+      .leftJoin(
+        sessionReports,
+        and(
+          eq(sessionReports.sessionId, sessions.id),
+          eq(sessionReports.userId, userId),
+          eq(sessionReports.status, 'completed'),
+        ),
+      )
+      .leftJoin(problems, eq(problems.id, sessions.problemId))
+      .leftJoin(
+        sessionDeletions,
+        and(
+          eq(sessionDeletions.sessionId, weaknessSessions.sessionId),
+          eq(sessionDeletions.userId, userId),
+        ),
+      )
+      .where(
+        and(
+          inArray(weaknessSessions.weaknessId, weaknessIds),
+          eq(sessions.status, 'finished'),
+          isNull(sessionDeletions.userId),
+        ),
+      )
+      .orderBy(
+        desc(
+          sql`COALESCE(${weaknessSessions.reportedAt}, ${sessionReports.generatedAt}, ${sessions.finishedAt}, ${sessions.startedAt})`,
+        ),
+      );
+
+    const sessionsByWeakness = new Map<
+      string,
+      Array<{
+        sessionId: string;
+        description: string | null;
+        trend: 'improving' | 'stable' | 'worsening' | null;
+        problemName: string | null;
+        reportedAt: string;
+        score: number | null;
+      }>
+    >();
+
+    for (const row of linkedSessionRows) {
+      const currentSessions = sessionsByWeakness.get(row.weaknessId) ?? [];
+      currentSessions.push({
+        sessionId: row.sessionId,
+        description: row.description,
+        trend: row.trend,
+        problemName: row.problemName,
+        reportedAt: new Date(row.reportedAt).toISOString(),
+        score: row.score ?? null,
+      });
+      sessionsByWeakness.set(row.weaknessId, currentSessions);
+    }
+
+    const visibleWeaknesses = weaknessRows
+      .filter((weakness) => (sessionsByWeakness.get(weakness.id)?.length ?? 0) > 0)
+      .sort((a, b) => {
+        const frequencyDelta =
+          (sessionsByWeakness.get(b.id)?.length ?? 0) - (sessionsByWeakness.get(a.id)?.length ?? 0);
+
+        if (frequencyDelta !== 0) {
+          return frequencyDelta;
+        }
+
+        return b.lastSeenAt.getTime() - a.lastSeenAt.getTime();
+      });
+
+    return {
+      data: visibleWeaknesses.map((weakness) => {
+        const linkedSessions = sessionsByWeakness.get(weakness.id) ?? [];
+        const latestSession = linkedSessions[0];
+
+        return {
+          ...weakness,
+          description: latestSession?.description ?? weakness.description,
+          frequency: linkedSessions.length,
+          trend: latestSession?.trend ?? weakness.trend,
+          lastSeenAt: latestSession?.reportedAt ?? weakness.lastSeenAt.toISOString(),
+          sessions: linkedSessions.map(({ sessionId, problemName, reportedAt, score }) => ({
+            sessionId,
+            problemName,
+            reportedAt,
+            score,
+          })),
+        };
+      }),
     };
   }
 

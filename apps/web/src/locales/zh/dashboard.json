@@ -82,5 +82,60 @@
     "noMatchDescription": "尝试调整搜索、筛选或排序条件以查看更多会话历史。",
     "noSessionsTitle": "暂无会话",
     "noSessionsDescription": "完成面试练习后，你的记录将显示在这里。"
+  },
+  "weakness": {
+    "heading": "薄弱项总结",
+    "sub": "找出重复出现的练习短板，并回看相关会话。",
+    "sessionCount_other": "已跟踪 {{count}} 个类别",
+    "categoriesTitle": "高频类别",
+    "trendTitle": "改善趋势",
+    "unknownProblem": "未命名题目",
+    "descriptionFallback": "请回看关联会话报告中的这个模式。",
+    "frequency_other": "{{count}} 次",
+    "frequencyProgress": "{{category}} 出现 {{count}} 次",
+    "trendScore": "{{score}}%",
+    "categoryCount_other": "{{count}} 个薄弱项类别",
+    "loadingTitle": "正在加载薄弱项",
+    "loadingDescription": "正在加载已跟踪的薄弱项类别。",
+    "unavailableTitle": "薄弱项总结暂不可用",
+    "unavailableDescription": "账户会话就绪后将显示总结。",
+    "errorTitle": "无法加载薄弱项总结",
+    "errorDescription": "当前无法获取薄弱项趋势，请稍后重试。",
+    "noDataTitle": "暂无已跟踪的薄弱项",
+    "noDataDescription": "会话报告识别出重复模式后，薄弱项类别将显示在这里。",
+    "noTrendTitle": "暂无趋势数据",
+    "noTrendDescription": "关联会话报告可用后将显示得分历史。",
+    "trendPoint": "{{problem}} 的薄弱项得分为 {{score}}%",
+    "trend": {
+      "improving": "正在改善",
+      "stable": "稳定",
+      "worsening": "恶化"
+    },
+    "category": {
+      "edge_cases": {
+        "title": "边界情况"
+      },
+      "time_complexity": {
+        "title": "时间复杂度"
+      },
+      "space_complexity": {
+        "title": "空间复杂度"
+      },
+      "variable_naming": {
+        "title": "变量命名"
+      },
+      "code_structure": {
+        "title": "代码结构"
+      },
+      "off_by_one": {
+        "title": "边界偏差错误"
+      },
+      "input_validation": {
+        "title": "输入校验"
+      },
+      "communication": {
+        "title": "沟通表达"
+      }
+    }
   }
 }

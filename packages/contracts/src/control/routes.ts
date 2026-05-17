@@ -74,6 +74,7 @@ import type {
   updateUserSchema,
   userProfileResponseSchema,
   userQuotasResponseSchema,
+  userWeaknessesResponseSchema,
 } from './users.js';
 import type {
   whiteboardAssetUploadUrlRequestSchema,
@@ -113,6 +114,10 @@ export const CONTROL_API = {
   USERS: {
     PROFILE: defineRoute<void, z.infer<typeof userProfileResponseSchema>>()('users/me', 'GET'),
     QUOTAS: defineRoute<void, z.infer<typeof userQuotasResponseSchema>>()('users/me/quotas', 'GET'),
+    WEAKNESSES: defineRoute<void, z.infer<typeof userWeaknessesResponseSchema>>()(
+      'users/me/weaknesses',
+      'GET',
+    ),
     GET_BY_ID: defineRoute<void, z.infer<typeof publicUserProfileResponseSchema>>()(
       'users/:id',
       'GET',

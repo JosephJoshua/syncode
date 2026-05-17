@@ -28,6 +28,7 @@ import {
   UpdateUserDto,
   UserProfileResponseDto,
   UserQuotasResponseDto,
+  UserWeaknessesResponseDto,
 } from './dto/user.dto.js';
 import { UsersService } from './users.service.js';
 
@@ -60,6 +61,21 @@ export class UsersController {
   @ApiResponse({ status: 500, type: ErrorResponseDto, description: 'Internal server error' })
   async getCurrentUserQuotas(@CurrentUser() user: { id: string }): Promise<UserQuotasResponseDto> {
     return this.usersService.getQuotas(user.id);
+  }
+
+  @Get(CONTROL_API.USERS.WEAKNESSES.route)
+  @ApiOperation({ summary: 'Get current user weakness summary' })
+  @ApiResponse({
+    status: 200,
+    type: UserWeaknessesResponseDto,
+    description: 'Current user weakness categories and linked sessions',
+  })
+  @ApiResponse({ status: 401, type: ErrorResponseDto, description: 'Unauthorized' })
+  @ApiResponse({ status: 500, type: ErrorResponseDto, description: 'Internal server error' })
+  async getCurrentUserWeaknesses(
+    @CurrentUser() user: { id: string },
+  ): Promise<UserWeaknessesResponseDto> {
+    return this.usersService.getWeaknesses(user.id);
   }
 
   @Get(CONTROL_API.USERS.GET_BY_ID.route)

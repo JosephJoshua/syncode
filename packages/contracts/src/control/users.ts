@@ -1,6 +1,19 @@
 import { UserRole } from '@syncode/shared';
 import { z } from 'zod';
 
+export const USER_WEAKNESS_CATEGORIES = [
+  'edge_cases',
+  'time_complexity',
+  'space_complexity',
+  'variable_naming',
+  'code_structure',
+  'off_by_one',
+  'input_validation',
+  'communication',
+] as const;
+
+export const USER_WEAKNESS_TRENDS = ['improving', 'stable', 'worsening'] as const;
+
 export const updateUserSchema = z
   .object({
     displayName: z
@@ -129,6 +142,30 @@ export const userQuotasResponseSchema = z.object({
 });
 
 export type UserQuotasResponse = z.infer<typeof userQuotasResponseSchema>;
+
+export const userWeaknessSessionSchema = z.object({
+  sessionId: z.uuid(),
+  problemName: z.string().nullable(),
+  reportedAt: z.iso.datetime(),
+  score: z.number().int().min(0).max(100).nullable(),
+});
+
+export const userWeaknessSchema = z.object({
+  id: z.uuid(),
+  category: z.enum(USER_WEAKNESS_CATEGORIES),
+  description: z.string(),
+  frequency: z.number().int().nonnegative(),
+  trend: z.enum(USER_WEAKNESS_TRENDS),
+  lastSeenAt: z.iso.datetime(),
+  sessions: z.array(userWeaknessSessionSchema).default([]),
+});
+
+export const userWeaknessesResponseSchema = z.object({
+  data: z.array(userWeaknessSchema).default([]),
+});
+
+export type UserWeakness = z.infer<typeof userWeaknessSchema>;
+export type UserWeaknessesResponse = z.infer<typeof userWeaknessesResponseSchema>;
 
 export const avatarUploadUrlResponseSchema = z.object({
   uploadUrl: z.string().describe('Presigned PUT URL for direct S3 upload'),
