@@ -281,90 +281,14 @@ function SessionComparisonPage() {
           {t('common:backToDashboard')}
         </Link>
 
-        <Popover open={isSelectorOpen} onOpenChange={setIsSelectorOpen}>
-          <PopoverTrigger asChild>
-            <Button className="gap-2 bg-emerald-600 text-white hover:bg-emerald-500">
-              <Plus className="size-4" />
-              {t('sessionComparison:actions.compareSessions')}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent
-            className="w-[420px] max-w-[calc(100vw-2rem)] p-0"
-            align="end"
-            sideOffset={8}
-          >
-            <Command>
-              <CommandInput placeholder={t('sessionComparison:selector.searchPlaceholder')} />
-              <CommandList>
-                <CommandEmpty>{t('sessionComparison:selector.empty')}</CommandEmpty>
-                <CommandGroup>
-                  {selectableSessions.map((session) => {
-                    const selected = selectedSessionIds.includes(session.sessionId);
-                    const disabled =
-                      !selected && selectedSessionIds.length >= SESSION_COMPARISON_MAX_SELECTION;
-                    const status = resolveSessionSummaryStatus(session);
-
-                    return (
-                      <CommandItem
-                        key={session.sessionId}
-                        value={`${session.problemTitle ?? ''} ${session.sessionId}`}
-                        disabled={disabled}
-                        onSelect={() => toggleSessionSelection(session.sessionId)}
-                        className={cn(
-                          'flex items-start justify-between gap-3 px-3 py-3',
-                          selected && 'bg-emerald-500/8',
-                        )}
-                      >
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-medium text-foreground">
-                            {session.problemTitle ?? t('sessionComparison:fallbackProblem')}
-                          </p>
-                          <p className="mt-1 truncate text-xs text-muted-foreground">
-                            {formatSessionDateTime(session.finishedAt ?? session.createdAt)}
-                          </p>
-                          {status || typeof session.overallScore === 'number' ? (
-                            <div className="mt-2 flex flex-wrap items-center gap-2">
-                              {status ? (
-                                <Badge
-                                  variant={getSessionStatusBadgeVariant(status)}
-                                  className="px-2 py-0.5"
-                                >
-                                  {status === 'passed'
-                                    ? t('dashboard:status.pass')
-                                    : t('dashboard:status.failed')}
-                                </Badge>
-                              ) : null}
-                              {typeof session.overallScore === 'number' ? (
-                                <span
-                                  className={cn(
-                                    'text-xs font-medium',
-                                    getSessionScoreTextClass(status),
-                                  )}
-                                >
-                                  {Math.round(session.overallScore)} / 100
-                                </span>
-                              ) : null}
-                            </div>
-                          ) : null}
-                        </div>
-                        <span
-                          className={cn(
-                            'mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full border transition-colors',
-                            selected
-                              ? 'border-emerald-400/20 bg-emerald-500 text-white'
-                              : 'border-border/60 bg-background/70 text-transparent',
-                          )}
-                        >
-                          <Check className="size-3.5" />
-                        </span>
-                      </CommandItem>
-                    );
-                  })}
-                </CommandGroup>
-              </CommandList>
-            </Command>
-          </PopoverContent>
-        </Popover>
+        <SessionSelectorPopover
+          isOpen={isSelectorOpen}
+          onOpenChange={setIsSelectorOpen}
+          selectableSessions={selectableSessions}
+          selectedSessionIds={selectedSessionIds}
+          onToggleSession={toggleSessionSelection}
+          t={t}
+        />
       </motion.div>
 
       <motion.header {...sectionMotion(1)} className="mt-5 space-y-3">
@@ -534,6 +458,112 @@ function SessionComparisonPage() {
   );
 }
 
+function SessionSelectorPopover({
+  isOpen,
+  onOpenChange,
+  selectableSessions,
+  selectedSessionIds,
+  onToggleSession,
+  t,
+}: {
+  isOpen: boolean;
+  onOpenChange: (open: boolean) => void;
+  selectableSessions: SessionSummary[];
+  selectedSessionIds: string[];
+  onToggleSession: (sessionId: string) => void;
+  t: TranslationFn;
+}) {
+  return (
+    <Popover open={isOpen} onOpenChange={onOpenChange}>
+      <PopoverTrigger asChild>
+        <Button className="gap-2 bg-emerald-600 text-white hover:bg-emerald-500">
+          <Plus className="size-4" />
+          {t('sessionComparison:actions.compareSessions')}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[420px] max-w-[calc(100vw-2rem)] p-0" align="end" sideOffset={8}>
+        <Command>
+          <CommandInput placeholder={t('sessionComparison:selector.searchPlaceholder')} />
+          <CommandList>
+            <CommandEmpty>{t('sessionComparison:selector.empty')}</CommandEmpty>
+            <CommandGroup>
+              {selectableSessions.map((session) => (
+                <SessionSelectorOption
+                  key={session.sessionId}
+                  session={session}
+                  selectedSessionIds={selectedSessionIds}
+                  onToggleSession={onToggleSession}
+                  t={t}
+                />
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function SessionSelectorOption({
+  session,
+  selectedSessionIds,
+  onToggleSession,
+  t,
+}: {
+  session: SessionSummary;
+  selectedSessionIds: string[];
+  onToggleSession: (sessionId: string) => void;
+  t: TranslationFn;
+}) {
+  const selected = selectedSessionIds.includes(session.sessionId);
+  const disabled = !selected && selectedSessionIds.length >= SESSION_COMPARISON_MAX_SELECTION;
+  const status = resolveSessionSummaryStatus(session);
+
+  return (
+    <CommandItem
+      value={`${session.problemTitle ?? ''} ${session.sessionId}`}
+      disabled={disabled}
+      onSelect={() => onToggleSession(session.sessionId)}
+      className={cn(
+        'flex items-start justify-between gap-3 px-3 py-3',
+        selected && 'bg-emerald-500/8',
+      )}
+    >
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium text-foreground">
+          {session.problemTitle ?? t('sessionComparison:fallbackProblem')}
+        </p>
+        <p className="mt-1 truncate text-xs text-muted-foreground">
+          {formatSessionDateTime(session.finishedAt ?? session.createdAt)}
+        </p>
+        {status || typeof session.overallScore === 'number' ? (
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            {status ? (
+              <Badge variant={getSessionStatusBadgeVariant(status)} className="px-2 py-0.5">
+                {status === 'passed' ? t('dashboard:status.pass') : t('dashboard:status.failed')}
+              </Badge>
+            ) : null}
+            {typeof session.overallScore === 'number' ? (
+              <span className={cn('text-xs font-medium', getSessionScoreTextClass(status))}>
+                {Math.round(session.overallScore)} / 100
+              </span>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+      <span
+        className={cn(
+          'mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full border transition-colors',
+          selected
+            ? 'border-emerald-400/20 bg-emerald-500 text-white'
+            : 'border-border/60 bg-background/70 text-transparent',
+        )}
+      >
+        <Check className="size-3.5" />
+      </span>
+    </CommandItem>
+  );
+}
 function HeroTrendChart({
   inspectLabel,
   points,
