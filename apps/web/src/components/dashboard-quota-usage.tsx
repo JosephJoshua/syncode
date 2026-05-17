@@ -1,6 +1,6 @@
 import type { UserQuotasResponse } from '@syncode/contracts';
 import { Button, Card, CardContent, cn, Progress } from '@syncode/ui';
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton.js';
@@ -10,50 +10,76 @@ type QuotaKey = 'ai' | 'execution' | 'rooms';
 interface DashboardQuotaUsageProps {
   readonly quotas: UserQuotasResponse | undefined;
   readonly isLoading: boolean;
+  readonly isFetching?: boolean;
   readonly isError?: boolean;
+  readonly notificationScope?: string | null;
   readonly onRetry?: () => void;
 }
 
 type QuotaItem = {
   key: QuotaKey;
   label: string;
-  current: number;
-  limit: number;
   value: string;
   percent: number;
   isAtRisk: boolean;
   isExceeded: boolean;
+  notificationKey: string;
   warningMessage: string;
   exceededMessage: string;
 };
 
 const WARNING_THRESHOLD = 80;
+const notifiedQuotaEvents = new Set<string>();
+
+export function resetDashboardQuotaUsageNotificationsForTest() {
+  notifiedQuotaEvents.clear();
+}
 
 export function DashboardQuotaUsage({
   quotas,
   isLoading,
+  isFetching = false,
   isError = false,
+  notificationScope = null,
   onRetry,
 }: DashboardQuotaUsageProps) {
   const { t } = useTranslation('dashboard');
-  const warnedQuotaKeysRef = useRef<Set<QuotaKey>>(new Set());
   const items = useMemo(() => buildQuotaItems(quotas, t), [quotas, t]);
   const exceededItems = items.filter((item) => item.isExceeded);
 
   useEffect(() => {
-    if (!quotas) {
+    if (!quotas || isLoading || isFetching || isError) {
       return;
     }
 
     for (const item of items) {
-      if (!item.isAtRisk || warnedQuotaKeysRef.current.has(item.key)) {
+      if (item.isExceeded) {
+        clearQuotaNotificationEvents(notificationScope, item.key, 'warning');
+        const eventKey = getQuotaNotificationEventKey(notificationScope, item, 'exceeded');
+        if (!notifiedQuotaEvents.has(eventKey)) {
+          notifiedQuotaEvents.add(eventKey);
+          toast.error(item.exceededMessage);
+        }
+
         continue;
       }
 
-      warnedQuotaKeysRef.current.add(item.key);
+      clearQuotaNotificationEvents(notificationScope, item.key, 'exceeded');
+
+      if (!item.isAtRisk) {
+        clearQuotaNotificationEvents(notificationScope, item.key, 'warning');
+        continue;
+      }
+
+      const eventKey = getQuotaNotificationEventKey(notificationScope, item, 'warning');
+      if (notifiedQuotaEvents.has(eventKey)) {
+        continue;
+      }
+
+      notifiedQuotaEvents.add(eventKey);
       toast.warning(item.warningMessage);
     }
-  }, [items, quotas]);
+  }, [isError, isFetching, isLoading, items, notificationScope, quotas]);
 
   return (
     <section className="mt-8 sm:mt-10" aria-labelledby="dashboard-quota-usage-heading">
@@ -111,6 +137,28 @@ export function DashboardQuotaUsage({
       </Card>
     </section>
   );
+}
+
+function getQuotaNotificationEventKey(
+  scope: string | null,
+  item: QuotaItem,
+  severity: 'warning' | 'exceeded',
+) {
+  return `${scope ?? 'anonymous'}:${severity}:${item.key}:${item.notificationKey}`;
+}
+
+function clearQuotaNotificationEvents(
+  scope: string | null,
+  key: QuotaKey,
+  severity: 'warning' | 'exceeded',
+) {
+  const prefix = `${scope ?? 'anonymous'}:${severity}:${key}:`;
+
+  for (const eventKey of notifiedQuotaEvents) {
+    if (eventKey.startsWith(prefix)) {
+      notifiedQuotaEvents.delete(eventKey);
+    }
+  }
 }
 
 function QuotaRow({ item }: { readonly item: QuotaItem }) {
@@ -221,12 +269,11 @@ function buildDailyQuotaItem({
   return {
     key,
     label,
-    current,
-    limit,
     value: quota ? `${current} / ${limit}` : '--',
     percent,
     isAtRisk: percent >= WARNING_THRESHOLD,
     isExceeded: isQuotaExceeded(current, limit),
+    notificationKey: `${current}/${limit}/${quota?.resetsAt ?? ''}`,
     warningMessage,
     exceededMessage,
   };
@@ -250,12 +297,11 @@ function buildRoomsQuotaItem({
   return {
     key: 'rooms',
     label,
-    current,
-    limit,
     value: quota ? `${current} / ${limit}` : '--',
     percent,
     isAtRisk: percent >= WARNING_THRESHOLD,
     isExceeded: isQuotaExceeded(current, limit),
+    notificationKey: `${current}/${limit}`,
     warningMessage,
     exceededMessage,
   };
@@ -263,12 +309,16 @@ function buildRoomsQuotaItem({
 
 function getUsagePercent(current: number, limit: number) {
   if (limit <= 0) {
-    return 0;
+    return 100;
   }
 
   return Math.min(Math.max((current / limit) * 100, 0), 100);
 }
 
 function isQuotaExceeded(current: number, limit: number) {
-  return limit > 0 && current >= limit;
+  if (limit <= 0) {
+    return true;
+  }
+
+  return current >= limit;
 }
