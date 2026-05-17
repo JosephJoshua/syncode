@@ -307,7 +307,7 @@ export function RoomWorkspace({
   const [inlineWhiteboardHost, setInlineWhiteboardHost] = useState<HTMLDivElement | null>(null);
   const [floatingWhiteboardHost, setFloatingWhiteboardHost] = useState<HTMLDivElement | null>(null);
   const [whiteboardParkingHost, setWhiteboardParkingHost] = useState<HTMLDivElement | null>(null);
-  const [activeCommentLine, setActiveCommentLine] = useState(1);
+  const [_activeCommentLine, _setActiveCommentLine] = useState(1);
   const rightMountedRef = useRef(false);
   const rightContentRef = useRef<HTMLDivElement>(null);
 

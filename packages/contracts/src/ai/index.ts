@@ -5,6 +5,7 @@ export type {
   GenerateHintResult,
   GenerateSessionReportRequest,
   GenerateSessionReportResult,
+  InterviewResponseAudio,
   InterviewResponseRequest,
   InterviewResponseResult,
   ReviewCodeRequest,

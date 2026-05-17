@@ -9,8 +9,8 @@ import {
   AI_SESSION_REPORT_QUEUE,
   AI_SESSION_REPORT_RESULT_QUEUE,
 } from '@syncode/contracts';
-import type { IQueueService, QueueJob } from '@syncode/shared/ports';
-import { QUEUE_SERVICE } from '@syncode/shared/ports';
+import type { IQueueService, IStorageService, QueueJob } from '@syncode/shared/ports';
+import { QUEUE_SERVICE, STORAGE_SERVICE } from '@syncode/shared/ports';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { LLM_PROVIDER } from '../llm/llm.constants.js';
 import { AiProcessor } from './ai.processor.js';
@@ -59,6 +59,22 @@ function createFakeJob<T>(data: T, id = 'job-123'): QueueJob<T> {
   };
 }
 
+function createMockStorageService(): IStorageService {
+  return {
+    upload: vi.fn().mockResolvedValue(undefined),
+    download: vi.fn().mockResolvedValue(Buffer.from('')),
+    delete: vi.fn().mockResolvedValue(undefined),
+    deleteMany: vi.fn().mockResolvedValue({ deleted: [], failed: [] }),
+    exists: vi.fn().mockResolvedValue(true),
+    getMetadata: vi.fn().mockResolvedValue(null),
+    list: vi.fn().mockResolvedValue({ keys: [], isTruncated: false }),
+    copy: vi.fn().mockResolvedValue(undefined),
+    getUploadUrl: vi.fn().mockResolvedValue('https://storage.example/upload'),
+    getDownloadUrl: vi.fn().mockResolvedValue('https://storage.example/interview-audio.mp3'),
+    shutdown: vi.fn().mockResolvedValue(undefined),
+  };
+}
+
 describe('AiProcessor', () => {
   const { mock: mockQueueService, handlers } = createMockQueueService();
 
@@ -73,25 +89,60 @@ describe('AiProcessor', () => {
         {
           provide: LLM_PROVIDER,
           useValue: {
-            generateText: vi.fn().mockResolvedValue({
-              text: JSON.stringify({
-                overallScore: 82,
-                dimensions: {
-                  correctness: { score: 84, feedback: 'Correctness', evidence: [] },
-                  efficiency: { score: 78, feedback: 'Efficiency', evidence: [] },
-                  codeQuality: { score: 80, feedback: 'Code quality', evidence: [] },
-                  communication: { score: 76, feedback: 'Communication', evidence: [] },
-                  problemSolving: { score: 83, feedback: 'Problem solving', evidence: [] },
-                },
-                strengths: ['Strong iteration'],
-                areasForImprovement: ['Explain tradeoffs earlier'],
-                detailedFeedback: 'Detailed feedback',
-                comparisonToHistory: null,
-                peerFeedbackSummary: null,
+            generateText: vi
+              .fn()
+              .mockImplementation(async (input: { maxOutputTokens?: number }) => {
+                if (input.maxOutputTokens === 600) {
+                  return {
+                    text: JSON.stringify({
+                      message: 'Can you explain the invariant your map maintains?',
+                      followUpQuestion:
+                        'Why is checking the complement before inserting the current value safe?',
+                      codeAnnotations: [{ line: 1, comment: 'Name the state you are tracking.' }],
+                    }),
+                    model: 'qwen3.5-mini',
+                  };
+                }
+
+                if (input.maxOutputTokens === 2500) {
+                  return {
+                    text: JSON.stringify({
+                      overallScore: 82,
+                      dimensions: {
+                        correctness: { score: 84, feedback: 'Correctness', evidence: [] },
+                        efficiency: { score: 78, feedback: 'Efficiency', evidence: [] },
+                        codeQuality: { score: 80, feedback: 'Code quality', evidence: [] },
+                        communication: { score: 76, feedback: 'Communication', evidence: [] },
+                        problemSolving: { score: 83, feedback: 'Problem solving', evidence: [] },
+                      },
+                      strengths: ['Strong iteration'],
+                      areasForImprovement: ['Explain tradeoffs earlier'],
+                      detailedFeedback: 'Detailed feedback',
+                      comparisonToHistory: null,
+                      peerFeedbackSummary: null,
+                    }),
+                    model: 'qwen3.5-mini',
+                  };
+                }
+
+                return {
+                  text: JSON.stringify({
+                    hint: 'Consider storing seen values in a map.',
+                    suggestedApproach: 'Track complement values while iterating.',
+                  }),
+                  model: 'qwen3.5-mini',
+                };
               }),
-              model: 'qwen3.5-mini',
+            generateSpeech: vi.fn().mockResolvedValue({
+              audio: Buffer.from('speech-bytes'),
+              model: 'qwen-tts',
+              mimeType: 'audio/mpeg',
             }),
           },
+        },
+        {
+          provide: STORAGE_SERVICE,
+          useValue: createMockStorageService(),
         },
       ],
     }).compile();
@@ -201,7 +252,13 @@ describe('AiProcessor', () => {
         'interview-result',
         expect.objectContaining({
           jobId: 'interview-job-1',
-          message: expect.any(String),
+          message: 'Can you explain the invariant your map maintains?',
+          followUpQuestion:
+            'Why is checking the complement before inserting the current value safe?',
+          codeAnnotations: [{ line: 1, comment: 'Name the state you are tracking.' }],
+          audio: expect.objectContaining({
+            downloadUrl: 'https://storage.example/interview-audio.mp3',
+          }),
         }),
       );
     });

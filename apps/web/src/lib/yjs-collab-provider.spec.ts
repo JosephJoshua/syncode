@@ -691,7 +691,9 @@ describe('YjsCollabProvider', () => {
       expect(afterFirst).toBeGreaterThan(1);
 
       for (let i = 0; i < 20; i++) {
-        const latest = MockWebSocket.instances[MockWebSocket.instances.length - 1]!;
+        const latest = MockWebSocket.instances.at(-1);
+        expect(latest).toBeDefined();
+        if (!latest) continue;
         latest.simulateClose(1006);
         vi.advanceTimersByTime(30_000);
       }

@@ -5,11 +5,7 @@ import '@testing-library/jest-dom/vitest';
 if (typeof window !== 'undefined') {
   if (!('PointerEvent' in window)) {
     // @ts-expect-error — polyfill PointerEvent onto jsdom window
-    window.PointerEvent = class PointerEvent extends Event {
-      constructor(type: string, init?: EventInit) {
-        super(type, init);
-      }
-    };
+    window.PointerEvent = class PointerEvent extends Event {};
   }
 
   if (!Element.prototype.hasPointerCapture) {
