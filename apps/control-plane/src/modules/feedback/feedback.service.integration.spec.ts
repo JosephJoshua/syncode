@@ -3,6 +3,7 @@ import { Test } from '@nestjs/testing';
 import { ERROR_CODES } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
 import { peerFeedback } from '@syncode/db';
+import { STORAGE_SERVICE } from '@syncode/shared/ports';
 import { and, eq } from 'drizzle-orm';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
 import {
@@ -13,6 +14,7 @@ import {
   insertSessionParticipant,
   insertUser,
 } from '@/test/integration-setup.js';
+import { createMockStorageService } from '@/test/mock-factories.js';
 import { FeedbackService } from './feedback.service.js';
 
 let db: Database;
@@ -37,7 +39,11 @@ beforeEach(async () => {
   cleanup = testDb.cleanup;
 
   const module = await Test.createTestingModule({
-    providers: [FeedbackService, { provide: DB_CLIENT, useValue: db }],
+    providers: [
+      FeedbackService,
+      { provide: DB_CLIENT, useValue: db },
+      { provide: STORAGE_SERVICE, useValue: createMockStorageService() },
+    ],
   }).compile();
 
   service = module.get(FeedbackService);
@@ -95,6 +101,36 @@ describe('FeedbackService', () => {
       .from(peerFeedback)
       .where(and(eq(peerFeedback.sessionId, session.id), eq(peerFeedback.reviewerId, reviewer.id)));
     expect(rows).toHaveLength(1);
+  });
+
+  it('GIVEN reviewer and candidate avatars WHEN reading feedback THEN returns resolved avatar URLs', async () => {
+    const reviewer = await insertUser(db, {
+      displayName: 'Reviewer',
+      avatarUrl: 'avatars/reviewer.webp',
+    });
+    const candidate = await insertUser(db, {
+      displayName: 'Candidate',
+      avatarUrl: 'avatars/candidate.webp',
+    });
+    const room = await insertRoom(db, reviewer.id);
+    const session = await insertSession(db, room.id);
+    await insertSessionParticipant(db, session.id, reviewer.id, 'interviewer');
+    await insertSessionParticipant(db, session.id, candidate.id, 'candidate');
+    await insertPeerFeedbackRow(db, {
+      sessionId: session.id,
+      roomId: room.id,
+      reviewerId: reviewer.id,
+      candidateId: candidate.id,
+    });
+
+    const result = await service.getSessionFeedback(session.id, reviewer.id, true);
+
+    expect(result.data[0]).toMatchObject({
+      reviewerId: reviewer.id,
+      reviewerAvatarUrl: 'https://s3.example.com/presigned-get',
+      candidateId: candidate.id,
+      candidateAvatarUrl: 'https://s3.example.com/presigned-get',
+    });
   });
 
   it('GIVEN existing reviewer-candidate feedback WHEN submitting again THEN throws conflict', async () => {

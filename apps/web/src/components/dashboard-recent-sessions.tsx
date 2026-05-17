@@ -128,10 +128,13 @@ function ParticipantAvatar({
 
   const initials =
     participant.isCurrentUser && currentUserInitial ? currentUserInitial : participant.initials;
+  const label = participant.isCurrentUser
+    ? `${participant.name} (${currentUserInitial})`
+    : participant.name;
 
   return (
-    <Avatar className="mx-auto size-8">
-      {participant.avatarUrl ? <AvatarImage src={participant.avatarUrl} /> : null}
+    <Avatar className="mx-auto size-8" aria-label={label} title={label}>
+      {participant.avatarUrl ? <AvatarImage src={participant.avatarUrl} alt="" /> : null}
       <AvatarFallback>{initials}</AvatarFallback>
     </Avatar>
   );

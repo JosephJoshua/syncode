@@ -274,7 +274,13 @@ function ActivityStatusStat({
               : 'shrink-0 text-muted-foreground/50'
         }
       >
-        {isReady ? <CircleCheckBig className="size-4" /> : <CircleDashed className="size-4" />}
+        {isReady ? (
+          <CircleCheckBig className="size-4" />
+        ) : isPending ? (
+          icon
+        ) : (
+          <CircleDashed className="size-4" />
+        )}
       </span>
       <div className="min-w-0">
         <p className="truncate text-[11px] text-muted-foreground">{label}</p>

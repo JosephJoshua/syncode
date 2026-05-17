@@ -109,8 +109,10 @@ export interface SessionPeerFeedbackResult {
   id: string;
   reviewerId: string;
   reviewerName: string;
+  reviewerAvatarUrl: string | null;
   candidateId: string;
   candidateName: string;
+  candidateAvatarUrl: string | null;
   problemSolvingRating: number;
   communicationRating: number;
   codeQualityRating: number;

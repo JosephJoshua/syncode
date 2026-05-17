@@ -20,9 +20,9 @@ export const sessionFeedbackEntrySchema = submitSessionFeedbackSchema.extend({
   roomId: z.uuid(),
   reviewerId: z.uuid(),
   reviewerName: z.string(),
-  reviewerAvatarUrl: z.string().nullable(),
+  reviewerAvatarUrl: z.string().nullable().default(null),
   candidateName: z.string(),
-  candidateAvatarUrl: z.string().nullable(),
+  candidateAvatarUrl: z.string().nullable().default(null),
   createdAt: z.iso.datetime(),
 });
 

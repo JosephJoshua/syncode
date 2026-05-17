@@ -83,8 +83,8 @@ function PeerFeedbackEntryCard({ entry }: { entry: PeerFeedbackEntry }) {
     <article className="rounded-2xl bg-muted/35 p-4 ring-1 ring-border/50 sm:p-5">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="flex min-w-0 gap-3">
-          <Avatar className="size-10 shrink-0">
-            {entry.reviewerAvatarUrl ? <AvatarImage src={entry.reviewerAvatarUrl} /> : null}
+          <Avatar className="size-10 shrink-0" aria-label={fromUserName} title={fromUserName}>
+            {entry.reviewerAvatarUrl ? <AvatarImage src={entry.reviewerAvatarUrl} alt="" /> : null}
             <AvatarFallback>{getFeedbackUserInitial(entry.reviewerName)}</AvatarFallback>
           </Avatar>
 
@@ -105,6 +105,11 @@ function PeerFeedbackEntryCard({ entry }: { entry: PeerFeedbackEntry }) {
             </p>
           </div>
         </div>
+
+        <Avatar className="size-10 shrink-0" aria-label={targetUserName} title={targetUserName}>
+          {entry.candidateAvatarUrl ? <AvatarImage src={entry.candidateAvatarUrl} alt="" /> : null}
+          <AvatarFallback>{getFeedbackUserInitial(entry.candidateName)}</AvatarFallback>
+        </Avatar>
 
         <div className="flex shrink-0 items-center gap-2 lg:pl-4">
           <Badge size="sm" variant="outline">

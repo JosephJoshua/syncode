@@ -19,7 +19,7 @@ export const sessionHistoryParticipantSchema = z.object({
   userId: z.uuid(),
   username: z.string(),
   displayName: z.string().nullable(),
-  avatarUrl: z.string().nullable(),
+  avatarUrl: z.string().nullable().default(null),
   role: z.enum(ROOM_ROLES),
 });
 
@@ -61,7 +61,7 @@ export const sessionParticipantSchema = z.object({
   userId: z.uuid(),
   username: z.string(),
   displayName: z.string().nullable(),
-  avatarUrl: z.string().nullable(),
+  avatarUrl: z.string().nullable().default(null),
   role: z.enum(ROOM_ROLES),
   joinedAt: z.iso.datetime(),
   leftAt: z.iso.datetime().nullable(),
@@ -168,8 +168,10 @@ export const sessionPeerFeedbackSchema = z.object({
   id: z.uuid(),
   reviewerId: z.uuid(),
   reviewerName: z.string(),
+  reviewerAvatarUrl: z.string().nullable().default(null),
   candidateId: z.uuid(),
   candidateName: z.string(),
+  candidateAvatarUrl: z.string().nullable().default(null),
   problemSolvingRating: z.number().int().min(1).max(5),
   communicationRating: z.number().int().min(1).max(5),
   codeQualityRating: z.number().int().min(1).max(5),
