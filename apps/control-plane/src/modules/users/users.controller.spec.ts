@@ -13,6 +13,7 @@ describe('UsersController', () => {
       | 'findPublicById'
       | 'getAvatarUploadUrl'
       | 'getQuotas'
+      | 'getWeaknesses'
       | 'update'
     > = {
       findById: vi.fn(async (id: string) => ({
@@ -54,6 +55,19 @@ describe('UsersController', () => {
           activeCount: 1,
           maxActive: 3,
         },
+      })),
+      getWeaknesses: vi.fn(async () => ({
+        data: [
+          {
+            id: '11111111-1111-4111-8111-111111111111',
+            category: 'edge_cases' as const,
+            description: 'Missed edge cases',
+            frequency: 2,
+            trend: 'improving' as const,
+            lastSeenAt: '2026-01-02T00:00:00.000Z',
+            sessions: [],
+          },
+        ],
       })),
       update: vi.fn(
         async (id: string, body: { displayName?: string; bio?: string; username?: string }) => ({
@@ -115,6 +129,15 @@ describe('UsersController', () => {
     expect(usersService.getQuotas).toHaveBeenCalledWith('user-1');
     expect(result.ai.used).toBe(1);
     expect(result.rooms.maxActive).toBe(3);
+  });
+
+  it('GIVEN authenticated user WHEN getCurrentUserWeaknesses THEN returns weakness summary for current id', async () => {
+    const { controller, usersService } = createUsersControllerFixture();
+
+    const result = await controller.getCurrentUserWeaknesses({ id: 'user-1' });
+
+    expect(usersService.getWeaknesses).toHaveBeenCalledWith('user-1');
+    expect(result.data[0]?.category).toBe('edge_cases');
   });
 
   it('GIVEN requested user id WHEN getUserById THEN returns profile', async () => {

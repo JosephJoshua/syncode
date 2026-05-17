@@ -11,6 +11,8 @@ import {
   rooms,
   runs,
   submissions,
+  userWeaknesses,
+  weaknessSessions,
 } from '@syncode/db';
 import { CACHE_SERVICE, STORAGE_SERVICE } from '@syncode/shared/ports';
 import { eq } from 'drizzle-orm';
@@ -22,7 +24,16 @@ import { AuditService } from '@/modules/admin/audit.service.js';
 import { AuthService } from '@/modules/auth/auth.service.js';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
 import { InMemoryCacheService } from '@/test/in-memory-cache.service.js';
-import { createTestDb, insertProblem, insertUser } from '@/test/integration-setup.js';
+import {
+  createTestDb,
+  insertProblem,
+  insertRoom,
+  insertSession,
+  insertSessionDeletion,
+  insertSessionParticipant,
+  insertSessionReport,
+  insertUser,
+} from '@/test/integration-setup.js';
 import { createMockConfigService, createMockStorageService } from '@/test/mock-factories.js';
 import { JwtStrategy } from '../auth/jwt.strategy.js';
 import { UsersController } from './users.controller.js';
@@ -267,6 +278,135 @@ describe('GET /users/me/quotas', () => {
 
   it('GIVEN no bearer token WHEN fetching quotas THEN returns 401', async () => {
     const res = await request(app.getHttpServer()).get('/users/me/quotas');
+    expect(res.status).toBe(401);
+  });
+});
+
+describe('GET /users/me/weaknesses', () => {
+  it('GIVEN persisted weaknesses WHEN fetching current weaknesses THEN returns sorted categories with visible linked sessions', async () => {
+    const user = await insertUser(db, {
+      email: 'alice@example.com',
+      username: 'alice_sync',
+    });
+    const otherUser = await insertUser(db, {
+      email: 'other@example.com',
+      username: 'other_sync',
+    });
+    const accessToken = await jwtService.signAsync({
+      sub: user.id,
+      email: user.email,
+      tokenType: 'access',
+    });
+
+    const problem = await insertProblem(db, { title: 'Two Sum' });
+    const room = await insertRoom(db, user.id, { problemId: problem.id });
+    const session = await insertSession(db, room.id, {
+      problemId: problem.id,
+      startedAt: new Date('2026-01-01T00:00:00.000Z'),
+      finishedAt: new Date('2026-01-01T00:30:00.000Z'),
+    });
+    const deletedRoom = await insertRoom(db, user.id);
+    const deletedSession = await insertSession(db, deletedRoom.id);
+    const otherRoom = await insertRoom(db, otherUser.id);
+    const inaccessibleSession = await insertSession(db, otherRoom.id);
+    const ongoingRoom = await insertRoom(db, user.id);
+    const ongoingSession = await insertSession(db, ongoingRoom.id, { status: 'ongoing' });
+
+    await insertSessionParticipant(db, session.id, user.id, 'candidate');
+    await insertSessionParticipant(db, deletedSession.id, user.id, 'candidate');
+    await insertSessionParticipant(db, inaccessibleSession.id, otherUser.id, 'candidate');
+    await insertSessionParticipant(db, ongoingSession.id, user.id, 'candidate');
+    await insertSessionReport(db, session.id, {
+      userId: user.id,
+      overallScore: 68,
+      generatedAt: new Date('2026-01-01T00:35:00.000Z'),
+    });
+
+    const [highFrequencyWeakness] = await db
+      .insert(userWeaknesses)
+      .values({
+        userId: user.id,
+        category: 'time_complexity',
+        description: 'Complexity analysis needs work',
+        frequency: 5,
+        trend: 'worsening',
+        lastSeenAt: new Date('2026-01-03T00:00:00.000Z'),
+      })
+      .returning();
+    const [lowFrequencyWeakness] = await db
+      .insert(userWeaknesses)
+      .values({
+        userId: user.id,
+        category: 'edge_cases',
+        description: 'Missed empty input cases',
+        frequency: 2,
+        trend: 'improving',
+        lastSeenAt: new Date('2026-01-02T00:00:00.000Z'),
+      })
+      .returning();
+    await db.insert(userWeaknesses).values({
+      userId: otherUser.id,
+      category: 'communication',
+      description: 'Other user weakness',
+      frequency: 10,
+      trend: 'stable',
+    });
+    await db.insert(weaknessSessions).values([
+      {
+        weaknessId: highFrequencyWeakness!.id,
+        sessionId: session.id,
+      },
+      {
+        weaknessId: highFrequencyWeakness!.id,
+        sessionId: deletedSession.id,
+      },
+      {
+        weaknessId: highFrequencyWeakness!.id,
+        sessionId: inaccessibleSession.id,
+      },
+      {
+        weaknessId: highFrequencyWeakness!.id,
+        sessionId: ongoingSession.id,
+      },
+      {
+        weaknessId: lowFrequencyWeakness!.id,
+        sessionId: deletedSession.id,
+      },
+    ]);
+    await insertSessionDeletion(db, deletedSession.id, user.id);
+
+    const res = await request(app.getHttpServer())
+      .get('/users/me/weaknesses')
+      .set('Authorization', `Bearer ${accessToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toHaveLength(1);
+    expect(res.body.data[0]).toMatchObject({
+      id: highFrequencyWeakness!.id,
+      category: 'time_complexity',
+      description: 'Complexity analysis needs work',
+      frequency: 1,
+      trend: 'worsening',
+      lastSeenAt: '2026-01-01T00:35:00.000Z',
+      sessions: [
+        {
+          sessionId: session.id,
+          problemName: 'Two Sum',
+          reportedAt: '2026-01-01T00:35:00.000Z',
+          score: 68,
+        },
+      ],
+    });
+    expect(Object.keys(res.body.data[0].sessions[0]).sort()).toEqual([
+      'problemName',
+      'reportedAt',
+      'score',
+      'sessionId',
+    ]);
+  });
+
+  it('GIVEN no bearer token WHEN fetching weaknesses THEN returns 401', async () => {
+    const res = await request(app.getHttpServer()).get('/users/me/weaknesses');
     expect(res.status).toBe(401);
   });
 });
