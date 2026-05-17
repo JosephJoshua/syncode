@@ -335,6 +335,10 @@ export class SessionReportsService {
         { sessionId, userId, requestedAt: requestedAt.toISOString() },
         SESSION_REPORT_META_TTL_SECONDS,
       );
+      const cachedResult = await this.aiClient.getSessionReportResult(jobId);
+      if (cachedResult) {
+        await this.handleResult(jobId, cachedResult);
+      }
     } catch (error) {
       await this.db
         .update(sessionReports)

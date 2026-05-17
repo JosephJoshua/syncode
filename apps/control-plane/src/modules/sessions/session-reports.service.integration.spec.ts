@@ -194,6 +194,62 @@ describe('enqueueForFinishedSession', () => {
       }),
     );
   });
+
+  it('GIVEN session report result is already cached WHEN enqueuing report THEN persists it after metadata is stored', async () => {
+    const user = await insertUser(db, { username: 'candidate-fast-report' });
+    const room = await insertRoom(db, user.id);
+    const session = await insertSession(db, room.id, {
+      status: 'finished',
+      durationMs: 90000,
+    });
+    await insertSessionParticipant(db, session.id, user.id, 'candidate');
+
+    mockAiClient.submitSessionReportRequest.mockResolvedValueOnce({
+      jobId: 'fast-report-job',
+    });
+    mockAiClient.getSessionReportResult.mockResolvedValueOnce({
+      sessionId: session.id,
+      generatedAt: '2026-04-20T06:00:00.000Z',
+      overallScore: 92,
+      dimensions: {
+        communication: {
+          score: 62,
+          feedback: 'Explain trade-offs more clearly.',
+          evidence: [],
+        },
+      },
+      strengths: ['Reached a solution'],
+      areasForImprovement: ['Explain trade-offs more clearly.'],
+      detailedFeedback: 'Cached report result',
+      comparisonToHistory: null,
+      peerFeedbackSummary: null,
+      testCaseBreakdown: [],
+      model: 'qwen3.5-mini',
+    });
+
+    await service.enqueueForFinishedSession(session.id);
+
+    const [row] = await db
+      .select({
+        status: sessionReports.status,
+        overallScore: sessionReports.overallScore,
+        generatedAt: sessionReports.generatedAt,
+        report: sessionReports.report,
+      })
+      .from(sessionReports)
+      .where(and(eq(sessionReports.sessionId, session.id), eq(sessionReports.userId, user.id)));
+    const weaknessRows = await db
+      .select({ category: userWeaknesses.category })
+      .from(userWeaknesses)
+      .where(eq(userWeaknesses.userId, user.id));
+
+    expect(row.status).toBe('completed');
+    expect(row.overallScore).toBe(92);
+    expect(row.generatedAt?.toISOString()).toBe('2026-04-20T06:00:00.000Z');
+    expect(row.report).toMatchObject({ detailedFeedback: 'Cached report result' });
+    expect(weaknessRows).toEqual([{ category: 'communication' }]);
+    expect(await cacheService.get('session-report-meta:fast-report-job')).toBeNull();
+  });
 });
 
 describe('handleResult', () => {
