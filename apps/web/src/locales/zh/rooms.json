@@ -398,7 +398,8 @@
     "joinFailed": "无法加入匹配到的房间。",
     "idleDescription": "选择偏好后进入队列。",
     "searchingDescription": "正在寻找符合偏好的公开房间。",
-    "availableRooms": "{{count}} 个候选房间",
+    "availableRooms_one": "{{count}} 个候选房间",
+    "availableRooms_other": "{{count}} 个候选房间",
     "status": {
       "idle": "就绪",
       "searching": "搜索中",

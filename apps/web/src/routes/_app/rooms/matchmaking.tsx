@@ -1,5 +1,10 @@
 import { CONTROL_API } from '@syncode/contracts';
-import type { ProblemDifficulty, SupportedLanguage } from '@syncode/shared';
+import {
+  PROBLEM_DIFFICULTIES,
+  type ProblemDifficulty,
+  SUPPORTED_LANGUAGES,
+  type SupportedLanguage,
+} from '@syncode/shared';
 import {
   Badge,
   Button,
@@ -16,10 +21,11 @@ import {
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { CheckCircle2, Loader2, Radio, Search, SlidersHorizontal } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { LANGUAGE_VERSIONED_LABELS } from '@/components/language-selector.data.js';
+import { LanguageSelector } from '@/components/language-selector.js';
 import { api, readApiError } from '@/lib/api-client.js';
 import { resolveJoinError } from '@/lib/join-errors.js';
 
@@ -29,8 +35,10 @@ export const Route = createFileRoute('/_app/rooms/matchmaking')({
 
 type QueueStatus = 'idle' | 'searching' | 'matched';
 
-const languages: SupportedLanguage[] = ['python', 'javascript', 'typescript', 'java', 'cpp'];
-const difficulties: ProblemDifficulty[] = ['easy', 'medium', 'hard'];
+const MATCHMAKING_PAGE_SIZE = 5;
+const MATCHMAKING_SCAN_INTERVAL_MS = 3000;
+const languages = SUPPORTED_LANGUAGES;
+const difficulties = PROBLEM_DIFFICULTIES;
 
 function MatchmakingPage() {
   const { t } = useTranslation('rooms');
@@ -39,27 +47,33 @@ function MatchmakingPage() {
   const [difficulty, setDifficulty] = useState<ProblemDifficulty>('medium');
   const [status, setStatus] = useState<QueueStatus>('idle');
   const [matchedRoomId, setMatchedRoomId] = useState<string | null>(null);
+  const [skippedRoomIds, setSkippedRoomIds] = useState<ReadonlySet<string>>(() => new Set());
+  const [queueAttempt, setQueueAttempt] = useState(0);
+  const [cursor, setCursor] = useState<string | undefined>(undefined);
+  const [scanCycle, setScanCycle] = useState(0);
+  const [scanComplete, setScanComplete] = useState(false);
+  const activeQueueAttemptRef = useRef(0);
 
   const searchParams = useMemo(
     () => ({
-      limit: 1,
+      limit: MATCHMAKING_PAGE_SIZE,
+      cursor,
       language,
       difficulty,
       status: 'waiting' as const,
     }),
-    [difficulty, language],
+    [cursor, difficulty, language],
   );
 
   const browseQuery = useQuery({
-    queryKey: ['matchmaking', searchParams],
-    enabled: status === 'searching',
+    queryKey: ['matchmaking', queueAttempt, scanCycle, searchParams],
+    enabled: status === 'searching' && !scanComplete,
     queryFn: () => api(CONTROL_API.ROOMS.BROWSE_PUBLIC, { searchParams }),
-    refetchInterval: status === 'searching' ? 3000 : false,
   });
 
   const joinMutation = useMutation({
     mutationFn: (roomId: string) =>
-      api(CONTROL_API.ROOMS.JOIN, { params: { id: roomId }, body: { requestedRole: 'candidate' } }),
+      api(CONTROL_API.ROOMS.JOIN, { params: { id: roomId }, body: {} }),
   });
 
   useEffect(() => {
@@ -67,26 +81,87 @@ function MatchmakingPage() {
       return;
     }
 
-    const room = browseQuery.data?.data[0];
+    const room = browseQuery.data?.data.find(
+      (candidate) => !candidate.isParticipant && !skippedRoomIds.has(candidate.roomId),
+    );
     if (!room) {
       return;
     }
 
+    const attempt = queueAttempt;
     setMatchedRoomId(room.roomId);
     setStatus('matched');
     joinMutation
       .mutateAsync(room.roomId)
       .then(() => {
+        if (activeQueueAttemptRef.current !== attempt) {
+          return;
+        }
         toast.success(t('matchmaking.toastMatched'));
         navigate({ to: '/rooms/$roomId', params: { roomId: room.roomId } }).catch(() => undefined);
       })
       .catch(async (error) => {
+        if (activeQueueAttemptRef.current !== attempt) {
+          return;
+        }
         const apiError = await readApiError(error);
         toast.error(resolveJoinError(apiError, t, 'matchmaking.joinFailed'));
+        setSkippedRoomIds((previous) => new Set(previous).add(room.roomId));
         setMatchedRoomId(null);
         setStatus('searching');
       });
-  }, [browseQuery.data, joinMutation, matchedRoomId, navigate, status, t]);
+  }, [
+    browseQuery.data,
+    joinMutation,
+    matchedRoomId,
+    navigate,
+    queueAttempt,
+    skippedRoomIds,
+    status,
+    t,
+  ]);
+
+  useEffect(() => {
+    if (status !== 'searching') {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      setCursor(undefined);
+      setScanComplete(false);
+      setScanCycle((previous) => previous + 1);
+    }, MATCHMAKING_SCAN_INTERVAL_MS);
+
+    return () => window.clearInterval(intervalId);
+  }, [status]);
+
+  useEffect(() => {
+    if (status !== 'searching' || browseQuery.isFetching || matchedRoomId || scanComplete) {
+      return;
+    }
+
+    const hasAvailableCandidate =
+      browseQuery.data?.data.some(
+        (candidate) => !candidate.isParticipant && !skippedRoomIds.has(candidate.roomId),
+      ) ?? false;
+    const nextCursor = browseQuery.data?.pagination.nextCursor;
+
+    if (!hasAvailableCandidate && nextCursor) {
+      setCursor(nextCursor);
+      return;
+    }
+
+    if (!hasAvailableCandidate && browseQuery.data) {
+      setScanComplete(true);
+    }
+  }, [
+    browseQuery.data,
+    browseQuery.isFetching,
+    matchedRoomId,
+    scanComplete,
+    skippedRoomIds,
+    status,
+  ]);
 
   useEffect(() => {
     if (status !== 'searching' || !browseQuery.isError) {
@@ -98,14 +173,34 @@ function MatchmakingPage() {
   }, [browseQuery.isError, status, t]);
 
   const startQueue = () => {
+    const nextAttempt = activeQueueAttemptRef.current + 1;
+    activeQueueAttemptRef.current = nextAttempt;
+    setQueueAttempt(nextAttempt);
+    setSkippedRoomIds(new Set());
+    setCursor(undefined);
+    setScanCycle((previous) => previous + 1);
+    setScanComplete(false);
     setMatchedRoomId(null);
     setStatus('searching');
   };
 
   const stopQueue = () => {
+    const nextAttempt = activeQueueAttemptRef.current + 1;
+    activeQueueAttemptRef.current = nextAttempt;
+    setQueueAttempt(nextAttempt);
+    setSkippedRoomIds(new Set());
+    setCursor(undefined);
+    setScanComplete(false);
     setMatchedRoomId(null);
     setStatus('idle');
   };
+
+  const availableRoomCount =
+    browseQuery.data?.data.filter(
+      (candidate) => !candidate.isParticipant && !skippedRoomIds.has(candidate.roomId),
+    ).length ?? 0;
+  const isQueued = status !== 'idle';
+  const canCancel = status === 'searching';
 
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
@@ -119,24 +214,18 @@ function MatchmakingPage() {
         <CardContent className="space-y-5 px-5 pb-6 sm:px-6">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground" htmlFor="match-language">
+              <span className="block text-sm font-medium text-foreground">
                 {t('matchmaking.languageLabel')}
-              </label>
-              <Select
+              </span>
+              <LanguageSelector
                 value={language}
-                onValueChange={(value) => setLanguage(value as SupportedLanguage)}
-              >
-                <SelectTrigger id="match-language">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {languages.map((item) => (
-                    <SelectItem key={item} value={item}>
-                      {LANGUAGE_VERSIONED_LABELS[item]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                onValueChange={setLanguage}
+                languages={languages}
+                labelOverrides={LANGUAGE_VERSIONED_LABELS}
+                disabled={isQueued}
+                ariaLabel={t('matchmaking.languageLabel')}
+                className="w-full"
+              />
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium text-foreground" htmlFor="match-difficulty">
@@ -145,6 +234,7 @@ function MatchmakingPage() {
               <Select
                 value={difficulty}
                 onValueChange={(value) => setDifficulty(value as ProblemDifficulty)}
+                disabled={isQueued}
               >
                 <SelectTrigger id="match-difficulty">
                   <SelectValue />
@@ -169,7 +259,7 @@ function MatchmakingPage() {
               <Search className="size-4" />
               {t('matchmaking.start')}
             </Button>
-            <Button variant="outline" disabled={status === 'idle'} onClick={stopQueue}>
+            <Button variant="outline" disabled={!canCancel} onClick={stopQueue}>
               {t('matchmaking.cancel')}
             </Button>
           </div>
@@ -184,7 +274,10 @@ function MatchmakingPage() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-5 px-5 pb-6 sm:px-6">
-          <div className="flex items-center justify-between rounded-lg border border-border/50 bg-background/55 p-4">
+          <output
+            className="flex items-center justify-between rounded-lg border border-border/50 bg-background/55 p-4"
+            aria-live="polite"
+          >
             <div>
               <p className="font-medium text-foreground">{t(`matchmaking.status.${status}`)}</p>
               <p className="mt-1 text-sm text-muted-foreground">
@@ -202,14 +295,14 @@ function MatchmakingPage() {
             ) : (
               <Search className="size-6 text-muted-foreground" />
             )}
-          </div>
+          </output>
 
           <div className="flex flex-wrap gap-2">
             <Badge variant="outline">{LANGUAGE_VERSIONED_LABELS[language]}</Badge>
             <Badge variant="outline">{t(`matchmaking.difficulty.${difficulty}`)}</Badge>
             {browseQuery.data ? (
               <Badge variant="secondary">
-                {t('matchmaking.availableRooms', { count: browseQuery.data.data.length })}
+                {t('matchmaking.availableRooms', { count: availableRoomCount })}
               </Badge>
             ) : null}
           </div>
@@ -218,3 +311,5 @@ function MatchmakingPage() {
     </div>
   );
 }
+
+export { MatchmakingPage };

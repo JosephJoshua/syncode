@@ -34,7 +34,8 @@
     "searchingDescription": "Looking for a public room that matches your preferences.",
     "matchedDescription": "A matching room was found. Redirecting to the workspace.",
     "searchFailed": "Couldn't search for a match right now.",
-    "availableRooms": "{{count}} candidates",
+    "availableRooms_one": "{{count}} candidate",
+    "availableRooms_other": "{{count}} candidates",
     "status": {
       "idle": "Ready",
       "searching": "Searching",
