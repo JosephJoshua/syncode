@@ -363,7 +363,18 @@
     "hintFollowUpFailed": "Failed to generate AI follow-up hint.",
     "hintRateLimited": "Hint rate limit exceeded (3 per 5 minutes).",
     "hintUnavailable": "AI hint service is temporarily unavailable.",
-    "hintPermissionDenied": "You do not have permission to request AI hints in this room."
+    "hintPermissionDenied": "You do not have permission to request AI hints in this room.",
+    "aiInterviewHeading": "AI Interviewer",
+    "aiInterviewPlaceholder": "Type your response to the interviewer...",
+    "aiInterviewSend": "Send",
+    "aiInterviewSending": "Sending...",
+    "aiInterviewYou": "You",
+    "aiInterviewAi": "AI Interviewer",
+    "aiInterviewEmpty": "The AI interviewer will ask you questions about the problem. Type your response below.",
+    "aiInterviewFailed": "Failed to get a response from the AI interviewer.",
+    "aiInterviewUnavailable": "AI interviewer service is temporarily unavailable.",
+    "aiInterviewFollowUp": "Follow-up",
+    "aiInterviewAnnotations": "Code annotations"
   },
   "whiteboard": {
     "layer": "Layer",
