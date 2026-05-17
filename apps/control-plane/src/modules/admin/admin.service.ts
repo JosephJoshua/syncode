@@ -22,6 +22,8 @@ interface UsersCursor {
   id: string;
 }
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 const adminUserSelection = {
   id: users.id,
   email: users.email,
@@ -177,10 +179,6 @@ export class AdminService {
     }
 
     const decoded = this.decodeCursor(cursor);
-    if (!decoded) {
-      return undefined;
-    }
-
     const createdAt = new Date(decoded.createdAt);
     return or(
       lt(users.createdAt, createdAt),
@@ -212,15 +210,33 @@ export class AdminService {
     return Buffer.from(JSON.stringify(cursor), 'utf8').toString('base64url');
   }
 
-  private decodeCursor(cursor: string): UsersCursor | null {
+  private decodeCursor(cursor: string): UsersCursor {
     try {
-      const parsed = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) as UsersCursor;
-      if (!parsed.createdAt || !parsed.id) {
-        return null;
+      const buf = Buffer.from(cursor, 'base64url');
+      if (buf.toString('base64url') !== cursor) {
+        throw new Error('Cursor failed base64url round trip');
       }
-      return parsed;
+
+      const parsed = JSON.parse(buf.toString('utf8')) as Partial<UsersCursor>;
+      if (!this.isValidCursor(parsed)) {
+        throw new Error('Cursor payload is invalid');
+      }
+
+      return { createdAt: parsed.createdAt, id: parsed.id };
     } catch {
-      return null;
+      throw new BadRequestException({
+        message: 'Invalid cursor',
+        code: ERROR_CODES.VALIDATION_FAILED,
+      });
     }
+  }
+
+  private isValidCursor(cursor: Partial<UsersCursor>): cursor is UsersCursor {
+    if (typeof cursor.createdAt !== 'string' || typeof cursor.id !== 'string') {
+      return false;
+    }
+
+    const createdAt = new Date(cursor.createdAt);
+    return createdAt.toISOString() === cursor.createdAt && UUID_PATTERN.test(cursor.id);
   }
 }

@@ -1,4 +1,13 @@
-import { Body, Controller, Get, Param, Patch, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiBody,
@@ -49,7 +58,7 @@ export class AdminController {
   @ApiResponse({ status: 404, type: ErrorResponseDto, description: 'User not found' })
   async banUser(
     @CurrentUser() user: { id: string },
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() body: AdminBanUserDto,
   ): Promise<AdminUserDto> {
     return this.adminService.banUser(user.id, id, body);
@@ -59,12 +68,13 @@ export class AdminController {
   @ApiOperation({ summary: 'Unban a user account' })
   @ApiParam({ name: 'id', description: 'User ID to unban' })
   @ApiResponse({ status: 200, type: AdminUserDto, description: 'Unbanned user' })
+  @ApiResponse({ status: 400, type: ErrorResponseDto, description: 'Validation error' })
   @ApiResponse({ status: 401, type: ErrorResponseDto, description: 'Unauthorized' })
   @ApiResponse({ status: 403, type: ErrorResponseDto, description: 'Admin access required' })
   @ApiResponse({ status: 404, type: ErrorResponseDto, description: 'User not found' })
   async unbanUser(
     @CurrentUser() user: { id: string },
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
   ): Promise<AdminUserDto> {
     return this.adminService.unbanUser(user.id, id);
   }

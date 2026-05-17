@@ -118,6 +118,38 @@ describe('GET /admin/users', () => {
       message: 'Admin access required',
     });
   });
+
+  it('GIVEN malformed cursor WHEN listing users THEN rejects the request', async () => {
+    const admin = await insertUser(db, { role: 'admin' });
+
+    const res = await asUser(
+      request(app.getHttpServer()).get('/admin/users?cursor=not-a-valid-cursor'),
+      admin,
+    ).expect(400);
+
+    expect(res.body).toMatchObject({
+      code: 'VALIDATION_FAILED',
+      message: 'Invalid cursor',
+    });
+  });
+
+  it('GIVEN cursor with invalid fields WHEN listing users THEN rejects the request', async () => {
+    const admin = await insertUser(db, { role: 'admin' });
+    const cursor = Buffer.from(
+      JSON.stringify({ createdAt: 'not-a-date', id: 'not-a-uuid' }),
+      'utf8',
+    ).toString('base64url');
+
+    const res = await asUser(
+      request(app.getHttpServer()).get(`/admin/users?cursor=${cursor}`),
+      admin,
+    ).expect(400);
+
+    expect(res.body).toMatchObject({
+      code: 'VALIDATION_FAILED',
+      message: 'Invalid cursor',
+    });
+  });
 });
 
 describe('PATCH /admin/users/:id/ban', () => {
@@ -174,6 +206,17 @@ describe('PATCH /admin/users/:id/ban', () => {
       message: 'Admins cannot ban their own account',
     });
   });
+
+  it('GIVEN malformed user id WHEN banning an account THEN rejects the request', async () => {
+    const admin = await insertUser(db, { role: 'admin' });
+
+    const res = await asUser(
+      request(app.getHttpServer()).patch('/admin/users/not-a-uuid/ban').send({}),
+      admin,
+    ).expect(400);
+
+    expect(res.body.message).toContain('uuid');
+  });
 });
 
 describe('PATCH /admin/users/:id/unban', () => {
@@ -194,5 +237,25 @@ describe('PATCH /admin/users/:id/unban', () => {
       bannedAt: null,
       bannedReason: null,
     });
+
+    const row = await db.query.users.findFirst({
+      columns: { bannedAt: true, bannedReason: true },
+      where: eq(users.id, target.id),
+    });
+    expect(row).toMatchObject({
+      bannedAt: null,
+      bannedReason: null,
+    });
+  });
+
+  it('GIVEN malformed user id WHEN unbanning an account THEN rejects the request', async () => {
+    const admin = await insertUser(db, { role: 'admin' });
+
+    const res = await asUser(
+      request(app.getHttpServer()).patch('/admin/users/not-a-uuid/unban'),
+      admin,
+    ).expect(400);
+
+    expect(res.body.message).toContain('uuid');
   });
 });
