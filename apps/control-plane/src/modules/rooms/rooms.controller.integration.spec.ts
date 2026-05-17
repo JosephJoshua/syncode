@@ -43,6 +43,7 @@ let app: INestApplication;
 let db: Database;
 let cleanup: () => Promise<void>;
 let mockMediaService: ReturnType<typeof createMockMediaService>;
+let mockAiClient: ReturnType<typeof createMockAiClient>;
 
 beforeEach(async () => {
   vi.clearAllMocks();
@@ -51,6 +52,7 @@ beforeEach(async () => {
   db = testDb.db;
   cleanup = testDb.cleanup;
   mockMediaService = createMockMediaService();
+  mockAiClient = createMockAiClient();
 
   const module = await Test.createTestingModule({
     controllers: [RoomsController],
@@ -59,7 +61,7 @@ beforeEach(async () => {
       ExecutionService,
       { provide: DB_CLIENT, useValue: db },
       { provide: EXECUTION_CLIENT, useValue: createMockExecutionClient() },
-      { provide: AI_CLIENT, useValue: createMockAiClient() },
+      { provide: AI_CLIENT, useValue: mockAiClient },
       { provide: CACHE_SERVICE, useValue: new InMemoryCacheService() },
       { provide: COLLAB_CLIENT, useValue: createMockCollabClient() },
       { provide: MEDIA_SERVICE, useValue: mockMediaService },
@@ -882,6 +884,195 @@ describe('POST /rooms/:id/ai/hint', () => {
         hintLevel: 'subtle',
       })
       .expect(429);
+  });
+});
+
+describe('POST /rooms/:id/ai/code-analysis', () => {
+  it('GIVEN participant with ai capability and selected problem WHEN requesting analysis THEN submits current code snapshot and returns ready result', async () => {
+    const interviewer = await insertUser(db);
+    const candidate = await insertUser(db);
+    const problem = await insertProblem(db);
+    const room = await insertRoom(db, interviewer.id, {
+      status: 'coding',
+      problemId: problem.id,
+      language: 'python',
+    });
+    await insertParticipant(db, room.id, interviewer.id, 'interviewer');
+    await insertParticipant(db, room.id, candidate.id, 'candidate');
+    mockAiClient.getCodeAnalysisResult.mockResolvedValueOnce({
+      summary: 'The solution is close but should discuss complexity and edge cases.',
+      focusAreas: {
+        complexity: 'Explain why the lookup strategy is linear.',
+        edgeCases: 'Cover empty inputs and duplicate values.',
+        readability: 'Rename state variables to clarify intent.',
+      },
+      followUpQuestions: ['What is the complexity?', 'Which edge case matters most?'],
+    });
+
+    const res = await asUser(
+      request(app.getHttpServer()).post(`/rooms/${room.id}/ai/code-analysis`),
+      candidate,
+    )
+      .send({
+        code: 'print("hello")',
+        language: 'python',
+      })
+      .expect(202);
+
+    expect(res.body.jobId).toBe('ai-code-analysis-job');
+    const hintRowsAfterPost = await db
+      .select({ id: aiHints.id })
+      .from(aiHints)
+      .where(eq(aiHints.userId, candidate.id));
+    expect(hintRowsAfterPost).toHaveLength(0);
+    expect(mockAiClient.submitCodeAnalysisRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        roomId: room.id,
+        participantId: candidate.id,
+        code: 'print("hello")',
+        language: 'python',
+      }),
+    );
+
+    const result = await asUser(
+      request(app.getHttpServer()).get(`/rooms/${room.id}/ai/code-analysis/${res.body.jobId}`),
+      candidate,
+    ).expect(200);
+
+    expect(result.body).toEqual({
+      status: 'ready',
+      jobId: res.body.jobId,
+      summary: 'The solution is close but should discuss complexity and edge cases.',
+      focusAreas: {
+        complexity: 'Explain why the lookup strategy is linear.',
+        edgeCases: 'Cover empty inputs and duplicate values.',
+        readability: 'Rename state variables to clarify intent.',
+      },
+      followUpQuestions: ['What is the complexity?', 'Which edge case matters most?'],
+    });
+
+    const hintRowsAfterPoll = await db
+      .select({ id: aiHints.id })
+      .from(aiHints)
+      .where(eq(aiHints.userId, candidate.id));
+    expect(hintRowsAfterPoll).toHaveLength(0);
+  });
+
+  it('GIVEN another user holds the analysis job WHEN polling with wrong user THEN returns 404', async () => {
+    const interviewer = await insertUser(db);
+    const candidate = await insertUser(db);
+    const intruder = await insertUser(db);
+    const problem = await insertProblem(db);
+    const room = await insertRoom(db, interviewer.id, {
+      status: 'coding',
+      problemId: problem.id,
+      language: 'python',
+    });
+    await insertParticipant(db, room.id, interviewer.id, 'interviewer');
+    await insertParticipant(db, room.id, candidate.id, 'candidate');
+    await insertParticipant(db, room.id, intruder.id, 'observer');
+
+    const submission = await asUser(
+      request(app.getHttpServer()).post(`/rooms/${room.id}/ai/code-analysis`),
+      candidate,
+    )
+      .send({ code: 'print("hi")', language: 'python' })
+      .expect(202);
+
+    await asUser(
+      request(app.getHttpServer()).get(
+        `/rooms/${room.id}/ai/code-analysis/${submission.body.jobId}`,
+      ),
+      intruder,
+    ).expect(404);
+  });
+
+  it('GIVEN request language mismatches active room language WHEN requesting analysis THEN returns 400', async () => {
+    const interviewer = await insertUser(db);
+    const candidate = await insertUser(db);
+    const problem = await insertProblem(db);
+    const room = await insertRoom(db, interviewer.id, {
+      status: 'coding',
+      problemId: problem.id,
+      language: 'python',
+    });
+    await insertParticipant(db, room.id, interviewer.id, 'interviewer');
+    await insertParticipant(db, room.id, candidate.id, 'candidate');
+
+    await asUser(request(app.getHttpServer()).post(`/rooms/${room.id}/ai/code-analysis`), candidate)
+      .send({
+        code: 'console.log("hello")',
+        language: 'javascript',
+      })
+      .expect(400);
+  });
+
+  it('GIVEN oversized code snapshot WHEN requesting analysis THEN returns 400 before enqueueing', async () => {
+    const interviewer = await insertUser(db);
+    const candidate = await insertUser(db);
+    const problem = await insertProblem(db);
+    const room = await insertRoom(db, interviewer.id, {
+      status: 'coding',
+      problemId: problem.id,
+      language: 'python',
+    });
+    await insertParticipant(db, room.id, interviewer.id, 'interviewer');
+    await insertParticipant(db, room.id, candidate.id, 'candidate');
+
+    await asUser(request(app.getHttpServer()).post(`/rooms/${room.id}/ai/code-analysis`), candidate)
+      .send({
+        code: 'x'.repeat(16_001),
+        language: 'python',
+      })
+      .expect(400);
+
+    expect(mockAiClient.submitCodeAnalysisRequest).not.toHaveBeenCalled();
+  });
+
+  it('GIVEN too many recent analysis requests WHEN requesting analysis THEN returns 429', async () => {
+    const interviewer = await insertUser(db);
+    const candidate = await insertUser(db);
+    const problem = await insertProblem(db);
+    const room = await insertRoom(db, interviewer.id, {
+      status: 'coding',
+      problemId: problem.id,
+      language: 'python',
+    });
+    await insertParticipant(db, room.id, interviewer.id, 'interviewer');
+    await insertParticipant(db, room.id, candidate.id, 'candidate');
+
+    for (let i = 0; i < 10; i += 1) {
+      await asUser(
+        request(app.getHttpServer()).post(`/rooms/${room.id}/ai/code-analysis`),
+        candidate,
+      )
+        .send({ code: `print(${i})`, language: 'python' })
+        .expect(202);
+    }
+
+    await asUser(request(app.getHttpServer()).post(`/rooms/${room.id}/ai/code-analysis`), candidate)
+      .send({ code: 'print("limited")', language: 'python' })
+      .expect(429);
+  });
+
+  it('GIVEN observer WHEN requesting analysis THEN returns 403', async () => {
+    const interviewer = await insertUser(db);
+    const observer = await insertUser(db);
+    const problem = await insertProblem(db);
+    const room = await insertRoom(db, interviewer.id, {
+      status: 'coding',
+      problemId: problem.id,
+      language: 'python',
+    });
+    await insertParticipant(db, room.id, interviewer.id, 'interviewer');
+    await insertParticipant(db, room.id, observer.id, 'observer');
+
+    await asUser(request(app.getHttpServer()).post(`/rooms/${room.id}/ai/code-analysis`), observer)
+      .send({
+        code: 'print("hello")',
+        language: 'python',
+      })
+      .expect(403);
   });
 });
 
