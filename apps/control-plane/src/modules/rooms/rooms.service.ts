@@ -1045,42 +1045,12 @@ export class RoomsService {
     userId: string,
     body: RequestRoomAiHintInput,
   ): Promise<RequestRoomAiHintResult> {
-    const [room, participant] = await this.getRoomContext(roomId, userId);
-
-    if (!participant) {
-      throw new ForbiddenException({
-        message: 'Not a participant of this room',
-        code: ERROR_CODES.ROOM_ACCESS_DENIED,
-      });
-    }
-
-    const capabilities = resolveRoomPermissions(participant.role, {
-      isHost: room.hostId === userId,
-    });
-
-    if (!capabilities.has('ai:request-hint')) {
-      throw new ForbiddenException({
-        message: 'No ai:request-hint capability',
-        code: ERROR_CODES.ROOM_PERMISSION_DENIED,
-      });
-    }
-
-    if (!room.problemId) {
-      throw new NotFoundException({
-        message: 'No problem selected in room',
-        code: ERROR_CODES.PROBLEM_NOT_FOUND,
-      });
-    }
-
-    if (room.language && body.language !== room.language) {
-      throw new BadRequestException({
-        message: `Hint language must match room language (${room.language})`,
-        code: ERROR_CODES.VALIDATION_FAILED,
-      });
-    }
-
-    const activeLanguage = room.language ?? body.language;
-
+    const { problemId, activeLanguage } = await this.getAiRequestRoomContext(
+      roomId,
+      userId,
+      body.language,
+      'Hint',
+    );
     const isFollowUp = Boolean(body.followUpToHintId);
     let followUpTarget:
       | {
@@ -1145,23 +1115,7 @@ export class RoomsService {
       }
     }
 
-    const [problem] = await this.db
-      .select({
-        title: problems.title,
-        description: problems.description,
-      })
-      .from(problems)
-      .where(eq(problems.id, room.problemId))
-      .limit(1);
-
-    if (!problem) {
-      throw new NotFoundException({
-        message: 'No problem selected in room',
-        code: ERROR_CODES.PROBLEM_NOT_FOUND,
-      });
-    }
-
-    const problemDescription = [problem.title, problem.description].filter(Boolean).join('\n\n');
+    const problemDescription = await this.loadAiProblemDescription(problemId);
     const conversationHistory = await this.loadHintConversationHistory(roomId);
     const latestSubmissionSummary = await this.loadLatestHintSubmissionSummary(roomId, userId);
     const reflectionResponse = body.noReply
@@ -1254,7 +1208,7 @@ export class RoomsService {
     const mapping = await this.cacheService.get<HintJobMapping>(
       `${RoomsService.AI_HINT_JOB_CACHE_PREFIX}${jobId}`,
     );
-    if (!mapping || mapping.roomId !== roomId || mapping.userId !== userId) {
+    if (mapping?.roomId !== roomId || mapping?.userId !== userId) {
       throw new NotFoundException({
         message: 'Hint job not found',
         code: ERROR_CODES.VALIDATION_FAILED,
@@ -1303,40 +1257,12 @@ export class RoomsService {
     userId: string,
     body: RequestRoomCodeAnalysisInput,
   ): Promise<RequestRoomCodeAnalysisResult> {
-    const [room, participant] = await this.getRoomContext(roomId, userId);
-
-    if (!participant) {
-      throw new ForbiddenException({
-        message: 'Not a participant of this room',
-        code: ERROR_CODES.ROOM_ACCESS_DENIED,
-      });
-    }
-
-    const capabilities = resolveRoomPermissions(participant.role, {
-      isHost: room.hostId === userId,
-    });
-
-    if (!capabilities.has('ai:request-hint')) {
-      throw new ForbiddenException({
-        message: 'No ai:request-hint capability',
-        code: ERROR_CODES.ROOM_PERMISSION_DENIED,
-      });
-    }
-
-    if (!room.problemId) {
-      throw new NotFoundException({
-        message: 'No problem selected in room',
-        code: ERROR_CODES.PROBLEM_NOT_FOUND,
-      });
-    }
-
-    if (room.language && body.language !== room.language) {
-      throw new BadRequestException({
-        message: `Analysis language must match room language (${room.language})`,
-        code: ERROR_CODES.VALIDATION_FAILED,
-      });
-    }
-
+    const { problemId, activeLanguage } = await this.getAiRequestRoomContext(
+      roomId,
+      userId,
+      body.language,
+      'Analysis',
+    );
     if (body.code.length > RoomsService.AI_CODE_ANALYSIS_MAX_CODE_LENGTH) {
       throw new BadRequestException({
         message: `Code snapshot must be at most ${RoomsService.AI_CODE_ANALYSIS_MAX_CODE_LENGTH} characters`,
@@ -1344,24 +1270,7 @@ export class RoomsService {
       });
     }
 
-    const [problem] = await this.db
-      .select({
-        title: problems.title,
-        description: problems.description,
-      })
-      .from(problems)
-      .where(eq(problems.id, room.problemId))
-      .limit(1);
-
-    if (!problem) {
-      throw new NotFoundException({
-        message: 'No problem selected in room',
-        code: ERROR_CODES.PROBLEM_NOT_FOUND,
-      });
-    }
-
-    const problemDescription = [problem.title, problem.description].filter(Boolean).join('\n\n');
-    const activeLanguage = room.language ?? body.language;
+    const problemDescription = await this.loadAiProblemDescription(problemId);
     let submitted: { jobId: JobId<'ai:code-analysis'> };
     const limitKey = `${RoomsService.AI_CODE_ANALYSIS_LIMIT_PREFIX}${roomId}:${userId}`;
     const usage = await this.cacheService.incrBy(
@@ -2193,6 +2102,72 @@ export class RoomsService {
         code: ERROR_CODES.ROOM_PERMISSION_DENIED,
       });
     }
+  }
+
+  private async getAiRequestRoomContext(
+    roomId: string,
+    userId: string,
+    language: SupportedLanguage,
+    label: 'Hint' | 'Analysis',
+  ): Promise<{ problemId: string; activeLanguage: SupportedLanguage }> {
+    const [room, participant] = await this.getRoomContext(roomId, userId);
+
+    if (!participant) {
+      throw new ForbiddenException({
+        message: 'Not a participant of this room',
+        code: ERROR_CODES.ROOM_ACCESS_DENIED,
+      });
+    }
+
+    const capabilities = resolveRoomPermissions(participant.role, {
+      isHost: room.hostId === userId,
+    });
+
+    if (!capabilities.has('ai:request-hint')) {
+      throw new ForbiddenException({
+        message: 'No ai:request-hint capability',
+        code: ERROR_CODES.ROOM_PERMISSION_DENIED,
+      });
+    }
+
+    if (!room.problemId) {
+      throw new NotFoundException({
+        message: 'No problem selected in room',
+        code: ERROR_CODES.PROBLEM_NOT_FOUND,
+      });
+    }
+
+    if (room.language && language !== room.language) {
+      throw new BadRequestException({
+        message: `${label} language must match room language (${room.language})`,
+        code: ERROR_CODES.VALIDATION_FAILED,
+      });
+    }
+
+    return {
+      problemId: room.problemId,
+      activeLanguage: room.language ?? language,
+    };
+  }
+
+  private async loadAiProblemDescription(problemId: string): Promise<string> {
+    const [problem] = await this.db
+      .select({
+        title: problems.title,
+        description: problems.description,
+      })
+      .from(problems)
+      .where(eq(problems.id, problemId))
+      .limit(1);
+
+    if (!problem) {
+      throw new NotFoundException({
+        message: 'No problem selected in room',
+        code: ERROR_CODES.PROBLEM_NOT_FOUND,
+      });
+    }
+
+    return [problem.title, problem.description].filter(Boolean).join('\n\n');
   }
 
   private async updateCollabRoomState(

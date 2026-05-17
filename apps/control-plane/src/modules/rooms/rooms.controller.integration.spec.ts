@@ -888,7 +888,7 @@ describe('POST /rooms/:id/ai/hint', () => {
 });
 
 describe('POST /rooms/:id/ai/code-analysis', () => {
-  it('GIVEN participant with ai capability and selected problem WHEN requesting analysis THEN submits current code snapshot and returns ready result', async () => {
+  async function createCodeAnalysisRoom(candidateRole: 'candidate' | 'observer' = 'candidate') {
     const interviewer = await insertUser(db);
     const candidate = await insertUser(db);
     const problem = await insertProblem(db);
@@ -898,7 +898,13 @@ describe('POST /rooms/:id/ai/code-analysis', () => {
       language: 'python',
     });
     await insertParticipant(db, room.id, interviewer.id, 'interviewer');
-    await insertParticipant(db, room.id, candidate.id, 'candidate');
+    await insertParticipant(db, room.id, candidate.id, candidateRole);
+
+    return { interviewer, candidate, problem, room };
+  }
+
+  it('GIVEN participant with ai capability and selected problem WHEN requesting analysis THEN submits current code snapshot and returns ready result', async () => {
+    const { candidate, room } = await createCodeAnalysisRoom();
     mockAiClient.getCodeAnalysisResult.mockResolvedValueOnce({
       summary: 'The solution is close but should discuss complexity and edge cases.',
       focusAreas: {
@@ -959,17 +965,8 @@ describe('POST /rooms/:id/ai/code-analysis', () => {
   });
 
   it('GIVEN another user holds the analysis job WHEN polling with wrong user THEN returns 404', async () => {
-    const interviewer = await insertUser(db);
-    const candidate = await insertUser(db);
+    const { candidate, room } = await createCodeAnalysisRoom();
     const intruder = await insertUser(db);
-    const problem = await insertProblem(db);
-    const room = await insertRoom(db, interviewer.id, {
-      status: 'coding',
-      problemId: problem.id,
-      language: 'python',
-    });
-    await insertParticipant(db, room.id, interviewer.id, 'interviewer');
-    await insertParticipant(db, room.id, candidate.id, 'candidate');
     await insertParticipant(db, room.id, intruder.id, 'observer');
 
     const submission = await asUser(
@@ -979,67 +976,51 @@ describe('POST /rooms/:id/ai/code-analysis', () => {
       .send({ code: 'print("hi")', language: 'python' })
       .expect(202);
 
-    await asUser(
+    const result = await asUser(
       request(app.getHttpServer()).get(
         `/rooms/${room.id}/ai/code-analysis/${submission.body.jobId}`,
       ),
       intruder,
     ).expect(404);
+
+    expect(result.body.message).toBe('Code analysis job not found');
   });
 
   it('GIVEN request language mismatches active room language WHEN requesting analysis THEN returns 400', async () => {
-    const interviewer = await insertUser(db);
-    const candidate = await insertUser(db);
-    const problem = await insertProblem(db);
-    const room = await insertRoom(db, interviewer.id, {
-      status: 'coding',
-      problemId: problem.id,
-      language: 'python',
-    });
-    await insertParticipant(db, room.id, interviewer.id, 'interviewer');
-    await insertParticipant(db, room.id, candidate.id, 'candidate');
+    const { candidate, room } = await createCodeAnalysisRoom();
 
-    await asUser(request(app.getHttpServer()).post(`/rooms/${room.id}/ai/code-analysis`), candidate)
+    const result = await asUser(
+      request(app.getHttpServer()).post(`/rooms/${room.id}/ai/code-analysis`),
+      candidate,
+    )
       .send({
         code: 'console.log("hello")',
         language: 'javascript',
       })
       .expect(400);
+
+    expect(result.body.message).toContain('Analysis language must match room language');
   });
 
   it('GIVEN oversized code snapshot WHEN requesting analysis THEN returns 400 before enqueueing', async () => {
-    const interviewer = await insertUser(db);
-    const candidate = await insertUser(db);
-    const problem = await insertProblem(db);
-    const room = await insertRoom(db, interviewer.id, {
-      status: 'coding',
-      problemId: problem.id,
-      language: 'python',
-    });
-    await insertParticipant(db, room.id, interviewer.id, 'interviewer');
-    await insertParticipant(db, room.id, candidate.id, 'candidate');
+    const { candidate, room } = await createCodeAnalysisRoom();
 
-    await asUser(request(app.getHttpServer()).post(`/rooms/${room.id}/ai/code-analysis`), candidate)
+    const result = await asUser(
+      request(app.getHttpServer()).post(`/rooms/${room.id}/ai/code-analysis`),
+      candidate,
+    )
       .send({
         code: 'x'.repeat(16_001),
         language: 'python',
       })
       .expect(400);
 
+    expect(result.body.statusCode).toBe(400);
     expect(mockAiClient.submitCodeAnalysisRequest).not.toHaveBeenCalled();
   });
 
   it('GIVEN too many recent analysis requests WHEN requesting analysis THEN returns 429', async () => {
-    const interviewer = await insertUser(db);
-    const candidate = await insertUser(db);
-    const problem = await insertProblem(db);
-    const room = await insertRoom(db, interviewer.id, {
-      status: 'coding',
-      problemId: problem.id,
-      language: 'python',
-    });
-    await insertParticipant(db, room.id, interviewer.id, 'interviewer');
-    await insertParticipant(db, room.id, candidate.id, 'candidate');
+    const { candidate, room } = await createCodeAnalysisRoom();
 
     for (let i = 0; i < 10; i += 1) {
       await asUser(
@@ -1050,29 +1031,30 @@ describe('POST /rooms/:id/ai/code-analysis', () => {
         .expect(202);
     }
 
-    await asUser(request(app.getHttpServer()).post(`/rooms/${room.id}/ai/code-analysis`), candidate)
+    const result = await asUser(
+      request(app.getHttpServer()).post(`/rooms/${room.id}/ai/code-analysis`),
+      candidate,
+    )
       .send({ code: 'print("limited")', language: 'python' })
       .expect(429);
+
+    expect(result.body.message).toBe('Code analysis rate limit exceeded (10 per 5 minutes)');
   });
 
   it('GIVEN observer WHEN requesting analysis THEN returns 403', async () => {
-    const interviewer = await insertUser(db);
-    const observer = await insertUser(db);
-    const problem = await insertProblem(db);
-    const room = await insertRoom(db, interviewer.id, {
-      status: 'coding',
-      problemId: problem.id,
-      language: 'python',
-    });
-    await insertParticipant(db, room.id, interviewer.id, 'interviewer');
-    await insertParticipant(db, room.id, observer.id, 'observer');
+    const { candidate: observer, room } = await createCodeAnalysisRoom('observer');
 
-    await asUser(request(app.getHttpServer()).post(`/rooms/${room.id}/ai/code-analysis`), observer)
+    const result = await asUser(
+      request(app.getHttpServer()).post(`/rooms/${room.id}/ai/code-analysis`),
+      observer,
+    )
       .send({
         code: 'print("hello")',
         language: 'python',
       })
       .expect(403);
+
+    expect(result.body.message).toBe('No ai:request-hint capability');
   });
 });
 

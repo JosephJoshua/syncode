@@ -126,7 +126,7 @@ export class QueueAiClient implements IAiClient, OnModuleInit {
       removeOnFail: false,
     });
 
-    return { jobId: jobId as JobId<'ai:code-analysis'> };
+    return { jobId };
   }
 
   async getCodeAnalysisResult(jobId: JobId<'ai:code-analysis'>): Promise<AnalyzeCodeResult | null> {
