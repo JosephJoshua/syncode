@@ -10,7 +10,7 @@ import {
   type SupportedLanguage,
 } from '@syncode/shared';
 import { Button, Input } from '@syncode/ui';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation } from '@tanstack/react-query';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { Compass, Loader2, Search, Sparkles, X } from 'lucide-react';
 import { motion } from 'motion/react';
@@ -68,55 +68,41 @@ function BrowseRoomsPage() {
   }, [isAuthenticated, navigate]);
 
   const [filters, setFilters] = useState<BrowseFilters>(emptyFilters);
-  const [cursor, setCursor] = useState<string | undefined>(undefined);
-  const [accumulated, setAccumulated] = useState<PublicRoomSummary[]>([]);
 
   const deferredSearch = useDeferredValue(filters.search);
   const normalizedSearch = deferredSearch.trim();
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: filter changes are the intended trigger
-  useEffect(() => {
-    setAccumulated([]);
-    setCursor(undefined);
-  }, [normalizedSearch, filters.language, filters.difficulty, filters.status]);
-
   const searchParams = useMemo(
     () => ({
       limit: BROWSE_PAGE_SIZE,
-      cursor,
       language: filters.language ?? undefined,
       difficulty: filters.difficulty ?? undefined,
       status: filters.status ?? undefined,
       search: normalizedSearch.length > 0 ? normalizedSearch : undefined,
     }),
-    [cursor, filters.difficulty, filters.language, filters.status, normalizedSearch],
+    [filters.difficulty, filters.language, filters.status, normalizedSearch],
   );
 
-  const browseQuery = useQuery({
+  const browseQuery = useInfiniteQuery({
     queryKey: ['rooms', 'browse', searchParams],
-    queryFn: () => api(CONTROL_API.ROOMS.BROWSE_PUBLIC, { searchParams }),
-    placeholderData: (previous) => previous,
+    queryFn: ({ pageParam }) =>
+      api(CONTROL_API.ROOMS.BROWSE_PUBLIC, {
+        searchParams: { ...searchParams, cursor: pageParam },
+      }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.pagination.nextCursor ?? undefined,
     refetchInterval: BROWSE_REFRESH_INTERVAL_MS,
   });
 
-  useEffect(() => {
-    const data = browseQuery.data;
-    if (!data) return;
-
-    setAccumulated((previous) => {
-      if (cursor === undefined) {
-        return data.data;
-      }
-      const seen = new Set(previous.map((room) => room.roomId));
-      const next = data.data.filter((room) => !seen.has(room.roomId));
-      const updates = new Map(data.data.map((room) => [room.roomId, room]));
-      const merged = previous.map((room) => updates.get(room.roomId) ?? room);
-      return next.length === 0 ? merged : [...merged, ...next];
+  const accumulated = useMemo(() => {
+    const rooms = browseQuery.data?.pages.flatMap((page) => page.data) ?? [];
+    const seen = new Set<string>();
+    return rooms.filter((room) => {
+      if (seen.has(room.roomId)) return false;
+      seen.add(room.roomId);
+      return true;
     });
-  }, [browseQuery.data, cursor]);
-
-  const hasMore = browseQuery.data?.pagination.hasMore === true;
-  const nextCursor = browseQuery.data?.pagination.nextCursor ?? null;
+  }, [browseQuery.data]);
 
   const joinMutation = useMutation({
     mutationFn: (roomId: string) =>
@@ -295,10 +281,11 @@ function BrowseRoomsPage() {
         listLabel={t('browse.heading')}
         handleJoin={handleJoin}
         joinPendingRoomId={joinMutation.isPending ? (joinMutation.variables ?? null) : null}
-        hasMore={hasMore}
-        nextCursor={nextCursor}
-        isFetching={browseQuery.isFetching}
-        onLoadMore={(c) => setCursor(c)}
+        hasMore={browseQuery.hasNextPage}
+        isFetchingMore={browseQuery.isFetchingNextPage}
+        onLoadMore={() => {
+          browseQuery.fetchNextPage().catch(() => undefined);
+        }}
         loadMoreLabel={t('browse.loadMore')}
       />
     </div>
@@ -314,9 +301,8 @@ type BrowseResultsProps = {
   handleJoin: (roomId: string) => void;
   joinPendingRoomId: string | null;
   hasMore: boolean;
-  nextCursor: string | null;
-  isFetching: boolean;
-  onLoadMore: (cursor: string) => void;
+  isFetchingMore: boolean;
+  onLoadMore: () => void;
   loadMoreLabel: string;
 };
 
@@ -329,8 +315,7 @@ function BrowseResults({
   handleJoin,
   joinPendingRoomId,
   hasMore,
-  nextCursor,
-  isFetching,
+  isFetchingMore,
   onLoadMore,
   loadMoreLabel,
 }: BrowseResultsProps) {
@@ -360,16 +345,20 @@ function BrowseResults({
         ))}
       </ul>
 
-      {hasMore && nextCursor !== null && (
+      {hasMore && (
         <div className="mt-10 flex justify-center">
           <Button
             variant="outline"
             size="lg"
-            disabled={isFetching}
-            onClick={() => onLoadMore(nextCursor)}
+            disabled={isFetchingMore}
+            onClick={onLoadMore}
             className="gap-2"
           >
-            {isFetching ? <Loader2 size={16} className="animate-spin" /> : <Compass size={16} />}
+            {isFetchingMore ? (
+              <Loader2 size={16} className="animate-spin" />
+            ) : (
+              <Compass size={16} />
+            )}
             {loadMoreLabel}
           </Button>
         </div>

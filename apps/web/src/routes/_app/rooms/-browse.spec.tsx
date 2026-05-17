@@ -1,6 +1,6 @@
 import { CONTROL_API } from '@syncode/contracts';
 import { focusManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { HTTPError } from 'ky';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -120,8 +120,11 @@ function makeRoom(
   };
 }
 
-function makeResponse(data: BrowseResponse['data']): BrowseResponse {
-  return { data, pagination: { nextCursor: null, hasMore: false } };
+function makeResponse(
+  data: BrowseResponse['data'],
+  pagination: BrowseResponse['pagination'] = { nextCursor: null, hasMore: false },
+): BrowseResponse {
+  return { data, pagination };
 }
 
 function renderPage() {
@@ -315,27 +318,109 @@ describe('BrowseRoomsPage', () => {
   });
 
   it('GIVEN participant count changes on the server WHEN the refresh interval elapses THEN the card updates', async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.useFakeTimers();
     focusManager.setFocused(true);
     apiMock
-      .mockResolvedValueOnce(makeResponse([makeRoom({ participantCount: 1, maxParticipants: 2 })]))
-      .mockResolvedValue(makeResponse([makeRoom({ participantCount: 2, maxParticipants: 2 })]));
+      .mockResolvedValueOnce(makeResponse([makeRoom({ participantCount: 1, maxParticipants: 3 })]))
+      .mockResolvedValue(makeResponse([makeRoom({ participantCount: 2, maxParticipants: 3 })]));
 
     renderPage();
 
-    expect(
-      await screen.findByText('browse.card.participantFraction current=1 max=2'),
-    ).toBeInTheDocument();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(screen.getByText('browse.card.participantFraction current=1 max=3')).toBeInTheDocument();
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(5_100);
     });
 
-    await waitFor(() => {
-      expect(
-        screen.getByText('browse.card.participantFraction current=2 max=2'),
-      ).toBeInTheDocument();
+    expect(screen.getByText('browse.card.participantFraction current=2 max=3')).toBeInTheDocument();
+  });
+
+  it('GIVEN more rooms are loaded WHEN the refresh interval elapses THEN all visible pages refresh without stale rooms', async () => {
+    vi.useFakeTimers();
+    focusManager.setFocused(true);
+    const seenCursors: Array<string | undefined> = [];
+    apiMock.mockImplementation((_route, opts) => {
+      const cursor = (opts as { searchParams?: { cursor?: string } } | undefined)?.searchParams
+        ?.cursor;
+      seenCursors.push(cursor);
+
+      if (seenCursors.length === 1) {
+        expect(cursor).toBeUndefined();
+        return Promise.resolve(
+          makeResponse([makeRoom({ roomId: 'room-1', problemTitle: 'Old first page' })], {
+            nextCursor: 'cursor-2',
+            hasMore: true,
+          }) as never,
+        );
+      }
+
+      if (seenCursors.length === 2) {
+        expect(cursor).toBe('cursor-2');
+        return Promise.resolve(
+          makeResponse([
+            makeRoom({
+              roomId: 'room-2',
+              problemTitle: 'Second page',
+              participantCount: 1,
+              maxParticipants: 3,
+            }),
+          ]) as never,
+        );
+      }
+
+      if (seenCursors.length === 3) {
+        expect(cursor).toBeUndefined();
+        return Promise.resolve(
+          makeResponse([makeRoom({ roomId: 'room-3', problemTitle: 'New first page' })], {
+            nextCursor: 'cursor-after-new-first-page',
+            hasMore: true,
+          }) as never,
+        );
+      }
+
+      if (seenCursors.length === 4) {
+        expect(cursor).toBe('cursor-after-new-first-page');
+        return Promise.resolve(
+          makeResponse([
+            makeRoom({
+              roomId: 'room-2',
+              problemTitle: 'Second page',
+              participantCount: 2,
+              maxParticipants: 3,
+            }),
+          ]) as never,
+        );
+      }
+
+      return Promise.reject(new Error(`Unexpected browse cursor: ${String(cursor)}`));
     });
+
+    renderPage();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(screen.getByText('Old first page')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /browse\.loadMore/i }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(screen.getByText('Second page')).toBeInTheDocument();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_100);
+    });
+
+    expect(screen.getByText('New first page')).toBeInTheDocument();
+    expect(screen.getByText('Second page')).toBeInTheDocument();
+    expect(screen.getByText('browse.card.participantFraction current=2 max=3')).toBeInTheDocument();
+    expect(screen.queryByText('Old first page')).not.toBeInTheDocument();
+    expect(seenCursors).toEqual([undefined, 'cursor-2', undefined, 'cursor-after-new-first-page']);
   });
 
   it('GIVEN a room WHERE isParticipant is true THEN the card shows Enter and an already-joined indicator', async () => {
