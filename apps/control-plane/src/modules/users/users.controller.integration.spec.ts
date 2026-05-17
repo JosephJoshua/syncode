@@ -18,6 +18,7 @@ import { ZodValidationPipe } from 'nestjs-zod';
 import request from 'supertest';
 import { GlobalExceptionFilter } from '@/common/filters/global-exception.filter.js';
 import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard.js';
+import { AuditService } from '@/modules/admin/audit.service.js';
 import { AuthService } from '@/modules/auth/auth.service.js';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
 import { InMemoryCacheService } from '@/test/in-memory-cache.service.js';
@@ -49,6 +50,7 @@ beforeEach(async () => {
     providers: [
       UsersService,
       AuthService,
+      AuditService,
       JwtAuthGuard,
       JwtStrategy,
       { provide: DB_CLIENT, useValue: db },

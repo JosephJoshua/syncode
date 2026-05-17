@@ -23,6 +23,7 @@ import { resolveAvatarUrls } from '@/common/resolve-avatar-urls.js';
 import type { EnvConfig } from '@/config/env.config.js';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
 import { toUserProfile } from '@/modules/users/user-profile.mapper.js';
+import { type AuditLogInput, AuditService } from '../admin/audit.service.js';
 
 const scryptAsync = promisify(scrypt);
 
@@ -48,12 +49,14 @@ export class AuthService {
     @Inject(STORAGE_SERVICE) private readonly storageService: IStorageService,
     private readonly jwtService: JwtService,
     private readonly config: ConfigService<EnvConfig>,
+    private readonly auditService: AuditService,
   ) {}
 
   async register(
     username: string,
     email: string,
     password: string,
+    ipAddress?: string,
   ): Promise<{
     accessToken: string;
     refreshToken: string;
@@ -87,28 +90,41 @@ export class AuthService {
     const passwordHash = await this.hashPassword(password);
 
     try {
-      const [createdUser] = await this.db
-        .insert(users)
-        .values({
-          username: normalizedUsername,
-          email: normalizedEmail,
-          passwordHash,
-        })
-        .returning({
-          id: users.id,
-          email: users.email,
-          username: users.username,
-          displayName: users.displayName,
-          role: users.role,
-          avatarUrl: users.avatarUrl,
-          bio: users.bio,
-          createdAt: users.createdAt,
-          updatedAt: users.updatedAt,
+      const createdUser = await this.db.transaction(async (tx) => {
+        const [user] = await tx
+          .insert(users)
+          .values({
+            username: normalizedUsername,
+            email: normalizedEmail,
+            passwordHash,
+          })
+          .returning({
+            id: users.id,
+            email: users.email,
+            username: users.username,
+            displayName: users.displayName,
+            role: users.role,
+            avatarUrl: users.avatarUrl,
+            bio: users.bio,
+            createdAt: users.createdAt,
+            updatedAt: users.updatedAt,
+          });
+
+        if (!user) {
+          throw new Error('Failed to create user');
+        }
+
+        await this.auditService.logWithClient(tx, {
+          actorId: user.id,
+          action: 'auth.register',
+          targetType: 'user',
+          targetId: user.id,
+          metadata: { email: user.email, username: user.username },
+          ipAddress,
         });
 
-      if (!createdUser) {
-        throw new Error('Failed to create user');
-      }
+        return user;
+      });
 
       const tokenPair = await this.issueTokenPair(createdUser.id, createdUser.email);
 
@@ -137,6 +153,7 @@ export class AuthService {
   async login(
     identifier: string,
     password: string,
+    ipAddress?: string,
   ): Promise<{
     accessToken: string;
     refreshToken: string;
@@ -187,6 +204,14 @@ export class AuthService {
       });
     }
 
+    await this.logAuthAudit({
+      actorId: user.id,
+      action: 'auth.login',
+      targetType: 'user',
+      targetId: user.id,
+      metadata: { identifierType: normalizedIdentifier.includes('@') ? 'email' : 'username' },
+      ipAddress,
+    });
     const tokenPair = await this.issueTokenPair(user.id, user.email);
 
     return {
@@ -223,9 +248,17 @@ export class AuthService {
     return this.issueTokenPair(user.id, user.email);
   }
 
-  async logout(refreshToken: string): Promise<void> {
+  async logout(refreshToken: string, ipAddress?: string): Promise<void> {
     const payload = await this.verifyRefreshToken(refreshToken);
     await this.revokeRefreshTokenByPayload(payload);
+    await this.logAuthAudit({
+      actorId: payload.sub,
+      action: 'auth.logout',
+      targetType: 'user',
+      targetId: payload.sub,
+      metadata: { tokenId: payload.jti },
+      ipAddress,
+    });
   }
 
   async revokeAllRefreshTokensForUser(userId: string): Promise<void> {
@@ -244,6 +277,10 @@ export class AuthService {
 
   async cleanupExpiredRefreshTokens(): Promise<void> {
     await this.db.delete(refreshTokens).where(lt(refreshTokens.expiresAt, new Date()));
+  }
+
+  private async logAuthAudit(input: AuditLogInput): Promise<void> {
+    await this.auditService.log(input);
   }
 
   private async issueTokenPair(

@@ -49,14 +49,23 @@ describe('AdminController', () => {
     };
     vi.mocked(service.banUser).mockResolvedValue(banned);
 
-    await expect(controller.banUser(ADMIN, TARGET_ID, { reason: 'policy' })).resolves.toEqual(
-      banned,
+    await expect(
+      controller.banUser(ADMIN, TARGET_ID, { reason: 'policy' }, '203.0.113.10'),
+    ).resolves.toEqual(banned);
+    expect(service.banUser).toHaveBeenCalledWith(
+      ADMIN.id,
+      TARGET_ID,
+      { reason: 'policy' },
+      '203.0.113.10',
     );
   });
 
   it('GIVEN unban request WHEN unbanning user THEN returns updated user', async () => {
     vi.mocked(service.unbanUser).mockResolvedValue(ADMIN_USER);
 
-    await expect(controller.unbanUser(ADMIN, TARGET_ID)).resolves.toEqual(ADMIN_USER);
+    await expect(controller.unbanUser(ADMIN, TARGET_ID, '203.0.113.10')).resolves.toEqual(
+      ADMIN_USER,
+    );
+    expect(service.unbanUser).toHaveBeenCalledWith(ADMIN.id, TARGET_ID, '203.0.113.10');
   });
 });

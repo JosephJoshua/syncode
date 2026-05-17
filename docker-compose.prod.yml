@@ -43,6 +43,8 @@ services:
       dockerfile: infra/docker/Dockerfile.control-plane
     restart: unless-stopped
     env_file: .env
+    environment:
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:?TRUSTED_PROXIES must name the exact nginx/proxy CIDR trusted by control-plane}
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
     depends_on:

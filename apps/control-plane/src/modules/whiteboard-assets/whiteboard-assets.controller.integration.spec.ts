@@ -12,6 +12,7 @@ import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { GlobalExceptionFilter } from '@/common/filters/global-exception.filter.js';
 import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard.js';
+import { AuditService } from '@/modules/admin/audit.service.js';
 import { AuthService } from '@/modules/auth/auth.service.js';
 import { JwtStrategy } from '@/modules/auth/jwt.strategy.js';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
@@ -60,6 +61,7 @@ beforeEach(async () => {
     providers: [
       WhiteboardAssetsService,
       AuthService,
+      AuditService,
       JwtAuthGuard,
       JwtStrategy,
       { provide: DB_CLIENT, useValue: db },

@@ -6,6 +6,7 @@ import type {
   adminUsersQuerySchema,
   adminUsersResponseSchema,
 } from './admin.js';
+import type { adminAuditLogsQuerySchema, adminAuditLogsResponseSchema } from './admin-audit.js';
 import type {
   accessTokenResponseSchema,
   loginResponseSchema,
@@ -81,6 +82,10 @@ import type {
 
 export const CONTROL_API = {
   ADMIN: {
+    AUDIT_LOGS: defineRoute<
+      z.infer<typeof adminAuditLogsQuerySchema>,
+      z.infer<typeof adminAuditLogsResponseSchema>
+    >()('admin/audit-logs', 'GET'),
     USERS: {
       LIST: defineRoute<
         z.infer<typeof adminUsersQuerySchema>,

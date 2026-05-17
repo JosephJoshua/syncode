@@ -1,4 +1,5 @@
 export * from './admin.js';
+export * from './admin-audit.js';
 export * from './auth.js';
 export * from './bookmarks.js';
 export * from './error.js';

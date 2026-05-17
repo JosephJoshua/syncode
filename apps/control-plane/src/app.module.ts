@@ -9,6 +9,7 @@ import { GlobalExceptionFilter } from './common/filters/global-exception.filter.
 import { type EnvConfig, validateEnv } from './config/env.config.js';
 import { InfrastructureModule } from './infrastructure/infrastructure.module.js';
 import { AdminModule } from './modules/admin/admin.module.js';
+import { AdminAuditModule } from './modules/admin/admin-audit.module.js';
 import { AuthModule } from './modules/auth/auth.module.js';
 import { DbModule } from './modules/db/db.module.js';
 import { ExecutionModule } from './modules/execution/execution.module.js';
@@ -119,6 +120,7 @@ if (!isProd) {
 
     // Feature modules
     AuthModule,
+    AdminAuditModule,
     UsersModule,
     RoomsModule,
     WhiteboardAssetsModule,

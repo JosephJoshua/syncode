@@ -1,6 +1,6 @@
 import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import { type Database, users } from '@syncode/db';
+import { auditLogs, type Database, users } from '@syncode/db';
 import { eq } from 'drizzle-orm';
 import { ZodValidationPipe } from 'nestjs-zod';
 import request from 'supertest';
@@ -10,6 +10,7 @@ import { createTestDb, insertUser } from '@/test/integration-setup.js';
 import { asUser, TestAuthGuard } from '@/test/mock-factories.js';
 import { AdminController } from './admin.controller.js';
 import { AdminService } from './admin.service.js';
+import { AuditService } from './audit.service.js';
 
 let app: INestApplication;
 let db: Database;
@@ -22,7 +23,7 @@ beforeEach(async () => {
 
   const module = await Test.createTestingModule({
     controllers: [AdminController],
-    providers: [AdminService, { provide: DB_CLIENT, useValue: db }],
+    providers: [AdminService, AuditService, { provide: DB_CLIENT, useValue: db }],
   })
     .overrideGuard(JwtAuthGuard)
     .useClass(TestAuthGuard)
@@ -176,6 +177,36 @@ describe('PATCH /admin/users/:id/ban', () => {
     });
     expect(row?.bannedAt).toBeInstanceOf(Date);
     expect(row?.bannedReason).toBe('Repeated abuse');
+
+    const auditLog = await db.query.auditLogs.findFirst({
+      where: eq(auditLogs.targetId, target.id),
+    });
+    expect(auditLog).toMatchObject({
+      actorId: admin.id,
+      action: 'admin.user.ban',
+      targetType: 'user',
+      targetId: target.id,
+      metadata: { reason: 'Repeated abuse' },
+    });
+  });
+
+  it('GIVEN trusted proxy forwarding WHEN banning an account THEN records forwarded client IP', async () => {
+    app.getHttpAdapter().getInstance().set('trust proxy', 'loopback');
+    const admin = await insertUser(db, { role: 'admin' });
+    const target = await insertUser(db);
+
+    await asUser(
+      request(app.getHttpServer())
+        .patch(`/admin/users/${target.id}/ban`)
+        .set('X-Forwarded-For', '198.51.100.20')
+        .send({ reason: 'policy' }),
+      admin,
+    ).expect(200);
+
+    const auditLog = await db.query.auditLogs.findFirst({
+      where: eq(auditLogs.targetId, target.id),
+    });
+    expect(auditLog?.ipAddress).toBe('198.51.100.20');
   });
 
   it('GIVEN non-admin user WHEN banning an account THEN rejects the request', async () => {
@@ -245,6 +276,17 @@ describe('PATCH /admin/users/:id/unban', () => {
     expect(row).toMatchObject({
       bannedAt: null,
       bannedReason: null,
+    });
+
+    const auditLog = await db.query.auditLogs.findFirst({
+      where: eq(auditLogs.targetId, target.id),
+    });
+    expect(auditLog).toMatchObject({
+      actorId: admin.id,
+      action: 'admin.user.unban',
+      targetType: 'user',
+      targetId: target.id,
+      metadata: null,
     });
   });
 
