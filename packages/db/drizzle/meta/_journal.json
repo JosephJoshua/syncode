@@ -85,6 +85,13 @@
       "when": 1779030909952,
       "tag": "0011_graceful_giant_man",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1779134770259,
+      "tag": "0012_cheerful_white_tiger",
+      "breakpoints": true
     }
   ]
 }
