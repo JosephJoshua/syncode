@@ -1,7 +1,6 @@
 import { Inject, Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import {
-  BROWSEABLE_ROOM_STATUSES,
   type EnterMatchmakingQueueInput,
   type EnterMatchmakingQueueResponse,
   type GetMatchmakingStatusResponse,
@@ -10,7 +9,7 @@ import {
   matchmakingPreferencesSchema,
 } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
-import { matchRequests, problems, rooms } from '@syncode/db';
+import { matchRequests, problems, rooms, users } from '@syncode/db';
 import {
   isRoomRole,
   JOINABLE_ROLES,
@@ -93,6 +92,8 @@ export class MatchmakingService implements OnModuleInit {
     const expiresAt = new Date(now.getTime() + MatchmakingService.REQUEST_TTL_MS);
 
     const [inserted] = await this.db.transaction(async (tx) => {
+      await tx.select({ id: users.id }).from(users).where(eq(users.id, userId)).for('update');
+
       await tx
         .update(matchRequests)
         .set({ status: 'cancelled' })
@@ -136,7 +137,12 @@ export class MatchmakingService implements OnModuleInit {
     await this.db
       .update(matchRequests)
       .set({ status: 'cancelled' })
-      .where(and(eq(matchRequests.userId, userId), eq(matchRequests.status, 'pending')));
+      .where(
+        and(
+          eq(matchRequests.userId, userId),
+          or(eq(matchRequests.status, 'pending'), eq(matchRequests.status, 'matched')),
+        ),
+      );
 
     return { status: 'idle' };
   }
@@ -439,6 +445,10 @@ export class MatchmakingService implements OnModuleInit {
     first: PendingMatchRequest,
     second: PendingMatchRequest,
   ): Promise<boolean> {
+    if (!(await this.arePendingRequestsCurrent([first.id, second.id]))) {
+      return false;
+    }
+
     const firstPreferences = this.parsePreferencesFromRow(first);
     const secondPreferences = this.parsePreferencesFromRow(second);
     const roleAssignment = this.resolvePairRoleAssignment(firstPreferences, secondPreferences);
@@ -453,10 +463,11 @@ export class MatchmakingService implements OnModuleInit {
       return false;
     }
 
-    try {
-      const hostRequest = roleAssignment.hostRequester === 'first' ? first : second;
-      const joinerRequest = roleAssignment.hostRequester === 'first' ? second : first;
+    const hostRequest = roleAssignment.hostRequester === 'first' ? first : second;
+    const joinerRequest = roleAssignment.hostRequester === 'first' ? second : first;
+    let createdRoomId: string | null = null;
 
+    try {
       const createResult = await this.roomsService.createRoom(hostRequest.userId, {
         mode: 'peer',
         name: MatchmakingService.MATCH_ROOM_NAME,
@@ -468,12 +479,13 @@ export class MatchmakingService implements OnModuleInit {
           maxParticipants: MatchmakingService.MATCH_ROOM_MAX_PARTICIPANTS,
         },
       });
+      createdRoomId = createResult.roomId;
 
       await this.roomsService.joinRoom(createResult.roomId, joinerRequest.userId, {
         requestedRole: roleAssignment.joinerRequestedRole,
       });
 
-      await this.db.transaction(async (tx) => {
+      const matchCommitted = await this.db.transaction(async (tx) => {
         const locked = await tx
           .select({
             id: matchRequests.id,
@@ -488,7 +500,7 @@ export class MatchmakingService implements OnModuleInit {
           (row) => row.status === 'pending' && row.expiresAt.getTime() > Date.now(),
         );
         if (!rowsArePending || locked.length !== 2) {
-          return;
+          return false;
         }
 
         await tx
@@ -508,10 +520,20 @@ export class MatchmakingService implements OnModuleInit {
             matchedWithUserId: first.userId,
           })
           .where(eq(matchRequests.id, second.id));
+
+        return true;
       });
+
+      if (!matchCommitted) {
+        await this.cleanupCreatedMatchRoom(createdRoomId, hostRequest.userId);
+        return false;
+      }
 
       return true;
     } catch (error) {
+      if (createdRoomId) {
+        await this.cleanupCreatedMatchRoom(createdRoomId, hostRequest.userId);
+      }
       this.logger.warn(
         `Matchmaking pair failed (${first.userId}, ${second.userId}): ${(error as Error).message}`,
       );
@@ -520,6 +542,10 @@ export class MatchmakingService implements OnModuleInit {
   }
 
   private async tryMatchExistingRoom(request: PendingMatchRequest): Promise<boolean> {
+    if (!(await this.isPendingRequestCurrent(request.id))) {
+      return false;
+    }
+
     const preferences = this.parsePreferencesFromRow(request);
     const candidates = await this.listExistingRoomCandidates(preferences, request.userId);
 
@@ -558,6 +584,8 @@ export class MatchmakingService implements OnModuleInit {
           this.logger.warn(
             `Request ${request.id} joined room ${candidate.roomId} but status update was skipped`,
           );
+          await this.cleanupJoinedExistingRoom(candidate.roomId, request.userId);
+          return false;
         }
         return true;
       }
@@ -566,13 +594,55 @@ export class MatchmakingService implements OnModuleInit {
     return false;
   }
 
+  private async isPendingRequestCurrent(requestId: string): Promise<boolean> {
+    return this.arePendingRequestsCurrent([requestId]);
+  }
+
+  private async arePendingRequestsCurrent(requestIds: string[]): Promise<boolean> {
+    const rows = await this.db
+      .select({
+        id: matchRequests.id,
+        status: matchRequests.status,
+        expiresAt: matchRequests.expiresAt,
+      })
+      .from(matchRequests)
+      .where(inArray(matchRequests.id, requestIds));
+
+    if (rows.length !== requestIds.length) {
+      return false;
+    }
+
+    const now = Date.now();
+    return rows.every((row) => row.status === 'pending' && row.expiresAt.getTime() > now);
+  }
+
+  private async cleanupCreatedMatchRoom(roomId: string, hostUserId: string): Promise<void> {
+    try {
+      await this.roomsService.destroyRoom(roomId, hostUserId);
+    } catch (error) {
+      this.logger.warn(
+        `Failed to clean up uncommitted match room ${roomId}: ${(error as Error).message}`,
+      );
+    }
+  }
+
+  private async cleanupJoinedExistingRoom(roomId: string, userId: string): Promise<void> {
+    try {
+      await this.roomsService.markParticipantInactive(roomId, userId, new Date());
+    } catch (error) {
+      this.logger.warn(
+        `Failed to roll back uncommitted matchmaking join for room ${roomId}: ${(error as Error).message}`,
+      );
+    }
+  }
+
   private async listExistingRoomCandidates(
     preferences: MatchmakingPreferences,
     userId: string,
   ): Promise<ExistingRoomCandidate[]> {
     const conditions = [
       eq(rooms.isPrivate, false),
-      inArray(rooms.status, [...BROWSEABLE_ROOM_STATUSES]),
+      eq(rooms.status, RoomStatus.WAITING),
       ne(rooms.hostId, userId),
       or(isNull(rooms.problemId), eq(problems.isPublished, true))!,
       sql`(select count(*)::int from room_participants rp
@@ -652,7 +722,7 @@ export class MatchmakingService implements OnModuleInit {
     status: (typeof RoomStatus)[keyof typeof RoomStatus],
   ): Array<MatchmakingPreferences['roles'][number] | null> {
     if (status !== RoomStatus.WAITING) {
-      return [RoomRole.OBSERVER];
+      return [];
     }
 
     if (preferences.roles.length === 0) {

@@ -410,22 +410,27 @@ export class RoomsService {
   }
 
   async joinRoom(roomId: string, userId: string, input: JoinRoomInput): Promise<JoinRoomResult> {
-    const [room] = await this.db.select().from(rooms).where(eq(rooms.id, roomId));
-    if (!room) {
-      throw new NotFoundException({ message: 'Room not found', code: ERROR_CODES.ROOM_NOT_FOUND });
-    }
-
-    if (room.status === RoomStatus.FINISHED) {
-      throw new ConflictException({
-        message: 'Room has already finished',
-        code: ERROR_CODES.ROOM_FINISHED,
-      });
-    }
-
     let assignedRole!: RoomRole;
     let assignmentReason!: RoleAssignmentReason;
+    let room!: typeof rooms.$inferSelect;
 
     await this.db.transaction(async (tx) => {
+      const [lockedRoom] = await tx.select().from(rooms).where(eq(rooms.id, roomId)).for('update');
+      if (!lockedRoom) {
+        throw new NotFoundException({
+          message: 'Room not found',
+          code: ERROR_CODES.ROOM_NOT_FOUND,
+        });
+      }
+
+      if (lockedRoom.status === RoomStatus.FINISHED) {
+        throw new ConflictException({
+          message: 'Room has already finished',
+          code: ERROR_CODES.ROOM_FINISHED,
+        });
+      }
+
+      room = lockedRoom;
       const existingParticipants = await tx
         .select({
           id: roomParticipants.id,
@@ -451,14 +456,19 @@ export class RoomsService {
       // would break WS reconnect reactivation, which re-calls this endpoint with
       // an empty body.
       if (!existing) {
-        this.assertJoinCode(room.isPrivate, room.inviteCode, input.roomCode);
+        this.assertJoinCode(lockedRoom.isPrivate, lockedRoom.inviteCode, input.roomCode);
       }
 
       if (existing?.isActive) {
         // Idempotent re-join: user is already active in this room. Skip the
         // DB write and let the post-transaction code mint a fresh collab
         // token so the caller can (re-)enter the workspace.
-        assignedRole = this.normalizeParticipantRole(room.mode, existing.role, room.hostId, userId);
+        assignedRole = this.normalizeParticipantRole(
+          lockedRoom.mode,
+          existing.role,
+          lockedRoom.hostId,
+          userId,
+        );
         assignmentReason = 'auto-assigned';
         return;
       }
@@ -469,15 +479,15 @@ export class RoomsService {
       }
 
       const roleSelection = this.selectJoinRole(
-        room.mode,
+        lockedRoom.mode,
         existingParticipants
           .filter((participant) => participant.isActive)
           .map((participant) => ({
             userId: participant.userId,
             role: this.normalizeParticipantRole(
-              room.mode,
+              lockedRoom.mode,
               participant.role,
-              room.hostId,
+              lockedRoom.hostId,
               participant.userId,
             ),
           })),
@@ -492,15 +502,19 @@ export class RoomsService {
         .map((participant) => ({
           userId: participant.userId,
           role: this.normalizeParticipantRole(
-            room.mode,
+            lockedRoom.mode,
             participant.role,
-            room.hostId,
+            lockedRoom.hostId,
             participant.userId,
           ),
         }))
         .concat({ userId, role: assignedRole });
 
-      this.assertActiveRoleConfiguration(room.mode, room.status, nextActiveParticipants);
+      this.assertActiveRoleConfiguration(
+        lockedRoom.mode,
+        lockedRoom.status,
+        nextActiveParticipants,
+      );
 
       if (existing) {
         await tx

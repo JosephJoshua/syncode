@@ -1,5 +1,13 @@
 import { Body, Controller, Delete, Get, HttpCode, Post, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiExtraModels,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+  getSchemaPath,
+} from '@nestjs/swagger';
 import { CONTROL_API } from '@syncode/contracts';
 import { CurrentUser } from '@/common/decorators/current-user.decorator.js';
 import { ErrorResponseDto } from '@/common/dto/error-response.dto.js';
@@ -7,14 +15,22 @@ import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard.js';
 import type { AuthUser } from '@/modules/auth/auth.types.js';
 import {
   EnterMatchmakingQueueDto,
-  EnterMatchmakingQueueResponseDto,
-  GetMatchmakingStatusResponseDto,
+  type EnterMatchmakingQueueResponseDto,
+  type GetMatchmakingStatusResponseDto,
   LeaveMatchmakingQueueResponseDto,
+  MatchmakingIdleStatusDto,
+  MatchmakingMatchedStatusDto,
+  MatchmakingSearchingStatusDto,
 } from './dto/matchmaking.dto.js';
 import { MatchmakingService } from './matchmaking.service.js';
 
 @ApiTags('matchmaking')
 @ApiBearerAuth()
+@ApiExtraModels(
+  MatchmakingIdleStatusDto,
+  MatchmakingSearchingStatusDto,
+  MatchmakingMatchedStatusDto,
+)
 @UseGuards(JwtAuthGuard)
 @Controller()
 export class MatchmakingController {
@@ -24,7 +40,15 @@ export class MatchmakingController {
   @HttpCode(200)
   @ApiOperation({ summary: 'Enter matchmaking queue with preferences' })
   @ApiBody({ type: EnterMatchmakingQueueDto })
-  @ApiResponse({ status: 200, type: EnterMatchmakingQueueResponseDto })
+  @ApiResponse({
+    status: 200,
+    schema: {
+      oneOf: [
+        { $ref: getSchemaPath(MatchmakingSearchingStatusDto) },
+        { $ref: getSchemaPath(MatchmakingMatchedStatusDto) },
+      ],
+    },
+  })
   @ApiResponse({ status: 401, type: ErrorResponseDto, description: 'Unauthorized' })
   async enterQueue(
     @CurrentUser() user: AuthUser,
@@ -44,7 +68,16 @@ export class MatchmakingController {
 
   @Get(CONTROL_API.MATCHMAKING.GET_QUEUE_STATUS.route)
   @ApiOperation({ summary: 'Get current user matchmaking queue status' })
-  @ApiResponse({ status: 200, type: GetMatchmakingStatusResponseDto })
+  @ApiResponse({
+    status: 200,
+    schema: {
+      oneOf: [
+        { $ref: getSchemaPath(MatchmakingIdleStatusDto) },
+        { $ref: getSchemaPath(MatchmakingSearchingStatusDto) },
+        { $ref: getSchemaPath(MatchmakingMatchedStatusDto) },
+      ],
+    },
+  })
   @ApiResponse({ status: 401, type: ErrorResponseDto, description: 'Unauthorized' })
   async getQueueStatus(@CurrentUser() user: AuthUser): Promise<GetMatchmakingStatusResponseDto> {
     return this.matchmakingService.getQueueStatus(user.id);

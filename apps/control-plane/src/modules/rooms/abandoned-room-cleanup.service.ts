@@ -1,4 +1,10 @@
-import { Inject, Injectable, Logger, type OnModuleInit } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  type OnModuleInit,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import {
   COLLAB_CLIENT,
@@ -6,7 +12,7 @@ import {
   ROOM_ABANDONED_CLEANUP_QUEUE,
 } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
-import { roomDocSnapshots, roomParticipants, rooms, sessions } from '@syncode/db';
+import { matchRequests, roomDocSnapshots, roomParticipants, rooms, sessions } from '@syncode/db';
 import { RoomStatus } from '@syncode/shared';
 import { type IQueueService, QUEUE_SERVICE } from '@syncode/shared/ports';
 import { and, asc, eq, ne, sql } from 'drizzle-orm';
@@ -139,29 +145,36 @@ export class AbandonedRoomCleanupService implements OnModuleInit {
     now: Date,
     cutoffIso: string,
   ): Promise<{ cleaned: boolean; finishedSessionId: string | null }> {
-    return this.db.transaction(async (tx) => {
-      const [lockedRoom] = await tx
-        .select({
-          id: rooms.id,
-          status: rooms.status,
-          language: rooms.language,
-          editorLocked: rooms.editorLocked,
-          phaseStartedAt: rooms.phaseStartedAt,
-          timerPaused: rooms.timerPaused,
-          elapsedMs: rooms.elapsedMs,
-        })
-        .from(rooms)
-        .where(
-          and(
-            eq(rooms.id, candidate.roomId),
-            ne(rooms.status, RoomStatus.FINISHED),
-            sql`not exists (
+    let restoreCollabState: {
+      roomId: string;
+      status: (typeof RoomStatus)[keyof typeof RoomStatus];
+      editorLocked: boolean;
+    } | null = null;
+
+    return this.db
+      .transaction(async (tx) => {
+        const [lockedRoom] = await tx
+          .select({
+            id: rooms.id,
+            status: rooms.status,
+            language: rooms.language,
+            editorLocked: rooms.editorLocked,
+            phaseStartedAt: rooms.phaseStartedAt,
+            timerPaused: rooms.timerPaused,
+            elapsedMs: rooms.elapsedMs,
+          })
+          .from(rooms)
+          .where(
+            and(
+              eq(rooms.id, candidate.roomId),
+              ne(rooms.status, RoomStatus.FINISHED),
+              sql`not exists (
               select 1
               from room_participants rp
               where rp.room_id = ${rooms.id}
                 and rp.is_active = true
             )`,
-            sql`coalesce(
+              sql`coalesce(
                 (
                   select max(coalesce(rp.left_at, rp.joined_at))
                   from room_participants rp
@@ -169,61 +182,77 @@ export class AbandonedRoomCleanupService implements OnModuleInit {
                 ),
                 ${rooms.createdAt}
               ) < ${cutoffIso}::timestamptz`,
-          ),
-        )
-        .for('update');
+            ),
+          )
+          .for('update');
 
-      if (!lockedRoom) {
-        return { cleaned: false, finishedSessionId: null };
-      }
+        if (!lockedRoom) {
+          return { cleaned: false, finishedSessionId: null };
+        }
 
-      if (lockedRoom.status !== RoomStatus.WAITING) {
-        await this.syncCollabRoomBeforeFinishing(lockedRoom);
-      }
+        if (lockedRoom.status !== RoomStatus.WAITING) {
+          await this.updateCollabRoomStateStrict(lockedRoom);
+          restoreCollabState = {
+            roomId: lockedRoom.id,
+            status: lockedRoom.status,
+            editorLocked: lockedRoom.editorLocked,
+          };
+        }
 
-      const elapsedMs = this.computeElapsedMs(lockedRoom, now);
-      await tx
-        .update(rooms)
-        .set({
-          status: RoomStatus.FINISHED,
-          phaseStartedAt: now,
-          elapsedMs,
-          endedAt: now,
-          ...(lockedRoom.status === RoomStatus.CODING ? { timerPaused: false } : {}),
-        })
-        .where(eq(rooms.id, lockedRoom.id));
+        const elapsedMs = this.computeElapsedMs(lockedRoom, now);
+        await tx
+          .update(rooms)
+          .set({
+            status: RoomStatus.FINISHED,
+            phaseStartedAt: now,
+            elapsedMs,
+            endedAt: now,
+            ...(lockedRoom.status === RoomStatus.CODING ? { timerPaused: false } : {}),
+          })
+          .where(eq(rooms.id, lockedRoom.id));
 
-      await tx
-        .update(roomParticipants)
-        .set({ isReady: false })
-        .where(eq(roomParticipants.roomId, lockedRoom.id));
+        await tx
+          .update(roomParticipants)
+          .set({ isReady: false })
+          .where(eq(roomParticipants.roomId, lockedRoom.id));
 
-      await tx
-        .update(roomParticipants)
-        .set({ isActive: false, leftAt: now })
-        .where(
-          and(eq(roomParticipants.roomId, lockedRoom.id), eq(roomParticipants.isActive, true)),
-        );
+        await tx
+          .update(roomParticipants)
+          .set({ isActive: false, leftAt: now })
+          .where(
+            and(eq(roomParticipants.roomId, lockedRoom.id), eq(roomParticipants.isActive, true)),
+          );
 
-      if (lockedRoom.status === RoomStatus.WAITING) {
-        return { cleaned: true, finishedSessionId: null };
-      }
+        await tx
+          .update(matchRequests)
+          .set({ status: 'expired' })
+          .where(eq(matchRequests.matchedRoomId, lockedRoom.id));
 
-      const [finishedSession] = await tx
-        .update(sessions)
-        .set({
-          status: 'finished',
-          finishedAt: now,
-          durationMs: elapsedMs,
-        })
-        .where(and(eq(sessions.roomId, lockedRoom.id), eq(sessions.status, 'ongoing')))
-        .returning({ id: sessions.id });
+        if (lockedRoom.status === RoomStatus.WAITING) {
+          return { cleaned: true, finishedSessionId: null };
+        }
 
-      return {
-        cleaned: true,
-        finishedSessionId: finishedSession?.id ?? null,
-      };
-    });
+        const [finishedSession] = await tx
+          .update(sessions)
+          .set({
+            status: 'finished',
+            finishedAt: now,
+            durationMs: elapsedMs,
+          })
+          .where(and(eq(sessions.roomId, lockedRoom.id), eq(sessions.status, 'ongoing')))
+          .returning({ id: sessions.id });
+
+        return {
+          cleaned: true,
+          finishedSessionId: finishedSession?.id ?? null,
+        };
+      })
+      .catch(async (error: unknown) => {
+        if (restoreCollabState) {
+          await this.restoreCollabRoomStateStrict(restoreCollabState);
+        }
+        throw error;
+      });
   }
 
   private computeElapsedMs(
@@ -249,10 +278,9 @@ export class AbandonedRoomCleanupService implements OnModuleInit {
     editorLocked: boolean;
   }): Promise<void> {
     if (!room.language) {
-      this.logger.warn(
-        `Skipping collab room-state sync for abandoned room ${room.id}: language is missing`,
+      throw new ServiceUnavailableException(
+        `Cannot finalize abandoned room ${room.id}: language is missing`,
       );
-      return;
     }
 
     const request = {
@@ -284,18 +312,20 @@ export class AbandonedRoomCleanupService implements OnModuleInit {
     await this.collabClient.updateRoomState(request);
   }
 
-  private async syncCollabRoomBeforeFinishing(room: {
+  private async restoreCollabRoomStateStrict(room: {
+    roomId: string;
     status: (typeof RoomStatus)[keyof typeof RoomStatus];
-    id: string;
-    language: string | null;
     editorLocked: boolean;
   }): Promise<void> {
     try {
-      await this.updateCollabRoomStateStrict(room);
+      await this.collabClient.updateRoomState({
+        roomId: room.roomId,
+        phase: room.status,
+        editorLocked: room.editorLocked,
+        changedBy: AbandonedRoomCleanupService.CLEANUP_ACTOR_ID,
+      });
     } catch (error) {
-      this.logger.warn(
-        `Proceeding with abandoned-room cleanup without collab sync for room ${room.id}: ${(error as Error).message}`,
-      );
+      this.logger.error(`Failed to restore collab state for abandoned room ${room.roomId}`, error);
     }
   }
 

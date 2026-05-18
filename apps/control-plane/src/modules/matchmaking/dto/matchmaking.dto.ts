@@ -1,5 +1,7 @@
 import {
+  type EnterMatchmakingQueueResponse,
   enterMatchmakingQueueSchema,
+  type GetMatchmakingStatusResponse,
   leaveMatchmakingQueueResponseSchema,
   matchmakingPreferencesSchema,
 } from '@syncode/contracts';
@@ -8,34 +10,37 @@ import { z } from 'zod';
 
 export class EnterMatchmakingQueueDto extends createZodDto(enterMatchmakingQueueSchema) {}
 
-const enterMatchmakingQueueResponseDtoSchema = z.object({
-  status: z.enum(['searching', 'matched']),
+const matchmakingSearchingStatusDtoSchema = z.object({
+  status: z.literal('searching'),
   requestId: z.uuid(),
-  queuePosition: z.number().int().positive().optional(),
-  roomId: z.uuid().optional(),
-  matchedWithUserId: z.uuid().optional(),
+  queuePosition: z.number().int().positive(),
   expiresAt: z.iso.datetime(),
   preferences: matchmakingPreferencesSchema,
 });
 
-const getMatchmakingStatusResponseDtoSchema = z.object({
-  status: z.enum(['idle', 'searching', 'matched']),
-  requestId: z.uuid().optional(),
-  queuePosition: z.number().int().positive().optional(),
-  roomId: z.uuid().optional(),
-  matchedWithUserId: z.uuid().optional(),
-  expiresAt: z.iso.datetime().optional(),
-  preferences: matchmakingPreferencesSchema.optional(),
+const matchmakingMatchedStatusDtoSchema = z.object({
+  status: z.literal('matched'),
+  requestId: z.uuid(),
+  roomId: z.uuid(),
+  matchedWithUserId: z.uuid(),
+  expiresAt: z.iso.datetime(),
+  preferences: matchmakingPreferencesSchema,
 });
 
-export class EnterMatchmakingQueueResponseDto extends createZodDto(
-  enterMatchmakingQueueResponseDtoSchema,
+const matchmakingIdleStatusDtoSchema = z.object({
+  status: z.literal('idle'),
+});
+
+export class MatchmakingSearchingStatusDto extends createZodDto(
+  matchmakingSearchingStatusDtoSchema,
 ) {}
+export class MatchmakingMatchedStatusDto extends createZodDto(matchmakingMatchedStatusDtoSchema) {}
+export class MatchmakingIdleStatusDto extends createZodDto(matchmakingIdleStatusDtoSchema) {}
+
+export type EnterMatchmakingQueueResponseDto = EnterMatchmakingQueueResponse;
 
 export class LeaveMatchmakingQueueResponseDto extends createZodDto(
   leaveMatchmakingQueueResponseSchema,
 ) {}
 
-export class GetMatchmakingStatusResponseDto extends createZodDto(
-  getMatchmakingStatusResponseDtoSchema,
-) {}
+export type GetMatchmakingStatusResponseDto = GetMatchmakingStatusResponse;
