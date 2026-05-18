@@ -181,9 +181,10 @@ export type GetRoomAiInterviewResult =
   | {
       status: 'ready';
       jobId: string;
-      message: string;
+      shouldRespond: boolean;
+      message?: string;
       followUpQuestion?: string;
-      codeContext: AiInterviewCodeContext;
+      codeContext?: AiInterviewCodeContext;
       codeAnnotations?: Array<{ line: number; comment: string }>;
       audioUrl?: string;
     }

@@ -95,6 +95,9 @@ export class GetRoomAiInterviewResultResponseDto {
   @ApiProperty({ description: 'AI interview job ID' })
   jobId!: string;
 
+  @ApiProperty({ required: false, description: 'Whether AI chose to respond for this request' })
+  shouldRespond?: boolean;
+
   @ApiProperty({ required: false, description: 'AI interviewer message (when status=ready)' })
   message?: string;
 
