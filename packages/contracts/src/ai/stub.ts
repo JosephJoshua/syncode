@@ -470,6 +470,7 @@ export class StubAiClient implements IAiClient {
             : null;
         const peerAveragePct =
           peerAverage == null ? null : Math.round((peerAverage / 5) * 100 * 10) / 10;
+        const chatSignalScore = (request.roomChatMessages?.length ?? 0) > 0 ? 80 : 72;
         const overallScore = Math.max(
           0,
           Math.min(
@@ -480,7 +481,7 @@ export class StubAiClient implements IAiClient {
                 request.runs.length > 0 ? 76 : 70,
                 request.snapshots.length > 0 ? 78 : 70,
                 peerAveragePct ?? 75,
-                request.aiMessages.length > 0 ? 80 : 72,
+                Math.max(chatSignalScore, request.aiMessages.length > 0 ? 80 : 72),
               ].reduce((sum, score) => sum + score, 0) / 5,
             ),
           ),
