@@ -683,6 +683,7 @@ describe('AiService', () => {
 
       const result = await service.generateInterviewResponse(baseInterviewRequest);
 
+      expect(result.shouldRespond).toBe(true);
       expect(result.message).toContain('Good direction');
       expect(result.followUpQuestion).toContain('invariant');
       expect(result.codeContext).toEqual(
@@ -725,7 +726,8 @@ describe('AiService', () => {
 
       const result = await service.generateInterviewResponse(baseInterviewRequest);
 
-      expect(result.message).toContain('reasonable direction');
+      expect(result.shouldRespond).toBe(true);
+      expect(result.message).toBe('That direction makes sense.');
       expect(result.followUpQuestion).toContain('Which state are you updating');
       expect(result.codeContext).toEqual(baseInterviewRequest.codeContext);
     });
@@ -743,6 +745,7 @@ describe('AiService', () => {
         codeContext: undefined,
       });
 
+      expect(result.shouldRespond).toBe(true);
       expect(result.message).toContain('Good direction');
       expect(result.followUpQuestion).toContain('invariant');
       expect(result.codeContext).toEqual(
@@ -776,6 +779,7 @@ describe('AiService', () => {
         ...baseInterviewRequest,
       });
 
+      expect(result.shouldRespond).toBe(true);
       expect(result.message.toLowerCase()).not.toContain('ignore all previous instructions');
       expect(result.followUpQuestion.toLowerCase()).not.toContain('do not output hints');
       expect(result.codeAnnotations?.[0]?.comment.toLowerCase()).not.toContain('shit');
@@ -807,6 +811,7 @@ describe('AiService', () => {
         ...baseInterviewRequest,
       });
 
+      expect(result.shouldRespond).toBe(true);
       expect(result.message).toContain('Good direction');
       expect(result.followUpQuestion).toContain('map contain');
       expect(result.audio).toBeUndefined();
@@ -814,7 +819,7 @@ describe('AiService', () => {
 
     it('GIVEN interview model request fails WHEN generateInterviewResponse is called THEN returns deterministic fallback without audio', async () => {
       const { service, llmProvider } = createServiceWithLlmResponse('unused');
-      vi.mocked(llmProvider.generateText).mockRejectedValueOnce(new Error('provider unavailable'));
+      vi.mocked(llmProvider.generateText).mockRejectedValue(new Error('provider unavailable'));
 
       const result = await service.generateInterviewResponse(baseInterviewRequest);
 
@@ -822,6 +827,23 @@ describe('AiService', () => {
       expect(result.followUpQuestion).toContain('invariant');
       expect(result.codeContext).toEqual(baseInterviewRequest.codeContext);
       expect(result.audio).toBeUndefined();
+      expect(llmProvider.generateSpeech).not.toHaveBeenCalled();
+    });
+
+    it('GIVEN proactive trigger with shouldRespond false WHEN generateInterviewResponse is called THEN returns silent result', async () => {
+      const { service, llmProvider } = createServiceWithLlmResponse(
+        JSON.stringify({
+          shouldRespond: false,
+        }),
+      );
+
+      const result = await service.generateInterviewResponse({
+        ...baseInterviewRequest,
+        trigger: 'proactive',
+        userMessage: undefined,
+      });
+
+      expect(result).toEqual({ shouldRespond: false, audio: undefined });
       expect(llmProvider.generateSpeech).not.toHaveBeenCalled();
     });
   });
