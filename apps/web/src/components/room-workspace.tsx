@@ -395,6 +395,8 @@ export function RoomWorkspace({
   const [multiRunState, setMultiRunState] = useState<MultiRunState>({ status: 'idle' });
   const cancelMultiRunRef = useRef(new Map<string, () => void>());
   const nextCustomId = useRef(1);
+  const isWhiteboardKeyboardActive =
+    activeCenterTab === 'whiteboard' || whiteboardViewMode === 'floating';
 
   useEffect(() => {
     const sourceCases = problem?.testCases ?? (isMockPreview ? MOCK_WORKSPACE_TEST_CASES : null);
@@ -1807,6 +1809,7 @@ export function RoomWorkspace({
               onDock={
                 whiteboardViewMode === 'floating' ? () => setWhiteboardViewMode('tab') : undefined
               }
+              keyboardShortcutsEnabled={isWhiteboardKeyboardActive}
             />
           </WhiteboardPortal>
         </>

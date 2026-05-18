@@ -1,7 +1,7 @@
 import type { INestApplication } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { Test } from '@nestjs/testing';
-import { AI_CLIENT } from '@syncode/contracts';
+import { AI_CLIENT, COLLAB_CLIENT } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
 import { CACHE_SERVICE, STORAGE_SERVICE } from '@syncode/shared/ports';
 import { ZodValidationPipe } from 'nestjs-zod';
@@ -26,6 +26,7 @@ import {
 import {
   asUser,
   createMockAiClient,
+  createMockCollabClient,
   createMockStorageService,
   TestAuthGuard,
 } from '@/test/mock-factories.js';
@@ -49,6 +50,7 @@ beforeEach(async () => {
       SessionReportsService,
       { provide: DB_CLIENT, useValue: db },
       { provide: AI_CLIENT, useValue: createMockAiClient() },
+      { provide: COLLAB_CLIENT, useValue: createMockCollabClient() },
       { provide: CACHE_SERVICE, useValue: new InMemoryCacheService() },
       { provide: STORAGE_SERVICE, useValue: createMockStorageService() },
       Reflector,

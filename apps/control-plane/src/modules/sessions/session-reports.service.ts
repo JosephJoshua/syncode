@@ -1,10 +1,13 @@
 import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import {
   AI_CLIENT,
+  COLLAB_CLIENT,
   ERROR_CODES,
+  type GenerateSessionReportRequest,
   type GenerateSessionReportResult,
   type GenerateWeaknessAnalysisResult,
   type IAiClient,
+  type ICollabClient,
   type SessionReport,
   type SessionReportDimension,
   USER_WEAKNESS_CATEGORIES,
@@ -33,6 +36,7 @@ const WEAKNESS_ANALYSIS_META_TTL_SECONDS = 24 * 60 * 60;
 const WEAKNESS_SCORE_THRESHOLD = 85;
 const PRIOR_TREND_DELTA = 3;
 const RECENT_REPORT_LIMIT = 5;
+const SESSION_REPORT_CHAT_HISTORY_LIMIT = 200;
 
 type WeaknessCategory = (typeof USER_WEAKNESS_CATEGORIES)[number];
 type WeaknessTrend = 'improving' | 'stable' | 'worsening';
@@ -77,6 +81,7 @@ export class SessionReportsService {
   constructor(
     @Inject(DB_CLIENT) private readonly db: Database,
     @Inject(AI_CLIENT) private readonly aiClient: IAiClient,
+    @Inject(COLLAB_CLIENT) private readonly collabClient: ICollabClient,
     @Inject(CACHE_SERVICE) private readonly cacheService: ICacheService,
     private readonly sessionsService: SessionsService,
     private readonly requestBuilder: SessionReportRequestBuilderService,
@@ -139,6 +144,11 @@ export class SessionReportsService {
       return;
     }
 
+    const roomChatMessages = await this.loadSessionReportChatMessages(
+      sessionRow.roomId,
+      participants,
+    );
+
     await Promise.all(
       participants.map(async (participant) => {
         const request = await this.requestBuilder.buildReportRequest(
@@ -146,6 +156,7 @@ export class SessionReportsService {
           participants,
           participant,
           problemRow ?? null,
+          roomChatMessages,
         );
         await this.enqueueParticipantReport(request.sessionId, request.participantId, request);
       }),
@@ -349,6 +360,59 @@ export class SessionReportsService {
         .where(and(eq(sessionReports.sessionId, sessionId), eq(sessionReports.userId, userId)));
 
       throw error;
+    }
+  }
+
+  private async loadSessionReportChatMessages(
+    roomId: string,
+    participants: Array<{
+      userId: string;
+      username: string;
+      displayName: string | null;
+      role: 'interviewer' | 'candidate' | 'observer';
+    }>,
+  ): Promise<NonNullable<GenerateSessionReportRequest['roomChatMessages']>> {
+    try {
+      const chatHistory = await this.collabClient.getRoomChatHistory(roomId, {
+        limit: SESSION_REPORT_CHAT_HISTORY_LIMIT,
+      });
+
+      const participantByUserId = new Map(
+        participants.map((participant) => [participant.userId, participant]),
+      );
+
+      return chatHistory.messages
+        .filter((message) => message.text.trim().length > 0 || message.attachments.length > 0)
+        .map((message) => {
+          const participant = participantByUserId.get(message.userId);
+          const identity = participant
+            ? (participant.displayName ?? participant.username)
+            : message.userId;
+          const role = participant?.role ?? 'observer';
+
+          const parts: string[] = [];
+          const text = message.text.trim();
+          if (text.length > 0) {
+            parts.push(text);
+          }
+          if (message.attachments.length > 0) {
+            parts.push(
+              `[attachments: ${message.attachments.map((attachment) => attachment.fileName).join(', ')}]`,
+            );
+          }
+
+          return {
+            role: 'user',
+            content: `${identity} (${role}): ${parts.join('\n')}`,
+            createdAt: new Date(message.createdAt).toISOString(),
+          };
+        });
+    } catch (error) {
+      this.logger.warn(
+        `Unable to load room chat history for session reports in room ${roomId}`,
+        error,
+      );
+      return [];
     }
   }
 

@@ -398,7 +398,28 @@ export class RoomsService {
       throw new NotFoundException({ message: 'Room not found', code: ERROR_CODES.ROOM_NOT_FOUND });
     }
 
-    const detail = await this.assembleRoomDetail(room, participantRows, userId);
+    const allowInactiveViewer = room.status === RoomStatus.FINISHED;
+    if (allowInactiveViewer) {
+      const [membership] = await this.db
+        .select({ removedAt: roomParticipants.removedAt })
+        .from(roomParticipants)
+        .where(and(eq(roomParticipants.roomId, roomId), eq(roomParticipants.userId, userId)))
+        .limit(1);
+
+      if (membership?.removedAt !== null) {
+        throw new ForbiddenException({
+          message: 'Not a participant of this room',
+          code: ERROR_CODES.ROOM_ACCESS_DENIED,
+        });
+      }
+    }
+
+    const detail = await this.assembleRoomDetail(
+      room,
+      participantRows,
+      userId,
+      allowInactiveViewer,
+    );
 
     if (room.status !== RoomStatus.FINISHED) {
       const collabToken = await this.jwtService.signAsync({
@@ -1473,7 +1494,7 @@ export class RoomsService {
     const mapping = await this.cacheService.get<CodeAnalysisJobMapping>(
       `${RoomsService.AI_CODE_ANALYSIS_JOB_CACHE_PREFIX}${jobId}`,
     );
-    if (!mapping || mapping.roomId !== roomId || mapping.userId !== userId) {
+    if (mapping?.roomId !== roomId || mapping?.userId !== userId) {
       throw new NotFoundException({
         message: 'Code analysis job not found',
         code: ERROR_CODES.VALIDATION_FAILED,
@@ -1679,6 +1700,7 @@ export class RoomsService {
     room: typeof rooms.$inferSelect,
     participantRows: Awaited<ReturnType<typeof this.fetchParticipants>>,
     userId: string,
+    allowInactiveViewer = false,
   ): Promise<RoomDetailResult> {
     const [roomSession] = await this.db
       .select({ id: sessions.id })
@@ -1696,7 +1718,9 @@ export class RoomsService {
         participant.userId,
       ),
     }));
-    const myParticipation = normalizedParticipants.find((p) => p.userId === userId && p.isActive);
+    const myParticipation = normalizedParticipants.find(
+      (p) => p.userId === userId && (p.isActive || allowInactiveViewer),
+    );
     if (!myParticipation) {
       throw new ForbiddenException({
         message: 'Not a participant of this room',
@@ -1843,11 +1867,25 @@ export class RoomsService {
   ): Promise<void> {
     // Auth check against the locked row to prevent TOCTOU race with ownership transfer.
     const [participant] = await tx
-      .select({ role: roomParticipants.role, isActive: roomParticipants.isActive })
+      .select({
+        role: roomParticipants.role,
+        isActive: roomParticipants.isActive,
+        removedAt: roomParticipants.removedAt,
+      })
       .from(roomParticipants)
       .where(and(eq(roomParticipants.roomId, lockedRoom.id), eq(roomParticipants.userId, userId)));
 
-    if (!participant?.isActive) {
+    if (participant?.removedAt !== null) {
+      throw new ForbiddenException({
+        message: 'Not a participant of this room',
+        code: ERROR_CODES.ROOM_ACCESS_DENIED,
+      });
+    }
+
+    const allowInactiveHostFinish =
+      targetStatus === RoomStatus.FINISHED && lockedRoom.hostId === userId;
+
+    if (!participant.isActive && !allowInactiveHostFinish) {
       throw new ForbiddenException({
         message: 'Not a participant of this room',
         code: ERROR_CODES.ROOM_ACCESS_DENIED,
@@ -2458,16 +2496,16 @@ export class RoomsService {
     editorLocked: boolean,
     language: SupportedLanguage,
     changedBy?: string,
-  ): Promise<void> {
+  ): Promise<boolean> {
     try {
       await this.collabClient.updateRoomState({ roomId, phase, editorLocked, changedBy, language });
+      return true;
     } catch (error) {
-      this.logger.error(`Failed to update collab room state for finished room ${roomId}`, error);
-      throw new ServiceUnavailableException({
-        message:
-          'Collab plane did not confirm the final room snapshot; session reports were not enqueued',
-        code: ERROR_CODES.COLLAB_SERVICE_UNAVAILABLE,
-      });
+      this.logger.warn(
+        `Failed to confirm final collab room state for room ${roomId}; continuing finish transition`,
+        error,
+      );
+      return false;
     }
   }
 
@@ -2480,11 +2518,10 @@ export class RoomsService {
     try {
       await this.collabClient.updateRoomState({ roomId, phase, editorLocked, changedBy });
     } catch (error) {
-      this.logger.error(`Failed to restore collab room state for room ${roomId}`, error);
-      throw new ServiceUnavailableException({
-        message: 'Collab plane did not restore room state after aborted finish transition',
-        code: ERROR_CODES.COLLAB_SERVICE_UNAVAILABLE,
-      });
+      this.logger.warn(
+        `Failed to restore collab room state after aborted finish transition for room ${roomId}`,
+        error,
+      );
     }
   }
 
@@ -2881,13 +2918,20 @@ export class RoomsService {
       return;
     }
 
-    await this.collabClient.createDocument({
-      roomId: room.id,
-      initialPhase: room.status,
-      editorLocked: room.editorLocked,
-      snapshot: Array.from(snapshot),
-      initialLanguage: room.language ?? undefined,
-    });
+    try {
+      await this.collabClient.createDocument({
+        roomId: room.id,
+        initialPhase: room.status,
+        editorLocked: room.editorLocked,
+        snapshot: Array.from(snapshot),
+        initialLanguage: room.language ?? undefined,
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Failed to ensure collab document before final snapshot for room ${room.id}; continuing finish transition`,
+        error,
+      );
+    }
   }
 
   private async loadDocSnapshot(roomId: string): Promise<Uint8Array | null> {

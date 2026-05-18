@@ -252,6 +252,12 @@ export interface SessionReportAiMessageContext {
   createdAt: string;
 }
 
+export interface SessionReportRoomChatMessageContext {
+  role: string;
+  content: string;
+  createdAt: string;
+}
+
 export interface SessionReportHistoricalContext {
   sessionsCompared: number;
   averageScore: number | null;
@@ -300,6 +306,7 @@ export interface GenerateSessionReportRequest {
   finalTestCaseBreakdown: SessionReportTestCaseContext[];
   peerFeedback: SessionReportPeerFeedbackContext[];
   aiMessages: SessionReportAiMessageContext[];
+  roomChatMessages?: SessionReportRoomChatMessageContext[];
   historicalContext: SessionReportHistoricalContext | null;
 }
 

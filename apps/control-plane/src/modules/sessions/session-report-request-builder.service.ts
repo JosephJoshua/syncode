@@ -52,6 +52,7 @@ export class SessionReportRequestBuilderService {
     participants: SessionReportParticipant[],
     participant: SessionReportParticipant,
     problemRow: SessionReportProblemRow | null,
+    roomChatMessages: NonNullable<GenerateSessionReportRequest['roomChatMessages']> = [],
   ): Promise<GenerateSessionReportRequest> {
     const [snapshotRows, runRows, submissionRows, feedbackRows, aiMessageRows, historicalRows] =
       await Promise.all([
@@ -253,6 +254,7 @@ export class SessionReportRequestBuilderService {
         content: message.content,
         createdAt: message.createdAt.toISOString(),
       })),
+      roomChatMessages,
       historicalContext:
         priorScores.length > 0
           ? {

@@ -316,6 +316,39 @@ describe('getRoom', () => {
       ForbiddenException,
     );
   });
+
+  it('GIVEN finished room and inactive participant WHEN requesting detail THEN returns room detail', async () => {
+    const host = await insertUser(db);
+    const inactiveParticipant = await insertUser(db);
+    const room = await insertRoom(db, host.id, { status: 'finished', endedAt: new Date() });
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+    await insertParticipant(db, room.id, inactiveParticipant.id, 'candidate', { isActive: false });
+
+    const result = await service.getRoom(room.id, inactiveParticipant.id);
+
+    expect(result.roomId).toBe(room.id);
+    expect(result.status).toBe('finished');
+    expect(result.myRole).toBe('candidate');
+    expect(result.participants.find((p) => p.userId === inactiveParticipant.id)?.isActive).toBe(
+      false,
+    );
+  });
+
+  it('GIVEN finished room and removed participant WHEN requesting detail THEN throws ForbiddenException', async () => {
+    const host = await insertUser(db);
+    const removedParticipant = await insertUser(db);
+    const room = await insertRoom(db, host.id, { status: 'finished', endedAt: new Date() });
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+    await insertParticipant(db, room.id, removedParticipant.id, 'candidate', {
+      isActive: false,
+      removedAt: new Date(),
+      leftAt: new Date(),
+    });
+
+    await expect(service.getRoom(room.id, removedParticipant.id)).rejects.toThrow(
+      ForbiddenException,
+    );
+  });
 });
 
 describe('joinRoom', () => {
@@ -1020,6 +1053,31 @@ describe('transitionPhase (multi-step)', () => {
     expect(updated!.status).toBe('finished');
   });
 
+  it('GIVEN host participant was swept inactive WHEN transitioning to finished THEN host can still end the room', async () => {
+    const host = await insertUser(db);
+    const candidate = await insertUser(db);
+    const room = await insertRoom(db, host.id, { status: 'wrapup', language: 'python' });
+    await insertParticipant(db, room.id, host.id, 'interviewer', { isActive: false });
+    await insertParticipant(db, room.id, candidate.id, 'candidate');
+
+    const session = await insertSession(db, room.id, { status: 'ongoing' });
+    await insertSessionParticipant(db, session.id, host.id, 'interviewer');
+    await insertSessionParticipant(db, session.id, candidate.id, 'candidate');
+
+    const result = await service.transitionPhase(room.id, host.id, 'finished');
+
+    expect(result.currentStatus).toBe('finished');
+    expect(mockSessionReportsService.enqueueForFinishedSession).toHaveBeenCalledWith(session.id);
+
+    const [roomAfterTransition] = await db.select().from(rooms).where(eq(rooms.id, room.id));
+    const [sessionAfterTransition] = await db
+      .select()
+      .from(sessions)
+      .where(eq(sessions.id, session.id));
+    expect(roomAfterTransition?.status).toBe('finished');
+    expect(sessionAfterTransition?.status).toBe('finished');
+  });
+
   it('GIVEN session finishes WHEN transitioning to finished THEN enqueues participant reports for that session', async () => {
     const host = await insertUser(db);
     const candidate = await insertUser(db);
@@ -1124,7 +1182,7 @@ describe('transitionPhase (multi-step)', () => {
     expect(sessionAfterFailure?.status).toBe('ongoing');
   });
 
-  it('GIVEN final collab snapshot update fails WHEN transitioning to finished THEN does not enqueue reports', async () => {
+  it('GIVEN final collab snapshot update fails WHEN transitioning to finished THEN still enqueues reports', async () => {
     const host = await insertUser(db);
     const candidate = await insertUser(db);
     const room = await insertRoom(db, host.id, { status: 'wrapup', language: 'python' });
@@ -1136,21 +1194,17 @@ describe('transitionPhase (multi-step)', () => {
     await insertSessionParticipant(db, session.id, candidate.id, 'candidate');
     mockCollabClient.updateRoomState.mockRejectedValueOnce(new Error('collab down'));
 
-    await expect(service.transitionPhase(room.id, host.id, 'finished')).rejects.toThrow(
-      ServiceUnavailableException,
-    );
+    await service.transitionPhase(room.id, host.id, 'finished');
 
-    expect(mockSessionReportsService.enqueueForFinishedSession).not.toHaveBeenCalledWith(
-      session.id,
-    );
+    expect(mockSessionReportsService.enqueueForFinishedSession).toHaveBeenCalledWith(session.id);
 
-    const [roomAfterFailure] = await db.select().from(rooms).where(eq(rooms.id, room.id));
-    const [sessionAfterFailure] = await db
+    const [roomAfterTransition] = await db.select().from(rooms).where(eq(rooms.id, room.id));
+    const [sessionAfterTransition] = await db
       .select()
       .from(sessions)
       .where(eq(sessions.id, session.id));
-    expect(roomAfterFailure?.status).toBe('wrapup');
-    expect(sessionAfterFailure?.status).toBe('ongoing');
+    expect(roomAfterTransition?.status).toBe('finished');
+    expect(sessionAfterTransition?.status).toBe('finished');
   });
 
   it('GIVEN DB update fails after final collab snapshot WHEN transitioning to finished THEN restores collab phase', async () => {
@@ -1204,7 +1258,7 @@ describe('transitionPhase (multi-step)', () => {
     expect(sessionAfterFailure?.status).toBe('ongoing');
   });
 
-  it('GIVEN DB update and collab rollback fail WHEN transitioning to finished THEN surfaces rollback failure', async () => {
+  it('GIVEN DB update and collab rollback fail WHEN transitioning to finished THEN surfaces DB failure', async () => {
     const host = await insertUser(db);
     const candidate = await insertUser(db);
     const room = await insertRoom(db, host.id, { status: 'wrapup', language: 'python' });
@@ -1237,7 +1291,7 @@ describe('transitionPhase (multi-step)', () => {
 
     try {
       await expect(service.transitionPhase(room.id, host.id, 'finished')).rejects.toThrow(
-        ServiceUnavailableException,
+        /Failed query: update "rooms"/,
       );
     } finally {
       await db.execute(sql`DROP TRIGGER IF EXISTS fail_room_finish_update_restore ON rooms;`);

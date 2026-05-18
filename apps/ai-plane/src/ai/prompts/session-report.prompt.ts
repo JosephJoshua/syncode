@@ -3,6 +3,8 @@ import type { GenerateSessionReportRequest } from '@syncode/contracts';
 const MAX_SESSION_DATA_BLOCK_LENGTH = 16_000;
 const MAX_FINAL_CODE_BLOCK_LENGTH = 48_000;
 const MAX_SESSION_EVENTS_BLOCK_LENGTH = 12_000;
+const MAX_ROOM_CHAT_MESSAGES = 40;
+const MAX_ROOM_CHAT_MESSAGE_CONTENT_LENGTH = 220;
 
 export interface SessionReportPrompt {
   systemPrompt: string;
@@ -128,8 +130,26 @@ function buildCompactSessionData(request: GenerateSessionReportRequest) {
     finalTestCaseBreakdown: request.finalTestCaseBreakdown,
     peerFeedback: request.peerFeedback,
     aiMessages: request.aiMessages,
+    roomChatMessages: compactRoomChatMessages(request.roomChatMessages ?? []),
     historicalContext: request.historicalContext,
   };
+}
+
+function compactRoomChatMessages(
+  messages: NonNullable<GenerateSessionReportRequest['roomChatMessages']>,
+) {
+  return messages.slice(-MAX_ROOM_CHAT_MESSAGES).map((message) => ({
+    ...message,
+    content: truncateChatContent(message.content),
+  }));
+}
+
+function truncateChatContent(content: string): string {
+  if (content.length <= MAX_ROOM_CHAT_MESSAGE_CONTENT_LENGTH) {
+    return content;
+  }
+
+  return `${content.slice(0, MAX_ROOM_CHAT_MESSAGE_CONTENT_LENGTH)}…`;
 }
 
 function buildFinalSnapshotMetadata(snapshot: GenerateSessionReportRequest['finalCodeSnapshot']) {

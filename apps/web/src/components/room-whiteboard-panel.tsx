@@ -48,6 +48,10 @@ export interface RoomWhiteboardPanelProps {
   // Provided when the panel is currently rendered inside the floating
   // window; clicking it docks the whiteboard back into the workspace tab.
   onDock?: () => void;
+  // Enables or disables tldraw keyboard shortcuts. We disable these while
+  // the user is focused on the Monaco code editor to avoid single-key tool
+  // shortcuts (for example `n`, `q`) hijacking code input.
+  keyboardShortcutsEnabled?: boolean;
 }
 
 const VISIBILITY_PREFIX = 'whiteboard:visibility';
@@ -103,6 +107,7 @@ export function RoomWhiteboardPanel({
   participantNames,
   onPopOut,
   onDock,
+  keyboardShortcutsEnabled = true,
 }: RoomWhiteboardPanelProps) {
   const { t } = useTranslation('rooms');
 
@@ -154,6 +159,9 @@ export function RoomWhiteboardPanel({
   const handleMount = useCallback(
     (editor: Editor) => {
       editorRef.current = editor;
+      editor.user.updateUserPreferences({
+        areKeyboardShortcutsEnabled: keyboardShortcutsEnabled,
+      });
 
       // Expose for ad-hoc browser-console debugging in dev only.
       if (import.meta.env?.DEV && typeof window !== 'undefined') {
@@ -250,8 +258,19 @@ export function RoomWhiteboardPanel({
         setLocalApplyTarget(null);
       };
     },
-    [attachLocalStoreForwarder, setLocalApplyTarget],
+    [attachLocalStoreForwarder, keyboardShortcutsEnabled, setLocalApplyTarget],
   );
+
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor) {
+      return;
+    }
+
+    editor.user.updateUserPreferences({
+      areKeyboardShortcutsEnabled: keyboardShortcutsEnabled,
+    });
+  }, [keyboardShortcutsEnabled]);
 
   // (D) Switch the active tldraw tool when the user toggles layer mode.
   // Drawing -> freehand draw tool; Annotation -> highlighter (visually
@@ -368,6 +387,7 @@ export function RoomWhiteboardPanel({
       <div className="relative flex-1 overflow-hidden">
         <Tldraw
           store={storeWithStatus}
+          autoFocus={false}
           onMount={handleMount}
           components={{
             // The default page menu, main menu, and document name aren't
