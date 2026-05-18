@@ -1,5 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MediaSettingsPanel } from './media-settings-panel.js';
 
@@ -70,18 +69,20 @@ describe('MediaSettingsPanel', () => {
   });
 
   it('GIVEN no prior permissions WHEN panel opened THEN shows both grant buttons', async () => {
-    setupNavigatorMocks({ cameraState: 'prompt', micState: 'prompt', devices: [] });
-    const user = userEvent.setup();
+    const { enumerateDevices } = setupNavigatorMocks({
+      cameraState: 'prompt',
+      micState: 'prompt',
+      devices: [],
+    });
 
     render(<MediaSettingsPanel {...baseProps} />);
-    await user.click(screen.getByRole('button', { name: /media settings/i }));
+    fireEvent.click(screen.getByRole('button', { name: /media settings/i }));
 
-    expect(
-      await screen.findByRole('button', { name: /grant camera permission/i }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /grant camera permission/i })).toBeInTheDocument();
     expect(
       screen.getByRole('button', { name: /grant microphone permission/i }),
     ).toBeInTheDocument();
+    await waitFor(() => expect(enumerateDevices).toHaveBeenCalled());
   });
 
   it('GIVEN camera already granted via Permissions API WHEN opened THEN camera section shows device picker and no grant button', async () => {
@@ -90,10 +91,9 @@ describe('MediaSettingsPanel', () => {
       micState: 'prompt',
       devices: [{ kind: 'videoinput', deviceId: 'cam-1', label: 'FaceTime HD' }],
     });
-    const user = userEvent.setup();
 
     render(<MediaSettingsPanel {...baseProps} />);
-    await user.click(screen.getByRole('button', { name: /media settings/i }));
+    fireEvent.click(screen.getByRole('button', { name: /media settings/i }));
 
     await waitFor(() => {
       expect(
@@ -115,10 +115,9 @@ describe('MediaSettingsPanel', () => {
         query: vi.fn().mockRejectedValue(new TypeError('unsupported')),
       },
     });
-    const user = userEvent.setup();
 
     render(<MediaSettingsPanel {...baseProps} />);
-    await user.click(screen.getByRole('button', { name: /media settings/i }));
+    fireEvent.click(screen.getByRole('button', { name: /media settings/i }));
 
     await waitFor(() => {
       expect(
@@ -157,12 +156,11 @@ describe('MediaSettingsPanel', () => {
       },
     });
 
-    const user = userEvent.setup();
     render(<MediaSettingsPanel {...baseProps} />);
-    await user.click(screen.getByRole('button', { name: /media settings/i }));
+    fireEvent.click(screen.getByRole('button', { name: /media settings/i }));
 
     const grantBtn = await screen.findByRole('button', { name: /grant camera permission/i });
-    await user.click(grantBtn);
+    fireEvent.click(grantBtn);
 
     await waitFor(() => {
       expect(getUserMedia).toHaveBeenCalledWith({ video: true });
@@ -189,12 +187,11 @@ describe('MediaSettingsPanel', () => {
       },
     });
 
-    const user = userEvent.setup();
     render(<MediaSettingsPanel {...baseProps} />);
-    await user.click(screen.getByRole('button', { name: /media settings/i }));
+    fireEvent.click(screen.getByRole('button', { name: /media settings/i }));
 
     const grantBtn = await screen.findByRole('button', { name: /grant microphone permission/i });
-    await user.click(grantBtn);
+    fireEvent.click(grantBtn);
 
     expect(await screen.findByText(/permission denied/i)).toBeInTheDocument();
     expect(

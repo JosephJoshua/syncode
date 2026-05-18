@@ -6,6 +6,8 @@ export const AI_WEAKNESS_ANALYSIS_QUEUE = 'ai.weakness-analysis';
 export const AI_REVIEW_QUEUE = 'ai.review-code';
 export const AI_INTERVIEW_QUEUE = 'ai.interview-response';
 export const AI_SESSION_REPORT_QUEUE = 'ai.session-report';
+export const MATCHMAKING_ENGINE_QUEUE = 'matchmaking.engine';
+export const ROOM_ABANDONED_CLEANUP_QUEUE = 'rooms.cleanup-abandoned';
 
 export const EXECUTION_RESULT_QUEUE = 'execution.run-code.results';
 

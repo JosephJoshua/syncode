@@ -2,7 +2,6 @@ import { CONTROL_API } from '@syncode/contracts';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { HTTPError } from 'ky';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 if (typeof globalThis.ResizeObserver === 'undefined') {
@@ -59,83 +58,51 @@ import { toast } from 'sonner';
 import { api } from '@/lib/api-client.js';
 import { MatchmakingPage } from './matchmaking.js';
 
-type BrowseResponse = {
-  data: Array<{
-    roomId: string;
-    name: string | null;
-    status: 'waiting' | 'warmup' | 'coding' | 'wrapup' | 'finished';
-    mode: 'peer' | 'ai';
-    hostId: string;
-    hostName: string;
-    hostAvatarUrl: string | null;
-    language: 'python' | 'javascript' | 'typescript' | 'java' | 'cpp' | 'c' | 'go' | 'rust' | null;
-    problemTitle: string | null;
-    problemDifficulty: 'easy' | 'medium' | 'hard' | null;
-    participantCount: number;
-    isParticipant: boolean;
-    maxParticipants: number;
-    createdAt: string;
-  }>;
-  pagination: { nextCursor: string | null; hasMore: boolean };
-};
-
 const apiMock = vi.mocked(api);
 const toastSuccessMock = vi.mocked(toast.success);
 const toastErrorMock = vi.mocked(toast.error);
-
-function makeRoom(
-  overrides: Partial<BrowseResponse['data'][number]> = {},
-): BrowseResponse['data'][number] {
-  return {
-    roomId: 'room-1',
-    name: 'Arrays warmup',
-    status: 'waiting',
-    mode: 'peer',
-    hostId: 'user-1',
-    hostName: 'alice',
-    hostAvatarUrl: null,
-    language: 'python',
-    problemTitle: 'Two Sum',
-    problemDifficulty: 'easy',
-    participantCount: 1,
-    isParticipant: false,
-    maxParticipants: 2,
-    createdAt: new Date().toISOString(),
-    ...overrides,
-  };
-}
-
-function makeResponse(data: BrowseResponse['data']): BrowseResponse {
-  return { data, pagination: { nextCursor: null, hasMore: false } };
-}
-
-function makePaginatedResponse(
-  data: BrowseResponse['data'],
-  nextCursor: string | null,
-): BrowseResponse {
-  return { data, pagination: { nextCursor, hasMore: nextCursor !== null } };
-}
 
 function renderPage() {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
+
+  return render(
+    <QueryClientProvider client={client}>
+      <MatchmakingPage />
+    </QueryClientProvider>,
+  );
+}
+
+function mockProblemsList() {
   return {
-    client,
-    ...render(
-      <QueryClientProvider client={client}>
-        <MatchmakingPage />
-      </QueryClientProvider>,
-    ),
+    data: [
+      {
+        id: '550e8400-e29b-41d4-a716-446655440100',
+        title: 'Two Sum',
+        difficulty: 'easy' as const,
+        isPublished: true,
+        tags: [],
+        company: null,
+        acceptanceRate: null,
+        isBookmarked: false,
+        attemptStatus: null,
+      },
+    ],
+    pagination: { nextCursor: null, hasMore: false },
   };
 }
 
-function makeHttpError(status: number, body: unknown) {
-  const response = new Response(JSON.stringify(body), {
-    status,
-    headers: { 'content-type': 'application/json' },
-  });
-  return new HTTPError(response, new Request('http://example'), {} as never);
+function mockProblemTags() {
+  return {
+    data: [
+      {
+        slug: 'array',
+        name: 'Array',
+        count: 1,
+      },
+    ],
+  };
 }
 
 describe('MatchmakingPage', () => {
@@ -151,143 +118,673 @@ describe('MatchmakingPage', () => {
     vi.clearAllMocks();
   });
 
-  it('GIVEN a matching public room WHEN the user starts matchmaking THEN it joins without forcing a role and navigates to the room', async () => {
+  it('GIVEN compatible waiting room exists WHEN user starts matchmaking THEN joins room before entering queue', async () => {
     apiMock.mockImplementation((route) => {
-      const typedRoute = route as { route?: string };
-      if (typedRoute.route === CONTROL_API.ROOMS.JOIN.route) {
-        return Promise.resolve({ ok: true } as never);
+      if (route.route === CONTROL_API.PROBLEMS.TAGS.route) {
+        return Promise.resolve(mockProblemTags());
       }
-      return Promise.resolve(makeResponse([makeRoom({ roomId: 'room-match' })]) as never);
+      if (route.route === CONTROL_API.PROBLEMS.LIST.route) {
+        return Promise.resolve(mockProblemsList());
+      }
+      if (route.route === CONTROL_API.ROOMS.BROWSE_PUBLIC.route) {
+        return Promise.resolve({
+          data: [
+            {
+              roomId: '550e8400-e29b-41d4-a716-446655440002',
+              name: 'Two Sum Practice',
+              status: 'waiting',
+              mode: 'peer',
+              hostId: '550e8400-e29b-41d4-a716-446655440003',
+              hostName: 'host-user',
+              hostAvatarUrl: null,
+              language: 'python',
+              problemTitle: 'Two Sum',
+              problemDifficulty: 'medium',
+              participantCount: 1,
+              isParticipant: false,
+              maxParticipants: 2,
+              createdAt: '2026-05-18T10:00:00.000Z',
+            },
+          ],
+          pagination: { nextCursor: null, hasMore: false },
+        });
+      }
+      if (route.route === CONTROL_API.ROOMS.JOIN.route) {
+        return Promise.resolve({
+          roomId: '550e8400-e29b-41d4-a716-446655440002',
+        });
+      }
+      throw new Error(`Unexpected route: ${route.route}`);
     });
-    const user = userEvent.setup();
 
+    const user = userEvent.setup();
     renderPage();
 
     await user.click(screen.getByRole('button', { name: /matchmaking\.start/i }));
 
     await waitFor(() => {
-      expect(apiMock).toHaveBeenCalledWith(CONTROL_API.ROOMS.BROWSE_PUBLIC, {
-        searchParams: {
-          limit: 5,
-          cursor: undefined,
-          language: 'python',
-          difficulty: 'medium',
-          status: 'waiting',
-        },
-      });
-    });
-    await waitFor(() => {
       expect(apiMock).toHaveBeenCalledWith(CONTROL_API.ROOMS.JOIN, {
-        params: { id: 'room-match' },
+        params: { id: '550e8400-e29b-41d4-a716-446655440002' },
         body: {},
       });
     });
+
+    expect(
+      apiMock.mock.calls.some(
+        ([route]) => route.route === CONTROL_API.MATCHMAKING.ENTER_QUEUE.route,
+      ),
+    ).toBe(false);
     await waitFor(() => {
       expect(navigateMock).toHaveBeenCalledWith({
         to: '/rooms/$roomId',
-        params: { roomId: 'room-match' },
+        params: { roomId: '550e8400-e29b-41d4-a716-446655440002' },
       });
     });
-    expect(toastSuccessMock).toHaveBeenCalledWith('matchmaking.toastMatched');
+
+    expect(toastSuccessMock).toHaveBeenCalledWith('browse.joinSuccess');
   });
 
-  it('GIVEN the first page is already joined or fails to join WHEN a later page has a candidate THEN it advances and joins that candidate', async () => {
-    apiMock.mockImplementation((route, options) => {
-      const typedRoute = route as { route?: string };
-      if (typedRoute.route !== CONTROL_API.ROOMS.JOIN.route) {
-        const cursor = (options as { searchParams?: { cursor?: string } }).searchParams?.cursor;
-        return Promise.resolve(
-          cursor === 'page-2'
-            ? makeResponse([makeRoom({ roomId: 'room-next' })])
-            : makePaginatedResponse(
-                [
-                  makeRoom({ roomId: 'room-own', isParticipant: true }),
-                  makeRoom({ roomId: 'room-stale' }),
-                ],
-                'page-2',
-              ),
-        ) as never;
+  it('GIVEN role filter is selected WHEN joining compatible waiting room THEN join request includes requestedRole', async () => {
+    apiMock.mockImplementation((route) => {
+      if (route.route === CONTROL_API.PROBLEMS.TAGS.route) {
+        return Promise.resolve(mockProblemTags());
       }
-
-      const roomId = (options as { params: { id: string } }).params.id;
-      if (roomId === 'room-stale') {
-        return Promise.reject(
-          makeHttpError(409, { statusCode: 409, message: 'full', code: 'ROOM_FULL' }),
-        );
+      if (route.route === CONTROL_API.PROBLEMS.LIST.route) {
+        return Promise.resolve(mockProblemsList());
       }
-      return Promise.resolve({ ok: true } as never);
+      if (route.route === CONTROL_API.ROOMS.BROWSE_PUBLIC.route) {
+        return Promise.resolve({
+          data: [
+            {
+              roomId: '550e8400-e29b-41d4-a716-446655440202',
+              name: 'Two Sum Practice',
+              status: 'waiting',
+              mode: 'peer',
+              hostId: '550e8400-e29b-41d4-a716-446655440203',
+              hostName: 'host-user',
+              hostAvatarUrl: null,
+              language: 'python',
+              problemTitle: 'Two Sum',
+              problemDifficulty: 'medium',
+              participantCount: 1,
+              isParticipant: false,
+              maxParticipants: 2,
+              createdAt: '2026-05-18T10:00:00.000Z',
+            },
+          ],
+          pagination: { nextCursor: null, hasMore: false },
+        });
+      }
+      if (route.route === CONTROL_API.ROOMS.JOIN.route) {
+        return Promise.resolve({
+          roomId: '550e8400-e29b-41d4-a716-446655440202',
+        });
+      }
+      throw new Error(`Unexpected route: ${route.route}`);
     });
-    const user = userEvent.setup();
 
+    const user = userEvent.setup();
     renderPage();
 
+    await user.click(screen.getByRole('button', { name: 'matchmaking.roleLabel' }));
+    await user.click(screen.getByRole('button', { name: 'role.candidate' }));
     await user.click(screen.getByRole('button', { name: /matchmaking\.start/i }));
 
     await waitFor(() => {
       expect(apiMock).toHaveBeenCalledWith(CONTROL_API.ROOMS.JOIN, {
-        params: { id: 'room-stale' },
-        body: {},
+        params: { id: '550e8400-e29b-41d4-a716-446655440202' },
+        body: { requestedRole: 'candidate' },
       });
     });
+
+    expect(
+      apiMock.mock.calls.some(
+        ([route]) => route.route === CONTROL_API.MATCHMAKING.ENTER_QUEUE.route,
+      ),
+    ).toBe(false);
+  });
+
+  it('GIVEN non-waiting public room exists WHEN user starts matchmaking THEN joins as observer', async () => {
+    apiMock.mockImplementation((route) => {
+      if (route.route === CONTROL_API.PROBLEMS.TAGS.route) {
+        return Promise.resolve(mockProblemTags());
+      }
+      if (route.route === CONTROL_API.PROBLEMS.LIST.route) {
+        return Promise.resolve(mockProblemsList());
+      }
+      if (route.route === CONTROL_API.ROOMS.BROWSE_PUBLIC.route) {
+        return Promise.resolve({
+          data: [
+            {
+              roomId: '550e8400-e29b-41d4-a716-446655440212',
+              name: 'Live coding room',
+              status: 'coding',
+              mode: 'peer',
+              hostId: '550e8400-e29b-41d4-a716-446655440213',
+              hostName: 'host-user',
+              hostAvatarUrl: null,
+              language: 'python',
+              problemTitle: 'Two Sum',
+              problemDifficulty: 'medium',
+              participantCount: 2,
+              isParticipant: false,
+              maxParticipants: 5,
+              createdAt: '2026-05-18T10:00:00.000Z',
+            },
+          ],
+          pagination: { nextCursor: null, hasMore: false },
+        });
+      }
+      if (route.route === CONTROL_API.ROOMS.JOIN.route) {
+        return Promise.resolve({
+          roomId: '550e8400-e29b-41d4-a716-446655440212',
+        });
+      }
+      throw new Error(`Unexpected route: ${route.route}`);
+    });
+
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(screen.getByRole('button', { name: 'matchmaking.roleLabel' }));
+    await user.click(screen.getByRole('button', { name: 'role.candidate' }));
+    await user.click(screen.getByRole('button', { name: /matchmaking\.start/i }));
+
     await waitFor(() => {
       expect(apiMock).toHaveBeenCalledWith(CONTROL_API.ROOMS.JOIN, {
-        params: { id: 'room-next' },
-        body: {},
+        params: { id: '550e8400-e29b-41d4-a716-446655440212' },
+        body: { requestedRole: 'observer' },
       });
     });
-    expect(apiMock).not.toHaveBeenCalledWith(
-      CONTROL_API.ROOMS.JOIN,
-      expect.objectContaining({ params: { id: 'room-own' } }),
+
+    expect(
+      apiMock.mock.calls.some(
+        ([route]) => route.route === CONTROL_API.MATCHMAKING.ENTER_QUEUE.route,
+      ),
+    ).toBe(false);
+  });
+
+  it('GIVEN queue status poll fails WHEN user is searching THEN shows idle without leaving queue', async () => {
+    apiMock.mockImplementation((route) => {
+      if (route.route === CONTROL_API.PROBLEMS.TAGS.route) {
+        return Promise.resolve(mockProblemTags());
+      }
+      if (route.route === CONTROL_API.PROBLEMS.LIST.route) {
+        return Promise.resolve(mockProblemsList());
+      }
+      if (route.route === CONTROL_API.ROOMS.BROWSE_PUBLIC.route) {
+        return Promise.resolve({
+          data: [],
+          pagination: { nextCursor: null, hasMore: false },
+        });
+      }
+      if (route === CONTROL_API.MATCHMAKING.GET_QUEUE_STATUS) {
+        return Promise.reject(new Error('network'));
+      }
+      if (route === CONTROL_API.MATCHMAKING.ENTER_QUEUE) {
+        return Promise.resolve({
+          status: 'searching',
+          requestId: '550e8400-e29b-41d4-a716-446655440214',
+          queuePosition: 1,
+          expiresAt: '2026-05-18T12:00:00.000Z',
+          preferences: {
+            languages: ['python'],
+            difficulties: ['medium'],
+            problemIds: [],
+            topics: [],
+            roles: [],
+          },
+        });
+      }
+      throw new Error(`Unexpected route: ${route.route}`);
+    });
+
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(screen.getByRole('button', { name: /matchmaking\.start/i }));
+
+    await waitFor(
+      () => {
+        expect(toastErrorMock).toHaveBeenCalledWith('matchmaking.searchFailed');
+      },
+      { timeout: 5_000 },
     );
-    await waitFor(() => {
-      expect(navigateMock).toHaveBeenCalledWith({
-        to: '/rooms/$roomId',
-        params: { roomId: 'room-next' },
-      });
-    });
-    expect(toastErrorMock).toHaveBeenCalledWith('lobby.roomFull');
+    expect(
+      apiMock.mock.calls.some(([route]) => route === CONTROL_API.MATCHMAKING.LEAVE_QUEUE),
+    ).toBe(false);
+    expect(screen.getByText('matchmaking.status.idle')).toBeInTheDocument();
   });
 
-  it('GIVEN search is pending WHEN the user leaves the queue THEN late search results do not join or navigate', async () => {
-    let resolveSearch: ((response: BrowseResponse) => void) | null = null;
-    const completeSearch = () => {
-      if (!resolveSearch) {
-        throw new Error('search request was not started');
-      }
-      resolveSearch(makeResponse([makeRoom({ roomId: 'room-late' })]));
-    };
+  it('GIVEN searching status WHEN user cancels queue THEN calls leave endpoint and returns idle status', async () => {
     apiMock.mockImplementation((route) => {
-      const typedRoute = route as { route?: string };
-      if (typedRoute.route === CONTROL_API.ROOMS.BROWSE_PUBLIC.route) {
-        return new Promise((resolve) => {
-          resolveSearch = (response) => resolve(response as never);
-        }) as never;
+      if (route.route === CONTROL_API.PROBLEMS.TAGS.route) {
+        return Promise.resolve(mockProblemTags());
       }
-      return Promise.resolve({ ok: true } as never);
+      if (route.route === CONTROL_API.PROBLEMS.LIST.route) {
+        return Promise.resolve(mockProblemsList());
+      }
+      if (route.route === CONTROL_API.ROOMS.BROWSE_PUBLIC.route) {
+        return Promise.resolve({
+          data: [],
+          pagination: { nextCursor: null, hasMore: false },
+        });
+      }
+      if (route.route === CONTROL_API.MATCHMAKING.ENTER_QUEUE.route) {
+        return Promise.resolve({
+          status: 'searching',
+          requestId: '550e8400-e29b-41d4-a716-446655440011',
+          queuePosition: 1,
+          expiresAt: '2026-05-18T12:00:00.000Z',
+          preferences: {
+            languages: ['python'],
+            difficulties: ['medium'],
+            problemIds: [],
+            topics: [],
+            roles: [],
+          },
+        });
+      }
+      if (route.route === CONTROL_API.MATCHMAKING.GET_QUEUE_STATUS.route) {
+        return Promise.resolve({
+          status: 'searching',
+          requestId: '550e8400-e29b-41d4-a716-446655440011',
+          queuePosition: 1,
+          expiresAt: '2026-05-18T12:00:00.000Z',
+          preferences: {
+            languages: ['python'],
+            difficulties: ['medium'],
+            problemIds: [],
+            topics: [],
+            roles: [],
+          },
+        });
+      }
+      if (route.route === CONTROL_API.MATCHMAKING.LEAVE_QUEUE.route) {
+        return Promise.resolve({ status: 'idle' });
+      }
+      throw new Error(`Unexpected route: ${route.route}`);
     });
-    const user = userEvent.setup();
 
+    const user = userEvent.setup();
     renderPage();
 
     await user.click(screen.getByRole('button', { name: /matchmaking\.start/i }));
     await waitFor(() => {
-      expect(apiMock).toHaveBeenCalledWith(
-        CONTROL_API.ROOMS.BROWSE_PUBLIC,
-        expect.objectContaining({ searchParams: expect.any(Object) }),
-      );
+      expect(screen.getByText('matchmaking.status.searching')).toBeInTheDocument();
     });
 
     await user.click(screen.getByRole('button', { name: /matchmaking\.cancel/i }));
-    completeSearch();
 
+    await waitFor(() => {
+      expect(apiMock).toHaveBeenCalledWith(CONTROL_API.MATCHMAKING.LEAVE_QUEUE);
+    });
     await waitFor(() => {
       expect(screen.getByText('matchmaking.status.idle')).toBeInTheDocument();
     });
-    expect(apiMock).not.toHaveBeenCalledWith(
-      CONTROL_API.ROOMS.JOIN,
-      expect.objectContaining({ params: { id: 'room-late' } }),
+  });
+
+  it('GIVEN room preflight is pending WHEN start is clicked twice THEN only one search starts', async () => {
+    let resolveBrowse:
+      | ((value: { data: []; pagination: { nextCursor: null; hasMore: false } }) => void)
+      | undefined;
+    const browsePromise = new Promise<{
+      data: [];
+      pagination: { nextCursor: null; hasMore: false };
+    }>((resolve) => {
+      resolveBrowse = resolve;
+    });
+
+    apiMock.mockImplementation((route) => {
+      if (route.route === CONTROL_API.PROBLEMS.TAGS.route) {
+        return Promise.resolve(mockProblemTags());
+      }
+      if (route.route === CONTROL_API.PROBLEMS.LIST.route) {
+        return Promise.resolve(mockProblemsList());
+      }
+      if (route.route === CONTROL_API.ROOMS.BROWSE_PUBLIC.route) {
+        return browsePromise;
+      }
+      if (route.route === CONTROL_API.MATCHMAKING.ENTER_QUEUE.route) {
+        return Promise.resolve({
+          status: 'searching',
+          requestId: '550e8400-e29b-41d4-a716-446655440042',
+          queuePosition: 1,
+          expiresAt: '2026-05-18T12:00:00.000Z',
+          preferences: {
+            languages: ['python'],
+            difficulties: ['medium'],
+            problemIds: [],
+            topics: [],
+            roles: [],
+          },
+        });
+      }
+      if (route.route === CONTROL_API.MATCHMAKING.GET_QUEUE_STATUS.route) {
+        return Promise.resolve({
+          status: 'searching',
+          requestId: '550e8400-e29b-41d4-a716-446655440042',
+          queuePosition: 1,
+          expiresAt: '2026-05-18T12:00:00.000Z',
+          preferences: {
+            languages: ['python'],
+            difficulties: ['medium'],
+            problemIds: [],
+            topics: [],
+            roles: [],
+          },
+        });
+      }
+      throw new Error(`Unexpected route: ${route.route}`);
+    });
+
+    const user = userEvent.setup();
+    renderPage();
+
+    const startButton = screen.getByRole('button', { name: /matchmaking\.start/i });
+    await user.click(startButton);
+    await user.click(startButton);
+    if (!resolveBrowse) {
+      throw new Error('expected browse resolver');
+    }
+    resolveBrowse({ data: [], pagination: { nextCursor: null, hasMore: false } });
+
+    await waitFor(() => {
+      expect(
+        apiMock.mock.calls.filter(
+          ([route]) => route.route === CONTROL_API.MATCHMAKING.ENTER_QUEUE.route,
+        ),
+      ).toHaveLength(1);
+    });
+  });
+
+  it('GIVEN searching status WHEN user leaves matchmaking page THEN queue is canceled automatically', async () => {
+    apiMock.mockImplementation((route) => {
+      if (route.route === CONTROL_API.PROBLEMS.TAGS.route) {
+        return Promise.resolve(mockProblemTags());
+      }
+      if (route.route === CONTROL_API.PROBLEMS.LIST.route) {
+        return Promise.resolve(mockProblemsList());
+      }
+      if (route.route === CONTROL_API.ROOMS.BROWSE_PUBLIC.route) {
+        return Promise.resolve({
+          data: [],
+          pagination: { nextCursor: null, hasMore: false },
+        });
+      }
+      if (route.route === CONTROL_API.MATCHMAKING.ENTER_QUEUE.route) {
+        return Promise.resolve({
+          status: 'searching',
+          requestId: '550e8400-e29b-41d4-a716-446655440031',
+          queuePosition: 1,
+          expiresAt: '2026-05-18T12:00:00.000Z',
+          preferences: {
+            languages: ['python'],
+            difficulties: ['medium'],
+            problemIds: [],
+            topics: [],
+            roles: [],
+          },
+        });
+      }
+      if (route.route === CONTROL_API.MATCHMAKING.GET_QUEUE_STATUS.route) {
+        return Promise.resolve({
+          status: 'searching',
+          requestId: '550e8400-e29b-41d4-a716-446655440031',
+          queuePosition: 1,
+          expiresAt: '2026-05-18T12:00:00.000Z',
+          preferences: {
+            languages: ['python'],
+            difficulties: ['medium'],
+            problemIds: [],
+            topics: [],
+            roles: [],
+          },
+        });
+      }
+      if (route.route === CONTROL_API.MATCHMAKING.LEAVE_QUEUE.route) {
+        return Promise.resolve({ status: 'idle' });
+      }
+      throw new Error(`Unexpected route: ${route.route}`);
+    });
+
+    const user = userEvent.setup();
+    const view = renderPage();
+
+    await user.click(screen.getByRole('button', { name: /matchmaking\.start/i }));
+    await waitFor(() => {
+      expect(screen.getByText('matchmaking.status.searching')).toBeInTheDocument();
+    });
+
+    view.unmount();
+
+    await waitFor(() => {
+      expect(apiMock).toHaveBeenCalledWith(CONTROL_API.MATCHMAKING.LEAVE_QUEUE);
+    });
+  });
+
+  it('GIVEN only empty waiting room exists WHEN user starts matchmaking THEN skips room join and enters queue', async () => {
+    apiMock.mockImplementation((route) => {
+      if (route.route === CONTROL_API.PROBLEMS.TAGS.route) {
+        return Promise.resolve(mockProblemTags());
+      }
+      if (route.route === CONTROL_API.PROBLEMS.LIST.route) {
+        return Promise.resolve(mockProblemsList());
+      }
+      if (route.route === CONTROL_API.ROOMS.BROWSE_PUBLIC.route) {
+        return Promise.resolve({
+          data: [
+            {
+              roomId: '550e8400-e29b-41d4-a716-446655440102',
+              name: 'Empty stale room',
+              status: 'waiting',
+              mode: 'peer',
+              hostId: '550e8400-e29b-41d4-a716-446655440103',
+              hostName: 'host-user',
+              hostAvatarUrl: null,
+              language: 'python',
+              problemTitle: 'Two Sum',
+              problemDifficulty: 'easy',
+              participantCount: 0,
+              isParticipant: false,
+              maxParticipants: 2,
+              createdAt: '2026-05-18T10:00:00.000Z',
+            },
+          ],
+          pagination: { nextCursor: null, hasMore: false },
+        });
+      }
+      if (route.route === CONTROL_API.MATCHMAKING.ENTER_QUEUE.route) {
+        return Promise.resolve({
+          status: 'searching',
+          requestId: '550e8400-e29b-41d4-a716-446655440104',
+          queuePosition: 1,
+          expiresAt: '2026-05-18T12:00:00.000Z',
+          preferences: {
+            languages: ['python'],
+            difficulties: ['medium'],
+            problemIds: [],
+            topics: [],
+            roles: [],
+          },
+        });
+      }
+      if (route.route === CONTROL_API.MATCHMAKING.GET_QUEUE_STATUS.route) {
+        return Promise.resolve({
+          status: 'searching',
+          requestId: '550e8400-e29b-41d4-a716-446655440104',
+          queuePosition: 1,
+          expiresAt: '2026-05-18T12:00:00.000Z',
+          preferences: {
+            languages: ['python'],
+            difficulties: ['medium'],
+            problemIds: [],
+            topics: [],
+            roles: [],
+          },
+        });
+      }
+      throw new Error(`Unexpected route: ${route.route}`);
+    });
+
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(screen.getByRole('button', { name: /matchmaking\.start/i }));
+
+    await waitFor(() => {
+      expect(apiMock).toHaveBeenCalledWith(CONTROL_API.MATCHMAKING.ENTER_QUEUE, {
+        body: {
+          languages: ['python'],
+          difficulties: ['medium'],
+          problemIds: [],
+          topics: [],
+          roles: [],
+        },
+      });
+    });
+
+    expect(apiMock.mock.calls.some(([route]) => route.route === CONTROL_API.ROOMS.JOIN.route)).toBe(
+      false,
     );
-    expect(navigateMock).not.toHaveBeenCalled();
-    expect(toastSuccessMock).not.toHaveBeenCalled();
+    expect(navigateMock).not.toHaveBeenCalledWith(
+      expect.objectContaining({ to: '/rooms/$roomId' }),
+    );
+  });
+
+  it('GIVEN user enables problem filter and selects one WHEN entering queue THEN payload includes selected problem IDs', async () => {
+    apiMock.mockImplementation((route) => {
+      if (route.route === CONTROL_API.PROBLEMS.TAGS.route) {
+        return Promise.resolve(mockProblemTags());
+      }
+      if (route.route === CONTROL_API.PROBLEMS.LIST.route) {
+        return Promise.resolve(mockProblemsList());
+      }
+      if (route.route === CONTROL_API.ROOMS.BROWSE_PUBLIC.route) {
+        return Promise.resolve({
+          data: [],
+          pagination: { nextCursor: null, hasMore: false },
+        });
+      }
+      if (route.route === CONTROL_API.MATCHMAKING.ENTER_QUEUE.route) {
+        return Promise.resolve({
+          status: 'searching',
+          requestId: '550e8400-e29b-41d4-a716-446655440021',
+          queuePosition: 1,
+          expiresAt: '2026-05-18T12:00:00.000Z',
+          preferences: {
+            languages: ['python'],
+            difficulties: ['easy'],
+            problemIds: ['550e8400-e29b-41d4-a716-446655440100'],
+            topics: [],
+            roles: [],
+          },
+        });
+      }
+      if (route.route === CONTROL_API.MATCHMAKING.GET_QUEUE_STATUS.route) {
+        return Promise.resolve({
+          status: 'searching',
+          requestId: '550e8400-e29b-41d4-a716-446655440021',
+          queuePosition: 1,
+          expiresAt: '2026-05-18T12:00:00.000Z',
+          preferences: {
+            languages: ['python'],
+            difficulties: ['easy'],
+            problemIds: ['550e8400-e29b-41d4-a716-446655440100'],
+            topics: [],
+            roles: [],
+          },
+        });
+      }
+      throw new Error(`Unexpected route: ${route.route}`);
+    });
+
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(screen.getByRole('button', { name: 'matchmaking.difficulty.medium' }));
+    await user.click(screen.getByRole('button', { name: 'matchmaking.difficulty.easy' }));
+    await user.click(screen.getByRole('button', { name: /matchmaking\.anyProblem/i }));
+    await user.click(screen.getByText(/Two Sum · matchmaking\.difficulty\.easy/i));
+    await user.click(screen.getByRole('button', { name: /matchmaking\.start/i }));
+
+    await waitFor(() => {
+      expect(apiMock).toHaveBeenCalledWith(CONTROL_API.MATCHMAKING.ENTER_QUEUE, {
+        body: {
+          languages: ['python'],
+          difficulties: ['easy'],
+          problemIds: ['550e8400-e29b-41d4-a716-446655440100'],
+          topics: [],
+          roles: [],
+        },
+      });
+    });
+  });
+
+  it('GIVEN topic is selected WHEN entering queue THEN payload includes selected topic slugs', async () => {
+    apiMock.mockImplementation((route) => {
+      if (route.route === CONTROL_API.PROBLEMS.TAGS.route) {
+        return Promise.resolve(mockProblemTags());
+      }
+      if (route.route === CONTROL_API.PROBLEMS.LIST.route) {
+        return Promise.resolve(mockProblemsList());
+      }
+      if (route.route === CONTROL_API.ROOMS.BROWSE_PUBLIC.route) {
+        return Promise.resolve({
+          data: [],
+          pagination: { nextCursor: null, hasMore: false },
+        });
+      }
+      if (route.route === CONTROL_API.MATCHMAKING.ENTER_QUEUE.route) {
+        return Promise.resolve({
+          status: 'searching',
+          requestId: '550e8400-e29b-41d4-a716-446655440025',
+          queuePosition: 1,
+          expiresAt: '2026-05-18T12:00:00.000Z',
+          preferences: {
+            languages: ['python'],
+            difficulties: ['medium'],
+            problemIds: [],
+            topics: ['array'],
+            roles: [],
+          },
+        });
+      }
+      if (route.route === CONTROL_API.MATCHMAKING.GET_QUEUE_STATUS.route) {
+        return Promise.resolve({
+          status: 'searching',
+          requestId: '550e8400-e29b-41d4-a716-446655440025',
+          queuePosition: 1,
+          expiresAt: '2026-05-18T12:00:00.000Z',
+          preferences: {
+            languages: ['python'],
+            difficulties: ['medium'],
+            problemIds: [],
+            topics: ['array'],
+            roles: [],
+          },
+        });
+      }
+      throw new Error(`Unexpected route: ${route.route}`);
+    });
+
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(screen.getByRole('button', { name: /matchmaking\.anyTopic/i }));
+    await user.click(screen.getByText(/Array \(1\)/i));
+    await user.click(screen.getByRole('button', { name: /matchmaking\.start/i }));
+
+    await waitFor(() => {
+      expect(apiMock).toHaveBeenCalledWith(CONTROL_API.MATCHMAKING.ENTER_QUEUE, {
+        body: {
+          languages: ['python'],
+          difficulties: ['medium'],
+          problemIds: [],
+          topics: ['array'],
+          roles: [],
+        },
+      });
+    });
   });
 });

@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import {
   BadRequestException,
   ConflictException,
@@ -121,12 +121,20 @@ interface HintJobMapping {
 interface CodeAnalysisJobMapping {
   roomId: string;
   userId: string;
+  codeHash: string;
+  language: SupportedLanguage;
 }
 
 interface InterviewJobMapping {
   roomId: string;
   userId: string;
   codeContext: AiInterviewCodeContext;
+}
+
+interface LatestCodeAnalysisContextCacheEntry {
+  codeHash: string;
+  language: SupportedLanguage;
+  context: AiInterviewCodeAnalysisContext;
 }
 
 @Injectable()
@@ -413,22 +421,27 @@ export class RoomsService {
   }
 
   async joinRoom(roomId: string, userId: string, input: JoinRoomInput): Promise<JoinRoomResult> {
-    const [room] = await this.db.select().from(rooms).where(eq(rooms.id, roomId));
-    if (!room) {
-      throw new NotFoundException({ message: 'Room not found', code: ERROR_CODES.ROOM_NOT_FOUND });
-    }
-
-    if (room.status === RoomStatus.FINISHED) {
-      throw new ConflictException({
-        message: 'Room has already finished',
-        code: ERROR_CODES.ROOM_FINISHED,
-      });
-    }
-
     let assignedRole!: RoomRole;
     let assignmentReason!: RoleAssignmentReason;
+    let room!: typeof rooms.$inferSelect;
 
     await this.db.transaction(async (tx) => {
+      const [lockedRoom] = await tx.select().from(rooms).where(eq(rooms.id, roomId)).for('update');
+      if (!lockedRoom) {
+        throw new NotFoundException({
+          message: 'Room not found',
+          code: ERROR_CODES.ROOM_NOT_FOUND,
+        });
+      }
+
+      if (lockedRoom.status === RoomStatus.FINISHED) {
+        throw new ConflictException({
+          message: 'Room has already finished',
+          code: ERROR_CODES.ROOM_FINISHED,
+        });
+      }
+
+      room = lockedRoom;
       const existingParticipants = await tx
         .select({
           id: roomParticipants.id,
@@ -454,14 +467,19 @@ export class RoomsService {
       // would break WS reconnect reactivation, which re-calls this endpoint with
       // an empty body.
       if (!existing) {
-        this.assertJoinCode(room.isPrivate, room.inviteCode, input.roomCode);
+        this.assertJoinCode(lockedRoom.isPrivate, lockedRoom.inviteCode, input.roomCode);
       }
 
       if (existing?.isActive) {
         // Idempotent re-join: user is already active in this room. Skip the
         // DB write and let the post-transaction code mint a fresh collab
         // token so the caller can (re-)enter the workspace.
-        assignedRole = this.normalizeParticipantRole(room.mode, existing.role, room.hostId, userId);
+        assignedRole = this.normalizeParticipantRole(
+          lockedRoom.mode,
+          existing.role,
+          lockedRoom.hostId,
+          userId,
+        );
         assignmentReason = 'auto-assigned';
         return;
       }
@@ -472,15 +490,15 @@ export class RoomsService {
       }
 
       const roleSelection = this.selectJoinRole(
-        room.mode,
+        lockedRoom.mode,
         existingParticipants
           .filter((participant) => participant.isActive)
           .map((participant) => ({
             userId: participant.userId,
             role: this.normalizeParticipantRole(
-              room.mode,
+              lockedRoom.mode,
               participant.role,
-              room.hostId,
+              lockedRoom.hostId,
               participant.userId,
             ),
           })),
@@ -495,15 +513,19 @@ export class RoomsService {
         .map((participant) => ({
           userId: participant.userId,
           role: this.normalizeParticipantRole(
-            room.mode,
+            lockedRoom.mode,
             participant.role,
-            room.hostId,
+            lockedRoom.hostId,
             participant.userId,
           ),
         }))
         .concat({ userId, role: assignedRole });
 
-      this.assertActiveRoleConfiguration(room.mode, room.status, nextActiveParticipants);
+      this.assertActiveRoleConfiguration(
+        lockedRoom.mode,
+        lockedRoom.status,
+        nextActiveParticipants,
+      );
 
       if (existing) {
         await tx
@@ -1277,10 +1299,14 @@ export class RoomsService {
     const problemDescription = await this.loadAiProblemDescription(problemId);
     const [sessionId, latestExecutionSummary, latestCodeAnalysisContext] = await Promise.all([
       this.loadCurrentRoomSessionId(roomId),
-      this.loadLatestHintSubmissionSummary(roomId, userId),
-      this.loadLatestCodeAnalysisContext(roomId, userId),
+      this.loadLatestHintSubmissionSummary(roomId, userId, body.currentCode, activeLanguage),
+      this.loadLatestCodeAnalysisContext(roomId, userId, body.currentCode, activeLanguage),
     ]);
-    const codeContext = { ...body.codeContext, language: activeLanguage };
+    const codeContext = this.buildVerifiedInterviewCodeContext(
+      body.codeContext,
+      body.currentCode,
+      activeLanguage,
+    );
 
     let submitted: { jobId: JobId<'ai:interview'> };
     try {
@@ -1291,8 +1317,8 @@ export class RoomsService {
         problemDescription,
         currentCode: body.currentCode,
         codeContext,
-        latestExecutionSummary: body.latestExecutionSummary ?? latestExecutionSummary,
-        codeAnalysisContext: body.codeAnalysisContext ?? latestCodeAnalysisContext ?? undefined,
+        latestExecutionSummary,
+        codeAnalysisContext: latestCodeAnalysisContext ?? undefined,
         language: activeLanguage,
         userMessage: body.userMessage,
         conversationHistory: body.conversationHistory,
@@ -1357,7 +1383,7 @@ export class RoomsService {
       jobId,
       message: interviewResult.message,
       followUpQuestion: interviewResult.followUpQuestion,
-      codeContext: interviewResult.codeContext ?? mapping.codeContext,
+      codeContext: mapping.codeContext,
       codeAnnotations: interviewResult.codeAnnotations,
       audioUrl: interviewResult.audio?.downloadUrl,
     };
@@ -1422,6 +1448,8 @@ export class RoomsService {
       {
         roomId,
         userId,
+        codeHash: this.hashAiContextCode(body.code),
+        language: activeLanguage,
       },
       RoomsService.AI_CODE_ANALYSIS_JOB_CACHE_TTL_SECONDS,
     );
@@ -1463,12 +1491,16 @@ export class RoomsService {
       return { status: 'pending', jobId };
     }
 
-    await this.cacheService.set<AiInterviewCodeAnalysisContext>(
+    await this.cacheService.set<LatestCodeAnalysisContextCacheEntry>(
       `${RoomsService.AI_CODE_ANALYSIS_LATEST_CACHE_PREFIX}${roomId}:${userId}`,
       {
-        summary: analysisResult.summary,
-        focusAreas: analysisResult.focusAreas,
-        followUpQuestions: analysisResult.followUpQuestions,
+        codeHash: mapping.codeHash,
+        language: mapping.language,
+        context: {
+          summary: analysisResult.summary,
+          focusAreas: analysisResult.focusAreas,
+          followUpQuestions: analysisResult.followUpQuestions,
+        },
       },
       RoomsService.AI_CODE_ANALYSIS_JOB_CACHE_TTL_SECONDS,
     );
@@ -2349,6 +2381,13 @@ export class RoomsService {
       });
     }
 
+    if (label === 'Interview' && room.status !== RoomStatus.CODING) {
+      throw new BadRequestException({
+        message: 'AI interview is only available during the coding phase',
+        code: ERROR_CODES.ROOM_INVALID_STATE,
+      });
+    }
+
     const capabilities = resolveRoomPermissions(participant.role, {
       isHost: room.hostId === userId,
     });
@@ -2601,9 +2640,13 @@ export class RoomsService {
   private async loadLatestHintSubmissionSummary(
     roomId: string,
     userId: string,
+    currentCode?: string,
+    language?: SupportedLanguage,
   ): Promise<GenerateHintRequest['latestSubmissionSummary']> {
     const [latest] = await this.db
       .select({
+        code: submissions.code,
+        language: submissions.language,
         status: submissions.status,
         passedTestCases: submissions.passedTestCases,
         totalTestCases: submissions.totalTestCases,
@@ -2617,6 +2660,12 @@ export class RoomsService {
       .limit(1);
 
     if (!latest) {
+      return null;
+    }
+    if (
+      (currentCode !== undefined && latest.code !== currentCode) ||
+      (language !== undefined && latest.language !== language)
+    ) {
       return null;
     }
 
@@ -2641,12 +2690,68 @@ export class RoomsService {
   private async loadLatestCodeAnalysisContext(
     roomId: string,
     userId: string,
+    currentCode: string,
+    language: SupportedLanguage,
   ): Promise<AiInterviewCodeAnalysisContext | null> {
-    return (
-      (await this.cacheService.get<AiInterviewCodeAnalysisContext>(
-        `${RoomsService.AI_CODE_ANALYSIS_LATEST_CACHE_PREFIX}${roomId}:${userId}`,
-      )) ?? null
+    const cached = await this.cacheService.get<LatestCodeAnalysisContextCacheEntry>(
+      `${RoomsService.AI_CODE_ANALYSIS_LATEST_CACHE_PREFIX}${roomId}:${userId}`,
     );
+    const currentCodeHash = this.hashAiContextCode(currentCode);
+    if (cached?.codeHash !== currentCodeHash || cached?.language !== language) {
+      return null;
+    }
+
+    return cached.context;
+  }
+
+  private buildVerifiedInterviewCodeContext(
+    input: AiInterviewCodeContext,
+    currentCode: string,
+    language: SupportedLanguage,
+  ): AiInterviewCodeContext {
+    const lines = currentCode.split('\n');
+    const lineCount = Math.max(1, lines.length);
+    const hasUsableRange =
+      input.startLine <= lineCount &&
+      input.endLine >= input.startLine &&
+      input.endLine <= lineCount;
+    const startLine = hasUsableRange ? input.startLine : 1;
+    const endLine = hasUsableRange ? input.endLine : Math.min(5, lineCount);
+    const codeSnippet = lines.slice(startLine - 1, endLine).join('\n') || ' ';
+
+    return {
+      language,
+      file: input.file,
+      codeSnippet,
+      startLine,
+      endLine,
+      ...this.validCodeContextColumn(input.startColumn, lines[startLine - 1])
+        .map((startColumn) => ({ startColumn }))
+        .at(0),
+      ...this.validCodeContextColumn(input.endColumn, lines[endLine - 1])
+        .map((endColumn) => ({ endColumn }))
+        .at(0),
+      ...(input.cursorLine && input.cursorLine <= lineCount
+        ? { cursorLine: input.cursorLine }
+        : {}),
+      ...this.validCodeContextColumn(input.cursorColumn, lines[(input.cursorLine ?? startLine) - 1])
+        .map((cursorColumn) => ({ cursorColumn }))
+        .at(0),
+      ...(input.questionType ? { questionType: input.questionType } : {}),
+      ...(input.reason ? { reason: input.reason } : {}),
+    };
+  }
+
+  private validCodeContextColumn(value: number | undefined, line: string | undefined): number[] {
+    if (!value) {
+      return [];
+    }
+    const maxColumn = (line?.length ?? 0) + 1;
+    return value <= maxColumn ? [value] : [];
+  }
+
+  private hashAiContextCode(code: string): string {
+    return createHash('sha256').update(code).digest('hex');
   }
 
   private async loadCurrentRoomSessionId(roomId: string): Promise<string | null> {

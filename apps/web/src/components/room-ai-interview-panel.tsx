@@ -326,10 +326,10 @@ function AiInterviewMessageBubble({
 function AiInterviewCodeContextCard({
   context,
   t,
-}: {
+}: Readonly<{
   context: AiInterviewCodeContext;
   t: (key: string, options?: Record<string, unknown>) => string;
-}) {
+}>) {
   return (
     <div className="w-full overflow-hidden rounded-xl bg-background/70 ring-1 ring-border/50">
       <div className="flex items-center justify-between gap-2 border-b border-border/50 px-3 py-2">
@@ -338,7 +338,7 @@ function AiInterviewCodeContextCard({
         </span>
         <span className="shrink-0 font-mono text-[10px] text-primary/75">
           {context.file} L{context.startLine}
-          {context.endLine !== context.startLine ? `-${context.endLine}` : ''}
+          {context.endLine === context.startLine ? '' : `-${context.endLine}`}
         </span>
       </div>
       <pre className="max-h-32 overflow-auto px-3 py-2 font-mono text-[11px] leading-5 text-foreground/85">
@@ -374,5 +374,5 @@ function mergeTranscript(previous: string, transcript: string): string {
     return transcript;
   }
 
-  return `${previous.replace(/\s+$/g, '')} ${transcript}`.trim();
+  return `${previous.trimEnd()} ${transcript}`.trim();
 }

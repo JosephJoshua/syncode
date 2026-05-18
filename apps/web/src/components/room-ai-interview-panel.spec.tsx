@@ -115,6 +115,28 @@ describe('RoomAiInterviewPanel', () => {
     expect(onSend).toHaveBeenCalledWith('My answer');
   });
 
+  it('GIVEN user submits rapidly WHEN send button is double-clicked THEN emits one message', async () => {
+    const user = userEvent.setup();
+    const onSend = vi.fn();
+    render(
+      <RoomAiInterviewPanel
+        messages={[]}
+        isLoading={false}
+        error={null}
+        onSendMessage={onSend}
+        canSendMessage={true}
+        currentUser={null}
+      />,
+    );
+
+    const textarea = screen.getByPlaceholderText('workspace.aiInterviewPlaceholder');
+    await user.type(textarea, 'My answer');
+    await user.dblClick(screen.getByRole('button', { name: 'workspace.aiInterviewSend' }));
+
+    expect(onSend).toHaveBeenCalledTimes(1);
+    expect(onSend).toHaveBeenCalledWith('My answer');
+  });
+
   it('GIVEN assistant message with codeAnnotations WHEN rendered THEN shows annotations', () => {
     render(
       <RoomAiInterviewPanel
@@ -134,6 +156,28 @@ describe('RoomAiInterviewPanel', () => {
     );
     expect(screen.getByText('L3')).toBeInTheDocument();
     expect(screen.getByText('Off-by-one error here.')).toBeInTheDocument();
+  });
+
+  it('GIVEN assistant message with follow-up question WHEN rendered THEN shows follow-up prompt', () => {
+    render(
+      <RoomAiInterviewPanel
+        messages={[
+          {
+            role: 'assistant',
+            content: 'Good direction.',
+            followUpQuestion: 'What invariant does the map maintain?',
+          },
+        ]}
+        isLoading={false}
+        error={null}
+        onSendMessage={vi.fn()}
+        canSendMessage={true}
+        currentUser={null}
+      />,
+    );
+
+    expect(screen.getByText('workspace.aiInterviewFollowUp')).toBeInTheDocument();
+    expect(screen.getByText('What invariant does the map maintain?')).toBeInTheDocument();
   });
 
   it('GIVEN assistant message with codeContext WHEN rendered THEN shows line range and snippet', () => {

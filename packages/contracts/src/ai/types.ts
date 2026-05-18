@@ -161,7 +161,7 @@ export interface InterviewResponseRequest {
   participantId: string;
   conversationHistory: Array<{ role: string; content: string }>;
   currentCode: string;
-  codeContext: InterviewCodeContext;
+  codeContext?: InterviewCodeContext;
   latestExecutionSummary?: HintSubmissionSummary | null;
   codeAnalysisContext?: InterviewCodeAnalysisContext;
   problemDescription: string;

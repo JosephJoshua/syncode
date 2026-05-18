@@ -6,6 +6,7 @@ export * from './error.js';
 export * from './execution.js';
 export * from './feedback.js';
 export * from './health.js';
+export * from './matchmaking.js';
 export * from './pagination.js';
 export * from './problems.js';
 export * from './rooms.js';

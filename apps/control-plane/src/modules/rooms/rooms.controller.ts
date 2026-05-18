@@ -5,6 +5,7 @@ import {
   Get,
   HttpCode,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Query,
@@ -162,7 +163,10 @@ export class RoomsController {
   @ApiOperation({ summary: 'Get room details' })
   @ApiParam({ name: 'id', description: 'Room ID (UUID)' })
   @ApiResponse({ status: 200, type: RoomDetailDto })
-  async getRoom(@CurrentUser() user: AuthUser, @Param('id') id: string): Promise<RoomDetailDto> {
+  async getRoom(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<RoomDetailDto> {
     const result = await this.roomsService.getRoom(id, user.id);
     return this.serializeRoomDetail(result);
   }
@@ -175,7 +179,7 @@ export class RoomsController {
   @ApiResponse({ status: 200, type: JoinRoomResponseDto })
   async joinRoom(
     @CurrentUser() user: AuthUser,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() body: JoinRoomDto,
   ): Promise<JoinRoomResponseDto> {
     const result = await this.roomsService.joinRoom(id, user.id, body);
@@ -198,7 +202,7 @@ export class RoomsController {
   @ApiResponse({ status: 200, type: TransferRoomOwnershipResponseDto })
   async transferOwnership(
     @CurrentUser() user: AuthUser,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() body: TransferRoomOwnershipDto,
   ): Promise<TransferRoomOwnershipResponseDto> {
     const result = await this.roomsService.transferOwnership(id, user.id, body.targetUserId);
@@ -214,8 +218,8 @@ export class RoomsController {
   @ApiResponse({ status: 200, type: UpdateRoomParticipantResponseDto })
   async updateParticipantRole(
     @CurrentUser() user: AuthUser,
-    @Param('id') id: string,
-    @Param('participantUserId') participantUserId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('participantUserId', ParseUUIDPipe) participantUserId: string,
     @Body() body: UpdateRoomParticipantDto,
   ): Promise<UpdateRoomParticipantResponseDto> {
     const result = await this.roomsService.updateParticipantRole(
@@ -255,8 +259,8 @@ export class RoomsController {
   })
   async removeParticipant(
     @CurrentUser() user: AuthUser,
-    @Param('id') id: string,
-    @Param('userId') userId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('userId', ParseUUIDPipe) userId: string,
   ): Promise<void> {
     await this.roomsService.removeParticipant(id, user.id, userId);
   }
@@ -267,7 +271,7 @@ export class RoomsController {
   @ApiResponse({ status: 200, type: DestroyRoomResponseDto })
   async destroyRoom(
     @CurrentUser() user: AuthUser,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
   ): Promise<DestroyRoomResponseDto> {
     const result = await this.roomsService.destroyRoom(id, user.id);
     return {
@@ -295,7 +299,7 @@ export class RoomsController {
   @ApiResponse({ status: 504, type: ErrorResponseDto, description: 'Execution service timeout' })
   async runCode(
     @CurrentUser() user: AuthUser,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() body: RunCodeDto,
   ): Promise<RunCodeResponseDto> {
     return this.roomsService.runCode(id, user.id, body);
@@ -312,7 +316,7 @@ export class RoomsController {
   @ApiResponse({ status: 409, type: ErrorResponseDto, description: 'Editor is locked' })
   async submitProblem(
     @CurrentUser() user: AuthUser,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() body: SubmitProblemDto,
   ): Promise<SubmitCodeResponseDto> {
     return this.roomsService.submitProblem(id, user.id, body);
@@ -354,7 +358,7 @@ export class RoomsController {
   })
   async requestAiHint(
     @CurrentUser() user: AuthUser,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() body: RequestRoomAiHintDto,
   ): Promise<RequestRoomAiHintResponseDto> {
     return this.roomsService.requestAiHint(id, user.id, body);
@@ -381,7 +385,7 @@ export class RoomsController {
   })
   async getAiHintResult(
     @CurrentUser() user: AuthUser,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Param('jobId') jobId: string,
   ): Promise<GetRoomAiHintResultResponseDto> {
     return this.roomsService.getAiHintResult(id, user.id, jobId);
@@ -410,7 +414,7 @@ export class RoomsController {
   @ApiResponse({ status: 503, type: ErrorResponseDto, description: 'AI service unavailable' })
   async requestAiInterview(
     @CurrentUser() user: AuthUser,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() body: RequestRoomAiInterviewDto,
   ): Promise<RequestRoomAiInterviewResponseDto> {
     return this.roomsService.requestAiInterview(id, user.id, body);
@@ -433,7 +437,7 @@ export class RoomsController {
   @ApiResponse({ status: 404, type: ErrorResponseDto, description: 'Job not found or expired' })
   async getAiInterviewResult(
     @CurrentUser() user: AuthUser,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Param('jobId') jobId: string,
   ): Promise<GetRoomAiInterviewResultResponseDto> {
     return this.roomsService.getAiInterviewResult(id, user.id, jobId);
@@ -480,7 +484,7 @@ export class RoomsController {
   })
   async requestCodeAnalysis(
     @CurrentUser() user: AuthUser,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() body: RequestRoomCodeAnalysisDto,
   ): Promise<RequestRoomCodeAnalysisResponseDto> {
     return this.roomsService.requestCodeAnalysis(id, user.id, body);
@@ -510,7 +514,7 @@ export class RoomsController {
   })
   async getCodeAnalysisResult(
     @CurrentUser() user: AuthUser,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Param('jobId') jobId: string,
   ): Promise<GetRoomCodeAnalysisResultResponseDto> {
     return this.roomsService.getCodeAnalysisResult(id, user.id, jobId);
@@ -539,7 +543,7 @@ export class RoomsController {
   @ApiResponse({ status: 404, type: ErrorResponseDto, description: 'Room not found' })
   async getChatMediaUploadUrl(
     @CurrentUser() user: AuthUser,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() body: RoomChatMediaUploadDto,
   ): Promise<RoomChatMediaUploadResponseDto> {
     return this.roomsService.getRoomChatMediaUploadUrl(id, user.id, body);
@@ -552,7 +556,7 @@ export class RoomsController {
   @ApiResponse({ status: 200, type: RoomDetailDto })
   async toggleReady(
     @CurrentUser() user: AuthUser,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
   ): Promise<RoomDetailDto> {
     const result = await this.roomsService.toggleReady(id, user.id);
     return this.serializeRoomDetail(result);
@@ -569,7 +573,7 @@ export class RoomsController {
   @ApiResponse({ status: 404, type: ErrorResponseDto })
   async changeLanguage(
     @CurrentUser() user: AuthUser,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() body: ChangeRoomLanguageDto,
   ): Promise<RoomDetailDto> {
     const result = await this.roomsService.changeLanguage(id, user.id, body.language);
@@ -584,7 +588,7 @@ export class RoomsController {
   @ApiResponse({ status: 200, type: TransitionRoomPhaseResponseDto })
   async transitionPhase(
     @CurrentUser() user: AuthUser,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() body: TransitionRoomPhaseDto,
   ): Promise<TransitionRoomPhaseResponseDto> {
     const result = await this.roomsService.transitionPhase(id, user.id, body.targetStatus);
@@ -601,7 +605,7 @@ export class RoomsController {
   @ApiResponse({ status: 409, type: ErrorResponseDto, description: 'Room has already finished' })
   async lockEditor(
     @CurrentUser() user: AuthUser,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
   ): Promise<LockEditorResponseDto> {
     const result = await this.roomsService.setEditorLock(id, user.id, true);
     return {
@@ -624,7 +628,7 @@ export class RoomsController {
   @ApiResponse({ status: 409, type: ErrorResponseDto, description: 'Room has already finished' })
   async unlockEditor(
     @CurrentUser() user: AuthUser,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
   ): Promise<UnlockEditorResponseDto> {
     const result = await this.roomsService.setEditorLock(id, user.id, false);
     return {
@@ -657,7 +661,7 @@ export class RoomsController {
   })
   async ensureCollab(
     @CurrentUser() user: AuthUser,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
   ): Promise<EnsureCollabResponseDto> {
     return this.roomsService.ensureCollab(id, user.id);
   }
@@ -681,7 +685,7 @@ export class RoomsController {
   @ApiResponse({ status: 504, type: ErrorResponseDto, description: 'Media service timeout' })
   async generateMediaToken(
     @CurrentUser() user: AuthUser,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
   ): Promise<MediaTokenResponseDto> {
     const result = await this.roomsService.generateMediaToken(id, user.id);
     return { ...result, expiresAt: result.expiresAt.toISOString() };

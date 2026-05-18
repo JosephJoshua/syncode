@@ -687,9 +687,9 @@ describe('AiService', () => {
       expect(result.followUpQuestion).toContain('invariant');
       expect(result.codeContext).toEqual(
         expect.objectContaining({
-          codeSnippet: 'const seen = new Map();',
-          startLine: 2,
-          endLine: 2,
+          codeSnippet: 'function twoSum() {}',
+          startLine: 1,
+          endLine: 1,
           questionType: 'data_structure_choice',
         }),
       );
@@ -728,6 +728,32 @@ describe('AiService', () => {
       expect(result.message).toContain('reasonable direction');
       expect(result.followUpQuestion).toContain('Which state are you updating');
       expect(result.codeContext).toEqual(baseInterviewRequest.codeContext);
+    });
+
+    it('GIVEN old interview job without code context WHEN generateInterviewResponse is called THEN uses fallback context', async () => {
+      const { service } = createServiceWithLlmResponse(
+        JSON.stringify({
+          message: 'Good direction. Consider the state you update each step.',
+          followUpQuestion: 'What invariant does that state maintain?',
+        }),
+      );
+
+      const result = await service.generateInterviewResponse({
+        ...baseInterviewRequest,
+        codeContext: undefined,
+      });
+
+      expect(result.message).toContain('Good direction');
+      expect(result.followUpQuestion).toContain('invariant');
+      expect(result.codeContext).toEqual(
+        expect.objectContaining({
+          language: 'typescript',
+          codeSnippet: 'function twoSum() {}',
+          startLine: 1,
+          endLine: 1,
+          questionType: 'other',
+        }),
+      );
     });
 
     it('GIVEN unsafe interview model text WHEN generateInterviewResponse is called THEN returned and spoken text use safe fallbacks', async () => {

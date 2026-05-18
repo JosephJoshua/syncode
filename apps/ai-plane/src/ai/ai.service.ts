@@ -103,6 +103,13 @@ interface ParsedInterviewResponse {
   codeAnnotations?: Array<{ line: number; comment: string }>;
 }
 
+interface ParsedInterviewModelResponse {
+  message: string;
+  followUpQuestion: string;
+  codeContext?: InterviewCodeContext;
+  codeAnnotations?: Array<{ line: number; comment: string }>;
+}
+
 interface ParsedCodeAnalysisResponse {
   summary: string;
   focusAreas: {
@@ -135,30 +142,32 @@ export class AiService {
   private static readonly interviewResponseSchema = z.object({
     message: z.string().min(1),
     followUpQuestion: z.string().min(1),
-    codeContext: z.object({
-      language: z.enum(SUPPORTED_LANGUAGES),
-      file: z.string().min(1),
-      codeSnippet: z.string().min(1),
-      startLine: z.number().int().positive(),
-      endLine: z.number().int().positive(),
-      startColumn: z.number().int().positive().optional(),
-      endColumn: z.number().int().positive().optional(),
-      cursorLine: z.number().int().positive().optional(),
-      cursorColumn: z.number().int().positive().optional(),
-      questionType: z
-        .enum([
-          'complexity',
-          'bug_risk',
-          'edge_case',
-          'optimization',
-          'data_structure_choice',
-          'correctness',
-          'readability',
-          'other',
-        ])
-        .optional(),
-      reason: z.string().min(1).optional(),
-    }),
+    codeContext: z
+      .object({
+        language: z.enum(SUPPORTED_LANGUAGES),
+        file: z.string().min(1),
+        codeSnippet: z.string().min(1),
+        startLine: z.number().int().positive(),
+        endLine: z.number().int().positive(),
+        startColumn: z.number().int().positive().optional(),
+        endColumn: z.number().int().positive().optional(),
+        cursorLine: z.number().int().positive().optional(),
+        cursorColumn: z.number().int().positive().optional(),
+        questionType: z
+          .enum([
+            'complexity',
+            'bug_risk',
+            'edge_case',
+            'optimization',
+            'data_structure_choice',
+            'correctness',
+            'readability',
+            'other',
+          ])
+          .optional(),
+        reason: z.string().min(1).optional(),
+      })
+      .optional(),
     codeAnnotations: z
       .array(
         z.object({
@@ -1297,12 +1306,13 @@ export class AiService {
   }
 
   private buildInterviewPrompt(request: InterviewResponseRequest): string {
+    const codeContext = this.resolveInterviewCodeContext(request);
     return [
       'Use only the following UNTRUSTED blocks as interview context.',
       this.wrapUntrustedBlock('PROBLEM_DESCRIPTION', request.problemDescription),
       this.wrapUntrustedBlock('LANGUAGE', request.language),
       this.wrapUntrustedBlock('CURRENT_CODE', request.currentCode),
-      this.wrapUntrustedBlock('SELECTED_CODE_CONTEXT', JSON.stringify(request.codeContext)),
+      this.wrapUntrustedBlock('SELECTED_CODE_CONTEXT', JSON.stringify(codeContext)),
       this.wrapUntrustedBlock(
         'CONVERSATION_HISTORY',
         this.buildConversationSummary(request.conversationHistory),
@@ -1355,14 +1365,14 @@ export class AiService {
           "That's a reasonable direction. Walk me through the key invariant your approach maintains after each step.",
         followUpQuestion:
           'Which state are you updating each iteration, and why does it stay correct?',
-        codeContext: request.codeContext,
+        codeContext: this.resolveInterviewCodeContext(request),
       },
       request,
     );
   }
 
   private postProcessInterviewResponse(
-    response: ParsedInterviewResponse,
+    response: ParsedInterviewModelResponse,
     request: InterviewResponseRequest,
   ): ParsedInterviewResponse {
     const message = this.sanitizeInterviewOutputText(
@@ -1399,13 +1409,7 @@ export class AiService {
     value: InterviewCodeContext | undefined,
     request: InterviewResponseRequest,
   ): InterviewCodeContext {
-    const fallback = request.codeContext;
-    const startLine = this.normalizePositiveLine(value?.startLine, fallback.startLine);
-    const endLine = Math.max(
-      this.normalizePositiveLine(value?.endLine, fallback.endLine),
-      startLine,
-    );
-    const snippet = this.normalizeInterviewContextText(value?.codeSnippet, fallback.codeSnippet);
+    const fallback = this.resolveInterviewCodeContext(request);
     const questionType = value?.questionType ?? fallback.questionType ?? 'other';
 
     return {
@@ -1414,21 +1418,13 @@ export class AiService {
         this.normalizeInterviewContextText(value?.file, fallback.file || 'solution'),
         120,
       ),
-      codeSnippet: this.truncateHintText(snippet, 4000),
-      startLine,
-      endLine,
-      ...((value?.startColumn ?? fallback.startColumn)
-        ? { startColumn: value?.startColumn ?? fallback.startColumn }
-        : {}),
-      ...((value?.endColumn ?? fallback.endColumn)
-        ? { endColumn: value?.endColumn ?? fallback.endColumn }
-        : {}),
-      ...((value?.cursorLine ?? fallback.cursorLine)
-        ? { cursorLine: value?.cursorLine ?? fallback.cursorLine }
-        : {}),
-      ...((value?.cursorColumn ?? fallback.cursorColumn)
-        ? { cursorColumn: value?.cursorColumn ?? fallback.cursorColumn }
-        : {}),
+      codeSnippet: this.truncateHintText(fallback.codeSnippet, 4000),
+      startLine: fallback.startLine,
+      endLine: fallback.endLine,
+      ...(fallback.startColumn ? { startColumn: fallback.startColumn } : {}),
+      ...(fallback.endColumn ? { endColumn: fallback.endColumn } : {}),
+      ...(fallback.cursorLine ? { cursorLine: fallback.cursorLine } : {}),
+      ...(fallback.cursorColumn ? { cursorColumn: fallback.cursorColumn } : {}),
       questionType,
       reason: this.truncateHintText(
         this.normalizeInterviewContextText(
@@ -1440,24 +1436,55 @@ export class AiService {
     };
   }
 
-  private normalizePositiveLine(value: number | undefined, fallback: number): number {
-    if (!Number.isFinite(value) || !value || value < 1) {
-      return Math.max(1, fallback);
+  private resolveInterviewCodeContext(request: InterviewResponseRequest): InterviewCodeContext {
+    if (request.codeContext) {
+      return request.codeContext;
     }
 
-    return Math.floor(value);
+    const lines = request.currentCode.split('\n');
+    const snippetLines = lines.slice(0, Math.min(5, Math.max(1, lines.length)));
+    const codeSnippet = snippetLines.join('\n') || ' ';
+
+    return {
+      language: request.language,
+      file: `solution.${request.language}`,
+      codeSnippet,
+      startLine: 1,
+      endLine: Math.max(1, snippetLines.length),
+      cursorLine: 1,
+      cursorColumn: 1,
+      questionType: 'other',
+      reason: 'Fallback context from the current solution snapshot.',
+    };
   }
 
   private normalizeInterviewContextText(value: string | undefined, fallback: string): string {
     const normalized = (value?.trim() || fallback)
-      .replaceAll('\\n', '\n')
-      .replaceAll('\\t', '\t')
-      .replaceAll('\\"', '"')
+      .replaceAll(String.raw`\n`, '\n')
+      .replaceAll(String.raw`\t`, '\t')
+      .replaceAll(String.raw`\"`, '"')
       .replaceAll(/\r\n?/g, '\n')
-      .replace(/^["'`]+|["'`]+$/g, '')
       .trim();
 
-    return this.compactHintText(normalized || fallback);
+    return this.compactHintText(this.trimBoundaryQuoteChars(normalized) || fallback);
+  }
+
+  private trimBoundaryQuoteChars(value: string): string {
+    let start = 0;
+    let end = value.length;
+
+    while (start < end && this.isBoundaryQuoteChar(value[start])) {
+      start += 1;
+    }
+    while (end > start && this.isBoundaryQuoteChar(value[end - 1])) {
+      end -= 1;
+    }
+
+    return value.slice(start, end).trim();
+  }
+
+  private isBoundaryQuoteChar(value: string | undefined): boolean {
+    return value === '"' || value === "'" || value === '`';
   }
 
   private sanitizeInterviewOutputText(

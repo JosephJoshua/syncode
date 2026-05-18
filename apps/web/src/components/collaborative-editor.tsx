@@ -205,8 +205,10 @@ export function CollaborativeEditor({
       if (selection && !selectionIsEmpty) {
         const startLine = clampLine(selection.startLineNumber, lineCount);
         const endLine = clampLine(selection.endLineNumber, lineCount);
+        const selectedSnippet = model.getValueInRange(selection);
         onCodeContextChangeRef.current({
-          codeSnippet: model.getValueInRange(selection).trim() || model.getLineContent(startLine),
+          codeSnippet:
+            selectedSnippet.length > 0 ? selectedSnippet : model.getLineContent(startLine),
           startLine,
           endLine,
           startColumn: selection.startColumn,
@@ -225,7 +227,7 @@ export function CollaborativeEditor({
       }
 
       onCodeContextChangeRef.current({
-        codeSnippet: lines.join('\n').trim() || model.getLineContent(cursorLine),
+        codeSnippet: lines.join('\n') || model.getLineContent(cursorLine),
         startLine,
         endLine,
         cursorLine,
@@ -369,9 +371,8 @@ export function CollaborativeEditor({
       };
     });
 
-    let cancelled = false;
-    queueMicrotask(() => {
-      if (cancelled) {
+    const frame = globalThis.window.requestAnimationFrame(() => {
+      if (!editor.getModel()) {
         return;
       }
 
@@ -382,7 +383,7 @@ export function CollaborativeEditor({
     });
 
     return () => {
-      cancelled = true;
+      globalThis.window.cancelAnimationFrame(frame);
     };
   }, [editor, commentLineSet, selectedLine, threadLine]);
 

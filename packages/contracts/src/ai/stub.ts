@@ -423,18 +423,28 @@ export class StubAiClient implements IAiClient {
         const job = this.jobs.get(jobId);
         if (!job) return;
 
+        const codeContext = request.codeContext ?? {
+          language: request.language,
+          file: `solution.${request.language}`,
+          codeSnippet: request.currentCode.split('\n').slice(0, 5).join('\n') || ' ',
+          startLine: 1,
+          endLine: Math.max(1, Math.min(5, request.currentCode.split('\n').length)),
+          cursorLine: 1,
+          cursorColumn: 1,
+        };
+
         job.status = 'completed';
         job.interviewResult = {
           message: "That's a good approach. Let me ask you about the time complexity.",
           followUpQuestion: 'What is the time and space complexity of your solution?',
           codeContext: {
             language: request.language,
-            file: request.codeContext.file,
-            codeSnippet: request.codeContext.codeSnippet,
-            startLine: request.codeContext.startLine,
-            endLine: request.codeContext.endLine,
-            cursorLine: request.codeContext.cursorLine,
-            cursorColumn: request.codeContext.cursorColumn,
+            file: codeContext.file,
+            codeSnippet: codeContext.codeSnippet,
+            startLine: codeContext.startLine,
+            endLine: codeContext.endLine,
+            cursorLine: codeContext.cursorLine,
+            cursorColumn: codeContext.cursorColumn,
             questionType: 'complexity',
             reason: 'Complexity follow-up for the selected code context.',
           },
