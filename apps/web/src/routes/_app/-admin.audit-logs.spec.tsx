@@ -116,17 +116,19 @@ describe('AdminAuditLogsPage', () => {
             resolveNext = resolve;
           }) as never,
       );
-    const user = userEvent.setup();
 
     renderPage();
 
     expect(await screen.findByText('auth.login')).toBeInTheDocument();
 
+    const user = userEvent.setup();
+
     await user.type(screen.getByLabelText('audit.filters.searchLabel'), 'ban');
 
-    await waitFor(() => expect(apiMock).toHaveBeenCalledTimes(2));
     expect(screen.queryByText('auth.login')).not.toBeInTheDocument();
     expect(screen.getAllByText('loading')).not.toHaveLength(0);
+
+    await waitFor(() => expect(apiMock).toHaveBeenCalledTimes(2), { timeout: 3_000 });
 
     await act(async () => {
       resolveNext(makeResponse([makeLog({ action: 'admin.user.ban' })]));

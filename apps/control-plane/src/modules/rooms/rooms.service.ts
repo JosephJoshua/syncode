@@ -29,6 +29,7 @@ import {
   type JoinRoomInput,
   type ListRoomsQuery,
   type RequestRoomAiHintInput,
+  type RequestRoomAiInterviewInput,
   type RequestRoomCodeAnalysisInput,
   type RoleAssignmentReason,
   type RoomChatMediaUploadInput,
@@ -89,11 +90,13 @@ import type {
   CreateRoomResult,
   DestroyRoomResult,
   GetRoomAiHintResult,
+  GetRoomAiInterviewResult,
   GetRoomCodeAnalysisResult,
   JoinRoomResult,
   MediaTokenResult,
   PublicRoomSummaryResult,
   RequestRoomAiHintResult,
+  RequestRoomAiInterviewResult,
   RequestRoomCodeAnalysisResult,
   RoomChatMediaUploadResult,
   RoomDetailResult,
@@ -114,6 +117,11 @@ interface HintJobMapping {
 }
 
 interface CodeAnalysisJobMapping {
+  roomId: string;
+  userId: string;
+}
+
+interface InterviewJobMapping {
   roomId: string;
   userId: string;
 }
@@ -1252,6 +1260,94 @@ export class RoomsService {
     };
   }
 
+  async requestAiInterview(
+    roomId: string,
+    userId: string,
+    body: RequestRoomAiInterviewInput,
+  ): Promise<RequestRoomAiInterviewResult> {
+    const { problemId, activeLanguage } = await this.getAiRequestRoomContext(
+      roomId,
+      userId,
+      undefined,
+      'Interview',
+    );
+    const problemDescription = await this.loadAiProblemDescription(problemId);
+
+    let submitted: { jobId: JobId<'ai:interview'> };
+    try {
+      submitted = await this.aiClient.submitInterviewResponse({
+        roomId,
+        participantId: userId,
+        problemDescription,
+        currentCode: body.currentCode,
+        language: activeLanguage,
+        userMessage: body.userMessage,
+        conversationHistory: body.conversationHistory,
+      });
+    } catch (error) {
+      this.logger.warn(`AI interview submission failed for room ${roomId}`, error);
+      throw new ServiceUnavailableException({
+        message: 'AI service unavailable',
+        code: ERROR_CODES.AI_SERVICE_UNAVAILABLE,
+      });
+    }
+
+    await this.cacheService.set<InterviewJobMapping>(
+      `${RoomsService.AI_INTERVIEW_JOB_CACHE_PREFIX}${submitted.jobId}`,
+      {
+        roomId,
+        userId,
+      },
+      RoomsService.AI_INTERVIEW_JOB_CACHE_TTL_SECONDS,
+    );
+
+    return { jobId: submitted.jobId };
+  }
+
+  async getAiInterviewResult(
+    roomId: string,
+    userId: string,
+    jobId: string,
+  ): Promise<GetRoomAiInterviewResult> {
+    const [, participant] = await this.getRoomContext(roomId, userId);
+    if (!participant) {
+      throw new ForbiddenException({
+        message: 'Not a participant of this room',
+        code: ERROR_CODES.ROOM_ACCESS_DENIED,
+      });
+    }
+
+    const mapping = await this.cacheService.get<InterviewJobMapping>(
+      `${RoomsService.AI_INTERVIEW_JOB_CACHE_PREFIX}${jobId}`,
+    );
+    if (!mapping || mapping.roomId !== roomId || mapping.userId !== userId) {
+      throw new NotFoundException({
+        message: 'Interview job not found',
+        code: ERROR_CODES.VALIDATION_FAILED,
+      });
+    }
+
+    const typedJobId = jobId as JobId<'ai:interview'>;
+    const interviewResult = await this.aiClient.getInterviewResult(typedJobId);
+
+    if (!interviewResult) {
+      const status = await this.aiClient.getInterviewJobStatus(typedJobId);
+      if (status === 'failed') {
+        return { status: 'failed', jobId };
+      }
+      return { status: 'pending', jobId };
+    }
+
+    return {
+      status: 'ready',
+      jobId,
+      message: interviewResult.message,
+      followUpQuestion: interviewResult.followUpQuestion,
+      codeAnnotations: interviewResult.codeAnnotations,
+      audioUrl: interviewResult.audio?.downloadUrl,
+    };
+  }
+
   async requestCodeAnalysis(
     roomId: string,
     userId: string,
@@ -1451,6 +1547,8 @@ export class RoomsService {
   private static readonly AI_HINT_CHAT_HISTORY_LIMIT = 50;
   private static readonly AI_HINT_JOB_CACHE_PREFIX = 'ai-hint-job:';
   private static readonly AI_HINT_JOB_CACHE_TTL_SECONDS = 60 * 60;
+  private static readonly AI_INTERVIEW_JOB_CACHE_PREFIX = 'ai-interview-job:';
+  private static readonly AI_INTERVIEW_JOB_CACHE_TTL_SECONDS = 60 * 60;
   private static readonly AI_CODE_ANALYSIS_MAX_CODE_LENGTH = 16_000;
   private static readonly AI_CODE_ANALYSIS_LIMIT_COUNT = 10;
   private static readonly AI_CODE_ANALYSIS_LIMIT_WINDOW_SECONDS = 5 * 60;
@@ -2206,8 +2304,8 @@ export class RoomsService {
   private async getAiRequestRoomContext(
     roomId: string,
     userId: string,
-    language: SupportedLanguage,
-    label: 'Hint' | 'Analysis',
+    language: SupportedLanguage | undefined,
+    label: 'Hint' | 'Analysis' | 'Interview',
   ): Promise<{ problemId: string; activeLanguage: SupportedLanguage }> {
     const [room, participant] = await this.getRoomContext(roomId, userId);
 
@@ -2215,6 +2313,13 @@ export class RoomsService {
       throw new ForbiddenException({
         message: 'Not a participant of this room',
         code: ERROR_CODES.ROOM_ACCESS_DENIED,
+      });
+    }
+
+    if (label === 'Interview' && room.mode !== 'ai') {
+      throw new BadRequestException({
+        message: 'AI interview is only available in AI rooms',
+        code: ERROR_CODES.ROOM_NOT_AI_MODE,
       });
     }
 
@@ -2236,7 +2341,7 @@ export class RoomsService {
       });
     }
 
-    if (room.language && language !== room.language) {
+    if (room.language && language && language !== room.language) {
       throw new BadRequestException({
         message: `${label} language must match room language (${room.language})`,
         code: ERROR_CODES.VALIDATION_FAILED,
@@ -2245,7 +2350,7 @@ export class RoomsService {
 
     return {
       problemId: room.problemId,
-      activeLanguage: room.language ?? language,
+      activeLanguage: room.language ?? language ?? 'python',
     };
   }
 

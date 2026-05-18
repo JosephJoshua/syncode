@@ -196,6 +196,8 @@ export class YjsCollabProvider {
   }
 
   destroy(): void {
+    if (this.disposed) return;
+
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
 
     // Broadcast our own awareness removal BEFORE tearing down handlers/WS so
