@@ -98,7 +98,7 @@ function renderPeerFeedbackContent({
   );
 }
 
-function PeerFeedbackLoadingState({ label }: { label: string }) {
+function PeerFeedbackLoadingState({ label }: { readonly label: string }) {
   return (
     <div className="space-y-4">
       <p className="text-sm leading-6 text-muted-foreground">{label}</p>
@@ -120,9 +120,9 @@ function PeerFeedbackErrorState({
   onRetry,
   retryLabel,
 }: {
-  message: string;
-  onRetry: () => void;
-  retryLabel: string;
+  readonly message: string;
+  readonly onRetry: () => void;
+  readonly retryLabel: string;
 }) {
   return (
     <div>
@@ -139,9 +139,9 @@ function PeerFeedbackPendingNotice({
   heading,
   message,
 }: {
-  detail?: string;
-  heading: string;
-  message: string;
+  readonly detail?: string;
+  readonly heading: string;
+  readonly message: string;
 }) {
   return (
     <div className="rounded-2xl bg-muted/35 p-4 ring-1 ring-border/50">
