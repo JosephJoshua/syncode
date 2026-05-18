@@ -17,6 +17,40 @@ export interface HintSubmissionSummary {
   submittedAt: string;
 }
 
+export type InterviewQuestionType =
+  | 'complexity'
+  | 'bug_risk'
+  | 'edge_case'
+  | 'optimization'
+  | 'data_structure_choice'
+  | 'correctness'
+  | 'readability'
+  | 'other';
+
+export interface InterviewCodeContext {
+  language: SupportedLanguage;
+  file: string;
+  codeSnippet: string;
+  startLine: number;
+  endLine: number;
+  startColumn?: number;
+  endColumn?: number;
+  cursorLine?: number;
+  cursorColumn?: number;
+  questionType?: InterviewQuestionType;
+  reason?: string;
+}
+
+export interface InterviewCodeAnalysisContext {
+  summary: string;
+  focusAreas?: {
+    complexity: string;
+    edgeCases: string;
+    readability: string;
+  };
+  followUpQuestions?: string[];
+}
+
 export interface GenerateHintRequest {
   roomId: string;
   participantId: string;
@@ -123,9 +157,13 @@ export interface ReviewCodeResult {
 
 export interface InterviewResponseRequest {
   roomId: string;
+  sessionId?: string | null;
   participantId: string;
   conversationHistory: Array<{ role: string; content: string }>;
   currentCode: string;
+  codeContext: InterviewCodeContext;
+  latestExecutionSummary?: HintSubmissionSummary | null;
+  codeAnalysisContext?: InterviewCodeAnalysisContext;
   problemDescription: string;
   language: SupportedLanguage;
   userMessage: string;
@@ -140,6 +178,7 @@ export interface InterviewResponseAudio {
 export interface InterviewResponseResult {
   message: string;
   followUpQuestion: string;
+  codeContext: InterviewCodeContext;
   codeAnnotations?: Array<{ line: number; comment: string }>;
   audio?: InterviewResponseAudio;
 }

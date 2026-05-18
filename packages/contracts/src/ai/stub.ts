@@ -140,7 +140,7 @@ export class StubAiClient implements IAiClient {
     const jobId = randomUUID() as JobId<'ai:interview'>;
     this.jobs.set(jobId, { status: 'queued', type: 'interview' });
 
-    this.scheduleInterviewCompletion(jobId);
+    this.scheduleInterviewCompletion(jobId, _request);
     return { jobId };
   }
 
@@ -413,7 +413,7 @@ export class StubAiClient implements IAiClient {
     );
   }
 
-  private scheduleInterviewCompletion(jobId: string): void {
+  private scheduleInterviewCompletion(jobId: string, request: InterviewResponseRequest): void {
     this.timers.push(
       setTimeout(() => {
         const job = this.jobs.get(jobId);
@@ -427,6 +427,17 @@ export class StubAiClient implements IAiClient {
         job.interviewResult = {
           message: "That's a good approach. Let me ask you about the time complexity.",
           followUpQuestion: 'What is the time and space complexity of your solution?',
+          codeContext: {
+            language: request.language,
+            file: request.codeContext.file,
+            codeSnippet: request.codeContext.codeSnippet,
+            startLine: request.codeContext.startLine,
+            endLine: request.codeContext.endLine,
+            cursorLine: request.codeContext.cursorLine,
+            cursorColumn: request.codeContext.cursorColumn,
+            questionType: 'complexity',
+            reason: 'Complexity follow-up for the selected code context.',
+          },
           codeAnnotations: [
             {
               line: 1,
