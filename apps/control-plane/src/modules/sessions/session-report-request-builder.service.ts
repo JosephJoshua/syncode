@@ -1,5 +1,9 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { GenerateSessionReportRequest, SessionReportEventContext } from '@syncode/contracts';
+import type {
+  GenerateSessionReportRequest,
+  SessionReportEventContext,
+  StaticAnalysisEvidenceContext,
+} from '@syncode/contracts';
 import type { Database } from '@syncode/db';
 import {
   aiMessages,
@@ -8,11 +12,12 @@ import {
   peerFeedback,
   runs,
   sessionReports,
+  staticAnalysisResults,
   submissions,
   testCases,
   users,
 } from '@syncode/db';
-import { and, asc, desc, eq, inArray, isNotNull, ne } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNotNull, ne, or } from 'drizzle-orm';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
 
 const TERMINAL_STATUSES = ['completed', 'failed'] as const;
@@ -71,6 +76,7 @@ export class SessionReportRequestBuilderService {
           .orderBy(asc(codeSnapshots.createdAt), asc(codeSnapshots.id)),
         this.db
           .select({
+            runId: runs.id,
             jobId: runs.jobId,
             createdAt: runs.createdAt,
             status: runs.status,
@@ -163,6 +169,12 @@ export class SessionReportRequestBuilderService {
       ]);
 
     const latestSubmission = submissionRows.at(-1) ?? null;
+    const staticAnalysis = await this.loadStaticAnalysisContext(
+      sessionRow,
+      participant,
+      runRows.map((run) => run.runId),
+      submissionRows.map((submission) => submission.submissionId),
+    );
     const finalTestCaseBreakdown = latestSubmission
       ? await this.loadFinalTestCaseBreakdown(
           latestSubmission.submissionId,
@@ -266,7 +278,81 @@ export class SessionReportRequestBuilderService {
               priorScores,
             }
           : null,
+      staticAnalysis,
     };
+  }
+
+  private async loadStaticAnalysisContext(
+    sessionRow: SessionReportSessionRow,
+    participant: SessionReportParticipant,
+    runIds: string[],
+    submissionIds: string[],
+  ): Promise<StaticAnalysisEvidenceContext[]> {
+    const sourceConditions = [
+      eq(staticAnalysisResults.sessionId, sessionRow.id),
+      ...(runIds.length > 0 ? [inArray(staticAnalysisResults.runId, runIds)] : []),
+      ...(submissionIds.length > 0
+        ? [inArray(staticAnalysisResults.submissionId, submissionIds)]
+        : []),
+    ];
+
+    const rows = await this.db
+      .select({
+        source: staticAnalysisResults.source,
+        runId: staticAnalysisResults.runId,
+        submissionId: staticAnalysisResults.submissionId,
+        language: staticAnalysisResults.language,
+        createdAt: staticAnalysisResults.createdAt,
+        completedAt: staticAnalysisResults.completedAt,
+        diagnosticCount: staticAnalysisResults.diagnosticCount,
+        errorCount: staticAnalysisResults.errorCount,
+        warningCount: staticAnalysisResults.warningCount,
+        maxCyclomaticComplexity: staticAnalysisResults.maxCyclomaticComplexity,
+        highComplexityCount: staticAnalysisResults.highComplexityCount,
+        duplicationCount: staticAnalysisResults.duplicationCount,
+        toolFailureCount: staticAnalysisResults.toolFailureCount,
+        report: staticAnalysisResults.report,
+      })
+      .from(staticAnalysisResults)
+      .where(
+        and(
+          eq(staticAnalysisResults.roomId, sessionRow.roomId),
+          eq(staticAnalysisResults.userId, participant.userId),
+          eq(staticAnalysisResults.status, 'completed'),
+          or(...sourceConditions),
+        ),
+      )
+      .orderBy(asc(staticAnalysisResults.createdAt), asc(staticAnalysisResults.id));
+
+    return rows.map((row) => {
+      const report = normalizeStaticAnalysisReport(row.report);
+      return {
+        source: row.source,
+        runId: row.runId,
+        submissionId: row.submissionId,
+        language: row.language,
+        createdAt: row.createdAt.toISOString(),
+        completedAt: row.completedAt?.toISOString() ?? null,
+        summary: {
+          diagnosticCount: row.diagnosticCount,
+          errorCount: row.errorCount,
+          warningCount: row.warningCount,
+          maxCyclomaticComplexity: row.maxCyclomaticComplexity,
+          highComplexityCount: row.highComplexityCount,
+          duplicationCount: row.duplicationCount,
+          toolFailureCount: row.toolFailureCount,
+        },
+        diagnostics: report.diagnostics.slice(
+          0,
+          10,
+        ) as StaticAnalysisEvidenceContext['diagnostics'],
+        complexity: report.complexity.slice(0, 10) as StaticAnalysisEvidenceContext['complexity'],
+        duplications: report.duplications.slice(
+          0,
+          5,
+        ) as StaticAnalysisEvidenceContext['duplications'],
+      };
+    });
   }
 
   private selectFinalSnapshot(
@@ -408,4 +494,17 @@ export class SessionReportRequestBuilderService {
 
     return null;
   }
+}
+
+function normalizeStaticAnalysisReport(value: unknown) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return { diagnostics: [], complexity: [], duplications: [] };
+  }
+
+  const report = value as Record<string, unknown>;
+  return {
+    diagnostics: Array.isArray(report.diagnostics) ? report.diagnostics : [],
+    complexity: Array.isArray(report.complexity) ? report.complexity : [],
+    duplications: Array.isArray(report.duplications) ? report.duplications : [],
+  };
 }
