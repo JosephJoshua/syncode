@@ -403,7 +403,21 @@
     "aiInterviewFailed": "Failed to get a response from the AI interviewer.",
     "aiInterviewUnavailable": "AI interviewer service is temporarily unavailable.",
     "aiInterviewFollowUp": "Follow-up",
-    "aiInterviewAnnotations": "Code annotations"
+    "aiInterviewAnnotations": "Code annotations",
+    "aiInterviewCodeContext": "Code context",
+    "aiInterviewVoiceInput": "Voice response",
+    "aiInterviewVoiceUnsupported": "Voice input is not supported in this browser.",
+    "aiInterviewVoiceError": "Could not capture voice input.",
+    "aiInterviewQuestionType": {
+      "complexity": "Complexity",
+      "bug_risk": "Bug risk",
+      "edge_case": "Edge case",
+      "optimization": "Optimization",
+      "data_structure_choice": "Data structure",
+      "correctness": "Correctness",
+      "readability": "Readability",
+      "other": "Context"
+    }
   },
   "whiteboard": {
     "layer": "Layer",

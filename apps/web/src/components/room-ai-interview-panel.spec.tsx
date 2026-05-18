@@ -20,6 +20,7 @@ describe('RoomAiInterviewPanel', () => {
         error={null}
         onSendMessage={vi.fn()}
         canSendMessage={true}
+        currentUser={null}
       />,
     );
     expect(screen.getByText('workspace.aiInterviewEmpty')).toBeInTheDocument();
@@ -36,10 +37,37 @@ describe('RoomAiInterviewPanel', () => {
         error={null}
         onSendMessage={vi.fn()}
         canSendMessage={true}
+        currentUser={null}
       />,
     );
     expect(screen.getByText('Hello interviewer')).toBeInTheDocument();
     expect(screen.getByText('Tell me about your approach.')).toBeInTheDocument();
+  });
+
+  it('GIVEN current user has an avatar WHEN rendering a user message THEN shows the real avatar', () => {
+    const { container } = render(
+      <RoomAiInterviewPanel
+        messages={[{ role: 'user', content: 'Hello interviewer' }]}
+        isLoading={false}
+        error={null}
+        onSendMessage={vi.fn()}
+        canSendMessage={true}
+        currentUser={{
+          userId: 'user-1',
+          username: 'jane',
+          displayName: 'Jane Doe',
+          avatarUrl: 'https://cdn.example.com/jane.png',
+          role: 'candidate',
+          isReady: true,
+          isActive: true,
+        }}
+      />,
+    );
+
+    expect(container.querySelector('[data-slot="avatar-image"]')).toHaveAttribute(
+      'src',
+      'https://cdn.example.com/jane.png',
+    );
   });
 
   it('GIVEN isLoading WHEN rendered THEN shows sending indicator', () => {
@@ -50,6 +78,7 @@ describe('RoomAiInterviewPanel', () => {
         error={null}
         onSendMessage={vi.fn()}
         canSendMessage={true}
+        currentUser={null}
       />,
     );
     expect(screen.getAllByText('workspace.aiInterviewSending').length).toBeGreaterThan(0);
@@ -63,6 +92,7 @@ describe('RoomAiInterviewPanel', () => {
         error="Something went wrong"
         onSendMessage={vi.fn()}
         canSendMessage={true}
+        currentUser={null}
       />,
     );
     expect(screen.getByText('Something went wrong')).toBeInTheDocument();
@@ -77,6 +107,7 @@ describe('RoomAiInterviewPanel', () => {
         error={null}
         onSendMessage={onSend}
         canSendMessage={true}
+        currentUser={null}
       />,
     );
     const textarea = screen.getByPlaceholderText('workspace.aiInterviewPlaceholder');
@@ -98,9 +129,139 @@ describe('RoomAiInterviewPanel', () => {
         error={null}
         onSendMessage={vi.fn()}
         canSendMessage={true}
+        currentUser={null}
       />,
     );
     expect(screen.getByText('L3')).toBeInTheDocument();
     expect(screen.getByText('Off-by-one error here.')).toBeInTheDocument();
+  });
+
+  it('GIVEN assistant message with codeContext WHEN rendered THEN shows line range and snippet', () => {
+    render(
+      <RoomAiInterviewPanel
+        messages={[
+          {
+            role: 'assistant',
+            content: 'Let us focus here.',
+            codeContext: {
+              language: 'typescript',
+              file: 'solution.ts',
+              codeSnippet: 'const seen = new Map();',
+              startLine: 2,
+              endLine: 3,
+              questionType: 'data_structure_choice',
+              reason: 'Map state matters here.',
+            },
+          },
+        ]}
+        isLoading={false}
+        error={null}
+        onSendMessage={vi.fn()}
+        canSendMessage={true}
+        currentUser={null}
+      />,
+    );
+
+    expect(screen.getByText('solution.ts L2-3')).toBeInTheDocument();
+    expect(screen.getByText('const seen = new Map();')).toBeInTheDocument();
+    expect(
+      screen.getByText('workspace.aiInterviewQuestionType.data_structure_choice'),
+    ).toBeInTheDocument();
+  });
+
+  it('GIVEN speech recognition is available WHEN voice transcript returns THEN fills editable draft', async () => {
+    const user = userEvent.setup();
+    class MockSpeechRecognition {
+      continuous = false;
+      interimResults = false;
+      lang = 'en-US';
+      onresult:
+        | ((event: {
+            resultIndex: number;
+            results: ArrayLike<{ isFinal: boolean; 0: { transcript: string } }>;
+          }) => void)
+        | null = null;
+      onerror = null;
+      onend: (() => void) | null = null;
+      start() {
+        this.onresult?.({
+          resultIndex: 0,
+          results: [{ isFinal: true, 0: { transcript: 'spoken answer' } }],
+        });
+        this.onend?.();
+      }
+      stop() {}
+      abort() {}
+    }
+    const original = (globalThis as { SpeechRecognition?: unknown }).SpeechRecognition;
+    (globalThis as { SpeechRecognition?: unknown }).SpeechRecognition = MockSpeechRecognition;
+
+    try {
+      render(
+        <RoomAiInterviewPanel
+          messages={[]}
+          isLoading={false}
+          error={null}
+          onSendMessage={vi.fn()}
+          canSendMessage={true}
+          currentUser={null}
+        />,
+      );
+
+      await user.click(screen.getByTitle('workspace.aiInterviewVoiceInput'));
+      const textarea = screen.getByPlaceholderText('workspace.aiInterviewPlaceholder');
+      expect(textarea).toHaveValue('spoken answer');
+
+      await user.type(textarea, ' edited');
+      expect(textarea).toHaveValue('spoken answer edited');
+    } finally {
+      (globalThis as { SpeechRecognition?: unknown }).SpeechRecognition = original;
+    }
+  });
+
+  it('GIVEN speech recognition is available WHEN toggling voice input THEN mic icon reflects off and listening states', async () => {
+    const user = userEvent.setup();
+    class MockSpeechRecognition {
+      continuous = false;
+      interimResults = false;
+      lang = 'en-US';
+      onresult = null;
+      onerror = null;
+      onend: (() => void) | null = null;
+      start() {}
+      stop() {
+        this.onend?.();
+      }
+      abort() {}
+    }
+    const original = (globalThis as { SpeechRecognition?: unknown }).SpeechRecognition;
+    (globalThis as { SpeechRecognition?: unknown }).SpeechRecognition = MockSpeechRecognition;
+
+    try {
+      const { container } = render(
+        <RoomAiInterviewPanel
+          messages={[]}
+          isLoading={false}
+          error={null}
+          onSendMessage={vi.fn()}
+          canSendMessage={true}
+          currentUser={null}
+        />,
+      );
+
+      const voiceButton = screen.getByTitle('workspace.aiInterviewVoiceInput');
+      expect(voiceButton).toHaveAttribute('aria-pressed', 'false');
+      expect(container.querySelector('.lucide-mic-off')).toBeInTheDocument();
+
+      await user.click(voiceButton);
+      expect(voiceButton).toHaveAttribute('aria-pressed', 'true');
+      expect(container.querySelector('.lucide-mic')).toBeInTheDocument();
+
+      await user.click(voiceButton);
+      expect(voiceButton).toHaveAttribute('aria-pressed', 'false');
+      expect(container.querySelector('.lucide-mic-off')).toBeInTheDocument();
+    } finally {
+      (globalThis as { SpeechRecognition?: unknown }).SpeechRecognition = original;
+    }
   });
 });
