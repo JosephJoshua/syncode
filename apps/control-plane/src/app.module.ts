@@ -15,6 +15,7 @@ import { DbModule } from './modules/db/db.module.js';
 import { ExecutionModule } from './modules/execution/execution.module.js';
 import { FeedbackModule } from './modules/feedback/feedback.module.js';
 import { InternalModule } from './modules/internal/internal.module.js';
+import { MatchmakingModule } from './modules/matchmaking/matchmaking.module.js';
 import { ProblemsModule } from './modules/problems/problems.module.js';
 import { RoomsModule } from './modules/rooms/rooms.module.js';
 import { SessionsModule } from './modules/sessions/sessions.module.js';
@@ -122,6 +123,7 @@ if (!isProd) {
     AuthModule,
     AdminAuditModule,
     UsersModule,
+    MatchmakingModule,
     RoomsModule,
     WhiteboardAssetsModule,
     SessionsModule,
