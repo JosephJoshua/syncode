@@ -1,9 +1,14 @@
 import { Inject, Injectable, Logger, type OnModuleInit } from '@nestjs/common';
-import { EXECUTION_CLIENT, type IExecutionClient, type RunCodeResult } from '@syncode/contracts';
+import {
+  EXECUTION_CLIENT,
+  type IExecutionClient,
+  type RunCodeResult,
+  type StaticAnalysisResult,
+} from '@syncode/contracts';
 import type { Database } from '@syncode/db';
-import { executionResults, submissions } from '@syncode/db';
+import { executionResults, runs, staticAnalysisResults, submissions } from '@syncode/db';
 import { CACHE_SERVICE, type ICacheService } from '@syncode/shared/ports';
-import { sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
 import { EXEC_META_KEY_PREFIX, type JobMeta } from './execution.types.js';
 
@@ -19,12 +24,18 @@ export class ExecutionResultProcessor implements OnModuleInit {
 
   onModuleInit() {
     this.executionClient.onResult(this.handleResult.bind(this));
+    this.executionClient.onStaticAnalysisResult(this.handleStaticAnalysisResult.bind(this));
   }
 
   async handleResult(jobId: string, result: RunCodeResult): Promise<void> {
     const meta = await this.cacheService.get<JobMeta>(`${EXEC_META_KEY_PREFIX}${jobId}`);
     if (!meta) {
       this.logger.debug(`No metadata for job ${jobId}, skipping DB persistence`);
+      return;
+    }
+
+    if (meta.kind === 'run') {
+      await this.persistRunResult(jobId, meta.runId, result);
       return;
     }
 
@@ -83,5 +94,60 @@ export class ExecutionResultProcessor implements OnModuleInit {
     this.logger.debug(
       `Persisted result for job ${jobId} (submission ${meta.submissionId}, case ${meta.testCaseIndex})`,
     );
+  }
+
+  private async persistRunResult(
+    jobId: string,
+    runId: string,
+    result: RunCodeResult,
+  ): Promise<void> {
+    await this.db
+      .update(runs)
+      .set({
+        status: result.status,
+        stdout: result.stdout,
+        stderr: result.stderr,
+        exitCode: result.exitCode,
+        durationMs: result.durationMs,
+        cpuTimeMs: result.cpuTimeMs,
+        memoryUsageMb: result.memoryUsageMb,
+        timedOut: result.timedOut,
+        outputTruncated: result.outputTruncated ?? false,
+        error: result.error ?? null,
+        completedAt: new Date(),
+      })
+      .where(eq(runs.id, runId));
+
+    await this.cacheService.del(`${EXEC_META_KEY_PREFIX}${jobId}`);
+    this.logger.debug(`Persisted result for job ${jobId} (run ${runId})`);
+  }
+
+  private async handleStaticAnalysisResult(
+    jobId: string,
+    result: StaticAnalysisResult,
+  ): Promise<void> {
+    await this.db
+      .update(staticAnalysisResults)
+      .set({
+        status: result.status,
+        diagnosticCount: result.summary.diagnosticCount,
+        errorCount: result.summary.errorCount,
+        warningCount: result.summary.warningCount,
+        maxCyclomaticComplexity: result.summary.maxCyclomaticComplexity,
+        highComplexityCount: result.summary.highComplexityCount,
+        duplicationCount: result.summary.duplicationCount,
+        toolFailureCount: result.summary.toolFailureCount,
+        report: {
+          diagnostics: result.diagnostics,
+          complexity: result.complexity,
+          duplications: result.duplications,
+          toolResults: result.toolResults,
+        },
+        errorMessage: result.error ?? null,
+        completedAt: new Date(),
+      })
+      .where(eq(staticAnalysisResults.jobId, jobId));
+
+    this.logger.debug(`Persisted static analysis result for job ${jobId}`);
   }
 }
