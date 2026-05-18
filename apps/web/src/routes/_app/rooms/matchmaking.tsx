@@ -147,19 +147,16 @@ function MatchmakingPage() {
     refetchInterval: queueStatus === 'searching' ? STATUS_POLL_MS : false,
   });
 
-  useEffect(
-    () => {
-      isMountedRef.current = true;
-      return () => {
-        isMountedRef.current = false;
-        if (queueStatusRef.current !== 'searching') {
-          return;
-        }
-        api(CONTROL_API.MATCHMAKING.LEAVE_QUEUE).catch(() => undefined);
-      };
-    },
-    [],
-  );
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      if (queueStatusRef.current !== 'searching') {
+        return;
+      }
+      api(CONTROL_API.MATCHMAKING.LEAVE_QUEUE).catch(() => undefined);
+    };
+  }, []);
 
   useEffect(() => {
     if (queueStatus === 'idle') {
