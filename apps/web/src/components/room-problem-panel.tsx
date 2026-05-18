@@ -1,9 +1,9 @@
-import Editor from '@monaco-editor/react';
 import { Badge, Button } from '@syncode/ui';
 import { FileText, Lightbulb, Loader2, X } from 'lucide-react';
-import { type ReactNode, useState } from 'react';
+import { type ReactNode, Suspense, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import Markdown, { type Components } from 'react-markdown';
+import { LazyMonacoEditor as Editor } from './lazy-monaco-editor.js';
 import { ConstraintsBlock } from './problems/constraints-block.js';
 import { ProblemMarkdown } from './problems/problem-markdown.js';
 import { EDITOR_OPTIONS_BASE, handleEditorWillMount } from './room-workspace-utils.js';
@@ -433,24 +433,26 @@ function HintMarkdown({ content }: { content: string }) {
 
       return (
         <div className="my-2 overflow-hidden rounded-md border border-border/60">
-          <Editor
-            height={`${editorHeight}px`}
-            language={language}
-            value={raw}
-            theme="syncode-dark"
-            beforeMount={handleEditorWillMount}
-            options={{
-              ...EDITOR_OPTIONS_BASE,
-              readOnly: true,
-              lineNumbers: 'on',
-              renderLineHighlight: 'none',
-              minimap: { enabled: false },
-              folding: false,
-              wordWrap: 'on',
-              lineDecorationsWidth: 0,
-              lineNumbersMinChars: 3,
-            }}
-          />
+          <Suspense fallback={null}>
+            <Editor
+              height={`${editorHeight}px`}
+              language={language}
+              value={raw}
+              theme="syncode-dark"
+              beforeMount={handleEditorWillMount}
+              options={{
+                ...EDITOR_OPTIONS_BASE,
+                readOnly: true,
+                lineNumbers: 'on',
+                renderLineHighlight: 'none',
+                minimap: { enabled: false },
+                folding: false,
+                wordWrap: 'on',
+                lineDecorationsWidth: 0,
+                lineNumbersMinChars: 3,
+              }}
+            />
+          </Suspense>
         </div>
       );
     },

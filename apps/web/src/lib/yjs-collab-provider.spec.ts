@@ -542,6 +542,44 @@ describe('YjsCollabProvider', () => {
       provider.destroy();
     });
 
+    it('GIVEN remote user joins or leaves WHEN awareness changes THEN notifies presence subscribers', () => {
+      const onAwarenessPeersChanged = vi.fn();
+      const { provider, ws } = connectProvider(defaultOptions({ onAwarenessPeersChanged }));
+
+      const remoteDoc = new Y.Doc();
+      const remoteAwareness = new awarenessProtocol.Awareness(remoteDoc);
+      remoteAwareness.setLocalStateField('user', {
+        name: 'Bob',
+        color: '#60a5fa',
+        colorLight: '#60a5fa33',
+      });
+
+      ws.simulateBinaryMessage(buildAwarenessMessage(remoteAwareness, [remoteDoc.clientID]));
+      expect(onAwarenessPeersChanged).toHaveBeenCalledTimes(1);
+
+      awarenessProtocol.removeAwarenessStates(remoteAwareness, [remoteDoc.clientID], null);
+      ws.simulateBinaryMessage(buildAwarenessMessage(remoteAwareness, [remoteDoc.clientID]));
+      expect(onAwarenessPeersChanged).toHaveBeenCalledTimes(2);
+
+      remoteAwareness.destroy();
+      remoteDoc.destroy();
+      provider.destroy();
+    });
+
+    it('GIVEN local awareness changes WHEN user data is published THEN does not notify presence subscribers', () => {
+      const onAwarenessPeersChanged = vi.fn();
+      const provider = new YjsCollabProvider(defaultOptions({ onAwarenessPeersChanged }));
+
+      provider.setLocalUser({
+        name: 'Alice Cooper',
+        color: '#00e599',
+        colorLight: '#00e59933',
+      });
+
+      expect(onAwarenessPeersChanged).not.toHaveBeenCalled();
+      provider.destroy();
+    });
+
     it('GIVEN constructor WHEN provider is created THEN local awareness has user info set', () => {
       const opts = defaultOptions();
       const provider = new YjsCollabProvider(opts);

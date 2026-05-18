@@ -22,6 +22,11 @@ export default defineConfig({
         target: 'ws://localhost:3001',
         ws: true,
       },
+      '/storage': {
+        target: 'http://localhost:8333',
+        changeOrigin: false,
+        rewrite: (path) => path.replace(/^\/storage/, ''),
+      },
     },
   },
 });

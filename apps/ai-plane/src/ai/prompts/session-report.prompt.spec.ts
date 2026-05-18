@@ -182,4 +182,37 @@ describe('buildSessionReportPrompt', () => {
     expect(prompt.userPrompt).toContain('msg-44-');
     expect(prompt.userPrompt).toContain('…');
   });
+
+  it('GIVEN participant report request WHEN building prompt THEN requires strict participant-specific evidence', () => {
+    const prompt = buildSessionReportPrompt(
+      createReportRequest({
+        participants: [
+          {
+            userId: '770e8400-e29b-41d4-a716-446655440000',
+            username: 'alice',
+            displayName: 'Alice',
+            role: 'candidate',
+          },
+          {
+            userId: '770e8400-e29b-41d4-a716-446655440001',
+            username: 'bob',
+            displayName: 'Bob',
+            role: 'interviewer',
+          },
+        ],
+      }),
+    );
+
+    expect(prompt.systemPrompt).toContain('do not soften scores');
+    expect(prompt.systemPrompt).toContain('Evaluate the named report participant');
+    expect(prompt.systemPrompt).toContain('Final code is shared room evidence');
+    expect(prompt.systemPrompt).toContain('named-participant evidence connects');
+    expect(prompt.systemPrompt).toContain('room-consistent');
+    expect(prompt.userPrompt).toContain(
+      'do not give credit for work that belongs only to another participant',
+    );
+    expect(prompt.userPrompt).toContain(
+      'base every score on evidence that ties the named participant',
+    );
+  });
 });

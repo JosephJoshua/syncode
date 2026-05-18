@@ -1,7 +1,7 @@
-import Editor, { type OnMount } from '@monaco-editor/react';
+import type { OnMount } from '@monaco-editor/react';
 import { cn } from '@syncode/ui';
 import { MessageCircle, Plus, X } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { MonacoBinding } from 'y-monaco';
 import type { Awareness } from 'y-protocols/awareness';
@@ -10,6 +10,7 @@ import type { InlineComment } from '@/lib/inline-comments.js';
 import { clientIdFromElement, remoteCursorSelector } from '@/lib/remote-cursor-dom.js';
 import { codeTextKey } from '@/lib/yjs-collab-provider.js';
 import { buildCursorCssRules, IDLE_HIDE_MS } from './cursor-styles.js';
+import { LazyMonacoEditor as Editor } from './lazy-monaco-editor.js';
 import {
   EDITOR_LOADING,
   EDITOR_OPTIONS_BASE,
@@ -733,15 +734,17 @@ export function CollaborativeEditor({
 
   return (
     <div className="relative h-full">
-      <Editor
-        height="100%"
-        language={language}
-        theme="syncode-dark"
-        beforeMount={handleEditorWillMount}
-        onMount={handleMount}
-        options={editorOptions}
-        loading={EDITOR_LOADING}
-      />
+      <Suspense fallback={EDITOR_LOADING}>
+        <Editor
+          height="100%"
+          language={language}
+          theme="syncode-dark"
+          beforeMount={handleEditorWillMount}
+          onMount={handleMount}
+          options={editorOptions}
+          loading={EDITOR_LOADING}
+        />
+      </Suspense>
 
       <div className="pointer-events-none absolute inset-0 z-10">
         {commentGlyphOverlays.map((marker) => (

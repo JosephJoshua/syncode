@@ -11,33 +11,33 @@ vi.mock('react-i18next', async (importOriginal) => ({
 }));
 
 describe('ReportPeerFeedbackSection', () => {
+  const entry = {
+    id: '550e8400-e29b-41d4-a716-446655440001',
+    sessionId: '550e8400-e29b-41d4-a716-446655440002',
+    roomId: '550e8400-e29b-41d4-a716-446655440003',
+    reviewerId: '550e8400-e29b-41d4-a716-446655440004',
+    reviewerName: 'Alice',
+    reviewerAvatarUrl: 'https://cdn.example.com/alice.webp',
+    candidateId: '550e8400-e29b-41d4-a716-446655440005',
+    candidateName: 'Bob',
+    candidateAvatarUrl: 'https://cdn.example.com/bob.webp',
+    problemSolvingRating: 4,
+    communicationRating: 4,
+    codeQualityRating: 5,
+    debuggingRating: 3,
+    overallRating: 4,
+    strengths: 'Clear explanation',
+    improvements: 'More edge cases',
+    wouldPairAgain: true,
+    createdAt: '2026-04-01T00:58:00.000Z',
+  };
+
   it('GIVEN peer feedback with reviewer and candidate avatars THEN renders both avatar images', () => {
     const { container } = render(
       <ReportPeerFeedbackSection
         feedback={{
           allSubmitted: true,
-          data: [
-            {
-              id: '550e8400-e29b-41d4-a716-446655440001',
-              sessionId: '550e8400-e29b-41d4-a716-446655440002',
-              roomId: '550e8400-e29b-41d4-a716-446655440003',
-              reviewerId: '550e8400-e29b-41d4-a716-446655440004',
-              reviewerName: 'Alice',
-              reviewerAvatarUrl: 'https://cdn.example.com/alice.webp',
-              candidateId: '550e8400-e29b-41d4-a716-446655440005',
-              candidateName: 'Bob',
-              candidateAvatarUrl: 'https://cdn.example.com/bob.webp',
-              problemSolvingRating: 4,
-              communicationRating: 4,
-              codeQualityRating: 5,
-              debuggingRating: 3,
-              overallRating: 4,
-              strengths: 'Clear explanation',
-              improvements: 'More edge cases',
-              wouldPairAgain: true,
-              createdAt: '2026-04-01T00:58:00.000Z',
-            },
-          ],
+          data: [entry],
         }}
         isLoading={false}
         isError={false}
@@ -52,5 +52,23 @@ describe('ReportPeerFeedbackSection', () => {
     );
     expect(imageSources).toContain('https://cdn.example.com/alice.webp');
     expect(imageSources).toContain('https://cdn.example.com/bob.webp');
+  });
+
+  it('GIVEN current user has visible feedback while peers are pending THEN still renders feedback', () => {
+    render(
+      <ReportPeerFeedbackSection
+        feedback={{
+          allSubmitted: false,
+          data: [entry],
+        }}
+        isLoading={false}
+        isError={false}
+        onRetry={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText('Alice → Bob')).toBeInTheDocument();
+    expect(screen.getByText('peerFeedbackSection.awaitingResponses')).toBeInTheDocument();
+    expect(screen.queryByText('peerFeedbackSection.hiddenUntilSubmitted')).not.toBeInTheDocument();
   });
 });

@@ -27,12 +27,22 @@ export class S3StorageAdapter implements IStorageService, OnModuleDestroy {
   private readonly logger = new Logger(S3StorageAdapter.name);
   private readonly client: S3Client;
   private readonly presignClient: S3Client;
+  private readonly publicPathPrefix: string;
   private readonly bucket: string;
 
   constructor(config: S3Config) {
     const validatedConfig = S3ConfigSchema.parse(config);
 
     this.bucket = validatedConfig.bucket;
+    const publicEndpoint = validatedConfig.publicEndpoint
+      ? new URL(validatedConfig.publicEndpoint)
+      : null;
+    this.publicPathPrefix = publicEndpoint
+      ? normalizePublicPathPrefix(publicEndpoint.pathname)
+      : '';
+    const presignEndpoint = publicEndpoint
+      ? `${publicEndpoint.protocol}//${publicEndpoint.host}`
+      : validatedConfig.endpoint;
     const clientConfig: S3ClientConfig = {
       endpoint: validatedConfig.endpoint,
       region: validatedConfig.region,
@@ -46,14 +56,13 @@ export class S3StorageAdapter implements IStorageService, OnModuleDestroy {
 
     this.client = new S3Client(clientConfig);
 
-    // Presigned URLs need a browser-reachable endpoint (e.g. nginx proxy in prod)
-    if (
-      validatedConfig.publicEndpoint &&
-      validatedConfig.publicEndpoint !== validatedConfig.endpoint
-    ) {
+    // Presigned URLs need a browser-reachable host. If the public URL includes
+    // a routing prefix like /storage, sign against the origin path and add the
+    // prefix after signing so nginx can strip it before S3 validates SigV4.
+    if (publicEndpoint && presignEndpoint !== validatedConfig.endpoint) {
       this.presignClient = new S3Client({
         ...clientConfig,
-        endpoint: validatedConfig.publicEndpoint,
+        endpoint: presignEndpoint,
       });
     } else {
       this.presignClient = this.client;
@@ -240,9 +249,10 @@ export class S3StorageAdapter implements IStorageService, OnModuleDestroy {
       ContentType: options.contentType,
     });
 
-    return getSignedUrl(this.presignClient, command, {
+    const signedUrl = await getSignedUrl(this.presignClient, command, {
       expiresIn: options.expiresInSeconds,
     });
+    return this.withPublicPathPrefix(signedUrl);
   }
 
   async getDownloadUrl(key: string, expiresInSeconds: number): Promise<string> {
@@ -251,9 +261,10 @@ export class S3StorageAdapter implements IStorageService, OnModuleDestroy {
       Key: key,
     });
 
-    return getSignedUrl(this.presignClient, command, {
+    const signedUrl = await getSignedUrl(this.presignClient, command, {
       expiresIn: expiresInSeconds,
     });
+    return this.withPublicPathPrefix(signedUrl);
   }
 
   async shutdown(): Promise<void> {
@@ -275,4 +286,28 @@ export class S3StorageAdapter implements IStorageService, OnModuleDestroy {
     }
     return chunks;
   }
+
+  private withPublicPathPrefix(signedUrl: string): string {
+    if (!this.publicPathPrefix) {
+      return signedUrl;
+    }
+
+    const url = new URL(signedUrl);
+    const signedPathname = url.pathname.startsWith('/') ? url.pathname : `/${url.pathname}`;
+    url.pathname = `${this.publicPathPrefix}${signedPathname}`;
+    return url.toString();
+  }
+}
+
+function normalizePublicPathPrefix(pathname: string): string {
+  let end = pathname.length;
+  while (end > 0 && pathname[end - 1] === '/') {
+    end -= 1;
+  }
+
+  const normalized = pathname.slice(0, end);
+  if (!normalized || normalized === '/') {
+    return '';
+  }
+  return normalized.startsWith('/') ? normalized : `/${normalized}`;
 }

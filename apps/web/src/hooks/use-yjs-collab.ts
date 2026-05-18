@@ -25,6 +25,7 @@ export interface UseYjsCollabOptions {
   onParticipantReady: (userId: string, isReady: boolean) => void;
   onPhaseChange?: () => void;
   onLanguageChange?: (language: string, changedBy: string | null) => void;
+  onAwarenessPeersChanged?: () => void;
   onReconnected?: () => void;
   onRoomNotFound?: () => Promise<void>;
 }
@@ -55,6 +56,7 @@ export function useYjsCollab({
   onParticipantReady,
   onPhaseChange,
   onLanguageChange,
+  onAwarenessPeersChanged,
   onReconnected,
   onRoomNotFound,
 }: UseYjsCollabOptions): YjsCollabResult {
@@ -74,6 +76,8 @@ export function useYjsCollab({
   phaseChangeRef.current = onPhaseChange;
   const languageChangeRef = useRef(onLanguageChange);
   languageChangeRef.current = onLanguageChange;
+  const awarenessPeersChangedRef = useRef(onAwarenessPeersChanged);
+  awarenessPeersChangedRef.current = onAwarenessPeersChanged;
   const reconnectedRef = useRef(onReconnected);
   reconnectedRef.current = onReconnected;
   const roomNotFoundRef = useRef(onRoomNotFound);
@@ -134,6 +138,10 @@ export function useYjsCollab({
       onLanguageChange: (language, changedBy) => {
         if (disposed) return;
         languageChangeRef.current?.(language, changedBy);
+      },
+      onAwarenessPeersChanged: () => {
+        if (disposed) return;
+        awarenessPeersChangedRef.current?.();
       },
       onReconnected: () => {
         if (disposed) return;

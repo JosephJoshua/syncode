@@ -631,10 +631,25 @@ export class RoomsService {
         });
       }
 
-      const [targetParticipant] = await tx
-        .select({ isActive: roomParticipants.isActive })
+      if (room.status !== RoomStatus.WAITING) {
+        throw new BadRequestException({
+          message: 'Room ownership can only be transferred before the session starts',
+          code: ERROR_CODES.ROOM_ROLES_LOCKED,
+        });
+      }
+
+      const participants = await tx
+        .select({
+          id: roomParticipants.id,
+          userId: roomParticipants.userId,
+          role: roomParticipants.role,
+          isActive: roomParticipants.isActive,
+        })
         .from(roomParticipants)
-        .where(and(eq(roomParticipants.roomId, roomId), eq(roomParticipants.userId, targetUserId)));
+        .where(and(eq(roomParticipants.roomId, roomId), eq(roomParticipants.userId, targetUserId)))
+        .for('update');
+
+      const [targetParticipant] = participants;
 
       if (!targetParticipant) {
         throw new NotFoundException({
@@ -654,6 +669,8 @@ export class RoomsService {
         .update(rooms)
         .set({ hostId: targetUserId, updatedAt: transferredAt })
         .where(eq(rooms.id, roomId));
+
+      await this.reassignHostRoleAfterTransfer(tx, room, currentUserId, targetParticipant);
 
       return room.hostId;
     });
@@ -704,6 +721,13 @@ export class RoomsService {
         throw new BadRequestException({
           message: 'Participant roles are locked once the session has started',
           code: ERROR_CODES.ROOM_ROLES_LOCKED,
+        });
+      }
+
+      if (lockedRoom.hostId === targetUserId) {
+        throw new BadRequestException({
+          message: 'Use ownership transfer to change who has host permissions',
+          code: ERROR_CODES.VALIDATION_FAILED,
         });
       }
 
@@ -2194,6 +2218,78 @@ export class RoomsService {
 
   private getInitialHostRole(mode: RoomMode): RoomRole {
     return mode === 'peer' ? RoomRole.INTERVIEWER : RoomRole.CANDIDATE;
+  }
+
+  private async reassignHostRoleAfterTransfer(
+    tx: Pick<Database, 'select' | 'update'>,
+    room: typeof rooms.$inferSelect,
+    previousHostId: string,
+    targetParticipant: {
+      id: string;
+      userId: string;
+      role: string;
+      isActive: boolean;
+    },
+  ): Promise<void> {
+    const [previousHostParticipant] = await tx
+      .select({
+        id: roomParticipants.id,
+        userId: roomParticipants.userId,
+        role: roomParticipants.role,
+        isActive: roomParticipants.isActive,
+      })
+      .from(roomParticipants)
+      .where(and(eq(roomParticipants.roomId, room.id), eq(roomParticipants.userId, previousHostId)))
+      .for('update');
+
+    if (!previousHostParticipant?.isActive) {
+      throw new BadRequestException({
+        message: 'Current host is not an active participant',
+        code: ERROR_CODES.PARTICIPANT_CANNOT_TRANSFER_OWNERSHIP,
+      });
+    }
+
+    const targetRole = this.normalizeParticipantRole(
+      room.mode,
+      targetParticipant.role,
+      previousHostId,
+      targetParticipant.userId,
+    );
+
+    const nextTargetRole = this.getInitialHostRole(room.mode);
+    const nextPreviousHostRole = targetRole === nextTargetRole ? RoomRole.OBSERVER : targetRole;
+
+    await tx
+      .update(roomParticipants)
+      .set({ role: nextTargetRole })
+      .where(eq(roomParticipants.id, targetParticipant.id));
+    await tx
+      .update(roomParticipants)
+      .set({ role: nextPreviousHostRole })
+      .where(eq(roomParticipants.id, previousHostParticipant.id));
+
+    const activeParticipants = await tx
+      .select({
+        userId: roomParticipants.userId,
+        role: roomParticipants.role,
+      })
+      .from(roomParticipants)
+      .where(and(eq(roomParticipants.roomId, room.id), eq(roomParticipants.isActive, true)));
+
+    this.assertActiveRoleConfiguration(
+      room.mode,
+      room.status,
+      activeParticipants.map((participant) => ({
+        userId: participant.userId,
+        role: this.normalizeParticipantRole(
+          room.mode,
+          participant.role,
+          targetParticipant.userId,
+          participant.userId,
+        ),
+      })),
+      { strict: room.status !== RoomStatus.WAITING },
+    );
   }
 
   private assertRoleAllowedForMode(mode: RoomMode, role: RoomRole): void {

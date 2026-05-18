@@ -607,6 +607,42 @@ describe('transferOwnership', () => {
     expect(updatedRoom?.hostId).toBe(target.id);
   });
 
+  it('GIVEN peer room WHEN host transfers ownership THEN host-only role moves to the new host', async () => {
+    const host = await insertUser(db);
+    const target = await insertUser(db);
+    const room = await insertRoom(db, host.id);
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+    await insertParticipant(db, room.id, target.id, 'candidate');
+
+    await service.transferOwnership(room.id, host.id, target.id);
+
+    const participantRows = await db
+      .select({
+        userId: roomParticipants.userId,
+        role: roomParticipants.role,
+      })
+      .from(roomParticipants)
+      .where(eq(roomParticipants.roomId, room.id));
+    expect(participantRows.find((participant) => participant.userId === target.id)?.role).toBe(
+      'interviewer',
+    );
+    expect(participantRows.find((participant) => participant.userId === host.id)?.role).toBe(
+      'candidate',
+    );
+  });
+
+  it('GIVEN started room WHEN host transfers ownership THEN throws BadRequestException with ROOM_ROLES_LOCKED', async () => {
+    const host = await insertUser(db);
+    const target = await insertUser(db);
+    const room = await insertRoom(db, host.id, { status: 'warmup' });
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+    await insertParticipant(db, room.id, target.id, 'candidate');
+
+    await expect(service.transferOwnership(room.id, host.id, target.id)).rejects.toMatchObject({
+      response: expect.objectContaining({ code: ERROR_CODES.ROOM_ROLES_LOCKED }),
+    });
+  });
+
   it('GIVEN caller is not host WHEN transferring ownership THEN throws ForbiddenException', async () => {
     const host = await insertUser(db);
     const target = await insertUser(db);
@@ -655,6 +691,20 @@ describe('updateParticipantRole', () => {
     await expect(
       service.updateParticipantRole(room.id, host.id, extra.id, 'interviewer'),
     ).rejects.toThrow(ConflictException);
+  });
+
+  it('GIVEN waiting room WHEN host tries to edit their own role THEN throws BadRequestException', async () => {
+    const host = await insertUser(db);
+    const participant = await insertUser(db);
+    const room = await insertRoom(db, host.id);
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+    await insertParticipant(db, room.id, participant.id, 'candidate');
+
+    await expect(
+      service.updateParticipantRole(room.id, host.id, host.id, 'observer'),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({ code: ERROR_CODES.VALIDATION_FAILED }),
+    });
   });
 
   it('GIVEN room in warmup WHEN host updates role THEN throws BadRequestException with ROOM_ROLES_LOCKED', async () => {

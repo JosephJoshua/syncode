@@ -23,6 +23,8 @@ vi.mock('@monaco-editor/react', () => ({
   default: ({ value }: { value: string }) => <pre data-testid="monaco-editor">{value}</pre>,
 }));
 
+vi.mock('@/lib/monaco-loader.js', () => ({}));
+
 vi.mock('@/components/room-workspace-utils.js', () => ({
   EDITOR_LOADING: null,
   EDITOR_OPTIONS_BASE: {},
@@ -50,7 +52,7 @@ describe('EvidenceCard', () => {
     expect(screen.getByText('L3: return [0, 1]')).toBeInTheDocument();
   });
 
-  it('GIVEN a code_snippet evidence item with language WHEN rendered THEN shows Monaco editor', () => {
+  it('GIVEN a code_snippet evidence item with language WHEN rendered THEN shows Monaco editor', async () => {
     render(
       <ul>
         <EvidenceCard
@@ -61,7 +63,7 @@ describe('EvidenceCard', () => {
     );
 
     expect(screen.getByText('Final return.')).toBeInTheDocument();
-    expect(screen.getByTestId('monaco-editor')).toBeInTheDocument();
+    expect(await screen.findByTestId('monaco-editor')).toBeInTheDocument();
   });
 
   it('GIVEN an event_timestamp evidence item WHEN rendered THEN shows formatted time', () => {
