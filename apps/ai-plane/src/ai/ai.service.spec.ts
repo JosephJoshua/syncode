@@ -878,6 +878,108 @@ describe('AiService', () => {
       );
     });
 
+    it('GIVEN partially missing scored dimensions WHEN generateSessionReport THEN repairs missing dimensions instead of failing', async () => {
+      llmProvider.generateText.mockResolvedValueOnce({
+        text: JSON.stringify({
+          overallScore: 79,
+          dimensions: {
+            correctness: {
+              score: 82,
+              feedback: 'Correctness feedback.',
+              evidence: [
+                {
+                  type: 'code_line',
+                  reference: 'L1: function twoSum() { return [0, 1]; }',
+                  description: 'Returns an answer format.',
+                },
+              ],
+            },
+            codeQuality: {
+              score: 77,
+              feedback: 'Code quality feedback.',
+              evidence: [
+                {
+                  type: 'code_line',
+                  reference: 'L1: function twoSum() { return [0, 1]; }',
+                  description: 'Single function keeps flow readable.',
+                },
+              ],
+            },
+          },
+          strengths: ['Good structure'],
+          areasForImprovement: ['Explain trade-offs'],
+          detailedFeedback: 'Detailed feedback',
+          comparisonToHistory: null,
+          peerFeedbackSummary: null,
+        }),
+        model: 'qwen3.5-mini',
+      });
+
+      const request: GenerateSessionReportRequest = {
+        sessionId: '550e8400-e29b-41d4-a716-446655440000',
+        roomId: '660e8400-e29b-41d4-a716-446655440000',
+        participantId: '770e8400-e29b-41d4-a716-446655440000',
+        participantRole: 'candidate',
+        participants: [
+          {
+            userId: '770e8400-e29b-41d4-a716-446655440000',
+            username: 'alice',
+            displayName: 'Alice',
+            role: 'candidate',
+          },
+        ],
+        problem: {
+          id: '880e8400-e29b-41d4-a716-446655440000',
+          title: 'Two Sum',
+          description: 'Find two numbers.',
+          difficulty: 'easy',
+          constraints: null,
+        },
+        language: 'typescript',
+        durationMs: 120000,
+        startedAt: '2026-04-20T01:00:00.000Z',
+        finishedAt: '2026-04-20T01:02:00.000Z',
+        snapshots: [],
+        runs: [],
+        submissions: [],
+        finalCodeSnapshot: {
+          snapshotId: '990e8400-e29b-41d4-a716-446655440000',
+          timestamp: '2026-04-20T01:01:50.000Z',
+          trigger: 'session_end',
+          language: 'typescript',
+          code: 'function twoSum() { return [0, 1]; }',
+          linesOfCode: 1,
+          phase: 'finished',
+        },
+        sessionEvents: [
+          {
+            eventType: 'stage_transition',
+            timestamp: '2026-04-20T01:01:00.000Z',
+            details: 'coding -> wrapup',
+            metadata: {
+              fromStage: 'coding',
+              toStage: 'wrapup',
+              trigger: 'phase_change',
+            },
+          },
+        ],
+        finalTestCaseBreakdown: [],
+        peerFeedback: [],
+        aiMessages: [],
+        historicalContext: null,
+      };
+
+      const result = await service.generateSessionReport(request);
+
+      expect(result.dimensions?.correctness?.score).toBe(82);
+      expect(result.dimensions?.efficiency?.score).toBeGreaterThanOrEqual(0);
+      expect(result.dimensions?.communication?.score).toBeGreaterThanOrEqual(0);
+      expect(result.dimensions?.problemSolving?.score).toBeGreaterThanOrEqual(0);
+      expect(result.dimensions?.efficiency?.evidence.length).toBeGreaterThan(0);
+      expect(result.dimensions?.communication?.evidence.length).toBeGreaterThan(0);
+      expect(result.dimensions?.problemSolving?.evidence.length).toBeGreaterThan(0);
+    });
+
     it('GIVEN no event evidence WHEN sessionEvents exist THEN rejects the malformed report', async () => {
       llmProvider.generateText.mockResolvedValueOnce({
         text: JSON.stringify({

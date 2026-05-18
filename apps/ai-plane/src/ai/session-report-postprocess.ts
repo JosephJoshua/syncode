@@ -65,6 +65,7 @@ export function postprocessSessionReport(
   report: SessionReport,
 ): SessionReport {
   const finalCode = getFinalCode(request);
+  const sessionEvents = request.sessionEvents ?? [];
   const usesPlatformIo = usesPlatformIoStyle(finalCode, request.language);
 
   const nextReport: SessionReport = {
@@ -115,7 +116,6 @@ export function postprocessSessionReport(
   }
 
   if (nextReport.dimensions) {
-    const sessionEvents = request.sessionEvents ?? [];
     nextReport.dimensions = {
       ...nextReport.dimensions,
       correctness: ensureEvidenceCoverage(
@@ -172,7 +172,8 @@ export function postprocessSessionReport(
   }
 
   sanitizeReportOutput(nextReport);
-  assertEvidenceBackedDimensions(nextReport, request.sessionEvents ?? []);
+  repairPartialMissingDimensionEvidence(nextReport, finalCode, sessionEvents);
+  assertEvidenceBackedDimensions(nextReport, sessionEvents);
   return nextReport;
 }
 
@@ -184,16 +185,7 @@ function assertEvidenceBackedDimensions(
     throw new Error('LLM session report omitted required scored dimensions');
   }
 
-  const missingOrInvalid = REQUIRED_DIMENSION_KEYS.filter((key) => {
-    const dimension = report.dimensions?.[key];
-    return (
-      !dimension ||
-      !Number.isFinite(dimension.score) ||
-      dimension.score < 0 ||
-      dimension.score > 100 ||
-      dimension.evidence.length === 0
-    );
-  });
+  const missingOrInvalid = getMissingOrInvalidDimensionKeys(report.dimensions);
 
   if (missingOrInvalid.length > 0) {
     throw new Error(
@@ -209,6 +201,150 @@ function assertEvidenceBackedDimensions(
   ) {
     throw new Error('LLM session report omitted session event timestamp evidence');
   }
+}
+
+function getMissingOrInvalidDimensionKeys(
+  dimensions: NonNullable<SessionReport['dimensions']>,
+): (typeof REQUIRED_DIMENSION_KEYS)[number][] {
+  return REQUIRED_DIMENSION_KEYS.filter((key) => {
+    const dimension = dimensions[key];
+    return (
+      !dimension ||
+      !Number.isFinite(dimension.score) ||
+      dimension.score < 0 ||
+      dimension.score > 100 ||
+      dimension.evidence.length === 0
+    );
+  });
+}
+
+function repairPartialMissingDimensionEvidence(
+  report: SessionReport,
+  finalCode: string,
+  sessionEvents: SessionReportEventContext[],
+) {
+  if (!report.dimensions) {
+    return;
+  }
+
+  const missingOrInvalid = getMissingOrInvalidDimensionKeys(report.dimensions);
+  if (missingOrInvalid.length === 0 || missingOrInvalid.length === REQUIRED_DIMENSION_KEYS.length) {
+    return;
+  }
+
+  const nextDimensions: NonNullable<SessionReport['dimensions']> = {
+    ...report.dimensions,
+  };
+
+  for (const key of missingOrInvalid) {
+    const current = nextDimensions[key];
+    const score = normalizeDimensionScore(current?.score, report.overallScore);
+    const feedback =
+      sanitizeReportText(current?.feedback, MAX_REPORT_LIST_ITEM_LENGTH) ??
+      defaultDimensionFeedback(key);
+    const normalizedEvidence = normalizeSpecificEvidence(
+      current?.evidence ?? [],
+      finalCode,
+      sessionEvents,
+    );
+    const evidence =
+      normalizedEvidence.length > 0
+        ? normalizedEvidence
+        : buildFallbackEvidence(key, finalCode, sessionEvents);
+
+    nextDimensions[key] = {
+      score,
+      feedback,
+      evidence,
+    };
+  }
+
+  report.dimensions = nextDimensions;
+}
+
+function normalizeDimensionScore(score: number | undefined, overallScore: number | undefined) {
+  if (typeof score === 'number' && Number.isFinite(score)) {
+    return clampScore(score);
+  }
+
+  if (typeof overallScore === 'number' && Number.isFinite(overallScore)) {
+    return clampScore(overallScore);
+  }
+
+  return 75;
+}
+
+function clampScore(score: number) {
+  return Math.max(0, Math.min(100, Math.round(score)));
+}
+
+function defaultDimensionFeedback(key: (typeof REQUIRED_DIMENSION_KEYS)[number]): string {
+  switch (key) {
+    case 'correctness':
+      return 'Correctness signal is mixed; review edge cases and verify each branch with a quick manual trace.';
+    case 'efficiency':
+      return 'Performance is acceptable; clearly state asymptotic complexity and confirm no redundant passes.';
+    case 'codeQuality':
+      return 'Code works but readability can improve with clearer naming and tighter structure.';
+    case 'communication':
+      return 'Summarize your invariant and trade-offs more explicitly while walking through the solution.';
+    case 'problemSolving':
+      return 'Problem-solving approach is reasonable; explicitly explain why the chosen pattern fits constraints.';
+    default:
+      return 'Score inferred from available session evidence.';
+  }
+}
+
+function buildFallbackEvidence(
+  key: (typeof REQUIRED_DIMENSION_KEYS)[number],
+  finalCode: string,
+  sessionEvents: SessionReportEventContext[],
+): SessionReportEvidence[] {
+  const eventEvidence = buildFallbackEventEvidence(key, sessionEvents);
+  if (eventEvidence) {
+    return [eventEvidence];
+  }
+
+  const codeEvidence = buildFallbackCodeEvidence(key, finalCode);
+  return codeEvidence ? [codeEvidence] : [];
+}
+
+function buildFallbackEventEvidence(
+  key: (typeof REQUIRED_DIMENSION_KEYS)[number],
+  sessionEvents: SessionReportEventContext[],
+): SessionReportEvidence | null {
+  const latestEvent = sessionEvents.at(-1);
+  if (!latestEvent) {
+    return null;
+  }
+
+  return {
+    type: 'event_timestamp',
+    reference: latestEvent.timestamp,
+    description: `Session timeline supports ${key} assessment.`,
+  };
+}
+
+function buildFallbackCodeEvidence(
+  key: (typeof REQUIRED_DIMENSION_KEYS)[number],
+  finalCode: string,
+): SessionReportEvidence | null {
+  const lines = finalCode.split('\n');
+  const firstMeaningfulLine = lines.findIndex((line) => line.trim().length > 0);
+  if (firstMeaningfulLine < 0) {
+    return null;
+  }
+
+  const snippet = lines[firstMeaningfulLine]?.trim().slice(0, 100);
+  if (!snippet) {
+    return null;
+  }
+
+  return {
+    type: 'code_line',
+    reference: `L${firstMeaningfulLine + 1}: ${snippet}`,
+    description: `Final code context supports ${key} assessment.`,
+  };
 }
 
 function sanitizeReportOutput(report: SessionReport) {
