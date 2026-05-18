@@ -1,16 +1,47 @@
-import { Button } from '@syncode/ui';
-import { Bot, Send, User } from 'lucide-react';
+import type { AiInterviewCodeContext } from '@syncode/contracts';
+import { Avatar, AvatarFallback, AvatarImage, Button } from '@syncode/ui';
+import { Bot, Mic, MicOff, Send } from 'lucide-react';
 import type { KeyboardEvent } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import type { Participant } from './room-participant-card.js';
 
 export interface AiInterviewMessage {
   role: 'user' | 'assistant';
   content: string;
   followUpQuestion?: string;
+  codeContext?: AiInterviewCodeContext;
   codeAnnotations?: Array<{ line: number; comment: string }>;
   audioUrl?: string;
 }
+
+interface SpeechRecognitionResultLike {
+  readonly isFinal: boolean;
+  readonly 0: { readonly transcript: string };
+}
+
+interface SpeechRecognitionEventLike {
+  readonly resultIndex: number;
+  readonly results: ArrayLike<SpeechRecognitionResultLike>;
+}
+
+interface SpeechRecognitionErrorEventLike {
+  readonly error?: string;
+}
+
+interface SpeechRecognitionLike {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
+  onerror: ((event: SpeechRecognitionErrorEventLike) => void) | null;
+  onend: (() => void) | null;
+  start: () => void;
+  stop: () => void;
+  abort: () => void;
+}
+
+type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
 
 export function RoomAiInterviewPanel({
   messages,
@@ -18,17 +49,23 @@ export function RoomAiInterviewPanel({
   error,
   onSendMessage,
   canSendMessage,
+  currentUser,
 }: {
   messages: AiInterviewMessage[];
   isLoading: boolean;
   error: string | null;
   onSendMessage: (message: string) => void;
   canSendMessage: boolean;
+  currentUser: Participant | null;
 }) {
   const { t } = useTranslation('rooms');
   const [draft, setDraft] = useState('');
+  const [isListening, setIsListening] = useState(false);
+  const [voiceError, setVoiceError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const speechRecognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const speechRecognitionConstructor = resolveSpeechRecognition();
 
   const latestAudioUrl = [...messages]
     .reverse()
@@ -54,11 +91,75 @@ export function RoomAiInterviewPanel({
     };
   }, [latestAudioUrl]);
 
+  useEffect(() => {
+    return () => {
+      speechRecognitionRef.current?.abort();
+      speechRecognitionRef.current = null;
+    };
+  }, []);
+
   function handleSend() {
     const trimmed = draft.trim();
     if (!trimmed || isLoading) return;
     onSendMessage(trimmed);
     setDraft('');
+  }
+
+  function toggleVoiceInput() {
+    if (isListening) {
+      speechRecognitionRef.current?.stop();
+      setIsListening(false);
+      return;
+    }
+
+    if (!speechRecognitionConstructor) {
+      setVoiceError(t('workspace.aiInterviewVoiceUnsupported'));
+      return;
+    }
+
+    setVoiceError(null);
+    const recognition = new speechRecognitionConstructor();
+    speechRecognitionRef.current = recognition;
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+    const baseDraft = draft;
+    let finalTranscript = '';
+
+    recognition.onresult = (event) => {
+      let interimTranscript = '';
+      for (let index = event.resultIndex; index < event.results.length; index += 1) {
+        const result = event.results[index];
+        if (!result) continue;
+        if (result.isFinal) {
+          finalTranscript += result[0].transcript;
+        } else {
+          interimTranscript += result[0].transcript;
+        }
+      }
+
+      const transcript = `${finalTranscript}${interimTranscript}`.trim();
+      if (transcript) {
+        setDraft(mergeTranscript(baseDraft, transcript));
+      }
+    };
+
+    recognition.onerror = () => {
+      setVoiceError(t('workspace.aiInterviewVoiceError'));
+      setIsListening(false);
+    };
+    recognition.onend = () => {
+      setIsListening(false);
+      speechRecognitionRef.current = null;
+    };
+
+    try {
+      recognition.start();
+      setIsListening(true);
+    } catch {
+      setVoiceError(t('workspace.aiInterviewVoiceError'));
+      setIsListening(false);
+    }
   }
 
   function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
@@ -81,6 +182,7 @@ export function RoomAiInterviewPanel({
               key={`${msg.role}-${index}-${msg.content.slice(0, 20)}`}
               message={msg}
               t={t}
+              currentUser={currentUser}
             />
           ))
         )}
@@ -107,15 +209,35 @@ export function RoomAiInterviewPanel({
           rows={3}
           className="w-full resize-none rounded-md border border-border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50"
         />
-        <Button
-          size="sm"
-          className="w-full gap-1.5"
-          disabled={!draft.trim() || !canSendMessage || isLoading}
-          onClick={handleSend}
-        >
-          <Send className="size-3.5" />
-          {isLoading ? t('workspace.aiInterviewSending') : t('workspace.aiInterviewSend')}
-        </Button>
+        {voiceError ? <p className="text-xs text-destructive">{voiceError}</p> : null}
+        <div className="flex gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="shrink-0 gap-1.5"
+            disabled={!canSendMessage || isLoading || !speechRecognitionConstructor}
+            onClick={toggleVoiceInput}
+            aria-pressed={isListening}
+            title={
+              speechRecognitionConstructor
+                ? t('workspace.aiInterviewVoiceInput')
+                : t('workspace.aiInterviewVoiceUnsupported')
+            }
+          >
+            {isListening ? <Mic className="size-3.5" /> : <MicOff className="size-3.5" />}
+            <span className="sr-only">{t('workspace.aiInterviewVoiceInput')}</span>
+          </Button>
+          <Button
+            size="sm"
+            className="min-w-0 flex-1 gap-1.5"
+            disabled={!draft.trim() || !canSendMessage || isLoading}
+            onClick={handleSend}
+          >
+            <Send className="size-3.5 shrink-0" />
+            {isLoading ? t('workspace.aiInterviewSending') : t('workspace.aiInterviewSend')}
+          </Button>
+        </div>
       </div>
     </div>
   );
@@ -124,9 +246,11 @@ export function RoomAiInterviewPanel({
 function AiInterviewMessageBubble({
   message,
   t,
+  currentUser,
 }: {
   message: AiInterviewMessage;
   t: (key: string) => string;
+  currentUser: Participant | null;
 }) {
   const isUser = message.role === 'user';
 
@@ -134,9 +258,12 @@ function AiInterviewMessageBubble({
     <div className={`flex gap-2 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
       <div className="mt-0.5 shrink-0">
         {isUser ? (
-          <div className="flex size-6 items-center justify-center rounded-full bg-primary/20">
-            <User className="size-3 text-primary" />
-          </div>
+          <Avatar className="size-6 text-[9px]">
+            {currentUser?.avatarUrl ? <AvatarImage src={currentUser.avatarUrl} /> : null}
+            <AvatarFallback className="bg-primary/20 text-primary">
+              {(currentUser?.displayName ?? currentUser?.username ?? '?').charAt(0).toUpperCase()}
+            </AvatarFallback>
+          </Avatar>
         ) : (
           <div className="flex size-6 items-center justify-center rounded-full bg-muted">
             <Bot className="size-3 text-muted-foreground" />
@@ -169,6 +296,10 @@ function AiInterviewMessageBubble({
           </div>
         ) : null}
 
+        {message.codeContext ? (
+          <AiInterviewCodeContextCard context={message.codeContext} t={t} />
+        ) : null}
+
         {message.codeAnnotations && message.codeAnnotations.length > 0 ? (
           <div className="w-full rounded-xl bg-muted/40 px-3 py-2 ring-1 ring-border/40">
             <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
@@ -190,4 +321,58 @@ function AiInterviewMessageBubble({
       </div>
     </div>
   );
+}
+
+function AiInterviewCodeContextCard({
+  context,
+  t,
+}: Readonly<{
+  context: AiInterviewCodeContext;
+  t: (key: string, options?: Record<string, unknown>) => string;
+}>) {
+  return (
+    <div className="w-full overflow-hidden rounded-xl bg-background/70 ring-1 ring-border/50">
+      <div className="flex items-center justify-between gap-2 border-b border-border/50 px-3 py-2">
+        <span className="truncate font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+          {t('workspace.aiInterviewCodeContext')}
+        </span>
+        <span className="shrink-0 font-mono text-[10px] text-primary/75">
+          {context.file} L{context.startLine}
+          {context.endLine === context.startLine ? '' : `-${context.endLine}`}
+        </span>
+      </div>
+      <pre className="max-h-32 overflow-auto px-3 py-2 font-mono text-[11px] leading-5 text-foreground/85">
+        <code>{context.codeSnippet}</code>
+      </pre>
+      {context.questionType || context.reason ? (
+        <div className="border-t border-border/50 px-3 py-2 text-xs text-muted-foreground">
+          {context.questionType ? (
+            <span className="font-medium text-primary/75">
+              {t(`workspace.aiInterviewQuestionType.${context.questionType}`)}
+            </span>
+          ) : null}
+          {context.reason ? (
+            <span>{context.questionType ? ` - ${context.reason}` : context.reason}</span>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function resolveSpeechRecognition(): SpeechRecognitionConstructor | null {
+  const speechGlobal = globalThis as typeof globalThis & {
+    SpeechRecognition?: SpeechRecognitionConstructor;
+    webkitSpeechRecognition?: SpeechRecognitionConstructor;
+  };
+
+  return speechGlobal.SpeechRecognition ?? speechGlobal.webkitSpeechRecognition ?? null;
+}
+
+function mergeTranscript(previous: string, transcript: string): string {
+  if (!previous.trim()) {
+    return transcript;
+  }
+
+  return `${previous.trimEnd()} ${transcript}`.trim();
 }

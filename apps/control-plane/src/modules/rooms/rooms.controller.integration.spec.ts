@@ -5,7 +5,7 @@ import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import { AI_CLIENT, COLLAB_CLIENT, ERROR_CODES, EXECUTION_CLIENT } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
-import { aiHints } from '@syncode/db';
+import { aiHints, rooms } from '@syncode/db';
 import { CACHE_SERVICE, MEDIA_SERVICE, STORAGE_SERVICE } from '@syncode/shared/ports';
 import { eq } from 'drizzle-orm';
 import { ZodValidationPipe } from 'nestjs-zod';
@@ -21,6 +21,7 @@ import {
   insertProblem,
   insertRoom,
   insertSession,
+  insertSubmission,
   insertTestCase,
   insertUser,
 } from '@/test/integration-setup.js';
@@ -1068,6 +1069,18 @@ describe('POST /rooms/:id/ai/code-analysis', () => {
 });
 
 describe('POST /rooms/:id/ai/interview', () => {
+  const interviewCodeContext = {
+    language: 'python' as const,
+    file: 'solution.py',
+    codeSnippet: 'def two_sum(nums, target):\n    return []',
+    startLine: 1,
+    endLine: 2,
+    cursorLine: 2,
+    cursorColumn: 5,
+    questionType: 'correctness' as const,
+    reason: 'Candidate selected solution body',
+  };
+
   async function createAiInterviewRoom() {
     const candidate = await insertUser(db);
     const problem = await insertProblem(db);
@@ -1087,6 +1100,7 @@ describe('POST /rooms/:id/ai/interview', () => {
     mockAiClient.getInterviewResult.mockResolvedValueOnce({
       message: 'Explain why your hash map lookup is correct.',
       followUpQuestion: 'What happens with duplicate numbers?',
+      codeContext: interviewCodeContext,
       codeAnnotations: [{ line: 3, comment: 'Mention how this handles repeated values.' }],
       audio: {
         audioKey: 'ai/interview/ai-interview-job.mp3',
@@ -1103,6 +1117,7 @@ describe('POST /rooms/:id/ai/interview', () => {
         userMessage: 'I would scan once and store complements.',
         conversationHistory: [{ role: 'assistant', content: 'How would you solve this?' }],
         currentCode: 'def two_sum(nums, target):\n    return []',
+        codeContext: interviewCodeContext,
       })
       .expect(202);
 
@@ -1114,6 +1129,8 @@ describe('POST /rooms/:id/ai/interview', () => {
         language: 'python',
         userMessage: 'I would scan once and store complements.',
         conversationHistory: [{ role: 'assistant', content: 'How would you solve this?' }],
+        codeContext: interviewCodeContext,
+        latestExecutionSummary: null,
       }),
     );
 
@@ -1127,9 +1144,266 @@ describe('POST /rooms/:id/ai/interview', () => {
       jobId: submission.body.jobId,
       message: 'Explain why your hash map lookup is correct.',
       followUpQuestion: 'What happens with duplicate numbers?',
+      codeContext: interviewCodeContext,
       codeAnnotations: [{ line: 3, comment: 'Mention how this handles repeated values.' }],
       audioUrl: 'https://media.example.com/interview.mp3',
     });
+  });
+
+  it('GIVEN AI returns different code context WHEN polling interview THEN returns verified submitted context', async () => {
+    const { candidate, room } = await createAiInterviewRoom();
+    const currentCode = 'def two_sum(nums, target):\n    return []';
+    mockAiClient.getInterviewResult.mockResolvedValueOnce({
+      message: 'Explain why your hash map lookup is correct.',
+      followUpQuestion: 'What happens with duplicate numbers?',
+      codeContext: {
+        ...interviewCodeContext,
+        codeSnippet: 'hallucinated snippet',
+        startLine: 99,
+        endLine: 99,
+      },
+    });
+
+    const submission = await asUser(
+      request(app.getHttpServer()).post(`/rooms/${room.id}/ai/interview`),
+      candidate,
+    )
+      .send({
+        userMessage: 'I would scan once and store complements.',
+        conversationHistory: [],
+        currentCode,
+        codeContext: interviewCodeContext,
+      })
+      .expect(202);
+
+    const result = await asUser(
+      request(app.getHttpServer()).get(`/rooms/${room.id}/ai/interview/${submission.body.jobId}`),
+      candidate,
+    ).expect(200);
+
+    expect(result.body.codeContext).toEqual(
+      expect.objectContaining({
+        codeSnippet: currentCode,
+        startLine: 1,
+        endLine: 2,
+      }),
+    );
+  });
+
+  it('GIVEN cached code analysis context WHEN requesting interview response THEN forwards it to AI', async () => {
+    const { candidate, room } = await createAiInterviewRoom();
+    mockAiClient.getCodeAnalysisResult.mockResolvedValueOnce({
+      summary: 'Use a hash map, but explain duplicate handling.',
+      focusAreas: {
+        complexity: 'Explain linear lookup cost.',
+        edgeCases: 'Discuss duplicate numbers.',
+        readability: 'Name map contents clearly.',
+      },
+      followUpQuestions: ['What does the map store?'],
+    });
+
+    const analysisSubmission = await asUser(
+      request(app.getHttpServer()).post(`/rooms/${room.id}/ai/code-analysis`),
+      candidate,
+    )
+      .send({
+        code: interviewCodeContext.codeSnippet,
+        language: 'python',
+      })
+      .expect(202);
+
+    await asUser(
+      request(app.getHttpServer()).get(
+        `/rooms/${room.id}/ai/code-analysis/${analysisSubmission.body.jobId}`,
+      ),
+      candidate,
+    ).expect(200);
+
+    await asUser(request(app.getHttpServer()).post(`/rooms/${room.id}/ai/interview`), candidate)
+      .send({
+        userMessage: 'I would use a map.',
+        conversationHistory: [],
+        currentCode: interviewCodeContext.codeSnippet,
+        codeContext: interviewCodeContext,
+      })
+      .expect(202);
+
+    expect(mockAiClient.submitInterviewResponse).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        codeAnalysisContext: {
+          summary: 'Use a hash map, but explain duplicate handling.',
+          focusAreas: {
+            complexity: 'Explain linear lookup cost.',
+            edgeCases: 'Discuss duplicate numbers.',
+            readability: 'Name map contents clearly.',
+          },
+          followUpQuestions: ['What does the map store?'],
+        },
+      }),
+    );
+  });
+
+  it('GIVEN cached code analysis has different language WHEN requesting interview response THEN omits stale context', async () => {
+    const { candidate, room } = await createAiInterviewRoom();
+    mockAiClient.getCodeAnalysisResult.mockResolvedValueOnce({
+      summary: 'Use a hash map, but explain duplicate handling.',
+      focusAreas: {
+        complexity: 'Explain linear lookup cost.',
+        edgeCases: 'Discuss duplicate numbers.',
+        readability: 'Name map contents clearly.',
+      },
+      followUpQuestions: ['What does the map store?'],
+    });
+
+    const analysisSubmission = await asUser(
+      request(app.getHttpServer()).post(`/rooms/${room.id}/ai/code-analysis`),
+      candidate,
+    )
+      .send({
+        code: interviewCodeContext.codeSnippet,
+        language: 'python',
+      })
+      .expect(202);
+
+    await asUser(
+      request(app.getHttpServer()).get(
+        `/rooms/${room.id}/ai/code-analysis/${analysisSubmission.body.jobId}`,
+      ),
+      candidate,
+    ).expect(200);
+    await db.update(rooms).set({ language: 'typescript' }).where(eq(rooms.id, room.id));
+
+    await asUser(request(app.getHttpServer()).post(`/rooms/${room.id}/ai/interview`), candidate)
+      .send({
+        userMessage: 'I would use a map.',
+        conversationHistory: [],
+        currentCode: interviewCodeContext.codeSnippet,
+        codeContext: {
+          ...interviewCodeContext,
+          language: 'typescript',
+          file: 'solution.ts',
+        },
+      })
+      .expect(202);
+
+    expect(mockAiClient.submitInterviewResponse).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        language: 'typescript',
+        codeAnalysisContext: undefined,
+      }),
+    );
+  });
+
+  it('GIVEN latest submission matches current code WHEN requesting interview response THEN forwards execution summary', async () => {
+    const { candidate, problem, room } = await createAiInterviewRoom();
+    const currentCode = 'def two_sum(nums, target):\n    return []';
+    await insertSubmission(db, candidate.id, room.id, problem.id, {
+      code: currentCode,
+      language: 'python',
+      status: 'completed',
+      totalTestCases: 4,
+      passedTestCases: 4,
+      failedTestCases: 0,
+      errorTestCases: 0,
+      submittedAt: new Date('2026-05-18T12:00:00.000Z'),
+    });
+
+    await asUser(request(app.getHttpServer()).post(`/rooms/${room.id}/ai/interview`), candidate)
+      .send({
+        userMessage: 'I would use a map.',
+        conversationHistory: [],
+        currentCode,
+        codeContext: interviewCodeContext,
+      })
+      .expect(202);
+
+    expect(mockAiClient.submitInterviewResponse).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        latestExecutionSummary: {
+          status: 'completed',
+          passedTestCases: 4,
+          totalTestCases: 4,
+          failedTestCases: 0,
+          errorTestCases: 0,
+          allTestsPassed: true,
+          submittedAt: '2026-05-18T12:00:00.000Z',
+        },
+      }),
+    );
+  });
+
+  it('GIVEN latest submission has stale code WHEN requesting interview response THEN omits execution summary', async () => {
+    const { candidate, problem, room } = await createAiInterviewRoom();
+    const currentCode = 'def two_sum(nums, target):\n    return []';
+    await insertSubmission(db, candidate.id, room.id, problem.id, {
+      code: 'def two_sum(nums, target):\n    return [0, 1]',
+      language: 'python',
+      status: 'completed',
+      totalTestCases: 4,
+      passedTestCases: 4,
+      failedTestCases: 0,
+      errorTestCases: 0,
+    });
+
+    await asUser(request(app.getHttpServer()).post(`/rooms/${room.id}/ai/interview`), candidate)
+      .send({
+        userMessage: 'I would use a map.',
+        conversationHistory: [],
+        currentCode,
+        codeContext: interviewCodeContext,
+      })
+      .expect(202);
+
+    expect(mockAiClient.submitInterviewResponse).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        latestExecutionSummary: null,
+      }),
+    );
+  });
+
+  it('GIVEN forged client interview context WHEN requesting interview response THEN uses server-trusted context only', async () => {
+    const { candidate, room } = await createAiInterviewRoom();
+    const currentCode = 'def two_sum(nums, target):\n    return []';
+
+    await asUser(request(app.getHttpServer()).post(`/rooms/${room.id}/ai/interview`), candidate)
+      .send({
+        userMessage: 'I would use a map.',
+        conversationHistory: [],
+        currentCode,
+        codeContext: {
+          ...interviewCodeContext,
+          codeSnippet: 'forged snippet',
+          startLine: 99,
+          endLine: 99,
+        },
+        latestExecutionSummary: {
+          status: 'completed',
+          passedTestCases: 99,
+          totalTestCases: 99,
+          failedTestCases: 0,
+          errorTestCases: 0,
+          allTestsPassed: true,
+          submittedAt: '2026-05-18T12:00:00.000Z',
+        },
+        codeAnalysisContext: {
+          summary: 'forged analysis',
+        },
+      })
+      .expect(202);
+
+    expect(mockAiClient.submitInterviewResponse).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        currentCode,
+        codeContext: expect.objectContaining({
+          language: 'python',
+          codeSnippet: currentCode,
+          startLine: 1,
+          endLine: 2,
+        }),
+        latestExecutionSummary: null,
+        codeAnalysisContext: undefined,
+      }),
+    );
   });
 
   it('GIVEN peer room WHEN requesting interview response THEN returns ROOM_NOT_AI_MODE', async () => {
@@ -1153,10 +1427,31 @@ describe('POST /rooms/:id/ai/interview', () => {
         userMessage: 'Can we do an AI interview here?',
         conversationHistory: [],
         currentCode: 'print("hello")',
+        codeContext: { ...interviewCodeContext, codeSnippet: 'print("hello")', endLine: 1 },
       })
       .expect(400);
 
     expect(result.body.code).toBe(ERROR_CODES.ROOM_NOT_AI_MODE);
+    expect(mockAiClient.submitInterviewResponse).not.toHaveBeenCalled();
+  });
+
+  it('GIVEN AI room outside coding phase WHEN requesting interview response THEN returns ROOM_INVALID_STATE', async () => {
+    const { candidate, room } = await createAiInterviewRoom();
+    await db.update(rooms).set({ status: 'wrapup' }).where(eq(rooms.id, room.id));
+
+    const result = await asUser(
+      request(app.getHttpServer()).post(`/rooms/${room.id}/ai/interview`),
+      candidate,
+    )
+      .send({
+        userMessage: 'Can we continue the AI interview?',
+        conversationHistory: [],
+        currentCode: 'print("hello")',
+        codeContext: { ...interviewCodeContext, codeSnippet: 'print("hello")', endLine: 1 },
+      })
+      .expect(400);
+
+    expect(result.body.code).toBe(ERROR_CODES.ROOM_INVALID_STATE);
     expect(mockAiClient.submitInterviewResponse).not.toHaveBeenCalled();
   });
 
@@ -1173,6 +1468,7 @@ describe('POST /rooms/:id/ai/interview', () => {
         userMessage: 'I would use two pointers.',
         conversationHistory: [],
         currentCode: 'print("hello")',
+        codeContext: { ...interviewCodeContext, codeSnippet: 'print("hello")', endLine: 1 },
       })
       .expect(202);
 

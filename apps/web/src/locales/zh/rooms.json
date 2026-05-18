@@ -377,7 +377,21 @@
     "aiInterviewFailed": "获取 AI 面试官回复失败。",
     "aiInterviewUnavailable": "AI 面试官服务暂时不可用。",
     "aiInterviewFollowUp": "追问",
-    "aiInterviewAnnotations": "代码注释"
+    "aiInterviewAnnotations": "代码注释",
+    "aiInterviewCodeContext": "代码上下文",
+    "aiInterviewVoiceInput": "语音回答",
+    "aiInterviewVoiceUnsupported": "当前浏览器不支持语音输入。",
+    "aiInterviewVoiceError": "无法捕获语音输入。",
+    "aiInterviewQuestionType": {
+      "complexity": "复杂度",
+      "bug_risk": "缺陷风险",
+      "edge_case": "边界情况",
+      "optimization": "优化",
+      "data_structure_choice": "数据结构",
+      "correctness": "正确性",
+      "readability": "可读性",
+      "other": "上下文"
+    }
   },
   "whiteboard": {
     "layer": "图层",

@@ -1,4 +1,9 @@
-import type { DestroyDocumentResponse, RoleAssignmentReason, RoomConfig } from '@syncode/contracts';
+import type {
+  AiInterviewCodeContext,
+  DestroyDocumentResponse,
+  RoleAssignmentReason,
+  RoomConfig,
+} from '@syncode/contracts';
 import type {
   ProblemDifficulty,
   RoomCapability,
@@ -178,6 +183,7 @@ export type GetRoomAiInterviewResult =
       jobId: string;
       message: string;
       followUpQuestion?: string;
+      codeContext: AiInterviewCodeContext;
       codeAnnotations?: Array<{ line: number; comment: string }>;
       audioUrl?: string;
     }

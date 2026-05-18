@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import {
   BadRequestException,
   ConflictException,
@@ -15,6 +15,8 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import {
   AI_CLIENT,
+  type AiInterviewCodeAnalysisContext,
+  type AiInterviewCodeContext,
   type AuthorizeJoinResponse,
   BROWSEABLE_ROOM_STATUSES,
   type BrowseRoomsQuery,
@@ -119,11 +121,20 @@ interface HintJobMapping {
 interface CodeAnalysisJobMapping {
   roomId: string;
   userId: string;
+  codeHash: string;
+  language: SupportedLanguage;
 }
 
 interface InterviewJobMapping {
   roomId: string;
   userId: string;
+  codeContext: AiInterviewCodeContext;
+}
+
+interface LatestCodeAnalysisContextCacheEntry {
+  codeHash: string;
+  language: SupportedLanguage;
+  context: AiInterviewCodeAnalysisContext;
 }
 
 @Injectable()
@@ -1286,14 +1297,28 @@ export class RoomsService {
       'Interview',
     );
     const problemDescription = await this.loadAiProblemDescription(problemId);
+    const [sessionId, latestExecutionSummary, latestCodeAnalysisContext] = await Promise.all([
+      this.loadCurrentRoomSessionId(roomId),
+      this.loadLatestHintSubmissionSummary(roomId, userId, body.currentCode, activeLanguage),
+      this.loadLatestCodeAnalysisContext(roomId, userId, body.currentCode, activeLanguage),
+    ]);
+    const codeContext = this.buildVerifiedInterviewCodeContext(
+      body.codeContext,
+      body.currentCode,
+      activeLanguage,
+    );
 
     let submitted: { jobId: JobId<'ai:interview'> };
     try {
       submitted = await this.aiClient.submitInterviewResponse({
         roomId,
+        sessionId,
         participantId: userId,
         problemDescription,
         currentCode: body.currentCode,
+        codeContext,
+        latestExecutionSummary,
+        codeAnalysisContext: latestCodeAnalysisContext ?? undefined,
         language: activeLanguage,
         userMessage: body.userMessage,
         conversationHistory: body.conversationHistory,
@@ -1311,6 +1336,7 @@ export class RoomsService {
       {
         roomId,
         userId,
+        codeContext,
       },
       RoomsService.AI_INTERVIEW_JOB_CACHE_TTL_SECONDS,
     );
@@ -1357,6 +1383,7 @@ export class RoomsService {
       jobId,
       message: interviewResult.message,
       followUpQuestion: interviewResult.followUpQuestion,
+      codeContext: mapping.codeContext,
       codeAnnotations: interviewResult.codeAnnotations,
       audioUrl: interviewResult.audio?.downloadUrl,
     };
@@ -1421,6 +1448,8 @@ export class RoomsService {
       {
         roomId,
         userId,
+        codeHash: this.hashAiContextCode(body.code),
+        language: activeLanguage,
       },
       RoomsService.AI_CODE_ANALYSIS_JOB_CACHE_TTL_SECONDS,
     );
@@ -1461,6 +1490,20 @@ export class RoomsService {
       }
       return { status: 'pending', jobId };
     }
+
+    await this.cacheService.set<LatestCodeAnalysisContextCacheEntry>(
+      `${RoomsService.AI_CODE_ANALYSIS_LATEST_CACHE_PREFIX}${roomId}:${userId}`,
+      {
+        codeHash: mapping.codeHash,
+        language: mapping.language,
+        context: {
+          summary: analysisResult.summary,
+          focusAreas: analysisResult.focusAreas,
+          followUpQuestions: analysisResult.followUpQuestions,
+        },
+      },
+      RoomsService.AI_CODE_ANALYSIS_JOB_CACHE_TTL_SECONDS,
+    );
 
     return {
       status: 'ready',
@@ -1568,6 +1611,7 @@ export class RoomsService {
   private static readonly AI_CODE_ANALYSIS_LIMIT_WINDOW_SECONDS = 5 * 60;
   private static readonly AI_CODE_ANALYSIS_LIMIT_PREFIX = 'ai-code-analysis-limit:';
   private static readonly AI_CODE_ANALYSIS_JOB_CACHE_PREFIX = 'ai-code-analysis-job:';
+  private static readonly AI_CODE_ANALYSIS_LATEST_CACHE_PREFIX = 'ai-code-analysis-latest:';
   private static readonly AI_CODE_ANALYSIS_JOB_CACHE_TTL_SECONDS = 60 * 60;
 
   async generateMediaToken(roomId: string, userId: string): Promise<MediaTokenResult> {
@@ -2337,6 +2381,13 @@ export class RoomsService {
       });
     }
 
+    if (label === 'Interview' && room.status !== RoomStatus.CODING) {
+      throw new BadRequestException({
+        message: 'AI interview is only available during the coding phase',
+        code: ERROR_CODES.ROOM_INVALID_STATE,
+      });
+    }
+
     const capabilities = resolveRoomPermissions(participant.role, {
       isHost: room.hostId === userId,
     });
@@ -2589,9 +2640,13 @@ export class RoomsService {
   private async loadLatestHintSubmissionSummary(
     roomId: string,
     userId: string,
+    currentCode?: string,
+    language?: SupportedLanguage,
   ): Promise<GenerateHintRequest['latestSubmissionSummary']> {
     const [latest] = await this.db
       .select({
+        code: submissions.code,
+        language: submissions.language,
         status: submissions.status,
         passedTestCases: submissions.passedTestCases,
         totalTestCases: submissions.totalTestCases,
@@ -2605,6 +2660,12 @@ export class RoomsService {
       .limit(1);
 
     if (!latest) {
+      return null;
+    }
+    if (
+      (currentCode !== undefined && latest.code !== currentCode) ||
+      (language !== undefined && latest.language !== language)
+    ) {
       return null;
     }
 
@@ -2624,6 +2685,83 @@ export class RoomsService {
       allTestsPassed,
       submittedAt: latest.submittedAt.toISOString(),
     };
+  }
+
+  private async loadLatestCodeAnalysisContext(
+    roomId: string,
+    userId: string,
+    currentCode: string,
+    language: SupportedLanguage,
+  ): Promise<AiInterviewCodeAnalysisContext | null> {
+    const cached = await this.cacheService.get<LatestCodeAnalysisContextCacheEntry>(
+      `${RoomsService.AI_CODE_ANALYSIS_LATEST_CACHE_PREFIX}${roomId}:${userId}`,
+    );
+    const currentCodeHash = this.hashAiContextCode(currentCode);
+    if (cached?.codeHash !== currentCodeHash || cached?.language !== language) {
+      return null;
+    }
+
+    return cached.context;
+  }
+
+  private buildVerifiedInterviewCodeContext(
+    input: AiInterviewCodeContext,
+    currentCode: string,
+    language: SupportedLanguage,
+  ): AiInterviewCodeContext {
+    const lines = currentCode.split('\n');
+    const lineCount = Math.max(1, lines.length);
+    const hasUsableRange =
+      input.startLine <= lineCount &&
+      input.endLine >= input.startLine &&
+      input.endLine <= lineCount;
+    const startLine = hasUsableRange ? input.startLine : 1;
+    const endLine = hasUsableRange ? input.endLine : Math.min(5, lineCount);
+    const codeSnippet = lines.slice(startLine - 1, endLine).join('\n') || ' ';
+
+    return {
+      language,
+      file: input.file,
+      codeSnippet,
+      startLine,
+      endLine,
+      ...this.validCodeContextColumn(input.startColumn, lines[startLine - 1])
+        .map((startColumn) => ({ startColumn }))
+        .at(0),
+      ...this.validCodeContextColumn(input.endColumn, lines[endLine - 1])
+        .map((endColumn) => ({ endColumn }))
+        .at(0),
+      ...(input.cursorLine && input.cursorLine <= lineCount
+        ? { cursorLine: input.cursorLine }
+        : {}),
+      ...this.validCodeContextColumn(input.cursorColumn, lines[(input.cursorLine ?? startLine) - 1])
+        .map((cursorColumn) => ({ cursorColumn }))
+        .at(0),
+      ...(input.questionType ? { questionType: input.questionType } : {}),
+      ...(input.reason ? { reason: input.reason } : {}),
+    };
+  }
+
+  private validCodeContextColumn(value: number | undefined, line: string | undefined): number[] {
+    if (!value) {
+      return [];
+    }
+    const maxColumn = (line?.length ?? 0) + 1;
+    return value <= maxColumn ? [value] : [];
+  }
+
+  private hashAiContextCode(code: string): string {
+    return createHash('sha256').update(code).digest('hex');
+  }
+
+  private async loadCurrentRoomSessionId(roomId: string): Promise<string | null> {
+    const [session] = await this.db
+      .select({ id: sessions.id })
+      .from(sessions)
+      .where(eq(sessions.roomId, roomId))
+      .limit(1);
+
+    return session?.id ?? null;
   }
 
   async markParticipantInactive(roomId: string, userId: string, leftAt: Date): Promise<void> {

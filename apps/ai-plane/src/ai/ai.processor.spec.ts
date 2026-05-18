@@ -109,6 +109,15 @@ describe('AiProcessor', () => {
                       message: 'Can you explain the invariant your map maintains?',
                       followUpQuestion:
                         'Why is checking the complement before inserting the current value safe?',
+                      codeContext: {
+                        language: 'typescript',
+                        file: 'solution.ts',
+                        codeSnippet: 'function twoSum() {}',
+                        startLine: 1,
+                        endLine: 1,
+                        questionType: 'correctness',
+                        reason: 'Invariant follow-up',
+                      },
                       codeAnnotations: [{ line: 1, comment: 'Name the state you are tracking.' }],
                     }),
                     model: 'qwen3.5-mini',
@@ -283,6 +292,14 @@ describe('AiProcessor', () => {
           participantId: 'user-1',
           problemDescription: 'Two Sum',
           currentCode: 'function twoSum() {}',
+          codeContext: {
+            language: 'typescript',
+            file: 'solution.ts',
+            codeSnippet: 'function twoSum() {}',
+            startLine: 1,
+            endLine: 1,
+            questionType: 'correctness',
+          },
           language: 'typescript',
           hintLevel: 'gentle',
         },
@@ -431,6 +448,14 @@ describe('AiProcessor', () => {
           participantId: 'user-1',
           problemDescription: 'Two Sum',
           currentCode: 'function twoSum() {}',
+          codeContext: {
+            language: 'typescript',
+            file: 'solution.ts',
+            codeSnippet: 'function twoSum() {}',
+            startLine: 1,
+            endLine: 1,
+            questionType: 'correctness',
+          },
           language: 'typescript',
           conversationHistory: [],
           userMessage: 'I will use a hash map.',
@@ -448,6 +473,11 @@ describe('AiProcessor', () => {
           message: 'Can you explain the invariant your map maintains?',
           followUpQuestion:
             'Why is checking the complement before inserting the current value safe?',
+          codeContext: expect.objectContaining({
+            file: 'solution.ts',
+            startLine: 1,
+            endLine: 1,
+          }),
           codeAnnotations: [{ line: 1, comment: 'Name the state you are tracking.' }],
           audio: expect.objectContaining({
             downloadUrl: 'https://storage.example/interview-audio.mp3',

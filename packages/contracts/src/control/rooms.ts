@@ -173,6 +173,67 @@ export const getRoomAiHintResultResponseSchema = z.discriminatedUnion('status', 
 
 export type GetRoomAiHintResultResponse = z.infer<typeof getRoomAiHintResultResponseSchema>;
 
+export const aiInterviewQuestionTypes = [
+  'complexity',
+  'bug_risk',
+  'edge_case',
+  'optimization',
+  'data_structure_choice',
+  'correctness',
+  'readability',
+  'other',
+] as const;
+
+export const aiInterviewCodeContextSchema = z
+  .object({
+    language: z.enum(SUPPORTED_LANGUAGES).describe('Programming language for the code context'),
+    file: z.string().min(1).max(120).describe('Display file or logical source name'),
+    codeSnippet: z.string().min(1).max(4000).describe('Focused code snippet for the question'),
+    startLine: z.number().int().positive().describe('1-based starting line for the snippet'),
+    endLine: z.number().int().positive().describe('1-based ending line for the snippet'),
+    startColumn: z.number().int().positive().optional().describe('1-based selection start column'),
+    endColumn: z.number().int().positive().optional().describe('1-based selection end column'),
+    cursorLine: z.number().int().positive().optional().describe('1-based cursor line'),
+    cursorColumn: z.number().int().positive().optional().describe('1-based cursor column'),
+    questionType: z
+      .enum(aiInterviewQuestionTypes)
+      .optional()
+      .describe('Reason this context is relevant to the follow-up question'),
+    reason: z.string().min(1).max(160).optional().describe('Short human-readable context reason'),
+  })
+  .refine((value) => value.endLine >= value.startLine, {
+    message: 'endLine must be greater than or equal to startLine',
+    path: ['endLine'],
+  });
+
+export type AiInterviewCodeContext = z.infer<typeof aiInterviewCodeContextSchema>;
+
+export const aiInterviewExecutionSummarySchema = z.object({
+  status: z.enum(['pending', 'running', 'completed', 'failed']),
+  passedTestCases: z.number().int().nonnegative(),
+  totalTestCases: z.number().int().nonnegative(),
+  failedTestCases: z.number().int().nonnegative(),
+  errorTestCases: z.number().int().nonnegative(),
+  allTestsPassed: z.boolean(),
+  submittedAt: z.iso.datetime(),
+});
+
+export type AiInterviewExecutionSummary = z.infer<typeof aiInterviewExecutionSummarySchema>;
+
+export const aiInterviewCodeAnalysisContextSchema = z.object({
+  summary: z.string().min(1).max(2000),
+  focusAreas: z
+    .object({
+      complexity: z.string().min(1).max(1000),
+      edgeCases: z.string().min(1).max(1000),
+      readability: z.string().min(1).max(1000),
+    })
+    .optional(),
+  followUpQuestions: z.array(z.string().min(1).max(500)).max(5).optional(),
+});
+
+export type AiInterviewCodeAnalysisContext = z.infer<typeof aiInterviewCodeAnalysisContextSchema>;
+
 export const requestRoomAiInterviewSchema = z
   .object({
     userMessage: z.string().min(1).max(2000).describe('Candidate message to the AI interviewer'),
@@ -186,6 +247,9 @@ export const requestRoomAiInterviewSchema = z
       .max(40)
       .describe('Prior conversation turns'),
     currentCode: z.string().max(16_000).describe('Current code in the editor'),
+    codeContext: aiInterviewCodeContextSchema.describe('Specific code context for the follow-up'),
+    latestExecutionSummary: aiInterviewExecutionSummarySchema.optional(),
+    codeAnalysisContext: aiInterviewCodeAnalysisContextSchema.optional(),
   })
   .strict();
 
@@ -209,6 +273,7 @@ export const getRoomAiInterviewResultResponseSchema = z.discriminatedUnion('stat
     jobId: z.string(),
     message: z.string(),
     followUpQuestion: z.string().optional(),
+    codeContext: aiInterviewCodeContextSchema,
     codeAnnotations: z.array(z.object({ line: z.number().int(), comment: z.string() })).optional(),
     audioUrl: z.string().url().optional(),
   }),

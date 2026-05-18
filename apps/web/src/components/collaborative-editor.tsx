@@ -1,7 +1,7 @@
 import Editor, { type OnMount } from '@monaco-editor/react';
 import { cn } from '@syncode/ui';
 import { MessageCircle, Plus, X } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { MonacoBinding } from 'y-monaco';
 import type { Awareness } from 'y-protocols/awareness';
@@ -16,6 +16,16 @@ import {
   handleEditorWillMount,
 } from './room-workspace-utils.js';
 
+export interface EditorCodeContext {
+  codeSnippet: string;
+  startLine: number;
+  endLine: number;
+  startColumn?: number;
+  endColumn?: number;
+  cursorLine?: number;
+  cursorColumn?: number;
+}
+
 interface CollaborativeEditorProps {
   readonly doc: Y.Doc;
   readonly awareness: Awareness;
@@ -28,6 +38,7 @@ interface CollaborativeEditorProps {
   readonly onRunCode: () => void;
   readonly onSubmitCode: () => void;
   readonly onActiveLineChange?: (lineNumber: number) => void;
+  readonly onCodeContextChange?: (context: EditorCodeContext) => void;
 }
 
 interface DisposableLike {
@@ -41,13 +52,15 @@ interface EditorLike {
     keybindings: number[];
     run: () => void;
   }) => void;
-  getModel: () => object | null;
+  getModel: () => ModelLike | null;
   getPosition: () => { lineNumber: number } | null;
+  getSelection: () => EditorRangeLike | null;
   getDomNode: () => HTMLElement | null;
   focus: () => void;
   onDidChangeCursorPosition: (
     listener: (event: { position: { lineNumber: number } }) => void,
   ) => DisposableLike;
+  onDidChangeCursorSelection: (listener: () => void) => DisposableLike;
   onDidScrollChange: (listener: () => void) => DisposableLike;
   onDidLayoutChange: (listener: () => void) => DisposableLike;
   onDidChangeModelContent: (listener: () => void) => DisposableLike;
@@ -74,6 +87,20 @@ interface EditorLike {
       options: Record<string, unknown>;
     }>,
   ) => string[];
+}
+
+interface ModelLike {
+  getLineCount: () => number;
+  getLineContent: (lineNumber: number) => string;
+  getValueInRange: (range: EditorRangeLike) => string;
+}
+
+interface EditorRangeLike {
+  startLineNumber: number;
+  startColumn: number;
+  endLineNumber: number;
+  endColumn: number;
+  isEmpty?: () => boolean;
 }
 
 interface EditorMouseEventLike {
@@ -112,6 +139,7 @@ export function CollaborativeEditor({
   onRunCode,
   onSubmitCode,
   onActiveLineChange = () => {},
+  onCodeContextChange = () => {},
 }: CollaborativeEditorProps) {
   const { t } = useTranslation('rooms');
   const bindingRef = useRef<MonacoBinding | null>(null);
@@ -134,6 +162,8 @@ export function CollaborativeEditor({
   onAddCommentRef.current = onAddComment;
   const onActiveLineChangeRef = useRef(onActiveLineChange);
   onActiveLineChangeRef.current = onActiveLineChange;
+  const onCodeContextChangeRef = useRef(onCodeContextChange);
+  onCodeContextChangeRef.current = onCodeContextChange;
 
   const editorOptions = useMemo(() => ({ ...EDITOR_OPTIONS_BASE, readOnly }), [readOnly]);
 
@@ -155,6 +185,56 @@ export function CollaborativeEditor({
           .map((lineNumber) => Math.floor(lineNumber)),
       ),
     [commentLineNumbers],
+  );
+
+  const emitCodeContext = useCallback(
+    (editorApi: EditorLike) => {
+      const model = editorApi.getModel();
+      if (!model) return;
+
+      const position = editorApi.getPosition();
+      const selection = editorApi.getSelection();
+      const lineCount = Math.max(1, model.getLineCount());
+      const selectionIsEmpty =
+        !selection ||
+        (typeof selection.isEmpty === 'function'
+          ? selection.isEmpty()
+          : selection.startLineNumber === selection.endLineNumber &&
+            selection.startColumn === selection.endColumn);
+
+      if (selection && !selectionIsEmpty) {
+        const startLine = clampLine(selection.startLineNumber, lineCount);
+        const endLine = clampLine(selection.endLineNumber, lineCount);
+        const selectedSnippet = model.getValueInRange(selection);
+        onCodeContextChangeRef.current({
+          codeSnippet:
+            selectedSnippet.length > 0 ? selectedSnippet : model.getLineContent(startLine),
+          startLine,
+          endLine,
+          startColumn: selection.startColumn,
+          endColumn: selection.endColumn,
+          cursorLine: position?.lineNumber,
+        });
+        return;
+      }
+
+      const cursorLine = clampLine(position?.lineNumber ?? selectedLine, lineCount);
+      const startLine = clampLine(cursorLine - 2, lineCount);
+      const endLine = clampLine(cursorLine + 2, lineCount);
+      const lines = [];
+      for (let lineNumber = startLine; lineNumber <= endLine; lineNumber += 1) {
+        lines.push(model.getLineContent(lineNumber));
+      }
+
+      onCodeContextChangeRef.current({
+        codeSnippet: lines.join('\n') || model.getLineContent(cursorLine),
+        startLine,
+        endLine,
+        cursorLine,
+        cursorColumn: editorApi.getSelection()?.startColumn,
+      });
+    },
+    [selectedLine],
   );
 
   useEffect(() => {
@@ -194,6 +274,7 @@ export function CollaborativeEditor({
     const initialLine = editorApi.getPosition()?.lineNumber ?? 1;
     setSelectedLine(initialLine);
     onActiveLineChangeRef.current(initialLine);
+    emitCodeContext(editorApi);
     setEditor(editorInstance);
     setEditorRoot(editorApi.getDomNode());
   };
@@ -225,6 +306,13 @@ export function CollaborativeEditor({
     const cursorDisposable = editorApi.onDidChangeCursorPosition((event) => {
       setSelectedLine(event.position.lineNumber);
       onActiveLineChangeRef.current(event.position.lineNumber);
+      emitCodeContext(editorApi);
+    });
+    const selectionDisposable = editorApi.onDidChangeCursorSelection(() => {
+      emitCodeContext(editorApi);
+    });
+    const contentDisposable = editorApi.onDidChangeModelContent(() => {
+      emitCodeContext(editorApi);
     });
 
     const mouseDisposable = editorApi.onMouseDown((event) => {
@@ -248,9 +336,11 @@ export function CollaborativeEditor({
 
     return () => {
       cursorDisposable.dispose();
+      selectionDisposable.dispose();
+      contentDisposable.dispose();
       mouseDisposable.dispose();
     };
-  }, [editor, commentLineSet]);
+  }, [editor, commentLineSet, emitCodeContext]);
 
   useEffect(() => {
     if (!editor) {
@@ -812,4 +902,8 @@ export function CollaborativeEditor({
       </div>
     </div>
   );
+}
+
+function clampLine(lineNumber: number, lineCount: number): number {
+  return Math.min(Math.max(1, Math.floor(lineNumber)), lineCount);
 }
