@@ -300,7 +300,12 @@ export class S3StorageAdapter implements IStorageService, OnModuleDestroy {
 }
 
 function normalizePublicPathPrefix(pathname: string): string {
-  const normalized = pathname.replace(/\/+$/g, '');
+  let end = pathname.length;
+  while (end > 0 && pathname[end - 1] === '/') {
+    end -= 1;
+  }
+
+  const normalized = pathname.slice(0, end);
   if (!normalized || normalized === '/') {
     return '';
   }
