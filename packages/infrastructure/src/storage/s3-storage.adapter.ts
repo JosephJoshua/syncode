@@ -293,7 +293,8 @@ export class S3StorageAdapter implements IStorageService, OnModuleDestroy {
     }
 
     const url = new URL(signedUrl);
-    url.pathname = `${this.publicPathPrefix}${url.pathname.startsWith('/') ? url.pathname : `/${url.pathname}`}`;
+    const signedPathname = url.pathname.startsWith('/') ? url.pathname : `/${url.pathname}`;
+    url.pathname = `${this.publicPathPrefix}${signedPathname}`;
     return url.toString();
   }
 }
