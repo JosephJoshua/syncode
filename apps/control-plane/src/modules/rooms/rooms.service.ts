@@ -387,7 +387,7 @@ export class RoomsService {
         .where(and(eq(roomParticipants.roomId, roomId), eq(roomParticipants.userId, userId)))
         .limit(1);
 
-      if (!membership || membership.removedAt !== null) {
+      if (membership?.removedAt !== null) {
         throw new ForbiddenException({
           message: 'Not a participant of this room',
           code: ERROR_CODES.ROOM_ACCESS_DENIED,
@@ -1355,7 +1355,7 @@ export class RoomsService {
     const mapping = await this.cacheService.get<CodeAnalysisJobMapping>(
       `${RoomsService.AI_CODE_ANALYSIS_JOB_CACHE_PREFIX}${jobId}`,
     );
-    if (!mapping || mapping.roomId !== roomId || mapping.userId !== userId) {
+    if (mapping?.roomId !== roomId || mapping?.userId !== userId) {
       throw new NotFoundException({
         message: 'Code analysis job not found',
         code: ERROR_CODES.VALIDATION_FAILED,
@@ -1719,7 +1719,7 @@ export class RoomsService {
       .from(roomParticipants)
       .where(and(eq(roomParticipants.roomId, lockedRoom.id), eq(roomParticipants.userId, userId)));
 
-    if (!participant || participant.removedAt !== null) {
+    if (participant?.removedAt !== null) {
       throw new ForbiddenException({
         message: 'Not a participant of this room',
         code: ERROR_CODES.ROOM_ACCESS_DENIED,
