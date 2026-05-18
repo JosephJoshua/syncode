@@ -49,7 +49,7 @@ export function ReportPeerFeedbackSection({
             {t('peerFeedbackSection.retry')}
           </Button>
         </div>
-      ) : feedback?.allSubmitted === false ? (
+      ) : feedback?.allSubmitted === false && entries.length === 0 ? (
         <div className="rounded-2xl bg-muted/35 p-4 ring-1 ring-border/50">
           <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
             {t('peerFeedbackSection.statusHeading')}
@@ -61,14 +61,24 @@ export function ReportPeerFeedbackSection({
             {t('peerFeedbackSection.hiddenUntilSubmitted')}
           </p>
         </div>
-      ) : entries.length === 0 ? (
-        <p className="text-sm leading-6 text-muted-foreground">{t('peerFeedbackSection.empty')}</p>
-      ) : (
+      ) : entries.length > 0 ? (
         <div className="space-y-4">
+          {feedback?.allSubmitted === false ? (
+            <div className="rounded-2xl bg-muted/35 p-4 ring-1 ring-border/50">
+              <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+                {t('peerFeedbackSection.statusHeading')}
+              </p>
+              <p className="mt-3 text-sm font-medium text-foreground">
+                {t('peerFeedbackSection.awaitingResponses')}
+              </p>
+            </div>
+          ) : null}
           {entries.map((entry) => (
             <PeerFeedbackEntryCard key={entry.id} entry={entry} />
           ))}
         </div>
+      ) : (
+        <p className="text-sm leading-6 text-muted-foreground">{t('peerFeedbackSection.empty')}</p>
       )}
     </SectionCard>
   );

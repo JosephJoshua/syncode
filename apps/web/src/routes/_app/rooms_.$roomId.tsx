@@ -329,6 +329,27 @@ function RoomPage() {
     });
   }, []);
 
+  const presenceRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleAwarenessPeersChanged = useCallback(() => {
+    if (presenceRefreshTimerRef.current) {
+      clearTimeout(presenceRefreshTimerRef.current);
+    }
+
+    presenceRefreshTimerRef.current = setTimeout(() => {
+      presenceRefreshTimerRef.current = null;
+      void refreshRoomDetail().catch(() => undefined);
+    }, 250);
+  }, [refreshRoomDetail]);
+
+  useEffect(
+    () => () => {
+      if (presenceRefreshTimerRef.current) {
+        clearTimeout(presenceRefreshTimerRef.current);
+      }
+    },
+    [],
+  );
+
   // Capture from room detail for the direct-navigation path (no ?code= join).
   // The join path sets the ref earlier from the join response.
   if (room?.collabToken && room?.collabUrl && !collabCredsRef.current) {
@@ -356,6 +377,7 @@ function RoomPage() {
     onParticipantReady: handleParticipantReady,
     onPhaseChange: () => void refreshRoomDetail(),
     onLanguageChange: () => void refreshRoomDetail(),
+    onAwarenessPeersChanged: handleAwarenessPeersChanged,
     onReconnected: () => {
       if (kickedRef.current) return;
       void (async () => {
