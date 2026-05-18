@@ -39,6 +39,7 @@ interface CollaborativeEditorProps {
   readonly onSubmitCode: () => void;
   readonly onActiveLineChange?: (lineNumber: number) => void;
   readonly onCodeContextChange?: (context: EditorCodeContext) => void;
+  readonly onFocusChange?: (isFocused: boolean) => void;
 }
 
 interface DisposableLike {
@@ -64,6 +65,8 @@ interface EditorLike {
   onDidScrollChange: (listener: () => void) => DisposableLike;
   onDidLayoutChange: (listener: () => void) => DisposableLike;
   onDidChangeModelContent: (listener: () => void) => DisposableLike;
+  onDidFocusEditorWidget: (listener: () => void) => DisposableLike;
+  onDidBlurEditorWidget: (listener: () => void) => DisposableLike;
   onMouseDown: (listener: (event: EditorMouseEventLike) => void) => DisposableLike;
   getVisibleRanges: () => Array<{ startLineNumber: number; endLineNumber: number }>;
   getLayoutInfo: () => {
@@ -140,6 +143,7 @@ export function CollaborativeEditor({
   onSubmitCode,
   onActiveLineChange = () => {},
   onCodeContextChange = () => {},
+  onFocusChange = () => {},
 }: CollaborativeEditorProps) {
   const { t } = useTranslation('rooms');
   const bindingRef = useRef<MonacoBinding | null>(null);
@@ -164,6 +168,8 @@ export function CollaborativeEditor({
   onActiveLineChangeRef.current = onActiveLineChange;
   const onCodeContextChangeRef = useRef(onCodeContextChange);
   onCodeContextChangeRef.current = onCodeContextChange;
+  const onFocusChangeRef = useRef(onFocusChange);
+  onFocusChangeRef.current = onFocusChange;
 
   const editorOptions = useMemo(() => ({ ...EDITOR_OPTIONS_BASE, readOnly }), [readOnly]);
 
@@ -314,6 +320,12 @@ export function CollaborativeEditor({
     const contentDisposable = editorApi.onDidChangeModelContent(() => {
       emitCodeContext(editorApi);
     });
+    const focusDisposable = editorApi.onDidFocusEditorWidget(() => {
+      onFocusChangeRef.current(true);
+    });
+    const blurDisposable = editorApi.onDidBlurEditorWidget(() => {
+      onFocusChangeRef.current(false);
+    });
 
     const mouseDisposable = editorApi.onMouseDown((event) => {
       const lineNumber = event.target.position?.lineNumber;
@@ -338,6 +350,8 @@ export function CollaborativeEditor({
       cursorDisposable.dispose();
       selectionDisposable.dispose();
       contentDisposable.dispose();
+      focusDisposable.dispose();
+      blurDisposable.dispose();
       mouseDisposable.dispose();
     };
   }, [editor, commentLineSet, emitCodeContext]);

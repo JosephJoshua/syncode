@@ -66,6 +66,7 @@ import { RoomHeaderBar } from './room-header-bar.js';
 import { type Participant, RoomParticipantCard } from './room-participant-card.js';
 import { type ProblemData, type RoomHintItem, RoomProblemPanel } from './room-problem-panel.js';
 import { RoomStatusBar } from './room-status-bar.js';
+import { shouldEnableWhiteboardKeyboardShortcuts } from './room-whiteboard-keyboard.js';
 import { RoomWhiteboardPanel } from './room-whiteboard-panel.js';
 import {
   type CaseRunState,
@@ -374,6 +375,8 @@ export function RoomWorkspace({
   const [inlineWhiteboardHost, setInlineWhiteboardHost] = useState<HTMLDivElement | null>(null);
   const [floatingWhiteboardHost, setFloatingWhiteboardHost] = useState<HTMLDivElement | null>(null);
   const [whiteboardParkingHost, setWhiteboardParkingHost] = useState<HTMLDivElement | null>(null);
+  const [isCodeEditorFocused, setIsCodeEditorFocused] = useState(false);
+  const [whiteboardHasKeyboardFocus, setWhiteboardHasKeyboardFocus] = useState(false);
   const [_activeCommentLine, _setActiveCommentLine] = useState(1);
   const rightMountedRef = useRef(false);
   const rightContentRef = useRef<HTMLDivElement>(null);
@@ -395,8 +398,16 @@ export function RoomWorkspace({
   const [multiRunState, setMultiRunState] = useState<MultiRunState>({ status: 'idle' });
   const cancelMultiRunRef = useRef(new Map<string, () => void>());
   const nextCustomId = useRef(1);
-  const isWhiteboardKeyboardActive =
-    activeCenterTab === 'whiteboard' || whiteboardViewMode === 'floating';
+  const isWhiteboardKeyboardActive = shouldEnableWhiteboardKeyboardShortcuts({
+    activeCenterTab,
+    whiteboardViewMode,
+    isCodeEditorFocused,
+    whiteboardHasKeyboardFocus,
+  });
+  const markWhiteboardKeyboardFocus = useCallback(() => {
+    setWhiteboardHasKeyboardFocus(true);
+    setIsCodeEditorFocused(false);
+  }, []);
 
   useEffect(() => {
     const sourceCases = problem?.testCases ?? (isMockPreview ? MOCK_WORKSPACE_TEST_CASES : null);
@@ -1396,6 +1407,7 @@ export function RoomWorkspace({
                         onRunCode={() => void handleRunCodeRef.current()}
                         onSubmitCode={() => void requestSubmitCodeRef.current()}
                         onCodeContextChange={setEditorCodeContext}
+                        onFocusChange={setIsCodeEditorFocused}
                       />
                     ) : (
                       EDITOR_LOADING
@@ -1784,33 +1796,39 @@ export function RoomWorkspace({
               whiteboardParkingHost,
             )}
           >
-            <RoomWhiteboardPanel
-              doc={doc}
-              awareness={awareness}
-              roomId={roomId}
-              userId={currentUserId}
-              userName={currentUserName}
-              userColor={authorColor(currentUserId)}
-              canDraw={room.myCapabilities.includes('whiteboard:draw')}
-              canAnnotate={room.myCapabilities.includes('whiteboard:annotate')}
-              participantNames={
-                new Map(
-                  // Use displayName when set, otherwise the user's @username
-                  // — never the raw userId UUID, which leaks an identifier
-                  // and isn't human-readable. Include even inactive
-                  // participants so historical authors still show up in
-                  // the legend with their proper name.
-                  room.participants.map((p) => [p.userId, p.displayName ?? p.username] as const),
-                )
-              }
-              onPopOut={
-                whiteboardViewMode === 'tab' ? () => setWhiteboardViewMode('floating') : undefined
-              }
-              onDock={
-                whiteboardViewMode === 'floating' ? () => setWhiteboardViewMode('tab') : undefined
-              }
-              keyboardShortcutsEnabled={isWhiteboardKeyboardActive}
-            />
+            <div
+              className="h-full"
+              onFocusCapture={markWhiteboardKeyboardFocus}
+              onPointerDownCapture={markWhiteboardKeyboardFocus}
+            >
+              <RoomWhiteboardPanel
+                doc={doc}
+                awareness={awareness}
+                roomId={roomId}
+                userId={currentUserId}
+                userName={currentUserName}
+                userColor={authorColor(currentUserId)}
+                canDraw={room.myCapabilities.includes('whiteboard:draw')}
+                canAnnotate={room.myCapabilities.includes('whiteboard:annotate')}
+                participantNames={
+                  new Map(
+                    // Use displayName when set, otherwise the user's @username
+                    // — never the raw userId UUID, which leaks an identifier
+                    // and isn't human-readable. Include even inactive
+                    // participants so historical authors still show up in
+                    // the legend with their proper name.
+                    room.participants.map((p) => [p.userId, p.displayName ?? p.username] as const),
+                  )
+                }
+                onPopOut={
+                  whiteboardViewMode === 'tab' ? () => setWhiteboardViewMode('floating') : undefined
+                }
+                onDock={
+                  whiteboardViewMode === 'floating' ? () => setWhiteboardViewMode('tab') : undefined
+                }
+                keyboardShortcutsEnabled={isWhiteboardKeyboardActive}
+              />
+            </div>
           </WhiteboardPortal>
         </>
       ) : null}
