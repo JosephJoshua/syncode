@@ -164,4 +164,22 @@ describe('buildSessionReportPrompt', () => {
     expect(prompt.userPrompt).toContain('"finalCodeSnapshotWithLines": null');
     expect(prompt.userPrompt).toContain('<UNTRUSTED_SESSION_EVENTS>');
   });
+
+  it('GIVEN many long room chat messages WHEN building prompt THEN keeps only recent compacted messages', () => {
+    const roomChatMessages = Array.from({ length: 45 }, (_, index) => ({
+      role: 'user',
+      content: `msg-${index}-${'x'.repeat(260)}`,
+      createdAt: `2026-04-20T01:${String(index).padStart(2, '0')}:00.000Z`,
+    }));
+
+    const prompt = buildSessionReportPrompt(
+      createReportRequest({
+        roomChatMessages,
+      }),
+    );
+
+    expect(prompt.userPrompt).not.toContain('msg-0-');
+    expect(prompt.userPrompt).toContain('msg-44-');
+    expect(prompt.userPrompt).toContain('…');
+  });
 });
