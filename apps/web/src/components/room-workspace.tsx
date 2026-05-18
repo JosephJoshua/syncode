@@ -786,6 +786,21 @@ export function RoomWorkspace({
     return doc?.getText(codeTextKey(language)).toString() ?? '';
   }, [doc, language]);
 
+  useEffect(() => {
+    if (!doc || room.mode !== 'ai') {
+      return;
+    }
+    const text = doc.getText(codeTextKey(language));
+    const observer = () => {
+      aiInterviewLastEditorActivityAtRef.current = Date.now();
+      aiInterviewRecentEditorChangesRef.current += 1;
+    };
+    text.observe(observer);
+    return () => {
+      text.unobserve(observer);
+    };
+  }, [doc, language, room.mode]);
+
   const handleRunCode = async () => {
     if (testCases.length === 0) return;
 
@@ -1137,103 +1152,168 @@ export function RoomWorkspace({
     [getCode, language, roomId, t],
   );
 
-  const handleSendInterviewMessage = useCallback(
-    async (userMessage: string) => {
-      if (!canSendInterviewMessage) {
+  const buildInterviewSignals = useCallback(
+    (reason: AiInterviewProactiveReason): AiInterviewInteractionSignals => {
+      const now = Date.now();
+      return {
+        reason,
+        roomStatus: room.status,
+        elapsedSeconds: Math.max(0, Math.floor(elapsedMs / 1000)),
+        ...(aiInterviewLastUserMessageAtRef.current != null
+          ? {
+              secondsSinceLastUserMessage: Math.max(
+                0,
+                Math.floor((now - aiInterviewLastUserMessageAtRef.current) / 1000),
+              ),
+            }
+          : {}),
+        ...(aiInterviewLastAssistantMessageAtRef.current != null
+          ? {
+              secondsSinceLastAssistantMessage: Math.max(
+                0,
+                Math.floor((now - aiInterviewLastAssistantMessageAtRef.current) / 1000),
+              ),
+            }
+          : {}),
+        ...(aiInterviewLastEditorActivityAtRef.current != null
+          ? {
+              secondsSinceLastEditorActivity: Math.max(
+                0,
+                Math.floor((now - aiInterviewLastEditorActivityAtRef.current) / 1000),
+              ),
+            }
+          : {}),
+        recentEditorChanges: aiInterviewRecentEditorChangesRef.current,
+        hintCount: hintHistory.length,
+      };
+    },
+    [elapsedMs, hintHistory.length, room.status],
+  );
+
+  const streamInterviewAssistantMessage = useCallback(
+    async (
+      message: Extract<GetRoomAiInterviewResultResponse, { status: 'ready' }>,
+      isCurrentRequest: () => boolean,
+    ) => {
+      if (!message.message?.trim()) {
         return;
       }
 
-      if (aiInterviewInFlightRef.current) {
+      const fullText = message.message.trim();
+      const messageId = createAiInterviewMessageId('assistant');
+      const chunks = splitInterviewMessageChunks(fullText);
+      const firstChunk = chunks[0] ?? fullText;
+      let streamed = firstChunk;
+
+      setAiInterviewMessages((prev) => [
+        ...prev,
+        {
+          id: messageId,
+          createdAt: Date.now(),
+          role: 'assistant',
+          content: firstChunk,
+          codeContext: message.codeContext,
+          codeAnnotations: message.codeAnnotations,
+          audioUrl: message.audioUrl,
+        },
+      ]);
+
+      for (const chunk of chunks.slice(1)) {
+        if (!isCurrentRequest()) {
+          return;
+        }
+        streamed = `${streamed} ${chunk}`;
+        setAiInterviewMessages((prev) =>
+          prev.map((entry) =>
+            entry.id === messageId
+              ? {
+                  ...entry,
+                  content: streamed,
+                }
+              : entry,
+          ),
+        );
+        await sleep(AI_INTERVIEW_STREAM_CHUNK_DELAY_MS);
+      }
+
+      if (!isCurrentRequest()) {
         return;
       }
 
-      aiInterviewInFlightRef.current = true;
-      aiInterviewRequestSeqRef.current += 1;
-      const requestSeq = aiInterviewRequestSeqRef.current;
-      if (aiInterviewPollTimeoutRef.current) {
-        clearTimeout(aiInterviewPollTimeoutRef.current);
-        aiInterviewPollTimeoutRef.current = null;
-      }
+      setAiInterviewMessages((prev) =>
+        prev.map((entry) =>
+          entry.id === messageId
+            ? {
+                ...entry,
+                content: fullText,
+                followUpQuestion: message.followUpQuestion,
+              }
+            : entry,
+        ),
+      );
+      aiInterviewLastAssistantMessageAtRef.current = Date.now();
+    },
+    [],
+  );
 
+  const pollInterviewJob = useCallback(
+    async (
+      jobId: string,
+      requestSeq: number,
+      trigger: AiInterviewRequestTrigger,
+      reason?: AiInterviewProactiveReason,
+    ) => {
       const isCurrentRequest = () => aiInterviewRequestSeqRef.current === requestSeq;
-      const currentCode = getCode();
-      const codeContext = buildInterviewCodeContext(editorCodeContext, currentCode, language);
-      const history = aiInterviewMessages.slice(-AI_INTERVIEW_HISTORY_LIMIT).map((m) => ({
-        role: m.role,
-        content:
-          m.role === 'assistant' && m.followUpQuestion
-            ? `${m.content}\n\nFollow-up question: ${m.followUpQuestion}`
-            : m.content,
-      }));
+      let polls = 0;
+      let transientErrors = 0;
 
-      setAiInterviewError(null);
-      setAiInterviewLoading(true);
-      setAiInterviewMessages((prev) => [...prev, { role: 'user', content: userMessage }]);
+      while (isCurrentRequest() && polls < AI_INTERVIEW_MAX_POLLS) {
+        polls += 1;
+        try {
+          const result = await api(CONTROL_API.ROOMS.AI_INTERVIEW_RESULT, {
+            params: { id: roomId, jobId },
+          });
+          if (!isCurrentRequest()) {
+            return;
+          }
 
-      try {
-        const submission = await api(CONTROL_API.ROOMS.AI_INTERVIEW, {
-          params: { id: roomId },
-          body: {
-            userMessage,
-            conversationHistory: history,
-            currentCode,
-            codeContext,
-            latestExecutionSummary: pickLatestInterviewExecutionSummary(
-              latestRunSummary,
-              buildLatestInterviewSubmissionSummary(submitState),
-            ),
-          },
-        });
+          if (result.status === 'pending') {
+            await sleep(AI_INTERVIEW_POLL_INTERVAL_MS);
+            continue;
+          }
 
-        let polls = 0;
+          clearPendingAiInterviewJob(roomId, currentUserId);
 
-        const poll = async (): Promise<void> => {
-          if (!isCurrentRequest()) return;
-          if (polls >= AI_INTERVIEW_MAX_POLLS) {
-            setAiInterviewError(t('workspace.aiInterviewFailed'));
+          if (result.status === 'failed') {
+            if (trigger !== 'proactive') {
+              setAiInterviewError(t('workspace.aiInterviewFailed'));
+            }
             setAiInterviewLoading(false);
             aiInterviewInFlightRef.current = false;
             return;
           }
-          polls += 1;
 
-          try {
-            const result = await api(CONTROL_API.ROOMS.AI_INTERVIEW_RESULT, {
-              params: { id: roomId, jobId: submission.jobId },
-            });
+          if (result.shouldRespond && result.message) {
+            await streamInterviewAssistantMessage(result, isCurrentRequest);
+          }
 
-            if (!isCurrentRequest()) return;
+          if (reason === 'hint_used') {
+            aiInterviewLastHintCountRef.current = hintHistory.length;
+          }
 
-            if (result.status === 'pending') {
-              aiInterviewPollTimeoutRef.current = setTimeout(() => {
-                aiInterviewPollTimeoutRef.current = null;
-                void poll();
-              }, AI_INTERVIEW_POLL_INTERVAL_MS);
-              return;
-            }
+          setAiInterviewLoading(false);
+          setAiInterviewError(null);
+          aiInterviewInFlightRef.current = false;
+          aiInterviewRecentEditorChangesRef.current = 0;
+          return;
+        } catch (error) {
+          if (!isCurrentRequest()) {
+            return;
+          }
 
-            if (result.status === 'failed') {
-              setAiInterviewError(t('workspace.aiInterviewFailed'));
-              setAiInterviewLoading(false);
-              aiInterviewInFlightRef.current = false;
-              return;
-            }
-
-            setAiInterviewMessages((prev) => [
-              ...prev,
-              {
-                role: 'assistant',
-                content: result.message,
-                followUpQuestion: result.followUpQuestion,
-                codeContext: result.codeContext,
-                codeAnnotations: result.codeAnnotations,
-                audioUrl: result.audioUrl,
-              },
-            ]);
-            setAiInterviewLoading(false);
-            aiInterviewInFlightRef.current = false;
-          } catch (error) {
-            if (!isCurrentRequest()) return;
+          transientErrors += 1;
+          if (transientErrors > AI_INTERVIEW_MAX_RETRY_ERRORS) {
+            clearPendingAiInterviewJob(roomId, currentUserId);
             const apiError = await readApiError(error);
             const message = resolveErrorMessage(
               apiError,
@@ -1241,15 +1321,110 @@ export function RoomWorkspace({
               'workspace.aiInterviewUnavailable',
               t,
             );
-            setAiInterviewError(message);
+            if (trigger !== 'proactive') {
+              setAiInterviewError(message);
+            }
             setAiInterviewLoading(false);
             aiInterviewInFlightRef.current = false;
+            return;
           }
-        };
 
-        void poll();
+          await sleep(AI_INTERVIEW_POLL_INTERVAL_MS * transientErrors);
+        }
+      }
+
+      if (aiInterviewRequestSeqRef.current === requestSeq) {
+        clearPendingAiInterviewJob(roomId, currentUserId);
+        if (trigger !== 'proactive') {
+          setAiInterviewError(t('workspace.aiInterviewFailed'));
+        }
+        setAiInterviewLoading(false);
+        aiInterviewInFlightRef.current = false;
+      }
+    },
+    [currentUserId, hintHistory.length, roomId, streamInterviewAssistantMessage, t],
+  );
+
+  const submitInterviewRequest = useCallback(
+    async ({
+      trigger,
+      userMessage,
+      reason,
+      pendingJobId,
+    }: {
+      trigger: AiInterviewRequestTrigger;
+      userMessage?: string;
+      reason?: AiInterviewProactiveReason;
+      pendingJobId?: string;
+    }) => {
+      if (!canSendInterviewMessage || aiInterviewInFlightRef.current) {
+        return;
+      }
+
+      aiInterviewInFlightRef.current = true;
+      aiInterviewRequestSeqRef.current += 1;
+      const requestSeq = aiInterviewRequestSeqRef.current;
+
+      const isUserTriggered = trigger === 'user_message';
+      setAiInterviewError(null);
+      setAiInterviewLoading(isUserTriggered);
+
+      if (isUserTriggered && userMessage?.trim()) {
+        aiInterviewLastUserMessageAtRef.current = Date.now();
+        setAiInterviewMessages((prev) => [
+          ...prev,
+          {
+            id: createAiInterviewMessageId('user'),
+            createdAt: Date.now(),
+            role: 'user',
+            content: userMessage,
+          },
+        ]);
+      }
+
+      if (pendingJobId) {
+        await pollInterviewJob(pendingJobId, requestSeq, trigger, reason);
+        return;
+      }
+
+      const currentCode = getCode();
+      const codeContext = buildInterviewCodeContext(editorCodeContext, currentCode, language);
+      const history = buildInterviewConversationHistory(
+        aiInterviewMessages,
+        AI_INTERVIEW_HISTORY_LIMIT,
+      );
+
+      try {
+        const submission = await api(CONTROL_API.ROOMS.AI_INTERVIEW, {
+          params: { id: roomId },
+          body: {
+            trigger,
+            userMessage: userMessage?.trim() || undefined,
+            conversationHistory: history,
+            currentCode,
+            codeContext,
+            latestExecutionSummary: pickLatestInterviewExecutionSummary(
+              latestRunSummary,
+              buildLatestInterviewSubmissionSummary(submitState),
+            ),
+            interactionSignals: reason ? buildInterviewSignals(reason) : undefined,
+          },
+        });
+
+        storePendingAiInterviewJob(roomId, currentUserId, {
+          jobId: submission.jobId,
+          trigger,
+          userMessage: userMessage?.trim() || undefined,
+          reason,
+        });
+        if (trigger === 'proactive') {
+          aiInterviewLastProactiveAtRef.current = Date.now();
+        }
+        await pollInterviewJob(submission.jobId, requestSeq, trigger, reason);
       } catch (error) {
-        if (!isCurrentRequest()) return;
+        if (aiInterviewRequestSeqRef.current !== requestSeq) {
+          return;
+        }
         const apiError = await readApiError(error);
         const message = resolveErrorMessage(
           apiError,
@@ -1257,23 +1432,153 @@ export function RoomWorkspace({
           'workspace.aiInterviewUnavailable',
           t,
         );
-        setAiInterviewError(message);
+        if (trigger !== 'proactive') {
+          setAiInterviewError(message);
+        }
         setAiInterviewLoading(false);
         aiInterviewInFlightRef.current = false;
       }
     },
     [
       aiInterviewMessages,
+      buildInterviewSignals,
       canSendInterviewMessage,
+      currentUserId,
       editorCodeContext,
       getCode,
       language,
       latestRunSummary,
+      pollInterviewJob,
       roomId,
       submitState,
       t,
     ],
   );
+
+  const handleSendInterviewMessage = useCallback(
+    (userMessage: string) => {
+      void submitInterviewRequest({ trigger: 'user_message', userMessage });
+    },
+    [submitInterviewRequest],
+  );
+
+  useEffect(() => {
+    if (!canSendInterviewMessage || room.mode !== 'ai') {
+      return;
+    }
+    const pending = loadPendingAiInterviewJob(roomId, currentUserId);
+    if (!pending || aiInterviewInFlightRef.current) {
+      return;
+    }
+    void submitInterviewRequest({
+      trigger: pending.trigger,
+      userMessage: pending.userMessage,
+      reason: pending.reason,
+      pendingJobId: pending.jobId,
+    });
+  }, [canSendInterviewMessage, currentUserId, room.mode, roomId, submitInterviewRequest]);
+
+  const previousAiInterviewStageRef = useRef<RoomStatus | null>(null);
+  useEffect(() => {
+    if (room.mode !== 'ai') {
+      previousAiInterviewStageRef.current = null;
+      return;
+    }
+    if (!AI_INTERVIEW_ALLOWED_STATUSES.has(room.status)) {
+      previousAiInterviewStageRef.current = room.status;
+      return;
+    }
+
+    const previous = previousAiInterviewStageRef.current;
+    previousAiInterviewStageRef.current = room.status;
+    if (previous == null) {
+      return;
+    }
+    if (previous === room.status) {
+      return;
+    }
+
+    if (
+      Date.now() - aiInterviewLastProactiveAtRef.current <
+      AI_INTERVIEW_PROACTIVE_MIN_INTERVAL_MS
+    ) {
+      return;
+    }
+
+    void submitInterviewRequest({
+      trigger: 'proactive',
+      reason: 'stage_changed',
+    });
+  }, [room.mode, room.status, submitInterviewRequest]);
+
+  useEffect(() => {
+    if (!canSendInterviewMessage || room.mode !== 'ai') {
+      return;
+    }
+
+    if (aiInterviewMessages.length > 0) {
+      return;
+    }
+
+    if (
+      Date.now() - aiInterviewLastProactiveAtRef.current <
+      AI_INTERVIEW_PROACTIVE_MIN_INTERVAL_MS
+    ) {
+      return;
+    }
+
+    void submitInterviewRequest({
+      trigger: 'proactive',
+      reason: 'session_joined',
+    });
+  }, [aiInterviewMessages.length, canSendInterviewMessage, room.mode, submitInterviewRequest]);
+
+  useEffect(() => {
+    if (!canSendInterviewMessage || room.mode !== 'ai') {
+      return;
+    }
+
+    const timer = setInterval(() => {
+      if (aiInterviewInFlightRef.current) {
+        return;
+      }
+
+      const now = Date.now();
+      const sinceLastProactive = now - aiInterviewLastProactiveAtRef.current;
+      if (sinceLastProactive < AI_INTERVIEW_PROACTIVE_MIN_INTERVAL_MS) {
+        return;
+      }
+
+      if (hintHistory.length > aiInterviewLastHintCountRef.current) {
+        void submitInterviewRequest({
+          trigger: 'proactive',
+          reason: 'hint_used',
+        });
+        return;
+      }
+
+      const sinceLastEditorActivity =
+        aiInterviewLastEditorActivityAtRef.current == null
+          ? Number.POSITIVE_INFINITY
+          : now - aiInterviewLastEditorActivityAtRef.current;
+      const sinceLastUserMessage =
+        aiInterviewLastUserMessageAtRef.current == null
+          ? Number.POSITIVE_INFINITY
+          : now - aiInterviewLastUserMessageAtRef.current;
+
+      if (
+        sinceLastEditorActivity >= AI_INTERVIEW_IDLE_EDITOR_MS &&
+        sinceLastUserMessage >= AI_INTERVIEW_IDLE_USER_MESSAGE_MS
+      ) {
+        void submitInterviewRequest({
+          trigger: 'proactive',
+          reason: 'user_idle',
+        });
+      }
+    }, AI_INTERVIEW_PROACTIVE_TICK_MS);
+
+    return () => clearInterval(timer);
+  }, [canSendInterviewMessage, hintHistory.length, room.mode, submitInterviewRequest]);
 
   return (
     <div className="fixed inset-0 z-40 flex flex-col overflow-hidden bg-background">
