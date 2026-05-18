@@ -175,20 +175,17 @@ export type GetRoomAiHintResultResponse = z.infer<typeof getRoomAiHintResultResp
 
 export const requestRoomAiInterviewSchema = z
   .object({
-    userMessage: z
-      .string()
-      .min(1)
-      .max(2000)
-      .describe('Candidate message to the AI interviewer'),
+    userMessage: z.string().min(1).max(2000).describe('Candidate message to the AI interviewer'),
     conversationHistory: z
       .array(
         z.object({
           role: z.enum(['user', 'assistant']),
-          content: z.string(),
+          content: z.string().max(4000),
         }),
       )
+      .max(40)
       .describe('Prior conversation turns'),
-    currentCode: z.string().describe('Current code in the editor'),
+    currentCode: z.string().max(16_000).describe('Current code in the editor'),
   })
   .strict();
 

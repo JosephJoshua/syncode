@@ -2316,6 +2316,13 @@ export class RoomsService {
       });
     }
 
+    if (label === 'Interview' && room.mode !== 'ai') {
+      throw new BadRequestException({
+        message: 'AI interview is only available in AI rooms',
+        code: ERROR_CODES.ROOM_NOT_AI_MODE,
+      });
+    }
+
     const capabilities = resolveRoomPermissions(participant.role, {
       isHost: room.hostId === userId,
     });

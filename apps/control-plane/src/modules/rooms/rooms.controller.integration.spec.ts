@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
-import { AI_CLIENT, COLLAB_CLIENT, EXECUTION_CLIENT } from '@syncode/contracts';
+import { AI_CLIENT, COLLAB_CLIENT, ERROR_CODES, EXECUTION_CLIENT } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
 import { aiHints } from '@syncode/db';
 import { CACHE_SERVICE, MEDIA_SERVICE, STORAGE_SERVICE } from '@syncode/shared/ports';
@@ -1055,6 +1055,124 @@ describe('POST /rooms/:id/ai/code-analysis', () => {
       .expect(403);
 
     expect(result.body.message).toBe('No ai:request-hint capability');
+  });
+});
+
+describe('POST /rooms/:id/ai/interview', () => {
+  async function createAiInterviewRoom() {
+    const candidate = await insertUser(db);
+    const problem = await insertProblem(db);
+    const room = await insertRoom(db, candidate.id, {
+      mode: 'ai',
+      status: 'coding',
+      problemId: problem.id,
+      language: 'python',
+    });
+    await insertParticipant(db, room.id, candidate.id, 'candidate');
+
+    return { candidate, problem, room };
+  }
+
+  it('GIVEN AI room candidate and selected problem WHEN requesting interview response THEN returns ready interview result', async () => {
+    const { candidate, room } = await createAiInterviewRoom();
+    mockAiClient.getInterviewResult.mockResolvedValueOnce({
+      message: 'Explain why your hash map lookup is correct.',
+      followUpQuestion: 'What happens with duplicate numbers?',
+      codeAnnotations: [{ line: 3, comment: 'Mention how this handles repeated values.' }],
+      audio: {
+        audioKey: 'ai/interview/ai-interview-job.mp3',
+        mimeType: 'audio/mpeg',
+        downloadUrl: 'https://media.example.com/interview.mp3',
+      },
+    });
+
+    const submission = await asUser(
+      request(app.getHttpServer()).post(`/rooms/${room.id}/ai/interview`),
+      candidate,
+    )
+      .send({
+        userMessage: 'I would scan once and store complements.',
+        conversationHistory: [{ role: 'assistant', content: 'How would you solve this?' }],
+        currentCode: 'def two_sum(nums, target):\n    return []',
+      })
+      .expect(202);
+
+    expect(submission.body.jobId).toBe('ai-interview-job');
+    expect(mockAiClient.submitInterviewResponse).toHaveBeenCalledWith(
+      expect.objectContaining({
+        roomId: room.id,
+        participantId: candidate.id,
+        language: 'python',
+        userMessage: 'I would scan once and store complements.',
+        conversationHistory: [{ role: 'assistant', content: 'How would you solve this?' }],
+      }),
+    );
+
+    const result = await asUser(
+      request(app.getHttpServer()).get(`/rooms/${room.id}/ai/interview/${submission.body.jobId}`),
+      candidate,
+    ).expect(200);
+
+    expect(result.body).toEqual({
+      status: 'ready',
+      jobId: submission.body.jobId,
+      message: 'Explain why your hash map lookup is correct.',
+      followUpQuestion: 'What happens with duplicate numbers?',
+      codeAnnotations: [{ line: 3, comment: 'Mention how this handles repeated values.' }],
+      audioUrl: 'https://media.example.com/interview.mp3',
+    });
+  });
+
+  it('GIVEN peer room WHEN requesting interview response THEN returns ROOM_NOT_AI_MODE', async () => {
+    const interviewer = await insertUser(db);
+    const candidate = await insertUser(db);
+    const problem = await insertProblem(db);
+    const room = await insertRoom(db, interviewer.id, {
+      mode: 'peer',
+      status: 'coding',
+      problemId: problem.id,
+      language: 'python',
+    });
+    await insertParticipant(db, room.id, interviewer.id, 'interviewer');
+    await insertParticipant(db, room.id, candidate.id, 'candidate');
+
+    const result = await asUser(
+      request(app.getHttpServer()).post(`/rooms/${room.id}/ai/interview`),
+      candidate,
+    )
+      .send({
+        userMessage: 'Can we do an AI interview here?',
+        conversationHistory: [],
+        currentCode: 'print("hello")',
+      })
+      .expect(400);
+
+    expect(result.body.code).toBe(ERROR_CODES.ROOM_NOT_AI_MODE);
+    expect(mockAiClient.submitInterviewResponse).not.toHaveBeenCalled();
+  });
+
+  it('GIVEN another participant owns interview job WHEN polling with wrong user THEN returns 404', async () => {
+    const { candidate, room } = await createAiInterviewRoom();
+    const intruder = await insertUser(db);
+    await insertParticipant(db, room.id, intruder.id, 'observer');
+
+    const submission = await asUser(
+      request(app.getHttpServer()).post(`/rooms/${room.id}/ai/interview`),
+      candidate,
+    )
+      .send({
+        userMessage: 'I would use two pointers.',
+        conversationHistory: [],
+        currentCode: 'print("hello")',
+      })
+      .expect(202);
+
+    const result = await asUser(
+      request(app.getHttpServer()).get(`/rooms/${room.id}/ai/interview/${submission.body.jobId}`),
+      intruder,
+    ).expect(404);
+
+    expect(result.body.message).toBe('Interview job not found');
   });
 });
 
