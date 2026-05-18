@@ -717,5 +717,22 @@ describe('YjsCollabProvider', () => {
       vi.advanceTimersByTime(60_000);
       expect(MockWebSocket.instances.length).toBe(wsBefore);
     });
+
+    it('GIVEN already destroyed provider WHEN destroy is called again THEN cleanup is silent', () => {
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const { provider, ws } = connectProvider();
+      const sentBeforeDestroy = ws.sent.length;
+
+      provider.destroy();
+      const sentOnFirstDestroy = ws.sent.slice(sentBeforeDestroy);
+      provider.destroy();
+
+      expect(sentOnFirstDestroy).toHaveLength(1);
+      expect(sentOnFirstDestroy[0]).toBeInstanceOf(Uint8Array);
+      expect((sentOnFirstDestroy[0] as Uint8Array)[0]).toBe(1);
+      expect(ws.sent).toHaveLength(sentBeforeDestroy + 1);
+      expect(consoleError).not.toHaveBeenCalled();
+      consoleError.mockRestore();
+    });
   });
 });

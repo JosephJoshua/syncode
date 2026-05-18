@@ -23,6 +23,13 @@ import type { IQueueService, QueueJob } from '@syncode/shared/ports';
 import { QUEUE_SERVICE } from '@syncode/shared/ports';
 import { AiService } from './ai.service.js';
 
+const RESULT_JOB_OPTIONS = {
+  attempts: 3,
+  backoff: { type: 'exponential', delay: 1500 },
+  removeOnComplete: 100,
+  removeOnFail: false,
+} as const;
+
 @Injectable()
 export class AiProcessor implements OnModuleInit {
   private readonly logger = new Logger(AiProcessor.name);
@@ -94,7 +101,15 @@ export class AiProcessor implements OnModuleInit {
 
     // Errors should propagate so BullMQ retries on transient failures.
     const result = await this.aiService.generateHint(request);
-    await this.queueService.enqueue(AI_HINT_RESULT_QUEUE, 'hint-result', { ...result, jobId });
+    await this.queueService.enqueue(
+      AI_HINT_RESULT_QUEUE,
+      'hint-result',
+      {
+        ...result,
+        jobId,
+      },
+      RESULT_JOB_OPTIONS,
+    );
 
     this.logger.log(`Hint job ${jobId} completed`);
   }
@@ -104,10 +119,15 @@ export class AiProcessor implements OnModuleInit {
     this.logger.log(`Processing code analysis job ${jobId}`);
 
     const result = await this.aiService.analyzeCode(request);
-    await this.queueService.enqueue(AI_CODE_ANALYSIS_RESULT_QUEUE, 'code-analysis-result', {
-      ...result,
-      jobId,
-    });
+    await this.queueService.enqueue(
+      AI_CODE_ANALYSIS_RESULT_QUEUE,
+      'code-analysis-result',
+      {
+        ...result,
+        jobId,
+      },
+      RESULT_JOB_OPTIONS,
+    );
 
     this.logger.log(`Code analysis job ${jobId} completed`);
   }
@@ -119,10 +139,15 @@ export class AiProcessor implements OnModuleInit {
     this.logger.log(`Processing weakness analysis job ${jobId} for session ${request.sessionId}`);
 
     const result = await this.aiService.generateWeaknessAnalysis(request);
-    await this.queueService.enqueue(AI_WEAKNESS_ANALYSIS_RESULT_QUEUE, 'weakness-analysis-result', {
-      ...result,
-      jobId,
-    });
+    await this.queueService.enqueue(
+      AI_WEAKNESS_ANALYSIS_RESULT_QUEUE,
+      'weakness-analysis-result',
+      {
+        ...result,
+        jobId,
+      },
+      RESULT_JOB_OPTIONS,
+    );
 
     this.logger.log(`Weakness analysis job ${jobId} completed`);
   }
@@ -133,7 +158,15 @@ export class AiProcessor implements OnModuleInit {
 
     // Errors should propagate so BullMQ retries on transient failures.
     const result = await this.aiService.reviewCode(request);
-    await this.queueService.enqueue(AI_REVIEW_RESULT_QUEUE, 'review-result', { ...result, jobId });
+    await this.queueService.enqueue(
+      AI_REVIEW_RESULT_QUEUE,
+      'review-result',
+      {
+        ...result,
+        jobId,
+      },
+      RESULT_JOB_OPTIONS,
+    );
 
     this.logger.log(`Review job ${jobId} completed`);
   }
@@ -144,10 +177,15 @@ export class AiProcessor implements OnModuleInit {
 
     // Errors should propagate so BullMQ retries on transient failures.
     const result = await this.aiService.generateInterviewResponse(request);
-    await this.queueService.enqueue(AI_INTERVIEW_RESULT_QUEUE, 'interview-result', {
-      ...result,
-      jobId,
-    });
+    await this.queueService.enqueue(
+      AI_INTERVIEW_RESULT_QUEUE,
+      'interview-result',
+      {
+        ...result,
+        jobId,
+      },
+      RESULT_JOB_OPTIONS,
+    );
 
     this.logger.log(`Interview job ${jobId} completed`);
   }
@@ -157,10 +195,15 @@ export class AiProcessor implements OnModuleInit {
     this.logger.log(`Processing session report job ${jobId} for session ${request.sessionId}`);
     try {
       const result = await this.aiService.generateSessionReport(request);
-      await this.queueService.enqueue(AI_SESSION_REPORT_RESULT_QUEUE, 'session-report-result', {
-        ...result,
-        jobId,
-      });
+      await this.queueService.enqueue(
+        AI_SESSION_REPORT_RESULT_QUEUE,
+        'session-report-result',
+        {
+          ...result,
+          jobId,
+        },
+        RESULT_JOB_OPTIONS,
+      );
 
       this.logger.log(`Session report job ${jobId} completed`);
     } catch (error) {

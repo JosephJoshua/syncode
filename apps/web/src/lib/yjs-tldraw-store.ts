@@ -466,6 +466,7 @@ export function createYjsTldrawStore({
     trackedOrigins: new Set([localOrigin]),
     captureTimeout: 500,
   });
+  let disposed = false;
 
   // Awareness: broadcast a minimal whiteboard presence under its own key so
   // the same Awareness instance can multiplex code-editor and whiteboard
@@ -489,6 +490,9 @@ export function createYjsTldrawStore({
     attachLocalStoreForwarder,
     setLocalApplyTarget,
     dispose: () => {
+      if (disposed) return;
+      disposed = true;
+
       beforeShapeCreate();
       beforeAssetCreate();
       yRecords.unobserve(onYRecordsChange);

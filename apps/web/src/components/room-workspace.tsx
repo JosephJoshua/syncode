@@ -271,6 +271,7 @@ export function RoomWorkspace({
   const [aiInterviewError, setAiInterviewError] = useState<string | null>(null);
   const aiInterviewPollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const aiInterviewRequestSeqRef = useRef(0);
+  const aiInterviewInFlightRef = useRef(false);
 
   useEffect(() => {
     if (!room.problemId) return;
@@ -321,6 +322,7 @@ export function RoomWorkspace({
   useEffect(() => {
     return () => {
       aiInterviewRequestSeqRef.current += 1;
+      aiInterviewInFlightRef.current = false;
       if (aiInterviewPollTimeoutRef.current) {
         clearTimeout(aiInterviewPollTimeoutRef.current);
         aiInterviewPollTimeoutRef.current = null;
@@ -986,6 +988,11 @@ export function RoomWorkspace({
 
   const handleSendInterviewMessage = useCallback(
     async (userMessage: string) => {
+      if (aiInterviewInFlightRef.current) {
+        return;
+      }
+
+      aiInterviewInFlightRef.current = true;
       aiInterviewRequestSeqRef.current += 1;
       const requestSeq = aiInterviewRequestSeqRef.current;
       if (aiInterviewPollTimeoutRef.current) {
@@ -1022,6 +1029,7 @@ export function RoomWorkspace({
           if (polls >= AI_INTERVIEW_MAX_POLLS) {
             setAiInterviewError(t('workspace.aiInterviewFailed'));
             setAiInterviewLoading(false);
+            aiInterviewInFlightRef.current = false;
             return;
           }
           polls += 1;
@@ -1044,6 +1052,7 @@ export function RoomWorkspace({
             if (result.status === 'failed') {
               setAiInterviewError(t('workspace.aiInterviewFailed'));
               setAiInterviewLoading(false);
+              aiInterviewInFlightRef.current = false;
               return;
             }
 
@@ -1058,6 +1067,7 @@ export function RoomWorkspace({
               },
             ]);
             setAiInterviewLoading(false);
+            aiInterviewInFlightRef.current = false;
           } catch (error) {
             if (!isCurrentRequest()) return;
             const apiError = await readApiError(error);
@@ -1069,6 +1079,7 @@ export function RoomWorkspace({
             );
             setAiInterviewError(message);
             setAiInterviewLoading(false);
+            aiInterviewInFlightRef.current = false;
           }
         };
 
@@ -1084,6 +1095,7 @@ export function RoomWorkspace({
         );
         setAiInterviewError(message);
         setAiInterviewLoading(false);
+        aiInterviewInFlightRef.current = false;
       }
     },
     [aiInterviewMessages, getCode, roomId, t],

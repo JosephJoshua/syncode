@@ -281,9 +281,8 @@ export function CollaborativeEditor({
       };
     });
 
-    let cancelled = false;
-    queueMicrotask(() => {
-      if (cancelled) {
+    const frame = globalThis.window.requestAnimationFrame(() => {
+      if (!editor.getModel()) {
         return;
       }
 
@@ -294,7 +293,7 @@ export function CollaborativeEditor({
     });
 
     return () => {
-      cancelled = true;
+      globalThis.window.cancelAnimationFrame(frame);
     };
   }, [editor, commentLineSet, selectedLine, threadLine]);
 

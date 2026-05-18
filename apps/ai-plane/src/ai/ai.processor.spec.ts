@@ -79,6 +79,13 @@ function createMockStorageService(): IStorageService {
   };
 }
 
+const resultJobOptions = {
+  attempts: 3,
+  backoff: { type: 'exponential', delay: 1500 },
+  removeOnComplete: 100,
+  removeOnFail: false,
+};
+
 describe('AiProcessor', () => {
   const { mock: mockQueueService, handlers } = createMockQueueService();
 
@@ -288,6 +295,7 @@ describe('AiProcessor', () => {
         AI_HINT_RESULT_QUEUE,
         'hint-result',
         expect.objectContaining({ jobId: 'hint-job-1', hint: expect.any(String) }),
+        resultJobOptions,
       );
     });
   });
@@ -319,6 +327,7 @@ describe('AiProcessor', () => {
           summary: expect.any(String),
           followUpQuestions: expect.any(Array),
         }),
+        resultJobOptions,
       );
     });
   });
@@ -373,6 +382,7 @@ describe('AiProcessor', () => {
           recurringPatterns: expect.any(Array),
           weaknesses: expect.any(Array),
         }),
+        resultJobOptions,
       );
     });
   });
@@ -404,6 +414,7 @@ describe('AiProcessor', () => {
           overallScore: expect.any(Number),
           categories: expect.any(Array),
         }),
+        resultJobOptions,
       );
     });
   });
@@ -442,6 +453,7 @@ describe('AiProcessor', () => {
             downloadUrl: 'https://storage.example/interview-audio.mp3',
           }),
         }),
+        resultJobOptions,
       );
     });
   });
@@ -544,6 +556,7 @@ describe('AiProcessor', () => {
             }),
           ],
         }),
+        resultJobOptions,
       );
     });
   });

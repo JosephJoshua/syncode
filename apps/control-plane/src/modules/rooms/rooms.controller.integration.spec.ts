@@ -227,6 +227,15 @@ describe('GET /rooms/public', () => {
 });
 
 describe('GET /rooms/:id', () => {
+  it('GIVEN malformed room id WHEN getting room THEN returns 400 instead of reaching storage', async () => {
+    const user = await insertUser(db);
+
+    const res = await asUser(request(app.getHttpServer()).get('/rooms/not-a-uuid'), user);
+
+    expect(res.status).toBe(400);
+    expect(res.body.statusCode).toBe(400);
+  });
+
   it('GIVEN user is participant WHEN getting room THEN returns detail with ISO timestamps on participants', async () => {
     const user = await insertUser(db);
     const room = await insertRoom(db, user.id);
@@ -1218,6 +1227,20 @@ describe('POST /rooms/:id/chat/media/upload-url', () => {
         sizeBytes: 42,
       })
       .expect(400);
+  });
+});
+
+describe('POST /rooms/:id/collab/ensure', () => {
+  it('GIVEN malformed room id WHEN ensuring collab THEN returns 400 instead of reaching storage', async () => {
+    const user = await insertUser(db);
+
+    const res = await asUser(
+      request(app.getHttpServer()).post('/rooms/not-a-uuid/collab/ensure'),
+      user,
+    );
+
+    expect(res.status).toBe(400);
+    expect(res.body.statusCode).toBe(400);
   });
 });
 
