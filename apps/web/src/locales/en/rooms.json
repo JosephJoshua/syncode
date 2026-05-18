@@ -391,7 +391,7 @@
     "rolesLocked": "Roles are locked once the session starts.",
     "chatHeading": "Room Chat",
     "chatEmpty": "No messages yet. Start the conversation.",
-    "chatInputPlaceholder": "Type a message... Use @username or @ai",
+    "chatInputPlaceholder": "Type a message... Use @username",
     "chatAttach": "Attach file",
     "chatSend": "Send message",
     "chatReply": "Reply",

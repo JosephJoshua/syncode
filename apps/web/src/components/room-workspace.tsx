@@ -1,6 +1,9 @@
 import {
   type AiInterviewCodeContext,
   type AiInterviewExecutionSummary,
+  type AiInterviewInteractionSignals,
+  type AiInterviewProactiveReason,
+  type AiInterviewRequestTrigger,
   type ChatAttachment,
   type ChatMessage,
   type ChatReactToggleEventData,
@@ -10,6 +13,7 @@ import {
   type ExecutionDetailsResponse,
   type ExecutionResultResponse,
   type GetRoomAiHintResultResponse,
+  type GetRoomAiInterviewResultResponse,
   type JobStatusResponse,
   type ProblemDetail,
   type RoomDetail,
@@ -17,6 +21,7 @@ import {
 import type { RoomRole, RoomStatus, SupportedLanguage } from '@syncode/shared';
 import { Avatar, AvatarFallback, AvatarImage, Badge, Button, cn } from '@syncode/ui';
 import {
+  Bot,
   CheckCircle2,
   ChevronDown,
   ChevronLeft,
@@ -274,14 +279,23 @@ export function RoomWorkspace({
   const [aiInterviewMessages, setAiInterviewMessages] = useState<AiInterviewMessage[]>([]);
   const [aiInterviewLoading, setAiInterviewLoading] = useState(false);
   const [aiInterviewError, setAiInterviewError] = useState<string | null>(null);
+  const [unreadInterviewCount, setUnreadInterviewCount] = useState(0);
   const [editorCodeContext, setEditorCodeContext] = useState<EditorCodeContext | null>(null);
   const [latestRunSummary, setLatestRunSummary] = useState<AiInterviewExecutionSummary | null>(
     null,
   );
   const previousRoomIdRef = useRef(roomId);
-  const aiInterviewPollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const aiInterviewRequestSeqRef = useRef(0);
   const aiInterviewInFlightRef = useRef(false);
+  const aiInterviewLastProactiveAtRef = useRef(0);
+  const aiInterviewLastHintCountRef = useRef(0);
+  const aiInterviewLastUserMessageAtRef = useRef<number | null>(null);
+  const aiInterviewLastAssistantMessageAtRef = useRef<number | null>(null);
+  const aiInterviewLastEditorActivityAtRef = useRef<number | null>(null);
+  const aiInterviewRecentEditorChangesRef = useRef(0);
+  const aiInterviewSeenMessageIdsRef = useRef<Set<string>>(new Set());
+  const aiInterviewToastInitializedRef = useRef(false);
+  const aiInterviewReadMessageIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (!room.problemId) return;
@@ -331,10 +345,6 @@ export function RoomWorkspace({
   const cancelAiInterviewPolling = useCallback(() => {
     aiInterviewRequestSeqRef.current += 1;
     aiInterviewInFlightRef.current = false;
-    if (aiInterviewPollTimeoutRef.current) {
-      clearTimeout(aiInterviewPollTimeoutRef.current);
-      aiInterviewPollTimeoutRef.current = null;
-    }
   }, []);
 
   useLayoutEffect(() => {
@@ -347,8 +357,18 @@ export function RoomWorkspace({
     setAiInterviewLoading(false);
     setAiInterviewError(null);
     setAiInterviewMessages([]);
+    setUnreadInterviewCount(0);
     setEditorCodeContext(null);
     setLatestRunSummary(null);
+    aiInterviewLastProactiveAtRef.current = 0;
+    aiInterviewLastHintCountRef.current = 0;
+    aiInterviewLastUserMessageAtRef.current = null;
+    aiInterviewLastAssistantMessageAtRef.current = null;
+    aiInterviewLastEditorActivityAtRef.current = null;
+    aiInterviewRecentEditorChangesRef.current = 0;
+    aiInterviewSeenMessageIdsRef.current.clear();
+    aiInterviewReadMessageIdsRef.current.clear();
+    aiInterviewToastInitializedRef.current = false;
   }, [cancelAiInterviewPolling, roomId]);
 
   useLayoutEffect(() => {
@@ -358,7 +378,7 @@ export function RoomWorkspace({
   }, [cancelAiInterviewPolling]);
 
   useLayoutEffect(() => {
-    if (room.mode === 'ai' && room.status === 'coding') {
+    if (room.mode === 'ai' && AI_INTERVIEW_ALLOWED_STATUSES.has(room.status)) {
       return;
     }
 
@@ -495,7 +515,8 @@ export function RoomWorkspace({
   const canEditCode = room.myCapabilities.includes('code:edit');
   const canSendChat = room.myCapabilities.includes('chat:send');
   const canRequestHint = room.myCapabilities.includes('ai:request-hint');
-  const canSendInterviewMessage = canRequestHint && room.mode === 'ai' && room.status === 'coding';
+  const canSendInterviewMessage =
+    canRequestHint && room.mode === 'ai' && AI_INTERVIEW_ALLOWED_STATUSES.has(room.status);
   const canManageParticipants = room.myCapabilities.includes('participant:assign-role');
   const isEditorReadOnly = !canEditCode || room.editorLocked || room.status === 'finished';
 
@@ -654,6 +675,85 @@ export function RoomWorkspace({
       );
     }
   }, [activeRightTab, chatMessages, currentUserId, participantsById, playIncomingChatDing, t]);
+
+  useEffect(() => {
+    const read = aiInterviewReadMessageIdsRef.current;
+    if (activeRightTab === 'interview') {
+      for (const [index, message] of aiInterviewMessages.entries()) {
+        if (message.role !== 'assistant') {
+          continue;
+        }
+        read.add(getAiInterviewMessageStableId(message, index));
+      }
+      setUnreadInterviewCount(0);
+      return;
+    }
+
+    const unreadCount = aiInterviewMessages.reduce((count, message, index) => {
+      if (message.role !== 'assistant') {
+        return count;
+      }
+      return read.has(getAiInterviewMessageStableId(message, index)) ? count : count + 1;
+    }, 0);
+    setUnreadInterviewCount(unreadCount);
+  }, [activeRightTab, aiInterviewMessages]);
+
+  useEffect(() => {
+    const seen = aiInterviewSeenMessageIdsRef.current;
+    if (!aiInterviewToastInitializedRef.current) {
+      for (const [index, message] of aiInterviewMessages.entries()) {
+        seen.add(getAiInterviewMessageStableId(message, index));
+      }
+      aiInterviewToastInitializedRef.current = true;
+      return;
+    }
+
+    const newAssistantMessages = aiInterviewMessages.filter((message, index) => {
+      const id = getAiInterviewMessageStableId(message, index);
+      if (seen.has(id)) {
+        return false;
+      }
+      seen.add(id);
+      return message.role === 'assistant';
+    });
+
+    if (newAssistantMessages.length === 0) {
+      return;
+    }
+
+    if (activeRightTab === 'interview') {
+      return;
+    }
+
+    playIncomingChatDing();
+    for (const message of newAssistantMessages) {
+      toast(
+        <div className="flex min-w-0 items-start gap-2">
+          <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/20">
+            <Bot className="size-3.5 text-primary" />
+          </div>
+          <div className="min-w-0">
+            <p className="truncate text-xs font-semibold text-primary">
+              {t('workspace.aiInterviewHeading')}
+            </p>
+            <p className="line-clamp-2 text-xs text-foreground">
+              {message.content.trim() || t('workspace.aiInterviewSending')}
+            </p>
+          </div>
+        </div>,
+        {
+          duration: 3500,
+          className:
+            'chat-notification-toast !bg-muted !border-border !text-foreground !opacity-100',
+          style: {
+            background: 'var(--muted)',
+            color: 'var(--foreground)',
+            border: '1px solid var(--border)',
+          },
+        },
+      );
+    }
+  }, [activeRightTab, aiInterviewMessages, playIncomingChatDing, t]);
 
   const handleAddCase = useCallback(() => {
     const idx = nextCustomId.current++;
@@ -1610,13 +1710,18 @@ export function RoomWorkspace({
                         type="button"
                         onClick={() => setActiveRightTab('interview')}
                         className={cn(
-                          'rounded px-2 py-1 text-xs font-medium transition-colors',
+                          'flex items-center justify-center gap-1 rounded px-2 py-1 text-xs font-medium transition-colors',
                           activeRightTab === 'interview'
                             ? 'bg-primary/20 text-primary'
                             : 'text-muted-foreground hover:bg-background/70 hover:text-foreground',
                         )}
                       >
-                        {t('workspace.aiInterviewHeading')}
+                        <span>{t('workspace.aiInterviewHeading')}</span>
+                        {unreadInterviewCount > 0 ? (
+                          <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] text-primary-foreground">
+                            {unreadInterviewCount}
+                          </span>
+                        ) : null}
                       </button>
                     ) : null}
                   </div>
@@ -2246,7 +2351,119 @@ const HINT_POLL_INTERVAL_MS = 750;
 const HINT_POLL_TIMEOUT_MS = 30_000;
 const AI_INTERVIEW_POLL_INTERVAL_MS = 1500;
 const AI_INTERVIEW_MAX_POLLS = 40;
-const AI_INTERVIEW_HISTORY_LIMIT = 20;
+const AI_INTERVIEW_HISTORY_LIMIT = 40;
+const AI_INTERVIEW_MAX_RETRY_ERRORS = 3;
+const AI_INTERVIEW_STREAM_CHUNK_DELAY_MS = 32;
+const AI_INTERVIEW_PROACTIVE_TICK_MS = 12_000;
+const AI_INTERVIEW_PROACTIVE_MIN_INTERVAL_MS = 45_000;
+const AI_INTERVIEW_IDLE_EDITOR_MS = 90_000;
+const AI_INTERVIEW_IDLE_USER_MESSAGE_MS = 75_000;
+const AI_INTERVIEW_PENDING_STORAGE_KEY_PREFIX = 'syncode:ai-interview-pending:';
+const AI_INTERVIEW_ALLOWED_STATUSES = new Set<RoomStatus>(['warmup', 'coding', 'wrapup']);
+
+interface PendingAiInterviewJob {
+  jobId: string;
+  trigger: AiInterviewRequestTrigger;
+  userMessage?: string;
+  reason?: AiInterviewProactiveReason;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function createAiInterviewMessageId(prefix: 'user' | 'assistant'): string {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function splitInterviewMessageChunks(text: string): string[] {
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  if (words.length <= 1) {
+    return words;
+  }
+
+  const chunks: string[] = [];
+  for (let index = 0; index < words.length; index += 3) {
+    chunks.push(words.slice(index, index + 3).join(' '));
+  }
+  return chunks;
+}
+
+function buildInterviewConversationHistory(messages: AiInterviewMessage[], limit: number) {
+  return messages.slice(-limit).map((message) => ({
+    role: message.role,
+    content:
+      message.role === 'assistant' && message.followUpQuestion
+        ? `${message.content}\n\nFollow-up question: ${message.followUpQuestion}`
+        : message.content,
+  }));
+}
+
+function getAiInterviewMessageStableId(message: AiInterviewMessage, index: number): string {
+  if (message.id) {
+    return message.id;
+  }
+  return `${message.role}:${message.createdAt ?? 0}:${index}:${message.content.slice(0, 36)}`;
+}
+
+function pendingAiInterviewStorageKey(roomId: string, userId: string | null): string | null {
+  if (!userId) {
+    return null;
+  }
+  return `${AI_INTERVIEW_PENDING_STORAGE_KEY_PREFIX}${roomId}:${userId}`;
+}
+
+function storePendingAiInterviewJob(
+  roomId: string,
+  userId: string | null,
+  value: PendingAiInterviewJob,
+): void {
+  const key = pendingAiInterviewStorageKey(roomId, userId);
+  if (!key) {
+    return;
+  }
+  try {
+    sessionStorage.setItem(key, JSON.stringify(value));
+  } catch {}
+}
+
+function loadPendingAiInterviewJob(
+  roomId: string,
+  userId: string | null,
+): PendingAiInterviewJob | null {
+  const key = pendingAiInterviewStorageKey(roomId, userId);
+  if (!key) {
+    return null;
+  }
+  try {
+    const raw = sessionStorage.getItem(key);
+    if (!raw) {
+      return null;
+    }
+    const parsed = JSON.parse(raw) as Partial<PendingAiInterviewJob>;
+    if (!parsed.jobId || (parsed.trigger !== 'user_message' && parsed.trigger !== 'proactive')) {
+      return null;
+    }
+    return {
+      jobId: parsed.jobId,
+      trigger: parsed.trigger,
+      ...(parsed.userMessage ? { userMessage: parsed.userMessage } : {}),
+      ...(parsed.reason ? { reason: parsed.reason } : {}),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function clearPendingAiInterviewJob(roomId: string, userId: string | null): void {
+  const key = pendingAiInterviewStorageKey(roomId, userId);
+  if (!key) {
+    return;
+  }
+  try {
+    sessionStorage.removeItem(key);
+  } catch {}
+}
 
 class AiHintTimeoutError extends Error {
   constructor() {
