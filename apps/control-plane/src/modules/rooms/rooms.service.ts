@@ -15,6 +15,8 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import {
   AI_CLIENT,
+  type AiInterviewCodeAnalysisContext,
+  type AiInterviewCodeContext,
   type AuthorizeJoinResponse,
   BROWSEABLE_ROOM_STATUSES,
   type BrowseRoomsQuery,
@@ -124,6 +126,7 @@ interface CodeAnalysisJobMapping {
 interface InterviewJobMapping {
   roomId: string;
   userId: string;
+  codeContext: AiInterviewCodeContext;
 }
 
 @Injectable()
@@ -1272,14 +1275,24 @@ export class RoomsService {
       'Interview',
     );
     const problemDescription = await this.loadAiProblemDescription(problemId);
+    const [sessionId, latestExecutionSummary, latestCodeAnalysisContext] = await Promise.all([
+      this.loadCurrentRoomSessionId(roomId),
+      this.loadLatestHintSubmissionSummary(roomId, userId),
+      this.loadLatestCodeAnalysisContext(roomId, userId),
+    ]);
+    const codeContext = { ...body.codeContext, language: activeLanguage };
 
     let submitted: { jobId: JobId<'ai:interview'> };
     try {
       submitted = await this.aiClient.submitInterviewResponse({
         roomId,
+        sessionId,
         participantId: userId,
         problemDescription,
         currentCode: body.currentCode,
+        codeContext,
+        latestExecutionSummary: body.latestExecutionSummary ?? latestExecutionSummary,
+        codeAnalysisContext: body.codeAnalysisContext ?? latestCodeAnalysisContext ?? undefined,
         language: activeLanguage,
         userMessage: body.userMessage,
         conversationHistory: body.conversationHistory,
@@ -1297,6 +1310,7 @@ export class RoomsService {
       {
         roomId,
         userId,
+        codeContext,
       },
       RoomsService.AI_INTERVIEW_JOB_CACHE_TTL_SECONDS,
     );
@@ -1343,6 +1357,7 @@ export class RoomsService {
       jobId,
       message: interviewResult.message,
       followUpQuestion: interviewResult.followUpQuestion,
+      codeContext: interviewResult.codeContext ?? mapping.codeContext,
       codeAnnotations: interviewResult.codeAnnotations,
       audioUrl: interviewResult.audio?.downloadUrl,
     };
@@ -1447,6 +1462,16 @@ export class RoomsService {
       }
       return { status: 'pending', jobId };
     }
+
+    await this.cacheService.set<AiInterviewCodeAnalysisContext>(
+      `${RoomsService.AI_CODE_ANALYSIS_LATEST_CACHE_PREFIX}${roomId}:${userId}`,
+      {
+        summary: analysisResult.summary,
+        focusAreas: analysisResult.focusAreas,
+        followUpQuestions: analysisResult.followUpQuestions,
+      },
+      RoomsService.AI_CODE_ANALYSIS_JOB_CACHE_TTL_SECONDS,
+    );
 
     return {
       status: 'ready',
@@ -1554,6 +1579,7 @@ export class RoomsService {
   private static readonly AI_CODE_ANALYSIS_LIMIT_WINDOW_SECONDS = 5 * 60;
   private static readonly AI_CODE_ANALYSIS_LIMIT_PREFIX = 'ai-code-analysis-limit:';
   private static readonly AI_CODE_ANALYSIS_JOB_CACHE_PREFIX = 'ai-code-analysis-job:';
+  private static readonly AI_CODE_ANALYSIS_LATEST_CACHE_PREFIX = 'ai-code-analysis-latest:';
   private static readonly AI_CODE_ANALYSIS_JOB_CACHE_TTL_SECONDS = 60 * 60;
 
   async generateMediaToken(roomId: string, userId: string): Promise<MediaTokenResult> {
@@ -2610,6 +2636,27 @@ export class RoomsService {
       allTestsPassed,
       submittedAt: latest.submittedAt.toISOString(),
     };
+  }
+
+  private async loadLatestCodeAnalysisContext(
+    roomId: string,
+    userId: string,
+  ): Promise<AiInterviewCodeAnalysisContext | null> {
+    return (
+      (await this.cacheService.get<AiInterviewCodeAnalysisContext>(
+        `${RoomsService.AI_CODE_ANALYSIS_LATEST_CACHE_PREFIX}${roomId}:${userId}`,
+      )) ?? null
+    );
+  }
+
+  private async loadCurrentRoomSessionId(roomId: string): Promise<string | null> {
+    const [session] = await this.db
+      .select({ id: sessions.id })
+      .from(sessions)
+      .where(eq(sessions.roomId, roomId))
+      .limit(1);
+
+    return session?.id ?? null;
   }
 
   async markParticipantInactive(roomId: string, userId: string, leftAt: Date): Promise<void> {

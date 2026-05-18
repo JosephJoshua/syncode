@@ -103,6 +103,20 @@ export class GetRoomAiInterviewResultResponseDto {
 
   @ApiProperty({
     required: false,
+    type: Object,
+  })
+  codeContext?: {
+    language: string;
+    file: string;
+    codeSnippet: string;
+    startLine: number;
+    endLine: number;
+    questionType?: string;
+    reason?: string;
+  };
+
+  @ApiProperty({
+    required: false,
     type: 'array',
     items: {
       type: 'object',

@@ -1059,6 +1059,18 @@ describe('POST /rooms/:id/ai/code-analysis', () => {
 });
 
 describe('POST /rooms/:id/ai/interview', () => {
+  const interviewCodeContext = {
+    language: 'python' as const,
+    file: 'solution.py',
+    codeSnippet: 'def two_sum(nums, target):\n    return []',
+    startLine: 1,
+    endLine: 2,
+    cursorLine: 2,
+    cursorColumn: 5,
+    questionType: 'correctness' as const,
+    reason: 'Candidate selected solution body',
+  };
+
   async function createAiInterviewRoom() {
     const candidate = await insertUser(db);
     const problem = await insertProblem(db);
@@ -1078,6 +1090,7 @@ describe('POST /rooms/:id/ai/interview', () => {
     mockAiClient.getInterviewResult.mockResolvedValueOnce({
       message: 'Explain why your hash map lookup is correct.',
       followUpQuestion: 'What happens with duplicate numbers?',
+      codeContext: interviewCodeContext,
       codeAnnotations: [{ line: 3, comment: 'Mention how this handles repeated values.' }],
       audio: {
         audioKey: 'ai/interview/ai-interview-job.mp3',
@@ -1094,6 +1107,7 @@ describe('POST /rooms/:id/ai/interview', () => {
         userMessage: 'I would scan once and store complements.',
         conversationHistory: [{ role: 'assistant', content: 'How would you solve this?' }],
         currentCode: 'def two_sum(nums, target):\n    return []',
+        codeContext: interviewCodeContext,
       })
       .expect(202);
 
@@ -1105,6 +1119,8 @@ describe('POST /rooms/:id/ai/interview', () => {
         language: 'python',
         userMessage: 'I would scan once and store complements.',
         conversationHistory: [{ role: 'assistant', content: 'How would you solve this?' }],
+        codeContext: interviewCodeContext,
+        latestExecutionSummary: null,
       }),
     );
 
@@ -1118,9 +1134,63 @@ describe('POST /rooms/:id/ai/interview', () => {
       jobId: submission.body.jobId,
       message: 'Explain why your hash map lookup is correct.',
       followUpQuestion: 'What happens with duplicate numbers?',
+      codeContext: interviewCodeContext,
       codeAnnotations: [{ line: 3, comment: 'Mention how this handles repeated values.' }],
       audioUrl: 'https://media.example.com/interview.mp3',
     });
+  });
+
+  it('GIVEN cached code analysis context WHEN requesting interview response THEN forwards it to AI', async () => {
+    const { candidate, room } = await createAiInterviewRoom();
+    mockAiClient.getCodeAnalysisResult.mockResolvedValueOnce({
+      summary: 'Use a hash map, but explain duplicate handling.',
+      focusAreas: {
+        complexity: 'Explain linear lookup cost.',
+        edgeCases: 'Discuss duplicate numbers.',
+        readability: 'Name map contents clearly.',
+      },
+      followUpQuestions: ['What does the map store?'],
+    });
+
+    const analysisSubmission = await asUser(
+      request(app.getHttpServer()).post(`/rooms/${room.id}/ai/code-analysis`),
+      candidate,
+    )
+      .send({
+        code: interviewCodeContext.codeSnippet,
+        language: 'python',
+      })
+      .expect(202);
+
+    await asUser(
+      request(app.getHttpServer()).get(
+        `/rooms/${room.id}/ai/code-analysis/${analysisSubmission.body.jobId}`,
+      ),
+      candidate,
+    ).expect(200);
+
+    await asUser(request(app.getHttpServer()).post(`/rooms/${room.id}/ai/interview`), candidate)
+      .send({
+        userMessage: 'I would use a map.',
+        conversationHistory: [],
+        currentCode: interviewCodeContext.codeSnippet,
+        codeContext: interviewCodeContext,
+      })
+      .expect(202);
+
+    expect(mockAiClient.submitInterviewResponse).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        codeAnalysisContext: {
+          summary: 'Use a hash map, but explain duplicate handling.',
+          focusAreas: {
+            complexity: 'Explain linear lookup cost.',
+            edgeCases: 'Discuss duplicate numbers.',
+            readability: 'Name map contents clearly.',
+          },
+          followUpQuestions: ['What does the map store?'],
+        },
+      }),
+    );
   });
 
   it('GIVEN peer room WHEN requesting interview response THEN returns ROOM_NOT_AI_MODE', async () => {
@@ -1144,6 +1214,7 @@ describe('POST /rooms/:id/ai/interview', () => {
         userMessage: 'Can we do an AI interview here?',
         conversationHistory: [],
         currentCode: 'print("hello")',
+        codeContext: { ...interviewCodeContext, codeSnippet: 'print("hello")', endLine: 1 },
       })
       .expect(400);
 
@@ -1164,6 +1235,7 @@ describe('POST /rooms/:id/ai/interview', () => {
         userMessage: 'I would use two pointers.',
         conversationHistory: [],
         currentCode: 'print("hello")',
+        codeContext: { ...interviewCodeContext, codeSnippet: 'print("hello")', endLine: 1 },
       })
       .expect(202);
 
