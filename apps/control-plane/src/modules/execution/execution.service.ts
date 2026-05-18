@@ -1,14 +1,155 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { ERROR_CODES } from '@syncode/contracts';
+import {
+  Inject,
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+  NotFoundException,
+  UnprocessableEntityException,
+} from '@nestjs/common';
+import {
+  ERROR_CODES,
+  EXECUTION_CLIENT,
+  type IExecutionClient,
+  type RunCodeRequest,
+  type RunCodeResponse,
+  type SubmitProblemInput,
+  type SubmitResponse,
+} from '@syncode/contracts';
 import type { Database } from '@syncode/db';
-import { executionResults, submissions } from '@syncode/db';
-import { and, asc, eq } from 'drizzle-orm';
+import { executionResults, problems, submissions, testCases } from '@syncode/db';
+import { CACHE_SERVICE, type ICacheService } from '@syncode/shared/ports';
+import { and, asc, eq, isNull } from 'drizzle-orm';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
-import type { ExecutionDetailsResult } from './execution.types.js';
+import {
+  EXEC_META_KEY_PREFIX,
+  EXEC_META_TTL_SECONDS,
+  type ExecutionDetailsResult,
+  type JobMeta,
+} from './execution.types.js';
 
 @Injectable()
 export class ExecutionService {
-  constructor(@Inject(DB_CLIENT) private readonly db: Database) {}
+  private readonly logger = new Logger(ExecutionService.name);
+
+  constructor(
+    @Inject(DB_CLIENT) private readonly db: Database,
+    @Inject(EXECUTION_CLIENT) private readonly executionClient: IExecutionClient,
+    @Inject(CACHE_SERVICE) private readonly cacheService: ICacheService,
+  ) {}
+
+  async runCode(input: RunCodeRequest): Promise<RunCodeResponse> {
+    const { jobId } = await this.executionClient.submit(input);
+    return { jobId };
+  }
+
+  async submitProblem(
+    userId: string,
+    input: SubmitProblemInput & { problemId: string; roomId: string },
+  ): Promise<SubmitResponse> {
+    const [problemRow, cases] = await Promise.all([
+      this.db
+        .select({
+          id: problems.id,
+          timeLimit: problems.timeLimit,
+          memoryLimit: problems.memoryLimit,
+        })
+        .from(problems)
+        .where(
+          and(
+            eq(problems.id, input.problemId),
+            isNull(problems.deletedAt),
+            eq(problems.isPublished, true),
+          ),
+        )
+        .limit(1)
+        .then(([row]) => row),
+      this.db
+        .select({
+          input: testCases.input,
+          expectedOutput: testCases.expectedOutput,
+          timeoutMs: testCases.timeoutMs,
+          memoryMb: testCases.memoryMb,
+        })
+        .from(testCases)
+        .where(eq(testCases.problemId, input.problemId))
+        .orderBy(asc(testCases.sortOrder)),
+    ]);
+
+    if (!problemRow) {
+      throw new NotFoundException({
+        message: 'Problem not found',
+        code: ERROR_CODES.PROBLEM_NOT_FOUND,
+      });
+    }
+
+    if (cases.length === 0) {
+      throw new UnprocessableEntityException({
+        message: 'Problem has no test cases',
+        code: ERROR_CODES.PROBLEM_NO_TEST_CASES,
+      });
+    }
+
+    const [submission] = await this.db
+      .insert(submissions)
+      .values({
+        userId,
+        roomId: input.roomId,
+        problemId: input.problemId,
+        code: input.code,
+        language: input.language,
+        status: 'pending',
+        totalTestCases: cases.length,
+      })
+      .returning({ id: submissions.id });
+
+    if (!submission) {
+      throw new InternalServerErrorException('Submission insert returned no rows');
+    }
+
+    const results = await Promise.allSettled(
+      cases.map((tc, i) => {
+        const timeoutMs = tc.timeoutMs ?? problemRow.timeLimit;
+        const memoryMb = tc.memoryMb ?? problemRow.memoryLimit;
+        const request: RunCodeRequest = {
+          code: input.code,
+          language: input.language,
+          stdin: tc.input,
+          ...(timeoutMs != null && { timeoutMs }),
+          ...(memoryMb != null && { memoryMb }),
+        };
+
+        return this.executionClient.submit(request).then(async ({ jobId }) => {
+          const meta: JobMeta = {
+            submissionId: submission.id,
+            testCaseIndex: i,
+            expectedOutput: tc.expectedOutput,
+          };
+          await this.cacheService.set(
+            `${EXEC_META_KEY_PREFIX}${jobId}`,
+            meta,
+            EXEC_META_TTL_SECONDS,
+          );
+          this.logger.debug(`Test case ${i} submitted: ${jobId}`);
+        });
+      }),
+    );
+
+    const failedCount = results.filter((r) => r.status === 'rejected').length;
+    if (failedCount > 0) {
+      this.logger.error(`${failedCount}/${cases.length} test case jobs failed to enqueue`);
+
+      const enqueuedCount = cases.length - failedCount;
+      await this.db
+        .update(submissions)
+        .set({
+          totalTestCases: enqueuedCount,
+          ...(enqueuedCount === 0 && { status: 'failed' as const, completedAt: new Date() }),
+        })
+        .where(eq(submissions.id, submission.id));
+    }
+
+    return { submissionId: submission.id };
+  }
 
   async getSubmissionDetails(
     submissionId: string,

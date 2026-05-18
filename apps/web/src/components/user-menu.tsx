@@ -1,5 +1,5 @@
 import { CONTROL_API } from '@syncode/contracts';
-import { Avatar, AvatarFallback } from '@syncode/ui';
+import { Avatar, AvatarFallback, AvatarImage } from '@syncode/ui';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { LogOut, User, UserRound } from 'lucide-react';
@@ -58,6 +58,7 @@ export function UserMenu() {
           className="inline-flex size-9 shrink-0 items-center justify-center rounded-full border border-border/80 bg-card/85 text-sm font-semibold text-foreground ring-1 ring-foreground/5 transition-all hover:border-primary/30 hover:bg-muted/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
         >
           <Avatar className="size-9 border-none bg-transparent text-foreground shadow-none ring-0">
+            {user?.avatarUrl ? <AvatarImage src={user.avatarUrl} alt="" /> : null}
             <AvatarFallback className="text-foreground">
               {accountInitial ?? <User className="size-4 text-primary" />}
             </AvatarFallback>

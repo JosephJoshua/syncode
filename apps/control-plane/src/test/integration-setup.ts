@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import * as schema from '@syncode/db';
 import {
   bookmarks,
+  codeSnapshots,
   type Database,
   peerFeedback,
   problems,
@@ -21,6 +22,7 @@ import {
   users,
 } from '@syncode/db';
 import type { RoomRole } from '@syncode/shared';
+import { eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { PG_CONFIG_PATH } from './global-setup.js';
@@ -120,9 +122,13 @@ export async function insertParticipant(
   db: Database,
   roomId: string,
   userId: string,
-  role: RoomRole = 'host',
+  role: RoomRole = 'interviewer',
+  overrides?: Partial<typeof roomParticipants.$inferInsert>,
 ) {
-  const [row] = await db.insert(roomParticipants).values({ roomId, userId, role }).returning();
+  const [row] = await db
+    .insert(roomParticipants)
+    .values({ roomId, userId, role, ...overrides })
+    .returning();
   return row;
 }
 
@@ -214,18 +220,65 @@ export async function insertSessionParticipant(
   return row;
 }
 
+export async function insertCodeSnapshot(
+  db: Database,
+  overrides: Omit<typeof codeSnapshots.$inferInsert, 'id'> &
+    Partial<Pick<typeof codeSnapshots.$inferInsert, 'id'>>,
+) {
+  const [row] = await db
+    .insert(codeSnapshots)
+    .values({
+      linesOfCode: overrides.code ? overrides.code.split('\n').length : 0,
+      ...overrides,
+    })
+    .returning();
+  return row;
+}
+
 export async function insertSessionReport(
   db: Database,
   sessionId: string,
   overrides?: Partial<typeof sessionReports.$inferInsert>,
 ) {
+  const participantUserId =
+    overrides?.userId ??
+    (
+      await db
+        .select({ userId: sessionParticipants.userId })
+        .from(sessionParticipants)
+        .where(eq(sessionParticipants.sessionId, sessionId))
+        .limit(1)
+    )[0]?.userId;
+
+  if (!participantUserId) {
+    throw new Error(`Cannot insert session report for session ${sessionId}: no participant found`);
+  }
+
   const [row] = await db
     .insert(sessionReports)
     .values({
       sessionId,
+      userId: participantUserId,
+      status: 'completed',
       overallScore: 80,
-      categoryScores: { problemSolving: 80, communication: 80 },
-      feedback: 'Good job',
+      report: {
+        sessionId,
+        generatedAt: new Date().toISOString(),
+        overallScore: 80,
+        dimensions: {
+          correctness: {
+            score: 80,
+            feedback: 'Good job',
+            evidence: [],
+          },
+        },
+        strengths: ['Good job'],
+        areasForImprovement: ['Keep practicing'],
+        detailedFeedback: 'Good job',
+        comparisonToHistory: null,
+        peerFeedbackSummary: null,
+      },
+      generatedAt: new Date(),
       ...overrides,
     })
     .returning();

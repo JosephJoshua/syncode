@@ -1,11 +1,21 @@
-import { Body, Controller, Delete, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
 import {
+  type BroadcastParticipantReadyRequest,
+  type ChangeLanguageRequest,
   COLLAB_INTERNAL,
   type CreateDocumentRequest,
   type KickUserRequest,
+  type UpdateRoomStateRequest,
 } from '@syncode/contracts';
 import { CollaborationService } from '../collaboration/collaboration.service.js';
+import { InternalCallbackGuard } from '../common/guards/internal-callback.guard.js';
 
+/**
+ * Receives HTTP callbacks FROM other planes.
+ * These endpoints are NOT exposed via nginx and require the shared
+ * `X-Internal-Secret` header enforced by `InternalCallbackGuard`.
+ */
+@UseGuards(InternalCallbackGuard)
 @Controller()
 export class InternalController {
   constructor(private readonly collaborationService: CollaborationService) {}
@@ -25,8 +35,28 @@ export class InternalController {
     return this.collaborationService.kickUser(roomId, body);
   }
 
-  @Get(COLLAB_INTERNAL.HEALTH.route)
-  health() {
-    return { status: 'ok' as const };
+  @Post(COLLAB_INTERNAL.UPDATE_ROOM_STATE.route)
+  updateRoomState(@Param('roomId') roomId: string, @Body() body: UpdateRoomStateRequest) {
+    return this.collaborationService.updateRoomState({ ...body, roomId });
+  }
+
+  @Post(COLLAB_INTERNAL.BROADCAST_PARTICIPANT_READY.route)
+  broadcastParticipantReady(
+    @Param('roomId') roomId: string,
+    @Body() body: BroadcastParticipantReadyRequest,
+  ) {
+    this.collaborationService.broadcastParticipantReady(roomId, body.userId, body.isReady);
+    return { success: true };
+  }
+
+  @Post(COLLAB_INTERNAL.CHANGE_LANGUAGE.route)
+  changeLanguage(@Param('roomId') roomId: string, @Body() body: ChangeLanguageRequest) {
+    return this.collaborationService.changeLanguage({ ...body, roomId });
+  }
+
+  @Get(COLLAB_INTERNAL.GET_ROOM_CHAT_HISTORY.route)
+  getRoomChatHistory(@Param('roomId') roomId: string, @Query('limit') limit?: string) {
+    const parsedLimit = limit ? Number.parseInt(limit, 10) : undefined;
+    return this.collaborationService.getRoomChatHistory(roomId, parsedLimit);
   }
 }

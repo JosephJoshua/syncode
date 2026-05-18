@@ -16,13 +16,21 @@ import { Route as PublicRegisterRouteImport } from './routes/_public/register'
 import { Route as PublicLoginRouteImport } from './routes/_public/login'
 import { Route as AppProfileRouteImport } from './routes/_app/profile'
 import { Route as AppDashboardRouteImport } from './routes/_app/dashboard'
+import { Route as AppCodeQualityRouteImport } from './routes/_app/code-quality'
 import { Route as AppBookmarksRouteImport } from './routes/_app/bookmarks'
-import { Route as AppRoomsIndexRouteImport } from './routes/_app/rooms.index'
+import { Route as AppRoomsRouteRouteImport } from './routes/_app/rooms/route'
+import { Route as AppRoomsIndexRouteImport } from './routes/_app/rooms/index'
 import { Route as AppProblemsIndexRouteImport } from './routes/_app/problems.index'
-import { Route as AppRoomsCreateRouteImport } from './routes/_app/rooms.create'
-import { Route as AppRoomsRoomIdRouteImport } from './routes/_app/rooms.$roomId'
+import { Route as AppSessionsCompareRouteImport } from './routes/_app/sessions.compare'
+import { Route as AppSessionsSessionIdRouteImport } from './routes/_app/sessions.$sessionId'
+import { Route as AppRoomsCreateRouteImport } from './routes/_app/rooms_.create'
+import { Route as AppRoomsRoomIdRouteImport } from './routes/_app/rooms_.$roomId'
+import { Route as AppRoomsMatchmakingRouteImport } from './routes/_app/rooms/matchmaking'
+import { Route as AppRoomsBrowseRouteImport } from './routes/_app/rooms/browse'
 import { Route as AppProblemsProblemIdRouteImport } from './routes/_app/problems.$problemId'
-import { Route as AppSessionsSessionIdFeedbackRouteImport } from './routes/_app/sessions.$sessionId.feedback'
+import { Route as AppAdminUsersRouteImport } from './routes/_app/admin.users'
+import { Route as AppAdminProblemsRouteImport } from './routes/_app/admin.problems'
+import { Route as AppAdminAuditLogsRouteImport } from './routes/_app/admin.audit-logs'
 
 const PublicRouteRoute = PublicRouteRouteImport.update({
   id: '/_public',
@@ -57,133 +65,218 @@ const AppDashboardRoute = AppDashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => AppRouteRoute,
 } as any)
+const AppCodeQualityRoute = AppCodeQualityRouteImport.update({
+  id: '/code-quality',
+  path: '/code-quality',
+  getParentRoute: () => AppRouteRoute,
+} as any)
 const AppBookmarksRoute = AppBookmarksRouteImport.update({
   id: '/bookmarks',
   path: '/bookmarks',
   getParentRoute: () => AppRouteRoute,
 } as any)
-const AppRoomsIndexRoute = AppRoomsIndexRouteImport.update({
-  id: '/rooms/',
-  path: '/rooms/',
+const AppRoomsRouteRoute = AppRoomsRouteRouteImport.update({
+  id: '/rooms',
+  path: '/rooms',
   getParentRoute: () => AppRouteRoute,
+} as any)
+const AppRoomsIndexRoute = AppRoomsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AppRoomsRouteRoute,
 } as any)
 const AppProblemsIndexRoute = AppProblemsIndexRouteImport.update({
   id: '/problems/',
   path: '/problems/',
   getParentRoute: () => AppRouteRoute,
 } as any)
+const AppSessionsCompareRoute = AppSessionsCompareRouteImport.update({
+  id: '/sessions/compare',
+  path: '/sessions/compare',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppSessionsSessionIdRoute = AppSessionsSessionIdRouteImport.update({
+  id: '/sessions/$sessionId',
+  path: '/sessions/$sessionId',
+  getParentRoute: () => AppRouteRoute,
+} as any)
 const AppRoomsCreateRoute = AppRoomsCreateRouteImport.update({
-  id: '/rooms/create',
+  id: '/rooms_/create',
   path: '/rooms/create',
   getParentRoute: () => AppRouteRoute,
 } as any)
 const AppRoomsRoomIdRoute = AppRoomsRoomIdRouteImport.update({
-  id: '/rooms/$roomId',
+  id: '/rooms_/$roomId',
   path: '/rooms/$roomId',
   getParentRoute: () => AppRouteRoute,
+} as any)
+const AppRoomsMatchmakingRoute = AppRoomsMatchmakingRouteImport.update({
+  id: '/matchmaking',
+  path: '/matchmaking',
+  getParentRoute: () => AppRoomsRouteRoute,
+} as any)
+const AppRoomsBrowseRoute = AppRoomsBrowseRouteImport.update({
+  id: '/browse',
+  path: '/browse',
+  getParentRoute: () => AppRoomsRouteRoute,
 } as any)
 const AppProblemsProblemIdRoute = AppProblemsProblemIdRouteImport.update({
   id: '/problems/$problemId',
   path: '/problems/$problemId',
   getParentRoute: () => AppRouteRoute,
 } as any)
-const AppSessionsSessionIdFeedbackRoute =
-  AppSessionsSessionIdFeedbackRouteImport.update({
-    id: '/sessions/$sessionId/feedback',
-    path: '/sessions/$sessionId/feedback',
-    getParentRoute: () => AppRouteRoute,
-  } as any)
+const AppAdminUsersRoute = AppAdminUsersRouteImport.update({
+  id: '/admin/users',
+  path: '/admin/users',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppAdminProblemsRoute = AppAdminProblemsRouteImport.update({
+  id: '/admin/problems',
+  path: '/admin/problems',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppAdminAuditLogsRoute = AppAdminAuditLogsRouteImport.update({
+  id: '/admin/audit-logs',
+  path: '/admin/audit-logs',
+  getParentRoute: () => AppRouteRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof PublicIndexRoute
+  '/rooms': typeof AppRoomsRouteRouteWithChildren
   '/bookmarks': typeof AppBookmarksRoute
+  '/code-quality': typeof AppCodeQualityRoute
   '/dashboard': typeof AppDashboardRoute
   '/profile': typeof AppProfileRoute
   '/login': typeof PublicLoginRoute
   '/register': typeof PublicRegisterRoute
+  '/admin/audit-logs': typeof AppAdminAuditLogsRoute
+  '/admin/problems': typeof AppAdminProblemsRoute
+  '/admin/users': typeof AppAdminUsersRoute
   '/problems/$problemId': typeof AppProblemsProblemIdRoute
+  '/rooms/browse': typeof AppRoomsBrowseRoute
+  '/rooms/matchmaking': typeof AppRoomsMatchmakingRoute
   '/rooms/$roomId': typeof AppRoomsRoomIdRoute
   '/rooms/create': typeof AppRoomsCreateRoute
+  '/sessions/$sessionId': typeof AppSessionsSessionIdRoute
+  '/sessions/compare': typeof AppSessionsCompareRoute
   '/problems/': typeof AppProblemsIndexRoute
   '/rooms/': typeof AppRoomsIndexRoute
-  '/sessions/$sessionId/feedback': typeof AppSessionsSessionIdFeedbackRoute
 }
 export interface FileRoutesByTo {
   '/': typeof PublicIndexRoute
   '/bookmarks': typeof AppBookmarksRoute
+  '/code-quality': typeof AppCodeQualityRoute
   '/dashboard': typeof AppDashboardRoute
   '/profile': typeof AppProfileRoute
   '/login': typeof PublicLoginRoute
   '/register': typeof PublicRegisterRoute
+  '/admin/audit-logs': typeof AppAdminAuditLogsRoute
+  '/admin/problems': typeof AppAdminProblemsRoute
+  '/admin/users': typeof AppAdminUsersRoute
   '/problems/$problemId': typeof AppProblemsProblemIdRoute
+  '/rooms/browse': typeof AppRoomsBrowseRoute
+  '/rooms/matchmaking': typeof AppRoomsMatchmakingRoute
   '/rooms/$roomId': typeof AppRoomsRoomIdRoute
   '/rooms/create': typeof AppRoomsCreateRoute
+  '/sessions/$sessionId': typeof AppSessionsSessionIdRoute
+  '/sessions/compare': typeof AppSessionsCompareRoute
   '/problems': typeof AppProblemsIndexRoute
   '/rooms': typeof AppRoomsIndexRoute
-  '/sessions/$sessionId/feedback': typeof AppSessionsSessionIdFeedbackRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_app': typeof AppRouteRouteWithChildren
   '/_public': typeof PublicRouteRouteWithChildren
+  '/_app/rooms': typeof AppRoomsRouteRouteWithChildren
   '/_app/bookmarks': typeof AppBookmarksRoute
+  '/_app/code-quality': typeof AppCodeQualityRoute
   '/_app/dashboard': typeof AppDashboardRoute
   '/_app/profile': typeof AppProfileRoute
   '/_public/login': typeof PublicLoginRoute
   '/_public/register': typeof PublicRegisterRoute
   '/_public/': typeof PublicIndexRoute
+  '/_app/admin/audit-logs': typeof AppAdminAuditLogsRoute
+  '/_app/admin/problems': typeof AppAdminProblemsRoute
+  '/_app/admin/users': typeof AppAdminUsersRoute
   '/_app/problems/$problemId': typeof AppProblemsProblemIdRoute
-  '/_app/rooms/$roomId': typeof AppRoomsRoomIdRoute
-  '/_app/rooms/create': typeof AppRoomsCreateRoute
+  '/_app/rooms/browse': typeof AppRoomsBrowseRoute
+  '/_app/rooms/matchmaking': typeof AppRoomsMatchmakingRoute
+  '/_app/rooms_/$roomId': typeof AppRoomsRoomIdRoute
+  '/_app/rooms_/create': typeof AppRoomsCreateRoute
+  '/_app/sessions/$sessionId': typeof AppSessionsSessionIdRoute
+  '/_app/sessions/compare': typeof AppSessionsCompareRoute
   '/_app/problems/': typeof AppProblemsIndexRoute
   '/_app/rooms/': typeof AppRoomsIndexRoute
-  '/_app/sessions/$sessionId/feedback': typeof AppSessionsSessionIdFeedbackRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/rooms'
     | '/bookmarks'
+    | '/code-quality'
     | '/dashboard'
     | '/profile'
     | '/login'
     | '/register'
+    | '/admin/audit-logs'
+    | '/admin/problems'
+    | '/admin/users'
     | '/problems/$problemId'
+    | '/rooms/browse'
+    | '/rooms/matchmaking'
     | '/rooms/$roomId'
     | '/rooms/create'
+    | '/sessions/$sessionId'
+    | '/sessions/compare'
     | '/problems/'
     | '/rooms/'
-    | '/sessions/$sessionId/feedback'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/bookmarks'
+    | '/code-quality'
     | '/dashboard'
     | '/profile'
     | '/login'
     | '/register'
+    | '/admin/audit-logs'
+    | '/admin/problems'
+    | '/admin/users'
     | '/problems/$problemId'
+    | '/rooms/browse'
+    | '/rooms/matchmaking'
     | '/rooms/$roomId'
     | '/rooms/create'
+    | '/sessions/$sessionId'
+    | '/sessions/compare'
     | '/problems'
     | '/rooms'
-    | '/sessions/$sessionId/feedback'
   id:
     | '__root__'
     | '/_app'
     | '/_public'
+    | '/_app/rooms'
     | '/_app/bookmarks'
+    | '/_app/code-quality'
     | '/_app/dashboard'
     | '/_app/profile'
     | '/_public/login'
     | '/_public/register'
     | '/_public/'
+    | '/_app/admin/audit-logs'
+    | '/_app/admin/problems'
+    | '/_app/admin/users'
     | '/_app/problems/$problemId'
-    | '/_app/rooms/$roomId'
-    | '/_app/rooms/create'
+    | '/_app/rooms/browse'
+    | '/_app/rooms/matchmaking'
+    | '/_app/rooms_/$roomId'
+    | '/_app/rooms_/create'
+    | '/_app/sessions/$sessionId'
+    | '/_app/sessions/compare'
     | '/_app/problems/'
     | '/_app/rooms/'
-    | '/_app/sessions/$sessionId/feedback'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -242,6 +335,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppDashboardRouteImport
       parentRoute: typeof AppRouteRoute
     }
+    '/_app/code-quality': {
+      id: '/_app/code-quality'
+      path: '/code-quality'
+      fullPath: '/code-quality'
+      preLoaderRoute: typeof AppCodeQualityRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
     '/_app/bookmarks': {
       id: '/_app/bookmarks'
       path: '/bookmarks'
@@ -249,12 +349,19 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppBookmarksRouteImport
       parentRoute: typeof AppRouteRoute
     }
+    '/_app/rooms': {
+      id: '/_app/rooms'
+      path: '/rooms'
+      fullPath: '/rooms'
+      preLoaderRoute: typeof AppRoomsRouteRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
     '/_app/rooms/': {
       id: '/_app/rooms/'
-      path: '/rooms'
+      path: '/'
       fullPath: '/rooms/'
       preLoaderRoute: typeof AppRoomsIndexRouteImport
-      parentRoute: typeof AppRouteRoute
+      parentRoute: typeof AppRoomsRouteRoute
     }
     '/_app/problems/': {
       id: '/_app/problems/'
@@ -263,19 +370,47 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppProblemsIndexRouteImport
       parentRoute: typeof AppRouteRoute
     }
-    '/_app/rooms/create': {
-      id: '/_app/rooms/create'
+    '/_app/sessions/compare': {
+      id: '/_app/sessions/compare'
+      path: '/sessions/compare'
+      fullPath: '/sessions/compare'
+      preLoaderRoute: typeof AppSessionsCompareRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/_app/sessions/$sessionId': {
+      id: '/_app/sessions/$sessionId'
+      path: '/sessions/$sessionId'
+      fullPath: '/sessions/$sessionId'
+      preLoaderRoute: typeof AppSessionsSessionIdRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/_app/rooms_/create': {
+      id: '/_app/rooms_/create'
       path: '/rooms/create'
       fullPath: '/rooms/create'
       preLoaderRoute: typeof AppRoomsCreateRouteImport
       parentRoute: typeof AppRouteRoute
     }
-    '/_app/rooms/$roomId': {
-      id: '/_app/rooms/$roomId'
+    '/_app/rooms_/$roomId': {
+      id: '/_app/rooms_/$roomId'
       path: '/rooms/$roomId'
       fullPath: '/rooms/$roomId'
       preLoaderRoute: typeof AppRoomsRoomIdRouteImport
       parentRoute: typeof AppRouteRoute
+    }
+    '/_app/rooms/matchmaking': {
+      id: '/_app/rooms/matchmaking'
+      path: '/matchmaking'
+      fullPath: '/rooms/matchmaking'
+      preLoaderRoute: typeof AppRoomsMatchmakingRouteImport
+      parentRoute: typeof AppRoomsRouteRoute
+    }
+    '/_app/rooms/browse': {
+      id: '/_app/rooms/browse'
+      path: '/browse'
+      fullPath: '/rooms/browse'
+      preLoaderRoute: typeof AppRoomsBrowseRouteImport
+      parentRoute: typeof AppRoomsRouteRoute
     }
     '/_app/problems/$problemId': {
       id: '/_app/problems/$problemId'
@@ -284,38 +419,78 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppProblemsProblemIdRouteImport
       parentRoute: typeof AppRouteRoute
     }
-    '/_app/sessions/$sessionId/feedback': {
-      id: '/_app/sessions/$sessionId/feedback'
-      path: '/sessions/$sessionId/feedback'
-      fullPath: '/sessions/$sessionId/feedback'
-      preLoaderRoute: typeof AppSessionsSessionIdFeedbackRouteImport
+    '/_app/admin/users': {
+      id: '/_app/admin/users'
+      path: '/admin/users'
+      fullPath: '/admin/users'
+      preLoaderRoute: typeof AppAdminUsersRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/_app/admin/problems': {
+      id: '/_app/admin/problems'
+      path: '/admin/problems'
+      fullPath: '/admin/problems'
+      preLoaderRoute: typeof AppAdminProblemsRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/_app/admin/audit-logs': {
+      id: '/_app/admin/audit-logs'
+      path: '/admin/audit-logs'
+      fullPath: '/admin/audit-logs'
+      preLoaderRoute: typeof AppAdminAuditLogsRouteImport
       parentRoute: typeof AppRouteRoute
     }
   }
 }
 
+interface AppRoomsRouteRouteChildren {
+  AppRoomsBrowseRoute: typeof AppRoomsBrowseRoute
+  AppRoomsMatchmakingRoute: typeof AppRoomsMatchmakingRoute
+  AppRoomsIndexRoute: typeof AppRoomsIndexRoute
+}
+
+const AppRoomsRouteRouteChildren: AppRoomsRouteRouteChildren = {
+  AppRoomsBrowseRoute: AppRoomsBrowseRoute,
+  AppRoomsMatchmakingRoute: AppRoomsMatchmakingRoute,
+  AppRoomsIndexRoute: AppRoomsIndexRoute,
+}
+
+const AppRoomsRouteRouteWithChildren = AppRoomsRouteRoute._addFileChildren(
+  AppRoomsRouteRouteChildren,
+)
+
 interface AppRouteRouteChildren {
+  AppRoomsRouteRoute: typeof AppRoomsRouteRouteWithChildren
   AppBookmarksRoute: typeof AppBookmarksRoute
+  AppCodeQualityRoute: typeof AppCodeQualityRoute
   AppDashboardRoute: typeof AppDashboardRoute
   AppProfileRoute: typeof AppProfileRoute
+  AppAdminAuditLogsRoute: typeof AppAdminAuditLogsRoute
+  AppAdminProblemsRoute: typeof AppAdminProblemsRoute
+  AppAdminUsersRoute: typeof AppAdminUsersRoute
   AppProblemsProblemIdRoute: typeof AppProblemsProblemIdRoute
   AppRoomsRoomIdRoute: typeof AppRoomsRoomIdRoute
   AppRoomsCreateRoute: typeof AppRoomsCreateRoute
+  AppSessionsSessionIdRoute: typeof AppSessionsSessionIdRoute
+  AppSessionsCompareRoute: typeof AppSessionsCompareRoute
   AppProblemsIndexRoute: typeof AppProblemsIndexRoute
-  AppRoomsIndexRoute: typeof AppRoomsIndexRoute
-  AppSessionsSessionIdFeedbackRoute: typeof AppSessionsSessionIdFeedbackRoute
 }
 
 const AppRouteRouteChildren: AppRouteRouteChildren = {
+  AppRoomsRouteRoute: AppRoomsRouteRouteWithChildren,
   AppBookmarksRoute: AppBookmarksRoute,
+  AppCodeQualityRoute: AppCodeQualityRoute,
   AppDashboardRoute: AppDashboardRoute,
   AppProfileRoute: AppProfileRoute,
+  AppAdminAuditLogsRoute: AppAdminAuditLogsRoute,
+  AppAdminProblemsRoute: AppAdminProblemsRoute,
+  AppAdminUsersRoute: AppAdminUsersRoute,
   AppProblemsProblemIdRoute: AppProblemsProblemIdRoute,
   AppRoomsRoomIdRoute: AppRoomsRoomIdRoute,
   AppRoomsCreateRoute: AppRoomsCreateRoute,
+  AppSessionsSessionIdRoute: AppSessionsSessionIdRoute,
+  AppSessionsCompareRoute: AppSessionsCompareRoute,
   AppProblemsIndexRoute: AppProblemsIndexRoute,
-  AppRoomsIndexRoute: AppRoomsIndexRoute,
-  AppSessionsSessionIdFeedbackRoute: AppSessionsSessionIdFeedbackRoute,
 }
 
 const AppRouteRouteWithChildren = AppRouteRoute._addFileChildren(

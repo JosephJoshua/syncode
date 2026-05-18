@@ -1,3 +1,4 @@
+import type { TagInfo } from '@syncode/contracts';
 import {
   Button,
   Card,
@@ -15,14 +16,13 @@ import {
   type ProblemStatus,
   STATUS_OPTIONS,
 } from './problems.types.js';
-import type { ProblemTagInfo } from './problems-tags.js';
 
 interface FilterOptionProps {
-  id: string;
-  label: string;
-  checked: boolean;
-  count?: number;
-  onCheckedChange: () => void;
+  readonly id: string;
+  readonly label: string;
+  readonly checked: boolean;
+  readonly count?: number;
+  readonly onCheckedChange: () => void;
 }
 
 function FilterOption({ id, label, checked, count, onCheckedChange }: FilterOptionProps) {
@@ -45,16 +45,16 @@ function FilterOption({ id, label, checked, count, onCheckedChange }: FilterOpti
 }
 
 export interface ProblemsFilterSidebarProps {
-  selectedDifficulties: ProblemDifficulty[];
-  selectedStatuses: ProblemStatus[];
-  selectedTags: string[];
-  difficultyCounts: Record<ProblemDifficulty, number>;
-  statusCounts: Record<ProblemStatus, number>;
-  popularTags: ProblemTagInfo[];
-  onToggleDifficulty: (value: ProblemDifficulty) => void;
-  onToggleStatus: (value: ProblemStatus) => void;
-  onToggleTag: (value: string) => void;
-  onClearAll: () => void;
+  readonly selectedDifficulties: ProblemDifficulty[];
+  readonly selectedStatuses: ProblemStatus[];
+  readonly selectedTags: string[];
+  readonly difficultyCounts: Record<ProblemDifficulty, number>;
+  readonly statusCounts: Record<ProblemStatus, number>;
+  readonly popularTags: TagInfo[];
+  readonly onToggleDifficulty: (value: ProblemDifficulty) => void;
+  readonly onToggleStatus: (value: ProblemStatus) => void;
+  readonly onToggleTag: (value: string) => void;
+  readonly onClearAll: () => void;
 }
 
 export function ProblemsFilterSidebar({

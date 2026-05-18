@@ -23,11 +23,12 @@ export {
 } from './problem.js';
 export type { RoomMode, RoomParticipant } from './room.js';
 export {
-  ALL_ROOM_ROLES as ROOM_ROLES,
   getNextStatuses,
+  isRoomRole,
   isValidStatusTransition,
   JOINABLE_ROOM_ROLES as JOINABLE_ROLES,
   ROOM_MODES,
+  ROOM_ROLES,
   ROOM_STATUS_LABELS,
   ROOM_STATUSES,
   RoomRole,
@@ -35,3 +36,24 @@ export {
   VALID_STATUS_TRANSITIONS,
 } from './room.js';
 export { UserRole } from './user.js';
+export type { WeaknessCategory, WeaknessTrend } from './weakness.js';
+export { WEAKNESS_CATEGORIES, WEAKNESS_TRENDS } from './weakness.js';
+export type {
+  WhiteboardAllowedContentType,
+  WhiteboardAllowedImageType,
+  WhiteboardAllowedVideoType,
+  WhiteboardAssetMeta,
+  WhiteboardLayer,
+  WhiteboardShapeMeta,
+} from './whiteboard.js';
+export {
+  isWhiteboardContentType,
+  isWhiteboardImageType,
+  isWhiteboardLayer,
+  isWhiteboardVideoType,
+  maxBytesForContentType,
+  WHITEBOARD_ALLOWED_IMAGE_TYPES,
+  WHITEBOARD_ALLOWED_VIDEO_TYPES,
+  WHITEBOARD_ASSET_LIMITS,
+  WHITEBOARD_LAYERS,
+} from './whiteboard.js';

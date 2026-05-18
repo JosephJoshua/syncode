@@ -1,5 +1,6 @@
 import {
   JOINABLE_ROLES,
+  PROBLEM_DIFFICULTIES,
   ROOM_MODES,
   ROOM_ROLES,
   ROOM_STATUSES,
@@ -86,48 +87,301 @@ export const runCodeSchema = z
 
 export type RunCodeInput = z.infer<typeof runCodeSchema>;
 
-export const testCaseSchema = z
-  .object({
-    input: z
-      .string()
-      .min(1)
-      .describe('Input provided via stdin')
-      .meta({ examples: ['5\n3 1 4 1 5'] }),
-    expectedOutput: z
-      .string()
-      .min(1)
-      .describe('Expected stdout output')
-      .meta({ examples: ['1 1 3 4 5'] }),
-    description: z
-      .string()
-      .optional()
-      .describe('Test case description')
-      .meta({ examples: ['Basic sorting test'] }),
-    timeoutMs: z
-      .number()
-      .positive()
-      .optional()
-      .describe('Per-test timeout override (ms)')
-      .meta({ examples: [5000] }),
-    memoryMb: z
-      .number()
-      .positive()
-      .optional()
-      .describe('Per-test memory limit override (MB)')
-      .meta({ examples: [128] }),
-  })
-  .strict();
-
-export type TestCaseInput = z.infer<typeof testCaseSchema>;
-
 export const submitProblemSchema = runCodeSchema
-  .omit({ stdin: true })
-  .extend({
-    testCases: z.array(testCaseSchema).nonempty().describe('Test cases to run the code against'),
-  })
+  .omit({ stdin: true, timeoutMs: true, memoryMb: true })
   .strict();
 
 export type SubmitProblemInput = z.infer<typeof submitProblemSchema>;
+
+export const hintLevelSchema = z.enum(['subtle', 'moderate', 'direct']);
+export type HintLevel = z.infer<typeof hintLevelSchema>;
+
+export const requestRoomAiHintSchema = z
+  .object({
+    code: z
+      .string()
+      .min(1)
+      .describe('Current code snapshot in the editor')
+      .meta({ examples: ['def two_sum(nums, target): ...'] }),
+    language: z
+      .enum(SUPPORTED_LANGUAGES)
+      .describe('Programming language')
+      .meta({ examples: ['python'] }),
+    hintLevel: hintLevelSchema.describe('Hint intensity level'),
+    followUpToHintId: z
+      .uuid()
+      .optional()
+      .describe('Existing hint ID to continue as a stage-2 follow-up'),
+    reflectionResponse: z
+      .string()
+      .max(2000)
+      .optional()
+      .describe('Optional learner reflection response for stage-2 follow-up'),
+    noReply: z
+      .boolean()
+      .optional()
+      .describe('Set true to continue follow-up without user reflection text'),
+  })
+  .refine(
+    (value) => {
+      const hasFollowUpTarget = Boolean(value.followUpToHintId);
+      const hasReflection = Boolean(value.reflectionResponse?.trim());
+
+      if (!hasFollowUpTarget) {
+        return !hasReflection && value.noReply !== true;
+      }
+
+      return hasReflection || value.noReply === true;
+    },
+    {
+      message:
+        'Follow-up hints require followUpToHintId and either reflectionResponse or noReply=true',
+      path: ['followUpToHintId'],
+    },
+  )
+  .strict();
+
+export type RequestRoomAiHintInput = z.infer<typeof requestRoomAiHintSchema>;
+
+export const requestRoomAiHintResponseSchema = z.object({
+  jobId: z.string().describe('AI hint job ID — poll GET /rooms/:id/ai/hint/:jobId for the result'),
+  hintId: z.uuid().describe('Persistent hint identifier'),
+  phase: z.enum(['initial', 'follow_up']).describe('Hint stage'),
+});
+
+export type RequestRoomAiHintResponse = z.infer<typeof requestRoomAiHintResponseSchema>;
+
+export const getRoomAiHintResultResponseSchema = z.discriminatedUnion('status', [
+  z.object({
+    status: z.literal('pending'),
+    jobId: z.string(),
+  }),
+  z.object({
+    status: z.literal('ready'),
+    jobId: z.string(),
+    hintId: z.uuid(),
+    phase: z.enum(['initial', 'follow_up']),
+    hint: z.string(),
+    suggestedApproach: z.string().optional(),
+    reflectionPrompt: z.string().optional(),
+  }),
+  z.object({
+    status: z.literal('failed'),
+    jobId: z.string(),
+  }),
+]);
+
+export type GetRoomAiHintResultResponse = z.infer<typeof getRoomAiHintResultResponseSchema>;
+
+export const aiInterviewQuestionTypes = [
+  'complexity',
+  'bug_risk',
+  'edge_case',
+  'optimization',
+  'data_structure_choice',
+  'correctness',
+  'readability',
+  'other',
+] as const;
+
+export const aiInterviewCodeContextSchema = z
+  .object({
+    language: z.enum(SUPPORTED_LANGUAGES).describe('Programming language for the code context'),
+    file: z.string().min(1).max(120).describe('Display file or logical source name'),
+    codeSnippet: z.string().min(1).max(4000).describe('Focused code snippet for the question'),
+    startLine: z.number().int().positive().describe('1-based starting line for the snippet'),
+    endLine: z.number().int().positive().describe('1-based ending line for the snippet'),
+    startColumn: z.number().int().positive().optional().describe('1-based selection start column'),
+    endColumn: z.number().int().positive().optional().describe('1-based selection end column'),
+    cursorLine: z.number().int().positive().optional().describe('1-based cursor line'),
+    cursorColumn: z.number().int().positive().optional().describe('1-based cursor column'),
+    questionType: z
+      .enum(aiInterviewQuestionTypes)
+      .optional()
+      .describe('Reason this context is relevant to the follow-up question'),
+    reason: z.string().min(1).max(160).optional().describe('Short human-readable context reason'),
+  })
+  .refine((value) => value.endLine >= value.startLine, {
+    message: 'endLine must be greater than or equal to startLine',
+    path: ['endLine'],
+  });
+
+export type AiInterviewCodeContext = z.infer<typeof aiInterviewCodeContextSchema>;
+
+export const aiInterviewExecutionSummarySchema = z.object({
+  status: z.enum(['pending', 'running', 'completed', 'failed']),
+  passedTestCases: z.number().int().nonnegative(),
+  totalTestCases: z.number().int().nonnegative(),
+  failedTestCases: z.number().int().nonnegative(),
+  errorTestCases: z.number().int().nonnegative(),
+  allTestsPassed: z.boolean(),
+  submittedAt: z.iso.datetime(),
+});
+
+export type AiInterviewExecutionSummary = z.infer<typeof aiInterviewExecutionSummarySchema>;
+
+export const aiInterviewCodeAnalysisContextSchema = z.object({
+  summary: z.string().min(1).max(2000),
+  focusAreas: z
+    .object({
+      complexity: z.string().min(1).max(1000),
+      edgeCases: z.string().min(1).max(1000),
+      readability: z.string().min(1).max(1000),
+    })
+    .optional(),
+  followUpQuestions: z.array(z.string().min(1).max(500)).max(5).optional(),
+});
+
+export type AiInterviewCodeAnalysisContext = z.infer<typeof aiInterviewCodeAnalysisContextSchema>;
+
+export const requestRoomAiInterviewSchema = z
+  .object({
+    userMessage: z.string().min(1).max(2000).describe('Candidate message to the AI interviewer'),
+    conversationHistory: z
+      .array(
+        z.object({
+          role: z.enum(['user', 'assistant']),
+          content: z.string().max(4000),
+        }),
+      )
+      .max(40)
+      .describe('Prior conversation turns'),
+    currentCode: z.string().max(16_000).describe('Current code in the editor'),
+    codeContext: aiInterviewCodeContextSchema.describe('Specific code context for the follow-up'),
+    latestExecutionSummary: aiInterviewExecutionSummarySchema.optional(),
+    codeAnalysisContext: aiInterviewCodeAnalysisContextSchema.optional(),
+  })
+  .strict();
+
+export type RequestRoomAiInterviewInput = z.infer<typeof requestRoomAiInterviewSchema>;
+
+export const requestRoomAiInterviewResponseSchema = z.object({
+  jobId: z
+    .string()
+    .describe('AI interview job ID — poll GET /rooms/:id/ai/interview/:jobId for the result'),
+});
+
+export type RequestRoomAiInterviewResponse = z.infer<typeof requestRoomAiInterviewResponseSchema>;
+
+export const getRoomAiInterviewResultResponseSchema = z.discriminatedUnion('status', [
+  z.object({
+    status: z.literal('pending'),
+    jobId: z.string(),
+  }),
+  z.object({
+    status: z.literal('ready'),
+    jobId: z.string(),
+    message: z.string(),
+    followUpQuestion: z.string().optional(),
+    codeContext: aiInterviewCodeContextSchema,
+    codeAnnotations: z.array(z.object({ line: z.number().int(), comment: z.string() })).optional(),
+    audioUrl: z.string().url().optional(),
+  }),
+  z.object({
+    status: z.literal('failed'),
+    jobId: z.string(),
+  }),
+]);
+
+export type GetRoomAiInterviewResultResponse = z.infer<
+  typeof getRoomAiInterviewResultResponseSchema
+>;
+
+export const requestRoomCodeAnalysisSchema = z
+  .object({
+    code: z
+      .string()
+      .min(1)
+      .max(16_000)
+      .describe('Current code snapshot in the editor')
+      .meta({ examples: ['def two_sum(nums, target): ...'] }),
+    language: z
+      .enum(SUPPORTED_LANGUAGES)
+      .describe('Programming language')
+      .meta({ examples: ['python'] }),
+  })
+  .strict();
+
+export type RequestRoomCodeAnalysisInput = z.infer<typeof requestRoomCodeAnalysisSchema>;
+
+export const requestRoomCodeAnalysisResponseSchema = z.object({
+  jobId: z
+    .string()
+    .describe('AI code analysis job ID - poll GET /rooms/:id/ai/code-analysis/:jobId'),
+});
+
+export type RequestRoomCodeAnalysisResponse = z.infer<typeof requestRoomCodeAnalysisResponseSchema>;
+
+export const getRoomCodeAnalysisResultResponseSchema = z.discriminatedUnion('status', [
+  z.object({
+    status: z.literal('pending'),
+    jobId: z.string(),
+  }),
+  z.object({
+    status: z.literal('ready'),
+    jobId: z.string(),
+    summary: z.string(),
+    focusAreas: z.object({
+      complexity: z.string(),
+      edgeCases: z.string(),
+      readability: z.string(),
+    }),
+    followUpQuestions: z.array(z.string()),
+  }),
+  z.object({
+    status: z.literal('failed'),
+    jobId: z.string(),
+  }),
+]);
+
+export type GetRoomCodeAnalysisResultResponse = z.infer<
+  typeof getRoomCodeAnalysisResultResponseSchema
+>;
+
+export const roomChatMediaUploadRequestSchema = z
+  .object({
+    fileName: z
+      .string()
+      .min(1)
+      .max(255)
+      .describe('Original file name')
+      .meta({ examples: ['debug-output.png'] }),
+    contentType: z
+      .string()
+      .min(1)
+      .max(255)
+      .describe('MIME type')
+      .meta({ examples: ['image/png'] }),
+    sizeBytes: z
+      .number()
+      .int()
+      .positive()
+      .describe('File size in bytes')
+      .meta({ examples: [204_800] }),
+  })
+  .strict();
+
+export type RoomChatMediaUploadInput = z.infer<typeof roomChatMediaUploadRequestSchema>;
+
+export const roomChatMediaUploadResponseSchema = z.object({
+  key: z.string().describe('Storage object key'),
+  uploadUrl: z.string().describe('Presigned PUT upload URL'),
+  downloadUrl: z.string().describe('Download URL for rendering in chat'),
+  fileName: z.string().describe('Original file name'),
+  contentType: z.string().describe('MIME type'),
+  sizeBytes: z.number().int().positive().describe('File size in bytes'),
+});
+
+export type RoomChatMediaUploadResponse = z.infer<typeof roomChatMediaUploadResponseSchema>;
+
+export const submitResponseSchema = z.object({
+  submissionId: z
+    .uuid()
+    .describe('Submission ID for polling results via GET /submissions/:submissionId')
+    .meta({ examples: ['550e8400-e29b-41d4-a716-446655440000'] }),
+});
+
+export type SubmitResponse = z.infer<typeof submitResponseSchema>;
 
 const roomBaseFields = {
   roomId: z.uuid().describe('Room identifier'),
@@ -175,6 +429,24 @@ export const destroyRoomResponseSchema = z.object({
 
 export type DestroyRoomResponse = z.infer<typeof destroyRoomResponseSchema>;
 
+export const transferRoomOwnershipSchema = z
+  .object({
+    targetUserId: z.uuid().describe('Participant user ID to become the new host'),
+  })
+  .strict();
+
+export type TransferRoomOwnershipInput = z.infer<typeof transferRoomOwnershipSchema>;
+
+export const transferRoomOwnershipResponseSchema = z.object({
+  roomId: z.uuid().describe('Room identifier'),
+  previousHostId: z.uuid().describe('Previous host user ID'),
+  currentHostId: z.uuid().describe('Current host user ID'),
+  transferredAt: z.iso.datetime().describe('ISO 8601 ownership transfer timestamp'),
+  transferredBy: z.uuid().describe('User ID that initiated the transfer'),
+});
+
+export type TransferRoomOwnershipResponse = z.infer<typeof transferRoomOwnershipResponseSchema>;
+
 export const runCodeResponseSchema = z.object({
   jobId: z
     .string()
@@ -183,30 +455,6 @@ export const runCodeResponseSchema = z.object({
 });
 
 export type RunCodeResponse = z.infer<typeof runCodeResponseSchema>;
-
-export const submitResultItemSchema = z.object({
-  jobId: z
-    .string()
-    .nullable()
-    .describe('Job ID for this test case. null if the submission failed to enqueue.')
-    .meta({ examples: ['exec-job-abc-123'] }),
-  testCaseIndex: z
-    .number()
-    .describe('Index of the test case in the submitted array')
-    .meta({ examples: [0] }),
-  description: z
-    .string()
-    .optional()
-    .describe('Test case description (echoed from input)')
-    .meta({ examples: ['Basic sorting test'] }),
-  error: z
-    .string()
-    .optional()
-    .describe('Present when the test case failed to enqueue. jobId will be null.')
-    .meta({ examples: ['submission_failed'] }),
-});
-
-export type SubmitResultItem = z.infer<typeof submitResultItemSchema>;
 
 // ── List rooms ─────────────────────────────────────────────────────
 
@@ -242,7 +490,8 @@ export const roomParticipantSummarySchema = z.object({
   displayName: z.string().nullable().describe('Display name'),
   avatarUrl: z.string().nullable().describe('Avatar URL'),
   role: z.enum(ROOM_ROLES).describe('Participant role'),
-  isActive: z.boolean().describe('Whether the participant is currently connected'),
+  isActive: z.boolean().describe('Whether the participant is currently active in the room'),
+  isReady: z.boolean().describe('Whether the participant has marked themselves as ready'),
   joinedAt: z.iso.datetime().describe('ISO 8601 join timestamp'),
 });
 
@@ -250,6 +499,7 @@ export type RoomParticipantSummary = z.infer<typeof roomParticipantSummarySchema
 
 export const roomDetailSchema = z.object({
   ...roomBaseFields,
+  sessionId: z.uuid().nullable().describe('Current or completed session for this room'),
   problemId: z.uuid().nullable().describe('Pre-selected problem'),
   config: roomConfigSchema.required().describe('Room configuration'),
   participants: z.array(roomParticipantSummarySchema).describe('Room participants'),
@@ -259,6 +509,13 @@ export const roomDetailSchema = z.object({
   timerPaused: z.boolean().describe('Whether the timer is paused'),
   elapsedMs: z.number().int().describe('Total elapsed coding time in ms'),
   editorLocked: z.boolean().describe('Whether the editor is locked'),
+  collabToken: z
+    .string()
+    .optional()
+    .describe(
+      'Collab-plane WebSocket auth token (present for active participants in non-finished rooms)',
+    ),
+  collabUrl: z.string().optional().describe('Collab-plane WebSocket URL'),
 });
 
 export type RoomDetail = z.infer<typeof roomDetailSchema>;
@@ -268,23 +525,56 @@ export const joinRoomSchema = z
     roomCode: z
       .string()
       .length(6)
-      .describe('6-char invite code')
+      .optional()
+      .describe(
+        '6-char invite code (required for private rooms / first-time join, optional for public rooms or when reactivating)',
+      )
       .meta({ examples: ['A3K7M2'] }),
-    preferredRole: z.enum(JOINABLE_ROLES).optional().describe('Preferred role in the room'),
+    requestedRole: z.enum(JOINABLE_ROLES).optional().describe('Requested role in the room'),
   })
   .strict();
 
 export type JoinRoomInput = z.infer<typeof joinRoomSchema>;
 
+export const ROLE_ASSIGNMENT_REASONS = ['requested', 'auto-assigned', 'fallback-observer'] as const;
+
+export type RoleAssignmentReason = (typeof ROLE_ASSIGNMENT_REASONS)[number];
+
 export const joinRoomResponseSchema = z.object({
   room: roomDetailSchema.describe('Full room detail after joining'),
   assignedRole: z.enum(ROOM_ROLES).describe('The role assigned to the joining user'),
+  requestedRole: z
+    .enum(JOINABLE_ROLES)
+    .nullable()
+    .describe('The role requested by the joining user, if any'),
+  assignmentReason: z
+    .enum(ROLE_ASSIGNMENT_REASONS)
+    .describe('How the final assigned role was chosen'),
   myCapabilities: z.array(z.string()).describe('Resolved room capabilities for assigned role'),
   collabToken: z.string().describe('Yjs auth token for collab-plane WebSocket'),
   collabUrl: z.string().describe('Collab-plane WebSocket URL'),
 });
 
 export type JoinRoomResponse = z.infer<typeof joinRoomResponseSchema>;
+
+export const updateRoomParticipantSchema = z
+  .object({
+    role: z.enum(ROOM_ROLES).describe('Updated participant role'),
+  })
+  .strict();
+
+export type UpdateRoomParticipantInput = z.infer<typeof updateRoomParticipantSchema>;
+
+export const updateRoomParticipantResponseSchema = z.object({
+  room: roomDetailSchema.describe('Full room detail after reassignment'),
+  updatedUserId: z.uuid().describe('Participant whose role was updated'),
+  previousRole: z.enum(ROOM_ROLES).describe('Participant role before the update'),
+  currentRole: z.enum(ROOM_ROLES).describe('Participant role after the update'),
+  updatedAt: z.iso.datetime().describe('ISO 8601 update timestamp'),
+  updatedBy: z.uuid().describe('User ID that performed the update'),
+});
+
+export type UpdateRoomParticipantResponse = z.infer<typeof updateRoomParticipantResponseSchema>;
 
 export const transitionRoomPhaseSchema = z
   .object({
@@ -303,3 +593,124 @@ export const transitionRoomPhaseResponseSchema = z.object({
 });
 
 export type TransitionRoomPhaseResponse = z.infer<typeof transitionRoomPhaseResponseSchema>;
+
+export const lockEditorResponseSchema = z.object({
+  roomId: z.uuid().describe('Room identifier'),
+  editorLocked: z.literal(true).describe('Always true after a successful lock'),
+  changed: z.boolean().describe('Whether this call mutated state (false on idempotent no-ops)'),
+  lockedAt: z.iso
+    .datetime()
+    .optional()
+    .describe('ISO 8601 timestamp when the lock was applied. Omitted on no-ops.'),
+  lockedBy: z.uuid().optional().describe('User ID that applied the lock. Omitted on no-ops.'),
+});
+
+export type LockEditorResponse = z.infer<typeof lockEditorResponseSchema>;
+
+export const unlockEditorResponseSchema = z.object({
+  roomId: z.uuid().describe('Room identifier'),
+  editorLocked: z.literal(false).describe('Always false after a successful unlock'),
+  changed: z.boolean().describe('Whether this call mutated state (false on idempotent no-ops)'),
+  unlockedAt: z.iso
+    .datetime()
+    .optional()
+    .describe('ISO 8601 timestamp when the lock was released. Omitted on no-ops.'),
+  unlockedBy: z.uuid().optional().describe('User ID that released the lock. Omitted on no-ops.'),
+});
+
+export type UnlockEditorResponse = z.infer<typeof unlockEditorResponseSchema>;
+
+// ── Browse public rooms ──────────────────────────────────────────────
+
+export const BROWSEABLE_ROOM_STATUSES = ['waiting', 'warmup', 'coding', 'wrapup'] as const;
+
+export type BrowseableRoomStatus = (typeof BROWSEABLE_ROOM_STATUSES)[number];
+
+export const browseRoomsQuerySchema = paginationQuerySchema.extend({
+  status: z
+    .enum(BROWSEABLE_ROOM_STATUSES)
+    .optional()
+    .describe('Filter by high-level browseable room status bucket')
+    .meta({ examples: ['waiting'] }),
+  language: z
+    .enum(SUPPORTED_LANGUAGES)
+    .optional()
+    .describe('Filter by programming language')
+    .meta({ examples: ['python'] }),
+  difficulty: z
+    .enum(PROBLEM_DIFFICULTIES)
+    .optional()
+    .describe('Filter by problem difficulty')
+    .meta({ examples: ['easy'] }),
+  search: z
+    .string()
+    .trim()
+    .min(1)
+    .max(100)
+    .optional()
+    .describe('Case-insensitive substring match on problem title')
+    .meta({ examples: ['two sum'] }),
+});
+
+export type BrowseRoomsQuery = z.infer<typeof browseRoomsQuerySchema>;
+
+export const publicRoomSummarySchema = z.object({
+  roomId: z.uuid().describe('Room identifier'),
+  name: z.string().nullable().describe('Room name'),
+  status: z.enum(ROOM_STATUSES).describe('Room status'),
+  mode: z.enum(ROOM_MODES).describe('Room mode'),
+  hostId: z.uuid().describe('Host user ID'),
+  hostName: z.string().describe('Host username'),
+  hostAvatarUrl: z.string().nullable().describe('Host avatar URL'),
+  language: z.enum(SUPPORTED_LANGUAGES).nullable().describe('Programming language'),
+  problemTitle: z.string().nullable().describe('Problem title'),
+  problemDifficulty: z.enum(PROBLEM_DIFFICULTIES).nullable().describe('Problem difficulty'),
+  participantCount: z.number().int().describe('Number of active participants'),
+  isParticipant: z
+    .boolean()
+    .describe('Whether the requesting user is an active participant in this room.'),
+  maxParticipants: z.number().int().describe('Maximum participants allowed'),
+  createdAt: z.iso.datetime().describe('ISO 8601 creation timestamp'),
+});
+
+export type PublicRoomSummary = z.infer<typeof publicRoomSummarySchema>;
+
+export const browseRoomsResponseSchema = z.object({
+  data: z.array(publicRoomSummarySchema),
+  pagination: paginationSchema,
+});
+
+export type BrowseRoomsResponse = z.infer<typeof browseRoomsResponseSchema>;
+
+// ── Change room language ────────────────────────────────────────────
+
+export const changeRoomLanguageSchema = z
+  .object({
+    language: z
+      .enum(SUPPORTED_LANGUAGES)
+      .describe('Programming language to switch the room to')
+      .meta({ examples: ['python'] }),
+  })
+  .strict();
+
+export type ChangeRoomLanguageInput = z.infer<typeof changeRoomLanguageSchema>;
+
+// ── Collab recovery ──────────────────────────────────────────────────
+
+export const ensureCollabResponseSchema = z.object({
+  recreated: z
+    .boolean()
+    .describe('True if the collab doc was missing and has been recreated from the stored snapshot'),
+});
+
+export type EnsureCollabResponse = z.infer<typeof ensureCollabResponseSchema>;
+
+// ── Media token ──────────────────────────────────────────────────────
+
+export const mediaTokenResponseSchema = z.object({
+  token: z.string().describe('LiveKit JWT'),
+  url: z.string().describe('LiveKit WebSocket URL'),
+  expiresAt: z.iso.datetime().describe('Token expiry (ISO 8601)'),
+});
+
+export type MediaTokenResponse = z.infer<typeof mediaTokenResponseSchema>;

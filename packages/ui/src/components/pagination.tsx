@@ -47,7 +47,7 @@ function PaginationLink({
   );
 }
 
-function ChevronLeftIcon(props: React.ComponentProps<'svg'>) {
+function ChevronLeftIcon(props: Readonly<React.ComponentProps<'svg'>>) {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -66,7 +66,7 @@ function ChevronLeftIcon(props: React.ComponentProps<'svg'>) {
   );
 }
 
-function ChevronRightIcon(props: React.ComponentProps<'svg'>) {
+function ChevronRightIcon(props: Readonly<React.ComponentProps<'svg'>>) {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"

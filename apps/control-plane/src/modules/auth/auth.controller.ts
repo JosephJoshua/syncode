@@ -3,6 +3,7 @@ import {
   Controller,
   HttpCode,
   HttpStatus,
+  Ip,
   Post,
   Res,
   UnauthorizedException,
@@ -74,11 +75,13 @@ export class AuthController {
   async register(
     @Body() body: RegisterDto,
     @Res({ passthrough: true }) response: Response,
+    @Ip() ipAddress: string,
   ): Promise<RegisterResponseDto> {
     const registerResult = await this.authService.register(
       body.username,
       body.email,
       body.password,
+      ipAddress,
     );
 
     this.setRefreshTokenCookie(response, registerResult.refreshToken);
@@ -111,8 +114,9 @@ export class AuthController {
   async login(
     @Body() body: LoginDto,
     @Res({ passthrough: true }) response: Response,
+    @Ip() ipAddress: string,
   ): Promise<LoginResponseDto> {
-    const loginResult = await this.authService.login(body.identifier, body.password);
+    const loginResult = await this.authService.login(body.identifier, body.password, ipAddress);
 
     this.setRefreshTokenCookie(response, loginResult.refreshToken);
 
@@ -172,9 +176,10 @@ export class AuthController {
   async logout(
     @Cookies(AuthController.REFRESH_TOKEN_COOKIE_NAME) refreshToken: string | undefined,
     @Res({ passthrough: true }) response: Response,
+    @Ip() ipAddress: string,
   ): Promise<void> {
     this.assertRefreshTokenCookie(refreshToken);
-    await this.authService.logout(refreshToken);
+    await this.authService.logout(refreshToken, ipAddress);
 
     this.clearRefreshTokenCookie(response);
   }

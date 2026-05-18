@@ -4,14 +4,15 @@ import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import { ERROR_CODES } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
-import { CACHE_SERVICE } from '@syncode/shared/ports';
+import { CACHE_SERVICE, STORAGE_SERVICE } from '@syncode/shared/ports';
 import cookieParser from 'cookie-parser';
 import { ZodValidationPipe } from 'nestjs-zod';
 import request from 'supertest';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
 import { InMemoryCacheService } from '@/test/in-memory-cache.service.js';
 import { createTestDb } from '@/test/integration-setup.js';
-import { createMockConfigService } from '@/test/mock-factories.js';
+import { createMockConfigService, createMockStorageService } from '@/test/mock-factories.js';
+import { AuditService } from '../admin/audit.service.js';
 import { AuthController } from './auth.controller.js';
 import { AuthService } from './auth.service.js';
 
@@ -45,8 +46,10 @@ beforeEach(async () => {
     controllers: [AuthController],
     providers: [
       AuthService,
+      AuditService,
       { provide: DB_CLIENT, useValue: db },
       { provide: CACHE_SERVICE, useValue: new InMemoryCacheService() },
+      { provide: STORAGE_SERVICE, useValue: createMockStorageService() },
       {
         provide: JwtService,
         useValue: new JwtService({
@@ -97,9 +100,39 @@ describe('POST /auth/register', () => {
     expect(res.headers['set-cookie']).toEqual(
       expect.arrayContaining([expect.stringContaining('refreshToken=')]),
     );
+
+    const auditLog = await db.query.auditLogs.findFirst({
+      where: (table, { eq }) => eq(table.action, 'auth.register'),
+    });
+    expect(auditLog).toMatchObject({
+      actorId: res.body.user.id,
+      targetType: 'user',
+      targetId: res.body.user.id,
+      metadata: { email: 'alice@example.com', username: 'alice_sync' },
+    });
   });
 
-  it('GIVEN duplicate email WHEN registering THEN returns 409', async () => {
+  it('GIVEN trusted proxy forwarding WHEN registering THEN records forwarded client IP', async () => {
+    app.getHttpAdapter().getInstance().set('trust proxy', 'loopback');
+
+    const res = await request(app.getHttpServer())
+      .post('/auth/register')
+      .set('X-Forwarded-For', '198.51.100.10')
+      .send({
+        username: 'alice_sync',
+        email: 'alice@example.com',
+        password: 'secret123',
+      });
+
+    expect(res.status).toBe(201);
+
+    const auditLog = await db.query.auditLogs.findFirst({
+      where: (table, { eq }) => eq(table.action, 'auth.register'),
+    });
+    expect(auditLog?.ipAddress).toBe('198.51.100.10');
+  });
+
+  it('GIVEN duplicate email WHEN registering THEN returns 409 with AUTH_EMAIL_TAKEN code', async () => {
     const agent = request(app.getHttpServer());
 
     await agent.post('/auth/register').send({
@@ -115,6 +148,26 @@ describe('POST /auth/register', () => {
     });
 
     expect(res.status).toBe(409);
+    expect(res.body.code).toBe('AUTH_EMAIL_TAKEN');
+  });
+
+  it('GIVEN duplicate username WHEN registering THEN returns 409 with AUTH_USERNAME_TAKEN code', async () => {
+    const agent = request(app.getHttpServer());
+
+    await agent.post('/auth/register').send({
+      username: 'alice_sync',
+      email: 'alice@example.com',
+      password: 'secret123',
+    });
+
+    const res = await agent.post('/auth/register').send({
+      username: 'alice_sync',
+      email: 'different@example.com',
+      password: 'secret123',
+    });
+
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe('AUTH_USERNAME_TAKEN');
   });
 });
 
@@ -140,6 +193,16 @@ describe('POST /auth/login', () => {
     expect(res.headers['set-cookie']).toEqual(
       expect.arrayContaining([expect.stringContaining('refreshToken=')]),
     );
+
+    const auditLog = await db.query.auditLogs.findFirst({
+      where: (table, { eq }) => eq(table.action, 'auth.login'),
+    });
+    expect(auditLog).toMatchObject({
+      actorId: res.body.user.id,
+      targetType: 'user',
+      targetId: res.body.user.id,
+      metadata: { identifierType: 'email' },
+    });
   });
 
   it('GIVEN wrong password WHEN logging in THEN returns 401', async () => {
@@ -202,6 +265,13 @@ describe('POST /auth/logout', () => {
     expect(logoutResponse.headers['set-cookie']).toEqual(
       expect.arrayContaining([expect.stringContaining('refreshToken=;')]),
     );
+    const auditLog = await db.query.auditLogs.findFirst({
+      where: (table, { eq }) => eq(table.action, 'auth.logout'),
+    });
+    expect(auditLog).toMatchObject({
+      targetType: 'user',
+      metadata: expect.objectContaining({ tokenId: expect.any(String) }),
+    });
 
     const refreshResponse = await request(app.getHttpServer())
       .post('/auth/refresh')

@@ -1,4 +1,11 @@
-import type { RoomMode, RoomRole, SupportedLanguage } from '@syncode/shared';
+import type { CodeSnapshotTrigger, SessionReport } from '@syncode/contracts';
+import type {
+  ProblemDifficulty,
+  RoomMode,
+  RoomRole,
+  RoomStatus,
+  SupportedLanguage,
+} from '@syncode/shared';
 
 export interface SessionSummaryResult {
   sessionId: string;
@@ -33,13 +40,16 @@ export interface SessionDetailResult {
   problem: {
     id: string;
     title: string;
-    difficulty: string;
+    difficulty: ProblemDifficulty;
   } | null;
   language: SupportedLanguage | null;
   duration: number;
   participants: SessionDetailParticipantResult[];
   runs: SessionRunResult[];
   submissions: SessionSubmissionResult[];
+  report: SessionReportResult | null;
+  latestCodeSnapshot: SessionLatestCodeSnapshotResult | null;
+  peerFeedback: SessionPeerFeedbackResult[];
   hasReport: boolean;
   hasFeedback: boolean;
   hasRecording: boolean;
@@ -51,6 +61,7 @@ export interface SessionDetailParticipantResult {
   userId: string;
   username: string;
   displayName: string | null;
+  avatarUrl: string | null;
   role: RoomRole;
   joinedAt: Date;
   leftAt: Date | null;
@@ -67,5 +78,48 @@ export interface SessionSubmissionResult {
   status: 'completed' | 'failed';
   passed: number;
   total: number;
+  createdAt: Date;
+}
+
+export interface SessionCodeSnapshotResult {
+  snapshotId: string;
+  timestamp: Date;
+  trigger: CodeSnapshotTrigger;
+  language: SupportedLanguage;
+  code: string;
+  linesOfCode: number;
+  phase: RoomStatus | null;
+}
+
+export type SessionReportResult = Omit<SessionReport, 'generatedAt'> & {
+  generatedAt: Date;
+};
+
+export interface SessionLatestCodeSnapshotResult {
+  id: string;
+  code: string;
+  language: SupportedLanguage;
+  trigger: string;
+  linesOfCode: number | null;
+  createdAt: Date;
+  phase: RoomStatus | null;
+}
+
+export interface SessionPeerFeedbackResult {
+  id: string;
+  reviewerId: string;
+  reviewerName: string;
+  reviewerAvatarUrl: string | null;
+  candidateId: string;
+  candidateName: string;
+  candidateAvatarUrl: string | null;
+  problemSolvingRating: number;
+  communicationRating: number;
+  codeQualityRating: number;
+  debuggingRating: number;
+  overallRating: number;
+  strengths: string;
+  improvements: string;
+  wouldPairAgain: boolean;
   createdAt: Date;
 }

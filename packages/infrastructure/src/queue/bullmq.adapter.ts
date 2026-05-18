@@ -60,10 +60,10 @@ export class BullMqAdapter implements IQueueService, OnModuleDestroy {
     const failures: string[] = [];
 
     for (const job of addedJobs) {
-      if (!job.id) {
-        failures.push(job.name ?? 'unknown');
-      } else {
+      if (job.id) {
         jobIds.push(job.id);
+      } else {
+        failures.push(job.name ?? 'unknown');
       }
     }
 

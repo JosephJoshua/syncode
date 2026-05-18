@@ -1,6 +1,7 @@
-import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, Post, Query, UseGuards } from '@nestjs/common';
 import {
   ApiBearerAuth,
+  ApiBody,
   ApiOperation,
   ApiParam,
   ApiQuery,
@@ -14,6 +15,7 @@ import { ErrorResponseDto } from '@/common/dto/error-response.dto.js';
 import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard.js';
 import type { AuthUser } from '@/modules/auth/auth.types.js';
 import {
+  CreateProblemDto,
   ProblemDetailDto,
   ProblemsListQueryDto,
   ProblemsListResponseDto,
@@ -36,7 +38,8 @@ export class ProblemsController {
     name: 'difficulty',
     required: false,
     enum: [...PROBLEM_DIFFICULTIES],
-    description: 'Filter by difficulty',
+    isArray: true,
+    description: 'Filter by difficulties; repeat the query param or pass a comma-separated list',
   })
   @ApiQuery({
     name: 'tags',
@@ -72,6 +75,22 @@ export class ProblemsController {
     @Query() query: ProblemsListQueryDto,
   ): Promise<ProblemsListResponseDto> {
     return this.problemsService.listProblems(user.id, query);
+  }
+
+  @Post(CONTROL_API.PROBLEMS.CREATE.route)
+  @HttpCode(201)
+  @ApiOperation({ summary: 'Create a problem' })
+  @ApiBody({ type: CreateProblemDto })
+  @ApiResponse({ status: 201, type: ProblemDetailDto, description: 'Created problem' })
+  @ApiResponse({ status: 400, type: ErrorResponseDto, description: 'Validation error' })
+  @ApiResponse({ status: 401, type: ErrorResponseDto, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, type: ErrorResponseDto, description: 'Admin access required' })
+  @ApiResponse({ status: 409, type: ErrorResponseDto, description: 'Problem title already exists' })
+  async createProblem(
+    @CurrentUser() user: AuthUser,
+    @Body() body: CreateProblemDto,
+  ): Promise<ProblemDetailDto> {
+    return this.problemsService.createProblem(user.id, body);
   }
 
   // /problems/tags MUST be registered before /problems/:id

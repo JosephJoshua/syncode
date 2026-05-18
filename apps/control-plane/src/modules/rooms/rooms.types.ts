@@ -1,5 +1,11 @@
-import type { DestroyDocumentResponse, RoomConfig } from '@syncode/contracts';
 import type {
+  AiInterviewCodeContext,
+  DestroyDocumentResponse,
+  RoleAssignmentReason,
+  RoomConfig,
+} from '@syncode/contracts';
+import type {
+  ProblemDifficulty,
   RoomCapability,
   RoomMode,
   RoomRole,
@@ -31,6 +37,23 @@ export interface RoomSummaryResult extends RoomBaseResult {
   participantCount: number;
 }
 
+export interface PublicRoomSummaryResult {
+  roomId: string;
+  name: string | null;
+  status: RoomStatus;
+  mode: RoomMode;
+  hostId: string;
+  hostName: string;
+  hostAvatarUrl: string | null;
+  language: SupportedLanguage | null;
+  problemTitle: string | null;
+  problemDifficulty: ProblemDifficulty | null;
+  participantCount: number;
+  isParticipant: boolean;
+  maxParticipants: number;
+  createdAt: Date;
+}
+
 export interface ParticipantResult {
   userId: string;
   username: string;
@@ -38,10 +61,12 @@ export interface ParticipantResult {
   avatarUrl: string | null;
   role: RoomRole;
   isActive: boolean;
+  isReady: boolean;
   joinedAt: Date;
 }
 
 export interface RoomDetailResult extends RoomBaseResult {
+  sessionId: string | null;
   problemId: string | null;
   config: RoomConfig;
   participants: ParticipantResult[];
@@ -51,6 +76,8 @@ export interface RoomDetailResult extends RoomBaseResult {
   timerPaused: boolean;
   elapsedMs: number;
   editorLocked: boolean;
+  collabToken?: string;
+  collabUrl?: string;
 }
 
 export interface DestroyRoomResult {
@@ -61,7 +88,112 @@ export interface DestroyRoomResult {
 export interface JoinRoomResult {
   room: RoomDetailResult;
   assignedRole: RoomRole;
+  requestedRole: RoomRole | null;
+  assignmentReason: RoleAssignmentReason;
   myCapabilities: RoomCapability[];
   collabToken: string;
   collabUrl: string;
+}
+
+export interface TransferOwnershipResult {
+  roomId: string;
+  previousHostId: string;
+  currentHostId: string;
+  transferredAt: Date;
+  transferredBy: string;
+}
+
+export interface UpdateParticipantRoleResult {
+  room: RoomDetailResult;
+  updatedUserId: string;
+  previousRole: RoomRole;
+  currentRole: RoomRole;
+  updatedAt: Date;
+  updatedBy: string;
+}
+
+export interface TransitionPhaseResult {
+  roomId: string;
+  previousStatus: RoomStatus;
+  currentStatus: RoomStatus;
+  transitionedAt: Date;
+  transitionedBy: string;
+}
+
+export interface SetEditorLockResult {
+  roomId: string;
+  editorLocked: boolean;
+  changed: boolean;
+  changedAt?: Date;
+  changedBy?: string;
+}
+
+export interface MediaTokenResult {
+  token: string;
+  url: string;
+  expiresAt: Date;
+}
+
+export interface RequestRoomAiHintResult {
+  jobId: string;
+  hintId: string;
+  phase: 'initial' | 'follow_up';
+}
+
+export type GetRoomAiHintResult =
+  | { status: 'pending'; jobId: string }
+  | {
+      status: 'ready';
+      jobId: string;
+      hintId: string;
+      phase: 'initial' | 'follow_up';
+      hint: string;
+      suggestedApproach?: string;
+      reflectionPrompt?: string;
+    }
+  | { status: 'failed'; jobId: string };
+
+export interface RequestRoomCodeAnalysisResult {
+  jobId: string;
+}
+
+export type GetRoomCodeAnalysisResult =
+  | { status: 'pending'; jobId: string }
+  | {
+      status: 'ready';
+      jobId: string;
+      summary: string;
+      focusAreas: {
+        complexity: string;
+        edgeCases: string;
+        readability: string;
+      };
+      followUpQuestions: string[];
+    }
+  | { status: 'failed'; jobId: string };
+
+export interface RequestRoomAiInterviewResult {
+  jobId: string;
+}
+
+export type GetRoomAiInterviewResult =
+  | { status: 'pending'; jobId: string }
+  | {
+      status: 'ready';
+      jobId: string;
+      message: string;
+      followUpQuestion?: string;
+      codeContext: AiInterviewCodeContext;
+      codeAnnotations?: Array<{ line: number; comment: string }>;
+      audioUrl?: string;
+    }
+  | { status: 'failed'; jobId: string };
+
+export interface RoomChatMediaUploadResult {
+  key: string;
+  uploadUrl: string;
+  downloadUrl: string;
+  fileName: string;
+  contentType: string;
+  sizeBytes: number;
 }

@@ -19,7 +19,19 @@ async function bootstrap() {
   const logger = app.get(Logger);
   app.useLogger(logger);
 
-  app.useWebSocketAdapter(new WsAdapter(app));
+  app.useWebSocketAdapter(
+    new WsAdapter(app, {
+      messageParser: (data: { toString(): string }) => {
+        try {
+          const message = JSON.parse(data.toString());
+          return { event: message.type, data: message.data };
+        } catch {
+          // Binary message — handled by raw listener in gateway
+          return { event: '', data: null };
+        }
+      },
+    }),
+  );
 
   app.enableShutdownHooks();
 

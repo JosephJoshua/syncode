@@ -1,3 +1,4 @@
+import { WEAKNESS_CATEGORIES, WEAKNESS_TRENDS } from '@syncode/shared';
 import { pgEnum } from 'drizzle-orm/pg-core';
 
 export const userRoleEnum = pgEnum('user_role', ['user', 'admin']);
@@ -25,9 +26,15 @@ export const supportedLanguageEnum = pgEnum('supported_language', [
 
 export const roomModeEnum = pgEnum('room_mode', ['ai', 'peer']);
 
-export const roomRoleEnum = pgEnum('room_role', ['host', 'interviewer', 'candidate', 'spectator']);
+export const roomRoleEnum = pgEnum('room_role', ['interviewer', 'candidate', 'observer']);
 
 export const sessionStatusEnum = pgEnum('session_status', ['ongoing', 'finished']);
+
+export const sessionReportStatusEnum = pgEnum('session_report_status', [
+  'pending',
+  'completed',
+  'failed',
+]);
 
 export const submissionStatusEnum = pgEnum('submission_status', [
   'pending',
@@ -69,15 +76,6 @@ export const roleSwapStatusEnum = pgEnum('role_swap_status', [
   'expired',
 ]);
 
-export const weaknessCategoryEnum = pgEnum('weakness_category', [
-  'edge_cases',
-  'time_complexity',
-  'space_complexity',
-  'variable_naming',
-  'code_structure',
-  'off_by_one',
-  'input_validation',
-  'communication',
-]);
+export const weaknessCategoryEnum = pgEnum('weakness_category', WEAKNESS_CATEGORIES);
 
-export const weaknessTrendEnum = pgEnum('weakness_trend', ['improving', 'stable', 'worsening']);
+export const weaknessTrendEnum = pgEnum('weakness_trend', WEAKNESS_TRENDS);

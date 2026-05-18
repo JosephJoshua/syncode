@@ -1,18 +1,34 @@
 import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import {
+  AI_CODE_ANALYSIS_QUEUE,
+  AI_CODE_ANALYSIS_RESULT_QUEUE,
   AI_HINT_QUEUE,
   AI_HINT_RESULT_QUEUE,
   AI_INTERVIEW_QUEUE,
   AI_INTERVIEW_RESULT_QUEUE,
   AI_REVIEW_QUEUE,
   AI_REVIEW_RESULT_QUEUE,
+  AI_SESSION_REPORT_QUEUE,
+  AI_SESSION_REPORT_RESULT_QUEUE,
+  AI_WEAKNESS_ANALYSIS_QUEUE,
+  AI_WEAKNESS_ANALYSIS_RESULT_QUEUE,
+  type AnalyzeCodeRequest,
   type GenerateHintRequest,
+  type GenerateSessionReportRequest,
+  type GenerateWeaknessAnalysisRequest,
   type InterviewResponseRequest,
   type ReviewCodeRequest,
 } from '@syncode/contracts';
 import type { IQueueService, QueueJob } from '@syncode/shared/ports';
 import { QUEUE_SERVICE } from '@syncode/shared/ports';
 import { AiService } from './ai.service.js';
+
+const RESULT_JOB_OPTIONS = {
+  attempts: 3,
+  backoff: { type: 'exponential', delay: 1500 },
+  removeOnComplete: 100,
+  removeOnFail: false,
+} as const;
 
 @Injectable()
 export class AiProcessor implements OnModuleInit {
@@ -33,6 +49,24 @@ export class AiProcessor implements OnModuleInit {
     );
     this.logger.log(`Registered processor on ${AI_HINT_QUEUE}`);
 
+    this.queueService.process<AnalyzeCodeRequest>(
+      AI_CODE_ANALYSIS_QUEUE,
+      async (job: QueueJob<AnalyzeCodeRequest>) => {
+        await this.handleCodeAnalysisJob(job);
+      },
+      { concurrency: 3 },
+    );
+    this.logger.log(`Registered processor on ${AI_CODE_ANALYSIS_QUEUE}`);
+
+    this.queueService.process<GenerateWeaknessAnalysisRequest>(
+      AI_WEAKNESS_ANALYSIS_QUEUE,
+      async (job: QueueJob<GenerateWeaknessAnalysisRequest>) => {
+        await this.handleWeaknessAnalysisJob(job);
+      },
+      { concurrency: 2 },
+    );
+    this.logger.log(`Registered processor on ${AI_WEAKNESS_ANALYSIS_QUEUE}`);
+
     this.queueService.process<ReviewCodeRequest>(
       AI_REVIEW_QUEUE,
       async (job: QueueJob<ReviewCodeRequest>) => {
@@ -50,6 +84,15 @@ export class AiProcessor implements OnModuleInit {
       { concurrency: 3 },
     );
     this.logger.log(`Registered processor on ${AI_INTERVIEW_QUEUE}`);
+
+    this.queueService.process<GenerateSessionReportRequest>(
+      AI_SESSION_REPORT_QUEUE,
+      async (job: QueueJob<GenerateSessionReportRequest>) => {
+        await this.handleSessionReportJob(job);
+      },
+      { concurrency: 1 },
+    );
+    this.logger.log(`Registered processor on ${AI_SESSION_REPORT_QUEUE}`);
   }
 
   private async handleHintJob(job: QueueJob<GenerateHintRequest>): Promise<void> {
@@ -58,9 +101,55 @@ export class AiProcessor implements OnModuleInit {
 
     // Errors should propagate so BullMQ retries on transient failures.
     const result = await this.aiService.generateHint(request);
-    await this.queueService.enqueue(AI_HINT_RESULT_QUEUE, 'hint-result', { ...result, jobId });
+    await this.queueService.enqueue(
+      AI_HINT_RESULT_QUEUE,
+      'hint-result',
+      {
+        ...result,
+        jobId,
+      },
+      RESULT_JOB_OPTIONS,
+    );
 
     this.logger.log(`Hint job ${jobId} completed`);
+  }
+
+  private async handleCodeAnalysisJob(job: QueueJob<AnalyzeCodeRequest>): Promise<void> {
+    const { id: jobId, data: request } = job;
+    this.logger.log(`Processing code analysis job ${jobId}`);
+
+    const result = await this.aiService.analyzeCode(request);
+    await this.queueService.enqueue(
+      AI_CODE_ANALYSIS_RESULT_QUEUE,
+      'code-analysis-result',
+      {
+        ...result,
+        jobId,
+      },
+      RESULT_JOB_OPTIONS,
+    );
+
+    this.logger.log(`Code analysis job ${jobId} completed`);
+  }
+
+  private async handleWeaknessAnalysisJob(
+    job: QueueJob<GenerateWeaknessAnalysisRequest>,
+  ): Promise<void> {
+    const { id: jobId, data: request } = job;
+    this.logger.log(`Processing weakness analysis job ${jobId} for session ${request.sessionId}`);
+
+    const result = await this.aiService.generateWeaknessAnalysis(request);
+    await this.queueService.enqueue(
+      AI_WEAKNESS_ANALYSIS_RESULT_QUEUE,
+      'weakness-analysis-result',
+      {
+        ...result,
+        jobId,
+      },
+      RESULT_JOB_OPTIONS,
+    );
+
+    this.logger.log(`Weakness analysis job ${jobId} completed`);
   }
 
   private async handleReviewJob(job: QueueJob<ReviewCodeRequest>): Promise<void> {
@@ -69,7 +158,15 @@ export class AiProcessor implements OnModuleInit {
 
     // Errors should propagate so BullMQ retries on transient failures.
     const result = await this.aiService.reviewCode(request);
-    await this.queueService.enqueue(AI_REVIEW_RESULT_QUEUE, 'review-result', { ...result, jobId });
+    await this.queueService.enqueue(
+      AI_REVIEW_RESULT_QUEUE,
+      'review-result',
+      {
+        ...result,
+        jobId,
+      },
+      RESULT_JOB_OPTIONS,
+    );
 
     this.logger.log(`Review job ${jobId} completed`);
   }
@@ -80,11 +177,43 @@ export class AiProcessor implements OnModuleInit {
 
     // Errors should propagate so BullMQ retries on transient failures.
     const result = await this.aiService.generateInterviewResponse(request);
-    await this.queueService.enqueue(AI_INTERVIEW_RESULT_QUEUE, 'interview-result', {
-      ...result,
-      jobId,
-    });
+    await this.queueService.enqueue(
+      AI_INTERVIEW_RESULT_QUEUE,
+      'interview-result',
+      {
+        ...result,
+        jobId,
+      },
+      RESULT_JOB_OPTIONS,
+    );
 
     this.logger.log(`Interview job ${jobId} completed`);
+  }
+
+  private async handleSessionReportJob(job: QueueJob<GenerateSessionReportRequest>): Promise<void> {
+    const { id: jobId, data: request } = job;
+    this.logger.log(`Processing session report job ${jobId} for session ${request.sessionId}`);
+    try {
+      const result = await this.aiService.generateSessionReport(request);
+      await this.queueService.enqueue(
+        AI_SESSION_REPORT_RESULT_QUEUE,
+        'session-report-result',
+        {
+          ...result,
+          jobId,
+        },
+        RESULT_JOB_OPTIONS,
+      );
+
+      this.logger.log(`Session report job ${jobId} completed`);
+    } catch (error) {
+      this.logger.error(
+        `Session report job ${jobId} failed for session ${request.sessionId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+        error instanceof Error ? error.stack : undefined,
+      );
+      throw error;
+    }
   }
 }

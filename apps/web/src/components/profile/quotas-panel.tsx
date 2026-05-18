@@ -5,8 +5,8 @@ import { Skeleton } from '@/components/ui/skeleton.js';
 import i18n from '@/lib/i18n.js';
 
 interface QuotasPanelProps {
-  quotas: UserQuotasResponse | undefined;
-  isLoading: boolean;
+  readonly quotas: UserQuotasResponse | undefined;
+  readonly isLoading: boolean;
 }
 
 export function QuotasPanel({ quotas, isLoading }: QuotasPanelProps) {

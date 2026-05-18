@@ -26,6 +26,7 @@ import { type S3Config, S3ConfigSchema } from '../config.js';
 export class S3StorageAdapter implements IStorageService, OnModuleDestroy {
   private readonly logger = new Logger(S3StorageAdapter.name);
   private readonly client: S3Client;
+  private readonly presignClient: S3Client;
   private readonly bucket: string;
 
   constructor(config: S3Config) {
@@ -44,6 +45,19 @@ export class S3StorageAdapter implements IStorageService, OnModuleDestroy {
     };
 
     this.client = new S3Client(clientConfig);
+
+    // Presigned URLs need a browser-reachable endpoint (e.g. nginx proxy in prod)
+    if (
+      validatedConfig.publicEndpoint &&
+      validatedConfig.publicEndpoint !== validatedConfig.endpoint
+    ) {
+      this.presignClient = new S3Client({
+        ...clientConfig,
+        endpoint: validatedConfig.publicEndpoint,
+      });
+    } else {
+      this.presignClient = this.client;
+    }
   }
 
   async upload(
@@ -91,55 +105,16 @@ export class S3StorageAdapter implements IStorageService, OnModuleDestroy {
     deleted: string[];
     failed: Array<{ key: string; error: string }>;
   }> {
+    if (keys.length === 0) return { deleted: [], failed: [] };
+
     const deleted: string[] = [];
     const failed: Array<{ key: string; error: string }> = [];
 
-    if (keys.length === 0) {
-      return { deleted, failed };
-    }
-
     // Handle 1000-key limit per DeleteObjects request.
-    const chunks = this.chunkArray(keys, 1000);
-
-    for (const chunk of chunks) {
-      try {
-        const command = new DeleteObjectsCommand({
-          Bucket: this.bucket,
-          Delete: {
-            Objects: chunk.map((key) => ({ Key: key })),
-            Quiet: false,
-          },
-        });
-
-        const result = await this.client.send(command);
-
-        if (result.Deleted) {
-          for (const obj of result.Deleted) {
-            if (obj.Key) {
-              deleted.push(obj.Key);
-            }
-          }
-        }
-
-        if (result.Errors) {
-          for (const error of result.Errors) {
-            if (error.Key) {
-              failed.push({
-                key: error.Key,
-                error: error.Message ?? 'Unknown error',
-              });
-            }
-          }
-        }
-      } catch (error) {
-        this.logger.error('S3 deleteMany chunk failed:', error);
-        for (const key of chunk) {
-          failed.push({
-            key,
-            error: error instanceof Error ? error.message : 'Chunk deletion failed',
-          });
-        }
-      }
+    for (const chunk of this.chunkArray(keys, 1000)) {
+      const result = await this.deleteChunk(chunk);
+      deleted.push(...result.deleted);
+      failed.push(...result.failed);
     }
 
     if (failed.length > 0) {
@@ -149,6 +124,41 @@ export class S3StorageAdapter implements IStorageService, OnModuleDestroy {
     }
 
     return { deleted, failed };
+  }
+
+  private async deleteChunk(chunk: string[]): Promise<{
+    deleted: string[];
+    failed: Array<{ key: string; error: string }>;
+  }> {
+    try {
+      const command = new DeleteObjectsCommand({
+        Bucket: this.bucket,
+        Delete: {
+          Objects: chunk.map((key) => ({ Key: key })),
+          Quiet: false,
+        },
+      });
+      const result = await this.client.send(command);
+      const deleted =
+        result.Deleted?.map((obj) => obj.Key).filter((k): k is string => Boolean(k)) ?? [];
+      const failed =
+        result.Errors?.filter((e): e is typeof e & { Key: string } => Boolean(e.Key)).map(
+          (error) => ({
+            key: error.Key,
+            error: error.Message ?? 'Unknown error',
+          }),
+        ) ?? [];
+      return { deleted, failed };
+    } catch (error) {
+      this.logger.error('S3 deleteMany chunk failed:', error);
+      return {
+        deleted: [],
+        failed: chunk.map((key) => ({
+          key,
+          error: error instanceof Error ? error.message : 'Chunk deletion failed',
+        })),
+      };
+    }
   }
 
   async exists(key: string): Promise<boolean> {
@@ -230,7 +240,7 @@ export class S3StorageAdapter implements IStorageService, OnModuleDestroy {
       ContentType: options.contentType,
     });
 
-    return getSignedUrl(this.client, command, {
+    return getSignedUrl(this.presignClient, command, {
       expiresIn: options.expiresInSeconds,
     });
   }
@@ -241,7 +251,7 @@ export class S3StorageAdapter implements IStorageService, OnModuleDestroy {
       Key: key,
     });
 
-    return getSignedUrl(this.client, command, {
+    return getSignedUrl(this.presignClient, command, {
       expiresIn: expiresInSeconds,
     });
   }
@@ -249,6 +259,9 @@ export class S3StorageAdapter implements IStorageService, OnModuleDestroy {
   async shutdown(): Promise<void> {
     this.logger.log('Shutting down S3 storage adapter...');
     this.client.destroy();
+    if (this.presignClient !== this.client) {
+      this.presignClient.destroy();
+    }
   }
 
   async onModuleDestroy(): Promise<void> {

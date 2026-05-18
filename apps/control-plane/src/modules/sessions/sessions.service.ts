@@ -1,7 +1,13 @@
 import { ForbiddenException, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { ERROR_CODES, type ListSessionsQuery, SESSIONS_SORT_BY_OPTIONS } from '@syncode/contracts';
+import {
+  ERROR_CODES,
+  type ListCodeSnapshotsQuery,
+  type ListSessionsQuery,
+  SESSIONS_SORT_BY_OPTIONS,
+} from '@syncode/contracts';
 import type { Database } from '@syncode/db';
 import {
+  codeSnapshots,
   peerFeedback,
   problems,
   runs,
@@ -13,10 +19,17 @@ import {
   submissions,
   users,
 } from '@syncode/db';
+import { type IStorageService, STORAGE_SERVICE } from '@syncode/shared/ports';
 import { type PaginatedResult, paginate } from '@syncode/shared/server';
 import { and, asc, type Column, desc, eq, gt, gte, inArray, lt, lte, or, sql } from 'drizzle-orm';
+import { resolveAvatarUrls } from '@/common/resolve-avatar-urls.js';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
-import type { SessionDetailResult, SessionSummaryResult } from './sessions.types.js';
+import { filterReviewFeedback, isAllReviewFeedbackSubmitted } from './session-feedback-utils.js';
+import type {
+  SessionCodeSnapshotResult,
+  SessionDetailResult,
+  SessionSummaryResult,
+} from './sessions.types.js';
 
 type SortBy = (typeof SESSIONS_SORT_BY_OPTIONS)[number];
 
@@ -28,7 +41,10 @@ const TERMINAL_STATUSES = ['completed', 'failed'] as const;
 export class SessionsService {
   private readonly logger = new Logger(SessionsService.name);
 
-  constructor(@Inject(DB_CLIENT) private readonly db: Database) {}
+  constructor(
+    @Inject(DB_CLIENT) private readonly db: Database,
+    @Inject(STORAGE_SERVICE) private readonly storageService: IStorageService,
+  ) {}
 
   async listSessions(
     userId: string,
@@ -70,13 +86,17 @@ export class SessionsService {
             cursorSort,
             cursorId,
             compareOp,
+            userId,
           );
           if (cursorCondition) {
             conditions.push(cursorCondition);
           }
         }
 
-        const sortColumn = this.getSortColumn(query.sortBy);
+        const sortColumn =
+          query.sortBy === 'overallScore'
+            ? this.getOverallScoreSortExpr(userId)
+            : this.getSortColumn(query.sortBy);
 
         const baseQuery = this.db
           .select({
@@ -87,8 +107,21 @@ export class SessionsService {
             difficulty: problems.difficulty,
             language: sessions.language,
             durationMs: sessions.durationMs,
-            overallScore: sessionReports.overallScore,
-            hasReport: sql<boolean>`${sessionReports.id} IS NOT NULL`.as('has_report'),
+            overallScore: sql<number | null>`(
+              SELECT ${sessionReports.overallScore}
+              FROM ${sessionReports}
+              WHERE ${sessionReports.sessionId} = ${sessions.id}
+                AND ${sessionReports.userId} = ${userId}
+                AND ${sessionReports.status} = 'completed'
+              LIMIT 1
+            )`.as('overall_score'),
+            hasReport: sql<boolean>`EXISTS (
+              SELECT 1
+              FROM ${sessionReports}
+              WHERE ${sessionReports.sessionId} = ${sessions.id}
+                AND ${sessionReports.userId} = ${userId}
+                AND ${sessionReports.status} = 'completed'
+            )`.as('has_report'),
             hasFeedback: sql<boolean>`EXISTS (
               SELECT 1 FROM peer_feedback pf
               WHERE pf.session_id = ${sessions.id}
@@ -97,8 +130,7 @@ export class SessionsService {
             finishedAt: sessions.finishedAt,
           })
           .from(sessions)
-          .leftJoin(problems, eq(problems.id, sessions.problemId))
-          .leftJoin(sessionReports, eq(sessionReports.sessionId, sessions.id));
+          .leftJoin(problems, eq(problems.id, sessions.problemId));
 
         const orderExpressions = this.isNullableSortColumn(query.sortBy)
           ? [
@@ -131,8 +163,10 @@ export class SessionsService {
                 .where(inArray(sessionParticipants.sessionId, sessionIds))
             : [];
 
+        const resolvedParticipants = await resolveAvatarUrls(participantRows, this.storageService);
+
         const participantsBySession = new Map<string, typeof participantRows>();
-        for (const p of participantRows) {
+        for (const p of resolvedParticipants) {
           const existing = participantsBySession.get(p.sessionId) ?? [];
           existing.push(p);
           participantsBySession.set(p.sessionId, existing);
@@ -191,15 +225,14 @@ export class SessionsService {
     }
 
     if (!isAdmin) {
-      await Promise.all([
-        this.assertParticipant(sessionId, userId),
-        this.assertNotSoftDeleted(sessionId, userId),
-      ]);
+      await this.assertSessionAccessible(sessionId, userId, isAdmin);
     }
 
     const [
       participantRows,
       report,
+      latestCodeSnapshot,
+      feedbackRows,
       feedbackExists,
       recordingExists,
       runRows,
@@ -211,6 +244,7 @@ export class SessionsService {
           userId: sessionParticipants.userId,
           username: users.username,
           displayName: users.displayName,
+          avatarUrl: users.avatarUrl,
           role: sessionParticipants.role,
           joinedAt: sessionParticipants.joinedAt,
           leftAt: sessionParticipants.leftAt,
@@ -219,9 +253,50 @@ export class SessionsService {
         .innerJoin(users, eq(users.id, sessionParticipants.userId))
         .where(eq(sessionParticipants.sessionId, sessionId)),
       this.db.query.sessionReports.findFirst({
-        columns: { id: true },
-        where: (table, { eq }) => eq(table.sessionId, sessionId),
+        columns: { id: true, report: true, generatedAt: true, overallScore: true },
+        where: (table, { and, eq }) =>
+          and(
+            eq(table.sessionId, sessionId),
+            eq(table.userId, userId),
+            eq(table.status, 'completed'),
+          ),
       }),
+      this.db
+        .select({
+          id: codeSnapshots.id,
+          code: codeSnapshots.code,
+          language: codeSnapshots.language,
+          trigger: codeSnapshots.trigger,
+          phase: codeSnapshots.phase,
+          linesOfCode: codeSnapshots.linesOfCode,
+          createdAt: codeSnapshots.createdAt,
+        })
+        .from(codeSnapshots)
+        .where(eq(codeSnapshots.sessionId, sessionId))
+        .orderBy(desc(codeSnapshots.createdAt))
+        .limit(1),
+      this.db
+        .select({
+          id: peerFeedback.id,
+          reviewerId: peerFeedback.reviewerId,
+          reviewerUsername: users.username,
+          reviewerDisplayName: users.displayName,
+          reviewerAvatarUrl: users.avatarUrl,
+          candidateId: peerFeedback.candidateId,
+          problemSolvingRating: peerFeedback.problemSolvingRating,
+          communicationRating: peerFeedback.communicationRating,
+          codeQualityRating: peerFeedback.codeQualityRating,
+          debuggingRating: peerFeedback.debuggingRating,
+          overallRating: peerFeedback.overallRating,
+          strengths: peerFeedback.strengths,
+          improvements: peerFeedback.improvements,
+          wouldPairAgain: peerFeedback.wouldPairAgain,
+          createdAt: peerFeedback.createdAt,
+        })
+        .from(peerFeedback)
+        .innerJoin(users, eq(users.id, peerFeedback.reviewerId))
+        .where(eq(peerFeedback.sessionId, sessionId))
+        .orderBy(asc(peerFeedback.createdAt)),
       this.db
         .select({ id: peerFeedback.id })
         .from(peerFeedback)
@@ -265,6 +340,49 @@ export class SessionsService {
         : Promise.resolve([]),
     ]);
 
+    const reviewParticipantIds = new Set(
+      participantRows
+        .filter((participant) => this.isReviewParticipantRole(participant.role))
+        .map((participant) => participant.userId),
+    );
+    const resolvedParticipantRows = await resolveAvatarUrls(participantRows, this.storageService);
+    const resolvedFeedbackReviewerRows = await resolveAvatarUrls(
+      feedbackRows.map((feedback) => ({
+        id: feedback.reviewerId,
+        avatarUrl: feedback.reviewerAvatarUrl,
+      })),
+      this.storageService,
+    );
+    const participantProfiles = new Map(
+      resolvedParticipantRows.map((participant) => [
+        participant.userId,
+        {
+          name: participant.displayName ?? participant.username,
+          avatarUrl: participant.avatarUrl,
+        },
+      ]),
+    );
+    const reviewerAvatarUrls = new Map(
+      resolvedFeedbackReviewerRows.map((reviewer) => [reviewer.id, reviewer.avatarUrl] as const),
+    );
+    const reviewFeedbackRows = filterReviewFeedback(feedbackRows, reviewParticipantIds);
+    const allReviewFeedbackSubmitted = isAllReviewFeedbackSubmitted(
+      reviewParticipantIds.size,
+      reviewFeedbackRows.length,
+    );
+    const visibleFeedbackRows = isAdmin
+      ? feedbackRows
+      : reviewFeedbackRows.filter(
+          (feedback) => allReviewFeedbackSubmitted || feedback.reviewerId === userId,
+        );
+    const normalizedReport = report
+      ? {
+          ...((report.report as Record<string, unknown> | null) ?? {}),
+          generatedAt: report.generatedAt ?? new Date(),
+          overallScore: report.overallScore ?? undefined,
+        }
+      : null;
+
     return {
       sessionId: session.id,
       roomId: session.roomId,
@@ -272,10 +390,11 @@ export class SessionsService {
       problem: problemRow[0] ?? null,
       language: session.language,
       duration: Math.round((session.durationMs ?? 0) / 1000),
-      participants: participantRows.map((p) => ({
+      participants: resolvedParticipantRows.map((p) => ({
         userId: p.userId,
         username: p.username,
         displayName: p.displayName,
+        avatarUrl: p.avatarUrl,
         role: p.role,
         joinedAt: p.joinedAt,
         leftAt: p.leftAt,
@@ -292,7 +411,27 @@ export class SessionsService {
         total: s.total,
         createdAt: s.createdAt,
       })),
-      hasReport: report != null,
+      report: normalizedReport,
+      latestCodeSnapshot: latestCodeSnapshot[0] ?? null,
+      peerFeedback: visibleFeedbackRows.map((feedback) => ({
+        id: feedback.id,
+        reviewerId: feedback.reviewerId,
+        reviewerName: feedback.reviewerDisplayName ?? feedback.reviewerUsername,
+        reviewerAvatarUrl: reviewerAvatarUrls.get(feedback.reviewerId) ?? null,
+        candidateId: feedback.candidateId,
+        candidateName: participantProfiles.get(feedback.candidateId)?.name ?? feedback.candidateId,
+        candidateAvatarUrl: participantProfiles.get(feedback.candidateId)?.avatarUrl ?? null,
+        problemSolvingRating: feedback.problemSolvingRating,
+        communicationRating: feedback.communicationRating,
+        codeQualityRating: feedback.codeQualityRating,
+        debuggingRating: feedback.debuggingRating,
+        overallRating: feedback.overallRating,
+        strengths: feedback.strengths,
+        improvements: feedback.improvements,
+        wouldPairAgain: feedback.wouldPairAgain,
+        createdAt: feedback.createdAt,
+      })),
+      hasReport: normalizedReport != null,
       hasFeedback: feedbackExists.length > 0,
       hasRecording: recordingExists.length > 0,
       createdAt: session.startedAt,
@@ -300,11 +439,68 @@ export class SessionsService {
     };
   }
 
+  async listSnapshots(
+    sessionId: string,
+    userId: string,
+    isAdmin: boolean,
+    query: ListCodeSnapshotsQuery,
+  ): Promise<PaginatedResult<SessionCodeSnapshotResult>> {
+    await this.assertSessionAccessible(sessionId, userId, isAdmin);
+
+    return paginate<SessionCodeSnapshotResult>({
+      cursor: query.cursor,
+      limit: query.limit,
+      getCursorValues: (row) => [row.timestamp.toISOString(), row.snapshotId],
+      fetchPage: async (decoded, fetchLimit) => {
+        const conditions = [eq(codeSnapshots.sessionId, sessionId)];
+
+        if (decoded?.length === 2 && decoded[0] && decoded[1]) {
+          const [cursorTs, cursorId] = decoded;
+          const cursorDate = new Date(cursorTs);
+          if (!Number.isNaN(cursorDate.getTime())) {
+            conditions.push(
+              or(
+                gt(codeSnapshots.createdAt, cursorDate),
+                and(eq(codeSnapshots.createdAt, cursorDate), gt(codeSnapshots.id, cursorId)),
+              )!,
+            );
+          }
+        }
+
+        const rows = await this.db
+          .select({
+            snapshotId: codeSnapshots.id,
+            timestamp: codeSnapshots.createdAt,
+            trigger: codeSnapshots.trigger,
+            language: codeSnapshots.language,
+            code: codeSnapshots.code,
+            linesOfCode: codeSnapshots.linesOfCode,
+            phase: codeSnapshots.phase,
+          })
+          .from(codeSnapshots)
+          .where(and(...conditions))
+          .orderBy(asc(codeSnapshots.createdAt), asc(codeSnapshots.id))
+          .limit(fetchLimit);
+
+        return rows.map((snapshot) => ({
+          snapshotId: snapshot.snapshotId,
+          timestamp: snapshot.timestamp,
+          trigger: snapshot.trigger,
+          language: snapshot.language,
+          code: snapshot.code,
+          linesOfCode: snapshot.linesOfCode ?? this.countLinesOfCode(snapshot.code),
+          phase: snapshot.phase,
+        }));
+      },
+    });
+  }
+
   async deleteSession(sessionId: string, userId: string, isAdmin: boolean): Promise<void> {
     const [session] = await this.db
       .select({ id: sessions.id })
       .from(sessions)
-      .where(eq(sessions.id, sessionId));
+      .where(eq(sessions.id, sessionId))
+      .limit(1);
 
     if (!session) {
       throw new NotFoundException({
@@ -328,6 +524,32 @@ export class SessionsService {
       where: (table, { eq }) => eq(table.id, userId),
     });
     return user?.role === 'admin';
+  }
+
+  async assertSessionAccessible(
+    sessionId: string,
+    userId: string,
+    isAdmin: boolean,
+  ): Promise<void> {
+    const [session] = await this.db
+      .select({ id: sessions.id })
+      .from(sessions)
+      .where(eq(sessions.id, sessionId))
+      .limit(1);
+
+    if (!session) {
+      throw new NotFoundException({
+        message: 'Session not found',
+        code: ERROR_CODES.SESSION_NOT_FOUND,
+      });
+    }
+
+    if (!isAdmin) {
+      await Promise.all([
+        this.assertParticipant(sessionId, userId),
+        this.assertNotSoftDeleted(sessionId, userId),
+      ]);
+    }
   }
 
   private async assertParticipant(sessionId: string, userId: string): Promise<void> {
@@ -367,15 +589,28 @@ export class SessionsService {
     cursorSort: string,
     cursorId: string,
     compareOp: typeof gt | typeof lt,
+    userId: string,
   ) {
-    const sortColumn = this.getSortColumn(sortBy);
+    const sortColumn =
+      sortBy === 'overallScore' ? this.getOverallScoreSortExpr(userId) : this.getSortColumn(sortBy);
     const isNullCursor = cursorSort === NULL_SENTINEL;
 
     if (isNullCursor) {
       return and(sql`${sortColumn} IS NULL`, compareOp(sessions.id, cursorId));
     }
 
-    if (sortBy === 'overallScore' || sortBy === 'duration') {
+    if (sortBy === 'overallScore') {
+      const cursorNum = Number(cursorSort);
+      if (Number.isNaN(cursorNum)) return null;
+      const operator = compareOp === gt ? sql.raw('>') : sql.raw('<');
+
+      return or(
+        sql`${sortColumn} ${operator} ${cursorNum}`,
+        and(sql`${sortColumn} = ${cursorNum}`, compareOp(sessions.id, cursorId)),
+      );
+    }
+
+    if (sortBy === 'duration') {
       const cursorNum = Number(cursorSort);
       if (Number.isNaN(cursorNum)) return null;
       const compareValue = cursorNum;
@@ -411,8 +646,6 @@ export class SessionsService {
     switch (sortBy) {
       case 'finishedAt':
         return sessions.finishedAt;
-      case 'overallScore':
-        return sessionReports.overallScore;
       case 'duration':
         return sessions.durationMs;
       default:
@@ -420,7 +653,26 @@ export class SessionsService {
     }
   }
 
+  private getOverallScoreSortExpr(userId: string) {
+    return sql<number | null>`(
+      SELECT ${sessionReports.overallScore}
+      FROM ${sessionReports}
+      WHERE ${sessionReports.sessionId} = ${sessions.id}
+        AND ${sessionReports.userId} = ${userId}
+        AND ${sessionReports.status} = 'completed'
+      LIMIT 1
+    )`;
+  }
+
   private isNullableSortColumn(sortBy: SortBy): boolean {
     return sortBy === 'overallScore' || sortBy === 'finishedAt' || sortBy === 'duration';
+  }
+
+  private isReviewParticipantRole(role: string): role is 'candidate' | 'interviewer' {
+    return role === 'candidate' || role === 'interviewer';
+  }
+
+  private countLinesOfCode(code: string): number {
+    return code ? code.split('\n').length : 0;
   }
 }

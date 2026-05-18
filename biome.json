@@ -48,7 +48,8 @@
       "!.turbo",
       "!coverage",
       "!pnpm-lock.yaml",
-      "!*.min.js"
+      "!*.min.js",
+      "!packages/db/drizzle/meta"
     ]
   }
 }

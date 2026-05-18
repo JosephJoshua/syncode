@@ -68,7 +68,7 @@ describe('AuthController', () => {
   }
 
   it('GIVEN register request WHEN successful THEN returns payload and sets refresh cookie', async () => {
-    const { controller, response } = createController();
+    const { controller, response, authService } = createController();
 
     const result = await controller.register(
       {
@@ -77,15 +77,22 @@ describe('AuthController', () => {
         password: 'secret123',
       },
       response as Response,
+      '203.0.113.10',
     );
 
     expect(result.accessToken).toBe('access-token');
     expect(result.user.username).toBe('alice');
     expect(response.cookie).toHaveBeenCalledTimes(1);
+    expect(authService.register).toHaveBeenCalledWith(
+      'alice',
+      'alice@example.com',
+      'secret123',
+      '203.0.113.10',
+    );
   });
 
   it('GIVEN login request WHEN successful THEN returns payload and sets refresh cookie', async () => {
-    const { controller, response } = createController();
+    const { controller, response, authService } = createController();
 
     const result = await controller.login(
       {
@@ -93,11 +100,13 @@ describe('AuthController', () => {
         password: 'secret123',
       },
       response as Response,
+      '203.0.113.10',
     );
 
     expect(result.accessToken).toBe('access-token');
     expect(result.user.email).toBe('user@example.com');
     expect(response.cookie).toHaveBeenCalledTimes(1);
+    expect(authService.login).toHaveBeenCalledWith('alice', 'secret123', '203.0.113.10');
   });
 
   it('GIVEN missing refresh cookie WHEN refreshing THEN throws unauthorized', async () => {
@@ -121,9 +130,9 @@ describe('AuthController', () => {
   it('GIVEN refresh cookie WHEN logging out THEN clears refresh cookie', async () => {
     const { controller, response, authService } = createController();
 
-    await controller.logout('refresh-token', response as Response);
+    await controller.logout('refresh-token', response as Response, '203.0.113.10');
 
-    expect(authService.logout).toHaveBeenCalledWith('refresh-token');
+    expect(authService.logout).toHaveBeenCalledWith('refresh-token', '203.0.113.10');
     expect(response.cookie).toHaveBeenCalledTimes(1);
     expect(response.cookie).toHaveBeenCalledWith(
       'refreshToken',

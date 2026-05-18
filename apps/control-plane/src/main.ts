@@ -3,6 +3,7 @@ import './telemetry.js';
 
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import cookieParser from 'cookie-parser';
 import { Logger } from 'nestjs-pino';
@@ -14,7 +15,7 @@ import type { EnvConfig } from './config/env.config.js';
  * Bootstrap the control plane application
  */
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, {
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     bufferLogs: true, // Buffer logs until logger is ready.
   });
 
@@ -25,6 +26,10 @@ async function bootstrap() {
   app.useGlobalPipes(new ZodValidationPipe());
 
   const config = app.get(ConfigService<EnvConfig>);
+  const trustedProxies = config.get('TRUSTED_PROXIES', { infer: true });
+  if (trustedProxies && trustedProxies.length > 0) {
+    app.set('trust proxy', trustedProxies);
+  }
 
   const corsOrigins = config.get('CORS_ORIGINS', { infer: true });
   app.enableCors({

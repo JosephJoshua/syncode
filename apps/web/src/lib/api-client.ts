@@ -24,6 +24,8 @@ const client = ky.create({
   },
 });
 
+type SearchParamValue = string | number | boolean | null | undefined;
+
 let refreshPromise: Promise<boolean> | null = null;
 
 async function refreshAccessToken(): Promise<boolean> {
@@ -50,6 +52,14 @@ async function refreshAccessToken(): Promise<boolean> {
 
       const data = (await response.json()) as { accessToken: string };
       useAuthStore.getState().setSession({ accessToken: data.accessToken });
+      // Refresh the user profile in the background so any server-side change
+      // (display name, avatar, etc.) propagates after a token refresh. Don't
+      // block the original request retry — the existing user stays in the
+      // store until this resolves, and `setSession`'s patch behavior keeps it
+      // intact while this runs.
+      void api(CONTROL_API.USERS.PROFILE)
+        .then((user) => useAuthStore.getState().setUser(user))
+        .catch(() => undefined);
       return true;
     } catch {
       return false;
@@ -87,7 +97,7 @@ export async function api<T extends TypedRoute<unknown, unknown>>(
   options?: {
     params?: Record<string, string>;
     body?: RequestOf<T>;
-    searchParams?: Record<string, string | number | boolean | null | undefined>;
+    searchParams?: Record<string, SearchParamValue>;
   },
 ): Promise<ResponseOf<T>> {
   try {
@@ -113,7 +123,7 @@ async function executeRequest<T extends TypedRoute<unknown, unknown>>(
   options?: {
     params?: Record<string, string>;
     body?: RequestOf<T>;
-    searchParams?: Record<string, string | number | boolean | null | undefined>;
+    searchParams?: Record<string, SearchParamValue>;
   },
 ): Promise<ResponseOf<T>> {
   const template = route.route.startsWith('/') ? route.route.slice(1) : route.route;
@@ -134,9 +144,7 @@ async function executeRequest<T extends TypedRoute<unknown, unknown>>(
   return response.json<ResponseOf<T>>();
 }
 
-function normalizeSearchParams(
-  params?: Record<string, string | number | boolean | null | undefined>,
-) {
+function normalizeSearchParams(params?: Record<string, SearchParamValue>) {
   if (!params) {
     return undefined;
   }
@@ -177,6 +185,24 @@ export async function readApiError(error: unknown): Promise<ErrorResponse | null
   } catch {
     return null;
   }
+}
+
+export type ApiErrorResult = Awaited<ReturnType<typeof readApiError>>;
+
+export type ErrorKeyMap = Partial<Record<string, string>>;
+
+export function resolveErrorMessage(
+  apiError: ApiErrorResult,
+  errorKeys: ErrorKeyMap,
+  fallbackKey: string,
+  t: (key: string) => string,
+): string {
+  if (!apiError) return t(fallbackKey);
+
+  const i18nKey = apiError.code ? errorKeys[apiError.code] : undefined;
+  if (i18nKey) return t(i18nKey);
+
+  return apiError.message || t(fallbackKey);
 }
 
 export function getFieldErrorMessage(details: Record<string, unknown>, field: string) {

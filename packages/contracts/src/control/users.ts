@@ -1,5 +1,9 @@
-import { UserRole } from '@syncode/shared';
+import { UserRole, WEAKNESS_CATEGORIES, WEAKNESS_TRENDS } from '@syncode/shared';
 import { z } from 'zod';
+
+export const USER_WEAKNESS_CATEGORIES = WEAKNESS_CATEGORIES;
+
+export const USER_WEAKNESS_TRENDS = WEAKNESS_TRENDS;
 
 export const updateUserSchema = z
   .object({
@@ -19,7 +23,7 @@ export const updateUserSchema = z
       .string()
       .min(3)
       .max(30)
-      .regex(/^[a-zA-Z0-9_]+$/)
+      .regex(/^\w+$/)
       .optional()
       .describe('New username')
       .meta({ examples: ['syncoder_01'] }),
@@ -67,13 +71,11 @@ export const userProfileResponseSchema = z.object({
     .describe('User bio')
     .meta({ examples: ['I love algorithms.'] }),
   stats: userStatsSchema,
-  createdAt: z
-    .string()
+  createdAt: z.iso
     .datetime()
     .describe('Account creation timestamp')
     .meta({ examples: ['2019-08-24T14:15:22.123Z'] }),
-  updatedAt: z
-    .string()
+  updatedAt: z.iso
     .datetime()
     .describe('Last update timestamp')
     .meta({ examples: ['2019-08-24T14:15:22.123Z'] }),
@@ -105,8 +107,7 @@ export const publicUserProfileResponseSchema = z.object({
     .nullable()
     .describe('User bio')
     .meta({ examples: ['I love algorithms.'] }),
-  createdAt: z
-    .string()
+  createdAt: z.iso
     .datetime()
     .describe('Account creation timestamp')
     .meta({ examples: ['2019-08-24T14:15:22.123Z'] }),
@@ -117,7 +118,7 @@ export type PublicUserProfileResponse = z.infer<typeof publicUserProfileResponse
 export const dailyUsageQuotaSchema = z.object({
   used: z.number().int().nonnegative(),
   limit: z.number().int().nonnegative(),
-  resetsAt: z.string().datetime(),
+  resetsAt: z.iso.datetime(),
 });
 
 export const roomsQuotaSchema = z.object({
@@ -132,3 +133,34 @@ export const userQuotasResponseSchema = z.object({
 });
 
 export type UserQuotasResponse = z.infer<typeof userQuotasResponseSchema>;
+
+export const userWeaknessSessionSchema = z.object({
+  sessionId: z.uuid(),
+  problemName: z.string().nullable(),
+  reportedAt: z.iso.datetime(),
+  score: z.number().int().min(0).max(100).nullable(),
+});
+
+export const userWeaknessSchema = z.object({
+  id: z.uuid(),
+  category: z.enum(USER_WEAKNESS_CATEGORIES),
+  description: z.string(),
+  frequency: z.number().int().nonnegative(),
+  trend: z.enum(USER_WEAKNESS_TRENDS),
+  lastSeenAt: z.iso.datetime(),
+  sessions: z.array(userWeaknessSessionSchema).default([]),
+});
+
+export const userWeaknessesResponseSchema = z.object({
+  data: z.array(userWeaknessSchema).default([]),
+});
+
+export type UserWeakness = z.infer<typeof userWeaknessSchema>;
+export type UserWeaknessesResponse = z.infer<typeof userWeaknessesResponseSchema>;
+
+export const avatarUploadUrlResponseSchema = z.object({
+  uploadUrl: z.string().describe('Presigned PUT URL for direct S3 upload'),
+  key: z.string().describe('S3 object key for the avatar'),
+});
+
+export type AvatarUploadUrlResponse = z.infer<typeof avatarUploadUrlResponseSchema>;

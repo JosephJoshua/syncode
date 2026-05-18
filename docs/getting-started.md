@@ -81,6 +81,17 @@ For local development, the defaults work fine. For anything shared or deployed, 
 openssl rand -hex 32
 ```
 
+### S3 Storage (defaults work)
+
+```env
+S3_ENDPOINT=http://localhost:8333
+S3_ACCESS_KEY=syncode
+S3_SECRET_KEY=syncode-secret
+S3_BUCKET=syncode
+```
+
+SeaweedFS runs as part of `pnpm infra:up` with hardcoded dev credentials. No changes needed.
+
 ### External Services (optional for local dev)
 
 ```env
@@ -88,15 +99,10 @@ LIVEKIT_API_KEY=
 LIVEKIT_API_SECRET=
 LIVEKIT_URL=ws://localhost:7880
 
-S3_ENDPOINT=http://localhost:9000
-S3_ACCESS_KEY=
-S3_SECRET_KEY=
-S3_BUCKET=syncode
-
 E2B_API_KEY=
 ```
 
-Leave these blank if you're not running LiveKit, SeaweedFS, or E2B locally. Use stubs instead (see below).
+Leave these blank if you're not running LiveKit or E2B locally. Use stubs instead (see below).
 
 ### Stub Configuration (recommended for getting started)
 

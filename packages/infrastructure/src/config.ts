@@ -10,6 +10,7 @@ export const RedisConfigSchema = z.object({
 
 export const S3ConfigSchema = z.object({
   endpoint: z.string().min(1, 'S3 endpoint cannot be empty'),
+  publicEndpoint: z.string().min(1).optional(),
   region: z.string().min(1, 'S3 region cannot be empty'),
   accessKeyId: z.string().min(1, 'S3 access key ID cannot be empty'),
   secretAccessKey: z.string().min(1, 'S3 secret access key cannot be empty'),

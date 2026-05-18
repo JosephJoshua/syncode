@@ -4,7 +4,8 @@
     "dashboard": "Dashboard",
     "rooms": "Rooms",
     "problems": "Problems",
-    "bookmarks": "Bookmarks"
+    "bookmarks": "Bookmarks",
+    "primaryAria": "Primary navigation"
   },
   "auth": {
     "register": "Register",
@@ -20,15 +21,26 @@
   },
   "copyLink": "Copy link",
   "switchLanguage": "Switch language to {{language}}",
+  "pagination": {
+    "previous": "Previous",
+    "next": "Next",
+    "previousAria": "Go to previous page",
+    "nextAria": "Go to next page"
+  },
   "untitledProblem": "Untitled Problem",
+  "backToDashboard": "Back to dashboard",
   "retry": "Retry",
   "cancel": "Cancel",
   "loading": "Loading...",
   "genericError": "Something went wrong. Please try again.",
   "execution": {
-    "details": "Execution Details",
-    "tip": "Tip: click a case arrow to view that case log viewer.",
+    "details": "Submission Results",
     "submission": "Submission {{submissionId}}",
+    "statusPending": "pending",
+    "statusRunning": "running",
+    "statusFailed": "failed",
+    "statusAllPass": "accepted",
+    "statusPartial": "wrong answer",
     "total": "Total",
     "passed": "Passed",
     "failed": "Failed",
@@ -37,12 +49,12 @@
     "caseIndex": "Case #{{index}}",
     "statusPass": "pass",
     "statusFail": "fail",
-    "statusPending": "pending",
     "statusTimeout": "timeout",
     "duration": "Duration",
     "memory": "Memory",
+    "expectedOutput": "Expected",
+    "actualOutput": "Actual",
     "outputDiff": "Output Diff",
-    "logViewer": "Execution Log Viewer",
     "stdout": "stdout",
     "stderr": "stderr",
     "empty": "(empty)"

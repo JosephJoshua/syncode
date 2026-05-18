@@ -87,7 +87,7 @@ export const executionTestCaseDetailSchema = z.object({
     .string()
     .nullable()
     .describe('Captured stdout for this test case')
-    .meta({ examples: ['answer=41\\n'] }),
+    .meta({ examples: [String.raw`answer=41\n`] }),
   stderr: z
     .string()
     .nullable()
@@ -158,13 +158,11 @@ export const executionDetailsResponseSchema = z.object({
     .nullable()
     .describe('Total duration in ms for all completed test cases')
     .meta({ examples: [84] }),
-  submittedAt: z
-    .string()
+  submittedAt: z.iso
     .datetime()
     .describe('ISO 8601 timestamp when submission was created')
     .meta({ examples: ['2026-03-03T12:00:00.000Z'] }),
-  completedAt: z
-    .string()
+  completedAt: z.iso
     .datetime()
     .nullable()
     .describe('ISO 8601 timestamp when submission finished, null if still running')

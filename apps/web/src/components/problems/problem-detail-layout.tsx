@@ -1,18 +1,20 @@
 import type { ProblemDetail, ProblemExample, ProblemTestCase } from '@syncode/contracts';
 import { SUPPORTED_LANGUAGES, type SupportedLanguage } from '@syncode/shared';
 import { Button } from '@syncode/ui';
+import { Link } from '@tanstack/react-router';
 import { Bookmark, LoaderCircle } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import Markdown from 'react-markdown';
 import i18n from '@/lib/i18n.js';
 import { useToggleProblemBookmarkMutation } from '@/lib/problems/problem-bookmark.js';
 import { useAuthStore } from '@/stores/auth.store.js';
+import { ConstraintsBlock } from './constraints-block.js';
+import { ProblemMarkdown } from './problem-markdown.js';
 import { StarterCodeBlock } from './starter-code-block.js';
 import { formatStarterLanguageLabel } from './starter-code-language.js';
 
-export function ProblemDetailLayout({ problem }: { problem: ProblemDetail }) {
+export function ProblemDetailLayout({ problem }: { readonly problem: ProblemDetail }) {
   const { t } = useTranslation('problems');
   const starterLanguages = getStarterLanguages(problem.starterCode);
   const firstLanguage = starterLanguages[0] ?? null;
@@ -55,12 +57,16 @@ export function ProblemDetailLayout({ problem }: { problem: ProblemDetail }) {
         <div className="grid gap-7 xl:grid-cols-[minmax(0,1fr)_320px]">
           <div className="space-y-5">
             <SectionSurface title={t('detail.description')}>
-              <MarkdownBlock value={problem.description} />
+              <ProblemMarkdown content={problem.description} />
             </SectionSurface>
 
-            <SectionSurface title={t('detail.constraints')}>
-              <MarkdownBlock value={problem.constraints ?? t('detail.noConstraints')} />
-            </SectionSurface>
+            {problem.constraints ? (
+              <ConstraintsBlock title={t('detail.constraints')} content={problem.constraints} />
+            ) : (
+              <SectionSurface title={t('detail.constraints')}>
+                <EmptySurfaceCopy message={t('detail.noConstraints')} />
+              </SectionSurface>
+            )}
 
             <SectionSurface title={t('detail.examples', { count: problem.examples.length })}>
               <div className="space-y-3">
@@ -131,10 +137,10 @@ function ProblemHeader({
   isBookmarkPending,
   onToggleBookmark,
 }: {
-  problem: ProblemDetail;
-  canToggleBookmark: boolean;
-  isBookmarkPending: boolean;
-  onToggleBookmark: () => void;
+  readonly problem: ProblemDetail;
+  readonly canToggleBookmark: boolean;
+  readonly isBookmarkPending: boolean;
+  readonly onToggleBookmark: () => void;
 }) {
   const { t } = useTranslation('problems');
   return (
@@ -180,17 +186,19 @@ function ProblemHeader({
   );
 }
 
-function SummaryRail({ problem }: { problem: ProblemDetail }) {
+function SummaryRail({ problem }: { readonly problem: ProblemDetail }) {
   const { t } = useTranslation('problems');
   return (
     <div className="rounded-2xl border border-border/60 bg-card/70 p-3">
       <div className="border-b border-border/60 pb-2.5">
         <Button
-          type="button"
+          asChild
           size="lg"
           className="w-full cursor-pointer bg-primary text-primary-foreground shadow-[0_10px_24px_-12px_hsl(var(--primary)/0.9)] hover:-translate-y-0.5 hover:bg-primary/90 hover:shadow-[0_16px_32px_-16px_hsl(var(--primary)/0.95)]"
         >
-          {t('detail.practiceButton')}
+          <Link to="/rooms/create" search={{ problemId: problem.id }}>
+            {t('detail.practiceButton')}
+          </Link>
         </Button>
       </div>
 
@@ -217,7 +225,7 @@ function SummaryRail({ problem }: { problem: ProblemDetail }) {
   );
 }
 
-function SummaryStat({ label, value }: { label: string; value: string }) {
+function SummaryStat({ label, value }: { readonly label: string; readonly value: string }) {
   return (
     <div className="py-2.5 first:pt-2.5 last:pb-0">
       <dt className="text-xs font-medium tracking-[0.16em] text-muted-foreground uppercase">
@@ -228,7 +236,13 @@ function SummaryStat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function SectionSurface({ title, children }: { title: string; children: ReactNode }) {
+function SectionSurface({
+  title,
+  children,
+}: {
+  readonly title: string;
+  readonly children: ReactNode;
+}) {
   return (
     <section className="rounded-2xl border border-border/60 bg-card/60">
       <div className="border-b border-border/60 px-4 py-2.5">
@@ -239,7 +253,13 @@ function SectionSurface({ title, children }: { title: string; children: ReactNod
   );
 }
 
-function ExamplePanel({ example, index }: { example: ProblemExample; index: number }) {
+function ExamplePanel({
+  example,
+  index,
+}: {
+  readonly example: ProblemExample;
+  readonly index: number;
+}) {
   const { t } = useTranslation('problems');
   return (
     <div className="rounded-xl border border-border/60 bg-background/70 p-3">
@@ -250,14 +270,20 @@ function ExamplePanel({ example, index }: { example: ProblemExample; index: numb
         <LabeledCodeBlock label={t('detail.input')} value={example.input} />
         <LabeledCodeBlock label={t('detail.output')} value={example.output} />
         {example.explanation ? (
-          <LabeledTextBlock label={t('detail.explanation')} value={example.explanation} />
+          <LabeledMarkdownBlock label={t('detail.explanation')} value={example.explanation} />
         ) : null}
       </div>
     </div>
   );
 }
 
-function PublicTestCasePanel({ testCase, index }: { testCase: ProblemTestCase; index: number }) {
+function PublicTestCasePanel({
+  testCase,
+  index,
+}: {
+  readonly testCase: ProblemTestCase;
+  readonly index: number;
+}) {
   const { t } = useTranslation('problems');
   return (
     <div className="rounded-xl border border-border/60 bg-background/70 p-3">
@@ -268,7 +294,7 @@ function PublicTestCasePanel({ testCase, index }: { testCase: ProblemTestCase; i
         <LabeledCodeBlock label={t('detail.input')} value={testCase.input} />
         <LabeledCodeBlock label={t('detail.expectedOutput')} value={testCase.expectedOutput} />
         {testCase.description ? (
-          <LabeledTextBlock label={t('detail.explanation')} value={testCase.description} />
+          <LabeledMarkdownBlock label={t('detail.explanation')} value={testCase.description} />
         ) : null}
         <div className="grid gap-2.5 sm:grid-cols-2">
           <InlineStat
@@ -285,7 +311,7 @@ function PublicTestCasePanel({ testCase, index }: { testCase: ProblemTestCase; i
   );
 }
 
-function LabeledCodeBlock({ label, value }: { label: string; value: string }) {
+function LabeledCodeBlock({ label, value }: { readonly label: string; readonly value: string }) {
   return (
     <div>
       <p className="text-xs font-medium tracking-[0.16em] text-muted-foreground uppercase">
@@ -298,28 +324,26 @@ function LabeledCodeBlock({ label, value }: { label: string; value: string }) {
   );
 }
 
-function LabeledTextBlock({ label, value }: { label: string; value: string }) {
+function LabeledMarkdownBlock({
+  label,
+  value,
+}: {
+  readonly label: string;
+  readonly value: string;
+}) {
   return (
     <div>
       <p className="text-xs font-medium tracking-[0.16em] text-muted-foreground uppercase">
         {label}
       </p>
-      <p className="mt-1 rounded-lg border border-border/60 bg-muted/50 px-3.5 py-2 text-sm leading-[1.625rem] text-foreground">
-        {value}
-      </p>
+      <div className="mt-1 rounded-lg border border-border/60 bg-muted/50 px-3.5 py-2">
+        <ProblemMarkdown content={value} />
+      </div>
     </div>
   );
 }
 
-function MarkdownBlock({ value }: { value: string }) {
-  return (
-    <div className="prose prose-sm prose-invert max-w-none text-foreground prose-headings:text-foreground prose-strong:text-foreground prose-code:rounded prose-code:bg-muted/70 prose-code:px-1.5 prose-code:py-0.5 prose-code:text-foreground prose-pre:bg-muted/70 prose-li:marker:text-muted-foreground">
-      <Markdown>{value}</Markdown>
-    </div>
-  );
-}
-
-function InlineStat({ label, value }: { label: string; value: string }) {
+function InlineStat({ label, value }: { readonly label: string; readonly value: string }) {
   return (
     <div className="rounded-lg border border-border/60 bg-background/70 px-3.5 py-2">
       <p className="text-xs font-medium tracking-[0.16em] text-muted-foreground uppercase">
@@ -330,11 +354,11 @@ function InlineStat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function EmptySurfaceCopy({ message }: { message: string }) {
+function EmptySurfaceCopy({ message }: { readonly message: string }) {
   return <p className="text-sm text-muted-foreground">{message}</p>;
 }
 
-function MetaChip({ children }: { children: ReactNode }) {
+function MetaChip({ children }: { readonly children: ReactNode }) {
   return (
     <span className="inline-flex rounded-full border border-border/60 bg-background/70 px-3 py-1.5 text-xs font-medium text-muted-foreground">
       {children}
@@ -342,7 +366,7 @@ function MetaChip({ children }: { children: ReactNode }) {
   );
 }
 
-function TagChip({ children }: { children: ReactNode }) {
+function TagChip({ children }: { readonly children: ReactNode }) {
   return (
     <span className="inline-flex rounded-full border border-cyan-400/45 bg-cyan-400/14 px-3 py-1.5 text-xs font-semibold text-cyan-300 ring-1 ring-cyan-400/12">
       {children}
@@ -356,18 +380,14 @@ function BookmarkToggleButton({
   isPending,
   onToggle,
 }: {
-  isBookmarked: boolean;
-  canToggleBookmark: boolean;
-  isPending: boolean;
-  onToggle: () => void;
+  readonly isBookmarked: boolean;
+  readonly canToggleBookmark: boolean;
+  readonly isPending: boolean;
+  readonly onToggle: () => void;
 }) {
   const { t } = useTranslation('problems');
   const isDisabled = !canToggleBookmark || isPending;
-  const label = !canToggleBookmark
-    ? t('detail.signInBookmarks')
-    : isBookmarked
-      ? t('detail.removeBookmark')
-      : t('detail.addBookmark');
+  const label = getBookmarkLabel(canToggleBookmark, isBookmarked, t);
 
   return (
     <Button
@@ -394,7 +414,7 @@ function BookmarkToggleButton({
   );
 }
 
-function DifficultyBadge({ difficulty }: { difficulty: ProblemDetail['difficulty'] }) {
+function DifficultyBadge({ difficulty }: { readonly difficulty: ProblemDetail['difficulty'] }) {
   const { t } = useTranslation('problems');
   if (difficulty === 'easy') {
     return (
@@ -419,7 +439,11 @@ function DifficultyBadge({ difficulty }: { difficulty: ProblemDetail['difficulty
   );
 }
 
-function AttemptStatusBadge({ attemptStatus }: { attemptStatus: ProblemDetail['attemptStatus'] }) {
+function AttemptStatusBadge({
+  attemptStatus,
+}: {
+  readonly attemptStatus: ProblemDetail['attemptStatus'];
+}) {
   if (attemptStatus) {
     return (
       <span className="inline-flex rounded-full border border-violet-400/34 bg-violet-500/16 px-3 py-1.5 text-xs font-semibold text-violet-300 ring-1 ring-violet-400/12">
@@ -460,4 +484,14 @@ function formatDate(value: string) {
     dateStyle: 'medium',
     timeStyle: 'short',
   });
+}
+
+function getBookmarkLabel(
+  canToggleBookmark: boolean,
+  isBookmarked: boolean,
+  t: (key: string) => string,
+): string {
+  if (!canToggleBookmark) return t('detail.signInBookmarks');
+  if (isBookmarked) return t('detail.removeBookmark');
+  return t('detail.addBookmark');
 }

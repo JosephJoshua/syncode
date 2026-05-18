@@ -1,10 +1,18 @@
 import type { ICollabClient } from './client.js';
 import type {
+  BroadcastParticipantReadyRequest,
+  BroadcastParticipantReadyResponse,
+  ChangeLanguageRequest,
+  ChangeLanguageResponse,
   CreateDocumentRequest,
   CreateDocumentResponse,
   DestroyDocumentResponse,
+  GetRoomChatHistoryRequest,
+  GetRoomChatHistoryResponse,
   KickUserRequest,
   KickUserResponse,
+  UpdateRoomStateRequest,
+  UpdateRoomStateResponse,
 } from './internal.js';
 
 interface StubCollabClientOptions {
@@ -15,7 +23,10 @@ interface StubCollabClientOptions {
 }
 
 export class StubCollabClient implements ICollabClient {
-  private readonly documents = new Map<string, { createdAt: number }>();
+  private readonly documents = new Map<
+    string,
+    { createdAt: number; phase?: string; editorLocked?: boolean }
+  >();
   private readonly delayMs: number;
   private readonly failRate: number;
 
@@ -28,9 +39,18 @@ export class StubCollabClient implements ICollabClient {
     await this.delay();
     this.maybeThrow('createDocument');
 
+    const existing = this.documents.get(request.roomId);
+    if (existing) {
+      return { roomId: request.roomId, createdAt: existing.createdAt, created: false };
+    }
+
     const createdAt = Date.now();
-    this.documents.set(request.roomId, { createdAt });
-    return { roomId: request.roomId, createdAt };
+    this.documents.set(request.roomId, {
+      createdAt,
+      phase: request.initialPhase,
+      editorLocked: request.editorLocked,
+    });
+    return { roomId: request.roomId, createdAt, created: true };
   }
 
   async destroyDocument(roomId: string): Promise<DestroyDocumentResponse> {
@@ -46,6 +66,48 @@ export class StubCollabClient implements ICollabClient {
     this.maybeThrow('kickUser');
 
     return { kicked: true };
+  }
+
+  async updateRoomState(request: UpdateRoomStateRequest): Promise<UpdateRoomStateResponse> {
+    await this.delay();
+    this.maybeThrow('updateRoomState');
+
+    const existing = this.documents.get(request.roomId);
+    if (existing) {
+      this.documents.set(request.roomId, {
+        ...existing,
+        phase: request.phase,
+        editorLocked: request.editorLocked,
+      });
+    }
+
+    return { success: true };
+  }
+
+  async broadcastParticipantReady(
+    _roomId: string,
+    _request: BroadcastParticipantReadyRequest,
+  ): Promise<BroadcastParticipantReadyResponse> {
+    await this.delay();
+    this.maybeThrow('broadcastParticipantReady');
+
+    return { success: true };
+  }
+
+  async changeLanguage(_request: ChangeLanguageRequest): Promise<ChangeLanguageResponse> {
+    await this.delay();
+    this.maybeThrow('changeLanguage');
+
+    return { success: true };
+  }
+
+  async getRoomChatHistory(
+    _roomId: string,
+    _request?: GetRoomChatHistoryRequest,
+  ): Promise<GetRoomChatHistoryResponse> {
+    await this.delay();
+    this.maybeThrow('getRoomChatHistory');
+    return { messages: [] };
   }
 
   async healthCheck(): Promise<boolean> {

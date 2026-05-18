@@ -11,7 +11,9 @@ export const RESULT_TTL_SECONDS = 24 * 60 * 60;
  * enqueue → result-queue → cache pattern. This class extracts the
  * duplicated result-caching and job-status logic.
  */
-export class QueueClientHelper {
+export class QueueClientHelper<TResult = unknown> {
+  private resultCallback?: (jobId: string, data: TResult) => Promise<void>;
+
   constructor(
     private readonly queueService: IQueueService,
     private readonly cacheService: ICacheService,
@@ -22,7 +24,11 @@ export class QueueClientHelper {
   /**
    * Register a processor that caches results arriving on a return queue.
    */
-  processResultQueue<T>(queue: string, label: string): void {
+  processResultQueue<T extends TResult>(
+    queue: string,
+    label: string,
+    cacheNamespace?: string,
+  ): void {
     this.queueService.process<T & { jobId: string }>(
       queue,
       async (job) => {
@@ -31,28 +37,44 @@ export class QueueClientHelper {
           return;
         }
         await this.cacheService.set(
-          `${this.cacheKeyPrefix}${job.data.jobId}`,
+          this.resultCacheKey(job.data.jobId, cacheNamespace),
           job.data,
           RESULT_TTL_SECONDS,
         );
         this.logger.debug(`Cached ${label} result for job ${job.data.jobId}`);
+
+        if (this.resultCallback) {
+          try {
+            await this.resultCallback(job.data.jobId, job.data);
+          } catch (error) {
+            this.logger.error(`Result callback error for job ${job.data.jobId}`, error);
+          }
+        }
       },
       { concurrency: 10 },
     );
   }
 
+  setResultCallback(callback: (jobId: string, data: TResult) => Promise<void>): void {
+    this.resultCallback = callback;
+  }
+
   /**
    * Look up a cached result by job ID.
    */
-  async getResult<T>(jobId: string): Promise<T | null> {
-    return this.cacheService.get<T>(`${this.cacheKeyPrefix}${jobId}`);
+  async getResult<T>(jobId: string, cacheNamespace?: string): Promise<T | null> {
+    return this.cacheService.get<T>(this.resultCacheKey(jobId, cacheNamespace));
   }
 
   /**
    * Derive job status from cache + queue state.
    */
-  async getJobStatus(queueName: string, jobId: string): Promise<JobStatus> {
-    const cached = await this.cacheService.exists(`${this.cacheKeyPrefix}${jobId}`);
+  async getJobStatus(
+    queueName: string,
+    jobId: string,
+    cacheNamespace?: string,
+  ): Promise<JobStatus> {
+    const cached = await this.cacheService.exists(this.resultCacheKey(jobId, cacheNamespace));
     if (cached) return 'completed';
 
     const job = await this.queueService.getJob(queueName, jobId);
@@ -63,5 +85,11 @@ export class QueueClientHelper {
     }
     if (job.processedOn) return 'running';
     return 'queued';
+  }
+
+  private resultCacheKey(jobId: string, cacheNamespace?: string): string {
+    return cacheNamespace
+      ? `${this.cacheKeyPrefix}${cacheNamespace}:${jobId}`
+      : `${this.cacheKeyPrefix}${jobId}`;
   }
 }

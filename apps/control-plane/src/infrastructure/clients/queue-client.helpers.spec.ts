@@ -1,7 +1,13 @@
 import { Logger } from '@nestjs/common';
-import type { QueueJob } from '@syncode/shared/ports';
+import type { ICacheService, IQueueService, QueueJob } from '@syncode/shared/ports';
 import { afterAll, beforeAll, beforeEach, describe, expect, test, vi } from 'vitest';
 import { QueueClientHelper, RESULT_TTL_SECONDS } from './queue-client.helpers';
+
+type QueueResultData = Record<string, unknown>;
+
+function toQueueJob(data: QueueResultData): QueueJob<QueueResultData> {
+  return { data } as QueueJob<QueueResultData>;
+}
 
 describe('QueueClientHelper', () => {
   let helper: QueueClientHelper;
@@ -25,19 +31,19 @@ describe('QueueClientHelper', () => {
     vi.clearAllMocks();
 
     helper = new QueueClientHelper(
-      { process, getJob } as any,
-      { get, set, exists } as any,
+      { process, getJob } as unknown as IQueueService,
+      { get, set, exists } as unknown as ICacheService,
       new Logger('test'),
       'exec:result:',
     );
   });
 
   describe('processResultQueue', () => {
-    let handler: (job: QueueJob<any>) => Promise<void>;
+    let handler: (job: QueueJob<QueueResultData>) => Promise<void>;
 
     beforeEach(() => {
       helper.processResultQueue('results-queue', 'execution');
-      handler = process.mock.calls[0][1] as (job: QueueJob<any>) => Promise<void>;
+      handler = process.mock.calls[0][1] as (job: QueueJob<QueueResultData>) => Promise<void>;
     });
 
     test('GIVEN result queue WHEN registering processor THEN caches results with correct key', async () => {
@@ -45,7 +51,7 @@ describe('QueueClientHelper', () => {
       expect(processCall[0]).toBe('results-queue');
       expect(processCall[2]).toEqual({ concurrency: 10 });
 
-      await handler({ data: { jobId: 'job-1', stdout: 'hello' } } as any);
+      await handler(toQueueJob({ jobId: 'job-1', stdout: 'hello' }));
 
       expect(set).toHaveBeenCalledWith(
         'exec:result:job-1',
@@ -54,10 +60,50 @@ describe('QueueClientHelper', () => {
       );
     });
 
+    test('GIVEN result namespace WHEN registering processor THEN caches results under namespaced key', async () => {
+      helper.processResultQueue('other-results-queue', 'ai-code-analysis', 'code-analysis');
+      const namespacedHandler = process.mock.calls[1][1] as (
+        job: QueueJob<QueueResultData>,
+      ) => Promise<void>;
+
+      await namespacedHandler(toQueueJob({ jobId: 'job-1', summary: 'analysis' }));
+
+      expect(set).toHaveBeenCalledWith(
+        'exec:result:code-analysis:job-1',
+        { jobId: 'job-1', summary: 'analysis' },
+        RESULT_TTL_SECONDS,
+      );
+    });
+
     test('GIVEN result without jobId WHEN processor invoked THEN skips caching', async () => {
-      await handler({ data: {} } as any);
+      await handler(toQueueJob({}));
 
       expect(set).not.toHaveBeenCalled();
+    });
+
+    test('GIVEN callback registered WHEN result arrives THEN callback is invoked with jobId and data', async () => {
+      const callback = vi.fn().mockResolvedValue(undefined);
+      helper.setResultCallback(callback);
+
+      await handler(toQueueJob({ jobId: 'job-2', stdout: 'world' }));
+
+      expect(callback).toHaveBeenCalledWith('job-2', {
+        jobId: 'job-2',
+        stdout: 'world',
+      });
+    });
+
+    test('GIVEN callback throws WHEN result arrives THEN result is still cached', async () => {
+      const callback = vi.fn().mockRejectedValue(new Error('boom'));
+      helper.setResultCallback(callback);
+
+      await handler(toQueueJob({ jobId: 'job-3', stdout: 'ok' }));
+
+      expect(set).toHaveBeenCalledWith(
+        'exec:result:job-3',
+        { jobId: 'job-3', stdout: 'ok' },
+        RESULT_TTL_SECONDS,
+      );
     });
   });
 
@@ -69,6 +115,15 @@ describe('QueueClientHelper', () => {
 
       expect(result).toEqual({ stdout: 'hello' });
       expect(get).toHaveBeenCalledWith('exec:result:job-1');
+    });
+
+    test('GIVEN namespace WHEN looking up cached result THEN uses namespaced key', async () => {
+      get.mockResolvedValue({ summary: 'analysis' });
+
+      const result = await helper.getResult('job-1', 'code-analysis');
+
+      expect(result).toEqual({ summary: 'analysis' });
+      expect(get).toHaveBeenCalledWith('exec:result:code-analysis:job-1');
     });
 
     test('GIVEN no cached result WHEN looking up THEN returns null', async () => {
@@ -87,6 +142,16 @@ describe('QueueClientHelper', () => {
       const status = await helper.getJobStatus('run-queue', 'job-1');
 
       expect(status).toBe('completed');
+      expect(getJob).not.toHaveBeenCalled();
+    });
+
+    test('GIVEN namespace WHEN checking status THEN checks namespaced cache key', async () => {
+      exists.mockResolvedValue(true);
+
+      const status = await helper.getJobStatus('run-queue', 'job-1', 'code-analysis');
+
+      expect(status).toBe('completed');
+      expect(exists).toHaveBeenCalledWith('exec:result:code-analysis:job-1');
       expect(getJob).not.toHaveBeenCalled();
     });
 

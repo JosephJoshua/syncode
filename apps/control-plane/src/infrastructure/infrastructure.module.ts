@@ -73,6 +73,7 @@ import { QueueExecutionClient } from './clients/queue-execution.client.js';
       useFactory: (config: ConfigService<EnvConfig>, circuitBreaker: CircuitBreakerAdapter) => {
         const s3Config: S3Config = {
           endpoint: config.get('S3_ENDPOINT', { infer: true })!,
+          publicEndpoint: config.get('S3_PUBLIC_ENDPOINT', { infer: true }),
           region: config.get('S3_REGION', { infer: true })!,
           accessKeyId: config.get('S3_ACCESS_KEY', { infer: true })!,
           secretAccessKey: config.get('S3_SECRET_KEY', { infer: true })!,
@@ -152,7 +153,8 @@ import { QueueExecutionClient } from './clients/queue-execution.client.js';
         }
 
         const collabUrl = config.get('COLLAB_PLANE_URL', { infer: true })!;
-        const client = new HttpCollabClient(collabUrl);
+        const internalSecret = config.get('INTERNAL_CALLBACK_SECRET', { infer: true })!;
+        const client = new HttpCollabClient(collabUrl, internalSecret);
         return createProtectedCollabClient(client, circuitBreaker);
       },
       inject: [ConfigService, CircuitBreakerAdapter],

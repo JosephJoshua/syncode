@@ -1,4 +1,4 @@
-export function SynCodeLogo({ className }: { className?: string }) {
+export function SynCodeLogo({ className }: { readonly className?: string }) {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"

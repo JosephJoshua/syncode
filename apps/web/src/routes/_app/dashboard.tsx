@@ -4,18 +4,24 @@ import { createFileRoute } from '@tanstack/react-router';
 import type { LucideIcon } from 'lucide-react';
 import { Calendar, Clock3, Target, TrendingUp } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { DashboardQuotaUsage } from '@/components/dashboard-quota-usage.js';
 import { DashboardRecentSessions } from '@/components/dashboard-recent-sessions.js';
-import { HostControlPanel } from '@/components/host-control-panel.js';
+import { DashboardWeaknessSummary } from '@/components/dashboard-weakness-summary.js';
 import {
   EMPTY_DASHBOARD_STATS,
   fetchDashboardSessionHistory,
+  getDashboardSessionHistoryQueryKey,
 } from '@/lib/dashboard-session-history.js';
+import { useUserQuotasQuery } from '@/lib/user-quotas.js';
 import { getUserDisplayName } from '@/lib/user-utils.js';
+import { fetchUserWeaknesses, USER_WEAKNESSES_QUERY_KEY } from '@/lib/user-weaknesses.js';
 import { useAuthStore } from '@/stores/auth.store.js';
 
 export const Route = createFileRoute('/_app/dashboard')({
   component: DashboardPage,
 });
+
+export { DashboardPage };
 
 function DashboardPage() {
   const { t } = useTranslation('dashboard');
@@ -23,14 +29,26 @@ function DashboardPage() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const dashboardName = getUserDisplayName(user);
   const viewerId = user?.id ?? null;
-  const isQueryEnabled = isAuthenticated && Boolean(viewerId);
+  const isDashboardDataQueryEnabled = isAuthenticated && Boolean(viewerId);
   const sessionHistoryQuery = useQuery({
-    queryKey: ['dashboard', 'session-history', viewerId],
-    enabled: isQueryEnabled,
-    queryFn: () => fetchDashboardSessionHistory(viewerId!),
+    queryKey: getDashboardSessionHistoryQueryKey(viewerId),
+    enabled: isDashboardDataQueryEnabled,
+    queryFn: () => {
+      if (!viewerId) {
+        throw new Error('Viewer ID is required to fetch dashboard session history');
+      }
+
+      return fetchDashboardSessionHistory(viewerId);
+    },
+  });
+  const quotasQuery = useUserQuotasQuery(isAuthenticated);
+  const weaknessesQuery = useQuery({
+    queryKey: USER_WEAKNESSES_QUERY_KEY,
+    enabled: isDashboardDataQueryEnabled,
+    queryFn: fetchUserWeaknesses,
   });
   const sessionHistory = sessionHistoryQuery.data;
-  const isUnavailable = !isQueryEnabled;
+  const isUnavailable = !isDashboardDataQueryEnabled;
   const stats = sessionHistory?.stats ?? EMPTY_DASHBOARD_STATS;
   const getStatValue = (value: string) => {
     if (isUnavailable) {
@@ -91,18 +109,34 @@ function DashboardPage() {
         </div>
       </section>
 
+      <DashboardQuotaUsage
+        quotas={quotasQuery.data}
+        isLoading={quotasQuery.isLoading}
+        isFetching={quotasQuery.isFetching}
+        isError={quotasQuery.isError}
+        notificationScope={viewerId}
+        onRetry={() => {
+          quotasQuery.refetch().catch(() => undefined);
+        }}
+      />
+
+      <DashboardWeaknessSummary
+        weaknesses={weaknessesQuery.data?.data ?? []}
+        isLoading={weaknessesQuery.isLoading}
+        isUnavailable={isUnavailable}
+        isError={weaknessesQuery.isError}
+      />
+
       <DashboardRecentSessions
+        viewerId={viewerId}
         rows={sessionHistory?.rows ?? []}
         isLoading={sessionHistoryQuery.isLoading}
         isUnavailable={isUnavailable}
         isError={sessionHistoryQuery.isError}
         onRetry={() => {
-          void sessionHistoryQuery.refetch();
+          sessionHistoryQuery.refetch().catch(() => undefined);
         }}
       />
-
-      {/* Render mock host controls only during local development/UI testing. */}
-      {import.meta.env.DEV ? <HostControlPanel /> : null}
     </div>
   );
 }
@@ -112,9 +146,9 @@ function StatCard({
   title,
   value,
 }: {
-  icon: LucideIcon;
-  title: string;
-  value: string;
+  readonly icon: LucideIcon;
+  readonly title: string;
+  readonly value: string;
 }) {
   return (
     <Card className="border border-border/50 bg-card/80 py-2.5 backdrop-blur-sm transition-colors hover:border-primary/20 sm:py-3">

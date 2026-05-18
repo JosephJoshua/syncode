@@ -8,6 +8,87 @@
     "averageScore": "Average Score",
     "practiceTime": "Practice Time"
   },
+  "quotas": {
+    "heading": "Usage quotas",
+    "description": "Current daily usage across AI, code execution, and active rooms.",
+    "ai": "AI",
+    "execution": "Execution",
+    "rooms": "Rooms",
+    "dailyLimit": "Daily limit",
+    "activeRooms": "Active rooms",
+    "resetsAt": "Resets {{time}}",
+    "soon": "soon",
+    "errorTitle": "Unable to load quotas",
+    "errorDescription": "Quota usage could not be retrieved right now.",
+    "warning": {
+      "ai": "AI quota usage has reached 80%.",
+      "execution": "Execution quota usage has reached 80%.",
+      "rooms": "Room quota usage has reached 80%."
+    },
+    "exceeded": {
+      "ai": "AI quota exceeded. Hints and AI feedback may be unavailable until reset.",
+      "execution": "Execution quota exceeded. Code run and submit may be unavailable until reset.",
+      "rooms": "Room quota exceeded. Creating new rooms may be unavailable until an active room closes."
+    }
+  },
+  "weakness": {
+    "heading": "Weakness summary",
+    "sub": "Spot repeated practice gaps and review the sessions behind them.",
+    "sessionCount_one": "{{count}} category tracked",
+    "sessionCount_other": "{{count}} categories tracked",
+    "categoriesTitle": "Frequent categories",
+    "trendTitle": "Improvement over time",
+    "unknownProblem": "Untitled problem",
+    "descriptionFallback": "Review this pattern in the linked session report.",
+    "frequency_one": "{{count}} hit",
+    "frequency_other": "{{count}} hits",
+    "frequencyProgress": "{{category}} appeared {{count}} times",
+    "trendScore": "{{score}}%",
+    "categoryCount_one": "{{count}} weakness category",
+    "categoryCount_other": "{{count}} weakness categories",
+    "loadingTitle": "Loading weaknesses",
+    "loadingDescription": "We're loading your tracked weakness categories.",
+    "unavailableTitle": "Weakness summary unavailable",
+    "unavailableDescription": "The summary will appear once your account session is ready.",
+    "errorTitle": "Unable to load weakness summary",
+    "errorDescription": "Weakness trends could not be retrieved right now. Try again in a moment.",
+    "noDataTitle": "No weaknesses tracked yet",
+    "noDataDescription": "Weakness categories will appear here after session reports identify repeated patterns.",
+    "noTrendTitle": "No trend data yet",
+    "noTrendDescription": "Score history will appear once linked session reports are available.",
+    "trendPoint": "{{problem}} weakness score was {{score}}%",
+    "trend": {
+      "improving": "Improving",
+      "stable": "Stable",
+      "worsening": "Worsening"
+    },
+    "category": {
+      "edge_cases": {
+        "title": "Edge cases"
+      },
+      "time_complexity": {
+        "title": "Time complexity"
+      },
+      "space_complexity": {
+        "title": "Space complexity"
+      },
+      "variable_naming": {
+        "title": "Variable naming"
+      },
+      "code_structure": {
+        "title": "Code structure"
+      },
+      "off_by_one": {
+        "title": "Off-by-one errors"
+      },
+      "input_validation": {
+        "title": "Input validation"
+      },
+      "communication": {
+        "title": "Communication"
+      }
+    }
+  },
   "recentSessions": "Recent Sessions",
   "search": {
     "placeholder": "Search by problem name"
@@ -32,7 +113,26 @@
     "role": "Role",
     "status": "Status",
     "score": "Score",
-    "duration": "Duration"
+    "duration": "Duration",
+    "actions": "Actions"
+  },
+  "actions": {
+    "deleteSessionAriaLabel": "Delete session",
+    "compareSessions": "Compare Sessions",
+    "deleteSessionAriaLabelWithProblem": "Delete session for {{problem}} on {{date}}"
+  },
+  "deleteDialog": {
+    "title": "Delete session?",
+    "description": "This action cannot be undone. This session history entry will be permanently deleted.",
+    "cancel": "Cancel",
+    "confirm": "Delete session",
+    "deleting": "Deleting..."
+  },
+  "deleteToast": {
+    "deleteFailed": "We couldn't delete this session right now.",
+    "sessionNotFound": "This session could not be found.",
+    "notParticipant": "You can't delete a session you didn't participate in.",
+    "unauthorized": "Your session expired. Please sign in again."
   },
   "status": {
     "pass": "Pass",
@@ -40,7 +140,14 @@
   },
   "aria": {
     "filterSessions": "Filter sessions",
-    "sortSessions": "Sort sessions"
+    "sortSessions": "Sort sessions",
+    "previousPage": "Previous page",
+    "nextPage": "Next page"
+  },
+  "pagination": {
+    "previous": "Previous",
+    "next": "Next",
+    "summary": "Showing {{start}}-{{end}} of {{total}}"
   },
   "role": {
     "candidate": "Candidate",

@@ -8,14 +8,19 @@ import { AppController } from './app.controller.js';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter.js';
 import { type EnvConfig, validateEnv } from './config/env.config.js';
 import { InfrastructureModule } from './infrastructure/infrastructure.module.js';
+import { AdminModule } from './modules/admin/admin.module.js';
+import { AdminAuditModule } from './modules/admin/admin-audit.module.js';
 import { AuthModule } from './modules/auth/auth.module.js';
 import { DbModule } from './modules/db/db.module.js';
 import { ExecutionModule } from './modules/execution/execution.module.js';
+import { FeedbackModule } from './modules/feedback/feedback.module.js';
 import { InternalModule } from './modules/internal/internal.module.js';
+import { MatchmakingModule } from './modules/matchmaking/matchmaking.module.js';
 import { ProblemsModule } from './modules/problems/problems.module.js';
 import { RoomsModule } from './modules/rooms/rooms.module.js';
 import { SessionsModule } from './modules/sessions/sessions.module.js';
 import { UsersModule } from './modules/users/users.module.js';
+import { WhiteboardAssetsModule } from './modules/whiteboard-assets/whiteboard-assets.module.js';
 
 const isProd = process.env.NODE_ENV === 'production';
 let hasPinoPretty = false;
@@ -98,12 +103,15 @@ if (!isProd) {
     // Rate limiting
     ThrottlerModule.forRootAsync({
       inject: [ConfigService],
-      useFactory: (config: ConfigService<EnvConfig>) => [
-        {
-          ttl: (config.get('THROTTLE_TTL_SECS', { infer: true }) ?? 60) * 1_000, // seconds -> ms
-          limit: config.get('THROTTLE_LIMIT', { infer: true }) ?? 10,
-        },
-      ],
+      useFactory: (config: ConfigService<EnvConfig>) => ({
+        throttlers: [
+          {
+            ttl: (config.get('THROTTLE_TTL_SECS', { infer: true }) ?? 60) * 1_000, // seconds -> ms
+            limit: config.get('THROTTLE_LIMIT', { infer: true }) ?? 10,
+          },
+        ],
+        skipIf: () => config.get('NODE_ENV', { infer: true }) === 'development',
+      }),
     }),
 
     // Global modules
@@ -113,10 +121,15 @@ if (!isProd) {
 
     // Feature modules
     AuthModule,
+    AdminAuditModule,
     UsersModule,
+    MatchmakingModule,
     RoomsModule,
+    WhiteboardAssetsModule,
     SessionsModule,
     ProblemsModule,
+    FeedbackModule,
+    AdminModule,
     ExecutionModule,
     InternalModule,
   ],

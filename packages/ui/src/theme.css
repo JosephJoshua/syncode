@@ -62,42 +62,42 @@
 
 /* Dark Mode (default) */
 :root {
-  --background: oklch(0.145 0.005 286);
+  --background: oklch(0.16 0.005 286);
   --foreground: oklch(0.985 0 0);
-  --card: oklch(0.178 0.005 286);
+  --card: oklch(0.205 0.005 286);
   --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.178 0.005 286);
+  --popover: oklch(0.205 0.005 286);
   --popover-foreground: oklch(0.985 0 0);
   --primary: oklch(0.82 0.18 165);
-  --primary-foreground: oklch(0.145 0.005 286);
-  --secondary: oklch(0.226 0.005 286);
+  --primary-foreground: oklch(0.16 0.005 286);
+  --secondary: oklch(0.255 0.005 286);
   --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.226 0.005 286);
+  --muted: oklch(0.255 0.005 286);
   --muted-foreground: oklch(0.704 0.01 286);
-  --accent: oklch(0.226 0.005 286);
+  --accent: oklch(0.255 0.005 286);
   --accent-foreground: oklch(0.985 0 0);
   --success: oklch(0.82 0.18 165);
-  --success-foreground: oklch(0.145 0.005 286);
+  --success-foreground: oklch(0.16 0.005 286);
   --warning: oklch(0.76 0.16 75);
-  --warning-foreground: oklch(0.145 0.005 286);
+  --warning-foreground: oklch(0.16 0.005 286);
   --destructive: oklch(0.637 0.237 25);
   --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.269 0.005 286);
-  --input: oklch(0.269 0.005 286);
+  --border: oklch(0.305 0.005 286);
+  --input: oklch(0.305 0.005 286);
   --ring: oklch(0.82 0.18 165);
   --chart-1: oklch(0.82 0.18 165);
   --chart-2: oklch(0.704 0.01 286);
   --chart-3: oklch(0.556 0.01 286);
   --chart-4: oklch(0.371 0.01 286);
-  --chart-5: oklch(0.269 0.005 286);
+  --chart-5: oklch(0.305 0.005 286);
   --radius: 0.625rem;
-  --sidebar: oklch(0.178 0.005 286);
+  --sidebar: oklch(0.205 0.005 286);
   --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: oklch(0.82 0.18 165);
-  --sidebar-primary-foreground: oklch(0.145 0.005 286);
-  --sidebar-accent: oklch(0.226 0.005 286);
+  --sidebar-primary-foreground: oklch(0.16 0.005 286);
+  --sidebar-accent: oklch(0.255 0.005 286);
   --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(0.269 0.005 286);
+  --sidebar-border: oklch(0.305 0.005 286);
   --sidebar-ring: oklch(0.82 0.18 165);
 }
 
@@ -297,4 +297,82 @@
 
 .input-glow:focus-within input {
   border-color: oklch(0.82 0.18 165);
+}
+
+/* Stage-colored ambient border */
+.stage-accent-coding {
+  border-image: linear-gradient(90deg, transparent, oklch(0.82 0.18 165 / 0.6), transparent) 1;
+}
+
+.stage-accent-warmup {
+  border-image: linear-gradient(90deg, transparent, oklch(0.76 0.16 75 / 0.5), transparent) 1;
+}
+
+.stage-accent-wrapup {
+  border-image: linear-gradient(90deg, transparent, oklch(0.7 0.15 320 / 0.5), transparent) 1;
+}
+
+.stage-accent-finished {
+  border-image: linear-gradient(90deg, transparent, oklch(0.75 0.12 200 / 0.5), transparent) 1;
+}
+
+/* Terminal blinking block cursor */
+@keyframes terminal-cursor {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
+.terminal-cursor::after {
+  content: "▋";
+  animation: terminal-cursor 1s step-end infinite;
+  color: oklch(0.82 0.18 165);
+}
+
+/* Subtle pulse for live indicators */
+@keyframes live-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.live-pulse {
+  animation: live-pulse 2s ease-in-out infinite;
+}
+
+/* Scan lines overlay for terminal authenticity */
+.scan-lines {
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    oklch(0 0 0 / 0.03) 2px,
+    oklch(0 0 0 / 0.03) 4px
+  );
+  pointer-events: none;
+}
+
+/* Run button glow animation */
+@keyframes run-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 8px oklch(0.82 0.18 165 / 0.3);
+  }
+  50% {
+    box-shadow:
+      0 0 20px oklch(0.82 0.18 165 / 0.5),
+      0 0 40px oklch(0.82 0.18 165 / 0.15);
+  }
+}
+
+.run-glow {
+  animation: run-glow 2s ease-in-out infinite;
 }

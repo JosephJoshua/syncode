@@ -22,10 +22,10 @@ export interface ActiveFilterItem {
 }
 
 export interface ProblemsResultsToolbarProps {
-  activeFilters: ActiveFilterItem[];
-  sort: ProblemSortKey;
-  onSortChange: (value: ProblemSortKey) => void;
-  onClearAll: () => void;
+  readonly activeFilters: ActiveFilterItem[];
+  readonly sort: ProblemSortKey;
+  readonly onSortChange: (value: ProblemSortKey) => void;
+  readonly onClearAll: () => void;
 }
 
 export function ProblemsResultsToolbar({

@@ -1,11 +1,23 @@
 import { z } from 'zod';
 
+const DEFAULT_INTERNAL_CALLBACK_SECRET = 'dev-internal-callback-secret-change-me-1234567890';
+
 /**
  * Parses an env var string into a boolean.
  */
 const booleanEnv = z
   .union([z.boolean(), z.string()])
   .transform((val) => val === true || val === 'true' || val === '1');
+
+const commaSeparatedListEnv = z
+  .string()
+  .default('')
+  .transform((val) =>
+    val
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean),
+  );
 
 /**
  * Environment variable validation schema
@@ -26,7 +38,13 @@ const envSchema = z
 
     COLLAB_JWT_SECRET: z.string().min(32, 'COLLAB_JWT_SECRET must be at least 32 characters'),
 
+    INTERNAL_CALLBACK_SECRET: z
+      .string()
+      .min(32, 'INTERNAL_CALLBACK_SECRET must be at least 32 characters')
+      .default(DEFAULT_INTERNAL_CALLBACK_SECRET),
+
     S3_ENDPOINT: z.url(),
+    S3_PUBLIC_ENDPOINT: z.url().optional(),
     S3_ACCESS_KEY: z.string().min(1),
     S3_SECRET_KEY: z.string().min(1),
     S3_BUCKET: z.string().min(1),
@@ -36,8 +54,10 @@ const envSchema = z
     LIVEKIT_API_KEY: z.string().min(1),
     LIVEKIT_API_SECRET: z.string().min(1),
     LIVEKIT_URL: z.url(),
+    LIVEKIT_CLIENT_URL: z.url().optional(),
 
     COLLAB_PLANE_URL: z.url().default('http://localhost:3001'),
+    COLLAB_PLANE_CLIENT_URL: z.url().optional(),
 
     USE_EXECUTION_STUB: booleanEnv.default(false),
     USE_AI_STUB: booleanEnv.default(false),
@@ -49,6 +69,9 @@ const envSchema = z
       .string()
       .default('http://localhost:5173,https://syncode.anggita.org')
       .transform((val) => val.split(',').map((origin) => origin.trim())),
+    TRUSTED_PROXIES: commaSeparatedListEnv.describe(
+      'Comma-separated Express trust proxy values. Leave empty to ignore forwarded IP headers.',
+    ),
 
     THROTTLE_TTL_SECS: z.coerce
       .number()
@@ -72,7 +95,21 @@ const envSchema = z
       message:
         'Production environment cannot use stubs. Set USE_EXECUTION_STUB=false, USE_AI_STUB=false, and USE_COLLAB_STUB=false in production.',
     },
-  );
+  )
+  .refine(
+    (env) =>
+      env.NODE_ENV !== 'production' ||
+      env.INTERNAL_CALLBACK_SECRET !== DEFAULT_INTERNAL_CALLBACK_SECRET,
+    {
+      message:
+        'INTERNAL_CALLBACK_SECRET must be explicitly set in production and must not use the development default.',
+      path: ['INTERNAL_CALLBACK_SECRET'],
+    },
+  )
+  .refine((env) => env.NODE_ENV !== 'production' || env.TRUSTED_PROXIES.length > 0, {
+    message: 'TRUSTED_PROXIES must be explicitly set in production.',
+    path: ['TRUSTED_PROXIES'],
+  });
 
 /**
  * Validated environment configuration type
@@ -91,7 +128,8 @@ export function validateEnv(config: Record<string, unknown>): EnvConfig {
 
   if (!parsed.success) {
     const errors = parsed.error.issues.map((err) => `${err.path.join('.')}: ${err.message}`);
-    throw new Error(`Environment validation failed:\n${errors.map((e) => `  - ${e}`).join('\n')}`);
+    const formatted = errors.map((e) => `  - ${e}`).join('\n');
+    throw new Error(`Environment validation failed:\n${formatted}`);
   }
 
   return parsed.data;

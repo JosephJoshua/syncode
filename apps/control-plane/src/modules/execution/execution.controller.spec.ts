@@ -138,4 +138,73 @@ describe('ExecutionController', () => {
       controller.getSubmissionDetails('550e8400-e29b-41d4-a716-446655440000', user),
     ).rejects.toThrow(NotFoundException);
   });
+
+  it('GIVEN completed job WHEN polling execution result THEN returns full result', async () => {
+    const mockResult = {
+      status: 'completed',
+      stdout: 'hello\n',
+      stderr: '',
+      exitCode: 0,
+      durationMs: 42,
+    };
+
+    const mockExecutionClient = {
+      getResult: vi.fn().mockResolvedValue(mockResult),
+      getJobStatus: vi.fn(),
+    };
+
+    const module = await Test.createTestingModule({
+      controllers: [ExecutionController],
+      providers: [
+        { provide: EXECUTION_CLIENT, useValue: mockExecutionClient },
+        { provide: ExecutionService, useValue: { getSubmissionDetails: vi.fn() } },
+      ],
+    }).compile();
+
+    const controller = module.get(ExecutionController);
+    const result = await controller.getExecutionResult('job-1');
+
+    expect(result).toEqual(mockResult);
+    expect(mockExecutionClient.getJobStatus).not.toHaveBeenCalled();
+  });
+
+  it('GIVEN pending job WHEN polling execution result THEN falls back to job status', async () => {
+    const mockExecutionClient = {
+      getResult: vi.fn().mockResolvedValue(null),
+      getJobStatus: vi.fn().mockResolvedValue('queued'),
+    };
+
+    const module = await Test.createTestingModule({
+      controllers: [ExecutionController],
+      providers: [
+        { provide: EXECUTION_CLIENT, useValue: mockExecutionClient },
+        { provide: ExecutionService, useValue: { getSubmissionDetails: vi.fn() } },
+      ],
+    }).compile();
+
+    const controller = module.get(ExecutionController);
+    const result = await controller.getExecutionResult('job-1');
+
+    expect(result).toEqual({ status: 'queued' });
+  });
+
+  it('GIVEN job id WHEN checking execution status THEN returns status object', async () => {
+    const mockExecutionClient = {
+      getResult: vi.fn(),
+      getJobStatus: vi.fn().mockResolvedValue('running'),
+    };
+
+    const module = await Test.createTestingModule({
+      controllers: [ExecutionController],
+      providers: [
+        { provide: EXECUTION_CLIENT, useValue: mockExecutionClient },
+        { provide: ExecutionService, useValue: { getSubmissionDetails: vi.fn() } },
+      ],
+    }).compile();
+
+    const controller = module.get(ExecutionController);
+    const result = await controller.getExecutionStatus('job-1');
+
+    expect(result).toEqual({ status: 'running' });
+  });
 });

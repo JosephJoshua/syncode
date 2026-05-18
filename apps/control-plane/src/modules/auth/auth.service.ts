@@ -12,11 +12,18 @@ import { JwtService } from '@nestjs/jwt';
 import { ERROR_CODES, type UserProfileResponse } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
 import { refreshTokens, users } from '@syncode/db';
-import { CACHE_SERVICE, type ICacheService } from '@syncode/shared/ports';
+import {
+  CACHE_SERVICE,
+  type ICacheService,
+  type IStorageService,
+  STORAGE_SERVICE,
+} from '@syncode/shared/ports';
 import { and, eq, isNull, lt } from 'drizzle-orm';
+import { resolveAvatarUrls } from '@/common/resolve-avatar-urls.js';
 import type { EnvConfig } from '@/config/env.config.js';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
 import { toUserProfile } from '@/modules/users/user-profile.mapper.js';
+import { type AuditLogInput, AuditService } from '../admin/audit.service.js';
 
 const scryptAsync = promisify(scrypt);
 
@@ -39,14 +46,17 @@ export class AuthService {
   constructor(
     @Inject(DB_CLIENT) private readonly db: Database,
     @Inject(CACHE_SERVICE) private readonly cacheService: ICacheService,
+    @Inject(STORAGE_SERVICE) private readonly storageService: IStorageService,
     private readonly jwtService: JwtService,
     private readonly config: ConfigService<EnvConfig>,
+    private readonly auditService: AuditService,
   ) {}
 
   async register(
     username: string,
     email: string,
     password: string,
+    ipAddress?: string,
   ): Promise<{
     accessToken: string;
     refreshToken: string;
@@ -56,7 +66,7 @@ export class AuthService {
     const normalizedUsername = username.trim();
 
     const existingUser = await this.db.query.users.findFirst({
-      columns: { id: true },
+      columns: { id: true, email: true, username: true },
       where: (table, { and, eq, isNull, or }) =>
         and(
           isNull(table.deletedAt),
@@ -65,44 +75,76 @@ export class AuthService {
     });
 
     if (existingUser) {
-      throw new ConflictException('Email or username already registered');
+      if (existingUser.email === normalizedEmail) {
+        throw new ConflictException({
+          message: 'Email already registered',
+          code: ERROR_CODES.AUTH_EMAIL_TAKEN,
+        });
+      }
+      throw new ConflictException({
+        message: 'Username already taken',
+        code: ERROR_CODES.AUTH_USERNAME_TAKEN,
+      });
     }
 
     const passwordHash = await this.hashPassword(password);
 
     try {
-      const [createdUser] = await this.db
-        .insert(users)
-        .values({
-          username: normalizedUsername,
-          email: normalizedEmail,
-          passwordHash,
-        })
-        .returning({
-          id: users.id,
-          email: users.email,
-          username: users.username,
-          displayName: users.displayName,
-          role: users.role,
-          avatarUrl: users.avatarUrl,
-          bio: users.bio,
-          createdAt: users.createdAt,
-          updatedAt: users.updatedAt,
+      const createdUser = await this.db.transaction(async (tx) => {
+        const [user] = await tx
+          .insert(users)
+          .values({
+            username: normalizedUsername,
+            email: normalizedEmail,
+            passwordHash,
+          })
+          .returning({
+            id: users.id,
+            email: users.email,
+            username: users.username,
+            displayName: users.displayName,
+            role: users.role,
+            avatarUrl: users.avatarUrl,
+            bio: users.bio,
+            createdAt: users.createdAt,
+            updatedAt: users.updatedAt,
+          });
+
+        if (!user) {
+          throw new Error('Failed to create user');
+        }
+
+        await this.auditService.logWithClient(tx, {
+          actorId: user.id,
+          action: 'auth.register',
+          targetType: 'user',
+          targetId: user.id,
+          metadata: { email: user.email, username: user.username },
+          ipAddress,
         });
 
-      if (!createdUser) {
-        throw new Error('Failed to create user');
-      }
+        return user;
+      });
 
       const tokenPair = await this.issueTokenPair(createdUser.id, createdUser.email);
 
       return {
         ...tokenPair,
-        user: toUserProfile(createdUser),
+        user: (await resolveAvatarUrls([toUserProfile(createdUser)], this.storageService))[0]!,
       };
     } catch (error) {
       if (this.isUniqueConstraintViolation(error)) {
-        throw new ConflictException('Email or username already registered');
+        const constraint = (error as { constraint?: string }).constraint;
+        if (constraint === 'users_email_unique') {
+          throw new ConflictException({
+            message: 'Email already registered',
+            code: ERROR_CODES.AUTH_EMAIL_TAKEN,
+          });
+        }
+        throw new ConflictException({
+          message: 'Username already taken',
+          code: ERROR_CODES.AUTH_USERNAME_TAKEN,
+        });
       }
       throw error;
     }
@@ -111,6 +153,7 @@ export class AuthService {
   async login(
     identifier: string,
     password: string,
+    ipAddress?: string,
   ): Promise<{
     accessToken: string;
     refreshToken: string;
@@ -161,11 +204,19 @@ export class AuthService {
       });
     }
 
+    await this.logAuthAudit({
+      actorId: user.id,
+      action: 'auth.login',
+      targetType: 'user',
+      targetId: user.id,
+      metadata: { identifierType: normalizedIdentifier.includes('@') ? 'email' : 'username' },
+      ipAddress,
+    });
     const tokenPair = await this.issueTokenPair(user.id, user.email);
 
     return {
       ...tokenPair,
-      user: toUserProfile(user),
+      user: (await resolveAvatarUrls([toUserProfile(user)], this.storageService))[0]!,
     };
   }
 
@@ -197,9 +248,17 @@ export class AuthService {
     return this.issueTokenPair(user.id, user.email);
   }
 
-  async logout(refreshToken: string): Promise<void> {
+  async logout(refreshToken: string, ipAddress?: string): Promise<void> {
     const payload = await this.verifyRefreshToken(refreshToken);
     await this.revokeRefreshTokenByPayload(payload);
+    await this.logAuthAudit({
+      actorId: payload.sub,
+      action: 'auth.logout',
+      targetType: 'user',
+      targetId: payload.sub,
+      metadata: { tokenId: payload.jti },
+      ipAddress,
+    });
   }
 
   async revokeAllRefreshTokensForUser(userId: string): Promise<void> {
@@ -218,6 +277,10 @@ export class AuthService {
 
   async cleanupExpiredRefreshTokens(): Promise<void> {
     await this.db.delete(refreshTokens).where(lt(refreshTokens.expiresAt, new Date()));
+  }
+
+  private async logAuthAudit(input: AuditLogInput): Promise<void> {
+    await this.auditService.log(input);
   }
 
   private async issueTokenPair(
@@ -360,7 +423,8 @@ export class AuthService {
       return Number.parseInt(duration, 10);
     }
 
-    const matchedDuration = duration.match(/^(\d+)([smhd])$/);
+    const durationPattern = /^(\d+)([smhd])$/;
+    const matchedDuration = durationPattern.exec(duration);
     if (!matchedDuration) {
       throw new Error(`Unsupported JWT duration format: ${duration}`);
     }

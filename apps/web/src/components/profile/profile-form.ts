@@ -8,7 +8,7 @@ export const profileFormSchema = updateUserSchema.extend({
     .string()
     .min(3, i18n.t('profile:validation.usernameMinLength'))
     .max(30, i18n.t('profile:validation.usernameMaxLength'))
-    .regex(/^[a-zA-Z0-9_]+$/, i18n.t('profile:validation.usernamePattern'))
+    .regex(/^\w+$/, i18n.t('profile:validation.usernamePattern'))
     .optional(),
 });
 

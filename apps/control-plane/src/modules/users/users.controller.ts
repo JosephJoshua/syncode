@@ -7,6 +7,7 @@ import {
   HttpStatus,
   Param,
   Patch,
+  Post,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -22,10 +23,12 @@ import { CurrentUser } from '@/common/decorators/current-user.decorator.js';
 import { ErrorResponseDto } from '@/common/dto/error-response.dto.js';
 import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard.js';
 import {
+  AvatarUploadUrlResponseDto,
   PublicUserProfileResponseDto,
   UpdateUserDto,
   UserProfileResponseDto,
   UserQuotasResponseDto,
+  UserWeaknessesResponseDto,
 } from './dto/user.dto.js';
 import { UsersService } from './users.service.js';
 
@@ -58,6 +61,21 @@ export class UsersController {
   @ApiResponse({ status: 500, type: ErrorResponseDto, description: 'Internal server error' })
   async getCurrentUserQuotas(@CurrentUser() user: { id: string }): Promise<UserQuotasResponseDto> {
     return this.usersService.getQuotas(user.id);
+  }
+
+  @Get(CONTROL_API.USERS.WEAKNESSES.route)
+  @ApiOperation({ summary: 'Get current user weakness summary' })
+  @ApiResponse({
+    status: 200,
+    type: UserWeaknessesResponseDto,
+    description: 'Current user weakness categories and linked sessions',
+  })
+  @ApiResponse({ status: 401, type: ErrorResponseDto, description: 'Unauthorized' })
+  @ApiResponse({ status: 500, type: ErrorResponseDto, description: 'Internal server error' })
+  async getCurrentUserWeaknesses(
+    @CurrentUser() user: { id: string },
+  ): Promise<UserWeaknessesResponseDto> {
+    return this.usersService.getWeaknesses(user.id);
   }
 
   @Get(CONTROL_API.USERS.GET_BY_ID.route)
@@ -102,5 +120,45 @@ export class UsersController {
   @ApiResponse({ status: 500, type: ErrorResponseDto, description: 'Internal server error' })
   async deleteCurrentUser(@CurrentUser() user: { id: string }): Promise<void> {
     await this.usersService.delete(user.id);
+  }
+
+  @Post(CONTROL_API.USERS.AVATAR_UPLOAD_URL.route)
+  @ApiOperation({ summary: 'Get presigned URL for avatar upload' })
+  @ApiResponse({
+    status: 201,
+    type: AvatarUploadUrlResponseDto,
+    description: 'Presigned upload URL and S3 key',
+  })
+  @ApiResponse({ status: 401, type: ErrorResponseDto, description: 'Unauthorized' })
+  async getAvatarUploadUrl(
+    @CurrentUser() user: { id: string },
+  ): Promise<AvatarUploadUrlResponseDto> {
+    return this.usersService.getAvatarUploadUrl(user.id);
+  }
+
+  @Post(CONTROL_API.USERS.AVATAR_CONFIRM.route)
+  @ApiOperation({ summary: 'Confirm avatar upload after S3 PUT completes' })
+  @ApiResponse({
+    status: 201,
+    type: UserProfileResponseDto,
+    description: 'Updated profile with avatar URL',
+  })
+  @ApiResponse({ status: 401, type: ErrorResponseDto, description: 'Unauthorized' })
+  @ApiResponse({
+    status: 404,
+    type: ErrorResponseDto,
+    description: 'Avatar not found in storage',
+  })
+  async confirmAvatarUpload(@CurrentUser() user: { id: string }): Promise<UserProfileResponseDto> {
+    return this.usersService.confirmAvatarUpload(user.id);
+  }
+
+  @Delete(CONTROL_API.USERS.AVATAR_DELETE.route)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Delete current user avatar' })
+  @ApiResponse({ status: 204, description: 'Avatar deleted' })
+  @ApiResponse({ status: 401, type: ErrorResponseDto, description: 'Unauthorized' })
+  async deleteAvatar(@CurrentUser() user: { id: string }): Promise<void> {
+    await this.usersService.deleteAvatar(user.id);
   }
 }

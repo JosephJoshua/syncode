@@ -1,0 +1,206 @@
+{
+  "nav": "Admin",
+  "navLinks": {
+    "users": "Users",
+    "auditLogs": "Audit logs",
+    "problems": "Problem editor"
+  },
+  "users": {
+    "heading": "User management",
+    "sub": "Review accounts, search by identity, and control access for banned users.",
+    "forbidden": {
+      "title": "Admin access required",
+      "description": "This area is only available to SynCode administrators."
+    },
+    "search": {
+      "label": "Search users",
+      "placeholder": "Search username, email, or display name"
+    },
+    "status": {
+      "label": "Status",
+      "all": "All",
+      "active": "Active",
+      "banned": "Banned"
+    },
+    "table": {
+      "user": "User",
+      "role": "Role",
+      "status": "Status",
+      "created": "Created",
+      "reason": "Ban reason",
+      "actions": "Actions"
+    },
+    "role": {
+      "admin": "Admin",
+      "user": "User"
+    },
+    "statusBadge": {
+      "active": "Active",
+      "banned": "Banned"
+    },
+    "actions": {
+      "ban": "Ban",
+      "unban": "Unban",
+      "refresh": "Refresh",
+      "currentUser": "Current user"
+    },
+    "banDialog": {
+      "title": "Ban {{username}}?",
+      "description": "Banned users cannot log in until an admin unbans the account.",
+      "reasonLabel": "Reason",
+      "reasonPlaceholder": "Optional internal reason",
+      "confirm": "Ban user"
+    },
+    "empty": {
+      "title": "No users found",
+      "description": "Try another search or status filter."
+    },
+    "emptyValue": "None",
+    "feedback": {
+      "banSuccess": "User banned.",
+      "unbanSuccess": "User unbanned.",
+      "mutationError": "Could not update the user.",
+      "loadError": "Could not load users."
+    },
+    "pagination": {
+      "summary": "{{count}} users on this page",
+      "previous": "Previous",
+      "next": "Next",
+      "ariaLabel": "User pages"
+    }
+  },
+  "audit": {
+    "heading": "Audit logs",
+    "sub": "Search sensitive activity across authentication, account, and admin operations.",
+    "forbidden": {
+      "title": "Admin access required",
+      "description": "This area is only available to SynCode administrators."
+    },
+    "filters": {
+      "searchLabel": "Search",
+      "searchPlaceholder": "Search actor, action, or target",
+      "actionLabel": "Action",
+      "actionPlaceholder": "auth.login",
+      "fromLabel": "From",
+      "toLabel": "To",
+      "datePlaceholder": "Pick date",
+      "previousMonth": "Previous month",
+      "nextMonth": "Next month",
+      "selectDate": "Select {{date}}",
+      "clearDate": "Clear date",
+      "clear": "Clear"
+    },
+    "table": {
+      "timestamp": "Timestamp",
+      "actor": "Actor",
+      "action": "Action",
+      "target": "Target",
+      "ip": "IP",
+      "details": "Details"
+    },
+    "actions": {
+      "refresh": "Refresh",
+      "expand": "Show details",
+      "collapse": "Hide details"
+    },
+    "empty": {
+      "title": "No audit logs found",
+      "description": "Try widening your search or date range."
+    },
+    "feedback": {
+      "loadErrorTitle": "Audit logs failed to load",
+      "loadError": "Could not load audit logs."
+    },
+    "metadata": {
+      "title": "Metadata",
+      "empty": "No metadata"
+    },
+    "pagination": {
+      "summary": "{{count}} logs on this page",
+      "previous": "Previous",
+      "next": "Next",
+      "ariaLabel": "Audit log pages"
+    },
+    "unknownActor": "System",
+    "emptyValue": "None"
+  },
+  "problemEditor": {
+    "heading": "Problem editor",
+    "sub": "Draft, validate, and prepare interview problems for publishing.",
+    "forbidden": {
+      "title": "Admin access required",
+      "description": "This area is only available to SynCode administrators."
+    },
+    "fields": {
+      "title": "Title",
+      "titlePlaceholder": "Two Sum",
+      "difficulty": "Difficulty",
+      "company": "Company",
+      "companyPlaceholder": "Optional company tag",
+      "description": "Description",
+      "descriptionPlaceholder": "Write the problem statement in Markdown.",
+      "constraints": "Constraints",
+      "constraintsPlaceholder": "Add constraints, edge cases, and input limits.",
+      "timeLimit": "Time limit (ms)",
+      "timeLimitPlaceholder": "Default",
+      "memoryLimit": "Memory limit (MB)",
+      "memoryLimitPlaceholder": "Default",
+      "examples": "Examples JSON",
+      "examplesPlaceholder": "[{\"input\":\"...\",\"output\":\"...\",\"explanation\":\"...\"}]",
+      "starterCode": "Starter code JSON",
+      "starterCodePlaceholder": "{\"typescript\":\"function solve() {\\n  // ...\\n}\"}",
+      "published": "Published"
+    },
+    "difficulty": {
+      "easy": "Easy",
+      "medium": "Medium",
+      "hard": "Hard"
+    },
+    "editor": {
+      "edit": "Edit",
+      "preview": "Preview",
+      "emptyPreview": "Preview appears after writing a description."
+    },
+    "testCases": {
+      "title": "Test cases",
+      "add": "Add case",
+      "remove": "Remove",
+      "input": "Input",
+      "output": "Expected output",
+      "inputPlaceholder": "nums = [2,7,11,15], target = 9",
+      "outputPlaceholder": "[0,1]",
+      "description": "Description",
+      "descriptionPlaceholder": "Visible sample or hidden edge case",
+      "timeoutMs": "Timeout (ms)",
+      "timeoutPlaceholder": "Problem default",
+      "memoryMb": "Memory (MB)",
+      "memoryPlaceholder": "Problem default",
+      "hidden": "Hidden"
+    },
+    "preview": {
+      "title": "Publish preview",
+      "statusDraft": "Draft",
+      "statusPublished": "Published",
+      "caseCount_one": "{{count}} case",
+      "caseCount_other": "{{count}} cases"
+    },
+    "actions": {
+      "save": "Save problem",
+      "saving": "Saving..."
+    },
+    "validation": {
+      "title": "Title is required.",
+      "description": "Description is required.",
+      "testCases": "Every test case needs input and expected output.",
+      "examples": "Examples must be a JSON array.",
+      "starterCode": "Starter code must be a JSON object with string values.",
+      "timeLimit": "Time limit must be a positive integer up to 60000.",
+      "memoryLimit": "Memory limit must be a positive integer up to 4096.",
+      "testCaseLimits": "Test case limits must be positive integers within the allowed maximums."
+    },
+    "toast": {
+      "saved": "Problem saved.",
+      "saveFailed": "Could not save problem."
+    }
+  }
+}

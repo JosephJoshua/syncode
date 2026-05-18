@@ -1,5 +1,12 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import {
+  ConflictException,
+  ForbiddenException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import {
+  type CreateProblemInput,
   ERROR_CODES,
   type ListBookmarksQuery,
   type ProblemDetail,
@@ -8,10 +15,24 @@ import {
   type ProblemsTagsResponse,
 } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
-import { bookmarks, problems, problemTags, tags, testCases } from '@syncode/db';
+import { bookmarks, problems, problemTags, tags, testCases, users } from '@syncode/db';
 import type { ProblemSortBy } from '@syncode/shared';
 import { type PaginatedResult, paginate } from '@syncode/shared/server';
-import { and, asc, count, desc, eq, gt, ilike, isNull, lt, or, sql } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  gt,
+  ilike,
+  inArray,
+  isNull,
+  lt,
+  or,
+  type SQL,
+  sql,
+} from 'drizzle-orm';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
 
 type ProblemSummaryRow = ProblemSummary & { sortValue: string };
@@ -28,6 +49,7 @@ export class ProblemsService {
     const sortField = query.sortBy ?? 'createdAt';
     const sortDir = query.sortOrder === 'asc' ? asc : desc;
     const compareOp = query.sortOrder === 'asc' ? gt : lt;
+    const canViewDrafts = await this.isAdmin(userId);
 
     const result = await paginate<ProblemSummaryRow>({
       cursor: query.cursor,
@@ -35,9 +57,12 @@ export class ProblemsService {
       getCursorValues: (row) => [row.sortValue, row.id],
       fetchPage: async (decoded, fetchLimit) => {
         const conditions = [isNull(problems.deletedAt)];
+        if (!canViewDrafts) {
+          conditions.push(eq(problems.isPublished, true));
+        }
 
-        if (query.difficulty) {
-          conditions.push(eq(problems.difficulty, query.difficulty));
+        if (query.difficulty?.length) {
+          conditions.push(inArray(problems.difficulty, query.difficulty));
         }
 
         if (query.company) {
@@ -74,56 +99,14 @@ export class ProblemsService {
         const sortColumn = this.getSortColumn(sortField);
 
         if (decoded?.length === 2 && decoded[0] && decoded[1]) {
-          const [cursorSort, cursorId] = decoded;
-
-          if (sortField === 'title') {
-            conditions.push(
-              or(
-                compareOp(problems.title, cursorSort),
-                and(eq(problems.title, cursorSort), compareOp(problems.id, cursorId)),
-              )!,
-            );
-          } else if (sortField === 'difficulty') {
-            const cursorDifficulty = cursorSort as 'easy' | 'medium' | 'hard';
-            conditions.push(
-              or(
-                compareOp(problems.difficulty, cursorDifficulty),
-                and(eq(problems.difficulty, cursorDifficulty), compareOp(problems.id, cursorId)),
-              )!,
-            );
-          } else if (sortField === 'totalSubmissions') {
-            conditions.push(
-              or(
-                compareOp(problems.totalSubmissions, Number(cursorSort)),
-                and(
-                  eq(problems.totalSubmissions, Number(cursorSort)),
-                  compareOp(problems.id, cursorId),
-                ),
-              )!,
-            );
-          } else if (sortField === 'popularity') {
-            // popularity = acceptedSubmissions / totalSubmissions ratio
-            const popularityExpr = sql<number>`CASE
-              WHEN "problems"."total_submissions" = 0 THEN 0
-              ELSE "problems"."accepted_submissions"::float / "problems"."total_submissions"::float
-            END`;
-            conditions.push(
-              or(
-                compareOp(popularityExpr, Number(cursorSort)),
-                and(eq(popularityExpr, Number(cursorSort)), compareOp(problems.id, cursorId)),
-              )!,
-            );
-          } else {
-            // createdAt (default)
-            const cursorDate = new Date(cursorSort);
-            if (!Number.isNaN(cursorDate.getTime())) {
-              conditions.push(
-                or(
-                  compareOp(problems.createdAt, cursorDate),
-                  and(eq(problems.createdAt, cursorDate), compareOp(problems.id, cursorId)),
-                )!,
-              );
-            }
+          const cursorCondition = this.buildCursorCondition(
+            sortField,
+            decoded[0],
+            decoded[1],
+            compareOp,
+          );
+          if (cursorCondition) {
+            conditions.push(cursorCondition);
           }
         }
 
@@ -132,6 +115,7 @@ export class ProblemsService {
             id: problems.id,
             title: problems.title,
             difficulty: problems.difficulty,
+            isPublished: problems.isPublished,
             tagsAgg: this.tagsAggExpr(),
             company: problems.company,
             acceptanceRate: this.acceptanceRateExpr(),
@@ -163,6 +147,7 @@ export class ProblemsService {
   }
 
   async findById(userId: string, problemId: string): Promise<ProblemDetail> {
+    const canViewDrafts = await this.isAdmin(userId);
     const userAttemptsExpr = sql<number>`(
       SELECT COUNT(*)::int FROM submissions s
       WHERE s.problem_id = "problems"."id"
@@ -176,10 +161,13 @@ export class ProblemsService {
           title: problems.title,
           description: problems.description,
           difficulty: problems.difficulty,
+          isPublished: problems.isPublished,
           company: problems.company,
           constraints: problems.constraints,
           examples: problems.examples,
           starterCode: problems.starterCode,
+          timeLimit: problems.timeLimit,
+          memoryLimit: problems.memoryLimit,
           totalSubmissions: problems.totalSubmissions,
           tagsAgg: this.tagsAggExpr(),
           acceptanceRate: this.acceptanceRateExpr(),
@@ -190,7 +178,15 @@ export class ProblemsService {
           updatedAt: problems.updatedAt,
         })
         .from(problems)
-        .where(and(eq(problems.id, problemId), isNull(problems.deletedAt))),
+        .where(
+          and(
+            ...[
+              eq(problems.id, problemId),
+              isNull(problems.deletedAt),
+              canViewDrafts ? undefined : eq(problems.isPublished, true),
+            ].filter((item): item is SQL => Boolean(item)),
+          ),
+        ),
       this.db
         .select({
           input: testCases.input,
@@ -219,11 +215,14 @@ export class ProblemsService {
       title: problem.title,
       description: problem.description,
       difficulty: problem.difficulty,
+      isPublished: problem.isPublished,
       tags: problem.tagsAgg ? problem.tagsAgg.split(',') : [],
       company: problem.company ?? null,
       constraints: problem.constraints ?? null,
       examples: (problem.examples as ProblemDetail['examples']) ?? [],
       starterCode: (problem.starterCode as ProblemDetail['starterCode']) ?? null,
+      timeLimit: problem.timeLimit ?? null,
+      memoryLimit: problem.memoryLimit ?? null,
       totalSubmissions: problem.totalSubmissions,
       acceptanceRate: problem.acceptanceRate == null ? null : Number(problem.acceptanceRate),
       isBookmarked: Boolean(problem.isBookmarked),
@@ -242,6 +241,61 @@ export class ProblemsService {
     };
   }
 
+  async createProblem(userId: string, input: CreateProblemInput): Promise<ProblemDetail> {
+    await this.assertAdmin(userId);
+
+    const [existing] = await this.db
+      .select({ id: problems.id })
+      .from(problems)
+      .where(and(eq(problems.title, input.title), isNull(problems.deletedAt)))
+      .limit(1);
+
+    if (existing) {
+      throw new ConflictException({
+        message: 'Problem title already exists',
+        code: ERROR_CODES.PROBLEM_DUPLICATE_TITLE,
+      });
+    }
+
+    const created = await this.db.transaction(async (tx) => {
+      const [problem] = await tx
+        .insert(problems)
+        .values({
+          title: input.title,
+          description: input.description,
+          difficulty: input.difficulty,
+          isPublished: input.isPublished,
+          company: input.company ?? null,
+          constraints: input.constraints ?? null,
+          examples: input.examples,
+          starterCode: input.starterCode ?? null,
+          timeLimit: input.timeLimit ?? null,
+          memoryLimit: input.memoryLimit ?? null,
+        })
+        .returning({ id: problems.id });
+      if (!problem) {
+        throw new Error('Problem insert did not return a row');
+      }
+
+      await tx.insert(testCases).values(
+        input.testCases.map((testCase, index) => ({
+          problemId: problem.id,
+          input: testCase.input,
+          expectedOutput: testCase.expectedOutput,
+          description: testCase.description ?? null,
+          isHidden: testCase.isHidden,
+          sortOrder: index,
+          timeoutMs: testCase.timeoutMs ?? null,
+          memoryMb: testCase.memoryMb ?? null,
+        })),
+      );
+
+      return problem;
+    });
+
+    return this.findById(userId, created.id);
+  }
+
   async listTags(): Promise<ProblemsTagsResponse> {
     const rows = await this.db
       .select({
@@ -252,7 +306,7 @@ export class ProblemsService {
       .from(tags)
       .innerJoin(problemTags, eq(problemTags.tagId, tags.id))
       .innerJoin(problems, eq(problems.id, problemTags.problemId))
-      .where(isNull(problems.deletedAt))
+      .where(and(isNull(problems.deletedAt), eq(problems.isPublished, true)))
       .groupBy(tags.id, tags.slug, tags.name)
       .orderBy(desc(count(problemTags.problemId)), asc(tags.name));
 
@@ -269,7 +323,9 @@ export class ProblemsService {
     const [problem] = await this.db
       .select({ id: problems.id })
       .from(problems)
-      .where(and(eq(problems.id, problemId), isNull(problems.deletedAt)));
+      .where(
+        and(eq(problems.id, problemId), isNull(problems.deletedAt), eq(problems.isPublished, true)),
+      );
 
     if (!problem) {
       throw new NotFoundException({
@@ -291,12 +347,16 @@ export class ProblemsService {
     userId: string,
     query: ListBookmarksQuery,
   ): Promise<PaginatedResult<ProblemSummary>> {
+    const canViewDrafts = await this.isAdmin(userId);
     const result = await paginate<BookmarkRow>({
       cursor: query.cursor,
       limit: query.limit,
       getCursorValues: (row) => [row.bookmarkedAt.toISOString(), row.id],
       fetchPage: async (decoded, fetchLimit) => {
         const conditions = [eq(bookmarks.userId, userId), isNull(problems.deletedAt)];
+        if (!canViewDrafts) {
+          conditions.push(eq(problems.isPublished, true));
+        }
 
         if (decoded?.length === 2 && decoded[0] && decoded[1]) {
           const cursorDate = new Date(decoded[0]);
@@ -315,6 +375,7 @@ export class ProblemsService {
             id: problems.id,
             title: problems.title,
             difficulty: problems.difficulty,
+            isPublished: problems.isPublished,
             tagsAgg: this.tagsAggExpr(),
             company: problems.company,
             acceptanceRate: this.acceptanceRateExpr(),
@@ -345,6 +406,7 @@ export class ProblemsService {
       id: string;
       title: string;
       difficulty: string;
+      isPublished: boolean;
       tagsAgg: string | null;
       company: string | null;
       acceptanceRate: number | null;
@@ -356,12 +418,34 @@ export class ProblemsService {
       id: row.id,
       title: row.title,
       difficulty: row.difficulty as ProblemSummary['difficulty'],
+      isPublished: row.isPublished,
       tags: row.tagsAgg ? row.tagsAgg.split(',') : [],
       company: row.company ?? null,
-      acceptanceRate: row.acceptanceRate != null ? Number(row.acceptanceRate) : null,
+      acceptanceRate: row.acceptanceRate == null ? null : Number(row.acceptanceRate),
       isBookmarked,
       attemptStatus: row.attemptStatus as ProblemSummary['attemptStatus'],
     };
+  }
+
+  private async assertAdmin(userId: string): Promise<void> {
+    if (await this.isAdmin(userId)) {
+      return;
+    }
+
+    throw new ForbiddenException({
+      message: 'Admin access required',
+      code: ERROR_CODES.FORBIDDEN,
+    });
+  }
+
+  private async isAdmin(userId: string): Promise<boolean> {
+    const [user] = await this.db
+      .select({ role: users.role })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+
+    return user?.role === 'admin';
   }
 
   private tagsAggExpr() {
@@ -411,6 +495,49 @@ export class ProblemsService {
         )
       END
     )`.as('acceptance_rate');
+  }
+
+  private buildCursorCondition(
+    sortField: ProblemSortBy,
+    cursorSort: string,
+    cursorId: string,
+    compareOp: typeof gt,
+  ) {
+    if (sortField === 'title') {
+      return or(
+        compareOp(problems.title, cursorSort),
+        and(eq(problems.title, cursorSort), compareOp(problems.id, cursorId)),
+      );
+    }
+    if (sortField === 'difficulty') {
+      const cursorDifficulty = cursorSort as 'easy' | 'medium' | 'hard';
+      return or(
+        compareOp(problems.difficulty, cursorDifficulty),
+        and(eq(problems.difficulty, cursorDifficulty), compareOp(problems.id, cursorId)),
+      );
+    }
+    if (sortField === 'totalSubmissions') {
+      return or(
+        compareOp(problems.totalSubmissions, Number(cursorSort)),
+        and(eq(problems.totalSubmissions, Number(cursorSort)), compareOp(problems.id, cursorId)),
+      );
+    }
+    if (sortField === 'popularity') {
+      const popularityExpr = sql<number>`CASE
+        WHEN "problems"."total_submissions" = 0 THEN 0
+        ELSE "problems"."accepted_submissions"::float / "problems"."total_submissions"::float
+      END`;
+      return or(
+        compareOp(popularityExpr, Number(cursorSort)),
+        and(eq(popularityExpr, Number(cursorSort)), compareOp(problems.id, cursorId)),
+      );
+    }
+    const cursorDate = new Date(cursorSort);
+    if (Number.isNaN(cursorDate.getTime())) return undefined;
+    return or(
+      compareOp(problems.createdAt, cursorDate),
+      and(eq(problems.createdAt, cursorDate), compareOp(problems.id, cursorId)),
+    );
   }
 
   private getSortColumn(sortField: ProblemSortBy) {

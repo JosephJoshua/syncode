@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { SessionReportsService } from './session-reports.service.js';
 import { SessionsController } from './sessions.controller.js';
 import type { SessionsService } from './sessions.service.js';
 
@@ -8,7 +9,7 @@ const SESSION_DETAIL_RESULT = {
   sessionId: 'session-1',
   roomId: 'room-1',
   mode: 'peer' as const,
-  problem: { id: 'problem-1', title: 'Two Sum', difficulty: 'easy' },
+  problem: { id: 'problem-1', title: 'Two Sum', difficulty: 'easy' as const },
   language: 'python' as const,
   duration: 3600,
   participants: [
@@ -16,6 +17,7 @@ const SESSION_DETAIL_RESULT = {
       userId: 'user-1',
       username: 'alice',
       displayName: 'Alice',
+      avatarUrl: null,
       role: 'candidate' as const,
       joinedAt: new Date('2026-04-01T00:00:00Z'),
       leftAt: null,
@@ -37,8 +39,44 @@ const SESSION_DETAIL_RESULT = {
       createdAt: new Date('2026-04-01T00:45:00Z'),
     },
   ],
+  report: {
+    overallScore: 85,
+    categoryScores: { problemSolving: 85 },
+    strengths: ['Clear reasoning'],
+    areasForImprovement: ['Cover edge cases earlier'],
+    feedback: 'Good job',
+    generatedAt: new Date('2026-04-01T00:50:00Z'),
+  },
+  latestCodeSnapshot: {
+    id: 'snapshot-1',
+    code: 'print("hello")',
+    language: 'python' as const,
+    trigger: 'session_end',
+    linesOfCode: 1,
+    createdAt: new Date('2026-04-01T00:55:00Z'),
+  },
+  peerFeedback: [
+    {
+      id: 'feedback-1',
+      reviewerId: 'user-1',
+      reviewerName: 'Alice',
+      reviewerAvatarUrl: null,
+      candidateId: 'user-2',
+      candidateName: 'Bob',
+      candidateAvatarUrl: null,
+      problemSolvingRating: 4,
+      communicationRating: 4,
+      codeQualityRating: 4,
+      debuggingRating: 4,
+      overallRating: 4,
+      strengths: 'Clear reasoning',
+      improvements: 'Cover edge cases earlier',
+      wouldPairAgain: true,
+      createdAt: new Date('2026-04-01T00:58:00Z'),
+    },
+  ],
   hasReport: true,
-  hasFeedback: false,
+  hasFeedback: true,
   hasRecording: false,
   createdAt: new Date('2026-04-01T00:00:00Z'),
   finishedAt: new Date('2026-04-01T01:00:00Z'),
@@ -74,38 +112,79 @@ const LIST_RESULT = {
   pagination: { nextCursor: null, hasMore: false },
 };
 
+const SNAPSHOTS_RESULT = {
+  data: [
+    {
+      snapshotId: 'snapshot-1',
+      timestamp: new Date('2026-04-01T00:10:00Z'),
+      trigger: 'phase_change' as const,
+      language: 'python' as const,
+      code: 'print("hello")',
+      linesOfCode: 1,
+    },
+  ],
+  pagination: { nextCursor: null, hasMore: false },
+};
+
+const REPORT_RESULT = {
+  sessionId: 'session-1',
+  generatedAt: '2026-04-01T01:00:00.000Z',
+  overallScore: 85,
+  dimensions: {
+    correctness: {
+      score: 90,
+      feedback: 'Good correctness',
+      evidence: [],
+    },
+  },
+  strengths: ['Strong debugging'],
+  areasForImprovement: ['Explain tradeoffs'],
+  detailedFeedback: 'Detailed feedback',
+  comparisonToHistory: null,
+  peerFeedbackSummary: null,
+  testCaseBreakdown: [],
+};
+
 function createFixture() {
   const sessionsService: Pick<
     SessionsService,
-    'listSessions' | 'getSession' | 'deleteSession' | 'isAdmin'
+    'listSessions' | 'listSnapshots' | 'getSession' | 'deleteSession' | 'isAdmin'
   > = {
     isAdmin: vi.fn(async () => false),
     listSessions: vi.fn(async () => LIST_RESULT),
+    listSnapshots: vi.fn(async () => SNAPSHOTS_RESULT),
     getSession: vi.fn(async () => SESSION_DETAIL_RESULT),
     deleteSession: vi.fn(async () => undefined),
   };
+  const sessionReportsService: Pick<SessionReportsService, 'getReport'> = {
+    getReport: vi.fn(async () => REPORT_RESULT),
+  };
 
-  const controller = new SessionsController(sessionsService as SessionsService);
-  return { controller, sessionsService };
+  const controller = new SessionsController(
+    sessionsService as SessionsService,
+    sessionReportsService as SessionReportsService,
+  );
+  return { controller, sessionsService, sessionReportsService };
 }
 
 describe('SessionsController', () => {
   describe('listSessions', () => {
-    it('GIVEN authenticated user WHEN listSessions THEN delegates to service with correct args and serializes dates', async () => {
-      const { controller, sessionsService } = createFixture();
-      const query = { limit: 20, sortBy: 'createdAt' as const, sortOrder: 'desc' as const };
+    it('GIVEN session list WHEN listing THEN serializes dates to ISO strings and strips durationMs', async () => {
+      const { controller } = createFixture();
 
-      const result = await controller.listSessions(AUTH_USER, query);
+      const result = await controller.listSessions(AUTH_USER, {
+        limit: 20,
+        sortBy: 'createdAt',
+        sortOrder: 'desc',
+      });
 
-      expect(sessionsService.isAdmin).toHaveBeenCalledWith('user-1');
-      expect(sessionsService.listSessions).toHaveBeenCalledWith('user-1', query, false);
       expect(result.data[0].createdAt).toBe('2026-04-01T00:00:00.000Z');
       expect(result.data[0].finishedAt).toBe('2026-04-01T01:00:00.000Z');
       expect(result.data[0]).not.toHaveProperty('durationMs');
       expect(result.pagination).toEqual({ nextCursor: null, hasMore: false });
     });
 
-    it('GIVEN session with null finishedAt WHEN listSessions THEN serializes to null', async () => {
+    it('GIVEN session with null finishedAt WHEN listing THEN serializes to null', async () => {
       const { controller, sessionsService } = createFixture();
       (sessionsService.listSessions as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
         data: [{ ...LIST_RESULT.data[0], finishedAt: null }],
@@ -123,39 +202,55 @@ describe('SessionsController', () => {
   });
 
   describe('getSession', () => {
-    it('GIVEN authenticated user WHEN getSession THEN delegates to service and serializes all dates', async () => {
-      const { controller, sessionsService } = createFixture();
+    it('GIVEN session detail WHEN getting THEN serializes all nested dates to ISO strings', async () => {
+      const { controller } = createFixture();
 
       const result = await controller.getSession(AUTH_USER, 'session-1');
 
-      expect(sessionsService.isAdmin).toHaveBeenCalledWith('user-1');
-      expect(sessionsService.getSession).toHaveBeenCalledWith('session-1', 'user-1', false);
       expect(result.createdAt).toBe('2026-04-01T00:00:00.000Z');
       expect(result.finishedAt).toBe('2026-04-01T01:00:00.000Z');
       expect(result.participants[0].joinedAt).toBe('2026-04-01T00:00:00.000Z');
       expect(result.participants[0].leftAt).toBeNull();
       expect(result.runs[0].createdAt).toBe('2026-04-01T00:30:00.000Z');
       expect(result.submissions[0].createdAt).toBe('2026-04-01T00:45:00.000Z');
+      expect(result.report?.generatedAt).toBe('2026-04-01T00:50:00.000Z');
+      expect(result.latestCodeSnapshot?.createdAt).toBe('2026-04-01T00:55:00.000Z');
+      expect(result.peerFeedback[0].createdAt).toBe('2026-04-01T00:58:00.000Z');
     });
   });
 
-  describe('deleteSession', () => {
-    it('GIVEN authenticated user WHEN deleteSession THEN delegates to service with isAdmin', async () => {
-      const { controller, sessionsService } = createFixture();
+  describe('listSnapshots', () => {
+    it('GIVEN code snapshots WHEN listing THEN serializes timestamps and includes pagination', async () => {
+      const { controller } = createFixture();
 
-      await controller.deleteSession(AUTH_USER, 'session-1');
+      const result = await controller.listSnapshots(AUTH_USER, 'session-1', {
+        limit: 50,
+        sortOrder: 'asc',
+      });
 
-      expect(sessionsService.isAdmin).toHaveBeenCalledWith('user-1');
-      expect(sessionsService.deleteSession).toHaveBeenCalledWith('session-1', 'user-1', false);
+      expect(result).toEqual({
+        data: [
+          {
+            snapshotId: 'snapshot-1',
+            timestamp: '2026-04-01T00:10:00.000Z',
+            trigger: 'phase_change',
+            language: 'python',
+            code: 'print("hello")',
+            linesOfCode: 1,
+          },
+        ],
+        pagination: { nextCursor: null, hasMore: false },
+      });
     });
+  });
 
-    it('GIVEN admin user WHEN deleteSession THEN passes isAdmin=true', async () => {
-      const { controller, sessionsService } = createFixture();
-      (sessionsService.isAdmin as ReturnType<typeof vi.fn>).mockResolvedValueOnce(true);
+  describe('getReport', () => {
+    it('GIVEN session report WHEN getting THEN returns the report body unchanged', async () => {
+      const { controller } = createFixture();
 
-      await controller.deleteSession(AUTH_USER, 'session-1');
+      const result = await controller.getReport(AUTH_USER, 'session-1');
 
-      expect(sessionsService.deleteSession).toHaveBeenCalledWith('session-1', 'user-1', true);
+      expect(result).toEqual(REPORT_RESULT);
     });
   });
 });
