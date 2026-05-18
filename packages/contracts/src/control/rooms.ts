@@ -234,9 +234,62 @@ export const aiInterviewCodeAnalysisContextSchema = z.object({
 
 export type AiInterviewCodeAnalysisContext = z.infer<typeof aiInterviewCodeAnalysisContextSchema>;
 
+export const aiInterviewRequestTriggerSchema = z.enum(['user_message', 'proactive']);
+export type AiInterviewRequestTrigger = z.infer<typeof aiInterviewRequestTriggerSchema>;
+
+export const aiInterviewProactiveReasonSchema = z.enum([
+  'session_joined',
+  'stage_changed',
+  'user_idle',
+  'hint_used',
+  'manual_nudge',
+]);
+export type AiInterviewProactiveReason = z.infer<typeof aiInterviewProactiveReasonSchema>;
+
+export const aiInterviewInteractionSignalsSchema = z
+  .object({
+    reason: aiInterviewProactiveReasonSchema,
+    roomStatus: z.enum(ROOM_STATUSES),
+    elapsedSeconds: z
+      .number()
+      .int()
+      .min(0)
+      .max(24 * 60 * 60),
+    secondsSinceLastUserMessage: z
+      .number()
+      .int()
+      .min(0)
+      .max(24 * 60 * 60)
+      .optional(),
+    secondsSinceLastAssistantMessage: z
+      .number()
+      .int()
+      .min(0)
+      .max(24 * 60 * 60)
+      .optional(),
+    secondsSinceLastEditorActivity: z
+      .number()
+      .int()
+      .min(0)
+      .max(24 * 60 * 60)
+      .optional(),
+    recentEditorChanges: z.number().int().min(0).max(10_000).optional(),
+    hintCount: z.number().int().min(0).max(200).optional(),
+  })
+  .strict();
+
+export type AiInterviewInteractionSignals = z.infer<typeof aiInterviewInteractionSignalsSchema>;
+
 export const requestRoomAiInterviewSchema = z
   .object({
-    userMessage: z.string().min(1).max(2000).describe('Candidate message to the AI interviewer'),
+    trigger: aiInterviewRequestTriggerSchema
+      .default('user_message')
+      .describe('How this interview request was triggered'),
+    userMessage: z
+      .string()
+      .max(2000)
+      .optional()
+      .describe('Candidate message to the AI interviewer'),
     conversationHistory: z
       .array(
         z.object({
@@ -250,6 +303,20 @@ export const requestRoomAiInterviewSchema = z
     codeContext: aiInterviewCodeContextSchema.describe('Specific code context for the follow-up'),
     latestExecutionSummary: aiInterviewExecutionSummarySchema.optional(),
     codeAnalysisContext: aiInterviewCodeAnalysisContextSchema.optional(),
+    interactionSignals: aiInterviewInteractionSignalsSchema.optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.trigger !== 'user_message') {
+      return;
+    }
+    if ((value.userMessage?.trim().length ?? 0) > 0) {
+      return;
+    }
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['userMessage'],
+      message: 'userMessage is required when trigger is user_message',
+    });
   })
   .strict();
 
@@ -271,9 +338,10 @@ export const getRoomAiInterviewResultResponseSchema = z.discriminatedUnion('stat
   z.object({
     status: z.literal('ready'),
     jobId: z.string(),
-    message: z.string(),
+    shouldRespond: z.boolean(),
+    message: z.string().optional(),
     followUpQuestion: z.string().optional(),
-    codeContext: aiInterviewCodeContextSchema,
+    codeContext: aiInterviewCodeContextSchema.optional(),
     codeAnnotations: z.array(z.object({ line: z.number().int(), comment: z.string() })).optional(),
     audioUrl: z.string().url().optional(),
   }),

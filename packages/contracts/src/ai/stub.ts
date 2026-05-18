@@ -432,34 +432,41 @@ export class StubAiClient implements IAiClient {
           cursorLine: 1,
           cursorColumn: 1,
         };
+        const shouldRespond =
+          request.trigger !== 'proactive' || request.interactionSignals?.reason !== 'user_idle';
 
         job.status = 'completed';
-        job.interviewResult = {
-          message: "That's a good approach. Let me ask you about the time complexity.",
-          followUpQuestion: 'What is the time and space complexity of your solution?',
-          codeContext: {
-            language: request.language,
-            file: codeContext.file,
-            codeSnippet: codeContext.codeSnippet,
-            startLine: codeContext.startLine,
-            endLine: codeContext.endLine,
-            cursorLine: codeContext.cursorLine,
-            cursorColumn: codeContext.cursorColumn,
-            questionType: 'complexity',
-            reason: 'Complexity follow-up for the selected code context.',
-          },
-          codeAnnotations: [
-            {
-              line: 1,
-              comment: 'Consider adding input validation here.',
-            },
-          ],
-          audio: {
-            audioKey: `ai/interview/${jobId}.mp3`,
-            mimeType: 'audio/mpeg',
-            downloadUrl: `https://example.com/ai/interview/${jobId}.mp3`,
-          },
-        };
+        job.interviewResult = shouldRespond
+          ? {
+              shouldRespond: true,
+              message: "That's a good approach. Let me ask you about the time complexity.",
+              followUpQuestion: 'What is the time and space complexity of your solution?',
+              codeContext: {
+                language: request.language,
+                file: codeContext.file,
+                codeSnippet: codeContext.codeSnippet,
+                startLine: codeContext.startLine,
+                endLine: codeContext.endLine,
+                cursorLine: codeContext.cursorLine,
+                cursorColumn: codeContext.cursorColumn,
+                questionType: 'complexity',
+                reason: 'Complexity follow-up for the selected code context.',
+              },
+              codeAnnotations: [
+                {
+                  line: 1,
+                  comment: 'Consider adding input validation here.',
+                },
+              ],
+              audio: {
+                audioKey: `ai/interview/${jobId}.mp3`,
+                mimeType: 'audio/mpeg',
+                downloadUrl: `https://example.com/ai/interview/${jobId}.mp3`,
+              },
+            }
+          : {
+              shouldRespond: false,
+            };
       }, this.delayMs),
     );
   }
