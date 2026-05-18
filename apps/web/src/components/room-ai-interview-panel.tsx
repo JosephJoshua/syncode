@@ -1,5 +1,6 @@
 import { Button } from '@syncode/ui';
 import { Bot, Send, User } from 'lucide-react';
+import type { KeyboardEvent } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -60,7 +61,7 @@ export function RoomAiInterviewPanel({
     setDraft('');
   }
 
-  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+  function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
@@ -102,6 +103,7 @@ export function RoomAiInterviewPanel({
           onKeyDown={handleKeyDown}
           placeholder={t('workspace.aiInterviewPlaceholder')}
           disabled={!canSendMessage || isLoading}
+          maxLength={2000}
           rows={3}
           className="w-full resize-none rounded-md border border-border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50"
         />

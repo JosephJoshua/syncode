@@ -137,6 +137,8 @@
     "modeAi": "AI interviewer",
     "modeAiDesc": "An AI plays the interviewer. Solo practice, anytime.",
     "modeAiUnavailable": "Coming soon",
+    "aiRequiresSavedProblem": "AI interviewer rooms require a saved backend problem.",
+    "aiRequiresSavedProblemBadge": "Saved problem",
     "button": "Create Collaborative Room",
     "provisioning": "Provisioning Workspace...",
     "noMatchingProblems": "No matching problems",

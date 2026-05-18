@@ -174,7 +174,10 @@ function CreateRoomPage() {
   });
 
   const selectedProblemId = watch('problemId');
-  const selectedProblemLabel = availableProblems.find((p) => p.value === selectedProblemId)?.label;
+  const selectedMode = watch('mode');
+  const selectedProblem = availableProblems.find((p) => p.value === selectedProblemId);
+  const selectedProblemLabel = selectedProblem?.label;
+  const selectedProblemIsMock = selectedProblem?.isMock ?? false;
 
   const { problemId: problemIdFromSearch } = Route.useSearch();
   const [hasAppliedInitialProblem, setHasAppliedInitialProblem] = useState(false);
@@ -191,6 +194,12 @@ function CreateRoomPage() {
     setValue('problemId', problemIdFromSearch, { shouldValidate: true });
     setHasAppliedInitialProblem(true);
   }, [availableProblems, hasAppliedInitialProblem, problemIdFromSearch, setValue]);
+
+  useEffect(() => {
+    if (selectedMode === 'ai' && selectedProblemIsMock) {
+      setValue('mode', 'peer', { shouldValidate: true });
+    }
+  }, [selectedMode, selectedProblemIsMock, setValue]);
 
   const createRoomMutation = useMutation({
     mutationFn: (data: CreateRoomFormData) =>
@@ -214,6 +223,11 @@ function CreateRoomPage() {
 
   const onSubmit = async (data: CreateRoomFormData) => {
     setSubmissionError(null);
+
+    if (data.mode === 'ai' && isMockProblemId(data.problemId)) {
+      setSubmissionError(t('create.aiRequiresSavedProblem'));
+      return;
+    }
 
     try {
       const room = await createRoomMutation.mutateAsync(data);
@@ -447,21 +461,36 @@ function CreateRoomPage() {
                       <button
                         type="button"
                         aria-pressed={field.value === 'ai'}
-                        aria-disabled="true"
-                        disabled
-                        className="flex cursor-not-allowed flex-col gap-2 rounded-lg border border-border bg-muted/20 p-4 text-left opacity-70"
+                        aria-disabled={selectedProblemIsMock}
+                        disabled={selectedProblemIsMock}
+                        onClick={() => field.onChange('ai')}
+                        className={cn(
+                          'flex cursor-pointer flex-col gap-2 rounded-lg border p-4 text-left transition-colors',
+                          selectedProblemIsMock
+                            ? 'cursor-not-allowed border-border bg-muted/20 opacity-70'
+                            : field.value === 'ai'
+                              ? 'border-primary bg-primary/5 ring-1 ring-primary/30'
+                              : 'border-border hover:bg-muted/30',
+                        )}
                       >
                         <div className="flex items-center gap-2">
-                          <Bot size={18} className="text-muted-foreground/60" />
+                          <Bot
+                            size={18}
+                            className={
+                              field.value === 'ai' ? 'text-primary' : 'text-muted-foreground/70'
+                            }
+                          />
                           <span className="text-sm font-semibold text-foreground">
                             {t('create.modeAi')}
                           </span>
-                          <Badge
-                            variant="outline"
-                            className="ml-auto px-1.5 py-0 text-[10px] font-medium"
-                          >
-                            {t('create.modeAiUnavailable')}
-                          </Badge>
+                          {selectedProblemIsMock ? (
+                            <Badge
+                              variant="outline"
+                              className="ml-auto px-1.5 py-0 text-[10px] font-medium"
+                            >
+                              {t('create.aiRequiresSavedProblemBadge')}
+                            </Badge>
+                          ) : null}
                         </div>
                         <span className="text-xs text-muted-foreground">
                           {t('create.modeAiDesc')}

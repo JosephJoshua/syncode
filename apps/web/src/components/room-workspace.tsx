@@ -269,6 +269,8 @@ export function RoomWorkspace({
   const [aiInterviewMessages, setAiInterviewMessages] = useState<AiInterviewMessage[]>([]);
   const [aiInterviewLoading, setAiInterviewLoading] = useState(false);
   const [aiInterviewError, setAiInterviewError] = useState<string | null>(null);
+  const aiInterviewPollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const aiInterviewRequestSeqRef = useRef(0);
 
   useEffect(() => {
     if (!room.problemId) return;
@@ -308,6 +310,24 @@ export function RoomWorkspace({
   const [activeRightTab, setActiveRightTab] = useState<'participants' | 'chat' | 'interview'>(
     'participants',
   );
+
+  useEffect(() => {
+    if (room.mode !== 'ai' && activeRightTab === 'interview') {
+      setActiveRightTab('participants');
+    }
+  }, [activeRightTab, room.mode]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: roomId changes must cancel stale interview polling before the new room renders
+  useEffect(() => {
+    return () => {
+      aiInterviewRequestSeqRef.current += 1;
+      if (aiInterviewPollTimeoutRef.current) {
+        clearTimeout(aiInterviewPollTimeoutRef.current);
+        aiInterviewPollTimeoutRef.current = null;
+      }
+    };
+  }, [roomId]);
+
   const [bottomCollapsed, setBottomCollapsed] = useState(false);
   const [activeCenterTab, setActiveCenterTab] = useState<'code' | 'whiteboard'>('code');
   const [whiteboardViewMode, setWhiteboardViewMode] = useState<'tab' | 'floating'>('tab');
@@ -966,13 +986,24 @@ export function RoomWorkspace({
 
   const handleSendInterviewMessage = useCallback(
     async (userMessage: string) => {
+      aiInterviewRequestSeqRef.current += 1;
+      const requestSeq = aiInterviewRequestSeqRef.current;
+      if (aiInterviewPollTimeoutRef.current) {
+        clearTimeout(aiInterviewPollTimeoutRef.current);
+        aiInterviewPollTimeoutRef.current = null;
+      }
+
+      const isCurrentRequest = () => aiInterviewRequestSeqRef.current === requestSeq;
+
       setAiInterviewError(null);
       setAiInterviewLoading(true);
 
       const userEntry: AiInterviewMessage = { role: 'user', content: userMessage };
       setAiInterviewMessages((prev) => [...prev, userEntry]);
 
-      const history = aiInterviewMessages.map((m) => ({ role: m.role, content: m.content }));
+      const history = aiInterviewMessages
+        .slice(-AI_INTERVIEW_HISTORY_LIMIT)
+        .map((m) => ({ role: m.role, content: m.content }));
 
       try {
         const submission = await api(CONTROL_API.ROOMS.AI_INTERVIEW, {
@@ -984,49 +1015,74 @@ export function RoomWorkspace({
           },
         });
 
-        const POLL_INTERVAL_MS = 1500;
-        const MAX_POLLS = 40;
         let polls = 0;
 
         const poll = async (): Promise<void> => {
-          if (polls >= MAX_POLLS) {
+          if (!isCurrentRequest()) return;
+          if (polls >= AI_INTERVIEW_MAX_POLLS) {
             setAiInterviewError(t('workspace.aiInterviewFailed'));
             setAiInterviewLoading(false);
             return;
           }
           polls += 1;
 
-          const result = await api(CONTROL_API.ROOMS.AI_INTERVIEW_RESULT, {
-            params: { id: roomId, jobId: submission.jobId },
-          });
+          try {
+            const result = await api(CONTROL_API.ROOMS.AI_INTERVIEW_RESULT, {
+              params: { id: roomId, jobId: submission.jobId },
+            });
 
-          if (result.status === 'pending') {
-            setTimeout(() => void poll(), POLL_INTERVAL_MS);
-            return;
-          }
+            if (!isCurrentRequest()) return;
 
-          if (result.status === 'failed') {
-            setAiInterviewError(t('workspace.aiInterviewFailed'));
+            if (result.status === 'pending') {
+              aiInterviewPollTimeoutRef.current = setTimeout(() => {
+                aiInterviewPollTimeoutRef.current = null;
+                void poll();
+              }, AI_INTERVIEW_POLL_INTERVAL_MS);
+              return;
+            }
+
+            if (result.status === 'failed') {
+              setAiInterviewError(t('workspace.aiInterviewFailed'));
+              setAiInterviewLoading(false);
+              return;
+            }
+
+            setAiInterviewMessages((prev) => [
+              ...prev,
+              {
+                role: 'assistant',
+                content: result.message,
+                followUpQuestion: result.followUpQuestion,
+                codeAnnotations: result.codeAnnotations,
+                audioUrl: result.audioUrl,
+              },
+            ]);
             setAiInterviewLoading(false);
-            return;
+          } catch (error) {
+            if (!isCurrentRequest()) return;
+            const apiError = await readApiError(error);
+            const message = resolveErrorMessage(
+              apiError,
+              INTERVIEW_ERROR_KEYS,
+              'workspace.aiInterviewUnavailable',
+              t,
+            );
+            setAiInterviewError(message);
+            setAiInterviewLoading(false);
           }
-
-          setAiInterviewMessages((prev) => [
-            ...prev,
-            {
-              role: 'assistant',
-              content: result.message,
-              followUpQuestion: result.followUpQuestion,
-              codeAnnotations: result.codeAnnotations,
-              audioUrl: result.audioUrl,
-            },
-          ]);
-          setAiInterviewLoading(false);
         };
 
         void poll();
-      } catch {
-        setAiInterviewError(t('workspace.aiInterviewUnavailable'));
+      } catch (error) {
+        if (!isCurrentRequest()) return;
+        const apiError = await readApiError(error);
+        const message = resolveErrorMessage(
+          apiError,
+          INTERVIEW_ERROR_KEYS,
+          'workspace.aiInterviewUnavailable',
+          t,
+        );
+        setAiInterviewError(message);
         setAiInterviewLoading(false);
       }
     },
@@ -1933,8 +1989,19 @@ const HINT_ERROR_KEYS: Partial<Record<string, string>> = {
   [ERROR_CODES.AI_SERVICE_UNAVAILABLE]: 'workspace.hintUnavailable',
 };
 
+const INTERVIEW_ERROR_KEYS: Partial<Record<string, string>> = {
+  [ERROR_CODES.ROOM_PERMISSION_DENIED]: 'workspace.hintPermissionDenied',
+  [ERROR_CODES.ROOM_ACCESS_DENIED]: 'workspace.hintPermissionDenied',
+  [ERROR_CODES.ROOM_NOT_AI_MODE]: 'workspace.aiInterviewUnavailable',
+  [ERROR_CODES.PROBLEM_NOT_FOUND]: 'workspace.problemNotFound',
+  [ERROR_CODES.AI_SERVICE_UNAVAILABLE]: 'workspace.aiInterviewUnavailable',
+};
+
 const HINT_POLL_INTERVAL_MS = 750;
 const HINT_POLL_TIMEOUT_MS = 30_000;
+const AI_INTERVIEW_POLL_INTERVAL_MS = 1500;
+const AI_INTERVIEW_MAX_POLLS = 40;
+const AI_INTERVIEW_HISTORY_LIMIT = 20;
 
 class AiHintTimeoutError extends Error {
   constructor() {
