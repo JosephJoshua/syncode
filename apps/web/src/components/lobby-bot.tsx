@@ -199,36 +199,36 @@ export function LobbyBot({
 
         {/* Left eye */}
         <motion.ellipse
+          cx={38}
+          cy={eyeBaseY}
           rx={eyeRx}
           ry={eyeRy}
           animate={{
-            cx: mood === 'sleeping' ? 38 : undefined,
-            cy: mood === 'sleeping' ? eyeBaseY : undefined,
             rx: eyeRx,
             ry: eyeRy,
             fill: eyeColor,
           }}
           style={{
-            cx: mood === 'sleeping' ? undefined : leftPupilCx,
-            cy: mood === 'sleeping' ? undefined : leftPupilCy,
+            cx: mood === 'sleeping' ? 38 : leftPupilCx,
+            cy: mood === 'sleeping' ? eyeBaseY : leftPupilCy,
           }}
           transition={{ type: 'spring', stiffness: 180, damping: 16 }}
         />
 
         {/* Right eye */}
         <motion.ellipse
+          cx={62}
+          cy={eyeBaseY}
           rx={eyeRx}
           ry={eyeRy}
           animate={{
-            cx: mood === 'sleeping' ? 62 : undefined,
-            cy: mood === 'sleeping' ? eyeBaseY : undefined,
             rx: eyeRx,
             ry: eyeRy,
             fill: eyeColor,
           }}
           style={{
-            cx: mood === 'sleeping' ? undefined : rightPupilCx,
-            cy: mood === 'sleeping' ? undefined : rightPupilCy,
+            cx: mood === 'sleeping' ? 62 : rightPupilCx,
+            cy: mood === 'sleeping' ? eyeBaseY : rightPupilCy,
           }}
           transition={{ type: 'spring', stiffness: 180, damping: 16 }}
         />

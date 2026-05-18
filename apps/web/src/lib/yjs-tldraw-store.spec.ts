@@ -166,10 +166,15 @@ describe('createYjsTldrawStore', () => {
   it('GIVEN dispose WHEN called twice THEN does not throw', () => {
     const doc = new Y.Doc();
     const result = makeStore(doc, 'alice');
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+
     expect(() => {
       result.dispose();
       result.dispose();
     }).not.toThrow();
+    expect(consoleError).not.toHaveBeenCalled();
+
+    consoleError.mockRestore();
     doc.destroy();
   });
 

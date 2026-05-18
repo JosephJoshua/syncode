@@ -84,6 +84,27 @@ describe('RoomAiInterviewPanel', () => {
     expect(onSend).toHaveBeenCalledWith('My answer');
   });
 
+  it('GIVEN user submits rapidly WHEN send button is double-clicked THEN emits one message', async () => {
+    const user = userEvent.setup();
+    const onSend = vi.fn();
+    render(
+      <RoomAiInterviewPanel
+        messages={[]}
+        isLoading={false}
+        error={null}
+        onSendMessage={onSend}
+        canSendMessage={true}
+      />,
+    );
+
+    const textarea = screen.getByPlaceholderText('workspace.aiInterviewPlaceholder');
+    await user.type(textarea, 'My answer');
+    await user.dblClick(screen.getByRole('button', { name: 'workspace.aiInterviewSend' }));
+
+    expect(onSend).toHaveBeenCalledTimes(1);
+    expect(onSend).toHaveBeenCalledWith('My answer');
+  });
+
   it('GIVEN assistant message with codeAnnotations WHEN rendered THEN shows annotations', () => {
     render(
       <RoomAiInterviewPanel
