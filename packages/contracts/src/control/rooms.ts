@@ -173,6 +173,55 @@ export const getRoomAiHintResultResponseSchema = z.discriminatedUnion('status', 
 
 export type GetRoomAiHintResultResponse = z.infer<typeof getRoomAiHintResultResponseSchema>;
 
+export const requestRoomAiInterviewSchema = z
+  .object({
+    userMessage: z.string().min(1).max(2000).describe('Candidate message to the AI interviewer'),
+    conversationHistory: z
+      .array(
+        z.object({
+          role: z.enum(['user', 'assistant']),
+          content: z.string().max(4000),
+        }),
+      )
+      .max(40)
+      .describe('Prior conversation turns'),
+    currentCode: z.string().max(16_000).describe('Current code in the editor'),
+  })
+  .strict();
+
+export type RequestRoomAiInterviewInput = z.infer<typeof requestRoomAiInterviewSchema>;
+
+export const requestRoomAiInterviewResponseSchema = z.object({
+  jobId: z
+    .string()
+    .describe('AI interview job ID — poll GET /rooms/:id/ai/interview/:jobId for the result'),
+});
+
+export type RequestRoomAiInterviewResponse = z.infer<typeof requestRoomAiInterviewResponseSchema>;
+
+export const getRoomAiInterviewResultResponseSchema = z.discriminatedUnion('status', [
+  z.object({
+    status: z.literal('pending'),
+    jobId: z.string(),
+  }),
+  z.object({
+    status: z.literal('ready'),
+    jobId: z.string(),
+    message: z.string(),
+    followUpQuestion: z.string().optional(),
+    codeAnnotations: z.array(z.object({ line: z.number().int(), comment: z.string() })).optional(),
+    audioUrl: z.string().url().optional(),
+  }),
+  z.object({
+    status: z.literal('failed'),
+    jobId: z.string(),
+  }),
+]);
+
+export type GetRoomAiInterviewResultResponse = z.infer<
+  typeof getRoomAiInterviewResultResponseSchema
+>;
+
 export const requestRoomCodeAnalysisSchema = z
   .object({
     code: z
