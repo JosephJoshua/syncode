@@ -39,6 +39,7 @@ import { MatchmakingService } from './matchmaking.service.js';
 let db: Database;
 let cleanup: () => Promise<void>;
 let service: MatchmakingService;
+let roomsService: RoomsService;
 
 beforeEach(async () => {
   vi.clearAllMocks();
@@ -91,6 +92,7 @@ beforeEach(async () => {
   }).compile();
 
   service = module.get(MatchmakingService);
+  roomsService = module.get(RoomsService);
 });
 
 afterEach(async () => {
@@ -198,7 +200,7 @@ describe('MatchmakingService', () => {
     expect(participant?.role).toBe('candidate');
   });
 
-  it('GIVEN non-waiting public room WHEN requester queues THEN requester joins as observer only', async () => {
+  it('GIVEN non-waiting public room WHEN requester queues THEN requester remains searching', async () => {
     const host = await insertUser(db);
     const activeCandidate = await insertUser(db);
     const requester = await insertUser(db);
@@ -219,18 +221,14 @@ describe('MatchmakingService', () => {
       roles: ['candidate'],
     });
 
-    expect(result.status).toBe('matched');
-    if (result.status !== 'matched') {
-      throw new Error('expected matched status');
-    }
-    expect(result.roomId).toBe(room.id);
+    expect(result.status).toBe('searching');
 
     const [participant] = await db
       .select({ role: roomParticipants.role })
       .from(roomParticipants)
       .where(and(eq(roomParticipants.roomId, room.id), eq(roomParticipants.userId, requester.id)))
       .limit(1);
-    expect(participant?.role).toBe('observer');
+    expect(participant).toBeUndefined();
   });
 
   it('GIVEN only private room is available WHEN requester queues THEN requester remains searching', async () => {
@@ -538,6 +536,59 @@ describe('MatchmakingService', () => {
     expect(row?.status).toBe('cancelled');
   });
 
+  it('GIVEN matched queue request WHEN user leaves queue THEN matched status is dismissed', async () => {
+    const firstUser = await insertUser(db);
+    const secondUser = await insertUser(db);
+
+    await service.enterQueue(firstUser.id, {
+      languages: ['python'],
+      difficulties: [],
+      problemIds: [],
+      topics: [],
+      roles: [],
+    });
+    await service.enterQueue(secondUser.id, {
+      languages: ['python'],
+      difficulties: [],
+      problemIds: [],
+      topics: [],
+      roles: [],
+    });
+
+    expect((await service.getQueueStatus(firstUser.id)).status).toBe('matched');
+
+    await expect(service.leaveQueue(firstUser.id)).resolves.toEqual({ status: 'idle' });
+    expect(await service.getQueueStatus(firstUser.id)).toEqual({ status: 'idle' });
+  });
+
+  it('GIVEN concurrent enterQueue calls for one user WHEN both complete THEN only one pending request remains', async () => {
+    const user = await insertUser(db);
+
+    await Promise.all([
+      service.enterQueue(user.id, {
+        languages: ['python'],
+        difficulties: [],
+        problemIds: [],
+        topics: [],
+        roles: ['observer'],
+      }),
+      service.enterQueue(user.id, {
+        languages: ['javascript'],
+        difficulties: [],
+        problemIds: [],
+        topics: [],
+        roles: ['observer'],
+      }),
+    ]);
+
+    const activeRequests = await db
+      .select({ id: matchRequests.id, status: matchRequests.status })
+      .from(matchRequests)
+      .where(and(eq(matchRequests.userId, user.id), eq(matchRequests.status, 'pending')));
+
+    expect(activeRequests).toHaveLength(1);
+  });
+
   it('GIVEN expired pending request WHEN running cycle THEN status becomes idle and request is marked expired', async () => {
     const user = await insertUser(db);
     const expiredAt = new Date(Date.now() - 30_000);
@@ -565,5 +616,125 @@ describe('MatchmakingService', () => {
       .where(and(eq(matchRequests.userId, user.id), eq(matchRequests.expiresAt, expiredAt)))
       .limit(1);
     expect(row?.status).toBe('expired');
+  });
+
+  it('GIVEN request is cancelled after joining existing room WHEN cycle commits THEN join is rolled back', async () => {
+    const host = await insertUser(db);
+    const requester = await insertUser(db);
+    const room = await insertRoom(db, host.id, {
+      status: 'waiting',
+      isPrivate: false,
+      language: 'python',
+      maxParticipants: 5,
+    });
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+
+    const expiresAt = new Date(Date.now() + 60_000);
+    const [request] = await db
+      .insert(matchRequests)
+      .values({
+        userId: requester.id,
+        status: 'pending',
+        expiresAt,
+        requestedTags: {
+          languages: ['python'],
+          difficulties: [],
+          problemIds: [],
+          topics: [],
+          roles: ['candidate'],
+        },
+      })
+      .returning({ id: matchRequests.id });
+    if (!request) {
+      throw new Error('expected match request');
+    }
+
+    const originalJoinRoom = roomsService.joinRoom.bind(roomsService);
+    vi.spyOn(roomsService, 'joinRoom').mockImplementation(async (...args) => {
+      const result = await originalJoinRoom(...args);
+      await db
+        .update(matchRequests)
+        .set({ status: 'cancelled' })
+        .where(eq(matchRequests.id, request.id));
+      return result;
+    });
+
+    await service.runMatchingCycle();
+
+    const [requestRow] = await db
+      .select({ status: matchRequests.status })
+      .from(matchRequests)
+      .where(eq(matchRequests.id, request.id))
+      .limit(1);
+    expect(requestRow?.status).toBe('cancelled');
+
+    const [participant] = await db
+      .select({ isActive: roomParticipants.isActive, leftAt: roomParticipants.leftAt })
+      .from(roomParticipants)
+      .where(and(eq(roomParticipants.roomId, room.id), eq(roomParticipants.userId, requester.id)))
+      .limit(1);
+    expect(participant?.isActive).toBe(false);
+    expect(participant?.leftAt).toBeInstanceOf(Date);
+  });
+
+  it('GIVEN request is cancelled after creating pair room WHEN cycle commits THEN room is removed', async () => {
+    const firstUser = await insertUser(db);
+    const secondUser = await insertUser(db);
+    const expiresAt = new Date(Date.now() + 60_000);
+    const sharedPreferences = {
+      languages: ['python'],
+      difficulties: [],
+      problemIds: [],
+      topics: [],
+      roles: [],
+    };
+
+    const [firstRequest, secondRequest] = await db
+      .insert(matchRequests)
+      .values([
+        {
+          userId: firstUser.id,
+          status: 'pending',
+          expiresAt,
+          requestedTags: sharedPreferences,
+        },
+        {
+          userId: secondUser.id,
+          status: 'pending',
+          expiresAt,
+          requestedTags: sharedPreferences,
+        },
+      ])
+      .returning({ id: matchRequests.id, userId: matchRequests.userId });
+
+    if (!firstRequest || !secondRequest) {
+      throw new Error('expected match requests');
+    }
+
+    const originalJoinRoom = roomsService.joinRoom.bind(roomsService);
+    vi.spyOn(roomsService, 'joinRoom').mockImplementation(async (...args) => {
+      const result = await originalJoinRoom(...args);
+      await db
+        .update(matchRequests)
+        .set({ status: 'cancelled' })
+        .where(eq(matchRequests.id, secondRequest.id));
+      return result;
+    });
+
+    await service.runMatchingCycle();
+
+    const matchmadeRooms = await db
+      .select({ id: rooms.id })
+      .from(rooms)
+      .where(eq(rooms.name, 'Matchmade Interview'));
+    expect(matchmadeRooms).toHaveLength(0);
+
+    const requestRows = await db
+      .select({ id: matchRequests.id, status: matchRequests.status })
+      .from(matchRequests)
+      .where(eq(matchRequests.userId, secondUser.id));
+    expect(requestRows).toEqual([
+      expect.objectContaining({ id: secondRequest.id, status: 'cancelled' }),
+    ]);
   });
 });

@@ -1,7 +1,7 @@
 import { Test } from '@nestjs/testing';
 import { COLLAB_CLIENT } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
-import { roomDocSnapshots, roomParticipants, rooms, sessions } from '@syncode/db';
+import { matchRequests, roomDocSnapshots, roomParticipants, rooms, sessions } from '@syncode/db';
 import { QUEUE_SERVICE } from '@syncode/shared/ports';
 import { and, eq } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -241,7 +241,7 @@ describe('AbandonedRoomCleanupService.cleanupAbandonedRoomsOnce', () => {
     expect(sessionReportsService.enqueueForFinishedSession).toHaveBeenCalledWith(session.id);
   });
 
-  it('GIVEN collab update fails WHEN cleanup runs THEN still finishes room', async () => {
+  it('GIVEN collab update fails WHEN cleanup runs THEN leaves room unfinished and skips reports', async () => {
     const host = await insertUser(db);
     const room = await insertRoom(db, host.id, {
       status: 'coding',
@@ -275,15 +275,58 @@ describe('AbandonedRoomCleanupService.cleanupAbandonedRoomsOnce', () => {
 
     const cleaned = await service.cleanupAbandonedRoomsOnce();
 
-    expect(cleaned).toBe(1);
+    expect(cleaned).toBe(0);
     expect(collabClient.createDocument).not.toHaveBeenCalled();
 
     const [roomRow] = await db.select().from(rooms).where(eq(rooms.id, room.id));
-    expect(roomRow?.status).toBe('finished');
+    expect(roomRow?.status).toBe('coding');
 
     const [sessionRow] = await db.select().from(sessions).where(eq(sessions.id, session.id));
-    expect(sessionRow?.status).toBe('finished');
-    expect(sessionReportsService.enqueueForFinishedSession).toHaveBeenCalledWith(session.id);
+    expect(sessionRow?.status).toBe('ongoing');
+    expect(sessionReportsService.enqueueForFinishedSession).not.toHaveBeenCalled();
+  });
+
+  it('GIVEN abandoned matched room WHEN cleanup runs THEN expires linked matchmaking requests', async () => {
+    const host = await insertUser(db);
+    const matchedUser = await insertUser(db);
+    const room = await insertRoom(db, host.id, {
+      status: 'waiting',
+      createdAt: new Date(Date.now() - 60 * 60_000),
+    });
+
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+    await db
+      .update(roomParticipants)
+      .set({
+        isActive: false,
+        joinedAt: new Date(Date.now() - 55 * 60_000),
+        leftAt: new Date(Date.now() - 30 * 60_000),
+      })
+      .where(and(eq(roomParticipants.roomId, room.id), eq(roomParticipants.userId, host.id)));
+
+    const [request] = await db
+      .insert(matchRequests)
+      .values({
+        userId: matchedUser.id,
+        status: 'matched',
+        matchedRoomId: room.id,
+        matchedWithUserId: host.id,
+        expiresAt: new Date(Date.now() + 60_000),
+      })
+      .returning({ id: matchRequests.id });
+    if (!request) {
+      throw new Error('expected match request');
+    }
+
+    const cleaned = await service.cleanupAbandonedRoomsOnce();
+
+    expect(cleaned).toBe(1);
+
+    const [requestRow] = await db
+      .select({ status: matchRequests.status })
+      .from(matchRequests)
+      .where(eq(matchRequests.id, request.id));
+    expect(requestRow?.status).toBe('expired');
   });
 
   it('GIVEN waiting room with active participant WHEN cleanup runs THEN does not finish room', async () => {
