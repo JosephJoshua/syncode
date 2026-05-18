@@ -1098,6 +1098,7 @@ describe('POST /rooms/:id/ai/interview', () => {
   it('GIVEN AI room candidate and selected problem WHEN requesting interview response THEN returns ready interview result', async () => {
     const { candidate, room } = await createAiInterviewRoom();
     mockAiClient.getInterviewResult.mockResolvedValueOnce({
+      shouldRespond: true,
       message: 'Explain why your hash map lookup is correct.',
       followUpQuestion: 'What happens with duplicate numbers?',
       codeContext: interviewCodeContext,
@@ -1142,6 +1143,7 @@ describe('POST /rooms/:id/ai/interview', () => {
     expect(result.body).toEqual({
       status: 'ready',
       jobId: submission.body.jobId,
+      shouldRespond: true,
       message: 'Explain why your hash map lookup is correct.',
       followUpQuestion: 'What happens with duplicate numbers?',
       codeContext: interviewCodeContext,
@@ -1154,6 +1156,7 @@ describe('POST /rooms/:id/ai/interview', () => {
     const { candidate, room } = await createAiInterviewRoom();
     const currentCode = 'def two_sum(nums, target):\n    return []';
     mockAiClient.getInterviewResult.mockResolvedValueOnce({
+      shouldRespond: true,
       message: 'Explain why your hash map lookup is correct.',
       followUpQuestion: 'What happens with duplicate numbers?',
       codeContext: {
@@ -1435,9 +1438,9 @@ describe('POST /rooms/:id/ai/interview', () => {
     expect(mockAiClient.submitInterviewResponse).not.toHaveBeenCalled();
   });
 
-  it('GIVEN AI room outside coding phase WHEN requesting interview response THEN returns ROOM_INVALID_STATE', async () => {
+  it('GIVEN AI room in finished phase WHEN requesting interview response THEN returns ROOM_INVALID_STATE', async () => {
     const { candidate, room } = await createAiInterviewRoom();
-    await db.update(rooms).set({ status: 'wrapup' }).where(eq(rooms.id, room.id));
+    await db.update(rooms).set({ status: 'finished' }).where(eq(rooms.id, room.id));
 
     const result = await asUser(
       request(app.getHttpServer()).post(`/rooms/${room.id}/ai/interview`),
@@ -1453,6 +1456,34 @@ describe('POST /rooms/:id/ai/interview', () => {
 
     expect(result.body.code).toBe(ERROR_CODES.ROOM_INVALID_STATE);
     expect(mockAiClient.submitInterviewResponse).not.toHaveBeenCalled();
+  });
+
+  it('GIVEN AI room in warmup phase WHEN requesting interview response THEN accepts request', async () => {
+    const { candidate, room } = await createAiInterviewRoom();
+    await db.update(rooms).set({ status: 'warmup' }).where(eq(rooms.id, room.id));
+
+    await asUser(request(app.getHttpServer()).post(`/rooms/${room.id}/ai/interview`), candidate)
+      .send({
+        userMessage: 'Can we discuss my plan before coding?',
+        conversationHistory: [],
+        currentCode: 'print("hello")',
+        codeContext: { ...interviewCodeContext, codeSnippet: 'print("hello")', endLine: 1 },
+      })
+      .expect(202);
+  });
+
+  it('GIVEN AI room in wrapup phase WHEN requesting interview response THEN accepts request', async () => {
+    const { candidate, room } = await createAiInterviewRoom();
+    await db.update(rooms).set({ status: 'wrapup' }).where(eq(rooms.id, room.id));
+
+    await asUser(request(app.getHttpServer()).post(`/rooms/${room.id}/ai/interview`), candidate)
+      .send({
+        userMessage: 'Can we review my choices from this session?',
+        conversationHistory: [],
+        currentCode: 'print("hello")',
+        codeContext: { ...interviewCodeContext, codeSnippet: 'print("hello")', endLine: 1 },
+      })
+      .expect(202);
   });
 
   it('GIVEN another participant owns interview job WHEN polling with wrong user THEN returns 404', async () => {

@@ -1342,16 +1342,19 @@ export class RoomsService {
       'Interview',
     );
     const problemDescription = await this.loadAiProblemDescription(problemId);
-    const [sessionId, latestExecutionSummary, latestCodeAnalysisContext] = await Promise.all([
-      this.loadCurrentRoomSessionId(roomId),
-      this.loadLatestHintSubmissionSummary(roomId, userId, body.currentCode, activeLanguage),
-      this.loadLatestCodeAnalysisContext(roomId, userId, body.currentCode, activeLanguage),
-    ]);
+    const [sessionId, latestExecutionSummary, latestCodeAnalysisContext, recentHints] =
+      await Promise.all([
+        this.loadCurrentRoomSessionId(roomId),
+        this.loadLatestHintSubmissionSummary(roomId, userId, body.currentCode, activeLanguage),
+        this.loadLatestCodeAnalysisContext(roomId, userId, body.currentCode, activeLanguage),
+        this.loadRecentInterviewHints(roomId, userId),
+      ]);
     const codeContext = this.buildVerifiedInterviewCodeContext(
       body.codeContext,
       body.currentCode,
       activeLanguage,
     );
+    const userMessage = body.userMessage?.trim();
 
     let submitted: { jobId: JobId<'ai:interview'> };
     try {
@@ -1364,8 +1367,11 @@ export class RoomsService {
         codeContext,
         latestExecutionSummary,
         codeAnalysisContext: latestCodeAnalysisContext ?? undefined,
+        recentHints,
+        trigger: body.trigger,
+        interactionSignals: body.interactionSignals,
         language: activeLanguage,
-        userMessage: body.userMessage,
+        userMessage,
         conversationHistory: body.conversationHistory,
       });
     } catch (error) {
@@ -1426,9 +1432,10 @@ export class RoomsService {
     return {
       status: 'ready',
       jobId,
+      shouldRespond: interviewResult.shouldRespond,
       message: interviewResult.message,
       followUpQuestion: interviewResult.followUpQuestion,
-      codeContext: mapping.codeContext,
+      codeContext: interviewResult.shouldRespond ? mapping.codeContext : undefined,
       codeAnnotations: interviewResult.codeAnnotations,
       audioUrl: interviewResult.audio?.downloadUrl,
     };
@@ -1651,6 +1658,12 @@ export class RoomsService {
   private static readonly AI_HINT_JOB_CACHE_TTL_SECONDS = 60 * 60;
   private static readonly AI_INTERVIEW_JOB_CACHE_PREFIX = 'ai-interview-job:';
   private static readonly AI_INTERVIEW_JOB_CACHE_TTL_SECONDS = 60 * 60;
+  private static readonly AI_INTERVIEW_ALLOWED_STATUSES = new Set<RoomStatus>([
+    RoomStatus.WARMUP,
+    RoomStatus.CODING,
+    RoomStatus.WRAPUP,
+  ]);
+  private static readonly AI_INTERVIEW_HINT_CONTEXT_LIMIT = 8;
   private static readonly AI_CODE_ANALYSIS_MAX_CODE_LENGTH = 16_000;
   private static readonly AI_CODE_ANALYSIS_LIMIT_COUNT = 10;
   private static readonly AI_CODE_ANALYSIS_LIMIT_WINDOW_SECONDS = 5 * 60;
@@ -2552,9 +2565,9 @@ export class RoomsService {
       });
     }
 
-    if (label === 'Interview' && room.status !== RoomStatus.CODING) {
+    if (label === 'Interview' && !RoomsService.AI_INTERVIEW_ALLOWED_STATUSES.has(room.status)) {
       throw new BadRequestException({
-        message: 'AI interview is only available during the coding phase',
+        message: 'AI interview is unavailable for this room phase',
         code: ERROR_CODES.ROOM_INVALID_STATE,
       });
     }
@@ -2796,6 +2809,34 @@ export class RoomsService {
       this.logger.warn(`Unable to load room chat history for AI hint in room ${roomId}`, error);
       return [];
     }
+  }
+
+  private async loadRecentInterviewHints(
+    roomId: string,
+    userId: string,
+  ): Promise<Array<{ hint: string; createdAt: string }>> {
+    const rows = await this.db
+      .select({
+        hint: aiHints.hint,
+        createdAt: aiHints.createdAt,
+      })
+      .from(aiHints)
+      .where(
+        and(
+          eq(aiHints.roomId, roomId),
+          eq(aiHints.userId, userId),
+          sql`length(${aiHints.hint}) > 0`,
+        ),
+      )
+      .orderBy(desc(aiHints.createdAt))
+      .limit(RoomsService.AI_INTERVIEW_HINT_CONTEXT_LIMIT);
+
+    return rows
+      .map((row) => ({
+        hint: row.hint.trim(),
+        createdAt: row.createdAt.toISOString(),
+      }))
+      .filter((row) => row.hint.length > 0);
   }
 
   private async loadLatestHintSubmissionSummary(
