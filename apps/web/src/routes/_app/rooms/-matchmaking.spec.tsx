@@ -60,6 +60,7 @@ import { MatchmakingPage } from './matchmaking.js';
 
 const apiMock = vi.mocked(api);
 const toastSuccessMock = vi.mocked(toast.success);
+const toastErrorMock = vi.mocked(toast.error);
 
 function renderPage() {
   const client = new QueryClient({
@@ -108,6 +109,7 @@ describe('MatchmakingPage', () => {
   beforeEach(() => {
     apiMock.mockReset();
     toastSuccessMock.mockReset();
+    toastErrorMock.mockReset();
     navigateMock.mockReset();
     navigateMock.mockImplementation(() => Promise.resolve());
   });
@@ -137,7 +139,7 @@ describe('MatchmakingPage', () => {
               hostAvatarUrl: null,
               language: 'python',
               problemTitle: 'Two Sum',
-              problemDifficulty: 'easy',
+              problemDifficulty: 'medium',
               participantCount: 1,
               isParticipant: false,
               maxParticipants: 2,
@@ -203,7 +205,7 @@ describe('MatchmakingPage', () => {
               hostAvatarUrl: null,
               language: 'python',
               problemTitle: 'Two Sum',
-              problemDifficulty: 'easy',
+              problemDifficulty: 'medium',
               participantCount: 1,
               isParticipant: false,
               maxParticipants: 2,
@@ -263,7 +265,7 @@ describe('MatchmakingPage', () => {
               hostAvatarUrl: null,
               language: 'python',
               problemTitle: 'Two Sum',
-              problemDifficulty: 'easy',
+              problemDifficulty: 'medium',
               participantCount: 2,
               isParticipant: false,
               maxParticipants: 5,
@@ -302,6 +304,58 @@ describe('MatchmakingPage', () => {
     ).toBe(false);
   });
 
+  it('GIVEN queue status poll fails WHEN user is searching THEN shows idle without leaving queue', async () => {
+    apiMock.mockImplementation((route) => {
+      if (route.route === CONTROL_API.PROBLEMS.TAGS.route) {
+        return Promise.resolve(mockProblemTags());
+      }
+      if (route.route === CONTROL_API.PROBLEMS.LIST.route) {
+        return Promise.resolve(mockProblemsList());
+      }
+      if (route.route === CONTROL_API.ROOMS.BROWSE_PUBLIC.route) {
+        return Promise.resolve({
+          data: [],
+          pagination: { nextCursor: null, hasMore: false },
+        });
+      }
+      if (route === CONTROL_API.MATCHMAKING.GET_QUEUE_STATUS) {
+        return Promise.reject(new Error('network'));
+      }
+      if (route === CONTROL_API.MATCHMAKING.ENTER_QUEUE) {
+        return Promise.resolve({
+          status: 'searching',
+          requestId: '550e8400-e29b-41d4-a716-446655440214',
+          queuePosition: 1,
+          expiresAt: '2026-05-18T12:00:00.000Z',
+          preferences: {
+            languages: ['python'],
+            difficulties: ['medium'],
+            problemIds: [],
+            topics: [],
+            roles: [],
+          },
+        });
+      }
+      throw new Error(`Unexpected route: ${route.route}`);
+    });
+
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(screen.getByRole('button', { name: /matchmaking\.start/i }));
+
+    await waitFor(
+      () => {
+        expect(toastErrorMock).toHaveBeenCalledWith('matchmaking.searchFailed');
+      },
+      { timeout: 5_000 },
+    );
+    expect(
+      apiMock.mock.calls.some(([route]) => route === CONTROL_API.MATCHMAKING.LEAVE_QUEUE),
+    ).toBe(false);
+    expect(screen.getByText('matchmaking.status.idle')).toBeInTheDocument();
+  });
+
   it('GIVEN searching status WHEN user cancels queue THEN calls leave endpoint and returns idle status', async () => {
     apiMock.mockImplementation((route) => {
       if (route.route === CONTROL_API.PROBLEMS.TAGS.route) {
@@ -324,7 +378,7 @@ describe('MatchmakingPage', () => {
           expiresAt: '2026-05-18T12:00:00.000Z',
           preferences: {
             languages: ['python'],
-            difficulties: [],
+            difficulties: ['medium'],
             problemIds: [],
             topics: [],
             roles: [],
@@ -339,7 +393,7 @@ describe('MatchmakingPage', () => {
           expiresAt: '2026-05-18T12:00:00.000Z',
           preferences: {
             languages: ['python'],
-            difficulties: [],
+            difficulties: ['medium'],
             problemIds: [],
             topics: [],
             roles: [],
@@ -370,6 +424,80 @@ describe('MatchmakingPage', () => {
     });
   });
 
+  it('GIVEN room preflight is pending WHEN start is clicked twice THEN only one search starts', async () => {
+    let resolveBrowse:
+      | ((value: { data: []; pagination: { nextCursor: null; hasMore: false } }) => void)
+      | undefined;
+    const browsePromise = new Promise<{
+      data: [];
+      pagination: { nextCursor: null; hasMore: false };
+    }>((resolve) => {
+      resolveBrowse = resolve;
+    });
+
+    apiMock.mockImplementation((route) => {
+      if (route.route === CONTROL_API.PROBLEMS.TAGS.route) {
+        return Promise.resolve(mockProblemTags());
+      }
+      if (route.route === CONTROL_API.PROBLEMS.LIST.route) {
+        return Promise.resolve(mockProblemsList());
+      }
+      if (route.route === CONTROL_API.ROOMS.BROWSE_PUBLIC.route) {
+        return browsePromise;
+      }
+      if (route.route === CONTROL_API.MATCHMAKING.ENTER_QUEUE.route) {
+        return Promise.resolve({
+          status: 'searching',
+          requestId: '550e8400-e29b-41d4-a716-446655440042',
+          queuePosition: 1,
+          expiresAt: '2026-05-18T12:00:00.000Z',
+          preferences: {
+            languages: ['python'],
+            difficulties: ['medium'],
+            problemIds: [],
+            topics: [],
+            roles: [],
+          },
+        });
+      }
+      if (route.route === CONTROL_API.MATCHMAKING.GET_QUEUE_STATUS.route) {
+        return Promise.resolve({
+          status: 'searching',
+          requestId: '550e8400-e29b-41d4-a716-446655440042',
+          queuePosition: 1,
+          expiresAt: '2026-05-18T12:00:00.000Z',
+          preferences: {
+            languages: ['python'],
+            difficulties: ['medium'],
+            problemIds: [],
+            topics: [],
+            roles: [],
+          },
+        });
+      }
+      throw new Error(`Unexpected route: ${route.route}`);
+    });
+
+    const user = userEvent.setup();
+    renderPage();
+
+    const startButton = screen.getByRole('button', { name: /matchmaking\.start/i });
+    await user.click(startButton);
+    await user.click(startButton);
+    if (!resolveBrowse) {
+      throw new Error('expected browse resolver');
+    }
+    resolveBrowse({ data: [], pagination: { nextCursor: null, hasMore: false } });
+
+    await waitFor(() => {
+      expect(
+        apiMock.mock.calls.filter(
+          ([route]) => route.route === CONTROL_API.MATCHMAKING.ENTER_QUEUE.route,
+        ),
+      ).toHaveLength(1);
+    });
+  });
+
   it('GIVEN searching status WHEN user leaves matchmaking page THEN queue is canceled automatically', async () => {
     apiMock.mockImplementation((route) => {
       if (route.route === CONTROL_API.PROBLEMS.TAGS.route) {
@@ -392,7 +520,7 @@ describe('MatchmakingPage', () => {
           expiresAt: '2026-05-18T12:00:00.000Z',
           preferences: {
             languages: ['python'],
-            difficulties: [],
+            difficulties: ['medium'],
             problemIds: [],
             topics: [],
             roles: [],
@@ -407,7 +535,7 @@ describe('MatchmakingPage', () => {
           expiresAt: '2026-05-18T12:00:00.000Z',
           preferences: {
             languages: ['python'],
-            difficulties: [],
+            difficulties: ['medium'],
             problemIds: [],
             topics: [],
             roles: [],
@@ -474,7 +602,7 @@ describe('MatchmakingPage', () => {
           expiresAt: '2026-05-18T12:00:00.000Z',
           preferences: {
             languages: ['python'],
-            difficulties: [],
+            difficulties: ['medium'],
             problemIds: [],
             topics: [],
             roles: [],
@@ -489,7 +617,7 @@ describe('MatchmakingPage', () => {
           expiresAt: '2026-05-18T12:00:00.000Z',
           preferences: {
             languages: ['python'],
-            difficulties: [],
+            difficulties: ['medium'],
             problemIds: [],
             topics: [],
             roles: [],
@@ -508,7 +636,7 @@ describe('MatchmakingPage', () => {
       expect(apiMock).toHaveBeenCalledWith(CONTROL_API.MATCHMAKING.ENTER_QUEUE, {
         body: {
           languages: ['python'],
-          difficulties: [],
+          difficulties: ['medium'],
           problemIds: [],
           topics: [],
           roles: [],
@@ -546,7 +674,7 @@ describe('MatchmakingPage', () => {
           expiresAt: '2026-05-18T12:00:00.000Z',
           preferences: {
             languages: ['python'],
-            difficulties: ['easy', 'medium'],
+            difficulties: ['easy'],
             problemIds: ['550e8400-e29b-41d4-a716-446655440100'],
             topics: [],
             roles: [],
@@ -561,7 +689,7 @@ describe('MatchmakingPage', () => {
           expiresAt: '2026-05-18T12:00:00.000Z',
           preferences: {
             languages: ['python'],
-            difficulties: ['easy', 'medium'],
+            difficulties: ['easy'],
             problemIds: ['550e8400-e29b-41d4-a716-446655440100'],
             topics: [],
             roles: [],
@@ -574,8 +702,8 @@ describe('MatchmakingPage', () => {
     const user = userEvent.setup();
     renderPage();
 
-    await user.click(screen.getByRole('button', { name: 'matchmaking.difficulty.easy' }));
     await user.click(screen.getByRole('button', { name: 'matchmaking.difficulty.medium' }));
+    await user.click(screen.getByRole('button', { name: 'matchmaking.difficulty.easy' }));
     await user.click(screen.getByRole('button', { name: /matchmaking\.anyProblem/i }));
     await user.click(screen.getByText(/Two Sum · matchmaking\.difficulty\.easy/i));
     await user.click(screen.getByRole('button', { name: /matchmaking\.start/i }));
@@ -584,7 +712,7 @@ describe('MatchmakingPage', () => {
       expect(apiMock).toHaveBeenCalledWith(CONTROL_API.MATCHMAKING.ENTER_QUEUE, {
         body: {
           languages: ['python'],
-          difficulties: ['easy', 'medium'],
+          difficulties: ['easy'],
           problemIds: ['550e8400-e29b-41d4-a716-446655440100'],
           topics: [],
           roles: [],
@@ -615,7 +743,7 @@ describe('MatchmakingPage', () => {
           expiresAt: '2026-05-18T12:00:00.000Z',
           preferences: {
             languages: ['python'],
-            difficulties: [],
+            difficulties: ['medium'],
             problemIds: [],
             topics: ['array'],
             roles: [],
@@ -630,7 +758,7 @@ describe('MatchmakingPage', () => {
           expiresAt: '2026-05-18T12:00:00.000Z',
           preferences: {
             languages: ['python'],
-            difficulties: [],
+            difficulties: ['medium'],
             problemIds: [],
             topics: ['array'],
             roles: [],
@@ -651,7 +779,7 @@ describe('MatchmakingPage', () => {
       expect(apiMock).toHaveBeenCalledWith(CONTROL_API.MATCHMAKING.ENTER_QUEUE, {
         body: {
           languages: ['python'],
-          difficulties: [],
+          difficulties: ['medium'],
           problemIds: [],
           topics: ['array'],
           roles: [],

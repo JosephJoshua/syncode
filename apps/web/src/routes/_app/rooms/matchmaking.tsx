@@ -66,14 +66,16 @@ function MatchmakingPage() {
   const [enabledFilters, setEnabledFilters] = useState<MatchFilterKey[]>(['languages', 'problems']);
   const [selectedLanguages, setSelectedLanguages] = useState<SupportedLanguage[]>(['python']);
   const [selectedRoles, setSelectedRoles] = useState<RoomRole[]>([]);
-  const [selectedDifficulties, setSelectedDifficulties] = useState<ProblemDifficulty[]>([]);
+  const [selectedDifficulties, setSelectedDifficulties] = useState<ProblemDifficulty[]>(['medium']);
   const [selectedProblemIds, setSelectedProblemIds] = useState<string[]>([]);
   const [selectedTopics, setSelectedTopics] = useState<string[]>([]);
   const [queueStatus, setQueueStatus] = useState<QueueStatus>('idle');
   const [queuePosition, setQueuePosition] = useState<number | null>(null);
+  const [isStartingQueue, setIsStartingQueue] = useState(false);
   const [activeQueueRequestId, setActiveQueueRequestId] = useState<string | null>(null);
   const matchedRoomIdRef = useRef<string | null>(null);
   const queueStatusRef = useRef<QueueStatus>('idle');
+  const isStartingQueueRef = useRef(false);
   const isMountedRef = useRef(true);
   const updateQueueStatus = useCallback((status: QueueStatus) => {
     queueStatusRef.current = status;
@@ -208,6 +210,12 @@ function MatchmakingPage() {
   const isQueued = queueStatus !== 'idle';
 
   const startQueue = async () => {
+    if (isQueued || isStartingQueueRef.current) {
+      return;
+    }
+
+    isStartingQueueRef.current = true;
+    setIsStartingQueue(true);
     try {
       const joinedExistingRoom = await tryJoinCompatiblePublicRoom();
       if (joinedExistingRoom) {
@@ -242,6 +250,9 @@ function MatchmakingPage() {
       setQueuePosition(null);
       setActiveQueueRequestId(null);
       updateQueueStatus('idle');
+    } finally {
+      isStartingQueueRef.current = false;
+      setIsStartingQueue(false);
     }
   };
 
@@ -336,7 +347,7 @@ function MatchmakingPage() {
             ? preferredRoles.length > 0
               ? [...preferredRoles]
               : [null]
-            : ['observer' as RoomRole];
+            : ['observer'];
 
         for (const requestedRole of requestedRoles) {
           try {
@@ -360,13 +371,14 @@ function MatchmakingPage() {
   };
 
   const stopQueue = async () => {
-    try {
-      await leaveQueueMutation.mutateAsync();
-    } catch {}
     matchedRoomIdRef.current = null;
     setQueuePosition(null);
     setActiveQueueRequestId(null);
     updateQueueStatus('idle');
+
+    try {
+      await leaveQueueMutation.mutateAsync();
+    } catch {}
   };
 
   const toggleFilter = (key: MatchFilterKey) => {
@@ -408,6 +420,7 @@ function MatchmakingPage() {
                     type="button"
                     onClick={() => toggleFilter(item.key)}
                     disabled={isQueued}
+                    aria-pressed={enabled}
                     className={cn(
                       'inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs transition-colors',
                       enabled
@@ -504,7 +517,7 @@ function MatchmakingPage() {
           <div className="flex flex-wrap gap-2">
             <Button
               className="gap-2 shadow-[0_0_25px_hsl(var(--primary)/0.3)] hover:shadow-[0_0_35px_hsl(var(--primary)/0.5)]"
-              disabled={isQueued || enterQueueMutation.isPending}
+              disabled={isQueued || isStartingQueue || enterQueueMutation.isPending}
               onClick={startQueue}
             >
               {enterQueueMutation.isPending ? (
@@ -747,6 +760,7 @@ function PreferencePillSelector<T extends string>({
               type="button"
               disabled={disabled}
               onClick={() => onToggle(option.id)}
+              aria-pressed={selected}
               className={cn(
                 'inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs transition-colors',
                 selected
