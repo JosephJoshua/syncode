@@ -23,6 +23,12 @@ import type {
 import type { sessionFeedbackResponseSchema, submitSessionFeedbackSchema } from './feedback.js';
 import type { healthCheckResponseSchema } from './health.js';
 import type {
+  enterMatchmakingQueueResponseSchema,
+  enterMatchmakingQueueSchema,
+  getMatchmakingStatusResponseSchema,
+  leaveMatchmakingQueueResponseSchema,
+} from './matchmaking.js';
+import type {
   createProblemSchema,
   problemDetailSchema,
   problemsListQuerySchema,
@@ -114,6 +120,20 @@ export const CONTROL_API = {
     ),
     REFRESH: defineRoute<void, z.infer<typeof accessTokenResponseSchema>>()('auth/refresh', 'POST'),
     LOGOUT: defineRoute<void, void>()('auth/logout', 'POST'),
+  },
+  MATCHMAKING: {
+    ENTER_QUEUE: defineRoute<
+      z.infer<typeof enterMatchmakingQueueSchema>,
+      z.infer<typeof enterMatchmakingQueueResponseSchema>
+    >()('matchmaking/queue', 'POST'),
+    LEAVE_QUEUE: defineRoute<void, z.infer<typeof leaveMatchmakingQueueResponseSchema>>()(
+      'matchmaking/queue',
+      'DELETE',
+    ),
+    GET_QUEUE_STATUS: defineRoute<void, z.infer<typeof getMatchmakingStatusResponseSchema>>()(
+      'matchmaking/queue',
+      'GET',
+    ),
   },
   USERS: {
     PROFILE: defineRoute<void, z.infer<typeof userProfileResponseSchema>>()('users/me', 'GET'),
