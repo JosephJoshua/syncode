@@ -6,7 +6,7 @@ import type {
   ChatSendEventData,
 } from '@syncode/contracts';
 import { Badge, Button } from '@syncode/ui';
-import { Bot, ChevronDown, Loader2, Paperclip, Reply, Send, X } from 'lucide-react';
+import { ChevronDown, Loader2, Paperclip, Reply, Send, X } from 'lucide-react';
 import {
   type ChangeEvent,
   type ReactNode,
@@ -199,7 +199,7 @@ export function RoomChatPanel({
         searchKey: participant.username.toLowerCase(),
       }));
 
-    return [{ key: 'ai', label: '@ai', token: '@ai', searchKey: 'ai' }, ...users];
+    return users;
   }, [participants, currentUserId]);
 
   const activeMention = useMemo(
@@ -566,7 +566,7 @@ export function RoomChatPanel({
           </div>
         ) : null}
 
-        {activeMention ? (
+        {activeMention && mentionTabSuggestions.length > 0 ? (
           <div className="space-y-1">
             <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
               {t('workspace.chatMentionTabsLabel')}
@@ -580,7 +580,6 @@ export function RoomChatPanel({
                   disabled={isComposerDisabled}
                   className="inline-flex shrink-0 items-center gap-1 rounded-full border border-border/70 bg-background/70 px-2 py-1 text-[10px] text-foreground/85 transition-colors hover:border-primary/40 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {tab.key === 'ai' ? <Bot className="size-3 text-primary/80" /> : null}
                   <span>{tab.label}</span>
                 </button>
               ))}
@@ -653,10 +652,6 @@ export function RoomChatPanel({
             </Button>
           </div>
         </div>
-
-        <p className="flex items-center gap-1 text-[10px] text-muted-foreground">
-          <Bot className="size-3" /> {t('workspace.chatAiHint')}
-        </p>
       </div>
     </div>
   );

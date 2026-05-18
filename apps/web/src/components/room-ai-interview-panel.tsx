@@ -7,6 +7,8 @@ import { useTranslation } from 'react-i18next';
 import type { Participant } from './room-participant-card.js';
 
 export interface AiInterviewMessage {
+  id?: string;
+  createdAt?: number;
   role: 'user' | 'assistant';
   content: string;
   followUpQuestion?: string;
@@ -179,7 +181,7 @@ export function RoomAiInterviewPanel({
         ) : (
           messages.map((msg, index) => (
             <AiInterviewMessageBubble
-              key={`${msg.role}-${index}-${msg.content.slice(0, 20)}`}
+              key={msg.id ?? `${msg.role}-${index}-${msg.content.slice(0, 20)}`}
               message={msg}
               t={t}
               currentUser={currentUser}
