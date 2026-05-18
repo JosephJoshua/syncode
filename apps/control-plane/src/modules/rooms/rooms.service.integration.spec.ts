@@ -11,6 +11,7 @@ import { Test } from '@nestjs/testing';
 import { AI_CLIENT, COLLAB_CLIENT, ERROR_CODES, EXECUTION_CLIENT } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
 import {
+  codeSnapshots,
   roomDocSnapshots,
   roomParticipants,
   rooms,
@@ -65,6 +66,13 @@ beforeEach(async () => {
   mockCollabClient = createMockCollabClient();
   mockSessionReportsService = createMockSessionReportsService();
   mockStorageService = createMockStorageService();
+  mockCollabClient.updateRoomState.mockImplementation(async (request) => {
+    if (request.phase === 'finished' && request.language) {
+      await insertSessionEndSnapshotForRoom(request.roomId, request.language);
+    }
+
+    return { success: true };
+  });
 
   const module = await Test.createTestingModule({
     providers: [
@@ -89,6 +97,28 @@ beforeEach(async () => {
 afterEach(async () => {
   await cleanup();
 });
+
+async function insertSessionEndSnapshotForRoom(roomId: string, language = 'python') {
+  const [session] = await db
+    .select({ id: sessions.id })
+    .from(sessions)
+    .where(eq(sessions.roomId, roomId))
+    .limit(1);
+
+  if (!session) {
+    return;
+  }
+
+  await db.insert(codeSnapshots).values({
+    sessionId: session.id,
+    roomId,
+    code: 'print("done")',
+    language,
+    trigger: 'session_end',
+    phase: 'finished',
+    linesOfCode: 1,
+  });
+}
 
 describe('createRoom', () => {
   it('GIVEN valid input WHEN creating room THEN persists room with DB defaults and interviewer participant for the host', async () => {
@@ -1094,6 +1124,27 @@ describe('transitionPhase (multi-step)', () => {
     expect(mockSessionReportsService.enqueueForFinishedSession).toHaveBeenCalledWith(session.id);
   });
 
+  it('GIVEN report enqueue fails WHEN transitioning to finished THEN surfaces the failure', async () => {
+    const host = await insertUser(db);
+    const candidate = await insertUser(db);
+    const room = await insertRoom(db, host.id, { status: 'wrapup', language: 'python' });
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+    await insertParticipant(db, room.id, candidate.id, 'candidate');
+
+    const session = await insertSession(db, room.id, { status: 'ongoing' });
+    await insertSessionParticipant(db, session.id, host.id, 'interviewer');
+    await insertSessionParticipant(db, session.id, candidate.id, 'candidate');
+    mockSessionReportsService.enqueueForFinishedSession.mockRejectedValueOnce(
+      new Error('report queue down'),
+    );
+
+    await expect(service.transitionPhase(room.id, host.id, 'finished')).rejects.toThrow(
+      'report queue down',
+    );
+
+    expect(mockSessionReportsService.enqueueForFinishedSession).toHaveBeenCalledWith(session.id);
+  });
+
   it('GIVEN session finishes WHEN transitioning to finished THEN waits for final collab snapshot before enqueuing reports', async () => {
     const host = await insertUser(db);
     const candidate = await insertUser(db);
@@ -1182,7 +1233,7 @@ describe('transitionPhase (multi-step)', () => {
     expect(sessionAfterFailure?.status).toBe('ongoing');
   });
 
-  it('GIVEN final collab snapshot update fails WHEN transitioning to finished THEN still enqueues reports', async () => {
+  it('GIVEN final collab snapshot update fails WHEN transitioning to finished THEN fails closed without enqueuing reports', async () => {
     const host = await insertUser(db);
     const candidate = await insertUser(db);
     const room = await insertRoom(db, host.id, { status: 'wrapup', language: 'python' });
@@ -1194,17 +1245,52 @@ describe('transitionPhase (multi-step)', () => {
     await insertSessionParticipant(db, session.id, candidate.id, 'candidate');
     mockCollabClient.updateRoomState.mockRejectedValueOnce(new Error('collab down'));
 
-    await service.transitionPhase(room.id, host.id, 'finished');
+    await expect(service.transitionPhase(room.id, host.id, 'finished')).rejects.toThrow(
+      'collab down',
+    );
 
-    expect(mockSessionReportsService.enqueueForFinishedSession).toHaveBeenCalledWith(session.id);
+    expect(mockSessionReportsService.enqueueForFinishedSession).not.toHaveBeenCalledWith(
+      session.id,
+    );
 
     const [roomAfterTransition] = await db.select().from(rooms).where(eq(rooms.id, room.id));
     const [sessionAfterTransition] = await db
       .select()
       .from(sessions)
       .where(eq(sessions.id, session.id));
-    expect(roomAfterTransition?.status).toBe('finished');
-    expect(sessionAfterTransition?.status).toBe('finished');
+    expect(roomAfterTransition?.status).toBe('wrapup');
+    expect(sessionAfterTransition?.status).toBe('ongoing');
+  });
+
+  it('GIVEN final collab update succeeds without session_end snapshot WHEN transitioning to finished THEN fails before finalizing', async () => {
+    const host = await insertUser(db);
+    const candidate = await insertUser(db);
+    const room = await insertRoom(db, host.id, { status: 'wrapup', language: 'python' });
+    await insertParticipant(db, room.id, host.id, 'interviewer');
+    await insertParticipant(db, room.id, candidate.id, 'candidate');
+
+    const session = await insertSession(db, room.id, { status: 'ongoing' });
+    await insertSessionParticipant(db, session.id, host.id, 'interviewer');
+    await insertSessionParticipant(db, session.id, candidate.id, 'candidate');
+    mockCollabClient.updateRoomState.mockResolvedValueOnce({ success: true });
+
+    await expect(service.transitionPhase(room.id, host.id, 'finished')).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: ERROR_CODES.INTERNAL_ERROR,
+      }),
+    });
+
+    expect(mockSessionReportsService.enqueueForFinishedSession).not.toHaveBeenCalledWith(
+      session.id,
+    );
+
+    const [roomAfterTransition] = await db.select().from(rooms).where(eq(rooms.id, room.id));
+    const [sessionAfterTransition] = await db
+      .select()
+      .from(sessions)
+      .where(eq(sessions.id, session.id));
+    expect(roomAfterTransition?.status).toBe('wrapup');
+    expect(sessionAfterTransition?.status).toBe('ongoing');
   });
 
   it('GIVEN DB update fails after final collab snapshot WHEN transitioning to finished THEN restores collab phase', async () => {
@@ -1268,6 +1354,7 @@ describe('transitionPhase (multi-step)', () => {
     const session = await insertSession(db, room.id, { status: 'ongoing' });
     await insertSessionParticipant(db, session.id, host.id, 'interviewer');
     await insertSessionParticipant(db, session.id, candidate.id, 'candidate');
+    await insertSessionEndSnapshotForRoom(room.id, 'python');
     await db.execute(sql`
       CREATE FUNCTION fail_room_finish_update_restore()
       RETURNS trigger AS $$

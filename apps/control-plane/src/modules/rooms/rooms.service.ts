@@ -1769,7 +1769,7 @@ export class RoomsService {
           .select()
           .from(rooms)
           .where(eq(rooms.id, roomId))
-          .for('update');
+          .for('no key update');
 
         if (!lockedRoom) {
           throw new NotFoundException({
@@ -1792,6 +1792,7 @@ export class RoomsService {
           targetStatus,
           userId,
         );
+        await this.assertFinalSessionEndSnapshotReady(tx, roomId, lockedStatus, targetStatus);
 
         const roomUpdate = this.buildPhaseTransitionUpdate(
           lockedStatus,
@@ -1842,6 +1843,7 @@ export class RoomsService {
           `Failed to enqueue session reports for session ${finishedSessionId}`,
           error,
         );
+        throw error;
       }
     }
 
@@ -1949,6 +1951,41 @@ export class RoomsService {
       message: 'Cannot finish a room before selecting a programming language',
       code: ERROR_CODES.VALIDATION_FAILED,
     });
+  }
+
+  private async assertFinalSessionEndSnapshotReady(
+    tx: Parameters<Parameters<Database['transaction']>[0]>[0],
+    roomId: string,
+    previousStatus: RoomStatus,
+    targetStatus: RoomStatus,
+  ): Promise<void> {
+    if (targetStatus !== RoomStatus.FINISHED || previousStatus === RoomStatus.WAITING) {
+      return;
+    }
+
+    const [session] = await tx
+      .select({ id: sessions.id })
+      .from(sessions)
+      .where(eq(sessions.roomId, roomId))
+      .limit(1);
+
+    if (!session) {
+      return;
+    }
+
+    const [snapshot] = await tx
+      .select({ id: codeSnapshots.id })
+      .from(codeSnapshots)
+      .where(and(eq(codeSnapshots.sessionId, session.id), eq(codeSnapshots.trigger, 'session_end')))
+      .orderBy(desc(codeSnapshots.createdAt))
+      .limit(1);
+
+    if (!snapshot) {
+      throw new InternalServerErrorException({
+        message: 'Cannot finish room before persisting the final session code snapshot',
+        code: ERROR_CODES.INTERNAL_ERROR,
+      });
+    }
   }
 
   private buildPhaseTransitionUpdate(
@@ -2496,17 +2533,8 @@ export class RoomsService {
     editorLocked: boolean,
     language: SupportedLanguage,
     changedBy?: string,
-  ): Promise<boolean> {
-    try {
-      await this.collabClient.updateRoomState({ roomId, phase, editorLocked, changedBy, language });
-      return true;
-    } catch (error) {
-      this.logger.warn(
-        `Failed to confirm final collab room state for room ${roomId}; continuing finish transition`,
-        error,
-      );
-      return false;
-    }
+  ): Promise<void> {
+    await this.collabClient.updateRoomState({ roomId, phase, editorLocked, changedBy, language });
   }
 
   private async restoreCollabRoomStateStrict(
