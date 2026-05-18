@@ -1,6 +1,6 @@
 import { NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import { AI_CLIENT, ERROR_CODES } from '@syncode/contracts';
+import { AI_CLIENT, COLLAB_CLIENT, ERROR_CODES } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
 import {
   aiMessages,
@@ -27,7 +27,11 @@ import {
   insertTestCase,
   insertUser,
 } from '@/test/integration-setup.js';
-import { createMockAiClient, createMockStorageService } from '@/test/mock-factories.js';
+import {
+  createMockAiClient,
+  createMockCollabClient,
+  createMockStorageService,
+} from '@/test/mock-factories.js';
 import { SessionReportRequestBuilderService } from './session-report-request-builder.service.js';
 import { SessionReportsService } from './session-reports.service.js';
 import { SessionsService } from './sessions.service.js';
@@ -36,6 +40,7 @@ let db: Database;
 let cleanup: () => Promise<void>;
 let service: SessionReportsService;
 let mockAiClient: ReturnType<typeof createMockAiClient>;
+let mockCollabClient: ReturnType<typeof createMockCollabClient>;
 let cacheService: InMemoryCacheService;
 
 beforeEach(async () => {
@@ -43,6 +48,7 @@ beforeEach(async () => {
   db = testDb.db;
   cleanup = testDb.cleanup;
   mockAiClient = createMockAiClient();
+  mockCollabClient = createMockCollabClient();
   cacheService = new InMemoryCacheService();
 
   const module = await Test.createTestingModule({
@@ -52,6 +58,7 @@ beforeEach(async () => {
       SessionReportsService,
       { provide: DB_CLIENT, useValue: db },
       { provide: AI_CLIENT, useValue: mockAiClient },
+      { provide: COLLAB_CLIENT, useValue: mockCollabClient },
       { provide: CACHE_SERVICE, useValue: cacheService },
       { provide: STORAGE_SERVICE, useValue: createMockStorageService() },
     ],
@@ -203,6 +210,43 @@ describe('enqueueForFinishedSession', () => {
       role: 'assistant',
       content: 'Talk through your complexity reasoning.',
     });
+    mockCollabClient.getRoomChatHistory.mockResolvedValueOnce({
+      messages: [
+        {
+          messageId: 'chat-1',
+          roomId: room.id,
+          userId: candidate.id,
+          text: 'I think hashmap should work here.',
+          replyToMessageId: null,
+          mentions: [],
+          attachments: [],
+          reactions: [],
+          createdAt: new Date('2026-04-20T01:00:40.000Z').getTime(),
+          updatedAt: new Date('2026-04-20T01:00:40.000Z').getTime(),
+        },
+        {
+          messageId: 'chat-2',
+          roomId: room.id,
+          userId: interviewer.id,
+          text: '',
+          replyToMessageId: null,
+          mentions: [],
+          attachments: [
+            {
+              kind: 'file',
+              key: 'rooms/file-1',
+              url: 'https://example.com/file-1',
+              fileName: 'hint.png',
+              mimeType: 'image/png',
+              sizeBytes: 1024,
+            },
+          ],
+          reactions: [],
+          createdAt: new Date('2026-04-20T01:00:55.000Z').getTime(),
+          updatedAt: new Date('2026-04-20T01:00:55.000Z').getTime(),
+        },
+      ],
+    });
 
     const previousRoom = await insertRoom(db, candidate.id);
     const previousSession = await insertSession(db, previousRoom.id, { status: 'finished' });
@@ -240,6 +284,7 @@ describe('enqueueForFinishedSession', () => {
     const candidateRequest = mockAiClient.submitSessionReportRequest.mock.calls.find(
       ([request]) => request.participantId === candidate.id,
     )?.[0];
+    expect(candidateRequest).toBeDefined();
     expect(candidateRequest?.sessionEvents).not.toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -248,7 +293,7 @@ describe('enqueueForFinishedSession', () => {
         }),
       ]),
     );
-    expect(mockAiClient.submitSessionReportRequest).toHaveBeenCalledWith(
+    expect(candidateRequest).toEqual(
       expect.objectContaining({
         sessionId: session.id,
         participantId: candidate.id,
@@ -275,6 +320,18 @@ describe('enqueueForFinishedSession', () => {
           expect.objectContaining({ userId: interviewer.id, role: 'interviewer' }),
           expect.objectContaining({ userId: candidate.id, role: 'candidate' }),
         ]),
+        roomChatMessages: [
+          {
+            role: 'user',
+            content: 'User 2 (candidate): I think hashmap should work here.',
+            createdAt: '2026-04-20T01:00:40.000Z',
+          },
+          {
+            role: 'user',
+            content: 'User 1 (interviewer): [attachments: hint.png]',
+            createdAt: '2026-04-20T01:00:55.000Z',
+          },
+        ],
         historicalContext: {
           sessionsCompared: 1,
           averageScore: 72,
@@ -347,6 +404,34 @@ describe('enqueueForFinishedSession', () => {
       .from(sessionReports)
       .where(eq(sessionReports.sessionId, session.id));
     expect(reportRows).toHaveLength(0);
+  });
+
+  it('GIVEN collab chat history lookup fails WHEN enqueuing reports THEN still submits AI jobs with empty roomChatMessages', async () => {
+    const user = await insertUser(db, { username: 'candidate-no-chat' });
+    const room = await insertRoom(db, user.id, { language: 'python' });
+    const session = await insertSession(db, room.id, {
+      language: 'python',
+      status: 'finished',
+      durationMs: 90000,
+    });
+    await insertSessionParticipant(db, session.id, user.id, 'candidate');
+    await insertRequiredSessionEndSnapshot(
+      session.id,
+      room.id,
+      'def two_sum():\n    return [0, 1]',
+    );
+
+    mockCollabClient.getRoomChatHistory.mockRejectedValueOnce(new Error('collab unavailable'));
+
+    await service.enqueueForFinishedSession(session.id);
+
+    expect(mockAiClient.submitSessionReportRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: session.id,
+        participantId: user.id,
+        roomChatMessages: [],
+      }),
+    );
   });
 
   it('GIVEN session report result is already cached WHEN enqueuing report THEN persists it after metadata is stored', async () => {
