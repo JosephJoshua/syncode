@@ -192,6 +192,26 @@ jobs:
 
           cd "${DEPLOY_PATH}"
 
+          deploy_lock="/tmp/syncode-deploy-${DEPLOY_BRANCH}.lock"
+          exec 9>"${deploy_lock}"
+          flock 9
+          echo "Acquired deploy lock: ${deploy_lock}"
+
+          retry() {
+            local attempt
+            local status
+            for attempt in 1 2 3; do
+              if "$@"; then
+                return 0
+              fi
+              status=$?
+              if [ "${attempt}" = 3 ]; then
+                return "${status}"
+              fi
+              sleep $((attempt * 5))
+            done
+          }
+
           services=(web control-plane collab-plane execution-plane ai-plane)
           case "${DEPLOY_BRANCH}" in
             main)
@@ -228,20 +248,20 @@ jobs:
           compose=(sudo docker compose -f docker-compose.prod.yml --env-file "${env_file}" "${project_args[@]}")
 
           echo "::group::Pull images"
-          "${compose[@]}" pull "${services[@]}"
+          retry "${compose[@]}" pull "${services[@]}"
           echo "::endgroup::"
 
           echo "::group::Run migrations"
-          "${compose[@]}" run -T --rm control-plane node migrate.mjs </dev/null
+          retry "${compose[@]}" run -T --rm control-plane node migrate.mjs </dev/null
           echo "::endgroup::"
 
           echo "::group::Recreate app services"
-          "${compose[@]}" up -d "${services[@]}"
+          retry "${compose[@]}" up -d --force-recreate --remove-orphans "${services[@]}"
           echo "::endgroup::"
 
           echo "::group::Reload nginx"
-          sudo docker exec "${nginx_container}" nginx -t
-          sudo docker exec "${nginx_container}" nginx -s reload
+          retry sudo docker exec "${nginx_container}" nginx -t
+          retry sudo docker exec "${nginx_container}" nginx -s reload
           echo "::endgroup::"
 
           echo "::group::Container status"
