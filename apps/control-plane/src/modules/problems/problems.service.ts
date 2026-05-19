@@ -65,6 +65,11 @@ export class ProblemsService {
           conditions.push(inArray(problems.difficulty, query.difficulty));
         }
 
+        const attemptStatusCondition = this.buildAttemptStatusCondition(userId, query.status);
+        if (attemptStatusCondition) {
+          conditions.push(attemptStatusCondition);
+        }
+
         if (query.company) {
           conditions.push(eq(problems.company, query.company));
         }
@@ -465,24 +470,64 @@ export class ProblemsService {
     )`.as('is_bookmarked');
   }
 
+  private buildAttemptStatusCondition(
+    userId: string,
+    statuses: ProblemsListQuery['status'],
+  ): SQL | undefined {
+    if (!statuses?.length) {
+      return undefined;
+    }
+
+    const uniqueStatuses = new Set(statuses);
+    const conditions: SQL[] = [];
+
+    if (uniqueStatuses.has('solved')) {
+      conditions.push(this.hasSolvedSubmissionExpr(userId));
+    }
+
+    if (uniqueStatuses.has('attempted')) {
+      conditions.push(
+        sql`(${this.hasAnySubmissionExpr(userId)} AND NOT (${this.hasSolvedSubmissionExpr(userId)}))`,
+      );
+    }
+
+    if (uniqueStatuses.has('todo')) {
+      conditions.push(sql`NOT (${this.hasAnySubmissionExpr(userId)})`);
+    }
+
+    if (conditions.length === 0) {
+      return undefined;
+    }
+
+    return conditions.length === 1 ? conditions[0] : or(...conditions);
+  }
+
   private attemptStatusExpr(userId: string) {
     return sql<string | null>`(
       CASE
-        WHEN EXISTS (
-          SELECT 1 FROM submissions s
-          WHERE s.problem_id = "problems"."id"
-          AND s.user_id = ${userId}
-          AND s.status = 'completed'
-          AND s.passed_test_cases = s.total_test_cases
-        ) THEN 'solved'
-        WHEN EXISTS (
-          SELECT 1 FROM submissions s
-          WHERE s.problem_id = "problems"."id"
-          AND s.user_id = ${userId}
-        ) THEN 'attempted'
+        WHEN ${this.hasSolvedSubmissionExpr(userId)} THEN 'solved'
+        WHEN ${this.hasAnySubmissionExpr(userId)} THEN 'attempted'
         ELSE NULL
       END
     )`.as('attempt_status');
+  }
+
+  private hasSolvedSubmissionExpr(userId: string) {
+    return sql<boolean>`EXISTS (
+      SELECT 1 FROM submissions s
+      WHERE s.problem_id = "problems"."id"
+      AND s.user_id = ${userId}
+      AND s.status = 'completed'
+      AND s.passed_test_cases = s.total_test_cases
+    )`;
+  }
+
+  private hasAnySubmissionExpr(userId: string) {
+    return sql<boolean>`EXISTS (
+      SELECT 1 FROM submissions s
+      WHERE s.problem_id = "problems"."id"
+      AND s.user_id = ${userId}
+    )`;
   }
 
   private acceptanceRateExpr() {
