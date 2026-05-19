@@ -371,7 +371,7 @@ export const requestRoomAiInterviewSchema = z
       return;
     }
     ctx.addIssue({
-      code: z.ZodIssueCode.custom,
+      code: 'custom',
       path: ['userMessage'],
       message: 'userMessage is required when trigger is user_message',
     });
