@@ -1485,10 +1485,9 @@ export class RoomsService implements OnModuleInit {
       });
     }
 
-    const typedJobId = submitted.jobId as JobId<'ai:interview-transcription'>;
     for (let attempt = 1; attempt <= RoomsService.AI_INTERVIEW_TRANSCRIPTION_MAX_POLLS; attempt++) {
       const result = await withTimeout(
-        this.aiClient.getInterviewTranscriptionResult(typedJobId),
+        this.aiClient.getInterviewTranscriptionResult(submitted.jobId),
         RoomsService.AI_INTERVIEW_TRANSCRIPTION_CLIENT_TIMEOUT_MS,
       );
       if (result?.text?.trim()) {
@@ -1498,7 +1497,7 @@ export class RoomsService implements OnModuleInit {
       }
 
       const status = await withTimeout(
-        this.aiClient.getInterviewTranscriptionJobStatus(typedJobId),
+        this.aiClient.getInterviewTranscriptionJobStatus(submitted.jobId),
         RoomsService.AI_INTERVIEW_TRANSCRIPTION_CLIENT_TIMEOUT_MS,
       );
       if (status === 'failed') {

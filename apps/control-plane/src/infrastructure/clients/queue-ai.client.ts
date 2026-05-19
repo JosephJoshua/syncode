@@ -279,7 +279,7 @@ export class QueueAiClient implements IAiClient, OnModuleInit {
       },
     );
 
-    return { jobId: jobId as JobId<'ai:interview-transcription'> };
+    return { jobId };
   }
 
   async getInterviewTranscriptionResult(
