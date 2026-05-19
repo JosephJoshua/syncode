@@ -21,6 +21,7 @@ export type {
   ReviewCodeRequest,
   ReviewCodeResult,
   SessionReportEventContext,
+  StaticAnalysisEvidenceContext,
   WeaknessAnalysisItem,
 } from './types.js';
 export { toPublicSessionReportTestCaseBreakdown } from './types.js';

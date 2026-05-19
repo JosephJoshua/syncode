@@ -49,6 +49,9 @@ export interface IAiClient {
   onWeaknessAnalysisResult(
     callback: (jobId: string, result: GenerateWeaknessAnalysisResult) => Promise<void>,
   ): void;
+  onInterviewResult(
+    callback: (jobId: string, result: InterviewResponseResult) => Promise<void>,
+  ): void;
   getHintJobStatus(jobId: JobId<'ai:hint'>): Promise<JobStatus>;
   getCodeAnalysisJobStatus(jobId: JobId<'ai:code-analysis'>): Promise<JobStatus>;
   getWeaknessAnalysisJobStatus(jobId: JobId<'ai:weakness-analysis'>): Promise<JobStatus>;

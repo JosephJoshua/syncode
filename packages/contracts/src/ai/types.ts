@@ -49,6 +49,7 @@ export interface InterviewCodeAnalysisContext {
     readability: string;
   };
   followUpQuestions?: string[];
+  staticAnalysis?: StaticAnalysisEvidenceContext;
 }
 
 export type InterviewResponseTrigger = 'user_message' | 'proactive';
@@ -118,6 +119,51 @@ export interface HistoricalWeaknessContext {
   lastSeenAt: string;
 }
 
+export interface StaticAnalysisEvidenceContext {
+  source: 'run' | 'submission';
+  runId: string | null;
+  submissionId: string | null;
+  language: SupportedLanguage;
+  createdAt: string;
+  completedAt: string | null;
+  summary: {
+    diagnosticCount: number;
+    errorCount: number;
+    warningCount: number;
+    maxCyclomaticComplexity: number | null;
+    highComplexityCount: number;
+    duplicationCount: number;
+    toolFailureCount: number;
+  };
+  diagnostics: Array<{
+    tool: string;
+    rule: string | null;
+    severity: 'error' | 'warning' | 'info';
+    message: string;
+    file: string | null;
+    line: number | null;
+    column: number | null;
+  }>;
+  complexity: Array<{
+    tool: string;
+    functionName: string;
+    file: string | null;
+    startLine: number;
+    endLine: number | null;
+    cyclomaticComplexity: number;
+  }>;
+  duplications: Array<{
+    tool: string;
+    lines: number;
+    tokens: number | null;
+    occurrences: Array<{
+      file: string | null;
+      startLine: number;
+      endLine: number | null;
+    }>;
+  }>;
+}
+
 export interface GenerateWeaknessAnalysisRequest {
   sessionId: string;
   roomId: string;
@@ -142,6 +188,7 @@ export interface GenerateWeaknessAnalysisRequest {
     feedback: string | null;
   } | null;
   historicalWeaknesses: HistoricalWeaknessContext[];
+  staticAnalysis: StaticAnalysisEvidenceContext[];
 }
 
 export interface WeaknessAnalysisItem {
@@ -176,6 +223,7 @@ export interface ReviewCodeResult {
 }
 
 export interface InterviewResponseRequest {
+  idempotencyKey?: string;
   roomId: string;
   sessionId?: string | null;
   participantId: string;
@@ -349,6 +397,7 @@ export interface GenerateSessionReportRequest {
   aiMessages: SessionReportAiMessageContext[];
   roomChatMessages?: SessionReportRoomChatMessageContext[];
   historicalContext: SessionReportHistoricalContext | null;
+  staticAnalysis: StaticAnalysisEvidenceContext[];
 }
 
 export interface GenerateSessionReportResult extends SessionReport {
