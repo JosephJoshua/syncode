@@ -10,6 +10,7 @@ import {
   insertTestCase,
   insertUser,
 } from '@/test/integration-setup.js';
+import { AuditService } from '../admin/audit.service.js';
 import { ProblemsService } from './problems.service.js';
 
 let db: Database;
@@ -20,7 +21,7 @@ beforeEach(async () => {
   const testDb = await createTestDb();
   db = testDb.db;
   cleanup = testDb.cleanup;
-  service = new ProblemsService(db);
+  service = new ProblemsService(db, new AuditService(db));
 });
 
 afterEach(async () => {
@@ -40,7 +41,7 @@ describe('listProblems', () => {
     expect(result.pagination.hasMore).toBe(false);
   });
 
-  it('GIVEN draft problem WHEN listing THEN regular users cannot see it but admins can', async () => {
+  it('GIVEN draft problem WHEN listing THEN only admins who request drafts can see it', async () => {
     const user = await insertUser(db, { role: 'user' });
     const admin = await insertUser(db, { role: 'admin' });
     await insertProblem(db, { title: 'Published', isPublished: true });
@@ -48,9 +49,24 @@ describe('listProblems', () => {
 
     const regularResult = await service.listProblems(user.id, { limit: 20, sortOrder: 'desc' });
     const adminResult = await service.listProblems(admin.id, { limit: 20, sortOrder: 'desc' });
+    const adminDraftResult = await service.listProblems(admin.id, {
+      limit: 20,
+      sortOrder: 'desc',
+      includeDrafts: true,
+    });
+    const regularDraftResult = await service.listProblems(user.id, {
+      limit: 20,
+      sortOrder: 'desc',
+      includeDrafts: true,
+    });
 
     expect(regularResult.data.map((problem) => problem.title)).toEqual(['Published']);
-    expect(adminResult.data.map((problem) => problem.title).sort()).toEqual(['Draft', 'Published']);
+    expect(adminResult.data.map((problem) => problem.title)).toEqual(['Published']);
+    expect(adminDraftResult.data.map((problem) => problem.title).sort()).toEqual([
+      'Draft',
+      'Published',
+    ]);
+    expect(regularDraftResult.data.map((problem) => problem.title)).toEqual(['Published']);
   });
 
   it('GIVEN single difficulty filter WHEN listing THEN returns only matching difficulty', async () => {
