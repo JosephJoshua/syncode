@@ -9,7 +9,93 @@ vi.mock('react-i18next', () => ({
   }),
 }));
 
-import { RoomAiInterviewPanel } from './room-ai-interview-panel.js';
+import {
+  isVoiceCaptureStateActive,
+  normalizeTranscriptionMimeType,
+  RoomAiInterviewPanel,
+  resolveRecognitionLanguage,
+  resolveVoiceButtonTitle,
+  resolveVoicePermissionError,
+  resolveVoiceStatusText,
+  shouldShowSendingIndicator,
+  withTimeout,
+} from './room-ai-interview-panel.js';
+
+const t = (key: string) => key;
+
+describe('room-ai-interview-panel helpers', () => {
+  it('GIVEN voice capture state WHEN resolving status text THEN requesting/listening/transcribing return keys', () => {
+    expect(resolveVoiceStatusText(t, 'idle')).toBeNull();
+    expect(resolveVoiceStatusText(t, 'requesting')).toBe('workspace.aiInterviewVoiceRequesting');
+    expect(resolveVoiceStatusText(t, 'listening')).toBe('workspace.aiInterviewVoiceListening');
+    expect(resolveVoiceStatusText(t, 'transcribing')).toBe(
+      'workspace.aiInterviewVoiceTranscribing',
+    );
+  });
+
+  it('GIVEN voice capture state WHEN checking active flag THEN only non-idle states are active', () => {
+    expect(isVoiceCaptureStateActive('idle')).toBe(false);
+    expect(isVoiceCaptureStateActive('requesting')).toBe(true);
+    expect(isVoiceCaptureStateActive('listening')).toBe(true);
+    expect(isVoiceCaptureStateActive('transcribing')).toBe(true);
+  });
+
+  it('GIVEN voice support flag WHEN resolving voice button title THEN returns correct title key', () => {
+    expect(resolveVoiceButtonTitle(t, true)).toBe('workspace.aiInterviewVoiceInput');
+    expect(resolveVoiceButtonTitle(t, false)).toBe('workspace.aiInterviewVoiceUnsupported');
+  });
+
+  it('GIVEN loading flags WHEN checking sending indicator visibility THEN only non-initial loading shows indicator', () => {
+    expect(shouldShowSendingIndicator(false, false)).toBe(false);
+    expect(shouldShowSendingIndicator(true, true)).toBe(false);
+    expect(shouldShowSendingIndicator(true, false)).toBe(true);
+  });
+
+  it('GIVEN UI language WHEN resolving recognition language THEN maps zh/en and keeps region variants', () => {
+    expect(resolveRecognitionLanguage(undefined)).toBe('en-US');
+    expect(resolveRecognitionLanguage('zh')).toBe('zh-CN');
+    expect(resolveRecognitionLanguage('zh-HK')).toBe('zh-TW');
+    expect(resolveRecognitionLanguage('en-GB')).toBe('en-US');
+    expect(resolveRecognitionLanguage('fr-CA')).toBe('fr-CA');
+    expect(resolveRecognitionLanguage('es')).toBe('es-US');
+  });
+
+  it('GIVEN mime types WHEN normalizing for transcription THEN maps aliases and strips codecs suffix', () => {
+    expect(normalizeTranscriptionMimeType(undefined)).toBe('audio/webm');
+    expect(normalizeTranscriptionMimeType('audio/mp3')).toBe('audio/mpeg');
+    expect(normalizeTranscriptionMimeType('audio/x-wav')).toBe('audio/wav');
+    expect(normalizeTranscriptionMimeType('audio/webm;codecs=opus')).toBe('audio/webm');
+  });
+
+  it('GIVEN microphone permission result WHEN resolving error message THEN returns expected key', () => {
+    expect(resolveVoicePermissionError(t, 'denied')).toBe(
+      'workspace.aiInterviewVoicePermissionDenied',
+    );
+    expect(resolveVoicePermissionError(t, 'no_device')).toBe('workspace.aiInterviewVoiceNoDevice');
+    expect(resolveVoicePermissionError(t, 'unavailable')).toBe('workspace.aiInterviewVoiceError');
+  });
+
+  it('GIVEN a promise and timeout WHEN promise resolves first THEN withTimeout resolves value', async () => {
+    await expect(withTimeout(Promise.resolve('ok'), 100, () => new Error('timeout'))).resolves.toBe(
+      'ok',
+    );
+  });
+
+  it('GIVEN a promise and timeout WHEN timeout elapses first THEN withTimeout rejects', async () => {
+    vi.useFakeTimers();
+    try {
+      const never = new Promise<string>(() => {
+        // intentionally unresolved
+      });
+      const pending = withTimeout(never, 10, () => new Error('timeout'));
+      const assertion = expect(pending).rejects.toThrow('timeout');
+      await vi.advanceTimersByTimeAsync(10);
+      await assertion;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
 
 describe('RoomAiInterviewPanel', () => {
   it('GIVEN no messages WHEN rendered THEN shows empty state', () => {
