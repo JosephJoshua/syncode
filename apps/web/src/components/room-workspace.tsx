@@ -254,7 +254,7 @@ export function RoomWorkspace({
   onSelfMicrophoneToggle,
   dockedVideoPanel,
 }: RoomWorkspaceProps) {
-  const { t } = useTranslation('rooms');
+  const { t, i18n } = useTranslation('rooms');
 
   const { remoteRun, remoteSubmit, broadcastRun, broadcastSubmit } = useSharedExecution(
     awareness,
@@ -387,6 +387,29 @@ export function RoomWorkspace({
     setAiInterviewMessages([]);
     setEditorCodeContext(null);
   }, [cancelAiInterviewPolling, room.mode, room.status]);
+
+  useLayoutEffect(() => {
+    if (room.mode !== 'ai' || !AI_INTERVIEW_ALLOWED_STATUSES.has(room.status)) {
+      return;
+    }
+    if (aiInterviewMessages.length > 0) {
+      return;
+    }
+
+    const persistedMessages = loadPersistedAiInterviewConversation(roomId, currentUserId);
+    if (!persistedMessages || persistedMessages.length === 0) {
+      return;
+    }
+
+    setAiInterviewMessages(persistedMessages);
+    const activity = extractAiInterviewActivityTimestamps(persistedMessages);
+    aiInterviewLastUserMessageAtRef.current = activity.lastUserMessageAt;
+    aiInterviewLastAssistantMessageAtRef.current = activity.lastAssistantMessageAt;
+    aiInterviewSeenMessageIdsRef.current = new Set(
+      persistedMessages.map((message, index) => getAiInterviewMessageStableId(message, index)),
+    );
+    aiInterviewToastInitializedRef.current = true;
+  }, [aiInterviewMessages.length, currentUserId, room.mode, room.status, roomId]);
 
   const [bottomCollapsed, setBottomCollapsed] = useState(false);
   const [activeCenterTab, setActiveCenterTab] = useState<'code' | 'whiteboard'>('code');
@@ -743,6 +766,14 @@ export function RoomWorkspace({
       );
     }
   }, [activeRightTab, aiInterviewMessages, playIncomingChatDing, t]);
+
+  useEffect(() => {
+    if (room.mode !== 'ai') {
+      clearPersistedAiInterviewConversation(roomId, currentUserId);
+      return;
+    }
+    persistAiInterviewConversation(roomId, currentUserId, aiInterviewMessages);
+  }, [aiInterviewMessages, currentUserId, room.mode, roomId]);
 
   const handleAddCase = useCallback(() => {
     const idx = nextCustomId.current++;
@@ -1393,6 +1424,9 @@ export function RoomWorkspace({
         aiInterviewMessages,
         AI_INTERVIEW_HISTORY_LIMIT,
       );
+      const responseLanguage = resolveAiInterviewResponseLanguage(
+        i18n.resolvedLanguage ?? i18n.language,
+      );
 
       try {
         const submission = await api(CONTROL_API.ROOMS.AI_INTERVIEW, {
@@ -1408,6 +1442,7 @@ export function RoomWorkspace({
               buildLatestInterviewSubmissionSummary(submitState),
             ),
             interactionSignals: reason ? buildInterviewSignals(reason) : undefined,
+            responseLanguage,
           },
         });
 
@@ -1448,6 +1483,8 @@ export function RoomWorkspace({
       getCode,
       language,
       latestRunSummary,
+      i18n.language,
+      i18n.resolvedLanguage,
       pollInterviewJob,
       roomId,
       submitState,
@@ -1460,6 +1497,45 @@ export function RoomWorkspace({
       void submitInterviewRequest({ trigger: 'user_message', userMessage });
     },
     [submitInterviewRequest],
+  );
+
+  const handleTranscribeInterviewVoice = useCallback(
+    async (request: { audioBase64: string; mimeType: string; language?: string }) => {
+      try {
+        if ((import.meta as ImportMeta & { env?: Record<string, unknown> }).env?.DEV === true) {
+          console.debug('[ai-interview-voice] transcribe-request', {
+            roomId,
+            mimeType: request.mimeType,
+            language: request.language,
+            payloadBytesApprox: Math.round((request.audioBase64.length * 3) / 4),
+          });
+        }
+        const response = await api(CONTROL_API.ROOMS.AI_INTERVIEW_TRANSCRIBE, {
+          params: { id: roomId },
+          body: request,
+        });
+        if ((import.meta as ImportMeta & { env?: Record<string, unknown> }).env?.DEV === true) {
+          console.debug('[ai-interview-voice] transcribe-response', {
+            roomId,
+            textLength: response.text.length,
+          });
+        }
+        return response.text;
+      } catch (error) {
+        if ((import.meta as ImportMeta & { env?: Record<string, unknown> }).env?.DEV === true) {
+          console.debug('[ai-interview-voice] transcribe-error', { roomId, error });
+        }
+        const apiError = await readApiError(error);
+        const message = resolveErrorMessage(
+          apiError,
+          INTERVIEW_TRANSCRIPTION_ERROR_KEYS,
+          'workspace.aiInterviewVoiceNetworkError',
+          t,
+        );
+        throw new Error(message);
+      }
+    },
+    [roomId, t],
   );
 
   useEffect(() => {
@@ -2114,6 +2190,7 @@ export function RoomWorkspace({
                       isLoading={aiInterviewLoading}
                       error={aiInterviewError}
                       onSendMessage={(msg) => void handleSendInterviewMessage(msg)}
+                      onTranscribeVoiceInput={handleTranscribeInterviewVoice}
                       canSendMessage={canSendInterviewMessage}
                       currentUser={
                         currentUserId ? (participantsById.get(currentUserId) ?? null) : null
@@ -2634,6 +2711,13 @@ const INTERVIEW_ERROR_KEYS: Partial<Record<string, string>> = {
   [ERROR_CODES.AI_SERVICE_UNAVAILABLE]: 'workspace.aiInterviewUnavailable',
 };
 
+const INTERVIEW_TRANSCRIPTION_ERROR_KEYS: Partial<Record<string, string>> = {
+  [ERROR_CODES.ROOM_PERMISSION_DENIED]: 'workspace.hintPermissionDenied',
+  [ERROR_CODES.ROOM_ACCESS_DENIED]: 'workspace.hintPermissionDenied',
+  [ERROR_CODES.ROOM_NOT_AI_MODE]: 'workspace.aiInterviewUnavailable',
+  [ERROR_CODES.AI_SERVICE_UNAVAILABLE]: 'workspace.aiInterviewVoiceNetworkError',
+};
+
 const HINT_POLL_INTERVAL_MS = 750;
 const HINT_POLL_TIMEOUT_MS = 30_000;
 const AI_INTERVIEW_POLL_INTERVAL_MS = 1500;
@@ -2646,6 +2730,8 @@ const AI_INTERVIEW_PROACTIVE_MIN_INTERVAL_MS = 45_000;
 const AI_INTERVIEW_IDLE_EDITOR_MS = 90_000;
 const AI_INTERVIEW_IDLE_USER_MESSAGE_MS = 75_000;
 const AI_INTERVIEW_PENDING_STORAGE_KEY_PREFIX = 'syncode:ai-interview-pending:';
+const AI_INTERVIEW_CONVERSATION_STORAGE_KEY_PREFIX = 'syncode:ai-interview-conversation:';
+const AI_INTERVIEW_PERSISTED_HISTORY_LIMIT = 80;
 const AI_INTERVIEW_ALLOWED_STATUSES = new Set<RoomStatus>(['warmup', 'coding', 'wrapup']);
 
 interface PendingAiInterviewJob {
@@ -2686,6 +2772,14 @@ function buildInterviewConversationHistory(messages: AiInterviewMessage[], limit
   }));
 }
 
+function resolveAiInterviewResponseLanguage(locale: string | undefined): 'en' | 'zh' {
+  if (!locale) {
+    return 'en';
+  }
+
+  return locale.toLowerCase().startsWith('zh') ? 'zh' : 'en';
+}
+
 function getAiInterviewMessageStableId(message: AiInterviewMessage, index: number): string {
   if (message.id) {
     return message.id;
@@ -2698,6 +2792,180 @@ function pendingAiInterviewStorageKey(roomId: string, userId: string | null): st
     return null;
   }
   return `${AI_INTERVIEW_PENDING_STORAGE_KEY_PREFIX}${roomId}:${userId}`;
+}
+
+function aiInterviewConversationStorageKey(roomId: string, userId: string | null): string | null {
+  if (!userId) {
+    return null;
+  }
+  return `${AI_INTERVIEW_CONVERSATION_STORAGE_KEY_PREFIX}${roomId}:${userId}`;
+}
+
+function persistAiInterviewConversation(
+  roomId: string,
+  userId: string | null,
+  messages: AiInterviewMessage[],
+): void {
+  const key = aiInterviewConversationStorageKey(roomId, userId);
+  if (!key) {
+    return;
+  }
+
+  try {
+    if (messages.length === 0) {
+      sessionStorage.removeItem(key);
+      return;
+    }
+
+    const persisted = messages.slice(-AI_INTERVIEW_PERSISTED_HISTORY_LIMIT);
+    sessionStorage.setItem(key, JSON.stringify(persisted));
+  } catch {}
+}
+
+function loadPersistedAiInterviewConversation(
+  roomId: string,
+  userId: string | null,
+): AiInterviewMessage[] | null {
+  const key = aiInterviewConversationStorageKey(roomId, userId);
+  if (!key) {
+    return null;
+  }
+
+  try {
+    const raw = sessionStorage.getItem(key);
+    if (!raw) {
+      return null;
+    }
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      return null;
+    }
+    const normalized = parsed
+      .map((entry) => normalizePersistedAiInterviewMessage(entry))
+      .filter((entry): entry is AiInterviewMessage => entry != null);
+    return normalized.length > 0 ? normalized : null;
+  } catch {
+    return null;
+  }
+}
+
+function clearPersistedAiInterviewConversation(roomId: string, userId: string | null): void {
+  const key = aiInterviewConversationStorageKey(roomId, userId);
+  if (!key) {
+    return;
+  }
+  try {
+    sessionStorage.removeItem(key);
+  } catch {}
+}
+
+function normalizePersistedAiInterviewMessage(value: unknown): AiInterviewMessage | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  const parsed = value as Partial<AiInterviewMessage>;
+  if (
+    (parsed.role !== 'user' && parsed.role !== 'assistant') ||
+    typeof parsed.content !== 'string'
+  ) {
+    return null;
+  }
+
+  const normalized: AiInterviewMessage = {
+    role: parsed.role,
+    content: parsed.content,
+  };
+
+  if (typeof parsed.id === 'string' && parsed.id.length > 0) {
+    normalized.id = parsed.id;
+  }
+  if (typeof parsed.createdAt === 'number' && Number.isFinite(parsed.createdAt)) {
+    normalized.createdAt = parsed.createdAt;
+  }
+  if (typeof parsed.followUpQuestion === 'string') {
+    normalized.followUpQuestion = parsed.followUpQuestion;
+  }
+  if (typeof parsed.audioUrl === 'string') {
+    normalized.audioUrl = parsed.audioUrl;
+  }
+  if (isAiInterviewCodeContext(parsed.codeContext)) {
+    normalized.codeContext = parsed.codeContext;
+  }
+  if (Array.isArray(parsed.codeAnnotations)) {
+    normalized.codeAnnotations = parsed.codeAnnotations
+      .filter((entry): entry is { line: number; comment: string } => {
+        return (
+          !!entry &&
+          typeof entry === 'object' &&
+          typeof entry.line === 'number' &&
+          Number.isFinite(entry.line) &&
+          typeof entry.comment === 'string'
+        );
+      })
+      .map((entry) => ({
+        line: entry.line,
+        comment: entry.comment,
+      }));
+  }
+
+  return normalized;
+}
+
+function isAiInterviewCodeContext(value: unknown): value is AiInterviewCodeContext {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const context = value as Partial<AiInterviewCodeContext>;
+  if (
+    typeof context.language !== 'string' ||
+    typeof context.file !== 'string' ||
+    typeof context.codeSnippet !== 'string' ||
+    typeof context.startLine !== 'number' ||
+    !Number.isFinite(context.startLine) ||
+    typeof context.endLine !== 'number' ||
+    !Number.isFinite(context.endLine)
+  ) {
+    return false;
+  }
+
+  if (context.questionType != null && typeof context.questionType !== 'string') {
+    return false;
+  }
+  if (context.reason != null && typeof context.reason !== 'string') {
+    return false;
+  }
+  return true;
+}
+
+function extractAiInterviewActivityTimestamps(messages: AiInterviewMessage[]): {
+  lastUserMessageAt: number | null;
+  lastAssistantMessageAt: number | null;
+} {
+  let lastUserMessageAt: number | null = null;
+  let lastAssistantMessageAt: number | null = null;
+
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (!message || typeof message.createdAt !== 'number' || !Number.isFinite(message.createdAt)) {
+      continue;
+    }
+    if (message.role === 'user' && lastUserMessageAt == null) {
+      lastUserMessageAt = message.createdAt;
+    } else if (message.role === 'assistant' && lastAssistantMessageAt == null) {
+      lastAssistantMessageAt = message.createdAt;
+    }
+
+    if (lastUserMessageAt != null && lastAssistantMessageAt != null) {
+      break;
+    }
+  }
+
+  return {
+    lastUserMessageAt,
+    lastAssistantMessageAt,
+  };
 }
 
 function storePendingAiInterviewJob(
