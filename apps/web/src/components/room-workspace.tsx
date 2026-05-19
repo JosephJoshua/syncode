@@ -17,6 +17,7 @@ import {
   type JobStatusResponse,
   type ProblemDetail,
   type RoomDetail,
+  type StaticAnalysisResultResponse,
 } from '@syncode/contracts';
 import type { RoomRole, RoomStatus, SupportedLanguage } from '@syncode/shared';
 import { Avatar, AvatarFallback, AvatarImage, Badge, Button, cn } from '@syncode/ui';
@@ -32,7 +33,17 @@ import {
   TerminalSquare,
 } from 'lucide-react';
 import { motion } from 'motion/react';
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import {
+  type Dispatch,
+  type RefObject,
+  type SetStateAction,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import {
@@ -71,6 +82,10 @@ import { RoomHeaderBar } from './room-header-bar.js';
 import { type Participant, RoomParticipantCard } from './room-participant-card.js';
 import { type ProblemData, type RoomHintItem, RoomProblemPanel } from './room-problem-panel.js';
 import { RoomStatusBar } from './room-status-bar.js';
+import {
+  nextWhiteboardKeyboardFocusState,
+  shouldEnableWhiteboardKeyboardShortcuts,
+} from './room-whiteboard-keyboard.js';
 import { RoomWhiteboardPanel } from './room-whiteboard-panel.js';
 import {
   type CaseRunState,
@@ -87,6 +102,7 @@ import {
 } from './room-workspace-utils.js';
 import { RunResultsPanel } from './run-results-panel.js';
 import { StageTransitionOverlay } from './stage-transition-overlay.js';
+import { StaticAnalysisPanel, type StaticAnalysisPanelState } from './static-analysis-panel.js';
 import { SubmissionPreviewModal } from './submission-preview-modal.js';
 import { TestCaseEditor } from './testcase-editor.js';
 
@@ -295,6 +311,15 @@ export function RoomWorkspace({
   const aiInterviewSeenMessageIdsRef = useRef<Set<string>>(new Set());
   const aiInterviewToastInitializedRef = useRef(false);
   const aiInterviewReadMessageIdsRef = useRef<Set<string>>(new Set());
+  const aiInterviewIntroRequestedRef = useRef(false);
+  const cancelSubmitPollRef = useRef<(() => void) | null>(null);
+  const cancelRunStaticAnalysisPollRef = useRef<(() => void) | null>(null);
+  const cancelSubmitStaticAnalysisPollRef = useRef<(() => void) | null>(null);
+  const [runStaticAnalysisState, setRunStaticAnalysisState] = useState<StaticAnalysisPanelState>({
+    status: 'idle',
+  });
+  const [submitStaticAnalysisState, setSubmitStaticAnalysisState] =
+    useState<StaticAnalysisPanelState>({ status: 'idle' });
 
   useEffect(() => {
     if (!room.problemId) return;
@@ -353,6 +378,10 @@ export function RoomWorkspace({
 
     previousRoomIdRef.current = roomId;
     cancelAiInterviewPolling();
+    cancelRunStaticAnalysisPollRef.current?.();
+    cancelRunStaticAnalysisPollRef.current = null;
+    cancelSubmitStaticAnalysisPollRef.current?.();
+    cancelSubmitStaticAnalysisPollRef.current = null;
     setAiInterviewLoading(false);
     setAiInterviewError(null);
     setAiInterviewMessages([]);
@@ -368,6 +397,9 @@ export function RoomWorkspace({
     aiInterviewSeenMessageIdsRef.current.clear();
     aiInterviewReadMessageIdsRef.current.clear();
     aiInterviewToastInitializedRef.current = false;
+    aiInterviewIntroRequestedRef.current = false;
+    setRunStaticAnalysisState({ status: 'idle' });
+    setSubmitStaticAnalysisState({ status: 'idle' });
   }, [cancelAiInterviewPolling, roomId]);
 
   useLayoutEffect(() => {
@@ -386,6 +418,7 @@ export function RoomWorkspace({
     setAiInterviewError(null);
     setAiInterviewMessages([]);
     setEditorCodeContext(null);
+    aiInterviewIntroRequestedRef.current = false;
   }, [cancelAiInterviewPolling, room.mode, room.status]);
 
   useLayoutEffect(() => {
@@ -868,11 +901,66 @@ export function RoomWorkspace({
     };
   }, [doc, language, room.mode]);
 
+  const startStaticAnalysisPoll = useCallback(
+    (
+      jobId: string | null,
+      setAnalysisState: Dispatch<SetStateAction<StaticAnalysisPanelState>>,
+      cancelRef: RefObject<(() => void) | null>,
+    ) => {
+      cancelRef.current?.();
+
+      if (!jobId) {
+        setAnalysisState({
+          status: 'request-error',
+          message: t('workspace.staticAnalysisUnavailable'),
+        });
+        return;
+      }
+
+      let cancelled = false;
+      cancelRef.current = () => {
+        cancelled = true;
+      };
+      setAnalysisState({ status: 'pending' });
+
+      const poll = async () => {
+        try {
+          const response: StaticAnalysisResultResponse = await api(
+            CONTROL_API.EXECUTION.GET_STATIC_ANALYSIS,
+            { params: { jobId } },
+          );
+
+          if (cancelled) return;
+
+          setAnalysisState(response);
+          if (response.status === 'pending') {
+            setTimeout(() => {
+              if (!cancelled) void poll();
+            }, EXECUTION_POLL_INTERVAL_MS);
+          }
+        } catch (error) {
+          const apiError = await readApiError(error);
+          if (!cancelled) {
+            setAnalysisState({
+              status: 'request-error',
+              message: apiError?.message ?? t('workspace.staticAnalysisFailedToLoad'),
+            });
+          }
+        }
+      };
+
+      void poll();
+    },
+    [t],
+  );
+
   const handleRunCode = async () => {
     if (testCases.length === 0) return;
 
     for (const cancel of cancelMultiRunRef.current.values()) cancel();
     cancelMultiRunRef.current.clear();
+    cancelRunStaticAnalysisPollRef.current?.();
+    setRunStaticAnalysisState({ status: 'idle' });
     setActiveBottomTab('output');
     setLatestRunSummary(createPendingInterviewExecutionSummary(testCases.length));
 
@@ -994,7 +1082,16 @@ export function RoomWorkspace({
         toast.error(message);
       }
     },
-    [broadcastSubmit, currentUserName, getCode, language, pollSubmission, roomId, t],
+    [
+      broadcastSubmit,
+      currentUserName,
+      getCode,
+      language,
+      pollSubmission,
+      roomId,
+      startStaticAnalysisPoll,
+      t,
+    ],
   );
 
   const requestSubmitCode = useCallback(() => {
