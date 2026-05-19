@@ -761,8 +761,39 @@ describe('AiService', () => {
 
       expect(result.shouldRespond).toBe(true);
       expect(result.message).toBe('That direction makes sense.');
-      expect(result.followUpQuestion).toContain('Which state are you updating');
+      expect(result.followUpQuestion).toContain('What invariant should hold');
       expect(result.codeContext).toEqual(baseInterviewRequest.codeContext);
+    });
+
+    it('GIVEN current turn is Chinese but model answers only in English WHEN generating interview response THEN response falls back to Chinese interviewer text', async () => {
+      const { service } = createServiceWithLlmResponse(
+        JSON.stringify({
+          message: 'That direction makes sense. Walk me through the key invariant.',
+          followUpQuestion: 'Which state do you update each iteration?',
+        }),
+      );
+
+      const result = await service.generateInterviewResponse({
+        ...baseInterviewRequest,
+        responseLanguage: 'zh',
+        userMessage: '请问你对这个问题有什么想法？',
+      });
+
+      expect(result.shouldRespond).toBe(true);
+      expect(result.message).toContain('这个方向可以');
+      expect(result.followUpQuestion).toContain('每一轮你更新的核心状态是什么');
+    });
+
+    it('GIVEN non-JSON interview output WHEN generateInterviewResponse is called THEN response preserves safe plain text instead of repeating canned fallback', async () => {
+      const { service } = createServiceWithLlmResponse(
+        'Try validating one failing case first, then explain where your state diverges.',
+      );
+
+      const result = await service.generateInterviewResponse(baseInterviewRequest);
+
+      expect(result.shouldRespond).toBe(true);
+      expect(result.message).toContain('Try validating one failing case first');
+      expect(result.followUpQuestion).toContain('What invariant should hold');
     });
 
     it('GIVEN old interview job without code context WHEN generateInterviewResponse is called THEN uses fallback context', async () => {
@@ -920,6 +951,19 @@ describe('AiService', () => {
       expect(result.audio).toBeUndefined();
     });
 
+    it('GIVEN interview model request fails WHEN generateInterviewResponse is called THEN returns deterministic fallback without audio', async () => {
+      const { service, llmProvider } = createServiceWithLlmResponse('unused');
+      vi.mocked(llmProvider.generateText).mockRejectedValue(new Error('provider unavailable'));
+
+      const result = await service.generateInterviewResponse(baseInterviewRequest);
+
+      expect(result.message).toContain('keep the interview moving');
+      expect(result.followUpQuestion).toContain('invariant');
+      expect(result.codeContext).toEqual(baseInterviewRequest.codeContext);
+      expect(result.audio).toBeUndefined();
+      expect(llmProvider.generateSpeech).not.toHaveBeenCalled();
+    });
+
     it('GIVEN proactive trigger with shouldRespond false WHEN generateInterviewResponse is called THEN returns silent result', async () => {
       const { service, llmProvider } = createServiceWithLlmResponse(
         JSON.stringify({
@@ -935,6 +979,25 @@ describe('AiService', () => {
 
       expect(result).toEqual({ shouldRespond: false, audio: undefined });
       expect(llmProvider.generateSpeech).not.toHaveBeenCalled();
+    });
+
+    it('GIVEN proactive trigger with old response missing shouldRespond WHEN generateInterviewResponse is called THEN keeps the response', async () => {
+      const { service } = createServiceWithLlmResponse(
+        JSON.stringify({
+          message: 'You have been quiet for a while. Explain your current invariant.',
+          followUpQuestion: 'What state changes after each loop iteration?',
+        }),
+      );
+
+      const result = await service.generateInterviewResponse({
+        ...baseInterviewRequest,
+        trigger: 'proactive',
+        userMessage: undefined,
+      });
+
+      expect(result.shouldRespond).toBe(true);
+      expect(result.message).toContain('quiet for a while');
+      expect(result.followUpQuestion).toContain('state changes');
     });
 
     it('GIVEN TTS model is not configured WHEN generateInterviewResponse is called THEN skips audio generation', async () => {

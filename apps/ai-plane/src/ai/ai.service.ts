@@ -355,18 +355,36 @@ export class AiService {
   ): Promise<InterviewResponseResult> {
     this.logger.debug(`Generating interview response for room ${request.roomId}`);
 
-    const llmResult = await this.generateInterviewTextWithRetry(request);
+    try {
+      const llmResult = await this.generateInterviewTextWithRetry(request);
 
-    const parsed = this.parseInterviewOutput(llmResult.text, request);
-    const audio =
-      parsed.shouldRespond && parsed.message && this.isInterviewAudioEnabled()
-        ? await this.generateInterviewAudio(request, parsed)
-        : undefined;
+      const parsed = this.parseInterviewOutput(llmResult.text, request);
+      const audio =
+        parsed.shouldRespond && parsed.message && this.isInterviewAudioEnabled()
+          ? await this.generateInterviewAudio(request, parsed)
+          : undefined;
 
-    return {
-      ...parsed,
-      audio,
-    };
+      return {
+        ...parsed,
+        audio,
+      };
+    } catch (error) {
+      this.logger.warn(
+        `Interview text generation failed for room ${request.roomId}; using deterministic fallback: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      const fallback = this.buildInterviewLocalizedFallbackTexts(request);
+
+      return this.postProcessInterviewResponse(
+        {
+          message: fallback.message,
+          followUpQuestion: fallback.followUpQuestion,
+          codeContext: this.resolveInterviewCodeContext(request),
+        },
+        request,
+      );
+    }
   }
 
   async generateInterviewTranscription(
@@ -1474,13 +1492,13 @@ export class AiService {
       } catch {}
     }
 
+    const fallback = this.buildInterviewParseFallback(rawText, request);
+
     return this.postProcessInterviewResponse(
       {
         shouldRespond: true,
-        message:
-          "That's a reasonable direction. Walk me through the key invariant your approach maintains after each step.",
-        followUpQuestion:
-          'Which state are you updating each iteration, and why does it stay correct?',
+        message: fallback.message,
+        followUpQuestion: fallback.followUpQuestion,
         codeContext: this.resolveInterviewCodeContext(request),
       },
       request,
@@ -1491,20 +1509,30 @@ export class AiService {
     response: ParsedInterviewModelResponse,
     request: InterviewResponseRequest,
   ): ParsedInterviewResponse {
+    const localizedFallback = this.buildInterviewLocalizedFallbackTexts(request);
+    const defaultResponseLanguage = resolveInterviewDefaultResponseLanguage(request);
+    const turnResponseLanguage = resolveInterviewTurnResponseLanguage(
+      request,
+      defaultResponseLanguage,
+    );
     const trigger = request.trigger ?? 'user_message';
-    const shouldRespond = trigger === 'user_message' ? true : response.shouldRespond === true;
+    const hasResponseContent = Boolean(
+      response.message?.trim() || response.followUpQuestion?.trim() || response.codeContext,
+    );
+    const shouldRespond =
+      trigger === 'user_message' ? true : (response.shouldRespond ?? hasResponseContent);
     if (!shouldRespond) {
       return { shouldRespond: false };
     }
 
     let message = this.sanitizeInterviewOutputText(
       response.message,
-      "That's a reasonable direction. Talk me through the invariant your approach maintains.",
+      localizedFallback.message,
       'message',
     );
     let followUpQuestion = this.sanitizeInterviewOutputText(
       response.followUpQuestion,
-      'Which state are you updating each iteration, and why does it stay correct?',
+      localizedFallback.followUpQuestion,
       'followUpQuestion',
     );
 
@@ -1515,6 +1543,13 @@ export class AiService {
       const escalated = this.buildEscalatedInterviewGuidance();
       message = escalated.message;
       followUpQuestion = escalated.followUpQuestion;
+    }
+
+    if (
+      this.shouldForceInterviewLocalizedFallback(turnResponseLanguage, message, followUpQuestion)
+    ) {
+      message = localizedFallback.message;
+      followUpQuestion = localizedFallback.followUpQuestion;
     }
 
     const codeAnnotations = response.codeAnnotations
@@ -1536,6 +1571,18 @@ export class AiService {
       codeContext: this.postProcessInterviewCodeContext(response.codeContext, request),
       codeAnnotations: codeAnnotations && codeAnnotations.length > 0 ? codeAnnotations : undefined,
     };
+  }
+
+  private shouldForceInterviewLocalizedFallback(
+    turnResponseLanguage: 'en' | 'zh',
+    message: string,
+    followUpQuestion: string,
+  ): boolean {
+    if (turnResponseLanguage !== 'zh') {
+      return false;
+    }
+
+    return !containsCjkCharacters(message) && !containsCjkCharacters(followUpQuestion);
   }
 
   private shouldEscalateInterviewGuidance(request: InterviewResponseRequest): boolean {
@@ -1596,6 +1643,54 @@ export class AiService {
         "Let's switch gears. Since you're stuck, I’ll give direct coaching: isolate the first failing case, log the key state per step, and compare where expected vs actual behavior first diverge.",
       followUpQuestion:
         'Do you want a concrete debug checklist now, or should we wrap up with key takeaways?',
+    };
+  }
+
+  private buildInterviewParseFallback(
+    rawText: string,
+    request: InterviewResponseRequest,
+  ): { message: string; followUpQuestion: string } {
+    const localized = this.buildInterviewLocalizedFallbackTexts(request);
+    const cleaned = this.stripCodeFence(rawText).trim();
+    const normalized = this.normalizeHintText(cleaned, 'hint');
+    if (!normalized || this.isUnsafeModelText(normalized)) {
+      return localized;
+    }
+
+    const compact = this.compactHintText(this.trimBoundaryQuoteChars(normalized));
+    if (!compact || this.looksLikeJsonObject(compact)) {
+      return localized;
+    }
+
+    return {
+      message: compact,
+      followUpQuestion: localized.followUpQuestion,
+    };
+  }
+
+  private looksLikeJsonObject(value: string): boolean {
+    const trimmed = value.trim();
+    return trimmed.startsWith('{') && trimmed.endsWith('}');
+  }
+
+  private buildInterviewLocalizedFallbackTexts(request: InterviewResponseRequest): {
+    message: string;
+    followUpQuestion: string;
+  } {
+    const defaultLanguage = resolveInterviewDefaultResponseLanguage(request);
+    const turnLanguage = resolveInterviewTurnResponseLanguage(request, defaultLanguage);
+    if (turnLanguage === 'zh') {
+      return {
+        message: '这个方向可以。请你先说明当前解法在每一步维护的不变量。',
+        followUpQuestion: '每一轮你更新的核心状态是什么？为什么它始终正确？',
+      };
+    }
+
+    return {
+      message:
+        "I can keep the interview moving. Let's focus on the reasoning behind your current approach.",
+      followUpQuestion:
+        'What invariant should hold after each iteration, and which edge case would break it first?',
     };
   }
 
