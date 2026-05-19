@@ -2,6 +2,7 @@ import {
   createProblemSchema,
   listBookmarksQuerySchema,
   listBookmarksResponseSchema,
+  problemDetailQuerySchema,
   problemDetailSchema,
   problemsListQuerySchema,
   problemsListResponseSchema,
@@ -12,6 +13,7 @@ import {
 import { createZodDto } from 'nestjs-zod';
 
 export class ProblemsListQueryDto extends createZodDto(problemsListQuerySchema) {}
+export class ProblemDetailQueryDto extends createZodDto(problemDetailQuerySchema) {}
 export class ProblemsListResponseDto extends createZodDto(problemsListResponseSchema) {}
 export class ProblemDetailDto extends createZodDto(problemDetailSchema) {}
 export class CreateProblemDto extends createZodDto(createProblemSchema) {}

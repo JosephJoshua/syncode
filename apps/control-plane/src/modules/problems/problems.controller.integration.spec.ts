@@ -9,6 +9,7 @@ import { DB_CLIENT } from '@/modules/db/db.module.js';
 import {
   createTestDb,
   insertProblem,
+  insertRoom,
   insertTestCase,
   insertUser,
 } from '@/test/integration-setup.js';
@@ -222,6 +223,28 @@ describe('POST /problems', () => {
     );
   });
 
+  it('GIVEN admin fetches problem without includeHidden THEN hidden test cases stay out of public detail', async () => {
+    const admin = await insertUser(db, { role: 'admin' });
+    const problem = await insertProblem(db);
+    await insertTestCase(db, problem.id, { input: 'visible', isHidden: false });
+    await insertTestCase(db, problem.id, { input: 'hidden', isHidden: true });
+
+    const publicRes = await asUser(
+      request(app.getHttpServer()).get(`/problems/${problem.id}`),
+      admin,
+    ).expect(200);
+    const editorRes = await asUser(
+      request(app.getHttpServer()).get(`/problems/${problem.id}?includeHidden=true`),
+      admin,
+    ).expect(200);
+
+    expect(publicRes.body.testCases.map((tc: { input: string }) => tc.input)).toEqual(['visible']);
+    expect(editorRes.body.testCases.map((tc: { input: string }) => tc.input).sort()).toEqual([
+      'hidden',
+      'visible',
+    ]);
+  });
+
   it('GIVEN admin problem mutations WHEN they succeed THEN writes complete audit entries', async () => {
     const admin = await insertUser(db, { role: 'admin' });
 
@@ -349,14 +372,20 @@ describe('PATCH /problems/:id/publish-status', () => {
 
     await asUser(request(app.getHttpServer()).get(`/problems/${problem.id}`), user).expect(404);
 
-    await asUser(
+    const publishRes = await asUser(
       request(app.getHttpServer()).patch(`/problems/${problem.id}/publish-status`),
       admin,
     )
       .send({ isPublished: true })
       .expect(200);
 
-    await asUser(request(app.getHttpServer()).get(`/problems/${problem.id}`), user).expect(200);
+    const userRes = await asUser(
+      request(app.getHttpServer()).get(`/problems/${problem.id}`),
+      user,
+    ).expect(200);
+
+    expect(publishRes.body).toMatchObject({ id: problem.id, isPublished: true });
+    expect(userRes.body).toMatchObject({ id: problem.id, title: problem.title });
   });
 });
 
@@ -365,8 +394,29 @@ describe('DELETE /problems/:id', () => {
     const admin = await insertUser(db, { role: 'admin' });
     const problem = await insertProblem(db);
 
-    await asUser(request(app.getHttpServer()).delete(`/problems/${problem.id}`), admin).expect(204);
+    const deleteRes = await asUser(
+      request(app.getHttpServer()).delete(`/problems/${problem.id}`),
+      admin,
+    ).expect(204);
 
     await asUser(request(app.getHttpServer()).get(`/problems/${problem.id}`), admin).expect(404);
+
+    expect(deleteRes.body).toEqual({});
+  });
+
+  it('GIVEN problem referenced by a room WHEN admin deletes it THEN returns 409', async () => {
+    const admin = await insertUser(db, { role: 'admin' });
+    const problem = await insertProblem(db);
+    await insertRoom(db, admin.id, { problemId: problem.id });
+
+    const res = await asUser(
+      request(app.getHttpServer()).delete(`/problems/${problem.id}`),
+      admin,
+    ).expect(409);
+
+    expect(res.body).toMatchObject({
+      code: 'PROBLEM_IN_USE',
+      message: 'Problem is used by existing rooms or sessions',
+    });
   });
 });

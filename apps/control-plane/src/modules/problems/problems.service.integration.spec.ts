@@ -5,6 +5,7 @@ import {
   insertProblem,
   insertProblemTag,
   insertRoom,
+  insertSession,
   insertSubmission,
   insertTag,
   insertTestCase,
@@ -470,6 +471,28 @@ describe('findById', () => {
     expect(result.testCases.every((tc) => !tc.isHidden)).toBe(true);
   });
 
+  it('GIVEN admin request without includeHidden WHEN finding THEN does not return hidden test cases', async () => {
+    const admin = await insertUser(db, { role: 'admin' });
+    const p = await insertProblem(db);
+    await insertTestCase(db, p.id, { input: 'visible', isHidden: false });
+    await insertTestCase(db, p.id, { input: 'hidden', isHidden: true });
+
+    const defaultResult = await service.findById(admin.id, p.id);
+    const editorResult = await service.findById(admin.id, p.id, { includeHidden: true });
+
+    expect(defaultResult.testCases.map((tc) => tc.input)).toEqual(['visible']);
+    expect(editorResult.testCases.map((tc) => tc.input).sort()).toEqual(['hidden', 'visible']);
+  });
+
+  it('GIVEN non-admin request with includeHidden WHEN finding THEN throws ForbiddenException', async () => {
+    const user = await insertUser(db);
+    const p = await insertProblem(db);
+
+    await expect(service.findById(user.id, p.id, { includeHidden: true })).rejects.toThrow(
+      'Admin access required',
+    );
+  });
+
   it('GIVEN non-existent ID WHEN finding THEN throws NotFoundException', async () => {
     const user = await insertUser(db);
     await expect(service.findById(user.id, '00000000-0000-0000-0000-000000000000')).rejects.toThrow(
@@ -527,6 +550,29 @@ describe('findById', () => {
     expect(result.constraints).toBeNull();
     expect(result.examples).toEqual([]);
     expect(result.starterCode).toBeNull();
+  });
+});
+
+describe('deleteProblem', () => {
+  it('GIVEN problem referenced by a room WHEN deleting THEN throws ConflictException', async () => {
+    const admin = await insertUser(db, { role: 'admin' });
+    const p = await insertProblem(db);
+    await insertRoom(db, admin.id, { problemId: p.id });
+
+    await expect(service.deleteProblem(admin.id, p.id)).rejects.toThrow(
+      'Problem is used by existing rooms or sessions',
+    );
+  });
+
+  it('GIVEN problem referenced by a session WHEN deleting THEN throws ConflictException', async () => {
+    const admin = await insertUser(db, { role: 'admin' });
+    const p = await insertProblem(db);
+    const room = await insertRoom(db, admin.id);
+    await insertSession(db, room.id, { problemId: p.id });
+
+    await expect(service.deleteProblem(admin.id, p.id)).rejects.toThrow(
+      'Problem is used by existing rooms or sessions',
+    );
   });
 });
 

@@ -30,6 +30,7 @@ import type { AuthUser } from '@/modules/auth/auth.types.js';
 import {
   CreateProblemDto,
   ProblemDetailDto,
+  ProblemDetailQueryDto,
   ProblemsListQueryDto,
   ProblemsListResponseDto,
   ProblemsTagsResponseDto,
@@ -176,14 +177,22 @@ export class ProblemsController {
   @Get(CONTROL_API.PROBLEMS.GET_BY_ID.route)
   @ApiOperation({ summary: 'Get problem details by ID' })
   @ApiParam({ name: 'id', description: 'Problem ID (UUID)' })
+  @ApiQuery({
+    name: 'includeHidden',
+    required: false,
+    type: Boolean,
+    description: 'Admin-only: include hidden test cases for problem editing',
+  })
   @ApiResponse({ status: 200, type: ProblemDetailDto, description: 'Problem details' })
   @ApiResponse({ status: 401, type: ErrorResponseDto, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, type: ErrorResponseDto, description: 'Admin access required' })
   @ApiResponse({ status: 404, type: ErrorResponseDto, description: 'Problem not found' })
   async getProblem(
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
+    @Query(new ZodValidationPipe(ProblemDetailQueryDto)) query: ProblemDetailQueryDto,
   ): Promise<ProblemDetailDto> {
-    return this.problemsService.findById(user.id, id);
+    return this.problemsService.findById(user.id, id, { includeHidden: query.includeHidden });
   }
 
   @Delete(CONTROL_API.PROBLEMS.DELETE.route)
@@ -194,6 +203,7 @@ export class ProblemsController {
   @ApiResponse({ status: 401, type: ErrorResponseDto, description: 'Unauthorized' })
   @ApiResponse({ status: 403, type: ErrorResponseDto, description: 'Admin access required' })
   @ApiResponse({ status: 404, type: ErrorResponseDto, description: 'Problem not found' })
+  @ApiResponse({ status: 409, type: ErrorResponseDto, description: 'Problem is in use' })
   async deleteProblem(
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,

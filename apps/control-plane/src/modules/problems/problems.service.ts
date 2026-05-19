@@ -17,7 +17,16 @@ import {
   type UpdateProblemInput,
 } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
-import { bookmarks, problems, problemTags, tags, testCases, users } from '@syncode/db';
+import {
+  bookmarks,
+  problems,
+  problemTags,
+  rooms,
+  sessions,
+  tags,
+  testCases,
+  users,
+} from '@syncode/db';
 import type { ProblemSortBy } from '@syncode/shared';
 import { type PaginatedResult, paginate } from '@syncode/shared/server';
 import {
@@ -45,6 +54,9 @@ type ActiveProblemAuditSnapshot = {
   title: string;
   difficulty: ProblemSummary['difficulty'];
   isPublished: boolean;
+};
+type FindProblemOptions = {
+  readonly includeHidden?: boolean;
 };
 
 @Injectable()
@@ -167,8 +179,19 @@ export class ProblemsService {
     };
   }
 
-  async findById(userId: string, problemId: string): Promise<ProblemDetail> {
+  async findById(
+    userId: string,
+    problemId: string,
+    options: FindProblemOptions = {},
+  ): Promise<ProblemDetail> {
     const canViewDrafts = await this.isAdmin(userId);
+    const canViewHidden = options.includeHidden === true && canViewDrafts;
+    if (options.includeHidden === true && !canViewDrafts) {
+      throw new ForbiddenException({
+        message: 'Admin access required',
+        code: ERROR_CODES.FORBIDDEN,
+      });
+    }
     const userAttemptsExpr = sql<number>`(
       SELECT COUNT(*)::int FROM submissions s
       WHERE s.problem_id = "problems"."id"
@@ -222,7 +245,7 @@ export class ProblemsService {
           and(
             ...[
               eq(testCases.problemId, problemId),
-              canViewDrafts ? undefined : eq(testCases.isHidden, false),
+              canViewHidden ? undefined : eq(testCases.isHidden, false),
             ].filter((item): item is SQL => Boolean(item)),
           ),
         )
@@ -340,7 +363,7 @@ export class ProblemsService {
       return problem;
     });
 
-    return this.findById(userId, created.id);
+    return this.findById(userId, created.id, { includeHidden: true });
   }
 
   async updateProblem(
@@ -408,7 +431,7 @@ export class ProblemsService {
       });
     });
 
-    return this.findById(userId, problemId);
+    return this.findById(userId, problemId, { includeHidden: true });
   }
 
   async changePublishStatus(
@@ -440,12 +463,13 @@ export class ProblemsService {
       });
     });
 
-    return this.findById(userId, problemId);
+    return this.findById(userId, problemId, { includeHidden: true });
   }
 
   async deleteProblem(userId: string, problemId: string, ipAddress?: string): Promise<void> {
     await this.assertAdmin(userId);
     const existing = await this.assertActiveProblem(problemId);
+    await this.assertProblemNotInUse(problemId);
 
     await this.db.transaction(async (tx) => {
       await tx.update(problems).set({ deletedAt: new Date() }).where(eq(problems.id, problemId));
@@ -642,6 +666,26 @@ export class ProblemsService {
     throw new NotFoundException({
       message: 'Problem not found',
       code: ERROR_CODES.PROBLEM_NOT_FOUND,
+    });
+  }
+
+  private async assertProblemNotInUse(problemId: string): Promise<void> {
+    const [roomRef, sessionRef] = await Promise.all([
+      this.db.select({ id: rooms.id }).from(rooms).where(eq(rooms.problemId, problemId)).limit(1),
+      this.db
+        .select({ id: sessions.id })
+        .from(sessions)
+        .where(eq(sessions.problemId, problemId))
+        .limit(1),
+    ]);
+
+    if (!roomRef[0] && !sessionRef[0]) {
+      return;
+    }
+
+    throw new ConflictException({
+      message: 'Problem is used by existing rooms or sessions',
+      code: ERROR_CODES.PROBLEM_IN_USE,
     });
   }
 

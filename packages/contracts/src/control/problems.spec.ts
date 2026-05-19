@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import {
+  problemDetailQuerySchema,
   problemsListQuerySchema,
   publishProblemStatusSchema,
   updateProblemSchema,
@@ -21,6 +22,13 @@ describe('problemsListQuerySchema', () => {
   test('GIVEN includeDrafts query string WHEN parsed THEN returns boolean value', () => {
     expect(problemsListQuerySchema.parse({ includeDrafts: 'true' }).includeDrafts).toBe(true);
     expect(problemsListQuerySchema.parse({ includeDrafts: 'false' }).includeDrafts).toBe(false);
+  });
+});
+
+describe('problemDetailQuerySchema', () => {
+  test('GIVEN includeHidden query string WHEN parsed THEN returns boolean value', () => {
+    expect(problemDetailQuerySchema.parse({ includeHidden: 'true' }).includeHidden).toBe(true);
+    expect(problemDetailQuerySchema.parse({ includeHidden: 'false' }).includeHidden).toBe(false);
   });
 });
 

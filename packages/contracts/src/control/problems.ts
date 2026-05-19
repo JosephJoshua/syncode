@@ -29,6 +29,14 @@ export const problemsListQuerySchema = paginationQuerySchema.extend({
 
 export type ProblemsListQuery = z.infer<typeof problemsListQuerySchema>;
 
+export const problemDetailQuerySchema = z.object({
+  includeHidden: z
+    .preprocess(parseQueryBoolean, z.boolean().optional())
+    .describe('Admin-only: include hidden test cases for editing'),
+});
+
+export type ProblemDetailQuery = z.infer<typeof problemDetailQuerySchema>;
+
 export const problemSummarySchema = z.object({
   id: z.string(),
   title: z.string(),
