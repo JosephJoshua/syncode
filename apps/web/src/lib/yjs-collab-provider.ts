@@ -56,6 +56,7 @@ export interface YjsCollabProviderOptions {
   onChatMessageCreated: (data: ChatMessageCreatedEventData) => void;
   onChatReactionUpdated: (data: ChatReactionUpdatedEventData) => void;
   onChatReadUpdated: (data: ChatReadUpdatedEventData) => void;
+  onAwarenessPeersChanged?: () => void;
   onRoomNotFound?: () => Promise<void>;
 }
 
@@ -99,6 +100,7 @@ export class YjsCollabProvider {
 
     this.doc.on('update', this.handleDocUpdate);
     this.awareness.on('update', this.handleAwarenessUpdate);
+    this.awareness.on('change', this.handleAwarenessChange);
   }
 
   /**
@@ -212,6 +214,7 @@ export class YjsCollabProvider {
 
     this.doc.off('update', this.handleDocUpdate);
     this.awareness.off('update', this.handleAwarenessUpdate);
+    this.awareness.off('change', this.handleAwarenessChange);
 
     this.awareness.destroy();
     this.doc.destroy();
@@ -411,5 +414,14 @@ export class YjsCollabProvider {
       awarenessProtocol.encodeAwarenessUpdate(this.awareness, changedClients),
     );
     this.send(encoding.toUint8Array(encoder));
+  };
+
+  private readonly handleAwarenessChange = (
+    { added, removed }: { added: number[]; updated: number[]; removed: number[] },
+    origin: unknown,
+  ): void => {
+    if (this.disposed || origin === 'local') return;
+    if (added.length === 0 && removed.length === 0) return;
+    this.options.onAwarenessPeersChanged?.();
   };
 }

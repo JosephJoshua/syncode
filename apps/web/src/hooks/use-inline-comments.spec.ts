@@ -1,3 +1,4 @@
+import { INLINE_COMMENTS_KEY } from '@syncode/shared';
 import { act, renderHook } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import * as Y from 'yjs';
@@ -104,6 +105,27 @@ describe('useInlineComments', () => {
     });
 
     expect(result.current.comments[0]?.lineNumber).toBe(3);
+    doc.destroy();
+  });
+
+  it('GIVEN comments hydrate before code WHEN initial code sync arrives THEN stored line numbers are preserved', () => {
+    const doc = makeDoc('');
+    const comments = doc.getMap<Y.Map<unknown>>(INLINE_COMMENTS_KEY);
+    const comment = new Y.Map<unknown>();
+    comment.set('authorId', 'u1');
+    comment.set('authorName', 'Alice');
+    comment.set('content', 'On beta');
+    comment.set('createdAt', '2026-05-19T00:00:00.000Z');
+    comment.set('updatedAt', '2026-05-19T00:00:00.000Z');
+    comment.set('lineNumber', 2);
+    comments.set('comment-1', comment);
+    const { result } = renderHook(() => useInlineComments(doc));
+
+    act(() => {
+      doc.getText(codeTextKey(TEST_LANGUAGE)).insert(0, 'alpha\nbeta\ngamma');
+    });
+
+    expect(result.current.comments[0]?.lineNumber).toBe(2);
     doc.destroy();
   });
 });
