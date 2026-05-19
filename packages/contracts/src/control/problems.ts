@@ -8,10 +8,16 @@ import { z } from 'zod';
 import { paginationQuerySchema, paginationSchema } from './pagination.js';
 import { parseQueryMultiSelect } from './query-parsers.js';
 
+export const PROBLEM_LIST_STATUSES = [...PROBLEM_ATTEMPT_STATUSES, 'todo'] as const;
+export type ProblemListStatus = (typeof PROBLEM_LIST_STATUSES)[number];
+
 export const problemsListQuerySchema = paginationQuerySchema.extend({
   difficulty: z
     .preprocess(parseQueryMultiSelect, z.array(z.enum(PROBLEM_DIFFICULTIES)).optional())
     .describe('Filter by difficulties; accepts repeated or comma-separated query params'),
+  status: z
+    .preprocess(parseQueryMultiSelect, z.array(z.enum(PROBLEM_LIST_STATUSES)).optional())
+    .describe('Filter by current user attempt status; accepts repeated or comma-separated values'),
   tags: z.string().optional().describe('Comma-separated tag slugs'),
   company: z.string().optional().describe('Company slug filter'),
   search: z.string().optional().describe('Full-text search on title + description'),

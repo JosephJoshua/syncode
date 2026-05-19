@@ -234,9 +234,62 @@ export const aiInterviewCodeAnalysisContextSchema = z.object({
 
 export type AiInterviewCodeAnalysisContext = z.infer<typeof aiInterviewCodeAnalysisContextSchema>;
 
+export const aiInterviewRequestTriggerSchema = z.enum(['user_message', 'proactive']);
+export type AiInterviewRequestTrigger = z.infer<typeof aiInterviewRequestTriggerSchema>;
+
+export const aiInterviewProactiveReasonSchema = z.enum([
+  'session_joined',
+  'stage_changed',
+  'user_idle',
+  'hint_used',
+  'manual_nudge',
+]);
+export type AiInterviewProactiveReason = z.infer<typeof aiInterviewProactiveReasonSchema>;
+
+export const aiInterviewInteractionSignalsSchema = z
+  .object({
+    reason: aiInterviewProactiveReasonSchema,
+    roomStatus: z.enum(ROOM_STATUSES),
+    elapsedSeconds: z
+      .number()
+      .int()
+      .min(0)
+      .max(24 * 60 * 60),
+    secondsSinceLastUserMessage: z
+      .number()
+      .int()
+      .min(0)
+      .max(24 * 60 * 60)
+      .optional(),
+    secondsSinceLastAssistantMessage: z
+      .number()
+      .int()
+      .min(0)
+      .max(24 * 60 * 60)
+      .optional(),
+    secondsSinceLastEditorActivity: z
+      .number()
+      .int()
+      .min(0)
+      .max(24 * 60 * 60)
+      .optional(),
+    recentEditorChanges: z.number().int().min(0).max(10_000).optional(),
+    hintCount: z.number().int().min(0).max(200).optional(),
+  })
+  .strict();
+
+export type AiInterviewInteractionSignals = z.infer<typeof aiInterviewInteractionSignalsSchema>;
+
 export const requestRoomAiInterviewSchema = z
   .object({
-    userMessage: z.string().min(1).max(2000).describe('Candidate message to the AI interviewer'),
+    trigger: aiInterviewRequestTriggerSchema
+      .default('user_message')
+      .describe('How this interview request was triggered'),
+    userMessage: z
+      .string()
+      .max(2000)
+      .optional()
+      .describe('Candidate message to the AI interviewer'),
     conversationHistory: z
       .array(
         z.object({
@@ -250,10 +303,25 @@ export const requestRoomAiInterviewSchema = z
     codeContext: aiInterviewCodeContextSchema.describe('Specific code context for the follow-up'),
     latestExecutionSummary: aiInterviewExecutionSummarySchema.optional(),
     codeAnalysisContext: aiInterviewCodeAnalysisContextSchema.optional(),
+    interactionSignals: aiInterviewInteractionSignalsSchema.optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.trigger !== 'user_message') {
+      return;
+    }
+    if ((value.userMessage?.trim().length ?? 0) > 0) {
+      return;
+    }
+    ctx.addIssue({
+      code: 'custom',
+      path: ['userMessage'],
+      message: 'userMessage is required when trigger is user_message',
+    });
   })
   .strict();
 
-export type RequestRoomAiInterviewInput = z.infer<typeof requestRoomAiInterviewSchema>;
+export type RequestRoomAiInterviewRequest = z.input<typeof requestRoomAiInterviewSchema>;
+export type RequestRoomAiInterviewInput = z.output<typeof requestRoomAiInterviewSchema>;
 
 export const requestRoomAiInterviewResponseSchema = z.object({
   jobId: z
@@ -263,24 +331,43 @@ export const requestRoomAiInterviewResponseSchema = z.object({
 
 export type RequestRoomAiInterviewResponse = z.infer<typeof requestRoomAiInterviewResponseSchema>;
 
-export const getRoomAiInterviewResultResponseSchema = z.discriminatedUnion('status', [
-  z.object({
-    status: z.literal('pending'),
-    jobId: z.string(),
-  }),
-  z.object({
-    status: z.literal('ready'),
-    jobId: z.string(),
-    message: z.string(),
-    followUpQuestion: z.string().optional(),
-    codeContext: aiInterviewCodeContextSchema,
-    codeAnnotations: z.array(z.object({ line: z.number().int(), comment: z.string() })).optional(),
-    audioUrl: z.string().url().optional(),
-  }),
-  z.object({
-    status: z.literal('failed'),
-    jobId: z.string(),
-  }),
+const aiInterviewPendingResultSchema = z.object({
+  status: z.literal('pending'),
+  jobId: z.string(),
+});
+
+const aiInterviewReadyRespondingResultSchema = z.object({
+  status: z.literal('ready'),
+  jobId: z.string(),
+  shouldRespond: z.literal(true),
+  message: z.string().min(1),
+  followUpQuestion: z.string().optional(),
+  codeContext: aiInterviewCodeContextSchema.optional(),
+  codeAnnotations: z.array(z.object({ line: z.number().int(), comment: z.string() })).optional(),
+  audioUrl: z.string().url().optional(),
+});
+
+const aiInterviewReadySilentResultSchema = z.object({
+  status: z.literal('ready'),
+  jobId: z.string(),
+  shouldRespond: z.literal(false),
+  message: z.undefined().optional(),
+  followUpQuestion: z.undefined().optional(),
+  codeContext: z.undefined().optional(),
+  codeAnnotations: z.undefined().optional(),
+  audioUrl: z.undefined().optional(),
+});
+
+const aiInterviewFailedResultSchema = z.object({
+  status: z.literal('failed'),
+  jobId: z.string(),
+});
+
+export const getRoomAiInterviewResultResponseSchema = z.union([
+  aiInterviewPendingResultSchema,
+  aiInterviewReadyRespondingResultSchema,
+  aiInterviewReadySilentResultSchema,
+  aiInterviewFailedResultSchema,
 ]);
 
 export type GetRoomAiInterviewResultResponse = z.infer<

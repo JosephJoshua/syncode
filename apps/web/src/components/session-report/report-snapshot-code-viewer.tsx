@@ -1,5 +1,6 @@
-import Editor from '@monaco-editor/react';
 import type { SupportedLanguage } from '@syncode/shared';
+import { Suspense } from 'react';
+import { LazyMonacoEditor as Editor } from '@/components/lazy-monaco-editor.js';
 import {
   EDITOR_LOADING,
   EDITOR_OPTIONS_BASE,
@@ -34,29 +35,31 @@ export function ReportSnapshotCodeViewer({
     <div
       className={`${compact ? 'mt-3' : 'mt-4'} overflow-hidden rounded-xl border border-border/50 bg-background/70`}
     >
-      <Editor
-        height={`${editorHeight}px`}
-        language={toMonacoLanguage(language)}
-        value={code}
-        theme="syncode-dark"
-        beforeMount={handleEditorWillMount}
-        options={{
-          ...EDITOR_OPTIONS_BASE,
-          readOnly: true,
-          domReadOnly: true,
-          minimap: { enabled: false },
-          lineNumbersMinChars: 3,
-          scrollbar: {
-            verticalScrollbarSize: 10,
-            horizontalScrollbarSize: 10,
-          },
-          overviewRulerBorder: false,
-          overviewRulerLanes: 0,
-          contextmenu: false,
-          renderValidationDecorations: 'off',
-        }}
-        loading={EDITOR_LOADING}
-      />
+      <Suspense fallback={EDITOR_LOADING}>
+        <Editor
+          height={`${editorHeight}px`}
+          language={toMonacoLanguage(language)}
+          value={code}
+          theme="syncode-dark"
+          beforeMount={handleEditorWillMount}
+          options={{
+            ...EDITOR_OPTIONS_BASE,
+            readOnly: true,
+            domReadOnly: true,
+            minimap: { enabled: false },
+            lineNumbersMinChars: 3,
+            scrollbar: {
+              verticalScrollbarSize: 10,
+              horizontalScrollbarSize: 10,
+            },
+            overviewRulerBorder: false,
+            overviewRulerLanes: 0,
+            contextmenu: false,
+            renderValidationDecorations: 'off',
+          }}
+          loading={EDITOR_LOADING}
+        />
+      </Suspense>
     </div>
   );
 }

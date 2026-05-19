@@ -376,6 +376,7 @@
     "aiInterviewEmpty": "AI 面试官将就题目向你提问，请在下方输入你的回复。",
     "aiInterviewFailed": "获取 AI 面试官回复失败。",
     "aiInterviewUnavailable": "AI 面试官服务暂时不可用。",
+    "aiInterviewBusy": "AI 面试官仍在准备回复。",
     "aiInterviewFollowUp": "追问",
     "aiInterviewAnnotations": "代码注释",
     "aiInterviewCodeContext": "代码上下文",

@@ -61,6 +61,10 @@ export class StubAiClient implements IAiClient {
     jobId: string,
     result: GenerateWeaknessAnalysisResult,
   ) => Promise<void>;
+  private interviewResultCallback?: (
+    jobId: string,
+    result: InterviewResponseResult,
+  ) => Promise<void>;
 
   constructor(options: StubAiClientOptions = {}) {
     this.delayMs = options.delayMs ?? 800;
@@ -135,12 +139,12 @@ export class StubAiClient implements IAiClient {
   }
 
   async submitInterviewResponse(
-    _request: InterviewResponseRequest,
+    request: InterviewResponseRequest,
   ): Promise<SubmitResult<'ai:interview'>> {
-    const jobId = randomUUID() as JobId<'ai:interview'>;
+    const jobId = (request.idempotencyKey ?? randomUUID()) as JobId<'ai:interview'>;
     this.jobs.set(jobId, { status: 'queued', type: 'interview' });
 
-    this.scheduleInterviewCompletion(jobId, _request);
+    this.scheduleInterviewCompletion(jobId, request);
     return { jobId };
   }
 
@@ -218,6 +222,12 @@ export class StubAiClient implements IAiClient {
     callback: (jobId: string, result: GenerateWeaknessAnalysisResult) => Promise<void>,
   ): void {
     this.weaknessAnalysisResultCallback = callback;
+  }
+
+  onInterviewResult(
+    callback: (jobId: string, result: InterviewResponseResult) => Promise<void>,
+  ): void {
+    this.interviewResultCallback = callback;
   }
 
   private scheduleHintCompletion(jobId: string, request: GenerateHintRequest): void {
@@ -432,34 +442,42 @@ export class StubAiClient implements IAiClient {
           cursorLine: 1,
           cursorColumn: 1,
         };
+        const shouldRespond =
+          request.trigger !== 'proactive' || request.interactionSignals?.reason !== 'user_idle';
 
         job.status = 'completed';
-        job.interviewResult = {
-          message: "That's a good approach. Let me ask you about the time complexity.",
-          followUpQuestion: 'What is the time and space complexity of your solution?',
-          codeContext: {
-            language: request.language,
-            file: codeContext.file,
-            codeSnippet: codeContext.codeSnippet,
-            startLine: codeContext.startLine,
-            endLine: codeContext.endLine,
-            cursorLine: codeContext.cursorLine,
-            cursorColumn: codeContext.cursorColumn,
-            questionType: 'complexity',
-            reason: 'Complexity follow-up for the selected code context.',
-          },
-          codeAnnotations: [
-            {
-              line: 1,
-              comment: 'Consider adding input validation here.',
-            },
-          ],
-          audio: {
-            audioKey: `ai/interview/${jobId}.mp3`,
-            mimeType: 'audio/mpeg',
-            downloadUrl: `https://example.com/ai/interview/${jobId}.mp3`,
-          },
-        };
+        job.interviewResult = shouldRespond
+          ? {
+              shouldRespond: true,
+              message: "That's a good approach. Let me ask you about the time complexity.",
+              followUpQuestion: 'What is the time and space complexity of your solution?',
+              codeContext: {
+                language: request.language,
+                file: codeContext.file,
+                codeSnippet: codeContext.codeSnippet,
+                startLine: codeContext.startLine,
+                endLine: codeContext.endLine,
+                cursorLine: codeContext.cursorLine,
+                cursorColumn: codeContext.cursorColumn,
+                questionType: 'complexity',
+                reason: 'Complexity follow-up for the selected code context.',
+              },
+              codeAnnotations: [
+                {
+                  line: 1,
+                  comment: 'Consider adding input validation here.',
+                },
+              ],
+              audio: {
+                audioKey: `ai/interview/${jobId}.mp3`,
+                mimeType: 'audio/mpeg',
+                downloadUrl: `https://example.com/ai/interview/${jobId}.mp3`,
+              },
+            }
+          : {
+              shouldRespond: false,
+            };
+        void this.interviewResultCallback?.(jobId, job.interviewResult);
       }, this.delayMs),
     );
   }

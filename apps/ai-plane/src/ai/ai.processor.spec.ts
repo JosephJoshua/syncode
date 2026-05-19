@@ -102,148 +102,183 @@ describe('AiProcessor', () => {
           useValue: {
             generateText: vi
               .fn()
-              .mockImplementation(async (input: { maxOutputTokens?: number }) => {
-                if (input.maxOutputTokens === 600) {
+              .mockImplementation(
+                async (input: {
+                  maxOutputTokens?: number;
+                  messages?: Array<{ role: string; content: string }>;
+                }) => {
+                  const systemMessage =
+                    input.messages?.find((message) => message.role === 'system')?.content ?? '';
+                  if (
+                    systemMessage.includes(
+                      'You are a senior software engineer conducting a realistic live interview for a company hiring loop.',
+                    ) &&
+                    input.maxOutputTokens === 700
+                  ) {
+                    return {
+                      text: JSON.stringify({
+                        shouldRespond: true,
+                        message: 'Can you explain the invariant your map maintains?',
+                        followUpQuestion:
+                          'Why is checking the complement before inserting the current value safe?',
+                        codeContext: {
+                          language: 'typescript',
+                          file: 'solution.ts',
+                          codeSnippet: 'function twoSum() {}',
+                          startLine: 1,
+                          endLine: 1,
+                          questionType: 'correctness',
+                          reason: 'Invariant follow-up',
+                        },
+                        codeAnnotations: [{ line: 1, comment: 'Name the state you are tracking.' }],
+                      }),
+                      model: 'qwen3.5-mini',
+                    };
+                  }
+
+                  if (input.maxOutputTokens === 600) {
+                    return {
+                      text: JSON.stringify({
+                        message: 'Can you explain the invariant your map maintains?',
+                        followUpQuestion:
+                          'Why is checking the complement before inserting the current value safe?',
+                        codeContext: {
+                          language: 'typescript',
+                          file: 'solution.ts',
+                          codeSnippet: 'function twoSum() {}',
+                          startLine: 1,
+                          endLine: 1,
+                          questionType: 'correctness',
+                          reason: 'Invariant follow-up',
+                        },
+                        codeAnnotations: [{ line: 1, comment: 'Name the state you are tracking.' }],
+                      }),
+                      model: 'qwen3.5-mini',
+                    };
+                  }
+
+                  if (input.maxOutputTokens === 700) {
+                    return {
+                      text: JSON.stringify({
+                        summary:
+                          'The implementation should be discussed through complexity, edge cases, and readability.',
+                        focusAreas: {
+                          complexity: 'Ask the candidate to justify the dominant operation.',
+                          edgeCases: 'Probe empty input and duplicate-value behavior.',
+                          readability:
+                            'Ask which state names make the approach easiest to explain.',
+                        },
+                        followUpQuestions: [
+                          'What operation dominates the time complexity?',
+                          'Which duplicate-value case would you test first?',
+                        ],
+                      }),
+                      model: 'qwen3.5-mini',
+                    };
+                  }
+
+                  if (input.maxOutputTokens === 900) {
+                    return {
+                      text: JSON.stringify({
+                        summary: 'Edge-case reasoning and communication need repeated attention.',
+                        recurringPatterns: [
+                          'Boundary cases are discussed after implementation instead of before.',
+                        ],
+                        weaknesses: [
+                          {
+                            category: 'edge_cases',
+                            description:
+                              'The candidate should identify boundary cases before submitting.',
+                            evidence:
+                              'The session included a submission before edge cases were named.',
+                            trend: 'stable',
+                          },
+                        ],
+                      }),
+                      model: 'qwen3.5-mini',
+                    };
+                  }
+
+                  if (input.maxOutputTokens === 2500) {
+                    return {
+                      text: JSON.stringify({
+                        overallScore: 82,
+                        dimensions: {
+                          correctness: {
+                            score: 84,
+                            feedback: 'Correctness',
+                            evidence: [
+                              {
+                                type: 'code_line',
+                                reference: 'L1: function twoSum() { return [0, 1]; }',
+                                description: 'The final code returns a pair of indices.',
+                              },
+                            ],
+                          },
+                          efficiency: {
+                            score: 78,
+                            feedback: 'Efficiency',
+                            evidence: [
+                              {
+                                type: 'code_line',
+                                reference: 'L1: function twoSum() { return [0, 1]; }',
+                                description: 'The final code is compact enough to inspect.',
+                              },
+                            ],
+                          },
+                          codeQuality: {
+                            score: 80,
+                            feedback: 'Code quality',
+                            evidence: [
+                              {
+                                type: 'code_line',
+                                reference: 'L1: function twoSum() { return [0, 1]; }',
+                                description: 'The final code is readable in the final snapshot.',
+                              },
+                            ],
+                          },
+                          communication: {
+                            score: 76,
+                            feedback: 'Communication',
+                            evidence: [
+                              {
+                                type: 'event_timestamp',
+                                reference: '2026-04-20T01:01:00.000Z',
+                                description: 'The session timeline includes a wrap-up transition.',
+                              },
+                            ],
+                          },
+                          problemSolving: {
+                            score: 83,
+                            feedback: 'Problem solving',
+                            evidence: [
+                              {
+                                type: 'code_line',
+                                reference: 'L1: function twoSum() { return [0, 1]; }',
+                                description: 'The final code shows the selected approach.',
+                              },
+                            ],
+                          },
+                        },
+                        strengths: ['Strong iteration'],
+                        areasForImprovement: ['Explain tradeoffs earlier'],
+                        detailedFeedback: 'Detailed feedback',
+                        comparisonToHistory: null,
+                        peerFeedbackSummary: null,
+                      }),
+                      model: 'qwen3.5-mini',
+                    };
+                  }
+
                   return {
                     text: JSON.stringify({
-                      message: 'Can you explain the invariant your map maintains?',
-                      followUpQuestion:
-                        'Why is checking the complement before inserting the current value safe?',
-                      codeContext: {
-                        language: 'typescript',
-                        file: 'solution.ts',
-                        codeSnippet: 'function twoSum() {}',
-                        startLine: 1,
-                        endLine: 1,
-                        questionType: 'correctness',
-                        reason: 'Invariant follow-up',
-                      },
-                      codeAnnotations: [{ line: 1, comment: 'Name the state you are tracking.' }],
+                      hint: 'Consider storing seen values in a map.',
+                      suggestedApproach: 'Track complement values while iterating.',
                     }),
                     model: 'qwen3.5-mini',
                   };
-                }
-
-                if (input.maxOutputTokens === 700) {
-                  return {
-                    text: JSON.stringify({
-                      summary:
-                        'The implementation should be discussed through complexity, edge cases, and readability.',
-                      focusAreas: {
-                        complexity: 'Ask the candidate to justify the dominant operation.',
-                        edgeCases: 'Probe empty input and duplicate-value behavior.',
-                        readability: 'Ask which state names make the approach easiest to explain.',
-                      },
-                      followUpQuestions: [
-                        'What operation dominates the time complexity?',
-                        'Which duplicate-value case would you test first?',
-                      ],
-                    }),
-                    model: 'qwen3.5-mini',
-                  };
-                }
-
-                if (input.maxOutputTokens === 900) {
-                  return {
-                    text: JSON.stringify({
-                      summary: 'Edge-case reasoning and communication need repeated attention.',
-                      recurringPatterns: [
-                        'Boundary cases are discussed after implementation instead of before.',
-                      ],
-                      weaknesses: [
-                        {
-                          category: 'edge_cases',
-                          description:
-                            'The candidate should identify boundary cases before submitting.',
-                          evidence:
-                            'The session included a submission before edge cases were named.',
-                          trend: 'stable',
-                        },
-                      ],
-                    }),
-                    model: 'qwen3.5-mini',
-                  };
-                }
-
-                if (input.maxOutputTokens === 2500) {
-                  return {
-                    text: JSON.stringify({
-                      overallScore: 82,
-                      dimensions: {
-                        correctness: {
-                          score: 84,
-                          feedback: 'Correctness',
-                          evidence: [
-                            {
-                              type: 'code_line',
-                              reference: 'L1: function twoSum() { return [0, 1]; }',
-                              description: 'The final code returns a pair of indices.',
-                            },
-                          ],
-                        },
-                        efficiency: {
-                          score: 78,
-                          feedback: 'Efficiency',
-                          evidence: [
-                            {
-                              type: 'code_line',
-                              reference: 'L1: function twoSum() { return [0, 1]; }',
-                              description: 'The final code is compact enough to inspect.',
-                            },
-                          ],
-                        },
-                        codeQuality: {
-                          score: 80,
-                          feedback: 'Code quality',
-                          evidence: [
-                            {
-                              type: 'code_line',
-                              reference: 'L1: function twoSum() { return [0, 1]; }',
-                              description: 'The final code is readable in the final snapshot.',
-                            },
-                          ],
-                        },
-                        communication: {
-                          score: 76,
-                          feedback: 'Communication',
-                          evidence: [
-                            {
-                              type: 'event_timestamp',
-                              reference: '2026-04-20T01:01:00.000Z',
-                              description: 'The session timeline includes a wrap-up transition.',
-                            },
-                          ],
-                        },
-                        problemSolving: {
-                          score: 83,
-                          feedback: 'Problem solving',
-                          evidence: [
-                            {
-                              type: 'code_line',
-                              reference: 'L1: function twoSum() { return [0, 1]; }',
-                              description: 'The final code shows the selected approach.',
-                            },
-                          ],
-                        },
-                      },
-                      strengths: ['Strong iteration'],
-                      areasForImprovement: ['Explain tradeoffs earlier'],
-                      detailedFeedback: 'Detailed feedback',
-                      comparisonToHistory: null,
-                      peerFeedbackSummary: null,
-                    }),
-                    model: 'qwen3.5-mini',
-                  };
-                }
-
-                return {
-                  text: JSON.stringify({
-                    hint: 'Consider storing seen values in a map.',
-                    suggestedApproach: 'Track complement values while iterating.',
-                  }),
-                  model: 'qwen3.5-mini',
-                };
-              }),
+                },
+              ),
             generateSpeech: vi.fn().mockResolvedValue({
               audio: Buffer.from('speech-bytes'),
               model: 'qwen-tts',

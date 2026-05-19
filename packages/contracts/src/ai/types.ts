@@ -51,6 +51,26 @@ export interface InterviewCodeAnalysisContext {
   followUpQuestions?: string[];
 }
 
+export type InterviewResponseTrigger = 'user_message' | 'proactive';
+
+export type InterviewProactiveReason =
+  | 'session_joined'
+  | 'stage_changed'
+  | 'user_idle'
+  | 'hint_used'
+  | 'manual_nudge';
+
+export interface InterviewInteractionSignals {
+  reason: InterviewProactiveReason;
+  roomStatus: RoomStatus;
+  elapsedSeconds: number;
+  secondsSinceLastUserMessage?: number;
+  secondsSinceLastAssistantMessage?: number;
+  secondsSinceLastEditorActivity?: number;
+  recentEditorChanges?: number;
+  hintCount?: number;
+}
+
 export interface GenerateHintRequest {
   roomId: string;
   participantId: string;
@@ -156,6 +176,7 @@ export interface ReviewCodeResult {
 }
 
 export interface InterviewResponseRequest {
+  idempotencyKey?: string;
   roomId: string;
   sessionId?: string | null;
   participantId: string;
@@ -164,9 +185,15 @@ export interface InterviewResponseRequest {
   codeContext?: InterviewCodeContext;
   latestExecutionSummary?: HintSubmissionSummary | null;
   codeAnalysisContext?: InterviewCodeAnalysisContext;
+  recentHints?: Array<{
+    hint: string;
+    createdAt: string;
+  }>;
+  trigger?: InterviewResponseTrigger;
+  interactionSignals?: InterviewInteractionSignals;
   problemDescription: string;
   language: SupportedLanguage;
-  userMessage: string;
+  userMessage?: string;
 }
 
 export interface InterviewResponseAudio {
@@ -176,9 +203,10 @@ export interface InterviewResponseAudio {
 }
 
 export interface InterviewResponseResult {
-  message: string;
-  followUpQuestion: string;
-  codeContext: InterviewCodeContext;
+  shouldRespond: boolean;
+  message?: string;
+  followUpQuestion?: string;
+  codeContext?: InterviewCodeContext;
   codeAnnotations?: Array<{ line: number; comment: string }>;
   audio?: InterviewResponseAudio;
 }
