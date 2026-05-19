@@ -51,6 +51,12 @@ export function useInlineComments(
       const nextCode = codeText.toString();
       const delta = event.changes.delta as InlineCommentTextDelta;
 
+      if (previousCode.length === 0 && commentsMap.size > 0) {
+        previousCodeRef.current = nextCode;
+        syncComments();
+        return;
+      }
+
       reconcileInlineCommentsForCodeChange(doc, language, previousCode, nextCode, delta);
       previousCodeRef.current = nextCode;
       syncComments();
