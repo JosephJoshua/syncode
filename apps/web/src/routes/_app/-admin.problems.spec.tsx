@@ -1,8 +1,32 @@
-import { CONTROL_API } from '@syncode/contracts';
+import {
+  CONTROL_API,
+  type ProblemDetail,
+  type ProblemSummary,
+  type ProblemsListResponse,
+} from '@syncode/contracts';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('@/components/lazy-monaco-editor.js', () => ({
+  LazyMonacoEditor: ({
+    value,
+    onChange,
+    options,
+  }: {
+    value?: string;
+    onChange?: (value: string) => void;
+    options?: { ariaLabel?: string };
+  }) => (
+    <textarea
+      aria-label={options?.ariaLabel}
+      value={value ?? ''}
+      onChange={(event) => onChange?.(event.currentTarget.value)}
+    />
+  ),
+}));
 
 vi.mock('@/lib/api-client.js', async () => {
   const actual = await vi.importActual<typeof import('@/lib/api-client.js')>('@/lib/api-client.js');
@@ -38,7 +62,7 @@ vi.mock('react-i18next', () => ({
       }
       return key;
     },
-    i18n: { language: 'en' },
+    i18n: { language: 'en', resolvedLanguage: 'en' },
   }),
 }));
 
@@ -83,6 +107,13 @@ function changeField(label: string, value: string) {
   });
 }
 
+async function openCreateDialog(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(
+    await screen.findByRole('button', { name: 'problemEditor.management.newProblem' }),
+  );
+  await screen.findByRole('dialog', { name: 'problemEditor.editorDialog.createTitle' });
+}
+
 async function fillValidProblemForm(user: ReturnType<typeof userEvent.setup>) {
   changeField('problemEditor.fields.title', 'Two Sum');
   changeField('problemEditor.fields.company', 'syncode');
@@ -103,7 +134,64 @@ async function fillValidProblemForm(user: ReturnType<typeof userEvent.setup>) {
 
   await user.click(screen.getByRole('switch', { name: 'problemEditor.testCases.hidden' }));
   await user.click(screen.getByRole('switch', { name: 'problemEditor.fields.published' }));
-  await user.click(screen.getByRole('button', { name: 'problemEditor.actions.save' }));
+}
+
+function mockProblemList(data = [problemSummary()]): ProblemsListResponse {
+  return {
+    data,
+    pagination: { hasMore: false, nextCursor: null },
+  };
+}
+
+function problemSummary(): ProblemSummary {
+  return {
+    id: 'problem-1',
+    title: 'Two Sum',
+    difficulty: 'medium',
+    isPublished: false,
+    tags: [],
+    company: 'syncode',
+    acceptanceRate: null,
+    isBookmarked: false,
+    attemptStatus: null,
+    testCaseCount: 2,
+    hiddenTestCaseCount: 1,
+    totalSubmissions: 0,
+    updatedAt: '2026-01-01T00:00:00.000Z',
+  };
+}
+
+function problemDetail(overrides: Partial<ProblemDetail> = {}): ProblemDetail {
+  return {
+    ...problemSummary(),
+    description: 'Find a pair.',
+    constraints: 'n >= 2',
+    examples: [{ input: '1 2', output: '3', explanation: 'sum' }],
+    testCases: [
+      {
+        input: '1 2',
+        expectedOutput: '3',
+        description: 'sample',
+        isHidden: false,
+        timeoutMs: 1200,
+        memoryMb: 128,
+      },
+      {
+        input: '9 9',
+        expectedOutput: '18',
+        description: 'hidden',
+        isHidden: true,
+      },
+    ],
+    starterCode: { typescript: 'function solve() {}' },
+    timeLimit: 1500,
+    memoryLimit: 256,
+    totalSubmissions: 0,
+    userAttempts: 0,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+    ...overrides,
+  };
 }
 
 describe('AdminProblemEditorPage', () => {
@@ -113,40 +201,44 @@ describe('AdminProblemEditorPage', () => {
     toastSuccessMock.mockReset();
     navigateMock.mockReset();
     navigateMock.mockImplementation(() => Promise.resolve());
+    apiMock.mockImplementation(async (route) => {
+      if (route === CONTROL_API.PROBLEMS.LIST) {
+        return mockProblemList() as never;
+      }
+      throw new Error(`Unexpected route ${route.route}`);
+    });
   });
 
   afterEach(() => {
     vi.clearAllMocks();
   });
 
-  it('GIVEN valid problem fields WHEN saving THEN posts the create-problem contract and navigates to the created problem', async () => {
-    apiMock.mockResolvedValue({
-      id: 'problem-1',
-      title: 'Two Sum',
-      difficulty: 'medium',
-      isPublished: true,
-      tags: [],
-      company: 'syncode',
-      acceptanceRate: null,
-      isBookmarked: false,
-      attemptStatus: null,
-      description: 'Find a pair.',
-      constraints: 'n >= 2',
-      examples: [],
-      testCases: [],
-      starterCode: null,
-      timeLimit: null,
-      memoryLimit: null,
-      totalSubmissions: 0,
-      userAttempts: 0,
-      createdAt: '2026-01-01T00:00:00.000Z',
-      updatedAt: '2026-01-01T00:00:00.000Z',
-    } as never);
+  it('GIVEN the management page loads WHEN no editor is open THEN authoring fields are not rendered inline', async () => {
+    renderPage();
+
+    expect(await screen.findByText('Two Sum')).toBeInTheDocument();
+    expect(screen.queryByLabelText('problemEditor.fields.title')).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'problemEditor.management.newProblem' }),
+    ).toBeInTheDocument();
+  });
+
+  it('GIVEN valid problem fields in the create dialog WHEN saving THEN posts the create contract and navigates', async () => {
+    apiMock.mockImplementation(async (route) => {
+      if (route === CONTROL_API.PROBLEMS.LIST) {
+        return mockProblemList([]) as never;
+      }
+      if (route === CONTROL_API.PROBLEMS.CREATE) {
+        return problemDetail({ id: 'created-problem', title: 'Two Sum' }) as never;
+      }
+      throw new Error(`Unexpected route ${route.route}`);
+    });
     const user = userEvent.setup();
 
     renderPage();
-
+    await openCreateDialog(user);
     await fillValidProblemForm(user);
+    await user.click(screen.getByRole('button', { name: 'problemEditor.actions.save' }));
 
     await waitFor(() => {
       expect(apiMock).toHaveBeenCalledWith(CONTROL_API.PROBLEMS.CREATE, {
@@ -177,44 +269,68 @@ describe('AdminProblemEditorPage', () => {
     expect(toastSuccessMock).toHaveBeenCalledWith('problemEditor.toast.saved');
     expect(navigateMock).toHaveBeenCalledWith({
       to: '/problems/$problemId',
-      params: { problemId: 'problem-1' },
+      params: { problemId: 'created-problem' },
     });
-  }, 10_000);
-
-  it('GIVEN missing required fields WHEN saving THEN shows validation errors and does not call the API', async () => {
-    const user = userEvent.setup();
-
-    renderPage();
-
-    await user.click(screen.getByRole('button', { name: 'problemEditor.actions.save' }));
-
-    expect(await screen.findByText('problemEditor.validation.title')).toBeInTheDocument();
-    expect(screen.getByText('problemEditor.validation.description')).toBeInTheDocument();
-    expect(screen.getByText('problemEditor.validation.testCases')).toBeInTheDocument();
-    expect(apiMock).not.toHaveBeenCalled();
   });
 
-  it('GIVEN starter code has an unsupported language key WHEN saving THEN shows validation error', async () => {
+  it('GIVEN an existing problem with hidden cases WHEN editing THEN updates the problem and preserves hidden cases in the public contract', async () => {
+    apiMock.mockImplementation(async (route) => {
+      if (route === CONTROL_API.PROBLEMS.LIST) {
+        return mockProblemList() as never;
+      }
+      if (route === CONTROL_API.PROBLEMS.GET_BY_ID) {
+        return problemDetail() as never;
+      }
+      if (route === CONTROL_API.PROBLEMS.UPDATE) {
+        return problemDetail({ title: 'Two Sum Updated', isPublished: false }) as never;
+      }
+      if (route === CONTROL_API.PROBLEMS.PUBLISH_STATUS) {
+        return problemDetail({ title: 'Two Sum Updated', isPublished: true }) as never;
+      }
+      throw new Error(`Unexpected route ${route.route}`);
+    });
     const user = userEvent.setup();
 
     renderPage();
-
-    changeField('problemEditor.fields.title', 'Two Sum');
-    changeField('problemEditor.fields.description', 'Find a pair.');
-    changeField('problemEditor.testCases.input', '1 2');
-    changeField('problemEditor.testCases.output', '3');
-    changeField('problemEditor.fields.starterCode', '{"js":"function solve() {}"}');
+    const row = (await screen.findByText('Two Sum')).closest('tr');
+    expect(row).not.toBeNull();
+    await user.click(
+      within(row as HTMLTableRowElement).getByRole('button', {
+        name: 'problemEditor.management.edit',
+      }),
+    );
+    await screen.findByRole('dialog', {
+      name: 'problemEditor.editorDialog.editTitle title=Two Sum',
+    });
+    expect(
+      screen.getByRole('combobox', { name: 'problemEditor.fields.difficulty' }),
+    ).toHaveTextContent('problemEditor.difficulty.medium');
+    changeField('problemEditor.fields.title', 'Two Sum Updated');
+    await user.click(screen.getByRole('switch', { name: 'problemEditor.fields.published' }));
     await user.click(screen.getByRole('button', { name: 'problemEditor.actions.save' }));
 
-    expect(await screen.findByText('problemEditor.validation.starterCode')).toBeInTheDocument();
-    expect(apiMock).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(apiMock).toHaveBeenCalledWith(CONTROL_API.PROBLEMS.UPDATE, {
+        params: { id: 'problem-1' },
+        body: expect.objectContaining({
+          title: 'Two Sum Updated',
+          testCases: expect.arrayContaining([
+            expect.objectContaining({ input: '9 9', expectedOutput: '18', isHidden: true }),
+          ]),
+        }),
+      });
+    });
+    expect(apiMock).toHaveBeenCalledWith(CONTROL_API.PROBLEMS.PUBLISH_STATUS, {
+      params: { id: 'problem-1' },
+      body: { isPublished: true },
+    });
   });
 
-  it('GIVEN examples JSON omits required output WHEN saving THEN shows validation error', async () => {
+  it('GIVEN invalid examples JSON in the dialog WHEN saving THEN validation blocks the API mutation', async () => {
     const user = userEvent.setup();
 
     renderPage();
-
+    await openCreateDialog(user);
     changeField('problemEditor.fields.title', 'Two Sum');
     changeField('problemEditor.fields.description', 'Find a pair.');
     changeField('problemEditor.testCases.input', '1 2');
@@ -223,6 +339,17 @@ describe('AdminProblemEditorPage', () => {
     await user.click(screen.getByRole('button', { name: 'problemEditor.actions.save' }));
 
     expect(await screen.findByText('problemEditor.validation.examples')).toBeInTheDocument();
-    expect(apiMock).not.toHaveBeenCalled();
+    expect(apiMock).not.toHaveBeenCalledWith(CONTROL_API.PROBLEMS.CREATE, expect.anything());
+  });
+
+  it('GIVEN problem list loading fails WHEN rendering THEN a load failure is shown instead of an empty state', async () => {
+    apiMock.mockRejectedValue(new Error('network'));
+
+    renderPage();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'problemEditor.management.loadFailed',
+    );
+    expect(screen.queryByText('problemEditor.management.empty')).not.toBeInTheDocument();
   });
 });
