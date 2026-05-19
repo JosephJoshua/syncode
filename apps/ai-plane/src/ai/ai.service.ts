@@ -1446,7 +1446,11 @@ export class AiService {
     request: InterviewResponseRequest,
   ): ParsedInterviewResponse {
     const trigger = request.trigger ?? 'user_message';
-    const shouldRespond = trigger === 'user_message' ? true : response.shouldRespond === true;
+    const hasResponseContent = Boolean(
+      response.message?.trim() || response.followUpQuestion?.trim() || response.codeContext,
+    );
+    const shouldRespond =
+      trigger === 'user_message' ? true : (response.shouldRespond ?? hasResponseContent);
     if (!shouldRespond) {
       return { shouldRespond: false };
     }

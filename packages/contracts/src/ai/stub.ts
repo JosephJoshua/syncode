@@ -61,6 +61,10 @@ export class StubAiClient implements IAiClient {
     jobId: string,
     result: GenerateWeaknessAnalysisResult,
   ) => Promise<void>;
+  private interviewResultCallback?: (
+    jobId: string,
+    result: InterviewResponseResult,
+  ) => Promise<void>;
 
   constructor(options: StubAiClientOptions = {}) {
     this.delayMs = options.delayMs ?? 800;
@@ -135,12 +139,12 @@ export class StubAiClient implements IAiClient {
   }
 
   async submitInterviewResponse(
-    _request: InterviewResponseRequest,
+    request: InterviewResponseRequest,
   ): Promise<SubmitResult<'ai:interview'>> {
-    const jobId = randomUUID() as JobId<'ai:interview'>;
+    const jobId = (request.idempotencyKey ?? randomUUID()) as JobId<'ai:interview'>;
     this.jobs.set(jobId, { status: 'queued', type: 'interview' });
 
-    this.scheduleInterviewCompletion(jobId, _request);
+    this.scheduleInterviewCompletion(jobId, request);
     return { jobId };
   }
 
@@ -218,6 +222,12 @@ export class StubAiClient implements IAiClient {
     callback: (jobId: string, result: GenerateWeaknessAnalysisResult) => Promise<void>,
   ): void {
     this.weaknessAnalysisResultCallback = callback;
+  }
+
+  onInterviewResult(
+    callback: (jobId: string, result: InterviewResponseResult) => Promise<void>,
+  ): void {
+    this.interviewResultCallback = callback;
   }
 
   private scheduleHintCompletion(jobId: string, request: GenerateHintRequest): void {
@@ -467,6 +477,7 @@ export class StubAiClient implements IAiClient {
           : {
               shouldRespond: false,
             };
+        void this.interviewResultCallback?.(jobId, job.interviewResult);
       }, this.delayMs),
     );
   }

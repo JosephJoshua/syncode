@@ -313,14 +313,15 @@ export const requestRoomAiInterviewSchema = z
       return;
     }
     ctx.addIssue({
-      code: z.ZodIssueCode.custom,
+      code: 'custom',
       path: ['userMessage'],
       message: 'userMessage is required when trigger is user_message',
     });
   })
   .strict();
 
-export type RequestRoomAiInterviewInput = z.infer<typeof requestRoomAiInterviewSchema>;
+export type RequestRoomAiInterviewRequest = z.input<typeof requestRoomAiInterviewSchema>;
+export type RequestRoomAiInterviewInput = z.output<typeof requestRoomAiInterviewSchema>;
 
 export const requestRoomAiInterviewResponseSchema = z.object({
   jobId: z
@@ -330,25 +331,43 @@ export const requestRoomAiInterviewResponseSchema = z.object({
 
 export type RequestRoomAiInterviewResponse = z.infer<typeof requestRoomAiInterviewResponseSchema>;
 
-export const getRoomAiInterviewResultResponseSchema = z.discriminatedUnion('status', [
-  z.object({
-    status: z.literal('pending'),
-    jobId: z.string(),
-  }),
-  z.object({
-    status: z.literal('ready'),
-    jobId: z.string(),
-    shouldRespond: z.boolean(),
-    message: z.string().optional(),
-    followUpQuestion: z.string().optional(),
-    codeContext: aiInterviewCodeContextSchema.optional(),
-    codeAnnotations: z.array(z.object({ line: z.number().int(), comment: z.string() })).optional(),
-    audioUrl: z.string().url().optional(),
-  }),
-  z.object({
-    status: z.literal('failed'),
-    jobId: z.string(),
-  }),
+const aiInterviewPendingResultSchema = z.object({
+  status: z.literal('pending'),
+  jobId: z.string(),
+});
+
+const aiInterviewReadyRespondingResultSchema = z.object({
+  status: z.literal('ready'),
+  jobId: z.string(),
+  shouldRespond: z.literal(true),
+  message: z.string().min(1),
+  followUpQuestion: z.string().optional(),
+  codeContext: aiInterviewCodeContextSchema.optional(),
+  codeAnnotations: z.array(z.object({ line: z.number().int(), comment: z.string() })).optional(),
+  audioUrl: z.string().url().optional(),
+});
+
+const aiInterviewReadySilentResultSchema = z.object({
+  status: z.literal('ready'),
+  jobId: z.string(),
+  shouldRespond: z.literal(false),
+  message: z.undefined().optional(),
+  followUpQuestion: z.undefined().optional(),
+  codeContext: z.undefined().optional(),
+  codeAnnotations: z.undefined().optional(),
+  audioUrl: z.undefined().optional(),
+});
+
+const aiInterviewFailedResultSchema = z.object({
+  status: z.literal('failed'),
+  jobId: z.string(),
+});
+
+export const getRoomAiInterviewResultResponseSchema = z.union([
+  aiInterviewPendingResultSchema,
+  aiInterviewReadyRespondingResultSchema,
+  aiInterviewReadySilentResultSchema,
+  aiInterviewFailedResultSchema,
 ]);
 
 export type GetRoomAiInterviewResultResponse = z.infer<

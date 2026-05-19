@@ -76,12 +76,15 @@ export class InMemoryCacheService implements ICacheService {
     return nextValue;
   }
 
-  async setIfNotExists<T = unknown>(key: string, value: T): Promise<boolean> {
+  async setIfNotExists<T = unknown>(key: string, value: T, ttlSeconds?: number): Promise<boolean> {
     if (this.getEntry(key)) {
       return false;
     }
 
-    this.entries.set(key, { value, expiresAt: null });
+    this.entries.set(key, {
+      value,
+      expiresAt: ttlSeconds ? Date.now() + ttlSeconds * 1_000 : null,
+    });
     return true;
   }
 

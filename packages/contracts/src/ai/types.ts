@@ -176,6 +176,7 @@ export interface ReviewCodeResult {
 }
 
 export interface InterviewResponseRequest {
+  idempotencyKey?: string;
   roomId: string;
   sessionId?: string | null;
   participantId: string;
