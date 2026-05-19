@@ -1,7 +1,29 @@
 export const EXEC_META_TTL_SECONDS = 24 * 60 * 60;
 export const EXEC_META_KEY_PREFIX = 'exec-meta:';
 
-export interface JobMeta {
+export type JobMeta =
+  | {
+      kind?: 'submission';
+      submissionId: string;
+      testCaseIndex: number;
+      expectedOutput: string;
+    }
+  | {
+      kind: 'run';
+      runId: string;
+    };
+
+export interface RunCodeContext {
+  userId: string;
+  roomId: string;
+  sessionId?: string | null;
+}
+
+export interface SubmitProblemContext {
+  sessionId?: string | null;
+}
+
+export interface SubmissionJobMeta {
   submissionId: string;
   testCaseIndex: number;
   expectedOutput: string;
