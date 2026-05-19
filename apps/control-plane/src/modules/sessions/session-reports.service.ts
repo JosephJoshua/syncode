@@ -532,6 +532,7 @@ export class SessionReportsService {
       submissions: reportRequest.submissions,
       peerFeedback: reportRequest.peerFeedback,
       aiMessages: reportRequest.aiMessages,
+      staticAnalysis: reportRequest.staticAnalysis,
       sessionReportSummary: {
         overallScore: report.overallScore ?? null,
         feedback: report.detailedFeedback ?? null,
@@ -725,7 +726,64 @@ export class SessionReportsService {
       });
     }
 
+    this.addStaticAnalysisSignals(signals, report);
+
     return [...signals.values()];
+  }
+
+  private addStaticAnalysisSignals(
+    signals: Map<WeaknessCategory, WeaknessSignal>,
+    report: SessionReport,
+  ): void {
+    for (const analysis of report.staticAnalysis ?? []) {
+      if (
+        (analysis.summary.highComplexityCount > 0 || analysis.summary.duplicationCount > 0) &&
+        !signals.has('code_structure')
+      ) {
+        signals.set('code_structure', {
+          category: 'code_structure',
+          dimension: 'codeQuality',
+          score: WEAKNESS_SCORE_THRESHOLD - 1,
+          description: this.cleanDescription(
+            `Static analysis found ${analysis.summary.highComplexityCount} high-complexity functions and ${analysis.summary.duplicationCount} duplicated blocks.`,
+          ),
+        });
+      }
+
+      if (
+        !signals.has('variable_naming') &&
+        this.hasStaticDiagnosticMatch(analysis.diagnostics, /\bnaming\b|\bidentifier\b/)
+      ) {
+        signals.set('variable_naming', {
+          category: 'variable_naming',
+          dimension: 'codeQuality',
+          score: WEAKNESS_SCORE_THRESHOLD - 1,
+          description: 'Static analysis found naming or identifier diagnostics.',
+        });
+      }
+
+      if (
+        !signals.has('input_validation') &&
+        this.hasStaticDiagnosticMatch(analysis.diagnostics, /\binput\b|\bparse|parsing\b/)
+      ) {
+        signals.set('input_validation', {
+          category: 'input_validation',
+          dimension: 'correctness',
+          score: WEAKNESS_SCORE_THRESHOLD - 1,
+          description: 'Static analysis found input or parsing diagnostics.',
+        });
+      }
+    }
+  }
+
+  private hasStaticDiagnosticMatch(diagnostics: unknown[], pattern: RegExp): boolean {
+    return diagnostics.some((item) => {
+      if (!item || typeof item !== 'object') return false;
+      const diagnostic = item as Record<string, unknown>;
+      return pattern.test(
+        [diagnostic.rule, diagnostic.message].filter((part) => typeof part === 'string').join(' '),
+      );
+    });
   }
 
   private addDimensionSignal(
