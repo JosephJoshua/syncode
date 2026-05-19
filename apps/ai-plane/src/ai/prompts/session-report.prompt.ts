@@ -46,6 +46,7 @@ export function buildSessionReportPrompt(
       'Do not omit dimension.feedback when you include a dimension object.',
       'For correctness, efficiency, and codeQuality, cite exact short code excerpts when code evidence exists.',
       'sessionEvents includes stage transitions and submissions with timestamps; use it for time-based evidence and do not invent events.',
+      'staticAnalysis contains deterministic lint, complexity, and duplication findings. Treat it as objective evidence when present, but do not invent findings when it is empty.',
       'Use evidence.type = "code_line" for line-based code references.',
       'For code_line evidence.reference, use line numbers plus a short exact excerpt from finalCodeSnapshotWithLines, for example "L12: if (seen.has(x))" or "L12-L14: for (...)".',
       'Use evidence.type = "code_snippet" only when a short verbatim snippet is clearer than line numbers.',
@@ -102,6 +103,7 @@ export function buildSessionReportPrompt(
       '- Generate a structured training report for one participant in one finished interview session.',
       '- Judge the participant against actual interview performance evidence; do not give credit for work that belongs only to another participant.',
       '- Use final code for shared factual context, but base every score on evidence that ties the named participant to the observed code, events, submissions, runs, peer feedback, or AI messages.',
+      '- Use staticAnalysis as supporting evidence for code quality and efficiency when present.',
       '- Return strict JSON matching the system prompt contract.',
     ].join('\n\n'),
   };
@@ -132,6 +134,7 @@ function buildCompactSessionData(request: GenerateSessionReportRequest) {
       codeLength: code.length,
     })),
     finalTestCaseBreakdown: request.finalTestCaseBreakdown,
+    staticAnalysis: request.staticAnalysis,
     peerFeedback: request.peerFeedback,
     aiMessages: request.aiMessages,
     roomChatMessages: compactRoomChatMessages(request.roomChatMessages ?? []),

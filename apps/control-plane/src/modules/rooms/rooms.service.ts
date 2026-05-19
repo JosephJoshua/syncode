@@ -41,6 +41,7 @@ import {
   type RoomConfig,
   type RunCodeRequest,
   type RunCodeResponse,
+  type StaticAnalysisEvidence,
   type SubmitProblemInput,
   type SubmitResponse,
 } from '@syncode/contracts';
@@ -59,6 +60,7 @@ import {
   runs,
   sessionParticipants,
   sessions,
+  staticAnalysisResults,
   submissions,
   users,
 } from '@syncode/db';
@@ -1100,7 +1102,8 @@ export class RoomsService implements OnModuleInit {
 
   async runCode(roomId: string, userId: string, request: RunCodeRequest): Promise<RunCodeResponse> {
     await this.assertRoomCapability(roomId, userId, 'code:run');
-    return this.executionService.runCode(request);
+    const sessionId = await this.loadCurrentRoomSessionId(roomId);
+    return this.executionService.runCode(request, { userId, roomId, sessionId });
   }
 
   async submitProblem(
@@ -1123,11 +1126,16 @@ export class RoomsService implements OnModuleInit {
       });
     }
 
-    return this.executionService.submitProblem(userId, {
-      ...body,
-      problemId: room.problemId,
-      roomId,
-    });
+    const sessionId = await this.loadCurrentRoomSessionId(roomId);
+    return this.executionService.submitProblem(
+      userId,
+      {
+        ...body,
+        problemId: room.problemId,
+        roomId,
+      },
+      { sessionId },
+    );
   }
 
   async requestAiHint(
@@ -2971,15 +2979,109 @@ export class RoomsService implements OnModuleInit {
     currentCode: string,
     language: SupportedLanguage,
   ): Promise<AiInterviewCodeAnalysisContext | null> {
-    const cached = await this.cacheService.get<LatestCodeAnalysisContextCacheEntry>(
-      `${RoomsService.AI_CODE_ANALYSIS_LATEST_CACHE_PREFIX}${roomId}:${userId}`,
-    );
+    const [cached, staticAnalysis] = await Promise.all([
+      this.cacheService.get<LatestCodeAnalysisContextCacheEntry>(
+        `${RoomsService.AI_CODE_ANALYSIS_LATEST_CACHE_PREFIX}${roomId}:${userId}`,
+      ),
+      this.loadLatestStaticAnalysisContext(roomId, userId, currentCode, language),
+    ]);
     const currentCodeHash = this.hashAiContextCode(currentCode);
     if (cached?.codeHash !== currentCodeHash || cached?.language !== language) {
+      if (!staticAnalysis) {
+        return null;
+      }
+      return {
+        summary: this.buildStaticAnalysisSummary(staticAnalysis),
+        staticAnalysis,
+      };
+    }
+
+    return {
+      ...cached.context,
+      ...(staticAnalysis ? { staticAnalysis } : {}),
+    };
+  }
+
+  private async loadLatestStaticAnalysisContext(
+    roomId: string,
+    userId: string,
+    currentCode: string,
+    language: SupportedLanguage,
+  ): Promise<StaticAnalysisEvidence | null> {
+    const rows = await this.db
+      .select({
+        source: staticAnalysisResults.source,
+        runId: staticAnalysisResults.runId,
+        submissionId: staticAnalysisResults.submissionId,
+        language: staticAnalysisResults.language,
+        createdAt: staticAnalysisResults.createdAt,
+        completedAt: staticAnalysisResults.completedAt,
+        diagnosticCount: staticAnalysisResults.diagnosticCount,
+        errorCount: staticAnalysisResults.errorCount,
+        warningCount: staticAnalysisResults.warningCount,
+        maxCyclomaticComplexity: staticAnalysisResults.maxCyclomaticComplexity,
+        highComplexityCount: staticAnalysisResults.highComplexityCount,
+        duplicationCount: staticAnalysisResults.duplicationCount,
+        toolFailureCount: staticAnalysisResults.toolFailureCount,
+        report: staticAnalysisResults.report,
+        runCode: runs.code,
+        submissionCode: submissions.code,
+      })
+      .from(staticAnalysisResults)
+      .leftJoin(runs, eq(runs.id, staticAnalysisResults.runId))
+      .leftJoin(submissions, eq(submissions.id, staticAnalysisResults.submissionId))
+      .where(
+        and(
+          eq(staticAnalysisResults.roomId, roomId),
+          eq(staticAnalysisResults.userId, userId),
+          eq(staticAnalysisResults.language, language),
+          eq(staticAnalysisResults.status, 'completed'),
+        ),
+      )
+      .orderBy(desc(staticAnalysisResults.completedAt), desc(staticAnalysisResults.createdAt))
+      .limit(10);
+
+    const row = rows.find((item) => (item.runCode ?? item.submissionCode) === currentCode);
+    if (!row) {
       return null;
     }
 
-    return cached.context;
+    const report = normalizeStaticAnalysisReport(row.report);
+    return {
+      source: row.source,
+      runId: row.runId,
+      submissionId: row.submissionId,
+      language: row.language,
+      createdAt: row.createdAt.toISOString(),
+      completedAt: row.completedAt?.toISOString() ?? null,
+      summary: {
+        diagnosticCount: row.diagnosticCount,
+        errorCount: row.errorCount,
+        warningCount: row.warningCount,
+        maxCyclomaticComplexity: row.maxCyclomaticComplexity,
+        highComplexityCount: row.highComplexityCount,
+        duplicationCount: row.duplicationCount,
+        toolFailureCount: row.toolFailureCount,
+      },
+      diagnostics: report.diagnostics.slice(0, 10) as StaticAnalysisEvidence['diagnostics'],
+      complexity: report.complexity.slice(0, 10) as StaticAnalysisEvidence['complexity'],
+      duplications: report.duplications.slice(0, 5) as StaticAnalysisEvidence['duplications'],
+    };
+  }
+
+  private buildStaticAnalysisSummary(analysis: {
+    summary: {
+      diagnosticCount: number;
+      highComplexityCount: number;
+      duplicationCount: number;
+    };
+  }): string {
+    const { summary } = analysis;
+    return [
+      `Static analysis reported ${summary.diagnosticCount} diagnostics`,
+      `${summary.highComplexityCount} high-complexity functions`,
+      `${summary.duplicationCount} duplicated blocks`,
+    ].join(', ');
   }
 
   private buildVerifiedInterviewSignals(
@@ -3521,4 +3623,17 @@ export class RoomsService implements OnModuleInit {
       return false;
     }
   }
+}
+
+function normalizeStaticAnalysisReport(value: unknown) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return { diagnostics: [], complexity: [], duplications: [] };
+  }
+
+  const report = value as Record<string, unknown>;
+  return {
+    diagnostics: Array.isArray(report.diagnostics) ? report.diagnostics : [],
+    complexity: Array.isArray(report.complexity) ? report.complexity : [],
+    duplications: Array.isArray(report.duplications) ? report.duplications : [],
+  };
 }

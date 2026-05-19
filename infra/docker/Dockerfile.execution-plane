@@ -28,7 +28,39 @@ RUN pnpm deploy --filter=@syncode/execution-plane --prod /app/deploy
 # Stage 3: Production runner
 FROM node:25-alpine AS runner
 
-RUN apk add --no-cache tini && addgroup -S syncode && adduser -S syncode -G syncode
+ARG RUFF_VERSION=0.14.8
+ARG LIZARD_VERSION=1.19.0
+ARG PMD_VERSION=7.18.0
+ARG GOLANGCI_LINT_VERSION=v2.6.2
+
+ENV ANALYSIS_TOOLS_HOME="/opt/analysis-tools" \
+    PMD_HOME="/opt/pmd-bin-${PMD_VERSION}" \
+    PATH="/opt/analysis-tools/bin:/opt/pmd-bin-${PMD_VERSION}/bin:${PATH}"
+
+RUN apk add --no-cache \
+      bash \
+      cargo \
+      cppcheck \
+      curl \
+      git \
+      go \
+      openjdk21-jre-headless \
+      py3-pip \
+      python3 \
+      rust \
+      rust-clippy \
+      tini \
+      unzip \
+    && python3 -m venv "${ANALYSIS_TOOLS_HOME}" \
+    && "${ANALYSIS_TOOLS_HOME}/bin/pip" install --no-cache-dir \
+      "ruff==${RUFF_VERSION}" \
+      "lizard==${LIZARD_VERSION}" \
+    && curl -fsSL "https://github.com/pmd/pmd/releases/download/pmd_releases%2F${PMD_VERSION}/pmd-dist-${PMD_VERSION}-bin.zip" -o /tmp/pmd.zip \
+    && unzip -q /tmp/pmd.zip -d /opt \
+    && rm /tmp/pmd.zip \
+    && GOBIN=/usr/local/bin go install "github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${GOLANGCI_LINT_VERSION}" \
+    && addgroup -S syncode \
+    && adduser -S syncode -G syncode
 
 WORKDIR /app
 

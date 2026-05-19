@@ -13,7 +13,12 @@ import {
   type JobStatus,
   type RunCodeRequest,
   type RunCodeResult,
+  STATIC_ANALYSIS_QUEUE,
+  STATIC_ANALYSIS_RESULT_QUEUE,
+  type StaticAnalysisRequest,
+  type StaticAnalysisResult,
   type SubmitResult,
+  type SubmitStaticAnalysisOptions,
 } from '@syncode/contracts';
 import {
   CACHE_SERVICE,
@@ -30,6 +35,7 @@ import { QueueClientHelper } from './queue-client.helpers.js';
 export class QueueExecutionClient implements IExecutionClient, OnModuleInit {
   private readonly logger = new Logger(QueueExecutionClient.name);
   private readonly helper: QueueClientHelper<RunCodeResult>;
+  private readonly staticAnalysisHelper: QueueClientHelper<StaticAnalysisResult>;
 
   constructor(
     @Inject(QUEUE_SERVICE) private readonly queueService: IQueueService,
@@ -41,10 +47,20 @@ export class QueueExecutionClient implements IExecutionClient, OnModuleInit {
       this.logger,
       'exec-result:',
     );
+    this.staticAnalysisHelper = new QueueClientHelper<StaticAnalysisResult>(
+      queueService,
+      cacheService,
+      this.logger,
+      'exec-static-analysis-result:',
+    );
   }
 
   async onModuleInit(): Promise<void> {
     this.helper.processResultQueue<RunCodeResult>(EXECUTION_RESULT_QUEUE, 'execution');
+    this.staticAnalysisHelper.processResultQueue<StaticAnalysisResult>(
+      STATIC_ANALYSIS_RESULT_QUEUE,
+      'static-analysis',
+    );
   }
 
   async submit(request: RunCodeRequest): Promise<SubmitResult<'execution'>> {
@@ -66,8 +82,43 @@ export class QueueExecutionClient implements IExecutionClient, OnModuleInit {
     return this.helper.getJobStatus(EXECUTION_QUEUE, jobId);
   }
 
+  async submitStaticAnalysis(
+    request: StaticAnalysisRequest,
+    options?: SubmitStaticAnalysisOptions,
+  ): Promise<SubmitResult<'static-analysis'>> {
+    const jobId = await this.queueService.enqueue(
+      STATIC_ANALYSIS_QUEUE,
+      'static-analysis',
+      request,
+      {
+        attempts: 1,
+        removeOnComplete: 100,
+        removeOnFail: false,
+        idempotencyKey: options?.idempotencyKey,
+      },
+    );
+
+    return { jobId };
+  }
+
+  async getStaticAnalysisResult(
+    jobId: JobId<'static-analysis'>,
+  ): Promise<StaticAnalysisResult | null> {
+    return this.staticAnalysisHelper.getResult<StaticAnalysisResult>(jobId);
+  }
+
+  async getStaticAnalysisJobStatus(jobId: JobId): Promise<JobStatus> {
+    return this.staticAnalysisHelper.getJobStatus(STATIC_ANALYSIS_QUEUE, jobId);
+  }
+
   onResult(callback: (jobId: string, result: RunCodeResult) => Promise<void>): void {
     this.helper.setResultCallback(callback);
+  }
+
+  onStaticAnalysisResult(
+    callback: (jobId: string, result: StaticAnalysisResult) => Promise<void>,
+  ): void {
+    this.staticAnalysisHelper.setResultCallback(callback);
   }
 
   async cancel(_jobId: JobId): Promise<void> {
@@ -76,8 +127,11 @@ export class QueueExecutionClient implements IExecutionClient, OnModuleInit {
 
   async healthCheck(): Promise<boolean> {
     try {
-      const stats = await this.queueService.getQueueStats(EXECUTION_QUEUE);
-      return stats != null;
+      const [executionStats, staticAnalysisStats] = await Promise.all([
+        this.queueService.getQueueStats(EXECUTION_QUEUE),
+        this.queueService.getQueueStats(STATIC_ANALYSIS_QUEUE),
+      ]);
+      return executionStats != null && staticAnalysisStats != null;
     } catch (error) {
       this.logger.error('Health check failed', error);
       return false;

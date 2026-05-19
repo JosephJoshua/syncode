@@ -131,6 +131,27 @@ export const sessionReportTestCaseBreakdownSchema = z.object({
     .meta({ examples: ['Time limit exceeded'] }),
 });
 
+export const sessionReportStaticAnalysisSchema = z.object({
+  source: z.enum(['run', 'submission']),
+  runId: z.uuid().nullable(),
+  submissionId: z.uuid().nullable(),
+  language: z.enum(SUPPORTED_LANGUAGES),
+  createdAt: z.iso.datetime(),
+  completedAt: z.iso.datetime().nullable(),
+  summary: z.object({
+    diagnosticCount: z.number().int().nonnegative(),
+    errorCount: z.number().int().nonnegative(),
+    warningCount: z.number().int().nonnegative(),
+    maxCyclomaticComplexity: z.number().int().nullable(),
+    highComplexityCount: z.number().int().nonnegative(),
+    duplicationCount: z.number().int().nonnegative(),
+    toolFailureCount: z.number().int().nonnegative(),
+  }),
+  diagnostics: z.array(z.unknown()).default([]),
+  complexity: z.array(z.unknown()).default([]),
+  duplications: z.array(z.unknown()).default([]),
+});
+
 export const sessionReportSchema = z.object({
   sessionId: z.uuid().optional(),
   generatedAt: z.iso.datetime().optional(),
@@ -152,6 +173,7 @@ export const sessionReportSchema = z.object({
   comparisonToHistory: sessionReportComparisonSchema.nullable().optional(),
   peerFeedbackSummary: sessionReportPeerFeedbackSummarySchema.nullable().optional(),
   testCaseBreakdown: z.array(sessionReportTestCaseBreakdownSchema).optional(),
+  staticAnalysis: z.array(sessionReportStaticAnalysisSchema).optional(),
 });
 
 export const sessionCodeSnapshotSchema = z.object({

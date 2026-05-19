@@ -449,6 +449,9 @@ importers:
 
   apps/execution-plane:
     dependencies:
+      '@biomejs/biome':
+        specifier: ^2.4.4
+        version: 2.4.4
       '@e2b/code-interpreter':
         specifier: ^2.3.3
         version: 2.3.3

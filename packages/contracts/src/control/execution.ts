@@ -1,3 +1,4 @@
+import { SUPPORTED_LANGUAGES } from '@syncode/shared';
 import { z } from 'zod';
 
 export const JOB_STATUSES = ['queued', 'running', 'completed', 'failed'] as const;
@@ -173,3 +174,89 @@ export const executionDetailsResponseSchema = z.object({
 });
 
 export type ExecutionDetailsResponse = z.infer<typeof executionDetailsResponseSchema>;
+
+export const staticAnalysisSummaryResponseSchema = z.object({
+  diagnosticCount: z.number().int().nonnegative(),
+  errorCount: z.number().int().nonnegative(),
+  warningCount: z.number().int().nonnegative(),
+  maxCyclomaticComplexity: z.number().int().nullable(),
+  highComplexityCount: z.number().int().nonnegative(),
+  duplicationCount: z.number().int().nonnegative(),
+  toolFailureCount: z.number().int().nonnegative(),
+});
+
+export const staticAnalysisDiagnosticResponseSchema = z.object({
+  tool: z.string(),
+  rule: z.string().nullable(),
+  severity: z.enum(['error', 'warning', 'info']),
+  message: z.string(),
+  file: z.string().nullable(),
+  line: z.number().int().nullable(),
+  column: z.number().int().nullable(),
+});
+
+export const staticAnalysisComplexityResponseSchema = z.object({
+  tool: z.string(),
+  functionName: z.string(),
+  file: z.string().nullable(),
+  startLine: z.number().int(),
+  endLine: z.number().int().nullable(),
+  cyclomaticComplexity: z.number().int(),
+});
+
+export const staticAnalysisDuplicationResponseSchema = z.object({
+  tool: z.string(),
+  lines: z.number().int(),
+  tokens: z.number().int().nullable(),
+  occurrences: z.array(
+    z.object({
+      file: z.string().nullable(),
+      startLine: z.number().int(),
+      endLine: z.number().int().nullable(),
+    }),
+  ),
+});
+
+export const staticAnalysisToolResultResponseSchema = z.object({
+  tool: z.string(),
+  status: z.enum(['completed', 'failed', 'skipped']),
+  exitCode: z.number().int().nullable(),
+  durationMs: z.number().int(),
+  timedOut: z.boolean(),
+  error: z.string().optional(),
+});
+
+const staticAnalysisResponseBaseSchema = z.object({
+  jobId: z.string(),
+  source: z.enum(['run', 'submission']),
+  runId: z.uuid().nullable(),
+  submissionId: z.uuid().nullable(),
+  language: z.enum(SUPPORTED_LANGUAGES),
+  createdAt: z.iso.datetime(),
+  completedAt: z.iso.datetime().nullable(),
+});
+
+const staticAnalysisReportResponseFields = {
+  summary: staticAnalysisSummaryResponseSchema,
+  diagnostics: z.array(staticAnalysisDiagnosticResponseSchema),
+  complexity: z.array(staticAnalysisComplexityResponseSchema),
+  duplications: z.array(staticAnalysisDuplicationResponseSchema),
+  toolResults: z.array(staticAnalysisToolResultResponseSchema),
+  error: z.string().nullable(),
+};
+
+export const staticAnalysisResultResponseSchema = z.discriminatedUnion('status', [
+  staticAnalysisResponseBaseSchema.extend({
+    status: z.literal('pending'),
+  }),
+  staticAnalysisResponseBaseSchema.extend({
+    status: z.literal('completed'),
+    ...staticAnalysisReportResponseFields,
+  }),
+  staticAnalysisResponseBaseSchema.extend({
+    status: z.literal('failed'),
+    ...staticAnalysisReportResponseFields,
+  }),
+]);
+
+export type StaticAnalysisResultResponse = z.infer<typeof staticAnalysisResultResponseSchema>;

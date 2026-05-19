@@ -390,6 +390,7 @@ export class AiService {
         sessionId: request.sessionId,
         generatedAt: new Date().toISOString(),
         testCaseBreakdown: toPublicSessionReportTestCaseBreakdown(request.finalTestCaseBreakdown),
+        staticAnalysis: request.staticAnalysis,
         model: llmResult.model,
       };
     } catch (error) {

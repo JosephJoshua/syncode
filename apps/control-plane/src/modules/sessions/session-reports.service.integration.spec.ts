@@ -6,6 +6,7 @@ import {
   aiMessages,
   executionResults,
   sessionReports,
+  staticAnalysisResults,
   userWeaknesses,
   weaknessSessions,
 } from '@syncode/db';
@@ -179,6 +180,58 @@ describe('enqueueForFinishedSession', () => {
       durationMs: 16,
       stdout: '[0,1]\n',
     });
+    await db.insert(staticAnalysisResults).values({
+      jobId: 'analysis-submission-1',
+      userId: candidate.id,
+      roomId: room.id,
+      submissionId: submission.id,
+      language: 'python',
+      source: 'submission',
+      status: 'completed',
+      diagnosticCount: 1,
+      errorCount: 0,
+      warningCount: 1,
+      maxCyclomaticComplexity: 14,
+      highComplexityCount: 1,
+      duplicationCount: 1,
+      toolFailureCount: 0,
+      report: {
+        summary: {
+          diagnosticCount: 1,
+          maxCyclomaticComplexity: 14,
+          duplicationCount: 1,
+        },
+        diagnostics: [
+          {
+            tool: 'ruff',
+            rule: 'F841',
+            severity: 'warning',
+            message: 'Local variable is assigned but never used',
+            line: 4,
+          },
+        ],
+        complexity: [
+          {
+            tool: 'lizard',
+            functionName: 'two_sum',
+            file: 'Main.py',
+            startLine: 1,
+            cyclomaticComplexity: 14,
+          },
+        ],
+        duplications: [
+          {
+            tool: 'pmd-cpd',
+            lines: 8,
+            occurrences: [
+              { file: 'Main.py', startLine: 3, endLine: 10 },
+              { file: 'Main.py', startLine: 14, endLine: 21 },
+            ],
+          },
+        ],
+      },
+      completedAt: new Date('2026-04-20T01:03:00.000Z'),
+    });
     await insertCodeSnapshot(db, {
       sessionId: session.id,
       roomId: room.id,
@@ -316,6 +369,17 @@ describe('enqueueForFinishedSession', () => {
           language: 'python',
           phase: 'finished',
         }),
+        staticAnalysis: [
+          expect.objectContaining({
+            source: 'submission',
+            submissionId: submission.id,
+            summary: expect.objectContaining({
+              diagnosticCount: 1,
+              maxCyclomaticComplexity: 14,
+              duplicationCount: 1,
+            }),
+          }),
+        ],
         participants: expect.arrayContaining([
           expect.objectContaining({ userId: interviewer.id, role: 'interviewer' }),
           expect.objectContaining({ userId: candidate.id, role: 'candidate' }),
