@@ -1352,12 +1352,24 @@ export class RoomsService implements OnModuleInit {
     userId: string,
     body: RequestRoomAiInterviewInput,
   ): Promise<RequestRoomAiInterviewResult> {
-    const { problemId, activeLanguage } = await this.getAiRequestRoomContext(
+    const { problemId, activeLanguage, room } = await this.getAiRequestRoomContext(
       roomId,
       userId,
       undefined,
       'Interview',
     );
+    const proactiveActiveKey = `${RoomsService.AI_INTERVIEW_PROACTIVE_ACTIVE_PREFIX}${roomId}:${userId}`;
+    const proactiveLimitKey = `${RoomsService.AI_INTERVIEW_PROACTIVE_LIMIT_PREFIX}${roomId}:${userId}`;
+    const proactiveJobId = this.buildProactiveInterviewJobId(roomId, userId);
+    if (body.trigger === 'proactive') {
+      const activeJobId = await this.reserveProactiveInterviewJob(
+        proactiveActiveKey,
+        proactiveLimitKey,
+        proactiveJobId,
+      );
+      if (activeJobId) return { jobId: activeJobId };
+    }
+
     const problemDescription = await this.loadAiProblemDescription(problemId);
     const [sessionId, latestExecutionSummary, latestCodeAnalysisContext, recentHints] =
       await Promise.all([
@@ -1372,6 +1384,11 @@ export class RoomsService implements OnModuleInit {
       activeLanguage,
     );
     const userMessage = body.userMessage?.trim();
+    const interactionSignals = this.buildVerifiedInterviewSignals(
+      body.interactionSignals,
+      room,
+      recentHints.length,
+    );
 
     let submitted: { jobId: JobId<'ai:interview'> };
     try {
@@ -1386,13 +1403,18 @@ export class RoomsService implements OnModuleInit {
         codeAnalysisContext: latestCodeAnalysisContext ?? undefined,
         recentHints,
         trigger: body.trigger,
-        interactionSignals: body.interactionSignals,
+        interactionSignals,
         language: activeLanguage,
         responseLanguage: body.responseLanguage,
         userMessage,
         conversationHistory: body.conversationHistory,
+        idempotencyKey: body.trigger === 'proactive' ? proactiveJobId : undefined,
       });
     } catch (error) {
+      if (body.trigger === 'proactive') {
+        await this.cacheService.del(proactiveActiveKey);
+        await this.cacheService.incrBy(proactiveLimitKey, -1);
+      }
       this.logger.warn(`AI interview submission failed for room ${roomId}`, error);
       throw new ServiceUnavailableException({
         message: 'AI service unavailable',
@@ -1400,11 +1422,27 @@ export class RoomsService implements OnModuleInit {
       });
     }
 
+    await this.persistAiInterviewMessage({
+      roomId,
+      sessionId,
+      userId,
+      role: 'user',
+      content: userMessage,
+    });
+    if (body.trigger === 'proactive' && submitted.jobId !== proactiveJobId) {
+      await this.cacheService.set(
+        proactiveActiveKey,
+        submitted.jobId,
+        RoomsService.AI_INTERVIEW_PROACTIVE_ACTIVE_TTL_SECONDS,
+      );
+    }
     await this.cacheService.set<InterviewJobMapping>(
       `${RoomsService.AI_INTERVIEW_JOB_CACHE_PREFIX}${submitted.jobId}`,
       {
         roomId,
         userId,
+        sessionId,
+        trigger: body.trigger,
         codeContext,
       },
       RoomsService.AI_INTERVIEW_JOB_CACHE_TTL_SECONDS,
@@ -1505,18 +1543,33 @@ export class RoomsService implements OnModuleInit {
     if (!interviewResult) {
       const status = await this.aiClient.getInterviewJobStatus(typedJobId);
       if (status === 'failed') {
+        if (mapping.trigger === 'proactive') {
+          await this.cacheService.del(
+            `${RoomsService.AI_INTERVIEW_PROACTIVE_ACTIVE_PREFIX}${roomId}:${userId}`,
+          );
+        }
         return { status: 'failed', jobId };
       }
       return { status: 'pending', jobId };
     }
 
+    const normalized = await this.persistCompletedAiInterviewResult(jobId, interviewResult);
+
+    if (!normalized.shouldRespond) {
+      return {
+        status: 'ready',
+        jobId,
+        shouldRespond: false,
+      };
+    }
+
     return {
       status: 'ready',
       jobId,
-      shouldRespond: interviewResult.shouldRespond,
-      message: interviewResult.message,
+      shouldRespond: true,
+      message: normalized.message,
       followUpQuestion: interviewResult.followUpQuestion,
-      codeContext: interviewResult.shouldRespond ? mapping.codeContext : undefined,
+      codeContext: mapping.codeContext,
       codeAnnotations: interviewResult.codeAnnotations,
       audioUrl: interviewResult.audio?.downloadUrl,
     };
@@ -1739,6 +1792,12 @@ export class RoomsService implements OnModuleInit {
   private static readonly AI_HINT_JOB_CACHE_TTL_SECONDS = 60 * 60;
   private static readonly AI_INTERVIEW_JOB_CACHE_PREFIX = 'ai-interview-job:';
   private static readonly AI_INTERVIEW_JOB_CACHE_TTL_SECONDS = 60 * 60;
+  private static readonly AI_INTERVIEW_MESSAGE_PERSISTED_PREFIX = 'ai-interview-message-persisted:';
+  private static readonly AI_INTERVIEW_PROACTIVE_ACTIVE_PREFIX = 'ai-interview-proactive-active:';
+  private static readonly AI_INTERVIEW_PROACTIVE_ACTIVE_TTL_SECONDS = 60;
+  private static readonly AI_INTERVIEW_PROACTIVE_LIMIT_PREFIX = 'ai-interview-proactive-limit:';
+  private static readonly AI_INTERVIEW_PROACTIVE_LIMIT_COUNT = 6;
+  private static readonly AI_INTERVIEW_PROACTIVE_LIMIT_WINDOW_SECONDS = 5 * 60;
   private static readonly AI_INTERVIEW_ALLOWED_STATUSES = new Set<RoomStatus>([
     RoomStatus.WARMUP,
     RoomStatus.CODING,
@@ -1890,7 +1949,7 @@ export class RoomsService implements OnModuleInit {
           .select()
           .from(rooms)
           .where(eq(rooms.id, roomId))
-          .for('update');
+          .for('no key update');
 
         if (!lockedRoom) {
           throw new NotFoundException({
@@ -1913,6 +1972,7 @@ export class RoomsService implements OnModuleInit {
           targetStatus,
           userId,
         );
+        await this.assertFinalSessionEndSnapshotReady(tx, roomId, lockedStatus, targetStatus);
 
         const roomUpdate = this.buildPhaseTransitionUpdate(
           lockedStatus,
@@ -1963,6 +2023,7 @@ export class RoomsService implements OnModuleInit {
           `Failed to enqueue session reports for session ${finishedSessionId}`,
           error,
         );
+        throw error;
       }
     }
 
@@ -2070,6 +2131,41 @@ export class RoomsService implements OnModuleInit {
       message: 'Cannot finish a room before selecting a programming language',
       code: ERROR_CODES.VALIDATION_FAILED,
     });
+  }
+
+  private async assertFinalSessionEndSnapshotReady(
+    tx: Parameters<Parameters<Database['transaction']>[0]>[0],
+    roomId: string,
+    previousStatus: RoomStatus,
+    targetStatus: RoomStatus,
+  ): Promise<void> {
+    if (targetStatus !== RoomStatus.FINISHED || previousStatus === RoomStatus.WAITING) {
+      return;
+    }
+
+    const [session] = await tx
+      .select({ id: sessions.id })
+      .from(sessions)
+      .where(eq(sessions.roomId, roomId))
+      .limit(1);
+
+    if (!session) {
+      return;
+    }
+
+    const [snapshot] = await tx
+      .select({ id: codeSnapshots.id })
+      .from(codeSnapshots)
+      .where(and(eq(codeSnapshots.sessionId, session.id), eq(codeSnapshots.trigger, 'session_end')))
+      .orderBy(desc(codeSnapshots.createdAt))
+      .limit(1);
+
+    if (!snapshot) {
+      throw new InternalServerErrorException({
+        message: 'Cannot finish room before persisting the final session code snapshot',
+        code: ERROR_CODES.INTERNAL_ERROR,
+      });
+    }
   }
 
   private buildPhaseTransitionUpdate(
@@ -2278,6 +2374,78 @@ export class RoomsService implements OnModuleInit {
 
   private getInitialHostRole(mode: RoomMode): RoomRole {
     return mode === 'peer' ? RoomRole.INTERVIEWER : RoomRole.CANDIDATE;
+  }
+
+  private async reassignHostRoleAfterTransfer(
+    tx: Pick<Database, 'select' | 'update'>,
+    room: typeof rooms.$inferSelect,
+    previousHostId: string,
+    targetParticipant: {
+      id: string;
+      userId: string;
+      role: string;
+      isActive: boolean;
+    },
+  ): Promise<void> {
+    const [previousHostParticipant] = await tx
+      .select({
+        id: roomParticipants.id,
+        userId: roomParticipants.userId,
+        role: roomParticipants.role,
+        isActive: roomParticipants.isActive,
+      })
+      .from(roomParticipants)
+      .where(and(eq(roomParticipants.roomId, room.id), eq(roomParticipants.userId, previousHostId)))
+      .for('update');
+
+    if (!previousHostParticipant?.isActive) {
+      throw new BadRequestException({
+        message: 'Current host is not an active participant',
+        code: ERROR_CODES.PARTICIPANT_CANNOT_TRANSFER_OWNERSHIP,
+      });
+    }
+
+    const targetRole = this.normalizeParticipantRole(
+      room.mode,
+      targetParticipant.role,
+      previousHostId,
+      targetParticipant.userId,
+    );
+
+    const nextTargetRole = this.getInitialHostRole(room.mode);
+    const nextPreviousHostRole = targetRole === nextTargetRole ? RoomRole.OBSERVER : targetRole;
+
+    await tx
+      .update(roomParticipants)
+      .set({ role: nextTargetRole })
+      .where(eq(roomParticipants.id, targetParticipant.id));
+    await tx
+      .update(roomParticipants)
+      .set({ role: nextPreviousHostRole })
+      .where(eq(roomParticipants.id, previousHostParticipant.id));
+
+    const activeParticipants = await tx
+      .select({
+        userId: roomParticipants.userId,
+        role: roomParticipants.role,
+      })
+      .from(roomParticipants)
+      .where(and(eq(roomParticipants.roomId, room.id), eq(roomParticipants.isActive, true)));
+
+    this.assertActiveRoleConfiguration(
+      room.mode,
+      room.status,
+      activeParticipants.map((participant) => ({
+        userId: participant.userId,
+        role: this.normalizeParticipantRole(
+          room.mode,
+          participant.role,
+          targetParticipant.userId,
+          participant.userId,
+        ),
+      })),
+      { strict: room.status !== RoomStatus.WAITING },
+    );
   }
 
   private assertRoleAllowedForMode(mode: RoomMode, role: RoomRole): void {
@@ -2523,7 +2691,11 @@ export class RoomsService implements OnModuleInit {
     userId: string,
     language: SupportedLanguage | undefined,
     label: 'Hint' | 'Analysis' | 'Interview',
-  ): Promise<{ problemId: string; activeLanguage: SupportedLanguage }> {
+  ): Promise<{
+    problemId: string;
+    activeLanguage: SupportedLanguage;
+    room: typeof rooms.$inferSelect;
+  }> {
     const [room, participant] = await this.getRoomContext(roomId, userId);
 
     if (!participant) {
@@ -2575,6 +2747,7 @@ export class RoomsService implements OnModuleInit {
     return {
       problemId: room.problemId,
       activeLanguage: room.language ?? language ?? 'python',
+      room,
     };
   }
 
@@ -2617,17 +2790,8 @@ export class RoomsService implements OnModuleInit {
     editorLocked: boolean,
     language: SupportedLanguage,
     changedBy?: string,
-  ): Promise<boolean> {
-    try {
-      await this.collabClient.updateRoomState({ roomId, phase, editorLocked, changedBy, language });
-      return true;
-    } catch (error) {
-      this.logger.warn(
-        `Failed to confirm final collab room state for room ${roomId}; continuing finish transition`,
-        error,
-      );
-      return false;
-    }
+  ): Promise<void> {
+    await this.collabClient.updateRoomState({ roomId, phase, editorLocked, changedBy, language });
   }
 
   private async restoreCollabRoomStateStrict(
@@ -2879,15 +3043,288 @@ export class RoomsService implements OnModuleInit {
     currentCode: string,
     language: SupportedLanguage,
   ): Promise<AiInterviewCodeAnalysisContext | null> {
-    const cached = await this.cacheService.get<LatestCodeAnalysisContextCacheEntry>(
-      `${RoomsService.AI_CODE_ANALYSIS_LATEST_CACHE_PREFIX}${roomId}:${userId}`,
-    );
+    const [cached, staticAnalysis] = await Promise.all([
+      this.cacheService.get<LatestCodeAnalysisContextCacheEntry>(
+        `${RoomsService.AI_CODE_ANALYSIS_LATEST_CACHE_PREFIX}${roomId}:${userId}`,
+      ),
+      this.loadLatestStaticAnalysisContext(roomId, userId, currentCode, language),
+    ]);
     const currentCodeHash = this.hashAiContextCode(currentCode);
     if (cached?.codeHash !== currentCodeHash || cached?.language !== language) {
+      if (!staticAnalysis) {
+        return null;
+      }
+      return {
+        summary: this.buildStaticAnalysisSummary(staticAnalysis),
+        staticAnalysis,
+      };
+    }
+
+    return {
+      ...cached.context,
+      ...(staticAnalysis ? { staticAnalysis } : {}),
+    };
+  }
+
+  private async loadLatestStaticAnalysisContext(
+    roomId: string,
+    userId: string,
+    currentCode: string,
+    language: SupportedLanguage,
+  ): Promise<StaticAnalysisEvidenceContext | null> {
+    const rows = await this.db
+      .select({
+        source: staticAnalysisResults.source,
+        runId: staticAnalysisResults.runId,
+        submissionId: staticAnalysisResults.submissionId,
+        language: staticAnalysisResults.language,
+        createdAt: staticAnalysisResults.createdAt,
+        completedAt: staticAnalysisResults.completedAt,
+        diagnosticCount: staticAnalysisResults.diagnosticCount,
+        errorCount: staticAnalysisResults.errorCount,
+        warningCount: staticAnalysisResults.warningCount,
+        maxCyclomaticComplexity: staticAnalysisResults.maxCyclomaticComplexity,
+        highComplexityCount: staticAnalysisResults.highComplexityCount,
+        duplicationCount: staticAnalysisResults.duplicationCount,
+        toolFailureCount: staticAnalysisResults.toolFailureCount,
+        report: staticAnalysisResults.report,
+        runCode: runs.code,
+        submissionCode: submissions.code,
+      })
+      .from(staticAnalysisResults)
+      .leftJoin(runs, eq(runs.id, staticAnalysisResults.runId))
+      .leftJoin(submissions, eq(submissions.id, staticAnalysisResults.submissionId))
+      .where(
+        and(
+          eq(staticAnalysisResults.roomId, roomId),
+          eq(staticAnalysisResults.userId, userId),
+          eq(staticAnalysisResults.language, language),
+          eq(staticAnalysisResults.status, 'completed'),
+        ),
+      )
+      .orderBy(desc(staticAnalysisResults.completedAt), desc(staticAnalysisResults.createdAt))
+      .limit(10);
+
+    const row = rows.find((item) => (item.runCode ?? item.submissionCode) === currentCode);
+    if (!row) {
       return null;
     }
 
-    return cached.context;
+    const report = normalizeStaticAnalysisReport(row.report);
+    return {
+      source: row.source,
+      runId: row.runId,
+      submissionId: row.submissionId,
+      language: row.language,
+      createdAt: row.createdAt.toISOString(),
+      completedAt: row.completedAt?.toISOString() ?? null,
+      summary: {
+        diagnosticCount: row.diagnosticCount,
+        errorCount: row.errorCount,
+        warningCount: row.warningCount,
+        maxCyclomaticComplexity: row.maxCyclomaticComplexity,
+        highComplexityCount: row.highComplexityCount,
+        duplicationCount: row.duplicationCount,
+        toolFailureCount: row.toolFailureCount,
+      },
+      diagnostics: report.diagnostics.slice(0, 10) as StaticAnalysisEvidenceContext['diagnostics'],
+      complexity: report.complexity.slice(0, 10) as StaticAnalysisEvidenceContext['complexity'],
+      duplications: report.duplications.slice(
+        0,
+        5,
+      ) as StaticAnalysisEvidenceContext['duplications'],
+    };
+  }
+
+  private buildStaticAnalysisSummary(analysis: {
+    summary: {
+      diagnosticCount: number;
+      highComplexityCount: number;
+      duplicationCount: number;
+    };
+  }): string {
+    const { summary } = analysis;
+    return [
+      `Static analysis reported ${summary.diagnosticCount} diagnostics`,
+      `${summary.highComplexityCount} high-complexity functions`,
+      `${summary.duplicationCount} duplicated blocks`,
+    ].join(', ');
+  }
+
+  private buildVerifiedInterviewSignals(
+    input: AiInterviewInteractionSignals | undefined,
+    room: typeof rooms.$inferSelect,
+    hintCount: number,
+  ): AiInterviewInteractionSignals | undefined {
+    if (!input) {
+      return undefined;
+    }
+
+    const activeElapsedMs =
+      room.timerPaused || !room.phaseStartedAt ? 0 : Date.now() - room.phaseStartedAt.getTime();
+
+    return {
+      reason: input.reason,
+      roomStatus: room.status,
+      elapsedSeconds: Math.max(0, Math.floor((room.elapsedMs + activeElapsedMs) / 1000)),
+      ...(input.secondsSinceLastUserMessage === undefined
+        ? {}
+        : { secondsSinceLastUserMessage: input.secondsSinceLastUserMessage }),
+      ...(input.secondsSinceLastAssistantMessage === undefined
+        ? {}
+        : { secondsSinceLastAssistantMessage: input.secondsSinceLastAssistantMessage }),
+      ...(input.secondsSinceLastEditorActivity === undefined
+        ? {}
+        : { secondsSinceLastEditorActivity: input.secondsSinceLastEditorActivity }),
+      ...(input.recentEditorChanges === undefined
+        ? {}
+        : { recentEditorChanges: input.recentEditorChanges }),
+      hintCount,
+    };
+  }
+
+  private async reserveProactiveInterviewJob(
+    proactiveActiveKey: string,
+    proactiveLimitKey: string,
+    proactiveJobId: JobId<'ai:interview'>,
+  ): Promise<JobId<'ai:interview'> | null> {
+    const activeJobId = await this.cacheService.get<JobId<'ai:interview'>>(proactiveActiveKey);
+    if (activeJobId) {
+      return activeJobId;
+    }
+
+    const reserved = await this.cacheService.setIfNotExists(
+      proactiveActiveKey,
+      proactiveJobId,
+      RoomsService.AI_INTERVIEW_PROACTIVE_ACTIVE_TTL_SECONDS,
+    );
+    if (!reserved) {
+      return this.cacheService.get<JobId<'ai:interview'>>(proactiveActiveKey);
+    }
+
+    const usage = await this.cacheService.incrBy(
+      proactiveLimitKey,
+      1,
+      RoomsService.AI_INTERVIEW_PROACTIVE_LIMIT_WINDOW_SECONDS,
+    );
+    if (usage <= 0) {
+      await this.cacheService.del(proactiveLimitKey);
+    }
+    if (usage <= RoomsService.AI_INTERVIEW_PROACTIVE_LIMIT_COUNT) {
+      return null;
+    }
+
+    await this.cacheService.del(proactiveActiveKey);
+    throw new HttpException(
+      {
+        message: 'AI interview proactive rate limit exceeded (6 per 5 minutes)',
+        code: ERROR_CODES.AI_MESSAGE_RATE_LIMIT,
+      },
+      429,
+    );
+  }
+
+  private async persistCompletedAiInterviewResult(
+    jobId: string,
+    interviewResult: InterviewResponseResult,
+  ): Promise<{ shouldRespond: false } | { shouldRespond: true; message: string }> {
+    const mappingKey = `${RoomsService.AI_INTERVIEW_JOB_CACHE_PREFIX}${jobId}`;
+    const mapping = await this.cacheService.get<InterviewJobMapping>(mappingKey);
+    const shouldRespond =
+      interviewResult.shouldRespond ??
+      Boolean(interviewResult.message?.trim() || interviewResult.followUpQuestion?.trim());
+
+    if (!mapping) {
+      return shouldRespond
+        ? { shouldRespond: true, message: this.resolveInterviewResponseMessage(interviewResult) }
+        : { shouldRespond: false };
+    }
+
+    if (mapping.trigger === 'proactive') {
+      await this.cacheService.del(
+        `${RoomsService.AI_INTERVIEW_PROACTIVE_ACTIVE_PREFIX}${mapping.roomId}:${mapping.userId}`,
+      );
+    }
+
+    if (!shouldRespond) {
+      return { shouldRespond: false };
+    }
+
+    const message = this.resolveInterviewResponseMessage(interviewResult);
+    const persistedKey = `${RoomsService.AI_INTERVIEW_MESSAGE_PERSISTED_PREFIX}${jobId}:assistant`;
+    const shouldPersist = await this.cacheService.setIfNotExists(
+      persistedKey,
+      true,
+      RoomsService.AI_INTERVIEW_JOB_CACHE_TTL_SECONDS,
+    );
+
+    if (shouldPersist) {
+      await this.persistAiInterviewMessage({
+        roomId: mapping.roomId,
+        sessionId: mapping.sessionId,
+        userId: mapping.userId,
+        role: 'assistant',
+        content: message,
+        audioKey: interviewResult.audio?.audioKey,
+      });
+      await this.cacheService.set<InterviewJobMapping>(
+        mappingKey,
+        {
+          ...mapping,
+          assistantMessagePersisted: true,
+        },
+        RoomsService.AI_INTERVIEW_JOB_CACHE_TTL_SECONDS,
+      );
+    }
+
+    return { shouldRespond: true, message };
+  }
+
+  private resolveInterviewResponseMessage(interviewResult: InterviewResponseResult): string {
+    return (
+      interviewResult.message?.trim() ||
+      interviewResult.followUpQuestion?.trim() ||
+      'Continue explaining your reasoning.'
+    );
+  }
+
+  private buildProactiveInterviewJobId(roomId: string, userId: string): JobId<'ai:interview'> {
+    const nonce = randomBytes(6).toString('hex');
+    return `ai-interview-proactive-${roomId}-${userId}-${Date.now()}-${nonce}`;
+  }
+
+  private async persistAiInterviewMessage({
+    roomId,
+    sessionId,
+    userId,
+    role,
+    content,
+    audioKey,
+  }: {
+    roomId: string;
+    sessionId: string | null;
+    userId: string;
+    role: 'user' | 'assistant';
+    content: string | undefined;
+    audioKey?: string;
+  }): Promise<void> {
+    const trimmed = content?.trim();
+    if (!sessionId || !trimmed) {
+      return;
+    }
+
+    try {
+      await this.db.insert(aiMessages).values({
+        roomId,
+        sessionId,
+        userId,
+        role,
+        content: trimmed,
+        audioKey,
+      });
+    } catch (error) {
+      this.logger.warn(`Unable to persist AI interview ${role} message for room ${roomId}`, error);
+    }
   }
 
   private buildVerifiedInterviewCodeContext(
@@ -3254,6 +3691,19 @@ export class RoomsService implements OnModuleInit {
       return false;
     }
   }
+}
+
+function normalizeStaticAnalysisReport(value: unknown) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return { diagnostics: [], complexity: [], duplications: [] };
+  }
+
+  const report = value as Record<string, unknown>;
+  return {
+    diagnostics: Array.isArray(report.diagnostics) ? report.diagnostics : [],
+    complexity: Array.isArray(report.complexity) ? report.complexity : [],
+    duplications: Array.isArray(report.duplications) ? report.duplications : [],
+  };
 }
 
 function delay(ms: number): Promise<void> {
