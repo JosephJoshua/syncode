@@ -70,3 +70,80 @@ jobs:
               .
             echo "::endgroup::"
           done
+
+  deploy-server:
+    needs: build-and-push
+    runs-on: [self-hosted, syncode-deploy]
+    permissions:
+      contents: read
+    env:
+      DEPLOY_BRANCH: ${{ github.event.workflow_run.head_branch }}
+      DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+    steps:
+      - name: Pull, migrate, recreate, and verify server stack
+        run: |
+          set -euo pipefail
+          test -n "${DEPLOY_PATH}" || { echo "DEPLOY_PATH is required"; exit 1; }
+
+          cd "${DEPLOY_PATH}"
+
+          services=(web control-plane collab-plane execution-plane ai-plane)
+          case "${DEPLOY_BRANCH}" in
+            main)
+              env_file=".env.production"
+              project_args=()
+              health_url="https://syncode.anggita.org/api/health"
+              nginx_container="syncode-nginx-1"
+              expected_tag="latest"
+              ;;
+            develop)
+              env_file=".env.staging"
+              project_args=(-p syncode-staging)
+              health_url="https://staging.syncode.anggita.org/api/health"
+              nginx_container="syncode-staging-nginx-1"
+              expected_tag="develop"
+              ;;
+            *)
+              echo "Unsupported deploy branch: ${DEPLOY_BRANCH}" >&2
+              exit 1
+              ;;
+          esac
+
+          if [ ! -f "${env_file}" ]; then
+            echo "Missing ${env_file}" >&2
+            exit 1
+          fi
+
+          actual_tag=$(sudo awk -F= '/^IMAGE_TAG=/ { value=$2 } END { print value }' "${env_file}")
+          if [ "${actual_tag}" != "${expected_tag}" ]; then
+            echo "${env_file} has IMAGE_TAG=${actual_tag}; expected ${expected_tag}" >&2
+            exit 1
+          fi
+
+          compose=(sudo docker compose -f docker-compose.prod.yml --env-file "${env_file}" "${project_args[@]}")
+
+          echo "::group::Pull images"
+          "${compose[@]}" pull "${services[@]}"
+          echo "::endgroup::"
+
+          echo "::group::Run migrations"
+          "${compose[@]}" run -T --rm control-plane node migrate.mjs </dev/null
+          echo "::endgroup::"
+
+          echo "::group::Recreate app services"
+          "${compose[@]}" up -d "${services[@]}"
+          echo "::endgroup::"
+
+          echo "::group::Reload nginx"
+          sudo docker exec "${nginx_container}" nginx -t
+          sudo docker exec "${nginx_container}" nginx -s reload
+          echo "::endgroup::"
+
+          echo "::group::Container status"
+          "${compose[@]}" ps "${services[@]}" nginx livekit
+          echo "::endgroup::"
+
+          echo "::group::Health check"
+          curl --fail --show-error --silent --retry 10 --retry-delay 3 "${health_url}"
+          echo
+          echo "::endgroup::"
