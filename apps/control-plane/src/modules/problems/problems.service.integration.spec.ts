@@ -199,6 +199,69 @@ describe('listProblems', () => {
     expect(result.data[0].attemptStatus).toBe('attempted');
   });
 
+  it('GIVEN mixed user attempts WHEN filtering by status THEN returns only matching problems for that user', async () => {
+    const user = await insertUser(db);
+    const otherUser = await insertUser(db);
+    const room = await insertRoom(db, user.id);
+    const otherRoom = await insertRoom(db, otherUser.id);
+    const attempted = await insertProblem(db, { title: 'Attempted Only' });
+    const solved = await insertProblem(db, { title: 'Solved Problem' });
+    await insertProblem(db, { title: 'Todo Problem' });
+    const otherUserAttempted = await insertProblem(db, { title: 'Other User Attempted' });
+
+    await insertSubmission(db, user.id, room.id, attempted.id, {
+      status: 'completed',
+      totalTestCases: 3,
+      passedTestCases: 1,
+    });
+    await insertSubmission(db, user.id, room.id, solved.id, {
+      status: 'completed',
+      totalTestCases: 3,
+      passedTestCases: 3,
+    });
+    await insertSubmission(db, otherUser.id, otherRoom.id, otherUserAttempted.id, {
+      status: 'completed',
+      totalTestCases: 2,
+      passedTestCases: 1,
+    });
+
+    const attemptedResult = await service.listProblems(user.id, {
+      limit: 20,
+      sortBy: 'title',
+      sortOrder: 'asc',
+      status: ['attempted'],
+    });
+    const solvedResult = await service.listProblems(user.id, {
+      limit: 20,
+      sortBy: 'title',
+      sortOrder: 'asc',
+      status: ['solved'],
+    });
+    const todoResult = await service.listProblems(user.id, {
+      limit: 20,
+      sortBy: 'title',
+      sortOrder: 'asc',
+      status: ['todo'],
+    });
+    const attemptedOrSolvedResult = await service.listProblems(user.id, {
+      limit: 20,
+      sortBy: 'title',
+      sortOrder: 'asc',
+      status: ['attempted', 'solved'],
+    });
+
+    expect(attemptedResult.data.map((problem) => problem.title)).toEqual(['Attempted Only']);
+    expect(solvedResult.data.map((problem) => problem.title)).toEqual(['Solved Problem']);
+    expect(todoResult.data.map((problem) => problem.title)).toEqual([
+      'Other User Attempted',
+      'Todo Problem',
+    ]);
+    expect(attemptedOrSolvedResult.data.map((problem) => problem.title)).toEqual([
+      'Attempted Only',
+      'Solved Problem',
+    ]);
+  });
+
   it('GIVEN problem with submissions WHEN listing THEN computes acceptance rate', async () => {
     const user = await insertUser(db);
     await insertProblem(db, { totalSubmissions: 200, acceptedSubmissions: 150 });

@@ -8,7 +8,7 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { CONTROL_API, SORT_ORDER_OPTIONS } from '@syncode/contracts';
+import { CONTROL_API, PROBLEM_LIST_STATUSES, SORT_ORDER_OPTIONS } from '@syncode/contracts';
 import { PROBLEM_DIFFICULTIES, PROBLEMS_SORT_BY_OPTIONS } from '@syncode/shared';
 import { CurrentUser } from '@/common/decorators/current-user.decorator.js';
 import { ErrorResponseDto } from '@/common/dto/error-response.dto.js';
@@ -40,6 +40,14 @@ export class ProblemsController {
     enum: [...PROBLEM_DIFFICULTIES],
     isArray: true,
     description: 'Filter by difficulties; repeat the query param or pass a comma-separated list',
+  })
+  @ApiQuery({
+    name: 'status',
+    required: false,
+    enum: [...PROBLEM_LIST_STATUSES],
+    isArray: true,
+    description:
+      'Filter by current user attempt status; repeat the query param or pass a comma-separated list',
   })
   @ApiQuery({
     name: 'tags',
