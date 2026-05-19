@@ -30,6 +30,8 @@ services:
     build:
       context: .
       dockerfile: infra/docker/Dockerfile.web
+      args:
+        VITE_TLDRAW_LICENSE_KEY: ${VITE_TLDRAW_LICENSE_KEY:-}
     restart: unless-stopped
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
@@ -162,6 +164,17 @@ services:
     restart: unless-stopped
     environment:
       LIVEKIT_KEYS: "${LIVEKIT_API_KEY:?LIVEKIT_API_KEY is required}: ${LIVEKIT_API_SECRET:?LIVEKIT_API_SECRET is required}"
+      LIVEKIT_CONFIG: |
+        port: 7880
+        log_level: info
+        rtc:
+          tcp_port: ${LIVEKIT_RTC_TCP_PORT:-7881}
+          port_range_start: ${LIVEKIT_RTC_UDP_PORT_RANGE_START:-50000}
+          port_range_end: ${LIVEKIT_RTC_UDP_PORT_RANGE_END:-50100}
+          use_external_ip: true
+    ports:
+      - "${LIVEKIT_RTC_TCP_PORT:-7881}:${LIVEKIT_RTC_TCP_PORT:-7881}/tcp"
+      - "${LIVEKIT_RTC_UDP_PORT_RANGE:-50000-50100}:${LIVEKIT_RTC_UDP_PORT_RANGE:-50000-50100}/udp"
     networks:
       - proxy
       - backend
