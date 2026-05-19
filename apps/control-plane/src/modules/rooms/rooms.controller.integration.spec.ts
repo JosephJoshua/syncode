@@ -1119,6 +1119,7 @@ describe('POST /rooms/:id/ai/interview', () => {
         conversationHistory: [{ role: 'assistant', content: 'How would you solve this?' }],
         currentCode: 'def two_sum(nums, target):\n    return []',
         codeContext: interviewCodeContext,
+        responseLanguage: 'zh',
       })
       .expect(202);
 
@@ -1128,6 +1129,7 @@ describe('POST /rooms/:id/ai/interview', () => {
         roomId: room.id,
         participantId: candidate.id,
         language: 'python',
+        responseLanguage: 'zh',
         userMessage: 'I would scan once and store complements.',
         conversationHistory: [{ role: 'assistant', content: 'How would you solve this?' }],
         codeContext: interviewCodeContext,
@@ -1509,6 +1511,68 @@ describe('POST /rooms/:id/ai/interview', () => {
     ).expect(404);
 
     expect(result.body.message).toBe('Interview job not found');
+  });
+});
+
+describe('POST /rooms/:id/ai/interview/transcribe', () => {
+  async function createAiInterviewRoomForTranscription() {
+    const candidate = await insertUser(db);
+    const problem = await insertProblem(db);
+    const room = await insertRoom(db, candidate.id, {
+      mode: 'ai',
+      status: 'coding',
+      problemId: problem.id,
+      language: 'python',
+    });
+    await insertParticipant(db, room.id, candidate.id, 'candidate');
+
+    return { candidate, room };
+  }
+
+  it('GIVEN candidate in AI room WHEN requesting transcription THEN returns transcribed text', async () => {
+    const { candidate, room } = await createAiInterviewRoomForTranscription();
+    mockAiClient.getInterviewTranscriptionResult.mockResolvedValueOnce({
+      text: 'Could you explain the invariant?',
+    });
+
+    const response = await asUser(
+      request(app.getHttpServer()).post(`/rooms/${room.id}/ai/interview/transcribe`),
+      candidate,
+    )
+      .send({
+        audioBase64: Buffer.from('audio-bytes').toString('base64'),
+        mimeType: 'audio/webm',
+        language: 'en-US',
+      })
+      .expect(200);
+
+    expect(response.body).toEqual({ text: 'Could you explain the invariant?' });
+    expect(mockAiClient.submitInterviewTranscription).toHaveBeenCalledWith(
+      expect.objectContaining({
+        roomId: room.id,
+        participantId: candidate.id,
+        mimeType: 'audio/webm',
+        language: 'en-US',
+      }),
+    );
+  });
+
+  it('GIVEN transcription job fails WHEN requesting transcription THEN returns 503', async () => {
+    const { candidate, room } = await createAiInterviewRoomForTranscription();
+    mockAiClient.getInterviewTranscriptionResult.mockResolvedValue(null);
+    mockAiClient.getInterviewTranscriptionJobStatus.mockResolvedValueOnce('failed');
+
+    const response = await asUser(
+      request(app.getHttpServer()).post(`/rooms/${room.id}/ai/interview/transcribe`),
+      candidate,
+    )
+      .send({
+        audioBase64: Buffer.from('audio-bytes').toString('base64'),
+        mimeType: 'audio/webm',
+      })
+      .expect(503);
+
+    expect(response.body.code).toBe(ERROR_CODES.AI_SERVICE_UNAVAILABLE);
   });
 });
 

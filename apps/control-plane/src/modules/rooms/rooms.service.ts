@@ -32,6 +32,7 @@ import {
   type ListRoomsQuery,
   type RequestRoomAiHintInput,
   type RequestRoomAiInterviewInput,
+  type RequestRoomAiInterviewTranscriptionInput,
   type RequestRoomCodeAnalysisInput,
   type RoleAssignmentReason,
   type RoomChatMediaUploadInput,
@@ -99,6 +100,7 @@ import type {
   PublicRoomSummaryResult,
   RequestRoomAiHintResult,
   RequestRoomAiInterviewResult,
+  RequestRoomAiInterviewTranscriptionResult,
   RequestRoomCodeAnalysisResult,
   RoomChatMediaUploadResult,
   RoomDetailResult,
@@ -1347,6 +1349,7 @@ export class RoomsService {
         trigger: body.trigger,
         interactionSignals: body.interactionSignals,
         language: activeLanguage,
+        responseLanguage: body.responseLanguage,
         userMessage,
         conversationHistory: body.conversationHistory,
       });
@@ -1369,6 +1372,69 @@ export class RoomsService {
     );
 
     return { jobId: submitted.jobId };
+  }
+
+  async requestAiInterviewTranscription(
+    roomId: string,
+    userId: string,
+    body: RequestRoomAiInterviewTranscriptionInput,
+  ): Promise<RequestRoomAiInterviewTranscriptionResult> {
+    await this.getAiRequestRoomContext(roomId, userId, undefined, 'Interview');
+    const sessionId = await this.loadCurrentRoomSessionId(roomId);
+
+    let submitted: { jobId: JobId<'ai:interview-transcription'> };
+    try {
+      submitted = await withTimeout(
+        this.aiClient.submitInterviewTranscription({
+          roomId,
+          sessionId,
+          participantId: userId,
+          audioBase64: body.audioBase64,
+          mimeType: body.mimeType,
+          language: body.language,
+        }),
+        RoomsService.AI_INTERVIEW_TRANSCRIPTION_CLIENT_TIMEOUT_MS,
+      );
+    } catch (error) {
+      this.logger.warn(`AI interview transcription submission failed for room ${roomId}`, error);
+      throw new ServiceUnavailableException({
+        message: 'AI service unavailable',
+        code: ERROR_CODES.AI_SERVICE_UNAVAILABLE,
+      });
+    }
+
+    const typedJobId = submitted.jobId as JobId<'ai:interview-transcription'>;
+    for (let attempt = 1; attempt <= RoomsService.AI_INTERVIEW_TRANSCRIPTION_MAX_POLLS; attempt++) {
+      const result = await withTimeout(
+        this.aiClient.getInterviewTranscriptionResult(typedJobId),
+        RoomsService.AI_INTERVIEW_TRANSCRIPTION_CLIENT_TIMEOUT_MS,
+      );
+      if (result?.text?.trim()) {
+        return {
+          text: result.text.trim(),
+        };
+      }
+
+      const status = await withTimeout(
+        this.aiClient.getInterviewTranscriptionJobStatus(typedJobId),
+        RoomsService.AI_INTERVIEW_TRANSCRIPTION_CLIENT_TIMEOUT_MS,
+      );
+      if (status === 'failed') {
+        throw new ServiceUnavailableException({
+          message: 'AI service unavailable',
+          code: ERROR_CODES.AI_SERVICE_UNAVAILABLE,
+        });
+      }
+
+      if (attempt < RoomsService.AI_INTERVIEW_TRANSCRIPTION_MAX_POLLS) {
+        await delay(RoomsService.AI_INTERVIEW_TRANSCRIPTION_POLL_INTERVAL_MS);
+      }
+    }
+
+    throw new ServiceUnavailableException({
+      message: 'AI service unavailable',
+      code: ERROR_CODES.AI_SERVICE_UNAVAILABLE,
+    });
   }
 
   async getAiInterviewResult(
@@ -1640,6 +1706,9 @@ export class RoomsService {
     RoomStatus.WRAPUP,
   ]);
   private static readonly AI_INTERVIEW_HINT_CONTEXT_LIMIT = 8;
+  private static readonly AI_INTERVIEW_TRANSCRIPTION_CLIENT_TIMEOUT_MS = 2_500;
+  private static readonly AI_INTERVIEW_TRANSCRIPTION_MAX_POLLS = 30;
+  private static readonly AI_INTERVIEW_TRANSCRIPTION_POLL_INTERVAL_MS = 250;
   private static readonly AI_CODE_ANALYSIS_MAX_CODE_LENGTH = 16_000;
   private static readonly AI_CODE_ANALYSIS_LIMIT_COUNT = 10;
   private static readonly AI_CODE_ANALYSIS_LIMIT_WINDOW_SECONDS = 5 * 60;
@@ -3146,4 +3215,25 @@ export class RoomsService {
       return false;
     }
   }
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error(`Operation timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+  });
+
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    if (timeoutId != null) {
+      clearTimeout(timeoutId);
+    }
+  });
 }
