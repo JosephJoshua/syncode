@@ -633,102 +633,228 @@ function AdminProblemEditorPage() {
                     </Field>
 
                     <Field
-                      label={t('problemEditor.testCases.memoryMb')}
-                      htmlFor={`${item.id}-memory`}
+                      label={t('problemEditor.fields.starterCode')}
+                      htmlFor="problem-starter-code"
                     >
-                      <Input
-                        id={`${item.id}-memory`}
-                        type="number"
-                        min={1}
-                        max={4096}
-                        placeholder={t('problemEditor.testCases.memoryPlaceholder')}
-                        {...register(`testCases.${index}.memoryMb`)}
+                      <textarea
+                        id="problem-starter-code"
+                        placeholder={t('problemEditor.fields.starterCodePlaceholder')}
+                        className="min-h-28 w-full rounded-lg border border-input bg-background px-4 py-3 font-mono text-sm outline-none transition-[border-color,box-shadow] focus-visible:border-ring/60 focus-visible:ring-3 focus-visible:ring-ring/40"
+                        {...register('starterCodeText')}
                       />
                     </Field>
-                    <div className="flex items-center justify-between gap-3 rounded-lg border border-border/50 px-3 py-2">
-                      <Label htmlFor={`${item.id}-hidden`}>
-                        {t('problemEditor.testCases.hidden')}
-                      </Label>
-                      <Controller
-                        control={control}
-                        name={`testCases.${index}.isHidden`}
-                        render={({ field }) => (
-                          <Switch
-                            id={`${item.id}-hidden`}
-                            checked={field.value}
-                            onCheckedChange={field.onChange}
-                            disabled={createProblemMutation.isPending}
-                          />
-                        )}
-                      />
+                  </section>
+
+                  <section className="grid gap-4 rounded-lg border border-border/50 p-5">
+                    <div className="flex items-center justify-between gap-3">
+                      <h2 className="font-semibold text-foreground">
+                        {t('problemEditor.testCases.title')}
+                      </h2>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        type="button"
+                        onClick={() => append(createTestCase())}
+                      >
+                        <Plus className="size-4" />
+                        {t('problemEditor.testCases.add')}
+                      </Button>
                     </div>
+                    {fields.map((item, index) => (
+                      <div
+                        key={item.id}
+                        className="grid gap-3 rounded-lg border border-border/50 p-4"
+                      >
+                        <div className="flex items-center justify-between">
+                          <Badge variant="outline">{index + 1}</Badge>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            type="button"
+                            disabled={fields.length === 1}
+                            onClick={() => remove(index)}
+                          >
+                            <Trash2 className="size-4" />
+                            {t('problemEditor.testCases.remove')}
+                          </Button>
+                        </div>
+                        <div className="grid gap-3 md:grid-cols-2">
+                          <Field
+                            label={t('problemEditor.testCases.input')}
+                            htmlFor={`${item.id}-in`}
+                          >
+                            <Input
+                              id={`${item.id}-in`}
+                              placeholder={t('problemEditor.testCases.inputPlaceholder')}
+                              {...register(`testCases.${index}.input`)}
+                            />
+                          </Field>
+                          <Field
+                            label={t('problemEditor.testCases.output')}
+                            htmlFor={`${item.id}-out`}
+                          >
+                            <Input
+                              id={`${item.id}-out`}
+                              placeholder={t('problemEditor.testCases.outputPlaceholder')}
+                              {...register(`testCases.${index}.expectedOutput`)}
+                            />
+                          </Field>
+                        </div>
+                        <Field
+                          label={t('problemEditor.testCases.description')}
+                          htmlFor={`${item.id}-description`}
+                        >
+                          <Input
+                            id={`${item.id}-description`}
+                            placeholder={t('problemEditor.testCases.descriptionPlaceholder')}
+                            {...register(`testCases.${index}.description`)}
+                          />
+                        </Field>
+                        <div className="grid gap-3 md:grid-cols-3">
+                          <Field
+                            label={t('problemEditor.testCases.timeoutMs')}
+                            htmlFor={`${item.id}-timeout`}
+                          >
+                            <Input
+                              id={`${item.id}-timeout`}
+                              type="number"
+                              min={1}
+                              max={60000}
+                              placeholder={t('problemEditor.testCases.timeoutPlaceholder')}
+                              {...register(`testCases.${index}.timeoutMs`)}
+                            />
+                          </Field>
+                          <Field
+                            label={t('problemEditor.testCases.memoryMb')}
+                            htmlFor={`${item.id}-memory`}
+                          >
+                            <Input
+                              id={`${item.id}-memory`}
+                              type="number"
+                              min={1}
+                              max={4096}
+                              placeholder={t('problemEditor.testCases.memoryPlaceholder')}
+                              {...register(`testCases.${index}.memoryMb`)}
+                            />
+                          </Field>
+                          <div className="flex items-center justify-between gap-3 rounded-lg border border-border/50 px-3 py-2">
+                            <Label htmlFor={`${item.id}-hidden`}>
+                              {t('problemEditor.testCases.hidden')}
+                            </Label>
+                            <Controller
+                              control={control}
+                              name={`testCases.${index}.isHidden`}
+                              render={({ field }) => (
+                                <Switch
+                                  id={`${item.id}-hidden`}
+                                  checked={field.value}
+                                  onCheckedChange={field.onChange}
+                                />
+                              )}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </section>
+                </>
+              )}
+            </fieldset>
+
+            <aside className="space-y-5">
+              <div className="rounded-lg border border-border/50 p-5">
+                <div className="flex items-center justify-between gap-4">
+                  <Label htmlFor="published-toggle">{t('problemEditor.fields.published')}</Label>
+                  <Controller
+                    control={control}
+                    name="isPublished"
+                    render={({ field }) => (
+                      <Switch
+                        id="published-toggle"
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                        disabled={isFormDisabled}
+                      />
+                    )}
+                  />
+                </div>
+                <div className="mt-4 space-y-3 rounded-lg border border-border/50 bg-card/40 p-4">
+                  <div>
+                    <p className="font-medium text-foreground">
+                      {watchedValues.title || t('problemEditor.fields.titlePlaceholder')}
+                    </p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {watchedValues.company || t('problemEditor.fields.companyPlaceholder')}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Badge variant="outline">
+                      {t(`problemEditor.difficulty.${watchedValues.difficulty}`)}
+                    </Badge>
+                    <Badge variant={watchedValues.isPublished ? 'success' : 'secondary'}>
+                      {watchedValues.isPublished
+                        ? t('problemEditor.preview.statusPublished')
+                        : t('problemEditor.preview.statusDraft')}
+                    </Badge>
+                    <Badge variant="outline">
+                      {t('problemEditor.preview.caseCount', { count: completedCaseCount })}
+                    </Badge>
                   </div>
                 </div>
-              ))}
-            </CardContent>
-          </Card>
-        </div>
+                {formErrors.length > 0 ? (
+                  <div className="mt-4 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+                    {formErrors.map((error) => (
+                      <p key={error}>{t(error)}</p>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
 
-        <aside className="space-y-5">
-          <Card className="border border-border/50 bg-card/80 py-0 backdrop-blur-sm">
-            <CardHeader className="px-5 pt-6 pb-4">
-              <CardTitle>{t('problemEditor.preview.title')}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4 px-5 pb-6">
-              <div className="flex items-center justify-between gap-4">
-                <Label htmlFor="published-toggle">{t('problemEditor.fields.published')}</Label>
-                <Controller
-                  control={control}
-                  name="isPublished"
-                  render={({ field }) => (
-                    <Switch
-                      id="published-toggle"
-                      checked={field.value}
-                      onCheckedChange={field.onChange}
-                      disabled={createProblemMutation.isPending}
-                    />
-                  )}
-                />
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={isMutating}
+                  onClick={closeProblemEditor}
+                >
+                  {t('problemEditor.actions.cancel')}
+                </Button>
+                <Button type="submit" disabled={isFormDisabled}>
+                  {isSaving ? t('problemEditor.actions.saving') : t('problemEditor.actions.save')}
+                </Button>
               </div>
-              <div className="space-y-3 rounded-lg border border-border/50 bg-background/50 p-4">
-                <div>
-                  <p className="font-medium text-foreground">
-                    {watchedValues.title || t('problemEditor.fields.titlePlaceholder')}
-                  </p>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    {watchedValues.company || t('problemEditor.fields.companyPlaceholder')}
-                  </p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Badge variant="outline">
-                    {t(`problemEditor.difficulty.${watchedValues.difficulty}`)}
-                  </Badge>
-                  <Badge variant={watchedValues.isPublished ? 'success' : 'secondary'}>
-                    {watchedValues.isPublished
-                      ? t('problemEditor.preview.statusPublished')
-                      : t('problemEditor.preview.statusDraft')}
-                  </Badge>
-                  <Badge variant="outline">
-                    {t('problemEditor.preview.caseCount', { count: completedCaseCount })}
-                  </Badge>
-                </div>
-              </div>
-              {formErrors.length > 0 ? (
-                <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
-                  {formErrors.map((error) => (
-                    <p key={error}>{t(error)}</p>
-                  ))}
-                </div>
-              ) : null}
-              <Button type="submit" className="w-full" disabled={createProblemMutation.isPending}>
-                {createProblemMutation.isPending
-                  ? t('problemEditor.actions.saving')
-                  : t('problemEditor.actions.save')}
-              </Button>
-            </CardContent>
-          </Card>
-        </aside>
-      </form>
+            </aside>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {t('problemEditor.deleteDialog.title', { title: deleteTarget?.title ?? '' })}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {t('problemEditor.deleteDialog.description')}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteProblemMutation.isPending}>
+              {t('problemEditor.actions.cancel')}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              disabled={deleteProblemMutation.isPending || !deleteTarget}
+              onClick={() => deleteTarget && deleteProblemMutation.mutate(deleteTarget.id)}
+            >
+              {t('problemEditor.management.delete')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
