@@ -3,6 +3,7 @@ import {
   browseRoomsQuerySchema,
   browseRoomsResponseSchema,
   changeRoomLanguageSchema,
+  requestRoomAiInterviewTranscriptionSchema,
 } from './rooms.js';
 
 describe('browseRoomsQuerySchema', () => {
@@ -88,6 +89,26 @@ describe('browseRoomsResponseSchema', () => {
     };
 
     expect(() => browseRoomsResponseSchema.parse(payload)).not.toThrow();
+  });
+});
+
+describe('requestRoomAiInterviewTranscriptionSchema', () => {
+  test('GIVEN supported audio mime type with codec suffix WHEN parsed THEN accepts', () => {
+    const result = requestRoomAiInterviewTranscriptionSchema.parse({
+      audioBase64: Buffer.from('audio').toString('base64'),
+      mimeType: 'audio/webm;codecs=opus',
+    });
+
+    expect(result.mimeType).toBe('audio/webm;codecs=opus');
+  });
+
+  test('GIVEN unsupported audio mime type WHEN parsed THEN rejects', () => {
+    const result = requestRoomAiInterviewTranscriptionSchema.safeParse({
+      audioBase64: Buffer.from('audio').toString('base64'),
+      mimeType: 'text/plain',
+    });
+
+    expect(result.success).toBe(false);
   });
 });
 

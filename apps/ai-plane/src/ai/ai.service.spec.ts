@@ -1168,6 +1168,16 @@ describe('AiService', () => {
         peerFeedback: [],
         aiMessages: [],
         historicalContext: null,
+        staticAnalysis: [
+          {
+            kind: 'run',
+            createdAt: '2026-04-20T01:01:45.000Z',
+            summary: 'Static analysis found no blocking issues.',
+            report: {
+              correctness: 'Looks correct for the exercised path.',
+            },
+          },
+        ],
       };
 
       const result = await service.generateSessionReport(request);
@@ -1182,6 +1192,7 @@ describe('AiService', () => {
         },
       ]);
       expect(result.overallScore).toBe(82);
+      expect(result.staticAnalysis).toEqual(request.staticAnalysis);
       expect(result.generatedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
       expect(result.categoryScores).toEqual({
         correctness: 84,
@@ -1290,6 +1301,7 @@ describe('AiService', () => {
         peerFeedback: [],
         aiMessages: [],
         historicalContext: null,
+        staticAnalysis: [],
       };
 
       const result = await service.generateSessionReport(request);
@@ -1380,6 +1392,7 @@ describe('AiService', () => {
         peerFeedback: [],
         aiMessages: [],
         historicalContext: null,
+        staticAnalysis: [],
       };
 
       const result = await service.generateSessionReport(request);
@@ -1513,6 +1526,7 @@ describe('AiService', () => {
         peerFeedback: [],
         aiMessages: [],
         historicalContext: null,
+        staticAnalysis: [],
       };
 
       await expect(service.generateSessionReport(request)).rejects.toThrow(
@@ -1630,6 +1644,7 @@ describe('AiService', () => {
           peerFeedback: [],
           aiMessages: [],
           historicalContext: null,
+          staticAnalysis: [],
         }),
       ).rejects.toThrow(/omitted evidence-backed scores/i);
     });
@@ -1701,6 +1716,7 @@ describe('AiService', () => {
           peerFeedback: [],
           aiMessages: [],
           historicalContext: null,
+          staticAnalysis: [],
         }),
       ).rejects.toThrow(/omitted required scored dimensions/i);
     });
@@ -1873,6 +1889,7 @@ describe('AiService', () => {
         peerFeedback: [],
         aiMessages: [],
         historicalContext: null,
+        staticAnalysis: [],
       });
 
       expect(result.dimensions?.efficiency?.score).toBe(95);

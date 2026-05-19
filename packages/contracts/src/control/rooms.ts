@@ -413,6 +413,19 @@ export type GetRoomAiInterviewResultResponse = z.infer<
   typeof getRoomAiInterviewResultResponseSchema
 >;
 
+export const INTERVIEW_TRANSCRIPTION_MIME_TYPES = [
+  'audio/webm',
+  'audio/ogg',
+  'audio/mpeg',
+  'audio/mp4',
+  'audio/wav',
+] as const;
+
+function isAllowedInterviewTranscriptionMimeType(value: string) {
+  const normalized = value.split(';', 1)[0]?.trim().toLowerCase();
+  return INTERVIEW_TRANSCRIPTION_MIME_TYPES.some((mimeType) => mimeType === normalized);
+}
+
 export const requestRoomAiInterviewTranscriptionSchema = z
   .object({
     audioBase64: z
@@ -420,7 +433,12 @@ export const requestRoomAiInterviewTranscriptionSchema = z
       .min(1)
       .max(4_000_000)
       .describe('Base64 audio payload captured from the interviewer input'),
-    mimeType: z.string().min(1).max(120).describe('Audio MIME type'),
+    mimeType: z
+      .string()
+      .min(1)
+      .max(120)
+      .refine(isAllowedInterviewTranscriptionMimeType, 'Unsupported audio MIME type')
+      .describe('Audio MIME type'),
     language: z
       .string()
       .min(2)

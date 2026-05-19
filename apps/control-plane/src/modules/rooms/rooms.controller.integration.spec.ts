@@ -1590,6 +1590,54 @@ describe('POST /rooms/:id/ai/interview/transcribe', () => {
 
     expect(response.body.code).toBe(ERROR_CODES.AI_SERVICE_UNAVAILABLE);
   });
+
+  it('GIVEN unsupported audio MIME type WHEN requesting transcription THEN returns 400 before enqueue', async () => {
+    const { candidate, room } = await createAiInterviewRoomForTranscription();
+
+    await asUser(
+      request(app.getHttpServer()).post(`/rooms/${room.id}/ai/interview/transcribe`),
+      candidate,
+    )
+      .send({
+        audioBase64: Buffer.from('audio-bytes').toString('base64'),
+        mimeType: 'text/plain',
+      })
+      .expect(400);
+
+    expect(mockAiClient.submitInterviewTranscription).not.toHaveBeenCalled();
+  });
+
+  it('GIVEN too many transcription requests WHEN requesting transcription THEN returns 429', async () => {
+    const { candidate, room } = await createAiInterviewRoomForTranscription();
+    mockAiClient.getInterviewTranscriptionResult.mockResolvedValue({
+      text: 'transcribed text',
+    });
+
+    for (let i = 0; i < 10; i++) {
+      await asUser(
+        request(app.getHttpServer()).post(`/rooms/${room.id}/ai/interview/transcribe`),
+        candidate,
+      )
+        .send({
+          audioBase64: Buffer.from(`audio-bytes-${i}`).toString('base64'),
+          mimeType: 'audio/webm',
+        })
+        .expect(200);
+    }
+
+    const response = await asUser(
+      request(app.getHttpServer()).post(`/rooms/${room.id}/ai/interview/transcribe`),
+      candidate,
+    )
+      .send({
+        audioBase64: Buffer.from('audio-bytes-over-limit').toString('base64'),
+        mimeType: 'audio/webm',
+      })
+      .expect(429);
+
+    expect(response.body.code).toBe(ERROR_CODES.AI_TRANSCRIPTION_RATE_LIMIT);
+    expect(mockAiClient.submitInterviewTranscription).toHaveBeenCalledTimes(10);
+  });
 });
 
 describe('POST /rooms/:id/chat/media/upload-url', () => {

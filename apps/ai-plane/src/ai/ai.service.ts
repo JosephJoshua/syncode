@@ -433,6 +433,7 @@ export class AiService {
         ...normalizedReport,
         sessionId: request.sessionId,
         generatedAt: new Date().toISOString(),
+        staticAnalysis: request.staticAnalysis,
         testCaseBreakdown: toPublicSessionReportTestCaseBreakdown(request.finalTestCaseBreakdown),
         model: llmResult.model,
       };
