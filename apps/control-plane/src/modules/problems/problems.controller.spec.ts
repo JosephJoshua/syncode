@@ -125,7 +125,7 @@ describe('ProblemsController', () => {
 
       await controller.createProblem(USER, body);
 
-      expect(service.createProblem).toHaveBeenCalledWith(USER.id, body);
+      expect(service.createProblem).toHaveBeenCalledWith(USER.id, body, undefined);
     });
   });
 });

@@ -9,6 +9,7 @@ import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard.js';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
 import { createTestDb, insertProblem, insertUser } from '@/test/integration-setup.js';
 import { asUser, TestAuthGuard } from '@/test/mock-factories.js';
+import { AuditService } from '../admin/audit.service.js';
 import { BookmarksController } from './bookmarks.controller.js';
 import { ProblemsService } from './problems.service.js';
 
@@ -23,7 +24,7 @@ beforeEach(async () => {
 
   const module = await Test.createTestingModule({
     controllers: [BookmarksController],
-    providers: [ProblemsService, { provide: DB_CLIENT, useValue: db }],
+    providers: [ProblemsService, AuditService, { provide: DB_CLIENT, useValue: db }],
   })
     .overrideGuard(JwtAuthGuard)
     .useClass(TestAuthGuard)

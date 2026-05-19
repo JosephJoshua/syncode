@@ -35,6 +35,8 @@ import type {
   problemsListQuerySchema,
   problemsListResponseSchema,
   problemsTagsResponseSchema,
+  publishProblemStatusSchema,
+  updateProblemSchema,
 } from './problems.js';
 import type {
   browseRoomsQuerySchema,
@@ -284,6 +286,14 @@ export const CONTROL_API = {
       'problems',
       'POST',
     ),
+    UPDATE: defineRoute<z.infer<typeof updateProblemSchema>, z.infer<typeof problemDetailSchema>>()(
+      'problems/:id',
+      'PATCH',
+    ),
+    PUBLISH_STATUS: defineRoute<
+      z.infer<typeof publishProblemStatusSchema>,
+      z.infer<typeof problemDetailSchema>
+    >()('problems/:id/publish-status', 'PATCH'),
     DELETE: defineRoute<void, void>()('problems/:id', 'DELETE'),
   },
   BOOKMARKS: {

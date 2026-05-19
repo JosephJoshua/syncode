@@ -6,7 +6,7 @@ import {
 } from '@syncode/shared';
 import { z } from 'zod';
 import { paginationQuerySchema, paginationSchema } from './pagination.js';
-import { parseQueryMultiSelect } from './query-parsers.js';
+import { parseQueryBoolean, parseQueryMultiSelect } from './query-parsers.js';
 
 export const PROBLEM_LIST_STATUSES = [...PROBLEM_ATTEMPT_STATUSES, 'todo'] as const;
 export type ProblemListStatus = (typeof PROBLEM_LIST_STATUSES)[number];
@@ -22,6 +22,9 @@ export const problemsListQuerySchema = paginationQuerySchema.extend({
   company: z.string().optional().describe('Company slug filter'),
   search: z.string().optional().describe('Full-text search on title + description'),
   sortBy: z.enum(PROBLEMS_SORT_BY_OPTIONS).optional().describe('Sort field'),
+  includeDrafts: z
+    .preprocess(parseQueryBoolean, z.boolean().optional())
+    .describe('Admin-only: include unpublished draft problems in the list'),
 });
 
 export type ProblemsListQuery = z.infer<typeof problemsListQuerySchema>;
@@ -125,6 +128,31 @@ export const createProblemSchema = z
   .strict();
 
 export type CreateProblemInput = z.infer<typeof createProblemSchema>;
+
+export const updateProblemSchema = z
+  .object({
+    title: z.string().trim().min(1).max(200).optional(),
+    description: z.string().trim().min(1).max(100_000).optional(),
+    difficulty: z.enum(PROBLEM_DIFFICULTIES).optional(),
+    company: z.string().trim().min(1).max(100).nullable().optional(),
+    constraints: z.string().trim().min(1).max(50_000).nullable().optional(),
+    examples: z.array(problemExampleSchema).optional(),
+    starterCode: z.partialRecord(z.enum(SUPPORTED_LANGUAGES), z.string()).nullable().optional(),
+    timeLimit: z.number().int().positive().max(60_000).nullable().optional(),
+    memoryLimit: z.number().int().positive().max(4096).nullable().optional(),
+    testCases: z.array(createProblemTestCaseSchema).min(1).max(100).optional(),
+  })
+  .strict();
+
+export type UpdateProblemInput = z.infer<typeof updateProblemSchema>;
+
+export const publishProblemStatusSchema = z
+  .object({
+    isPublished: z.boolean(),
+  })
+  .strict();
+
+export type PublishProblemStatusInput = z.infer<typeof publishProblemStatusSchema>;
 
 export const tagInfoSchema = z.object({
   slug: z.string(),
