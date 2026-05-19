@@ -73,44 +73,17 @@ jobs:
 
   deploy-server:
     needs: build-and-push
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, syncode-deploy]
     permissions:
       contents: read
     env:
       DEPLOY_BRANCH: ${{ github.event.workflow_run.head_branch }}
-      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-      DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
       DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
     steps:
-      - name: Configure SSH
-        env:
-          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-        run: |
-          set -euo pipefail
-          test -n "${DEPLOY_HOST}" || { echo "DEPLOY_HOST is required"; exit 1; }
-          test -n "${DEPLOY_USER}" || { echo "DEPLOY_USER is required"; exit 1; }
-          test -n "${DEPLOY_PORT}" || { echo "DEPLOY_PORT is required"; exit 1; }
-          test -n "${DEPLOY_PATH}" || { echo "DEPLOY_PATH is required"; exit 1; }
-          test -n "${DEPLOY_SSH_KEY}" || { echo "DEPLOY_SSH_KEY is required"; exit 1; }
-
-          install -m 700 -d ~/.ssh
-          printf '%s\n' "${DEPLOY_SSH_KEY}" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -T 30 -p "${DEPLOY_PORT}" -H "${DEPLOY_HOST}" >> ~/.ssh/known_hosts || true
-
       - name: Pull, migrate, recreate, and verify server stack
         run: |
           set -euo pipefail
-
-          ssh \
-            -i ~/.ssh/deploy_key \
-            -p "${DEPLOY_PORT}" \
-            -o IdentitiesOnly=yes \
-            -o StrictHostKeyChecking=accept-new \
-            "${DEPLOY_USER}@${DEPLOY_HOST}" \
-            "DEPLOY_BRANCH='${DEPLOY_BRANCH}' DEPLOY_PATH='${DEPLOY_PATH}' bash -s" <<'REMOTE'
-          set -euo pipefail
+          test -n "${DEPLOY_PATH}" || { echo "DEPLOY_PATH is required"; exit 1; }
 
           cd "${DEPLOY_PATH}"
 
@@ -174,4 +147,3 @@ jobs:
           curl --fail --show-error --silent --retry 10 --retry-delay 3 "${health_url}"
           echo
           echo "::endgroup::"
-          REMOTE
