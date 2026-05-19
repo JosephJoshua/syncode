@@ -18,6 +18,7 @@ import {
   type StaticAnalysisRequest,
   type StaticAnalysisResult,
   type SubmitResult,
+  type SubmitStaticAnalysisOptions,
 } from '@syncode/contracts';
 import {
   CACHE_SERVICE,
@@ -83,6 +84,7 @@ export class QueueExecutionClient implements IExecutionClient, OnModuleInit {
 
   async submitStaticAnalysis(
     request: StaticAnalysisRequest,
+    options?: SubmitStaticAnalysisOptions,
   ): Promise<SubmitResult<'static-analysis'>> {
     const jobId = await this.queueService.enqueue(
       STATIC_ANALYSIS_QUEUE,
@@ -92,6 +94,7 @@ export class QueueExecutionClient implements IExecutionClient, OnModuleInit {
         attempts: 1,
         removeOnComplete: 100,
         removeOnFail: false,
+        idempotencyKey: options?.idempotencyKey,
       },
     );
 

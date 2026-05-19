@@ -35,7 +35,7 @@ import {
 import { motion } from 'motion/react';
 import {
   type Dispatch,
-  type MutableRefObject,
+  type RefObject,
   type SetStateAction,
   useCallback,
   useEffect,
@@ -851,7 +851,7 @@ export function RoomWorkspace({
     (
       jobId: string | null,
       setAnalysisState: Dispatch<SetStateAction<StaticAnalysisPanelState>>,
-      cancelRef: MutableRefObject<(() => void) | null>,
+      cancelRef: RefObject<(() => void) | null>,
     ) => {
       cancelRef.current?.();
 

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { JobId, JobStatus, SubmitResult } from '../queues.js';
-import type { IExecutionClient } from './client.js';
+import type { IExecutionClient, SubmitStaticAnalysisOptions } from './client.js';
 import type {
   RunCodeRequest,
   RunCodeResult,
@@ -71,8 +71,9 @@ export class StubExecutionClient implements IExecutionClient {
 
   async submitStaticAnalysis(
     request: StaticAnalysisRequest,
+    options?: SubmitStaticAnalysisOptions,
   ): Promise<SubmitResult<'static-analysis'>> {
-    const jobId = randomUUID() as JobId<'static-analysis'>;
+    const jobId = options?.idempotencyKey ?? (randomUUID() as JobId<'static-analysis'>);
     this.staticAnalysisJobs.set(jobId, { status: 'queued' });
     this.scheduleStaticAnalysisCompletion(jobId, request);
     return { jobId };

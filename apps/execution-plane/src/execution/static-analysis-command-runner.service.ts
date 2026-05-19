@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { join } from 'node:path';
 import { Injectable } from '@nestjs/common';
 
 const MAX_CAPTURE_BYTES = 256 * 1024;
@@ -29,8 +30,9 @@ export class ChildProcessStaticAnalysisCommandRunner implements StaticAnalysisCo
     return new Promise((resolve) => {
       const child = spawn(command, args, {
         cwd: options.cwd,
-        env: process.env,
+        env: buildSanitizedEnv(options.cwd),
         stdio: ['ignore', 'pipe', 'pipe'],
+        detached: process.platform !== 'win32',
       });
 
       let stdout = '';
@@ -43,7 +45,7 @@ export class ChildProcessStaticAnalysisCommandRunner implements StaticAnalysisCo
 
       const timeout = setTimeout(() => {
         timedOut = true;
-        child.kill('SIGKILL');
+        killChildProcessTree(child.pid);
       }, options.timeoutMs);
 
       child.stdout.on('data', (chunk: Buffer) => {
@@ -74,4 +76,42 @@ export class ChildProcessStaticAnalysisCommandRunner implements StaticAnalysisCo
       });
     });
   }
+}
+
+function buildSanitizedEnv(cwd: string): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {
+    CI: '1',
+    HOME: cwd,
+    TMPDIR: cwd,
+    TMP: cwd,
+    TEMP: cwd,
+    NO_COLOR: '1',
+    PATH: process.env.PATH ?? '',
+    GOCACHE: join(cwd, '.cache', 'go-build'),
+    GOMODCACHE: join(cwd, '.cache', 'go-mod'),
+    CARGO_HOME: join(cwd, '.cache', 'cargo'),
+  };
+
+  for (const key of ['ANALYSIS_TOOLS_HOME', 'JAVA_HOME', 'LANG', 'LC_ALL', 'PMD_HOME'] as const) {
+    if (process.env[key]) {
+      env[key] = process.env[key];
+    }
+  }
+
+  return env;
+}
+
+function killChildProcessTree(pid: number | undefined): void {
+  if (!pid) return;
+
+  if (process.platform !== 'win32') {
+    try {
+      process.kill(-pid, 'SIGKILL');
+      return;
+    } catch {}
+  }
+
+  try {
+    process.kill(pid, 'SIGKILL');
+  } catch {}
 }

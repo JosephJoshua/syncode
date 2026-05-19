@@ -34,7 +34,7 @@ function asNumber(value: unknown): number | null {
 }
 
 function normalizeSeverity(value: unknown): StaticAnalysisSeverity {
-  const raw = String(value ?? '').toLowerCase();
+  const raw = asString(value)?.toLowerCase() ?? '';
   if (raw === 'error' || raw === 'fatal') return 'error';
   if (raw === 'warning' || raw === 'warn') return 'warning';
   return 'info';
@@ -200,7 +200,7 @@ export function parseCpdJson(raw: string): StaticAnalysisDuplication[] {
 }
 
 function normalizeCppcheckSeverity(value: unknown): StaticAnalysisSeverity {
-  const raw = String(value ?? '').toLowerCase();
+  const raw = asString(value)?.toLowerCase() ?? '';
   if (raw === 'error') return 'error';
   if (raw === 'warning' || raw === 'performance' || raw === 'portability') return 'warning';
   return 'info';

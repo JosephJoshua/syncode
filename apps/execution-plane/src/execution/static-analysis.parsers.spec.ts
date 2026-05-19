@@ -66,6 +66,22 @@ describe('static analysis parser normalization', () => {
     ]);
   });
 
+  it('GIVEN Biome severity is malformed WHEN parsed THEN treats diagnostic as info', () => {
+    const diagnostics = parseBiomeJson(
+      JSON.stringify({
+        diagnostics: [
+          {
+            category: 'lint/suspicious/noDebugger',
+            severity: { value: 'warning' },
+            description: 'Unexpected debugger statement.',
+          },
+        ],
+      }),
+    );
+
+    expect(diagnostics[0]?.severity).toBe('info');
+  });
+
   it('GIVEN PMD JSON WHEN parsed THEN returns Java rule diagnostics', () => {
     const diagnostics = parsePmdJson(
       JSON.stringify({

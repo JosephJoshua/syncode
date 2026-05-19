@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import {
   Inject,
   Injectable,
@@ -10,6 +11,7 @@ import {
   ERROR_CODES,
   EXECUTION_CLIENT,
   type IExecutionClient,
+  type JobId,
   type RunCodeRequest,
   type RunCodeResponse,
   type StaticAnalysisReport,
@@ -215,19 +217,7 @@ export class ExecutionService {
   }
 
   private async enqueueStaticAnalysis(request: StaticAnalysisRequest): Promise<string | null> {
-    let jobId: string;
-    try {
-      const submitted = await this.executionClient.submitStaticAnalysis(request);
-      jobId = submitted.jobId;
-    } catch (error) {
-      this.logger.warn(
-        `Static analysis enqueue failed for ${request.source}: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
-      return null;
-    }
-
+    const jobId = randomUUID() as JobId<'static-analysis'>;
     await this.db.insert(staticAnalysisResults).values({
       jobId,
       userId: request.userId,
@@ -239,6 +229,25 @@ export class ExecutionService {
       source: request.source,
       status: 'pending',
     });
+
+    try {
+      const submitted = await this.executionClient.submitStaticAnalysis(request, {
+        idempotencyKey: jobId,
+      });
+      if (submitted.jobId !== jobId) {
+        this.logger.warn(
+          `Static analysis queue returned unexpected job ID ${submitted.jobId} for preallocated ${jobId}`,
+        );
+      }
+    } catch (error) {
+      await this.db.delete(staticAnalysisResults).where(eq(staticAnalysisResults.jobId, jobId));
+      this.logger.warn(
+        `Static analysis enqueue failed for ${request.source}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      return null;
+    }
 
     return jobId;
   }

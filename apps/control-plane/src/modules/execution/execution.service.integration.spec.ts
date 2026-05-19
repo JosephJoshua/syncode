@@ -57,7 +57,7 @@ describe('runCode', () => {
     );
 
     expect(result.jobId).toBe('stub-job');
-    expect(result.staticAnalysisJobId).toBe('static-analysis-job');
+    expect(result.staticAnalysisJobId).toEqual(expect.any(String));
 
     const [run] = await db.select().from(runs).where(eq(runs.userId, user.id));
     expect(run).toMatchObject({
@@ -73,6 +73,7 @@ describe('runCode', () => {
       .from(staticAnalysisResults)
       .where(eq(staticAnalysisResults.runId, run.id));
     expect(analysis).toMatchObject({
+      jobId: result.staticAnalysisJobId,
       userId: user.id,
       roomId: room.id,
       runId: run.id,
@@ -88,7 +89,30 @@ describe('runCode', () => {
         source: 'run',
         code: 'print("hello")',
       }),
+      { idempotencyKey: result.staticAnalysisJobId },
     );
+  });
+
+  it('GIVEN static analysis worker responds immediately WHEN running code THEN row exists before enqueue', async () => {
+    const user = await insertUser(db);
+    const room = await insertRoom(db, user.id);
+
+    mockExecutionClient.submitStaticAnalysis.mockImplementation(async (_request, options) => {
+      const jobId = options?.idempotencyKey ?? 'static-analysis-job';
+      const rows = await db
+        .select()
+        .from(staticAnalysisResults)
+        .where(eq(staticAnalysisResults.jobId, jobId));
+      expect(rows).toHaveLength(1);
+      return { jobId };
+    });
+
+    const result = await service.runCode(
+      { language: 'python', code: 'print("hello")' },
+      { userId: user.id, roomId: room.id, sessionId: null },
+    );
+
+    expect(result.staticAnalysisJobId).toEqual(expect.any(String));
   });
 });
 
@@ -108,7 +132,7 @@ describe('submitProblem', () => {
     });
 
     expect(result.submissionId).toEqual(expect.any(String));
-    expect(result.staticAnalysisJobId).toBe('static-analysis-job');
+    expect(result.staticAnalysisJobId).toEqual(expect.any(String));
 
     const [row] = await db.select().from(submissions).where(eq(submissions.userId, user.id));
     expect(row).toBeDefined();
@@ -310,11 +334,14 @@ describe('getStaticAnalysisResult', () => {
       })
       .where(eq(staticAnalysisResults.jobId, runResult.staticAnalysisJobId ?? ''));
 
-    const result = await service.getStaticAnalysisResult('static-analysis-job', user.id);
+    const result = await service.getStaticAnalysisResult(
+      runResult.staticAnalysisJobId ?? '',
+      user.id,
+    );
 
     expect(result).toMatchObject({
       status: 'completed',
-      jobId: 'static-analysis-job',
+      jobId: runResult.staticAnalysisJobId,
       source: 'run',
       language: 'python',
       summary: {
@@ -340,8 +367,13 @@ describe('getStaticAnalysisResult', () => {
       { userId: owner.id, roomId: room.id, sessionId: null },
     );
 
-    await expect(service.getStaticAnalysisResult('static-analysis-job', other.id)).rejects.toThrow(
-      NotFoundException,
-    );
+    const ownerAnalysis = await db
+      .select()
+      .from(staticAnalysisResults)
+      .where(eq(staticAnalysisResults.userId, owner.id));
+
+    await expect(
+      service.getStaticAnalysisResult(ownerAnalysis[0]?.jobId ?? '', other.id),
+    ).rejects.toThrow(NotFoundException);
   });
 });

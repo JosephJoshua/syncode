@@ -965,7 +965,7 @@ describe('runCode', () => {
       code: 'console.log(1);',
     });
 
-    expect(result).toEqual({ jobId: 'stub-job', staticAnalysisJobId: 'static-analysis-job' });
+    expect(result).toEqual({ jobId: 'stub-job', staticAnalysisJobId: expect.any(String) });
   });
 
   it('GIVEN room editor is locked WHEN running code THEN throws ConflictException', async () => {
@@ -1533,7 +1533,7 @@ describe('submitProblem', () => {
     });
 
     expect(result.submissionId).toEqual(expect.any(String));
-    expect(result.staticAnalysisJobId).toBe('static-analysis-job');
+    expect(result.staticAnalysisJobId).toEqual(expect.any(String));
 
     const [sub] = await db
       .select()

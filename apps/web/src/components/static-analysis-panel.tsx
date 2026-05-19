@@ -200,12 +200,7 @@ function AnalysisMetric({
 }
 
 function DiagnosticFinding({ diagnostic }: { readonly diagnostic: StaticAnalysisDiagnostic }) {
-  const severityClass =
-    diagnostic.severity === 'error'
-      ? 'text-destructive'
-      : diagnostic.severity === 'warning'
-        ? 'text-warning'
-        : 'text-muted-foreground';
+  const severityClass = severityClassName(diagnostic.severity);
 
   return (
     <div className="flex min-w-0 items-center gap-2 rounded border border-border/80 bg-background px-2 py-1.5">
@@ -223,6 +218,12 @@ function DiagnosticFinding({ diagnostic }: { readonly diagnostic: StaticAnalysis
       <LocationText file={diagnostic.file} line={diagnostic.line} />
     </div>
   );
+}
+
+function severityClassName(severity: StaticAnalysisDiagnostic['severity']): string {
+  if (severity === 'error') return 'text-destructive';
+  if (severity === 'warning') return 'text-warning';
+  return 'text-muted-foreground';
 }
 
 function DuplicationFinding({ duplication }: { readonly duplication: StaticAnalysisDuplication }) {

@@ -46,6 +46,8 @@ interface AnalyzerFindings {
   duplications: StaticAnalysisDuplication[];
 }
 
+type ParsedToolOutput = Partial<AnalyzerFindings> & { parseError?: string };
+
 @Injectable()
 export class StaticAnalysisAnalyzer {
   constructor(
@@ -79,19 +81,20 @@ export class StaticAnalysisAnalyzer {
         findings.complexity.push(...(parsed.complexity ?? []));
         findings.duplications.push(...(parsed.duplications ?? []));
 
-        const failed = Boolean(result.error || result.timedOut);
+        const failed = isToolFailure(result, parsed);
+        const error = resolveToolError(result, parsed);
         toolResults.push({
           tool: tool.tool,
           status: failed ? 'failed' : 'completed',
           exitCode: result.exitCode,
           durationMs,
           timedOut: result.timedOut,
-          ...(failed && { error: result.error ?? 'Tool timed out' }),
+          ...(failed && { error }),
         });
       }
 
       return {
-        status: 'completed',
+        status: toolResults.every((tool) => tool.status === 'failed') ? 'failed' : 'completed',
         ...findings,
         toolResults,
         summary: buildSummary(findings, toolResults),
@@ -171,21 +174,19 @@ export class StaticAnalysisAnalyzer {
     return lint ? [lint, ...common] : common;
   }
 
-  private parseToolOutput(
-    tool: ToolCommand,
-    stdout: string,
-    stderr: string,
-  ): Partial<AnalyzerFindings> {
+  private parseToolOutput(tool: ToolCommand, stdout: string, stderr: string): ParsedToolOutput {
     try {
       return tool.parser(stdout, stderr);
     } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to parse tool output';
       return {
+        parseError: message,
         diagnostics: [
           {
             tool: tool.tool,
             rule: 'parse-error',
             severity: 'info',
-            message: error instanceof Error ? error.message : 'Failed to parse tool output',
+            message,
             file: null,
             line: null,
             column: null,
@@ -194,6 +195,33 @@ export class StaticAnalysisAnalyzer {
       };
     }
   }
+}
+
+function isToolFailure(
+  result: Awaited<ReturnType<StaticAnalysisCommandRunner['run']>>,
+  parsed: ParsedToolOutput,
+): boolean {
+  if (result.error || result.timedOut || parsed.parseError) return true;
+  if (result.exitCode == null) return true;
+  if (result.exitCode === 0) return false;
+  return !hasParsedFindings(parsed);
+}
+
+function hasParsedFindings(parsed: ParsedToolOutput): boolean {
+  return Boolean(
+    parsed.diagnostics?.length || parsed.complexity?.length || parsed.duplications?.length,
+  );
+}
+
+function resolveToolError(
+  result: Awaited<ReturnType<StaticAnalysisCommandRunner['run']>>,
+  parsed: ParsedToolOutput,
+): string {
+  if (result.error) return result.error;
+  if (result.timedOut) return 'Tool timed out';
+  if (parsed.parseError) return parsed.parseError;
+  if (result.exitCode == null) return 'Tool exited without a status code';
+  return `Tool exited with code ${result.exitCode}`;
 }
 
 function lintCommandFor(language: SupportedLanguage, fileName: string): ToolCommand | null {
