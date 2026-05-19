@@ -1355,44 +1355,14 @@ export class RoomsService implements OnModuleInit {
     );
     const proactiveActiveKey = `${RoomsService.AI_INTERVIEW_PROACTIVE_ACTIVE_PREFIX}${roomId}:${userId}`;
     const proactiveLimitKey = `${RoomsService.AI_INTERVIEW_PROACTIVE_LIMIT_PREFIX}${roomId}:${userId}`;
-    const proactiveJobId =
-      body.trigger === 'proactive' ? this.buildProactiveInterviewJobId(roomId, userId) : undefined;
+    const proactiveJobId = this.buildProactiveInterviewJobId(roomId, userId);
     if (body.trigger === 'proactive') {
-      const activeJobId = await this.cacheService.get<string>(proactiveActiveKey);
-      if (activeJobId) {
-        return { jobId: activeJobId as JobId<'ai:interview'> };
-      }
-
-      const reserved = await this.cacheService.setIfNotExists(
+      const activeJobId = await this.reserveProactiveInterviewJob(
         proactiveActiveKey,
-        proactiveJobId,
-        RoomsService.AI_INTERVIEW_PROACTIVE_ACTIVE_TTL_SECONDS,
-      );
-      if (!reserved) {
-        const reservedJobId = await this.cacheService.get<string>(proactiveActiveKey);
-        if (reservedJobId) {
-          return { jobId: reservedJobId as JobId<'ai:interview'> };
-        }
-      }
-
-      const usage = await this.cacheService.incrBy(
         proactiveLimitKey,
-        1,
-        RoomsService.AI_INTERVIEW_PROACTIVE_LIMIT_WINDOW_SECONDS,
+        proactiveJobId,
       );
-      if (usage <= 0) {
-        await this.cacheService.del(proactiveLimitKey);
-      }
-      if (usage > RoomsService.AI_INTERVIEW_PROACTIVE_LIMIT_COUNT) {
-        await this.cacheService.del(proactiveActiveKey);
-        throw new HttpException(
-          {
-            message: 'AI interview proactive rate limit exceeded (6 per 5 minutes)',
-            code: ERROR_CODES.AI_MESSAGE_RATE_LIMIT,
-          },
-          429,
-        );
-      }
+      if (activeJobId) return { jobId: activeJobId };
     }
 
     const problemDescription = await this.loadAiProblemDescription(problemId);
@@ -1432,7 +1402,7 @@ export class RoomsService implements OnModuleInit {
         language: activeLanguage,
         userMessage,
         conversationHistory: body.conversationHistory,
-        idempotencyKey: proactiveJobId,
+        idempotencyKey: body.trigger === 'proactive' ? proactiveJobId : undefined,
       });
     } catch (error) {
       if (body.trigger === 'proactive') {
@@ -3028,20 +2998,61 @@ export class RoomsService implements OnModuleInit {
       reason: input.reason,
       roomStatus: room.status,
       elapsedSeconds: Math.max(0, Math.floor((room.elapsedMs + activeElapsedMs) / 1000)),
-      ...(input.secondsSinceLastUserMessage !== undefined
-        ? { secondsSinceLastUserMessage: input.secondsSinceLastUserMessage }
-        : {}),
-      ...(input.secondsSinceLastAssistantMessage !== undefined
-        ? { secondsSinceLastAssistantMessage: input.secondsSinceLastAssistantMessage }
-        : {}),
-      ...(input.secondsSinceLastEditorActivity !== undefined
-        ? { secondsSinceLastEditorActivity: input.secondsSinceLastEditorActivity }
-        : {}),
-      ...(input.recentEditorChanges !== undefined
-        ? { recentEditorChanges: input.recentEditorChanges }
-        : {}),
+      ...(input.secondsSinceLastUserMessage === undefined
+        ? {}
+        : { secondsSinceLastUserMessage: input.secondsSinceLastUserMessage }),
+      ...(input.secondsSinceLastAssistantMessage === undefined
+        ? {}
+        : { secondsSinceLastAssistantMessage: input.secondsSinceLastAssistantMessage }),
+      ...(input.secondsSinceLastEditorActivity === undefined
+        ? {}
+        : { secondsSinceLastEditorActivity: input.secondsSinceLastEditorActivity }),
+      ...(input.recentEditorChanges === undefined
+        ? {}
+        : { recentEditorChanges: input.recentEditorChanges }),
       hintCount,
     };
+  }
+
+  private async reserveProactiveInterviewJob(
+    proactiveActiveKey: string,
+    proactiveLimitKey: string,
+    proactiveJobId: JobId<'ai:interview'>,
+  ): Promise<JobId<'ai:interview'> | null> {
+    const activeJobId = await this.cacheService.get<JobId<'ai:interview'>>(proactiveActiveKey);
+    if (activeJobId) {
+      return activeJobId;
+    }
+
+    const reserved = await this.cacheService.setIfNotExists(
+      proactiveActiveKey,
+      proactiveJobId,
+      RoomsService.AI_INTERVIEW_PROACTIVE_ACTIVE_TTL_SECONDS,
+    );
+    if (!reserved) {
+      return this.cacheService.get<JobId<'ai:interview'>>(proactiveActiveKey);
+    }
+
+    const usage = await this.cacheService.incrBy(
+      proactiveLimitKey,
+      1,
+      RoomsService.AI_INTERVIEW_PROACTIVE_LIMIT_WINDOW_SECONDS,
+    );
+    if (usage <= 0) {
+      await this.cacheService.del(proactiveLimitKey);
+    }
+    if (usage <= RoomsService.AI_INTERVIEW_PROACTIVE_LIMIT_COUNT) {
+      return null;
+    }
+
+    await this.cacheService.del(proactiveActiveKey);
+    throw new HttpException(
+      {
+        message: 'AI interview proactive rate limit exceeded (6 per 5 minutes)',
+        code: ERROR_CODES.AI_MESSAGE_RATE_LIMIT,
+      },
+      429,
+    );
   }
 
   private async persistCompletedAiInterviewResult(
@@ -3109,7 +3120,7 @@ export class RoomsService implements OnModuleInit {
   }
 
   private buildProactiveInterviewJobId(roomId: string, userId: string): JobId<'ai:interview'> {
-    return `ai-interview-proactive-${roomId}-${userId}` as JobId<'ai:interview'>;
+    return `ai-interview-proactive-${roomId}-${userId}`;
   }
 
   private async persistAiInterviewMessage({

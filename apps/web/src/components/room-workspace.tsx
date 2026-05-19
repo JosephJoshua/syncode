@@ -1276,6 +1276,71 @@ export function RoomWorkspace({
     [],
   );
 
+  const finishInterviewRequest = useCallback((errorMessage: string | null) => {
+    if (errorMessage) {
+      setAiInterviewError(errorMessage);
+    } else {
+      setAiInterviewError(null);
+    }
+    setAiInterviewLoading(false);
+    aiInterviewInFlightRef.current = false;
+  }, []);
+
+  const failInterviewRequest = useCallback(
+    (trigger: AiInterviewRequestTrigger, message: string) => {
+      clearPendingAiInterviewJob(roomId, currentUserId);
+      finishInterviewRequest(trigger === 'proactive' ? null : message);
+    },
+    [currentUserId, finishInterviewRequest, roomId],
+  );
+
+  const handleReadyInterviewResult = useCallback(
+    async (
+      result: Extract<GetRoomAiInterviewResultResponse, { status: 'ready' }>,
+      reason: AiInterviewProactiveReason | undefined,
+      isCurrentRequest: () => boolean,
+    ): Promise<boolean> => {
+      if (result.shouldRespond && result.message) {
+        const streamed = await streamInterviewAssistantMessage(result, isCurrentRequest);
+        if (!streamed) {
+          return false;
+        }
+      }
+
+      clearPendingAiInterviewJob(roomId, currentUserId);
+
+      if (reason === 'hint_used') {
+        aiInterviewLastHintCountRef.current = hintHistory.length;
+      }
+
+      finishInterviewRequest(null);
+      aiInterviewRecentEditorChangesRef.current = 0;
+      return true;
+    },
+    [
+      currentUserId,
+      finishInterviewRequest,
+      hintHistory.length,
+      roomId,
+      streamInterviewAssistantMessage,
+    ],
+  );
+
+  const handleInterviewPollingFailure = useCallback(
+    async (error: unknown, trigger: AiInterviewRequestTrigger) => {
+      clearPendingAiInterviewJob(roomId, currentUserId);
+      const apiError = await readApiError(error);
+      const message = resolveErrorMessage(
+        apiError,
+        INTERVIEW_ERROR_KEYS,
+        'workspace.aiInterviewUnavailable',
+        t,
+      );
+      finishInterviewRequest(trigger === 'proactive' ? null : message);
+    },
+    [currentUserId, finishInterviewRequest, roomId, t],
+  );
+
   const pollInterviewJob = useCallback(
     async (
       jobId: string,
@@ -1303,32 +1368,11 @@ export function RoomWorkspace({
           }
 
           if (result.status === 'failed') {
-            clearPendingAiInterviewJob(roomId, currentUserId);
-            if (trigger !== 'proactive') {
-              setAiInterviewError(t('workspace.aiInterviewFailed'));
-            }
-            setAiInterviewLoading(false);
-            aiInterviewInFlightRef.current = false;
+            failInterviewRequest(trigger, t('workspace.aiInterviewFailed'));
             return;
           }
 
-          if (result.shouldRespond && result.message) {
-            const streamed = await streamInterviewAssistantMessage(result, isCurrentRequest);
-            if (!streamed) {
-              return;
-            }
-          }
-
-          clearPendingAiInterviewJob(roomId, currentUserId);
-
-          if (reason === 'hint_used') {
-            aiInterviewLastHintCountRef.current = hintHistory.length;
-          }
-
-          setAiInterviewLoading(false);
-          setAiInterviewError(null);
-          aiInterviewInFlightRef.current = false;
-          aiInterviewRecentEditorChangesRef.current = 0;
+          await handleReadyInterviewResult(result, reason, isCurrentRequest);
           return;
         } catch (error) {
           if (!isCurrentRequest()) {
@@ -1337,19 +1381,7 @@ export function RoomWorkspace({
 
           transientErrors += 1;
           if (transientErrors > AI_INTERVIEW_MAX_RETRY_ERRORS) {
-            clearPendingAiInterviewJob(roomId, currentUserId);
-            const apiError = await readApiError(error);
-            const message = resolveErrorMessage(
-              apiError,
-              INTERVIEW_ERROR_KEYS,
-              'workspace.aiInterviewUnavailable',
-              t,
-            );
-            if (trigger !== 'proactive') {
-              setAiInterviewError(message);
-            }
-            setAiInterviewLoading(false);
-            aiInterviewInFlightRef.current = false;
+            await handleInterviewPollingFailure(error, trigger);
             return;
           }
 
@@ -1358,15 +1390,10 @@ export function RoomWorkspace({
       }
 
       if (aiInterviewRequestSeqRef.current === requestSeq) {
-        clearPendingAiInterviewJob(roomId, currentUserId);
-        if (trigger !== 'proactive') {
-          setAiInterviewError(t('workspace.aiInterviewFailed'));
-        }
-        setAiInterviewLoading(false);
-        aiInterviewInFlightRef.current = false;
+        failInterviewRequest(trigger, t('workspace.aiInterviewFailed'));
       }
     },
-    [currentUserId, hintHistory.length, roomId, streamInterviewAssistantMessage, t],
+    [failInterviewRequest, handleInterviewPollingFailure, handleReadyInterviewResult, roomId, t],
   );
 
   const submitInterviewRequest = useCallback(
