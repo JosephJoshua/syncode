@@ -97,7 +97,7 @@ jobs:
           install -m 700 -d ~/.ssh
           printf '%s\n' "${DEPLOY_SSH_KEY}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -p "${DEPLOY_PORT}" -H "${DEPLOY_HOST}" >> ~/.ssh/known_hosts
+          ssh-keyscan -T 30 -p "${DEPLOY_PORT}" -H "${DEPLOY_HOST}" >> ~/.ssh/known_hosts || true
 
       - name: Pull, migrate, recreate, and verify server stack
         run: |
@@ -107,7 +107,7 @@ jobs:
             -i ~/.ssh/deploy_key \
             -p "${DEPLOY_PORT}" \
             -o IdentitiesOnly=yes \
-            -o StrictHostKeyChecking=yes \
+            -o StrictHostKeyChecking=accept-new \
             "${DEPLOY_USER}@${DEPLOY_HOST}" \
             "DEPLOY_BRANCH='${DEPLOY_BRANCH}' DEPLOY_PATH='${DEPLOY_PATH}' bash -s" <<'REMOTE'
           set -euo pipefail
