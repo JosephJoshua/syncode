@@ -9,6 +9,7 @@ import {
   InternalServerErrorException,
   Logger,
   NotFoundException,
+  type OnModuleInit,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -17,6 +18,7 @@ import {
   AI_CLIENT,
   type AiInterviewCodeAnalysisContext,
   type AiInterviewCodeContext,
+  type AiInterviewInteractionSignals,
   type AuthorizeJoinResponse,
   BROWSEABLE_ROOM_STATUSES,
   type BrowseRoomsQuery,
@@ -27,6 +29,7 @@ import {
   type GenerateHintRequest,
   type IAiClient,
   type ICollabClient,
+  type InterviewResponseResult,
   type JobId,
   type JoinRoomInput,
   type ListRoomsQuery,
@@ -39,6 +42,7 @@ import {
   type RoomConfig,
   type RunCodeRequest,
   type RunCodeResponse,
+  type StaticAnalysisEvidenceContext,
   type SubmitProblemInput,
   type SubmitResponse,
 } from '@syncode/contracts';
@@ -57,6 +61,7 @@ import {
   runs,
   sessionParticipants,
   sessions,
+  staticAnalysisResults,
   submissions,
   users,
 } from '@syncode/db';
@@ -130,7 +135,10 @@ interface CodeAnalysisJobMapping {
 interface InterviewJobMapping {
   roomId: string;
   userId: string;
+  sessionId: string | null;
+  trigger: RequestRoomAiInterviewInput['trigger'];
   codeContext: AiInterviewCodeContext;
+  assistantMessagePersisted?: boolean;
 }
 
 interface LatestCodeAnalysisContextCacheEntry {
@@ -140,7 +148,7 @@ interface LatestCodeAnalysisContextCacheEntry {
 }
 
 @Injectable()
-export class RoomsService {
+export class RoomsService implements OnModuleInit {
   private readonly logger = new Logger(RoomsService.name);
 
   constructor(
@@ -160,6 +168,12 @@ export class RoomsService {
     private readonly configService: ConfigService<EnvConfig>,
     private readonly sessionReportsService: SessionReportsService,
   ) {}
+
+  onModuleInit(): void {
+    this.aiClient.onInterviewResult(async (jobId, result) => {
+      await this.persistCompletedAiInterviewResult(jobId, result);
+    });
+  }
 
   async createRoom(hostId: string, input: CreateRoomInput): Promise<CreateRoomResult> {
     if (input.problemId) {
@@ -633,10 +647,25 @@ export class RoomsService {
         });
       }
 
-      const [targetParticipant] = await tx
-        .select({ isActive: roomParticipants.isActive })
+      if (room.status !== RoomStatus.WAITING) {
+        throw new BadRequestException({
+          message: 'Room ownership can only be transferred before the session starts',
+          code: ERROR_CODES.ROOM_ROLES_LOCKED,
+        });
+      }
+
+      const participants = await tx
+        .select({
+          id: roomParticipants.id,
+          userId: roomParticipants.userId,
+          role: roomParticipants.role,
+          isActive: roomParticipants.isActive,
+        })
         .from(roomParticipants)
-        .where(and(eq(roomParticipants.roomId, roomId), eq(roomParticipants.userId, targetUserId)));
+        .where(and(eq(roomParticipants.roomId, roomId), eq(roomParticipants.userId, targetUserId)))
+        .for('update');
+
+      const [targetParticipant] = participants;
 
       if (!targetParticipant) {
         throw new NotFoundException({
@@ -656,6 +685,8 @@ export class RoomsService {
         .update(rooms)
         .set({ hostId: targetUserId, updatedAt: transferredAt })
         .where(eq(rooms.id, roomId));
+
+      await this.reassignHostRoleAfterTransfer(tx, room, currentUserId, targetParticipant);
 
       return room.hostId;
     });
@@ -706,6 +737,13 @@ export class RoomsService {
         throw new BadRequestException({
           message: 'Participant roles are locked once the session has started',
           code: ERROR_CODES.ROOM_ROLES_LOCKED,
+        });
+      }
+
+      if (lockedRoom.hostId === targetUserId) {
+        throw new BadRequestException({
+          message: 'Use ownership transfer to change who has host permissions',
+          code: ERROR_CODES.VALIDATION_FAILED,
         });
       }
 
@@ -1066,7 +1104,8 @@ export class RoomsService {
 
   async runCode(roomId: string, userId: string, request: RunCodeRequest): Promise<RunCodeResponse> {
     await this.assertRoomCapability(roomId, userId, 'code:run');
-    return this.executionService.runCode(request);
+    const sessionId = await this.loadCurrentRoomSessionId(roomId);
+    return this.executionService.runCode(request, { userId, roomId, sessionId });
   }
 
   async submitProblem(

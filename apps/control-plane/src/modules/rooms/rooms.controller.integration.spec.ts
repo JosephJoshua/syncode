@@ -1464,7 +1464,10 @@ describe('POST /rooms/:id/ai/interview', () => {
     const { candidate, room } = await createAiInterviewRoom();
     await db.update(rooms).set({ status: 'warmup' }).where(eq(rooms.id, room.id));
 
-    await asUser(request(app.getHttpServer()).post(`/rooms/${room.id}/ai/interview`), candidate)
+    const result = await asUser(
+      request(app.getHttpServer()).post(`/rooms/${room.id}/ai/interview`),
+      candidate,
+    )
       .send({
         userMessage: 'Can we discuss my plan before coding?',
         conversationHistory: [],
@@ -1472,13 +1475,21 @@ describe('POST /rooms/:id/ai/interview', () => {
         codeContext: { ...interviewCodeContext, codeSnippet: 'print("hello")', endLine: 1 },
       })
       .expect(202);
+
+    expect(result.body.jobId).toBe('ai-interview-job');
+    expect(mockAiClient.submitInterviewResponse).toHaveBeenCalledWith(
+      expect.objectContaining({ roomId: room.id, participantId: candidate.id }),
+    );
   });
 
   it('GIVEN AI room in wrapup phase WHEN requesting interview response THEN accepts request', async () => {
     const { candidate, room } = await createAiInterviewRoom();
     await db.update(rooms).set({ status: 'wrapup' }).where(eq(rooms.id, room.id));
 
-    await asUser(request(app.getHttpServer()).post(`/rooms/${room.id}/ai/interview`), candidate)
+    const result = await asUser(
+      request(app.getHttpServer()).post(`/rooms/${room.id}/ai/interview`),
+      candidate,
+    )
       .send({
         userMessage: 'Can we review my choices from this session?',
         conversationHistory: [],
@@ -1486,6 +1497,11 @@ describe('POST /rooms/:id/ai/interview', () => {
         codeContext: { ...interviewCodeContext, codeSnippet: 'print("hello")', endLine: 1 },
       })
       .expect(202);
+
+    expect(result.body.jobId).toBe('ai-interview-job');
+    expect(mockAiClient.submitInterviewResponse).toHaveBeenCalledWith(
+      expect.objectContaining({ roomId: room.id, participantId: candidate.id }),
+    );
   });
 
   it('GIVEN another participant owns interview job WHEN polling with wrong user THEN returns 404', async () => {
