@@ -190,9 +190,9 @@ export class ProblemsController {
   async getProblem(
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
-    @Query(new ZodValidationPipe(ProblemDetailQueryDto)) query: ProblemDetailQueryDto,
+    @Query(new ZodValidationPipe(ProblemDetailQueryDto)) query: ProblemDetailQueryDto = {},
   ): Promise<ProblemDetailDto> {
-    return this.problemsService.findById(user.id, id, { includeHidden: query.includeHidden });
+    return this.problemsService.findById(user.id, id, { includeHidden: query?.includeHidden });
   }
 
   @Delete(CONTROL_API.PROBLEMS.DELETE.route)

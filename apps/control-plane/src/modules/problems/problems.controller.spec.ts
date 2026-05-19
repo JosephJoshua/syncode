@@ -84,7 +84,13 @@ describe('ProblemsController', () => {
     it('GIVEN valid ID WHEN getting problem THEN delegates to service with userId and id', async () => {
       const { controller, service } = createFixture();
       await controller.getProblem(USER, 'p1');
-      expect(service.findById).toHaveBeenCalledWith(USER.id, 'p1');
+      expect(service.findById).toHaveBeenCalledWith(USER.id, 'p1', { includeHidden: undefined });
+    });
+
+    it('GIVEN includeHidden query WHEN getting problem THEN forwards editor option', async () => {
+      const { controller, service } = createFixture();
+      await controller.getProblem(USER, 'p1', { includeHidden: true });
+      expect(service.findById).toHaveBeenCalledWith(USER.id, 'p1', { includeHidden: true });
     });
   });
 
