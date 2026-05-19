@@ -28,6 +28,7 @@ export * from './session-participants.js';
 export * from './session-recordings.js';
 export * from './session-reports.js';
 export * from './sessions.js';
+export * from './static-analysis-results.js';
 export * from './submissions.js';
 export * from './tags.js';
 export * from './test-cases.js';

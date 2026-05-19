@@ -24,6 +24,7 @@ import { sessionParticipants } from './session-participants.js';
 import { sessionRecordings } from './session-recordings.js';
 import { sessionReports } from './session-reports.js';
 import { sessions } from './sessions.js';
+import { staticAnalysisResults } from './static-analysis-results.js';
 import { submissions } from './submissions.js';
 import { tags } from './tags.js';
 import { testCases } from './test-cases.js';
@@ -47,6 +48,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   userWeaknesses: many(userWeaknesses),
   sessionParticipations: many(sessionParticipants),
   sessionReports: many(sessionReports),
+  staticAnalysisResults: many(staticAnalysisResults),
   sessionDeletions: many(sessionDeletions),
   sessionEvents: many(sessionEvents),
   recordingConsents: many(recordingConsents),
@@ -89,6 +91,7 @@ export const roomsRelations = relations(rooms, ({ one, many }) => ({
   codeSnapshots: many(codeSnapshots),
   runs: many(runs),
   submissions: many(submissions),
+  staticAnalysisResults: many(staticAnalysisResults),
   aiMessages: many(aiMessages),
   aiHints: many(aiHints),
   aiReviews: many(aiReviews),
@@ -159,6 +162,7 @@ export const sessionsRelations = relations(sessions, ({ one, many }) => ({
   aiMessages: many(aiMessages),
   peerFeedback: many(peerFeedback),
   weaknessSessions: many(weaknessSessions),
+  staticAnalysisResults: many(staticAnalysisResults),
   deletions: many(sessionDeletions),
 }));
 
@@ -226,7 +230,7 @@ export const codeSnapshotsRelations = relations(codeSnapshots, ({ one }) => ({
 }));
 
 // Execution
-export const runsRelations = relations(runs, ({ one }) => ({
+export const runsRelations = relations(runs, ({ one, many }) => ({
   user: one(users, {
     fields: [runs.userId],
     references: [users.id],
@@ -235,6 +239,7 @@ export const runsRelations = relations(runs, ({ one }) => ({
     fields: [runs.roomId],
     references: [rooms.id],
   }),
+  staticAnalysisResults: many(staticAnalysisResults),
 }));
 
 export const submissionsRelations = relations(submissions, ({ one, many }) => ({
@@ -251,11 +256,35 @@ export const submissionsRelations = relations(submissions, ({ one, many }) => ({
     references: [problems.id],
   }),
   executionResults: many(executionResults),
+  staticAnalysisResults: many(staticAnalysisResults),
 }));
 
 export const executionResultsRelations = relations(executionResults, ({ one }) => ({
   submission: one(submissions, {
     fields: [executionResults.submissionId],
+    references: [submissions.id],
+  }),
+}));
+
+export const staticAnalysisResultsRelations = relations(staticAnalysisResults, ({ one }) => ({
+  user: one(users, {
+    fields: [staticAnalysisResults.userId],
+    references: [users.id],
+  }),
+  room: one(rooms, {
+    fields: [staticAnalysisResults.roomId],
+    references: [rooms.id],
+  }),
+  session: one(sessions, {
+    fields: [staticAnalysisResults.sessionId],
+    references: [sessions.id],
+  }),
+  run: one(runs, {
+    fields: [staticAnalysisResults.runId],
+    references: [runs.id],
+  }),
+  submission: one(submissions, {
+    fields: [staticAnalysisResults.submissionId],
     references: [submissions.id],
   }),
 }));
