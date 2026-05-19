@@ -205,22 +205,12 @@ export class OpenAiCompatibleLlmProvider implements ILlmProvider {
 
         const parsed = await parseTranscriptionResponse(response, model);
         if (parsed.kind === 'retryable') {
-          if (attempt < STT_MAX_RETRY_ATTEMPTS) {
-            await delay(getRetryDelayMs(attempt));
-            continue;
-          }
-          throw parsed.error;
+          await handleRetryableTranscriptionStatus(parsed.error, attempt);
+          continue;
         }
         return parsed.result;
       } catch (error) {
-        if (attempt < STT_MAX_RETRY_ATTEMPTS && isRetryableTransportError(error)) {
-          await delay(getRetryDelayMs(attempt));
-          continue;
-        }
-        if (error instanceof Error && error.name === 'AbortError') {
-          throw new Error(`STT request timed out after ${timeoutMs}ms`);
-        }
-        throw error;
+        await handleTranscriptionAttemptError(error, attempt, timeoutMs);
       } finally {
         clearTimeout(timeout);
       }
@@ -228,6 +218,28 @@ export class OpenAiCompatibleLlmProvider implements ILlmProvider {
 
     throw new Error('STT request failed after retries');
   }
+}
+
+async function handleRetryableTranscriptionStatus(error: Error, attempt: number): Promise<void> {
+  if (attempt >= STT_MAX_RETRY_ATTEMPTS) {
+    throw error;
+  }
+  await delay(getRetryDelayMs(attempt));
+}
+
+async function handleTranscriptionAttemptError(
+  error: unknown,
+  attempt: number,
+  timeoutMs: number,
+): Promise<void> {
+  if (attempt < STT_MAX_RETRY_ATTEMPTS && isRetryableTransportError(error)) {
+    await delay(getRetryDelayMs(attempt));
+    return;
+  }
+  if (error instanceof Error && error.name === 'AbortError') {
+    throw new Error(`STT request timed out after ${timeoutMs}ms`);
+  }
+  throw error;
 }
 
 function mimeTypeForAudioFormat(format: 'mp3' | 'wav') {
