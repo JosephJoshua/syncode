@@ -29,6 +29,7 @@ import type { Awareness } from 'y-protocols/awareness';
 import type * as Y from 'yjs';
 import { api } from '@/lib/api-client.js';
 import { useYjsTldrawStore } from '@/lib/yjs-tldraw-store.js';
+import { applyWhiteboardKeyboardShortcutsState } from './room-whiteboard-keyboard.js';
 import { WhiteboardAuthorLegend } from './whiteboard-author-legend.js';
 
 export interface RoomWhiteboardPanelProps {
@@ -55,6 +56,7 @@ export interface RoomWhiteboardPanelProps {
 }
 
 const VISIBILITY_PREFIX = 'whiteboard:visibility';
+const TLDRAW_LICENSE_KEY = import.meta.env.VITE_TLDRAW_LICENSE_KEY;
 
 function readVisibilityPrefs(
   roomId: string,
@@ -159,9 +161,7 @@ export function RoomWhiteboardPanel({
   const handleMount = useCallback(
     (editor: Editor) => {
       editorRef.current = editor;
-      editor.user.updateUserPreferences({
-        areKeyboardShortcutsEnabled: keyboardShortcutsEnabled,
-      });
+      applyWhiteboardKeyboardShortcutsState(editor, keyboardShortcutsEnabled);
 
       // Expose for ad-hoc browser-console debugging in dev only.
       if (import.meta.env?.DEV && typeof window !== 'undefined') {
@@ -267,9 +267,7 @@ export function RoomWhiteboardPanel({
       return;
     }
 
-    editor.user.updateUserPreferences({
-      areKeyboardShortcutsEnabled: keyboardShortcutsEnabled,
-    });
+    applyWhiteboardKeyboardShortcutsState(editor, keyboardShortcutsEnabled);
   }, [keyboardShortcutsEnabled]);
 
   // (D) Switch the active tldraw tool when the user toggles layer mode.
@@ -387,6 +385,7 @@ export function RoomWhiteboardPanel({
       <div className="relative flex-1 overflow-hidden">
         <Tldraw
           store={storeWithStatus}
+          licenseKey={TLDRAW_LICENSE_KEY}
           autoFocus={false}
           onMount={handleMount}
           components={{

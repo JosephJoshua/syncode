@@ -1,4 +1,3 @@
-import Editor from '@monaco-editor/react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -9,8 +8,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@syncode/ui';
-import { useMemo } from 'react';
+import { Suspense, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
+import { LazyMonacoEditor as Editor } from './lazy-monaco-editor.js';
 import {
   EDITOR_LOADING,
   EDITOR_OPTIONS_BASE,
@@ -76,15 +76,17 @@ export function SubmissionPreviewModal({
             className="h-[min(420px,55vh)] overflow-hidden"
             data-testid="submission-preview-editor"
           >
-            <Editor
-              height="100%"
-              language={language}
-              value={code}
-              theme="syncode-dark"
-              beforeMount={handleEditorWillMount}
-              options={editorOptions}
-              loading={EDITOR_LOADING}
-            />
+            <Suspense fallback={EDITOR_LOADING}>
+              <Editor
+                height="100%"
+                language={language}
+                value={code}
+                theme="syncode-dark"
+                beforeMount={handleEditorWillMount}
+                options={editorOptions}
+                loading={EDITOR_LOADING}
+              />
+            </Suspense>
           </div>
         </div>
 
