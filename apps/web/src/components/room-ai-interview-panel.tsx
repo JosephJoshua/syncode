@@ -11,6 +11,7 @@ export interface AiInterviewMessage {
   createdAt?: number;
   role: 'user' | 'assistant';
   content: string;
+  isStreaming?: boolean;
   followUpQuestion?: string;
   codeContext?: AiInterviewCodeContext;
   codeAnnotations?: Array<{ line: number; comment: string }>;
@@ -51,7 +52,7 @@ export function RoomAiInterviewPanel({
   messages: AiInterviewMessage[];
   isLoading: boolean;
   error: string | null;
-  onSendMessage: (message: string) => void;
+  onSendMessage: (message: string) => boolean | undefined;
   canSendMessage: boolean;
   currentUser: Participant | null;
   onTranscribeVoiceInput?: (request: VoiceTranscriptionRequest) => Promise<string>;
@@ -103,6 +104,7 @@ export function RoomAiInterviewPanel({
     .find((m) => m.role === 'assistant' && m.audioUrl)?.audioUrl;
 
   const messageCount = messages.length;
+  const showInitialLoadingState = isLoading && messageCount === 0;
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: scroll on new message
   useEffect(() => {
@@ -154,7 +156,10 @@ export function RoomAiInterviewPanel({
   function handleSend() {
     const trimmed = draft.trim();
     if (!trimmed || isLoading) return;
-    onSendMessage(trimmed);
+    const accepted = onSendMessage(trimmed);
+    if (accepted === false) {
+      return;
+    }
     setDraft('');
   }
 
@@ -588,7 +593,14 @@ export function RoomAiInterviewPanel({
   return (
     <div className="flex h-full flex-col">
       <div className="flex-1 space-y-3 overflow-y-auto p-3">
-        {messages.length === 0 ? (
+        {showInitialLoadingState ? (
+          <div className="mt-4 rounded-xl border border-primary/30 bg-primary/5 px-3 py-3">
+            <div className="flex items-center gap-2 text-xs text-primary">
+              <Loader2 className="size-3.5 animate-spin" />
+              <span>{t('workspace.aiInterviewBusy')}</span>
+            </div>
+          </div>
+        ) : messages.length === 0 ? (
           <p className="pt-4 text-center text-xs text-muted-foreground">
             {t('workspace.aiInterviewEmpty')}
           </p>
@@ -602,7 +614,7 @@ export function RoomAiInterviewPanel({
             />
           ))
         )}
-        {isLoading ? (
+        {isLoading && !showInitialLoadingState ? (
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <Bot className="size-3 shrink-0 animate-pulse text-primary" />
             <span className="animate-pulse">{t('workspace.aiInterviewSending')}</span>

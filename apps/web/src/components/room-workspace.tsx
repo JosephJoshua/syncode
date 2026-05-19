@@ -409,6 +409,7 @@ export function RoomWorkspace({
       persistedMessages.map((message, index) => getAiInterviewMessageStableId(message, index)),
     );
     aiInterviewToastInitializedRef.current = true;
+    aiInterviewIntroRequestedRef.current = true;
   }, [aiInterviewMessages.length, currentUserId, room.mode, room.status, roomId]);
 
   const [bottomCollapsed, setBottomCollapsed] = useState(false);
@@ -417,6 +418,8 @@ export function RoomWorkspace({
   const [inlineWhiteboardHost, setInlineWhiteboardHost] = useState<HTMLDivElement | null>(null);
   const [floatingWhiteboardHost, setFloatingWhiteboardHost] = useState<HTMLDivElement | null>(null);
   const [whiteboardParkingHost, setWhiteboardParkingHost] = useState<HTMLDivElement | null>(null);
+  const [isCodeEditorFocused, setIsCodeEditorFocused] = useState(false);
+  const [whiteboardHasKeyboardFocus, setWhiteboardHasKeyboardFocus] = useState(false);
   const [_activeCommentLine, _setActiveCommentLine] = useState(1);
   const rightMountedRef = useRef(false);
   const rightContentRef = useRef<HTMLDivElement>(null);
@@ -431,15 +434,37 @@ export function RoomWorkspace({
     observer.observe(el);
     return () => observer.disconnect();
   }, [rightCollapsed]);
-  const cancelSubmitPollRef = useRef<(() => void) | null>(null);
-
   const [testCases, setTestCases] = useState<TestCaseEntry[]>([]);
   const [activeCaseId, setActiveCaseId] = useState('');
   const [multiRunState, setMultiRunState] = useState<MultiRunState>({ status: 'idle' });
   const cancelMultiRunRef = useRef(new Map<string, () => void>());
   const nextCustomId = useRef(1);
-  const isWhiteboardKeyboardActive =
-    activeCenterTab === 'whiteboard' || whiteboardViewMode === 'floating';
+  const isWhiteboardKeyboardActive = shouldEnableWhiteboardKeyboardShortcuts({
+    activeCenterTab,
+    whiteboardViewMode,
+    isCodeEditorFocused,
+    whiteboardHasKeyboardFocus,
+  });
+  const updateWhiteboardKeyboardFocus = useCallback(
+    (event: Parameters<typeof nextWhiteboardKeyboardFocusState>[1]) => {
+      const next = nextWhiteboardKeyboardFocusState(
+        { isCodeEditorFocused, whiteboardHasKeyboardFocus },
+        event,
+      );
+      setIsCodeEditorFocused(next.isCodeEditorFocused);
+      setWhiteboardHasKeyboardFocus(next.whiteboardHasKeyboardFocus);
+    },
+    [isCodeEditorFocused, whiteboardHasKeyboardFocus],
+  );
+  const markCodeEditorKeyboardFocus = useCallback(
+    (focused: boolean) => {
+      updateWhiteboardKeyboardFocus({ source: 'code-editor', focused });
+    },
+    [updateWhiteboardKeyboardFocus],
+  );
+  const markWhiteboardKeyboardFocus = useCallback(() => {
+    updateWhiteboardKeyboardFocus({ source: 'whiteboard' });
+  }, [updateWhiteboardKeyboardFocus]);
 
   useEffect(() => {
     const sourceCases = problem?.testCases ?? (isMockPreview ? MOCK_WORKSPACE_TEST_CASES : null);
@@ -459,6 +484,8 @@ export function RoomWorkspace({
   useEffect(() => {
     return () => {
       cancelSubmitPollRef.current?.();
+      cancelRunStaticAnalysisPollRef.current?.();
+      cancelSubmitStaticAnalysisPollRef.current?.();
       for (const cancel of cancelMultiRunRef.current.values()) cancel();
     };
   }, []);
@@ -695,6 +722,9 @@ export function RoomWorkspace({
         if (message.role !== 'assistant') {
           continue;
         }
+        if (message.isStreaming) {
+          continue;
+        }
         read.add(getAiInterviewMessageStableId(message, index));
       }
       setUnreadInterviewCount(0);
@@ -703,6 +733,9 @@ export function RoomWorkspace({
 
     const unreadCount = aiInterviewMessages.reduce((count, message, index) => {
       if (message.role !== 'assistant') {
+        return count;
+      }
+      if (message.isStreaming) {
         return count;
       }
       return read.has(getAiInterviewMessageStableId(message, index)) ? count : count + 1;
@@ -722,6 +755,9 @@ export function RoomWorkspace({
 
     const newAssistantMessages = aiInterviewMessages.filter((message, index) => {
       const id = getAiInterviewMessageStableId(message, index);
+      if (message.isStreaming) {
+        return false;
+      }
       if (seen.has(id)) {
         return false;
       }
@@ -848,10 +884,15 @@ export function RoomWorkspace({
 
     const code = getCode();
     const results = await Promise.all(
-      testCases.map(async (tc) => {
-        const jobId = await runCase(tc, code);
-        return jobId
-          ? { caseId: tc.id, jobId, label: tc.label, expectedOutput: tc.expectedOutput }
+      testCases.map(async (tc, index) => {
+        const result = await runCase(tc, code, { trackStaticAnalysis: index === 0 });
+        return result
+          ? {
+              caseId: tc.id,
+              jobId: result.jobId,
+              label: tc.label,
+              expectedOutput: tc.expectedOutput,
+            }
           : null;
       }),
     );
@@ -922,7 +963,9 @@ export function RoomWorkspace({
   const handleSubmitCode = useCallback(
     async (codeOverride?: string) => {
       cancelSubmitPollRef.current?.();
+      cancelSubmitStaticAnalysisPollRef.current?.();
       setSubmitState({ status: 'submitting' });
+      setSubmitStaticAnalysisState({ status: 'idle' });
       setActiveBottomTab('results');
 
       try {
@@ -932,6 +975,11 @@ export function RoomWorkspace({
         });
 
         setSubmitState({ status: 'polling', submissionId: response.submissionId });
+        startStaticAnalysisPoll(
+          response.staticAnalysisJobId ?? null,
+          setSubmitStaticAnalysisState,
+          cancelSubmitStaticAnalysisPollRef,
+        );
         cancelSubmitPollRef.current = pollSubmission(response.submissionId);
         broadcastSubmit(currentUserName, response.submissionId);
       } catch (error) {
@@ -966,7 +1014,11 @@ export function RoomWorkspace({
     void handleSubmitCode(codeSnapshot);
   }, [submissionPreviewCode, submitDisabled, handleSubmitCode]);
 
-  const runCase = async (tc: TestCaseEntry, code?: string): Promise<string | null> => {
+  const runCase = async (
+    tc: TestCaseEntry,
+    code?: string,
+    options: { trackStaticAnalysis?: boolean } = {},
+  ): Promise<{ jobId: string; staticAnalysisJobId: string | null } | null> => {
     cancelMultiRunRef.current.get(tc.id)?.();
     const token = { cancelled: false };
     cancelMultiRunRef.current.set(tc.id, () => {
@@ -989,7 +1041,15 @@ export function RoomWorkspace({
       });
 
       pollCaseExecution(tc.id, response.jobId, tc.expectedOutput, token);
-      return response.jobId;
+      if (options.trackStaticAnalysis ?? true) {
+        startStaticAnalysisPoll(
+          response.staticAnalysisJobId ?? null,
+          setRunStaticAnalysisState,
+          cancelRunStaticAnalysisPollRef,
+        );
+      }
+
+      return { jobId: response.jobId, staticAnalysisJobId: response.staticAnalysisJobId ?? null };
     } catch (error) {
       if (token.cancelled) return null;
       const apiError = await readApiError(error);
@@ -1186,37 +1246,34 @@ export function RoomWorkspace({
   const buildInterviewSignals = useCallback(
     (reason: AiInterviewProactiveReason): AiInterviewInteractionSignals => {
       const now = Date.now();
-      return {
+      const signals: AiInterviewInteractionSignals = {
         reason,
         roomStatus: room.status,
         elapsedSeconds: Math.max(0, Math.floor(elapsedMs / 1000)),
-        ...(aiInterviewLastUserMessageAtRef.current != null
-          ? {
-              secondsSinceLastUserMessage: Math.max(
-                0,
-                Math.floor((now - aiInterviewLastUserMessageAtRef.current) / 1000),
-              ),
-            }
-          : {}),
-        ...(aiInterviewLastAssistantMessageAtRef.current != null
-          ? {
-              secondsSinceLastAssistantMessage: Math.max(
-                0,
-                Math.floor((now - aiInterviewLastAssistantMessageAtRef.current) / 1000),
-              ),
-            }
-          : {}),
-        ...(aiInterviewLastEditorActivityAtRef.current != null
-          ? {
-              secondsSinceLastEditorActivity: Math.max(
-                0,
-                Math.floor((now - aiInterviewLastEditorActivityAtRef.current) / 1000),
-              ),
-            }
-          : {}),
         recentEditorChanges: aiInterviewRecentEditorChangesRef.current,
         hintCount: hintHistory.length,
       };
+
+      if (aiInterviewLastUserMessageAtRef.current != null) {
+        signals.secondsSinceLastUserMessage = Math.max(
+          0,
+          Math.floor((now - aiInterviewLastUserMessageAtRef.current) / 1000),
+        );
+      }
+      if (aiInterviewLastAssistantMessageAtRef.current != null) {
+        signals.secondsSinceLastAssistantMessage = Math.max(
+          0,
+          Math.floor((now - aiInterviewLastAssistantMessageAtRef.current) / 1000),
+        );
+      }
+      if (aiInterviewLastEditorActivityAtRef.current != null) {
+        signals.secondsSinceLastEditorActivity = Math.max(
+          0,
+          Math.floor((now - aiInterviewLastEditorActivityAtRef.current) / 1000),
+        );
+      }
+
+      return signals;
     },
     [elapsedMs, hintHistory.length, room.status],
   );
@@ -1225,9 +1282,9 @@ export function RoomWorkspace({
     async (
       message: Extract<GetRoomAiInterviewResultResponse, { status: 'ready' }>,
       isCurrentRequest: () => boolean,
-    ) => {
+    ): Promise<boolean> => {
       if (!message.message?.trim()) {
-        return;
+        return true;
       }
 
       const fullText = message.message.trim();
@@ -1243,6 +1300,7 @@ export function RoomWorkspace({
           createdAt: Date.now(),
           role: 'assistant',
           content: firstChunk,
+          isStreaming: chunks.length > 1,
           codeContext: message.codeContext,
           codeAnnotations: message.codeAnnotations,
           audioUrl: message.audioUrl,
@@ -1251,7 +1309,7 @@ export function RoomWorkspace({
 
       for (const chunk of chunks.slice(1)) {
         if (!isCurrentRequest()) {
-          return;
+          return false;
         }
         streamed = `${streamed} ${chunk}`;
         setAiInterviewMessages((prev) =>
@@ -1268,7 +1326,7 @@ export function RoomWorkspace({
       }
 
       if (!isCurrentRequest()) {
-        return;
+        return false;
       }
 
       setAiInterviewMessages((prev) =>
@@ -1277,14 +1335,82 @@ export function RoomWorkspace({
             ? {
                 ...entry,
                 content: fullText,
+                isStreaming: false,
                 followUpQuestion: message.followUpQuestion,
               }
             : entry,
         ),
       );
       aiInterviewLastAssistantMessageAtRef.current = Date.now();
+      return true;
     },
     [],
+  );
+
+  const finishInterviewRequest = useCallback((errorMessage: string | null) => {
+    if (errorMessage) {
+      setAiInterviewError(errorMessage);
+    } else {
+      setAiInterviewError(null);
+    }
+    setAiInterviewLoading(false);
+    aiInterviewInFlightRef.current = false;
+  }, []);
+
+  const failInterviewRequest = useCallback(
+    (trigger: AiInterviewRequestTrigger, message: string) => {
+      clearPendingAiInterviewJob(roomId, currentUserId);
+      finishInterviewRequest(trigger === 'proactive' ? null : message);
+    },
+    [currentUserId, finishInterviewRequest, roomId],
+  );
+
+  const handleReadyInterviewResult = useCallback(
+    async (
+      result: Extract<GetRoomAiInterviewResultResponse, { status: 'ready' }>,
+      reason: AiInterviewProactiveReason | undefined,
+      isCurrentRequest: () => boolean,
+    ): Promise<boolean> => {
+      if (result.shouldRespond && result.message) {
+        const streamed = await streamInterviewAssistantMessage(result, isCurrentRequest);
+        if (!streamed) {
+          return false;
+        }
+        aiInterviewIntroRequestedRef.current = true;
+      }
+
+      clearPendingAiInterviewJob(roomId, currentUserId);
+
+      if (reason === 'hint_used') {
+        aiInterviewLastHintCountRef.current = hintHistory.length;
+      }
+
+      finishInterviewRequest(null);
+      aiInterviewRecentEditorChangesRef.current = 0;
+      return true;
+    },
+    [
+      currentUserId,
+      finishInterviewRequest,
+      hintHistory.length,
+      roomId,
+      streamInterviewAssistantMessage,
+    ],
+  );
+
+  const handleInterviewPollingFailure = useCallback(
+    async (error: unknown, trigger: AiInterviewRequestTrigger) => {
+      clearPendingAiInterviewJob(roomId, currentUserId);
+      const apiError = await readApiError(error);
+      const message = resolveErrorMessage(
+        apiError,
+        INTERVIEW_ERROR_KEYS,
+        'workspace.aiInterviewUnavailable',
+        t,
+      );
+      finishInterviewRequest(trigger === 'proactive' ? null : message);
+    },
+    [currentUserId, finishInterviewRequest, roomId, t],
   );
 
   const pollInterviewJob = useCallback(
@@ -1313,29 +1439,12 @@ export function RoomWorkspace({
             continue;
           }
 
-          clearPendingAiInterviewJob(roomId, currentUserId);
-
           if (result.status === 'failed') {
-            if (trigger !== 'proactive') {
-              setAiInterviewError(t('workspace.aiInterviewFailed'));
-            }
-            setAiInterviewLoading(false);
-            aiInterviewInFlightRef.current = false;
+            failInterviewRequest(trigger, t('workspace.aiInterviewFailed'));
             return;
           }
 
-          if (result.shouldRespond && result.message) {
-            await streamInterviewAssistantMessage(result, isCurrentRequest);
-          }
-
-          if (reason === 'hint_used') {
-            aiInterviewLastHintCountRef.current = hintHistory.length;
-          }
-
-          setAiInterviewLoading(false);
-          setAiInterviewError(null);
-          aiInterviewInFlightRef.current = false;
-          aiInterviewRecentEditorChangesRef.current = 0;
+          await handleReadyInterviewResult(result, reason, isCurrentRequest);
           return;
         } catch (error) {
           if (!isCurrentRequest()) {
@@ -1344,19 +1453,7 @@ export function RoomWorkspace({
 
           transientErrors += 1;
           if (transientErrors > AI_INTERVIEW_MAX_RETRY_ERRORS) {
-            clearPendingAiInterviewJob(roomId, currentUserId);
-            const apiError = await readApiError(error);
-            const message = resolveErrorMessage(
-              apiError,
-              INTERVIEW_ERROR_KEYS,
-              'workspace.aiInterviewUnavailable',
-              t,
-            );
-            if (trigger !== 'proactive') {
-              setAiInterviewError(message);
-            }
-            setAiInterviewLoading(false);
-            aiInterviewInFlightRef.current = false;
+            await handleInterviewPollingFailure(error, trigger);
             return;
           }
 
@@ -1365,15 +1462,10 @@ export function RoomWorkspace({
       }
 
       if (aiInterviewRequestSeqRef.current === requestSeq) {
-        clearPendingAiInterviewJob(roomId, currentUserId);
-        if (trigger !== 'proactive') {
-          setAiInterviewError(t('workspace.aiInterviewFailed'));
-        }
-        setAiInterviewLoading(false);
-        aiInterviewInFlightRef.current = false;
+        failInterviewRequest(trigger, t('workspace.aiInterviewFailed'));
       }
     },
-    [currentUserId, hintHistory.length, roomId, streamInterviewAssistantMessage, t],
+    [failInterviewRequest, handleInterviewPollingFailure, handleReadyInterviewResult, roomId, t],
   );
 
   const submitInterviewRequest = useCallback(
@@ -1397,8 +1489,13 @@ export function RoomWorkspace({
       const requestSeq = aiInterviewRequestSeqRef.current;
 
       const isUserTriggered = trigger === 'user_message';
+      const isInitialAssistantKickoff =
+        reason === 'session_joined' &&
+        trigger === 'proactive' &&
+        (!userMessage || userMessage.trim().length === 0) &&
+        aiInterviewMessages.length === 0;
       setAiInterviewError(null);
-      setAiInterviewLoading(isUserTriggered);
+      setAiInterviewLoading(isUserTriggered || isInitialAssistantKickoff);
 
       if (isUserTriggered && userMessage?.trim()) {
         aiInterviewLastUserMessageAtRef.current = Date.now();
@@ -1460,6 +1557,9 @@ export function RoomWorkspace({
         if (aiInterviewRequestSeqRef.current !== requestSeq) {
           return;
         }
+        if (trigger === 'proactive' && reason === 'session_joined') {
+          aiInterviewIntroRequestedRef.current = false;
+        }
         const apiError = await readApiError(error);
         const message = resolveErrorMessage(
           apiError,
@@ -1481,10 +1581,10 @@ export function RoomWorkspace({
       currentUserId,
       editorCodeContext,
       getCode,
-      language,
-      latestRunSummary,
       i18n.language,
       i18n.resolvedLanguage,
+      language,
+      latestRunSummary,
       pollInterviewJob,
       roomId,
       submitState,
@@ -1493,10 +1593,17 @@ export function RoomWorkspace({
   );
 
   const handleSendInterviewMessage = useCallback(
-    (userMessage: string) => {
+    (userMessage: string): boolean => {
+      if (!canSendInterviewMessage || aiInterviewInFlightRef.current) {
+        const message = t('workspace.aiInterviewBusy');
+        setAiInterviewError(message);
+        return false;
+      }
+
       void submitInterviewRequest({ trigger: 'user_message', userMessage });
+      return true;
     },
-    [submitInterviewRequest],
+    [canSendInterviewMessage, submitInterviewRequest, t],
   );
 
   const handleTranscribeInterviewVoice = useCallback(
@@ -1591,8 +1698,15 @@ export function RoomWorkspace({
     if (!canSendInterviewMessage || room.mode !== 'ai') {
       return;
     }
+    if (!currentUserId) {
+      return;
+    }
 
     if (aiInterviewMessages.length > 0) {
+      aiInterviewIntroRequestedRef.current = true;
+      return;
+    }
+    if (aiInterviewIntroRequestedRef.current) {
       return;
     }
 
@@ -1603,11 +1717,18 @@ export function RoomWorkspace({
       return;
     }
 
+    aiInterviewIntroRequestedRef.current = true;
     void submitInterviewRequest({
       trigger: 'proactive',
       reason: 'session_joined',
     });
-  }, [aiInterviewMessages.length, canSendInterviewMessage, room.mode, submitInterviewRequest]);
+  }, [
+    aiInterviewMessages.length,
+    canSendInterviewMessage,
+    currentUserId,
+    room.mode,
+    submitInterviewRequest,
+  ]);
 
   useEffect(() => {
     if (!canSendInterviewMessage || room.mode !== 'ai') {
@@ -1855,6 +1976,8 @@ export function RoomWorkspace({
                       'absolute inset-0',
                       activeCenterTab === 'code' ? 'visible' : 'invisible',
                     )}
+                    onFocusCapture={() => markCodeEditorKeyboardFocus(true)}
+                    onPointerDownCapture={() => markCodeEditorKeyboardFocus(true)}
                   >
                     {doc && awareness && collabStatus === 'connected' ? (
                       <CollaborativeEditor
@@ -1877,6 +2000,7 @@ export function RoomWorkspace({
                         onRunCode={() => void handleRunCodeRef.current()}
                         onSubmitCode={() => void requestSubmitCodeRef.current()}
                         onCodeContextChange={setEditorCodeContext}
+                        onFocusChange={markCodeEditorKeyboardFocus}
                       />
                     ) : (
                       EDITOR_LOADING
@@ -1950,7 +2074,9 @@ export function RoomWorkspace({
               isEditorReadOnly={isEditorReadOnly}
               multiRunState={multiRunState}
               handleRunSingleCase={handleRunSingleCase}
+              runStaticAnalysisState={runStaticAnalysisState}
               submitState={submitState}
+              submitStaticAnalysisState={submitStaticAnalysisState}
               canSubmitCode={canSubmitCode}
               isSubmitBusy={isSubmitBusy}
               t={t}
@@ -2189,7 +2315,7 @@ export function RoomWorkspace({
                       messages={aiInterviewMessages}
                       isLoading={aiInterviewLoading}
                       error={aiInterviewError}
-                      onSendMessage={(msg) => void handleSendInterviewMessage(msg)}
+                      onSendMessage={handleSendInterviewMessage}
                       onTranscribeVoiceInput={handleTranscribeInterviewVoice}
                       canSendMessage={canSendInterviewMessage}
                       currentUser={
@@ -2271,33 +2397,39 @@ export function RoomWorkspace({
               whiteboardParkingHost,
             )}
           >
-            <RoomWhiteboardPanel
-              doc={doc}
-              awareness={awareness}
-              roomId={roomId}
-              userId={currentUserId}
-              userName={currentUserName}
-              userColor={authorColor(currentUserId)}
-              canDraw={room.myCapabilities.includes('whiteboard:draw')}
-              canAnnotate={room.myCapabilities.includes('whiteboard:annotate')}
-              participantNames={
-                new Map(
-                  // Use displayName when set, otherwise the user's @username
-                  // — never the raw userId UUID, which leaks an identifier
-                  // and isn't human-readable. Include even inactive
-                  // participants so historical authors still show up in
-                  // the legend with their proper name.
-                  room.participants.map((p) => [p.userId, p.displayName ?? p.username] as const),
-                )
-              }
-              onPopOut={
-                whiteboardViewMode === 'tab' ? () => setWhiteboardViewMode('floating') : undefined
-              }
-              onDock={
-                whiteboardViewMode === 'floating' ? () => setWhiteboardViewMode('tab') : undefined
-              }
-              keyboardShortcutsEnabled={isWhiteboardKeyboardActive}
-            />
+            <div
+              className="h-full"
+              onFocusCapture={markWhiteboardKeyboardFocus}
+              onPointerDownCapture={markWhiteboardKeyboardFocus}
+            >
+              <RoomWhiteboardPanel
+                doc={doc}
+                awareness={awareness}
+                roomId={roomId}
+                userId={currentUserId}
+                userName={currentUserName}
+                userColor={authorColor(currentUserId)}
+                canDraw={room.myCapabilities.includes('whiteboard:draw')}
+                canAnnotate={room.myCapabilities.includes('whiteboard:annotate')}
+                participantNames={
+                  new Map(
+                    // Use displayName when set, otherwise the user's @username
+                    // — never the raw userId UUID, which leaks an identifier
+                    // and isn't human-readable. Include even inactive
+                    // participants so historical authors still show up in
+                    // the legend with their proper name.
+                    room.participants.map((p) => [p.userId, p.displayName ?? p.username] as const),
+                  )
+                }
+                onPopOut={
+                  whiteboardViewMode === 'tab' ? () => setWhiteboardViewMode('floating') : undefined
+                }
+                onDock={
+                  whiteboardViewMode === 'floating' ? () => setWhiteboardViewMode('tab') : undefined
+                }
+                keyboardShortcutsEnabled={isWhiteboardKeyboardActive}
+              />
+            </div>
           </WhiteboardPortal>
         </>
       ) : null}
@@ -2349,7 +2481,9 @@ function WorkspaceBottomPanel({
   isEditorReadOnly,
   multiRunState,
   handleRunSingleCase,
+  runStaticAnalysisState,
   submitState,
+  submitStaticAnalysisState,
   canSubmitCode,
   isSubmitBusy,
   t,
@@ -2367,7 +2501,9 @@ function WorkspaceBottomPanel({
   readonly isEditorReadOnly: boolean;
   readonly multiRunState: MultiRunState;
   readonly handleRunSingleCase: (id: string) => void;
+  readonly runStaticAnalysisState: StaticAnalysisPanelState;
   readonly submitState: SubmitState;
+  readonly submitStaticAnalysisState: StaticAnalysisPanelState;
   readonly canSubmitCode: boolean;
   readonly isSubmitBusy: boolean;
   readonly t: (key: string) => string;
@@ -2431,7 +2567,9 @@ function WorkspaceBottomPanel({
             isEditorReadOnly={isEditorReadOnly}
             multiRunState={multiRunState}
             handleRunSingleCase={handleRunSingleCase}
+            runStaticAnalysisState={runStaticAnalysisState}
             submitState={submitState}
+            submitStaticAnalysisState={submitStaticAnalysisState}
           />
         </div>
       </div>
@@ -2469,7 +2607,9 @@ function BottomTabContent({
   isEditorReadOnly,
   multiRunState,
   handleRunSingleCase,
+  runStaticAnalysisState,
   submitState,
+  submitStaticAnalysisState,
 }: {
   readonly activeBottomTab: 'testcases' | 'output' | 'results';
   readonly testCases: TestCaseEntry[];
@@ -2481,7 +2621,9 @@ function BottomTabContent({
   readonly isEditorReadOnly: boolean;
   readonly multiRunState: MultiRunState;
   readonly handleRunSingleCase: (id: string) => void;
+  readonly runStaticAnalysisState: StaticAnalysisPanelState;
   readonly submitState: SubmitState;
+  readonly submitStaticAnalysisState: StaticAnalysisPanelState;
 }) {
   if (activeBottomTab === 'testcases') {
     return (
@@ -2498,17 +2640,28 @@ function BottomTabContent({
   }
   if (activeBottomTab === 'output') {
     return (
-      <RunResultsPanel
-        multiRunState={multiRunState}
-        cases={testCases}
-        onRunCase={handleRunSingleCase}
-      />
+      <div className="space-y-3">
+        <RunResultsPanel
+          multiRunState={multiRunState}
+          cases={testCases}
+          onRunCase={handleRunSingleCase}
+        />
+        <StaticAnalysisPanel analysis={runStaticAnalysisState} />
+      </div>
     );
   }
-  return <SubmissionOutput submitState={submitState} />;
+  return (
+    <SubmissionOutput submitState={submitState} staticAnalysisState={submitStaticAnalysisState} />
+  );
 }
 
-function SubmissionOutput({ submitState }: { submitState: SubmitState }) {
+function SubmissionOutput({
+  submitState,
+  staticAnalysisState,
+}: {
+  readonly submitState: SubmitState;
+  readonly staticAnalysisState: StaticAnalysisPanelState;
+}) {
   const { t } = useTranslation('rooms');
 
   if (submitState.status === 'idle') {
@@ -2525,21 +2678,29 @@ function SubmissionOutput({ submitState }: { submitState: SubmitState }) {
 
   if (submitState.status === 'submitting') {
     return (
-      <div className="flex items-center gap-2">
-        <Loader2 className="size-3 animate-spin text-primary" />
-        <span className="font-mono text-xs text-muted-foreground">{t('workspace.submitting')}</span>
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <Loader2 className="size-3 animate-spin text-primary" />
+          <span className="font-mono text-xs text-muted-foreground">
+            {t('workspace.submitting')}
+          </span>
+        </div>
+        <StaticAnalysisPanel analysis={staticAnalysisState} />
       </div>
     );
   }
 
   if (submitState.status === 'polling') {
     return (
-      <div className="flex items-center gap-2">
-        <Loader2 className="size-3 animate-spin text-primary" />
-        <span className="font-mono text-xs text-primary/80">
-          {t('workspace.submissionPolling')}
-        </span>
-        <span className="terminal-cursor" />
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <Loader2 className="size-3 animate-spin text-primary" />
+          <span className="font-mono text-xs text-primary/80">
+            {t('workspace.submissionPolling')}
+          </span>
+          <span className="terminal-cursor" />
+        </div>
+        <StaticAnalysisPanel analysis={staticAnalysisState} />
       </div>
     );
   }
@@ -2548,7 +2709,12 @@ function SubmissionOutput({ submitState }: { submitState: SubmitState }) {
     return <p className="font-mono text-xs text-destructive">{submitState.message}</p>;
   }
 
-  return <ExecutionDetailsPanel details={submitState.details} />;
+  return (
+    <div className="space-y-3">
+      <ExecutionDetailsPanel details={submitState.details} />
+      <StaticAnalysisPanel analysis={staticAnalysisState} />
+    </div>
+  );
 }
 
 function buildInterviewCodeContext(
@@ -2714,13 +2880,14 @@ const INTERVIEW_ERROR_KEYS: Partial<Record<string, string>> = {
 const INTERVIEW_TRANSCRIPTION_ERROR_KEYS: Partial<Record<string, string>> = {
   [ERROR_CODES.ROOM_PERMISSION_DENIED]: 'workspace.hintPermissionDenied',
   [ERROR_CODES.ROOM_ACCESS_DENIED]: 'workspace.hintPermissionDenied',
-  [ERROR_CODES.ROOM_NOT_AI_MODE]: 'workspace.aiInterviewUnavailable',
+  [ERROR_CODES.ROOM_NOT_AI_MODE]: 'workspace.aiInterviewVoiceNetworkError',
+  [ERROR_CODES.PROBLEM_NOT_FOUND]: 'workspace.problemNotFound',
   [ERROR_CODES.AI_SERVICE_UNAVAILABLE]: 'workspace.aiInterviewVoiceNetworkError',
 };
 
 const HINT_POLL_INTERVAL_MS = 750;
 const HINT_POLL_TIMEOUT_MS = 30_000;
-const AI_INTERVIEW_POLL_INTERVAL_MS = 1500;
+const AI_INTERVIEW_POLL_INTERVAL_MS = 900;
 const AI_INTERVIEW_MAX_POLLS = 40;
 const AI_INTERVIEW_HISTORY_LIMIT = 40;
 const AI_INTERVIEW_MAX_RETRY_ERRORS = 3;
@@ -2745,8 +2912,21 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+let aiInterviewMessageIdCounter = 0;
+
 function createAiInterviewMessageId(prefix: 'user' | 'assistant'): string {
-  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return `${prefix}-${crypto.randomUUID()}`;
+  }
+
+  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+    const bytes = crypto.getRandomValues(new Uint8Array(8));
+    const token = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+    return `${prefix}-${Date.now()}-${token}`;
+  }
+
+  aiInterviewMessageIdCounter += 1;
+  return `${prefix}-${Date.now()}-${aiInterviewMessageIdCounter}`;
 }
 
 function splitInterviewMessageChunks(text: string): string[] {

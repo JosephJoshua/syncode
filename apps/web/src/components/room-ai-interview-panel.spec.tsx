@@ -70,10 +70,24 @@ describe('RoomAiInterviewPanel', () => {
     );
   });
 
-  it('GIVEN loading state WHEN rendered THEN shows sending indicator', () => {
+  it('GIVEN initial loading state WHEN rendered THEN shows preparing indicator', () => {
     render(
       <RoomAiInterviewPanel
         messages={[]}
+        isLoading={true}
+        error={null}
+        onSendMessage={vi.fn()}
+        canSendMessage={true}
+        currentUser={null}
+      />,
+    );
+    expect(screen.getByText('workspace.aiInterviewBusy')).toBeInTheDocument();
+  });
+
+  it('GIVEN loading with existing messages WHEN rendered THEN shows sending indicator', () => {
+    render(
+      <RoomAiInterviewPanel
+        messages={[{ role: 'assistant', content: 'Let us begin.' }]}
         isLoading={true}
         error={null}
         onSendMessage={vi.fn()}
