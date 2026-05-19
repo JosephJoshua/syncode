@@ -1,32 +1,79 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { CONTROL_API, type CreateProblemInput } from '@syncode/contracts';
-import { PROBLEM_DIFFICULTIES, type ProblemDifficulty, SUPPORTED_LANGUAGES } from '@syncode/shared';
+import type { OnMount } from '@monaco-editor/react';
 import {
+  CONTROL_API,
+  type CreateProblemInput,
+  type ProblemDetail,
+  type ProblemSummary,
+  type UpdateProblemInput,
+} from '@syncode/contracts';
+import { PROBLEM_DIFFICULTIES, SUPPORTED_LANGUAGES } from '@syncode/shared';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
   Badge,
   Button,
   Card,
   CardContent,
   CardHeader,
   CardTitle,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
   Input,
   Label,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
   Switch,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from '@syncode/ui';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
-import { FileText, Plus, ShieldAlert, Trash2 } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { createFileRoute, useNavigate } from '@tanstack/react-router';
+import {
+  Bold,
+  Code2,
+  Eye,
+  EyeOff,
+  FileText,
+  Heading2,
+  Italic,
+  Link as LinkIcon,
+  List,
+  ListOrdered,
+  Loader2,
+  Pencil,
+  Plus,
+  Quote,
+  RefreshCw,
+  ShieldAlert,
+  Table2,
+  Trash2,
+} from 'lucide-react';
 import type React from 'react';
-import { useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { Controller, type FieldErrors, useFieldArray, useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { z } from 'zod';
+import { AdminTabs } from '@/components/admin/admin-tabs.js';
+import { LazyMonacoEditor as Editor } from '@/components/lazy-monaco-editor.js';
 import { ProblemMarkdown } from '@/components/problems/problem-markdown.js';
+import {
+  EDITOR_LOADING,
+  EDITOR_OPTIONS_BASE,
+  handleEditorWillMount,
+} from '@/components/room-workspace-utils.js';
 import { api, readApiError } from '@/lib/api-client.js';
 import { useAuthStore } from '@/stores/auth.store.js';
 
@@ -77,44 +124,49 @@ const adminProblemFormSchema = z.object({
 
 type AdminProblemFormValues = z.infer<typeof adminProblemFormSchema>;
 
-const defaultFormValues: AdminProblemFormValues = {
-  title: '',
-  difficulty: 'medium',
-  company: '',
-  description: '',
-  constraints: '',
-  examplesText: '[]',
-  starterCodeText: '{}',
-  timeLimit: '',
-  memoryLimit: '',
-  isPublished: false,
-  testCases: [createTestCase()],
-};
-
 function AdminProblemEditorPage() {
-  const { t } = useTranslation('admin');
+  const { t, i18n } = useTranslation('admin');
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const user = useAuthStore((state) => state.user);
-  const [descriptionMode, setDescriptionMode] = useState<'edit' | 'preview'>('edit');
+  const [selectedProblemId, setSelectedProblemId] = useState<string | null>(null);
+  const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<ProblemSummary | null>(null);
   const {
     control,
     formState: { errors },
     handleSubmit,
     register,
+    reset,
     watch,
   } = useForm<AdminProblemFormValues>({
     resolver: zodResolver(adminProblemFormSchema),
-    defaultValues: defaultFormValues,
+    defaultValues: createDefaultFormValues(),
   });
   const { append, fields, remove } = useFieldArray({ control, name: 'testCases' });
   const watchedValues = watch();
 
+  const problemsQuery = useQuery({
+    queryKey: ['admin', 'problems', 'list'],
+    enabled: user?.role === 'admin',
+    queryFn: () =>
+      api(CONTROL_API.PROBLEMS.LIST, {
+        searchParams: { limit: 50, sortBy: 'createdAt', sortOrder: 'desc', includeDrafts: true },
+      }),
+  });
+
+  const problemDetailQuery = useQuery({
+    queryKey: ['admin', 'problems', 'detail', selectedProblemId],
+    enabled: user?.role === 'admin' && selectedProblemId !== null,
+    queryFn: () => api(CONTROL_API.PROBLEMS.GET_BY_ID, { params: { id: selectedProblemId ?? '' } }),
+  });
+
   const createProblemMutation = useMutation({
     mutationFn: (input: CreateProblemInput) => api(CONTROL_API.PROBLEMS.CREATE, { body: input }),
-    onSuccess: (problem) => {
+    onSuccess: async (problem) => {
       toast.success(t('problemEditor.toast.saved'));
-      queryClient.invalidateQueries({ queryKey: ['problems'] }).catch(() => undefined);
+      closeProblemEditor();
+      await invalidateProblemQueries(queryClient);
       navigate({ to: '/problems/$problemId', params: { problemId: problem.id } }).catch(
         () => undefined,
       );
@@ -125,6 +177,80 @@ function AdminProblemEditorPage() {
     },
   });
 
+  const updateProblemMutation = useMutation({
+    mutationFn: async ({
+      problemId,
+      input,
+      isPublished,
+    }: {
+      problemId: string;
+      input: UpdateProblemInput;
+      isPublished: boolean;
+    }) => {
+      const updated = await api(CONTROL_API.PROBLEMS.UPDATE, {
+        params: { id: problemId },
+        body: input,
+      });
+      if (updated.isPublished !== isPublished) {
+        return api(CONTROL_API.PROBLEMS.PUBLISH_STATUS, {
+          params: { id: problemId },
+          body: { isPublished },
+        });
+      }
+      return updated;
+    },
+    onSuccess: async (problem) => {
+      toast.success(t('problemEditor.toast.saved'));
+      reset(problemDetailToFormValues(problem));
+      closeProblemEditor();
+      await invalidateProblemQueries(queryClient);
+    },
+    onError: async (error) => {
+      const apiError = await readApiError(error);
+      toast.error(apiError?.message ?? t('problemEditor.toast.saveFailed'));
+    },
+  });
+
+  const publishStatusMutation = useMutation({
+    mutationFn: ({ problemId, isPublished }: { problemId: string; isPublished: boolean }) =>
+      api(CONTROL_API.PROBLEMS.PUBLISH_STATUS, {
+        params: { id: problemId },
+        body: { isPublished },
+      }),
+    onSuccess: async () => {
+      toast.success(t('problemEditor.toast.statusSaved'));
+      await invalidateProblemQueries(queryClient);
+    },
+    onError: async (error) => {
+      const apiError = await readApiError(error);
+      toast.error(apiError?.message ?? t('problemEditor.toast.saveFailed'));
+    },
+  });
+
+  const deleteProblemMutation = useMutation({
+    mutationFn: (problemId: string) =>
+      api(CONTROL_API.PROBLEMS.DELETE, { params: { id: problemId } }),
+    onSuccess: async () => {
+      toast.success(t('problemEditor.toast.deleted'));
+      setDeleteTarget(null);
+      if (selectedProblemId === deleteTarget?.id) {
+        setSelectedProblemId(null);
+        reset(createDefaultFormValues());
+      }
+      await invalidateProblemQueries(queryClient);
+    },
+    onError: async (error) => {
+      const apiError = await readApiError(error);
+      toast.error(apiError?.message ?? t('problemEditor.toast.deleteFailed'));
+    },
+  });
+
+  useEffect(() => {
+    if (problemDetailQuery.data && problemDetailQuery.data.id === selectedProblemId) {
+      reset(problemDetailToFormValues(problemDetailQuery.data));
+    }
+  }, [problemDetailQuery.data, reset, selectedProblemId]);
+
   const completedCaseCount = useMemo(
     () =>
       watchedValues.testCases.filter((item) => item.input.trim() && item.expectedOutput.trim())
@@ -132,6 +258,25 @@ function AdminProblemEditorPage() {
     [watchedValues.testCases],
   );
   const formErrors = useMemo(() => collectErrorMessages(errors), [errors]);
+  const problems = problemsQuery.data?.data ?? [];
+  const selectedProblem = problems.find((problem) => problem.id === selectedProblemId) ?? null;
+  const isSaving = createProblemMutation.isPending || updateProblemMutation.isPending;
+  const isProblemDetailError = selectedProblemId !== null && problemDetailQuery.isError;
+  const isProblemDetailLoading =
+    selectedProblemId !== null &&
+    !isProblemDetailError &&
+    (problemDetailQuery.isLoading || problemDetailQuery.data?.id !== selectedProblemId);
+  const isFormDisabled = isSaving || isProblemDetailLoading || isProblemDetailError;
+  const isMutating = isSaving || publishStatusMutation.isPending || deleteProblemMutation.isPending;
+  const dateFormatter = useMemo(
+    () =>
+      new Intl.DateTimeFormat(i18n.resolvedLanguage ?? i18n.language, {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+      }),
+    [i18n.language, i18n.resolvedLanguage],
+  );
 
   if (user?.role !== 'admin') {
     return (
@@ -154,29 +299,209 @@ function AdminProblemEditorPage() {
   }
 
   const submitForm = (values: AdminProblemFormValues) => {
+    if (selectedProblemId) {
+      updateProblemMutation.mutate({
+        problemId: selectedProblemId,
+        input: buildUpdateProblemInput(values),
+        isPublished: values.isPublished,
+      });
+      return;
+    }
+
     createProblemMutation.mutate(buildCreateProblemInput(values));
   };
 
+  const startNewProblem = () => {
+    setSelectedProblemId(null);
+    reset(createDefaultFormValues());
+    setIsEditorOpen(true);
+  };
+
+  const selectProblemForEdit = (problemId: string) => {
+    setSelectedProblemId(problemId);
+    reset(createDefaultFormValues());
+    setIsEditorOpen(true);
+  };
+
+  function closeProblemEditor() {
+    if (isMutating) {
+      return;
+    }
+    setIsEditorOpen(false);
+    setSelectedProblemId(null);
+    reset(createDefaultFormValues());
+  }
+
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:py-10 lg:py-12">
-      <section className="max-w-3xl">
-        <h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-          {t('problemEditor.heading')}
-        </h1>
-        <p className="mt-3 text-sm text-muted-foreground sm:text-base">{t('problemEditor.sub')}</p>
+      <section className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="max-w-3xl">
+          <h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
+            {t('problemEditor.management.heading')}
+          </h1>
+          <p className="mt-3 text-sm text-muted-foreground sm:text-base">
+            {t('problemEditor.management.sub')}
+          </p>
+        </div>
+        <div className="flex flex-nowrap items-center gap-3 self-start lg:self-auto">
+          <AdminTabs
+            active="problems"
+            labels={{
+              users: t('navLinks.users'),
+              problems: t('navLinks.problems'),
+              auditLogs: t('navLinks.auditLogs'),
+            }}
+          />
+          <Button type="button" className="h-11 shrink-0" onClick={startNewProblem}>
+            <Plus className="size-4" />
+            {t('problemEditor.management.newProblem')}
+          </Button>
+        </div>
       </section>
-      <div className="mt-5 flex flex-wrap gap-2">
-        <Button variant="outline" asChild>
-          <Link to="/admin/users">{t('navLinks.users')}</Link>
-        </Button>
-        <Button variant="outline" asChild>
-          <Link to="/admin/audit-logs">{t('navLinks.auditLogs')}</Link>
-        </Button>
-      </div>
 
-      <form
-        className="mt-8 grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]"
-        onSubmit={handleSubmit(submitForm)}
+      <Card className="mt-8 gap-0 overflow-hidden border border-border/50 bg-card/80 py-0 backdrop-blur-sm">
+        <CardHeader className="flex-row items-center justify-between px-5 py-4 sm:px-6">
+          <CardTitle>{t('problemEditor.management.tableTitle')}</CardTitle>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={problemsQuery.isFetching}
+            onClick={() => problemsQuery.refetch()}
+          >
+            <RefreshCw className={problemsQuery.isFetching ? 'size-4 animate-spin' : 'size-4'} />
+            {t('problemEditor.management.refresh')}
+          </Button>
+        </CardHeader>
+        <CardContent className="px-0 pb-0">
+          {problemsQuery.isError ? (
+            <div role="alert" className="px-6 py-10 text-sm text-destructive">
+              {t('problemEditor.management.loadFailed')}
+            </div>
+          ) : problemsQuery.isLoading ? (
+            <div className="flex min-h-60 items-center justify-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="size-4 animate-spin" />
+              {t('problemEditor.management.loading')}
+            </div>
+          ) : problems.length === 0 ? (
+            <div className="px-6 py-10 text-sm text-muted-foreground">
+              {t('problemEditor.management.empty')}
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead>{t('problemEditor.management.columns.problem')}</TableHead>
+                  <TableHead className="w-28">
+                    {t('problemEditor.management.columns.status')}
+                  </TableHead>
+                  <TableHead className="w-28">
+                    {t('problemEditor.management.columns.tests')}
+                  </TableHead>
+                  <TableHead className="w-36">
+                    {t('problemEditor.management.columns.updated')}
+                  </TableHead>
+                  <TableHead className="w-56 text-right">
+                    {t('problemEditor.management.columns.actions')}
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {problems.map((problem) => (
+                  <TableRow key={problem.id}>
+                    <TableCell>
+                      <div className="min-w-0">
+                        <div className="truncate font-medium text-foreground">{problem.title}</div>
+                        <div className="mt-1 flex flex-wrap gap-1.5">
+                          <Badge variant="outline">
+                            {t(`problemEditor.difficulty.${problem.difficulty}`)}
+                          </Badge>
+                          {problem.company ? (
+                            <Badge variant="neutral">{problem.company}</Badge>
+                          ) : null}
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={problem.isPublished ? 'success' : 'secondary'}>
+                        {problem.isPublished
+                          ? t('problemEditor.preview.statusPublished')
+                          : t('problemEditor.preview.statusDraft')}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap text-muted-foreground">
+                      {problem.testCaseCount ?? 0}
+                      {problem.hiddenTestCaseCount
+                        ? ` (${t('problemEditor.management.hiddenCount', {
+                            count: problem.hiddenTestCaseCount,
+                          })})`
+                        : null}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {problem.updatedAt ? dateFormatter.format(new Date(problem.updatedAt)) : '-'}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={isMutating}
+                          onClick={() => selectProblemForEdit(problem.id)}
+                        >
+                          <Pencil className="size-4" />
+                          {t('problemEditor.management.edit')}
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={publishStatusMutation.isPending}
+                          onClick={() =>
+                            publishStatusMutation.mutate({
+                              problemId: problem.id,
+                              isPublished: !problem.isPublished,
+                            })
+                          }
+                        >
+                          {problem.isPublished ? (
+                            <EyeOff className="size-4" />
+                          ) : (
+                            <Eye className="size-4" />
+                          )}
+                          {problem.isPublished
+                            ? t('problemEditor.management.unpublish')
+                            : t('problemEditor.management.publish')}
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          disabled={deleteProblemMutation.isPending}
+                          onClick={() => setDeleteTarget(problem)}
+                        >
+                          <Trash2 className="size-4" />
+                          {t('problemEditor.management.delete')}
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      <Dialog
+        open={isEditorOpen}
+        onOpenChange={(open) => {
+          if (open) {
+            setIsEditorOpen(true);
+            return;
+          }
+          closeProblemEditor();
+        }}
       >
         <div className="space-y-6">
           <Card className="border border-border/50 bg-card/80 py-0 backdrop-blur-sm">
