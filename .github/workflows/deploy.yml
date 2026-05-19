@@ -46,15 +46,22 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push all images
+        env:
+          TLDRAW_LICENSE_KEY: ${{ secrets.TLDRAW_LICENSE_KEY }}
         run: |
           PREFIX="${{ steps.meta.outputs.prefix }}"
           TAG="${{ steps.meta.outputs.tag }}"
           SHA="${{ steps.meta.outputs.sha }}"
           for svc in web control-plane collab-plane execution-plane ai-plane; do
             IMAGE="${PREFIX}/syncode-${svc}"
+            BUILD_ARGS=()
+            if [ "${svc}" = "web" ]; then
+              BUILD_ARGS+=(--build-arg "VITE_TLDRAW_LICENSE_KEY=${TLDRAW_LICENSE_KEY}")
+            fi
             echo "::group::Building ${svc}"
             docker buildx build \
               --file "infra/docker/Dockerfile.${svc}" \
+              "${BUILD_ARGS[@]}" \
               --tag "${IMAGE}:${TAG}" \
               --tag "${IMAGE}:${SHA}" \
               --push \

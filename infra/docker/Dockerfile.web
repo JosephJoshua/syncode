@@ -21,6 +21,8 @@ COPY --from=pruner /app/out/json/ .
 RUN pnpm install --frozen-lockfile
 
 COPY --from=pruner /app/out/full/ .
+ARG VITE_TLDRAW_LICENSE_KEY
+ENV VITE_TLDRAW_LICENSE_KEY=${VITE_TLDRAW_LICENSE_KEY}
 RUN pnpm turbo build --filter=@syncode/web
 
 # Stage 3: Serve static files with nginx
