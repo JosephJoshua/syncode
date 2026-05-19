@@ -184,6 +184,13 @@ export function RoomChatPanel({
 
   const mentionTabs = useMemo(() => {
     const seen = new Set<string>();
+    const aiMention = {
+      key: 'ai',
+      label: '@ai',
+      token: '@ai',
+      searchKey: 'ai',
+      kind: 'ai' as const,
+    };
     const users = participants
       .filter((participant) => participant.userId !== currentUserId)
       .filter((participant) => {
@@ -197,9 +204,10 @@ export function RoomChatPanel({
         label: `@${participant.username}`,
         token: `@${participant.username}`,
         searchKey: participant.username.toLowerCase(),
+        kind: 'user' as const,
       }));
 
-    return [{ key: 'ai', label: '@ai', token: '@ai', searchKey: 'ai' }, ...users];
+    return [aiMention, ...users];
   }, [participants, currentUserId]);
 
   const activeMention = useMemo(
@@ -566,7 +574,7 @@ export function RoomChatPanel({
           </div>
         ) : null}
 
-        {activeMention ? (
+        {activeMention && mentionTabSuggestions.length > 0 ? (
           <div className="space-y-1">
             <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
               {t('workspace.chatMentionTabsLabel')}
@@ -578,9 +586,14 @@ export function RoomChatPanel({
                   type="button"
                   onClick={() => insertMention(tab.token)}
                   disabled={isComposerDisabled}
-                  className="inline-flex shrink-0 items-center gap-1 rounded-full border border-border/70 bg-background/70 px-2 py-1 text-[10px] text-foreground/85 transition-colors hover:border-primary/40 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                  className={
+                    tab.kind === 'ai'
+                      ? 'inline-flex shrink-0 items-center gap-1 rounded-full border border-primary/40 bg-primary/10 px-2 py-1 text-[10px] text-primary transition-colors hover:border-primary/60 hover:bg-primary/15 disabled:cursor-not-allowed disabled:opacity-50'
+                      : 'inline-flex shrink-0 items-center gap-1 rounded-full border border-border/70 bg-background/70 px-2 py-1 text-[10px] text-foreground/85 transition-colors hover:border-primary/40 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50'
+                  }
+                  title={tab.kind === 'ai' ? t('workspace.chatAiHint') : undefined}
                 >
-                  {tab.key === 'ai' ? <Bot className="size-3 text-primary/80" /> : null}
+                  {tab.kind === 'ai' ? <Bot className="size-3" /> : null}
                   <span>{tab.label}</span>
                 </button>
               ))}
@@ -653,10 +666,6 @@ export function RoomChatPanel({
             </Button>
           </div>
         </div>
-
-        <p className="flex items-center gap-1 text-[10px] text-muted-foreground">
-          <Bot className="size-3" /> {t('workspace.chatAiHint')}
-        </p>
       </div>
     </div>
   );

@@ -9,6 +9,7 @@ import {
   InternalServerErrorException,
   Logger,
   NotFoundException,
+  type OnModuleInit,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -17,6 +18,7 @@ import {
   AI_CLIENT,
   type AiInterviewCodeAnalysisContext,
   type AiInterviewCodeContext,
+  type AiInterviewInteractionSignals,
   type AuthorizeJoinResponse,
   BROWSEABLE_ROOM_STATUSES,
   type BrowseRoomsQuery,
@@ -27,6 +29,7 @@ import {
   type GenerateHintRequest,
   type IAiClient,
   type ICollabClient,
+  type InterviewResponseResult,
   type JobId,
   type JoinRoomInput,
   type ListRoomsQuery,
@@ -128,7 +131,10 @@ interface CodeAnalysisJobMapping {
 interface InterviewJobMapping {
   roomId: string;
   userId: string;
+  sessionId: string | null;
+  trigger: RequestRoomAiInterviewInput['trigger'];
   codeContext: AiInterviewCodeContext;
+  assistantMessagePersisted?: boolean;
 }
 
 interface LatestCodeAnalysisContextCacheEntry {
@@ -138,7 +144,7 @@ interface LatestCodeAnalysisContextCacheEntry {
 }
 
 @Injectable()
-export class RoomsService {
+export class RoomsService implements OnModuleInit {
   private readonly logger = new Logger(RoomsService.name);
 
   constructor(
@@ -158,6 +164,12 @@ export class RoomsService {
     private readonly configService: ConfigService<EnvConfig>,
     private readonly sessionReportsService: SessionReportsService,
   ) {}
+
+  onModuleInit(): void {
+    this.aiClient.onInterviewResult(async (jobId, result) => {
+      await this.persistCompletedAiInterviewResult(jobId, result);
+    });
+  }
 
   async createRoom(hostId: string, input: CreateRoomInput): Promise<CreateRoomResult> {
     if (input.problemId) {
@@ -1335,22 +1347,42 @@ export class RoomsService {
     userId: string,
     body: RequestRoomAiInterviewInput,
   ): Promise<RequestRoomAiInterviewResult> {
-    const { problemId, activeLanguage } = await this.getAiRequestRoomContext(
+    const { problemId, activeLanguage, room } = await this.getAiRequestRoomContext(
       roomId,
       userId,
       undefined,
       'Interview',
     );
+    const proactiveActiveKey = `${RoomsService.AI_INTERVIEW_PROACTIVE_ACTIVE_PREFIX}${roomId}:${userId}`;
+    const proactiveLimitKey = `${RoomsService.AI_INTERVIEW_PROACTIVE_LIMIT_PREFIX}${roomId}:${userId}`;
+    const proactiveJobId = this.buildProactiveInterviewJobId(roomId, userId);
+    if (body.trigger === 'proactive') {
+      const activeJobId = await this.reserveProactiveInterviewJob(
+        proactiveActiveKey,
+        proactiveLimitKey,
+        proactiveJobId,
+      );
+      if (activeJobId) return { jobId: activeJobId };
+    }
+
     const problemDescription = await this.loadAiProblemDescription(problemId);
-    const [sessionId, latestExecutionSummary, latestCodeAnalysisContext] = await Promise.all([
-      this.loadCurrentRoomSessionId(roomId),
-      this.loadLatestHintSubmissionSummary(roomId, userId, body.currentCode, activeLanguage),
-      this.loadLatestCodeAnalysisContext(roomId, userId, body.currentCode, activeLanguage),
-    ]);
+    const [sessionId, latestExecutionSummary, latestCodeAnalysisContext, recentHints] =
+      await Promise.all([
+        this.loadCurrentRoomSessionId(roomId),
+        this.loadLatestHintSubmissionSummary(roomId, userId, body.currentCode, activeLanguage),
+        this.loadLatestCodeAnalysisContext(roomId, userId, body.currentCode, activeLanguage),
+        this.loadRecentInterviewHints(roomId, userId),
+      ]);
     const codeContext = this.buildVerifiedInterviewCodeContext(
       body.codeContext,
       body.currentCode,
       activeLanguage,
+    );
+    const userMessage = body.userMessage?.trim();
+    const interactionSignals = this.buildVerifiedInterviewSignals(
+      body.interactionSignals,
+      room,
+      recentHints.length,
     );
 
     let submitted: { jobId: JobId<'ai:interview'> };
@@ -1364,11 +1396,19 @@ export class RoomsService {
         codeContext,
         latestExecutionSummary,
         codeAnalysisContext: latestCodeAnalysisContext ?? undefined,
+        recentHints,
+        trigger: body.trigger,
+        interactionSignals,
         language: activeLanguage,
-        userMessage: body.userMessage,
+        userMessage,
         conversationHistory: body.conversationHistory,
+        idempotencyKey: body.trigger === 'proactive' ? proactiveJobId : undefined,
       });
     } catch (error) {
+      if (body.trigger === 'proactive') {
+        await this.cacheService.del(proactiveActiveKey);
+        await this.cacheService.incrBy(proactiveLimitKey, -1);
+      }
       this.logger.warn(`AI interview submission failed for room ${roomId}`, error);
       throw new ServiceUnavailableException({
         message: 'AI service unavailable',
@@ -1376,11 +1416,27 @@ export class RoomsService {
       });
     }
 
+    await this.persistAiInterviewMessage({
+      roomId,
+      sessionId,
+      userId,
+      role: 'user',
+      content: userMessage,
+    });
+    if (body.trigger === 'proactive' && submitted.jobId !== proactiveJobId) {
+      await this.cacheService.set(
+        proactiveActiveKey,
+        submitted.jobId,
+        RoomsService.AI_INTERVIEW_PROACTIVE_ACTIVE_TTL_SECONDS,
+      );
+    }
     await this.cacheService.set<InterviewJobMapping>(
       `${RoomsService.AI_INTERVIEW_JOB_CACHE_PREFIX}${submitted.jobId}`,
       {
         roomId,
         userId,
+        sessionId,
+        trigger: body.trigger,
         codeContext,
       },
       RoomsService.AI_INTERVIEW_JOB_CACHE_TTL_SECONDS,
@@ -1418,15 +1474,31 @@ export class RoomsService {
     if (!interviewResult) {
       const status = await this.aiClient.getInterviewJobStatus(typedJobId);
       if (status === 'failed') {
+        if (mapping.trigger === 'proactive') {
+          await this.cacheService.del(
+            `${RoomsService.AI_INTERVIEW_PROACTIVE_ACTIVE_PREFIX}${roomId}:${userId}`,
+          );
+        }
         return { status: 'failed', jobId };
       }
       return { status: 'pending', jobId };
     }
 
+    const normalized = await this.persistCompletedAiInterviewResult(jobId, interviewResult);
+
+    if (!normalized.shouldRespond) {
+      return {
+        status: 'ready',
+        jobId,
+        shouldRespond: false,
+      };
+    }
+
     return {
       status: 'ready',
       jobId,
-      message: interviewResult.message,
+      shouldRespond: true,
+      message: normalized.message,
       followUpQuestion: interviewResult.followUpQuestion,
       codeContext: mapping.codeContext,
       codeAnnotations: interviewResult.codeAnnotations,
@@ -1651,6 +1723,18 @@ export class RoomsService {
   private static readonly AI_HINT_JOB_CACHE_TTL_SECONDS = 60 * 60;
   private static readonly AI_INTERVIEW_JOB_CACHE_PREFIX = 'ai-interview-job:';
   private static readonly AI_INTERVIEW_JOB_CACHE_TTL_SECONDS = 60 * 60;
+  private static readonly AI_INTERVIEW_MESSAGE_PERSISTED_PREFIX = 'ai-interview-message-persisted:';
+  private static readonly AI_INTERVIEW_PROACTIVE_ACTIVE_PREFIX = 'ai-interview-proactive-active:';
+  private static readonly AI_INTERVIEW_PROACTIVE_ACTIVE_TTL_SECONDS = 60;
+  private static readonly AI_INTERVIEW_PROACTIVE_LIMIT_PREFIX = 'ai-interview-proactive-limit:';
+  private static readonly AI_INTERVIEW_PROACTIVE_LIMIT_COUNT = 6;
+  private static readonly AI_INTERVIEW_PROACTIVE_LIMIT_WINDOW_SECONDS = 5 * 60;
+  private static readonly AI_INTERVIEW_ALLOWED_STATUSES = new Set<RoomStatus>([
+    RoomStatus.WARMUP,
+    RoomStatus.CODING,
+    RoomStatus.WRAPUP,
+  ]);
+  private static readonly AI_INTERVIEW_HINT_CONTEXT_LIMIT = 8;
   private static readonly AI_CODE_ANALYSIS_MAX_CODE_LENGTH = 16_000;
   private static readonly AI_CODE_ANALYSIS_LIMIT_COUNT = 10;
   private static readonly AI_CODE_ANALYSIS_LIMIT_WINDOW_SECONDS = 5 * 60;
@@ -2535,7 +2619,11 @@ export class RoomsService {
     userId: string,
     language: SupportedLanguage | undefined,
     label: 'Hint' | 'Analysis' | 'Interview',
-  ): Promise<{ problemId: string; activeLanguage: SupportedLanguage }> {
+  ): Promise<{
+    problemId: string;
+    activeLanguage: SupportedLanguage;
+    room: typeof rooms.$inferSelect;
+  }> {
     const [room, participant] = await this.getRoomContext(roomId, userId);
 
     if (!participant) {
@@ -2552,9 +2640,9 @@ export class RoomsService {
       });
     }
 
-    if (label === 'Interview' && room.status !== RoomStatus.CODING) {
+    if (label === 'Interview' && !RoomsService.AI_INTERVIEW_ALLOWED_STATUSES.has(room.status)) {
       throw new BadRequestException({
-        message: 'AI interview is only available during the coding phase',
+        message: 'AI interview is unavailable for this room phase',
         code: ERROR_CODES.ROOM_INVALID_STATE,
       });
     }
@@ -2587,6 +2675,7 @@ export class RoomsService {
     return {
       problemId: room.problemId,
       activeLanguage: room.language ?? language ?? 'python',
+      room,
     };
   }
 
@@ -2798,6 +2887,34 @@ export class RoomsService {
     }
   }
 
+  private async loadRecentInterviewHints(
+    roomId: string,
+    userId: string,
+  ): Promise<Array<{ hint: string; createdAt: string }>> {
+    const rows = await this.db
+      .select({
+        hint: aiHints.hint,
+        createdAt: aiHints.createdAt,
+      })
+      .from(aiHints)
+      .where(
+        and(
+          eq(aiHints.roomId, roomId),
+          eq(aiHints.userId, userId),
+          sql`length(${aiHints.hint}) > 0`,
+        ),
+      )
+      .orderBy(desc(aiHints.createdAt))
+      .limit(RoomsService.AI_INTERVIEW_HINT_CONTEXT_LIMIT);
+
+    return rows
+      .map((row) => ({
+        hint: row.hint.trim(),
+        createdAt: row.createdAt.toISOString(),
+      }))
+      .filter((row) => row.hint.length > 0);
+  }
+
   private async loadLatestHintSubmissionSummary(
     roomId: string,
     userId: string,
@@ -2863,6 +2980,181 @@ export class RoomsService {
     }
 
     return cached.context;
+  }
+
+  private buildVerifiedInterviewSignals(
+    input: AiInterviewInteractionSignals | undefined,
+    room: typeof rooms.$inferSelect,
+    hintCount: number,
+  ): AiInterviewInteractionSignals | undefined {
+    if (!input) {
+      return undefined;
+    }
+
+    const activeElapsedMs =
+      room.timerPaused || !room.phaseStartedAt ? 0 : Date.now() - room.phaseStartedAt.getTime();
+
+    return {
+      reason: input.reason,
+      roomStatus: room.status,
+      elapsedSeconds: Math.max(0, Math.floor((room.elapsedMs + activeElapsedMs) / 1000)),
+      ...(input.secondsSinceLastUserMessage === undefined
+        ? {}
+        : { secondsSinceLastUserMessage: input.secondsSinceLastUserMessage }),
+      ...(input.secondsSinceLastAssistantMessage === undefined
+        ? {}
+        : { secondsSinceLastAssistantMessage: input.secondsSinceLastAssistantMessage }),
+      ...(input.secondsSinceLastEditorActivity === undefined
+        ? {}
+        : { secondsSinceLastEditorActivity: input.secondsSinceLastEditorActivity }),
+      ...(input.recentEditorChanges === undefined
+        ? {}
+        : { recentEditorChanges: input.recentEditorChanges }),
+      hintCount,
+    };
+  }
+
+  private async reserveProactiveInterviewJob(
+    proactiveActiveKey: string,
+    proactiveLimitKey: string,
+    proactiveJobId: JobId<'ai:interview'>,
+  ): Promise<JobId<'ai:interview'> | null> {
+    const activeJobId = await this.cacheService.get<JobId<'ai:interview'>>(proactiveActiveKey);
+    if (activeJobId) {
+      return activeJobId;
+    }
+
+    const reserved = await this.cacheService.setIfNotExists(
+      proactiveActiveKey,
+      proactiveJobId,
+      RoomsService.AI_INTERVIEW_PROACTIVE_ACTIVE_TTL_SECONDS,
+    );
+    if (!reserved) {
+      return this.cacheService.get<JobId<'ai:interview'>>(proactiveActiveKey);
+    }
+
+    const usage = await this.cacheService.incrBy(
+      proactiveLimitKey,
+      1,
+      RoomsService.AI_INTERVIEW_PROACTIVE_LIMIT_WINDOW_SECONDS,
+    );
+    if (usage <= 0) {
+      await this.cacheService.del(proactiveLimitKey);
+    }
+    if (usage <= RoomsService.AI_INTERVIEW_PROACTIVE_LIMIT_COUNT) {
+      return null;
+    }
+
+    await this.cacheService.del(proactiveActiveKey);
+    throw new HttpException(
+      {
+        message: 'AI interview proactive rate limit exceeded (6 per 5 minutes)',
+        code: ERROR_CODES.AI_MESSAGE_RATE_LIMIT,
+      },
+      429,
+    );
+  }
+
+  private async persistCompletedAiInterviewResult(
+    jobId: string,
+    interviewResult: InterviewResponseResult,
+  ): Promise<{ shouldRespond: false } | { shouldRespond: true; message: string }> {
+    const mappingKey = `${RoomsService.AI_INTERVIEW_JOB_CACHE_PREFIX}${jobId}`;
+    const mapping = await this.cacheService.get<InterviewJobMapping>(mappingKey);
+    const shouldRespond =
+      interviewResult.shouldRespond ??
+      Boolean(interviewResult.message?.trim() || interviewResult.followUpQuestion?.trim());
+
+    if (!mapping) {
+      return shouldRespond
+        ? { shouldRespond: true, message: this.resolveInterviewResponseMessage(interviewResult) }
+        : { shouldRespond: false };
+    }
+
+    if (mapping.trigger === 'proactive') {
+      await this.cacheService.del(
+        `${RoomsService.AI_INTERVIEW_PROACTIVE_ACTIVE_PREFIX}${mapping.roomId}:${mapping.userId}`,
+      );
+    }
+
+    if (!shouldRespond) {
+      return { shouldRespond: false };
+    }
+
+    const message = this.resolveInterviewResponseMessage(interviewResult);
+    const persistedKey = `${RoomsService.AI_INTERVIEW_MESSAGE_PERSISTED_PREFIX}${jobId}:assistant`;
+    const shouldPersist = await this.cacheService.setIfNotExists(
+      persistedKey,
+      true,
+      RoomsService.AI_INTERVIEW_JOB_CACHE_TTL_SECONDS,
+    );
+
+    if (shouldPersist) {
+      await this.persistAiInterviewMessage({
+        roomId: mapping.roomId,
+        sessionId: mapping.sessionId,
+        userId: mapping.userId,
+        role: 'assistant',
+        content: message,
+        audioKey: interviewResult.audio?.audioKey,
+      });
+      await this.cacheService.set<InterviewJobMapping>(
+        mappingKey,
+        {
+          ...mapping,
+          assistantMessagePersisted: true,
+        },
+        RoomsService.AI_INTERVIEW_JOB_CACHE_TTL_SECONDS,
+      );
+    }
+
+    return { shouldRespond: true, message };
+  }
+
+  private resolveInterviewResponseMessage(interviewResult: InterviewResponseResult): string {
+    return (
+      interviewResult.message?.trim() ||
+      interviewResult.followUpQuestion?.trim() ||
+      'Continue explaining your reasoning.'
+    );
+  }
+
+  private buildProactiveInterviewJobId(roomId: string, userId: string): JobId<'ai:interview'> {
+    return `ai-interview-proactive-${roomId}-${userId}`;
+  }
+
+  private async persistAiInterviewMessage({
+    roomId,
+    sessionId,
+    userId,
+    role,
+    content,
+    audioKey,
+  }: {
+    roomId: string;
+    sessionId: string | null;
+    userId: string;
+    role: 'user' | 'assistant';
+    content: string | undefined;
+    audioKey?: string;
+  }): Promise<void> {
+    const trimmed = content?.trim();
+    if (!sessionId || !trimmed) {
+      return;
+    }
+
+    try {
+      await this.db.insert(aiMessages).values({
+        roomId,
+        sessionId,
+        userId,
+        role,
+        content: trimmed,
+        audioKey,
+      });
+    } catch (error) {
+      this.logger.warn(`Unable to persist AI interview ${role} message for room ${roomId}`, error);
+    }
   }
 
   private buildVerifiedInterviewCodeContext(

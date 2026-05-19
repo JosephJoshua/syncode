@@ -7,8 +7,11 @@ import { useTranslation } from 'react-i18next';
 import type { Participant } from './room-participant-card.js';
 
 export interface AiInterviewMessage {
+  id?: string;
+  createdAt?: number;
   role: 'user' | 'assistant';
   content: string;
+  isStreaming?: boolean;
   followUpQuestion?: string;
   codeContext?: AiInterviewCodeContext;
   codeAnnotations?: Array<{ line: number; comment: string }>;
@@ -54,7 +57,7 @@ export function RoomAiInterviewPanel({
   messages: AiInterviewMessage[];
   isLoading: boolean;
   error: string | null;
-  onSendMessage: (message: string) => void;
+  onSendMessage: (message: string) => boolean | undefined;
   canSendMessage: boolean;
   currentUser: Participant | null;
 }) {
@@ -101,7 +104,10 @@ export function RoomAiInterviewPanel({
   function handleSend() {
     const trimmed = draft.trim();
     if (!trimmed || isLoading) return;
-    onSendMessage(trimmed);
+    const accepted = onSendMessage(trimmed);
+    if (accepted === false) {
+      return;
+    }
     setDraft('');
   }
 
@@ -179,7 +185,7 @@ export function RoomAiInterviewPanel({
         ) : (
           messages.map((msg, index) => (
             <AiInterviewMessageBubble
-              key={`${msg.role}-${index}-${msg.content.slice(0, 20)}`}
+              key={msg.id ?? `${msg.role}-${index}-${msg.content.slice(0, 20)}`}
               message={msg}
               t={t}
               currentUser={currentUser}

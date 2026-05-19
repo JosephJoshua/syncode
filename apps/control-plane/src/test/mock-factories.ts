@@ -85,12 +85,17 @@ export function createMockAiClient() {
     getWeaknessAnalysisResult: vi.fn().mockResolvedValue(null),
     submitReviewRequest: vi.fn().mockResolvedValue({ jobId: 'ai-review-job' }),
     getReviewResult: vi.fn().mockResolvedValue(null),
-    submitInterviewResponse: vi.fn().mockResolvedValue({ jobId: 'ai-interview-job' }),
+    submitInterviewResponse: vi
+      .fn()
+      .mockImplementation((request) =>
+        Promise.resolve({ jobId: request.idempotencyKey ?? 'ai-interview-job' }),
+      ),
     getInterviewResult: vi.fn().mockResolvedValue(null),
     submitSessionReportRequest: vi.fn().mockResolvedValue({ jobId: 'session-report-job' }),
     getSessionReportResult: vi.fn().mockResolvedValue(null),
     onSessionReportResult: vi.fn(),
     onWeaknessAnalysisResult: vi.fn(),
+    onInterviewResult: vi.fn(),
     getHintJobStatus: vi.fn().mockResolvedValue('completed'),
     getCodeAnalysisJobStatus: vi.fn().mockResolvedValue('queued'),
     getWeaknessAnalysisJobStatus: vi.fn().mockResolvedValue('queued'),

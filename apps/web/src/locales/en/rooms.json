@@ -417,6 +417,7 @@
     "aiInterviewEmpty": "The AI interviewer will ask you questions about the problem. Type your response below.",
     "aiInterviewFailed": "Failed to get a response from the AI interviewer.",
     "aiInterviewUnavailable": "AI interviewer service is temporarily unavailable.",
+    "aiInterviewBusy": "The AI interviewer is still preparing a response.",
     "aiInterviewFollowUp": "Follow-up",
     "aiInterviewAnnotations": "Code annotations",
     "aiInterviewCodeContext": "Code context",

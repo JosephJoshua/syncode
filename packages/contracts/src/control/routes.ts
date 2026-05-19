@@ -209,7 +209,7 @@ export const CONTROL_API = {
       'GET',
     ),
     AI_INTERVIEW: defineRoute<
-      z.infer<typeof requestRoomAiInterviewSchema>,
+      z.input<typeof requestRoomAiInterviewSchema>,
       z.infer<typeof requestRoomAiInterviewResponseSchema>
     >()('rooms/:id/ai/interview', 'POST'),
     AI_INTERVIEW_RESULT: defineRoute<
