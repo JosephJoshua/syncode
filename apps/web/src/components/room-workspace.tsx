@@ -82,7 +82,10 @@ import { RoomHeaderBar } from './room-header-bar.js';
 import { type Participant, RoomParticipantCard } from './room-participant-card.js';
 import { type ProblemData, type RoomHintItem, RoomProblemPanel } from './room-problem-panel.js';
 import { RoomStatusBar } from './room-status-bar.js';
-import { shouldEnableWhiteboardKeyboardShortcuts } from './room-whiteboard-keyboard.js';
+import {
+  nextWhiteboardKeyboardFocusState,
+  shouldEnableWhiteboardKeyboardShortcuts,
+} from './room-whiteboard-keyboard.js';
 import { RoomWhiteboardPanel } from './room-whiteboard-panel.js';
 import {
   type CaseRunState,
@@ -448,10 +451,26 @@ export function RoomWorkspace({
     isCodeEditorFocused,
     whiteboardHasKeyboardFocus,
   });
+  const updateWhiteboardKeyboardFocus = useCallback(
+    (event: Parameters<typeof nextWhiteboardKeyboardFocusState>[1]) => {
+      const next = nextWhiteboardKeyboardFocusState(
+        { isCodeEditorFocused, whiteboardHasKeyboardFocus },
+        event,
+      );
+      setIsCodeEditorFocused(next.isCodeEditorFocused);
+      setWhiteboardHasKeyboardFocus(next.whiteboardHasKeyboardFocus);
+    },
+    [isCodeEditorFocused, whiteboardHasKeyboardFocus],
+  );
+  const markCodeEditorKeyboardFocus = useCallback(
+    (focused: boolean) => {
+      updateWhiteboardKeyboardFocus({ source: 'code-editor', focused });
+    },
+    [updateWhiteboardKeyboardFocus],
+  );
   const markWhiteboardKeyboardFocus = useCallback(() => {
-    setWhiteboardHasKeyboardFocus(true);
-    setIsCodeEditorFocused(false);
-  }, []);
+    updateWhiteboardKeyboardFocus({ source: 'whiteboard' });
+  }, [updateWhiteboardKeyboardFocus]);
 
   useEffect(() => {
     const sourceCases = problem?.testCases ?? (isMockPreview ? MOCK_WORKSPACE_TEST_CASES : null);
@@ -1951,6 +1970,8 @@ export function RoomWorkspace({
                       'absolute inset-0',
                       activeCenterTab === 'code' ? 'visible' : 'invisible',
                     )}
+                    onFocusCapture={() => markCodeEditorKeyboardFocus(true)}
+                    onPointerDownCapture={() => markCodeEditorKeyboardFocus(true)}
                   >
                     {doc && awareness && collabStatus === 'connected' ? (
                       <CollaborativeEditor
@@ -1973,7 +1994,7 @@ export function RoomWorkspace({
                         onRunCode={() => void handleRunCodeRef.current()}
                         onSubmitCode={() => void requestSubmitCodeRef.current()}
                         onCodeContextChange={setEditorCodeContext}
-                        onFocusChange={setIsCodeEditorFocused}
+                        onFocusChange={markCodeEditorKeyboardFocus}
                       />
                     ) : (
                       EDITOR_LOADING
