@@ -464,12 +464,118 @@ export function RoomAiInterviewPanel({
       finalizeVoiceCaptureFromChunks(expectedRequestId, recorder.mimeType);
     }, VOICE_STOP_FALLBACK_MS);
     try {
-      recognition.start();
-      setIsListening(true);
+      recorder.stop();
     } catch {
-      setVoiceError(t('workspace.aiInterviewVoiceError'));
-      setIsListening(false);
+      finalizeVoiceCaptureFromChunks(expectedRequestId, recorder.mimeType);
     }
+  }
+
+  async function startVoiceCapture() {
+    if (!isVoiceInputSupported || !onTranscribeVoiceInput) {
+      setVoiceError(t('workspace.aiInterviewVoiceUnsupported'));
+      return;
+    }
+
+    const requestId = voiceSessionRef.current + 1;
+    voiceSessionRef.current = requestId;
+    voiceFinalizedSessionRef.current = null;
+    voiceAutoStopPendingRef.current = false;
+    mediaChunksRef.current = [];
+    cancelVoiceStopFallback();
+    setVoiceError(null);
+    setVoiceCaptureState('requesting');
+    setVoiceLevel(0);
+
+    const capture = await requestMicrophoneStream();
+    if (voiceSessionRef.current !== requestId) {
+      stopMediaStream(capture.stream);
+      return;
+    }
+    if (capture.result !== 'granted' || !capture.stream) {
+      setVoiceCaptureState('idle');
+      setVoiceError(resolveVoicePermissionError(t, capture.result));
+      stopMediaStream(capture.stream);
+      return;
+    }
+
+    try {
+      const stream = capture.stream;
+      mediaStreamRef.current = stream;
+      const mimeType = pickRecordingMimeType();
+      const recorder = mimeType
+        ? new MediaRecorder(stream, { mimeType })
+        : new MediaRecorder(stream);
+      mediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          mediaChunksRef.current.push(event.data);
+          logVoice('data-available', {
+            requestId,
+            chunkSize: event.data.size,
+            chunkCount: mediaChunksRef.current.length,
+          });
+        }
+      };
+
+      recorder.onerror = () => {
+        if (voiceSessionRef.current !== requestId) {
+          return;
+        }
+        stopVoiceStreamsAndMeter();
+        mediaRecorderRef.current = null;
+        mediaChunksRef.current = [];
+        setVoiceCaptureState('idle');
+        setVoiceError(t('workspace.aiInterviewVoiceError'));
+      };
+
+      recorder.onstop = () => {
+        cancelVoiceStopFallback();
+        logVoice('recorder-stop', {
+          requestId,
+          chunkCount: mediaChunksRef.current.length,
+          currentSession: voiceSessionRef.current,
+          unmounted: isUnmountedRef.current,
+        });
+        if (voiceSessionRef.current !== requestId) {
+          stopVoiceStreamsAndMeter();
+          mediaRecorderRef.current = null;
+          mediaChunksRef.current = [];
+          return;
+        }
+        finalizeVoiceCaptureFromChunks(requestId, recorder.mimeType || mimeType || 'audio/webm');
+      };
+
+      voiceStartedAtRef.current = Date.now();
+      voiceActiveAtRef.current = Date.now();
+      recorder.start(VOICE_RECORDER_TIMESLICE_MS);
+      startVoiceMeter(stream, requestId);
+      setVoiceCaptureState('listening');
+      logVoice('capture-started', {
+        requestId,
+        mimeType: recorder.mimeType || mimeType || 'audio/webm',
+      });
+    } catch {
+      stopVoiceStreamsAndMeter();
+      mediaRecorderRef.current = null;
+      mediaChunksRef.current = [];
+      cancelVoiceStopFallback();
+      setVoiceCaptureState('idle');
+      setVoiceError(t('workspace.aiInterviewVoiceError'));
+    }
+  }
+
+  async function toggleVoiceInput() {
+    if (voiceCaptureState === 'listening') {
+      stopVoiceCapture(voiceSessionRef.current);
+      return;
+    }
+
+    if (voiceCaptureState !== 'idle') {
+      return;
+    }
+
+    await startVoiceCapture();
   }
 
   function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
@@ -509,16 +615,31 @@ export function RoomAiInterviewPanel({
       </div>
 
       <div className="space-y-2 border-t border-border p-3">
-        <textarea
-          value={draft}
-          onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setDraft(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder={t('workspace.aiInterviewPlaceholder')}
-          disabled={!canSendMessage || isLoading}
-          maxLength={2000}
-          rows={3}
-          className="w-full resize-none rounded-md border border-border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50"
-        />
+        {isVoiceCaptureActive ? (
+          <div className="space-y-2 rounded-md border border-primary/30 bg-primary/5 px-3 py-3">
+            <VoiceActivityWave level={voiceLevel} active={isListening} />
+            {voiceStatusText ? (
+              <p
+                className={`text-xs ${
+                  isTranscribingVoice ? 'text-muted-foreground' : 'text-primary'
+                }`}
+              >
+                {voiceStatusText}
+              </p>
+            ) : null}
+          </div>
+        ) : (
+          <textarea
+            value={draft}
+            onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setDraft(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder={t('workspace.aiInterviewPlaceholder')}
+            disabled={!canSendMessage || isLoading}
+            maxLength={2000}
+            rows={3}
+            className="w-full resize-none rounded-md border border-border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50"
+          />
+        )}
         {voiceError ? <p className="text-xs text-destructive">{voiceError}</p> : null}
         <div className="flex gap-2">
           <Button
@@ -526,22 +647,30 @@ export function RoomAiInterviewPanel({
             size="sm"
             variant="outline"
             className="shrink-0 gap-1.5"
-            disabled={!canSendMessage || isLoading || !speechRecognitionConstructor}
-            onClick={toggleVoiceInput}
+            disabled={!canSendMessage || isLoading || !isVoiceInputSupported || isTranscribingVoice}
+            onClick={() => {
+              void toggleVoiceInput();
+            }}
             aria-pressed={isListening}
-            title={
-              speechRecognitionConstructor
-                ? t('workspace.aiInterviewVoiceInput')
-                : t('workspace.aiInterviewVoiceUnsupported')
-            }
+            title={t(
+              isVoiceInputSupported
+                ? 'workspace.aiInterviewVoiceInput'
+                : 'workspace.aiInterviewVoiceUnsupported',
+            )}
           >
-            {isListening ? <Mic className="size-3.5" /> : <MicOff className="size-3.5" />}
+            {isTranscribingVoice ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : isListening || isRequestingVoice ? (
+              <Mic className="size-3.5 animate-pulse" />
+            ) : (
+              <MicOff className="size-3.5" />
+            )}
             <span className="sr-only">{t('workspace.aiInterviewVoiceInput')}</span>
           </Button>
           <Button
             size="sm"
             className="min-w-0 flex-1 gap-1.5"
-            disabled={!draft.trim() || !canSendMessage || isLoading}
+            disabled={!draft.trim() || !canSendMessage || isLoading || isVoiceCaptureActive}
             onClick={handleSend}
           >
             <Send className="size-3.5 shrink-0" />
@@ -549,6 +678,35 @@ export function RoomAiInterviewPanel({
           </Button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function VoiceActivityWave({
+  level,
+  active,
+}: Readonly<{
+  level: number;
+  active: boolean;
+}>) {
+  const center = VOICE_WAVE_OFFSETS.length / 2;
+
+  return (
+    <div className="flex h-12 items-end justify-center gap-1" aria-hidden="true">
+      {VOICE_WAVE_OFFSETS.map((offset) => {
+        const distance = Math.abs(offset) / center;
+        const shape = 1 - distance;
+        const dynamic = active ? level * (10 + shape * 28) : 4;
+        const height = Math.max(4, Math.round(4 + shape * 14 + dynamic));
+
+        return (
+          <span
+            key={`wave-${offset}`}
+            className="w-1.5 rounded-full bg-primary/70 transition-[height] duration-100 ease-out"
+            style={{ height }}
+          />
+        );
+      })}
     </div>
   );
 }
@@ -670,19 +828,296 @@ function AiInterviewCodeContextCard({
   );
 }
 
-function resolveSpeechRecognition(): SpeechRecognitionConstructor | null {
-  const speechGlobal = globalThis as typeof globalThis & {
-    SpeechRecognition?: SpeechRecognitionConstructor;
-    webkitSpeechRecognition?: SpeechRecognitionConstructor;
-  };
-
-  return speechGlobal.SpeechRecognition ?? speechGlobal.webkitSpeechRecognition ?? null;
-}
-
-function mergeTranscript(previous: string, transcript: string): string {
-  if (!previous.trim()) {
-    return transcript;
+function resolveRecognitionLanguage(language: string | undefined): string {
+  if (!language) {
+    return 'en-US';
   }
 
-  return `${previous.trimEnd()} ${transcript}`.trim();
+  const normalized = language.toLowerCase();
+  if (normalized.startsWith('zh')) {
+    return normalized.includes('tw') || normalized.includes('hk') ? 'zh-TW' : 'zh-CN';
+  }
+  if (normalized.startsWith('en')) {
+    return 'en-US';
+  }
+  if (language.includes('-')) {
+    return language;
+  }
+  return `${language}-US`;
+}
+
+async function requestMicrophoneStream(): Promise<{
+  result: VoicePermissionResult;
+  stream: MediaStream | null;
+}> {
+  if (typeof navigator === 'undefined') {
+    return { result: 'unavailable', stream: null };
+  }
+
+  if (!navigator.mediaDevices?.getUserMedia) {
+    return { result: 'unavailable', stream: null };
+  }
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    return { result: 'granted', stream };
+  } catch (error) {
+    if (error instanceof DOMException) {
+      if (error.name === 'NotAllowedError' || error.name === 'SecurityError') {
+        return { result: 'denied', stream: null };
+      }
+      if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
+        return { result: 'no_device', stream: null };
+      }
+    }
+    return { result: 'unavailable', stream: null };
+  }
+}
+
+function supportsMediaRecorderAndCapture(): boolean {
+  return (
+    typeof MediaRecorder !== 'undefined' &&
+    typeof navigator !== 'undefined' &&
+    Boolean(navigator.mediaDevices?.getUserMedia)
+  );
+}
+
+function stopMediaStream(stream: MediaStream | null): void {
+  if (!stream) {
+    return;
+  }
+  for (const track of stream.getTracks()) {
+    track.stop();
+  }
+}
+
+function pickRecordingMimeType(): string | undefined {
+  if (typeof MediaRecorder === 'undefined') {
+    return undefined;
+  }
+
+  const preferredTypes = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm', 'audio/ogg'];
+  for (const type of preferredTypes) {
+    if (MediaRecorder.isTypeSupported(type)) {
+      return type;
+    }
+  }
+
+  return undefined;
+}
+
+async function blobToBase64(blob: Blob): Promise<string> {
+  if (typeof FileReader !== 'undefined') {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error('Unable to read recorded audio.'));
+      reader.onload = () => {
+        if (typeof reader.result !== 'string') {
+          reject(new Error('Unable to encode recorded audio.'));
+          return;
+        }
+        const commaIndex = reader.result.indexOf(',');
+        resolve(commaIndex >= 0 ? reader.result.slice(commaIndex + 1) : reader.result);
+      };
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+
+  if (typeof Buffer !== 'undefined') {
+    return Buffer.from(bytes).toString('base64');
+  }
+
+  if (typeof btoa === 'undefined') {
+    throw new Error('Base64 encoding is unavailable');
+  }
+
+  let binary = '';
+  const chunkSize = 32_768;
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    const chunk = bytes.subarray(offset, offset + chunkSize);
+    binary += String.fromCharCode(...chunk);
+  }
+  return btoa(binary);
+}
+
+async function prepareVoiceAudioForTranscription(
+  blob: Blob,
+): Promise<{ blob: Blob; mimeType: string }> {
+  const normalizedMimeType = normalizeTranscriptionMimeType(blob.type);
+  if (normalizedMimeType === 'audio/wav') {
+    return { blob, mimeType: normalizedMimeType };
+  }
+
+  const wavBlob = await convertBlobToWav(blob);
+  if (wavBlob) {
+    return {
+      blob: wavBlob,
+      mimeType: 'audio/wav',
+    };
+  }
+
+  return {
+    blob,
+    mimeType: normalizedMimeType,
+  };
+}
+
+async function convertBlobToWav(blob: Blob): Promise<Blob | null> {
+  const AudioContextCtor =
+    globalThis.AudioContext ??
+    (globalThis as typeof globalThis & { webkitAudioContext?: typeof AudioContext })
+      .webkitAudioContext;
+  if (!AudioContextCtor) {
+    return null;
+  }
+
+  const arrayBuffer = await blob.arrayBuffer();
+  const audioContext = new AudioContextCtor();
+  try {
+    const decoded = await audioContext.decodeAudioData(arrayBuffer.slice(0));
+    const mono = mixDownToMono(decoded);
+    const resampled = resampleMonoData(mono, decoded.sampleRate, VOICE_TARGET_SAMPLE_RATE);
+    const wav = encodeWavPcm16(resampled, VOICE_TARGET_SAMPLE_RATE);
+    return new Blob([wav], { type: 'audio/wav' });
+  } catch {
+    return null;
+  } finally {
+    void audioContext.close().catch(() => undefined);
+  }
+}
+
+function mixDownToMono(buffer: AudioBuffer): Float32Array {
+  if (buffer.numberOfChannels === 1) {
+    return buffer.getChannelData(0).slice();
+  }
+
+  const mono = new Float32Array(buffer.length);
+  for (let channelIndex = 0; channelIndex < buffer.numberOfChannels; channelIndex += 1) {
+    const channelData = buffer.getChannelData(channelIndex);
+    for (let sampleIndex = 0; sampleIndex < channelData.length; sampleIndex += 1) {
+      mono[sampleIndex] =
+        (mono[sampleIndex] ?? 0) + (channelData[sampleIndex] ?? 0) / buffer.numberOfChannels;
+    }
+  }
+  return mono;
+}
+
+function resampleMonoData(
+  input: Float32Array,
+  sourceRate: number,
+  targetRate: number,
+): Float32Array {
+  if (sourceRate === targetRate) {
+    return input;
+  }
+  const ratio = sourceRate / targetRate;
+  const outputLength = Math.max(1, Math.floor(input.length / ratio));
+  const output = new Float32Array(outputLength);
+  let inputIndex = 0;
+
+  for (let outputIndex = 0; outputIndex < outputLength; outputIndex += 1) {
+    const nextInputIndex = Math.min(input.length, Math.round((outputIndex + 1) * ratio));
+    let sum = 0;
+    let count = 0;
+
+    for (let index = inputIndex; index < nextInputIndex; index += 1) {
+      sum += input[index] ?? 0;
+      count += 1;
+    }
+
+    output[outputIndex] = count > 0 ? sum / count : (input[inputIndex] ?? 0);
+    inputIndex = nextInputIndex;
+  }
+
+  return output;
+}
+
+function encodeWavPcm16(samples: Float32Array, sampleRate: number): ArrayBuffer {
+  const bytesPerSample = 2;
+  const blockAlign = bytesPerSample;
+  const byteRate = sampleRate * blockAlign;
+  const dataSize = samples.length * bytesPerSample;
+  const buffer = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(buffer);
+
+  writeAscii(view, 0, 'RIFF');
+  view.setUint32(4, 36 + dataSize, true);
+  writeAscii(view, 8, 'WAVE');
+  writeAscii(view, 12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, byteRate, true);
+  view.setUint16(32, blockAlign, true);
+  view.setUint16(34, 16, true);
+  writeAscii(view, 36, 'data');
+  view.setUint32(40, dataSize, true);
+
+  let offset = 44;
+  for (const sample of samples) {
+    const clamped = Math.max(-1, Math.min(1, sample));
+    const pcm = clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff;
+    view.setInt16(offset, pcm, true);
+    offset += bytesPerSample;
+  }
+
+  return buffer;
+}
+
+function writeAscii(view: DataView, offset: number, text: string): void {
+  for (let index = 0; index < text.length; index += 1) {
+    view.setUint8(offset + index, text.charCodeAt(index));
+  }
+}
+
+function normalizeTranscriptionMimeType(mimeType: string | undefined): string {
+  const normalized = mimeType?.split(';', 1)[0]?.trim().toLowerCase();
+  if (!normalized) {
+    return 'audio/webm';
+  }
+
+  if (normalized === 'audio/mp3') {
+    return 'audio/mpeg';
+  }
+
+  if (normalized === 'audio/x-wav') {
+    return 'audio/wav';
+  }
+
+  return normalized;
+}
+
+function resolveVoicePermissionError(
+  t: (key: string, options?: Record<string, unknown>) => string,
+  result: VoicePermissionResult,
+): string {
+  if (result === 'denied') {
+    return t('workspace.aiInterviewVoicePermissionDenied');
+  }
+  if (result === 'no_device') {
+    return t('workspace.aiInterviewVoiceNoDevice');
+  }
+  return t('workspace.aiInterviewVoiceError');
+}
+
+function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  errorFactory: () => Error,
+): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<T>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(errorFactory());
+    }, timeoutMs);
+  });
+
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    if (timeoutId != null) {
+      clearTimeout(timeoutId);
+    }
+  });
 }
