@@ -134,6 +134,27 @@ describe('static analysis parser normalization', () => {
     });
   });
 
+  it('GIVEN Cppcheck attributes contain XML entities WHEN parsed THEN decodes values', () => {
+    const diagnostics = parseCppcheckXml(`
+      <results>
+        <errors>
+          <error id="unreadVariable" severity="warning" msg="Value &quot;answer&quot; is unused">
+            <location file="src/main.cpp" line="11" column="3" />
+          </error>
+        </errors>
+      </results>
+    `);
+
+    expect(diagnostics[0]).toMatchObject({
+      rule: 'unreadVariable',
+      severity: 'warning',
+      message: 'Value "answer" is unused',
+      file: 'src/main.cpp',
+      line: 11,
+      column: 3,
+    });
+  });
+
   it('GIVEN golangci-lint JSON WHEN parsed THEN returns Go diagnostics', () => {
     const diagnostics = parseGolangciLintJson(
       JSON.stringify({

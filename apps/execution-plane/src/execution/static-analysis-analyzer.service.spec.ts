@@ -9,6 +9,116 @@ function makeRunner(result: Awaited<ReturnType<StaticAnalysisCommandRunner['run'
 }
 
 describe('StaticAnalysisAnalyzer', () => {
+  const request = {
+    userId: '550e8400-e29b-41d4-a716-446655440000',
+    roomId: '660e8400-e29b-41d4-a716-446655440000',
+    runId: '770e8400-e29b-41d4-a716-446655440000',
+    language: 'python' as const,
+    source: 'run' as const,
+    code: 'print("hello")',
+  };
+
+  it('GIVEN analyzer tools return findings WHEN analyzed THEN summarizes diagnostics complexity and duplication', async () => {
+    const runner = {
+      run: vi.fn().mockImplementation(async (command: string) => {
+        if (command === 'ruff') {
+          return {
+            exitCode: 1,
+            stdout: JSON.stringify([
+              {
+                code: 'F841',
+                message: 'Local variable `x` is assigned to but never used',
+                filename: 'Main.py',
+                location: { row: 3, column: 5 },
+              },
+            ]),
+            stderr: '',
+            timedOut: false,
+          };
+        }
+        if (command === 'lizard') {
+          return {
+            exitCode: 0,
+            stdout:
+              '<cppncss><function name="solve" line="12" endline="40" complexity="14" file="Main.py" /></cppncss>',
+            stderr: '',
+            timedOut: false,
+          };
+        }
+        return {
+          exitCode: 0,
+          stdout: JSON.stringify({
+            duplications: [
+              {
+                lines: 8,
+                tokens: 54,
+                files: [
+                  { name: 'Main.py', startLine: 3, endLine: 10 },
+                  { name: 'Main.py', startLine: 14, endLine: 21 },
+                ],
+              },
+            ],
+          }),
+          stderr: '',
+          timedOut: false,
+        };
+      }),
+    } satisfies StaticAnalysisCommandRunner;
+    const analyzer = new StaticAnalysisAnalyzer(runner);
+
+    const result = await analyzer.analyze(request);
+
+    expect(result.status).toBe('completed');
+    expect(result.summary).toMatchObject({
+      diagnosticCount: 1,
+      errorCount: 1,
+      warningCount: 0,
+      maxCyclomaticComplexity: 14,
+      highComplexityCount: 1,
+      duplicationCount: 1,
+      toolFailureCount: 0,
+    });
+    expect(result.toolResults).toHaveLength(3);
+  });
+
+  it('GIVEN code is empty WHEN analyzed THEN returns validation failure', async () => {
+    const runner = makeRunner({
+      exitCode: 0,
+      stdout: '',
+      stderr: '',
+      timedOut: false,
+    });
+    const analyzer = new StaticAnalysisAnalyzer(runner);
+
+    const result = await analyzer.analyze({ ...request, code: '   ' });
+
+    expect(result).toMatchObject({
+      status: 'failed',
+      error: 'Code cannot be empty',
+      toolResults: [],
+    });
+    expect(runner.run).not.toHaveBeenCalled();
+  });
+
+  it('GIVEN request has both run and submission targets WHEN analyzed THEN returns validation failure', async () => {
+    const runner = makeRunner({
+      exitCode: 0,
+      stdout: '',
+      stderr: '',
+      timedOut: false,
+    });
+    const analyzer = new StaticAnalysisAnalyzer(runner);
+
+    const result = await analyzer.analyze({
+      ...request,
+      submissionId: '880e8400-e29b-41d4-a716-446655440000',
+    });
+
+    expect(result.status).toBe('failed');
+    expect(result.error).toBe('Exactly one of runId or submissionId is required');
+    expect(runner.run).not.toHaveBeenCalled();
+  });
+
   it('GIVEN tools exit nonzero without findings WHEN analyzed THEN records tool failures', async () => {
     const runner = makeRunner({
       exitCode: 127,
@@ -18,14 +128,7 @@ describe('StaticAnalysisAnalyzer', () => {
     });
     const analyzer = new StaticAnalysisAnalyzer(runner);
 
-    const result = await analyzer.analyze({
-      userId: '550e8400-e29b-41d4-a716-446655440000',
-      roomId: '660e8400-e29b-41d4-a716-446655440000',
-      runId: '770e8400-e29b-41d4-a716-446655440000',
-      language: 'python',
-      source: 'run',
-      code: 'print("hello")',
-    });
+    const result = await analyzer.analyze(request);
 
     expect(result.status).toBe('failed');
     expect(result.summary.toolFailureCount).toBeGreaterThan(0);

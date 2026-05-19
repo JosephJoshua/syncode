@@ -98,7 +98,7 @@ export class QueueExecutionClient implements IExecutionClient, OnModuleInit {
       },
     );
 
-    return { jobId: jobId as JobId<'static-analysis'> };
+    return { jobId };
   }
 
   async getStaticAnalysisResult(

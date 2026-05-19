@@ -208,10 +208,72 @@ function normalizeCppcheckSeverity(value: unknown): StaticAnalysisSeverity {
 
 function parseXmlAttributes(raw: string): Record<string, string> {
   const attrs: Record<string, string> = {};
-  for (const match of raw.matchAll(/([A-Za-z_:][-A-Za-z0-9_:.]*)="([^"]*)"/g)) {
-    attrs[match[1] ?? ''] = decodeXml(match[2] ?? '');
+  let index = 0;
+
+  while (index < raw.length) {
+    if (!isXmlNameStart(raw[index])) {
+      index += 1;
+      continue;
+    }
+
+    const nameStart = index;
+    index += 1;
+    while (index < raw.length && isXmlNameChar(raw[index])) {
+      index += 1;
+    }
+
+    const name = raw.slice(nameStart, index);
+    while (index < raw.length && isXmlWhitespace(raw[index])) {
+      index += 1;
+    }
+
+    if (raw[index] !== '=') {
+      continue;
+    }
+    index += 1;
+
+    while (index < raw.length && isXmlWhitespace(raw[index])) {
+      index += 1;
+    }
+
+    if (raw[index] !== '"') {
+      continue;
+    }
+    index += 1;
+
+    const valueStart = index;
+    while (index < raw.length && raw[index] !== '"') {
+      index += 1;
+    }
+
+    if (index >= raw.length) {
+      break;
+    }
+
+    attrs[name] = decodeXml(raw.slice(valueStart, index));
+    index += 1;
   }
   return attrs;
+}
+
+function isXmlWhitespace(char: string | undefined): boolean {
+  return char === ' ' || char === '\n' || char === '\r' || char === '\t';
+}
+
+function isXmlNameStart(char: string | undefined): boolean {
+  return Boolean(
+    char &&
+      ((char >= 'A' && char <= 'Z') ||
+        (char >= 'a' && char <= 'z') ||
+        char === '_' ||
+        char === ':'),
+  );
+}
+
+function isXmlNameChar(char: string | undefined): boolean {
+  return Boolean(
+    char && (isXmlNameStart(char) || (char >= '0' && char <= '9') || char === '-' || char === '.'),
+  );
 }
 
 function decodeXml(value: string): string {
