@@ -17,6 +17,10 @@ import {
   handleEditorWillMount,
 } from './room-workspace-utils.js';
 
+const INLINE_COMMENT_PANEL_GAP_PX = 6;
+const COMMENT_COMPOSER_HEIGHT_ESTIMATE_PX = 160;
+const COMMENT_THREAD_HEIGHT_ESTIMATE_PX = 300;
+
 export interface EditorCodeContext {
   codeSnippet: string;
   startLine: number;
@@ -69,6 +73,7 @@ interface EditorLike {
   onDidFocusEditorWidget: (listener: () => void) => DisposableLike;
   onDidBlurEditorWidget: (listener: () => void) => DisposableLike;
   onMouseDown: (listener: (event: EditorMouseEventLike) => void) => DisposableLike;
+  onMouseMove: (listener: (event: EditorMouseEventLike) => void) => DisposableLike;
   getVisibleRanges: () => Array<{ startLineNumber: number; endLineNumber: number }>;
   getLayoutInfo: () => {
     glyphMarginLeft: number;
@@ -127,6 +132,8 @@ interface MonacoLike {
   editor: {
     MouseTargetType: {
       GUTTER_GLYPH_MARGIN: number;
+      GUTTER_LINE_NUMBERS?: number;
+      GUTTER_LINE_DECORATIONS?: number;
     };
   };
 }
@@ -152,6 +159,7 @@ export function CollaborativeEditor({
   const [editor, setEditor] = useState<EditorInstance | null>(null);
   const [editorRoot, setEditorRoot] = useState<HTMLElement | null>(null);
   const [selectedLine, setSelectedLine] = useState(1);
+  const [hoveredGutterLine, setHoveredGutterLine] = useState<number | null>(null);
   const [composerLine, setComposerLine] = useState<number | null>(null);
   const [composerDraft, setComposerDraft] = useState('');
   const [threadLine, setThreadLine] = useState<number | null>(null);
@@ -327,6 +335,15 @@ export function CollaborativeEditor({
     const blurDisposable = editorApi.onDidBlurEditorWidget(() => {
       onFocusChangeRef.current(false);
     });
+    const mouseMoveDisposable = editorApi.onMouseMove((event) => {
+      const lineNumber = event.target.position?.lineNumber;
+      if (lineNumber && isGutterMouseTarget(event.target.type, mouseTargetType)) {
+        setHoveredGutterLine(lineNumber);
+        return;
+      }
+
+      setHoveredGutterLine(null);
+    });
 
     const mouseDisposable = editorApi.onMouseDown((event) => {
       const lineNumber = event.target.position?.lineNumber;
@@ -353,6 +370,7 @@ export function CollaborativeEditor({
       contentDisposable.dispose();
       focusDisposable.dispose();
       blurDisposable.dispose();
+      mouseMoveDisposable.dispose();
       mouseDisposable.dispose();
     };
   }, [editor, commentLineSet, emitCodeContext]);
@@ -423,37 +441,46 @@ export function CollaborativeEditor({
     };
   }, [editor]);
 
-  const selectedLineOverlay = useMemo(() => {
+  const getVisibleLineOverlay = useCallback(
+    (lineNumber: number) => {
+      void overlayVersion;
+      if (!editor || lineNumber < 1) {
+        return null;
+      }
+
+      const editorApi = editor as unknown as EditorLike;
+      const visibleRanges = editorApi.getVisibleRanges();
+      const isVisible = visibleRanges.some(
+        (range) => lineNumber >= range.startLineNumber && lineNumber <= range.endLineNumber,
+      );
+      if (!isVisible) {
+        return null;
+      }
+
+      const linePosition = editorApi.getScrolledVisiblePosition({
+        lineNumber,
+        column: 1,
+      });
+      if (!linePosition) {
+        return null;
+      }
+
+      const layout = editorApi.getLayoutInfo();
+      return {
+        lineNumber,
+        top: linePosition.top,
+        height: linePosition.height,
+        glyphLeft: layout.glyphMarginLeft + Math.max((layout.glyphMarginWidth - 16) / 2, 0),
+      };
+    },
+    [editor, overlayVersion],
+  );
+
+  const addCommentLine = hoveredGutterLine ?? selectedLine;
+  const addCommentLineOverlay = useMemo(() => {
     void overlayVersion;
-    if (!editor || selectedLine < 1) {
-      return null;
-    }
-
-    const editorApi = editor as unknown as EditorLike;
-    const visibleRanges = editorApi.getVisibleRanges();
-    const isVisible = visibleRanges.some(
-      (range) => selectedLine >= range.startLineNumber && selectedLine <= range.endLineNumber,
-    );
-    if (!isVisible) {
-      return null;
-    }
-
-    const linePosition = editorApi.getScrolledVisiblePosition({
-      lineNumber: selectedLine,
-      column: 1,
-    });
-    if (!linePosition) {
-      return null;
-    }
-
-    const layout = editorApi.getLayoutInfo();
-    return {
-      top: linePosition.top,
-      height: linePosition.height,
-      glyphLeft: layout.glyphMarginLeft + Math.max((layout.glyphMarginWidth - 16) / 2, 0),
-      contentLeft: layout.contentLeft + 8,
-    };
-  }, [editor, selectedLine, overlayVersion]);
+    return getVisibleLineOverlay(addCommentLine);
+  }, [addCommentLine, getVisibleLineOverlay, overlayVersion]);
 
   const commentGlyphOverlays = useMemo(() => {
     void overlayVersion;
@@ -507,29 +534,7 @@ export function CollaborativeEditor({
     }
 
     const editorApi = editor as unknown as EditorLike;
-    const visibleRanges = editorApi.getVisibleRanges();
-    const isVisible = visibleRanges.some(
-      (range) => composerLine >= range.startLineNumber && composerLine <= range.endLineNumber,
-    );
-    if (!isVisible) {
-      return null;
-    }
-
-    const linePosition = editorApi.getScrolledVisiblePosition({
-      lineNumber: composerLine,
-      column: 1,
-    });
-    if (!linePosition) {
-      return null;
-    }
-
-    const layout = editorApi.getLayoutInfo();
-    return {
-      top: linePosition.top,
-      height: linePosition.height,
-      left: layout.contentLeft + 8,
-      lineNumber: composerLine,
-    };
+    return getVisibleLinePanelOverlay(editorApi, composerLine, COMMENT_COMPOSER_HEIGHT_ESTIMATE_PX);
   }, [editor, composerLine, overlayVersion]);
 
   const threadComments = threadLine == null ? [] : (commentsByLine.get(threadLine) ?? []);
@@ -541,29 +546,7 @@ export function CollaborativeEditor({
     }
 
     const editorApi = editor as unknown as EditorLike;
-    const visibleRanges = editorApi.getVisibleRanges();
-    const isVisible = visibleRanges.some(
-      (range) => threadLine >= range.startLineNumber && threadLine <= range.endLineNumber,
-    );
-    if (!isVisible) {
-      return null;
-    }
-
-    const linePosition = editorApi.getScrolledVisiblePosition({
-      lineNumber: threadLine,
-      column: 1,
-    });
-    if (!linePosition) {
-      return null;
-    }
-
-    const layout = editorApi.getLayoutInfo();
-    return {
-      top: linePosition.top,
-      height: linePosition.height,
-      left: layout.contentLeft + 8,
-      lineNumber: threadLine,
-    };
+    return getVisibleLinePanelOverlay(editorApi, threadLine, COMMENT_THREAD_HEIGHT_ESTIMATE_PX);
   }, [editor, threadLine, overlayVersion]);
 
   const submitComment = () => {
@@ -777,19 +760,23 @@ export function CollaborativeEditor({
           </button>
         ))}
 
-        {canAddComments && selectedLineOverlay ? (
+        {canAddComments && addCommentLineOverlay ? (
           <button
             type="button"
             onClick={() => {
               setThreadLine(null);
-              setComposerLine(selectedLine);
+              setSelectedLine(addCommentLineOverlay.lineNumber);
+              onActiveLineChangeRef.current(addCommentLineOverlay.lineNumber);
+              setComposerLine(addCommentLineOverlay.lineNumber);
               setComposerDraft('');
               (editor as unknown as EditorLike | null)?.focus();
             }}
             className="pointer-events-auto absolute flex size-5 items-center justify-center rounded-full border border-emerald-400/50 bg-background/95 text-emerald-300 shadow-sm shadow-black/40 transition-colors hover:border-emerald-300 hover:bg-emerald-500/15"
             style={{
-              top: selectedLineOverlay.top + Math.max(selectedLineOverlay.height / 2 - 10, 0),
-              left: selectedLineOverlay.glyphLeft + (commentLineSet.has(selectedLine) ? 18 : 0),
+              top: addCommentLineOverlay.top + Math.max(addCommentLineOverlay.height / 2 - 10, 0),
+              left:
+                addCommentLineOverlay.glyphLeft +
+                (commentLineSet.has(addCommentLineOverlay.lineNumber) ? 18 : 0),
             }}
             aria-label={t('workspace.addComment')}
             title={t('workspace.addComment')}
@@ -802,7 +789,7 @@ export function CollaborativeEditor({
           <div
             className="pointer-events-auto absolute w-[min(24rem,calc(100%-1rem))] rounded-lg border border-border bg-card/95 p-2.5 shadow-lg shadow-black/35 backdrop-blur"
             style={{
-              top: composerOverlay.top + composerOverlay.height + 6,
+              ...getLinePanelPositionStyle(composerOverlay),
               left: composerOverlay.left,
             }}
           >
@@ -870,7 +857,7 @@ export function CollaborativeEditor({
           <div
             className="pointer-events-auto absolute w-[min(26rem,calc(100%-1rem))] rounded-lg border border-emerald-400/30 bg-card/95 p-2.5 shadow-lg shadow-black/35 backdrop-blur"
             style={{
-              top: threadOverlay.top + threadOverlay.height + 6,
+              ...getLinePanelPositionStyle(threadOverlay),
               left: threadOverlay.left,
             }}
           >
@@ -923,4 +910,73 @@ export function CollaborativeEditor({
 
 function clampLine(lineNumber: number, lineCount: number): number {
   return Math.min(Math.max(1, Math.floor(lineNumber)), lineCount);
+}
+
+function isGutterMouseTarget(
+  targetType: number,
+  mouseTargetType: MonacoLike['editor']['MouseTargetType'],
+): boolean {
+  return (
+    targetType === mouseTargetType.GUTTER_GLYPH_MARGIN ||
+    targetType === mouseTargetType.GUTTER_LINE_NUMBERS ||
+    targetType === mouseTargetType.GUTTER_LINE_DECORATIONS
+  );
+}
+
+interface LinePanelOverlay {
+  top: number;
+  bottom: number | null;
+  height: number;
+  left: number;
+  lineNumber: number;
+}
+
+function getVisibleLinePanelOverlay(
+  editorApi: EditorLike,
+  lineNumber: number,
+  panelHeightEstimate: number,
+): LinePanelOverlay | null {
+  const visibleRanges = editorApi.getVisibleRanges();
+  const isVisible = visibleRanges.some(
+    (range) => lineNumber >= range.startLineNumber && lineNumber <= range.endLineNumber,
+  );
+  if (!isVisible) {
+    return null;
+  }
+
+  const linePosition = editorApi.getScrolledVisiblePosition({
+    lineNumber,
+    column: 1,
+  });
+  if (!linePosition) {
+    return null;
+  }
+
+  const layout = editorApi.getLayoutInfo();
+  const editorHeight = editorApi.getDomNode()?.clientHeight ?? 0;
+  const belowTop = linePosition.top + linePosition.height + INLINE_COMMENT_PANEL_GAP_PX;
+  const spaceBelow = Math.max(editorHeight - belowTop, 0);
+  const spaceAbove = Math.max(linePosition.top - INLINE_COMMENT_PANEL_GAP_PX, 0);
+  const shouldOpenAbove =
+    editorHeight > 0 && spaceBelow < panelHeightEstimate && spaceAbove > spaceBelow;
+
+  return {
+    top: belowTop,
+    bottom: shouldOpenAbove
+      ? Math.max(editorHeight - linePosition.top + INLINE_COMMENT_PANEL_GAP_PX, 0)
+      : null,
+    height: linePosition.height,
+    left: layout.contentLeft + 8,
+    lineNumber,
+  };
+}
+
+function getLinePanelPositionStyle(
+  overlay: LinePanelOverlay,
+): { top: number; bottom?: undefined } | { top?: undefined; bottom: number } {
+  if (overlay.bottom != null) {
+    return { bottom: overlay.bottom };
+  }
+
+  return { top: overlay.top };
 }
