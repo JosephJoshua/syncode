@@ -503,214 +503,135 @@ function AdminProblemEditorPage() {
           closeProblemEditor();
         }}
       >
-        <div className="space-y-6">
-          <Card className="border border-border/50 bg-card/80 py-0 backdrop-blur-sm">
-            <CardHeader className="px-5 pt-6 pb-4 sm:px-6">
-              <CardTitle className="flex items-center gap-2">
-                <FileText className="size-5 text-primary" />
-                {t('problemEditor.heading')}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="grid gap-5 px-5 pb-6 sm:px-6">
-              <div className="grid gap-4 md:grid-cols-2">
-                <Field label={t('problemEditor.fields.title')} htmlFor="problem-title">
-                  <Input
-                    id="problem-title"
-                    placeholder={t('problemEditor.fields.titlePlaceholder')}
-                    {...register('title')}
-                  />
-                </Field>
-                <Field label={t('problemEditor.fields.difficulty')} htmlFor="problem-difficulty">
-                  <Controller
-                    control={control}
-                    name="difficulty"
-                    render={({ field }) => (
-                      <Select
-                        value={field.value}
-                        onValueChange={(value) => field.onChange(value as ProblemDifficulty)}
-                      >
-                        <SelectTrigger id="problem-difficulty">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {difficulties.map((item) => (
-                            <SelectItem key={item} value={item}>
-                              {t(`problemEditor.difficulty.${item}`)}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    )}
-                  />
-                </Field>
-              </div>
-
-              <Field label={t('problemEditor.fields.company')} htmlFor="problem-company">
-                <Input
-                  id="problem-company"
-                  placeholder={t('problemEditor.fields.companyPlaceholder')}
-                  {...register('company')}
-                />
-              </Field>
-
-              <Field label={t('problemEditor.fields.description')} htmlFor="problem-description">
-                <div className="overflow-hidden rounded-lg border border-input bg-background">
-                  <div className="flex items-center border-b border-border/60 bg-muted/30 p-1">
-                    {(['edit', 'preview'] as const).map((mode) => (
-                      <Button
-                        key={mode}
-                        type="button"
-                        size="xs"
-                        variant={descriptionMode === mode ? 'secondary' : 'ghost'}
-                        onClick={() => setDescriptionMode(mode)}
-                      >
-                        {t(`problemEditor.editor.${mode}`)}
-                      </Button>
-                    ))}
-                  </div>
-                  {descriptionMode === 'edit' ? (
-                    <textarea
-                      id="problem-description"
-                      placeholder={t('problemEditor.fields.descriptionPlaceholder')}
-                      className="min-h-48 w-full resize-y bg-transparent px-4 py-3 text-sm outline-none"
-                      {...register('description')}
-                    />
-                  ) : (
-                    <div className="min-h-48 px-4 py-3">
-                      {watchedValues.description.trim() ? (
-                        <ProblemMarkdown content={watchedValues.description} />
-                      ) : (
-                        <p className="text-sm text-muted-foreground">
-                          {t('problemEditor.editor.emptyPreview')}
-                        </p>
-                      )}
-                    </div>
-                  )}
+        <DialogContent className="w-[min(calc(100vw-2rem),96rem)] max-w-[min(calc(100vw-2rem),96rem)] gap-0 p-0 sm:max-w-[min(calc(100vw-2rem),96rem)]">
+          <DialogHeader className="border-b border-border px-6 py-5">
+            <DialogTitle>
+              {selectedProblem
+                ? t('problemEditor.editorDialog.editTitle', { title: selectedProblem.title })
+                : t('problemEditor.editorDialog.createTitle')}
+            </DialogTitle>
+            <DialogDescription>{t('problemEditor.editorDialog.description')}</DialogDescription>
+          </DialogHeader>
+          <form
+            className="grid max-h-[calc(100vh-7rem)] gap-6 overflow-y-auto p-6 lg:grid-cols-[minmax(0,1fr)_380px]"
+            onSubmit={handleSubmit(submitForm)}
+          >
+            <fieldset className="space-y-6 disabled:opacity-70" disabled={isFormDisabled}>
+              {isProblemDetailError ? (
+                <div
+                  role="alert"
+                  className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive"
+                >
+                  {t('problemEditor.editorDialog.loadFailed')}
                 </div>
-              </Field>
+              ) : null}
+              {isProblemDetailLoading ? (
+                <div className="flex min-h-40 items-center justify-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="size-4 animate-spin" />
+                  {t('problemEditor.editorDialog.loading')}
+                </div>
+              ) : (
+                <>
+                  <section className="grid gap-5 rounded-lg border border-border/50 p-5">
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <Field label={t('problemEditor.fields.title')} htmlFor="problem-title">
+                        <Input
+                          id="problem-title"
+                          placeholder={t('problemEditor.fields.titlePlaceholder')}
+                          {...register('title')}
+                        />
+                      </Field>
+                      <Field
+                        label={t('problemEditor.fields.difficulty')}
+                        htmlFor="problem-difficulty"
+                      >
+                        <select
+                          id="problem-difficulty"
+                          className="h-11 w-full rounded-lg border border-input bg-background px-4 py-2.5 text-sm font-medium outline-none transition-[border-color,box-shadow] focus-visible:border-ring/60 focus-visible:ring-3 focus-visible:ring-ring/40"
+                          {...register('difficulty')}
+                        >
+                          {difficulties.map((item) => (
+                            <option key={item} value={item}>
+                              {t(`problemEditor.difficulty.${item}`)}
+                            </option>
+                          ))}
+                        </select>
+                      </Field>
+                    </div>
 
-              <Field label={t('problemEditor.fields.constraints')} htmlFor="problem-constraints">
-                <textarea
-                  id="problem-constraints"
-                  placeholder={t('problemEditor.fields.constraintsPlaceholder')}
-                  className="min-h-28 w-full rounded-lg border border-input bg-background px-4 py-3 text-sm outline-none transition-[border-color,box-shadow] focus-visible:border-ring/60 focus-visible:ring-3 focus-visible:ring-ring/40"
-                  {...register('constraints')}
-                />
-              </Field>
-
-              <div className="grid gap-4 md:grid-cols-2">
-                <Field label={t('problemEditor.fields.timeLimit')} htmlFor="problem-time-limit">
-                  <Input
-                    id="problem-time-limit"
-                    type="number"
-                    min={1}
-                    max={60000}
-                    placeholder={t('problemEditor.fields.timeLimitPlaceholder')}
-                    {...register('timeLimit')}
-                  />
-                </Field>
-                <Field label={t('problemEditor.fields.memoryLimit')} htmlFor="problem-memory-limit">
-                  <Input
-                    id="problem-memory-limit"
-                    type="number"
-                    min={1}
-                    max={4096}
-                    placeholder={t('problemEditor.fields.memoryLimitPlaceholder')}
-                    {...register('memoryLimit')}
-                  />
-                </Field>
-              </div>
-
-              <Field label={t('problemEditor.fields.examples')} htmlFor="problem-examples">
-                <textarea
-                  id="problem-examples"
-                  placeholder={t('problemEditor.fields.examplesPlaceholder')}
-                  className="min-h-28 w-full rounded-lg border border-input bg-background px-4 py-3 font-mono text-sm outline-none transition-[border-color,box-shadow] focus-visible:border-ring/60 focus-visible:ring-3 focus-visible:ring-ring/40"
-                  {...register('examplesText')}
-                />
-              </Field>
-
-              <Field label={t('problemEditor.fields.starterCode')} htmlFor="problem-starter-code">
-                <textarea
-                  id="problem-starter-code"
-                  placeholder={t('problemEditor.fields.starterCodePlaceholder')}
-                  className="min-h-28 w-full rounded-lg border border-input bg-background px-4 py-3 font-mono text-sm outline-none transition-[border-color,box-shadow] focus-visible:border-ring/60 focus-visible:ring-3 focus-visible:ring-ring/40"
-                  {...register('starterCodeText')}
-                />
-              </Field>
-            </CardContent>
-          </Card>
-
-          <Card className="border border-border/50 bg-card/80 py-0 backdrop-blur-sm">
-            <CardHeader className="flex-row items-center justify-between px-5 pt-6 pb-4 sm:px-6">
-              <CardTitle>{t('problemEditor.testCases.title')}</CardTitle>
-              <Button
-                size="sm"
-                variant="outline"
-                type="button"
-                disabled={createProblemMutation.isPending}
-                onClick={() => append(createTestCase())}
-              >
-                <Plus className="size-4" />
-                {t('problemEditor.testCases.add')}
-              </Button>
-            </CardHeader>
-            <CardContent className="space-y-4 px-5 pb-6 sm:px-6">
-              {fields.map((item, index) => (
-                <div key={item.id} className="grid gap-3 rounded-lg border border-border/50 p-4">
-                  <div className="flex items-center justify-between">
-                    <Badge variant="outline">{index + 1}</Badge>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      type="button"
-                      disabled={fields.length === 1 || createProblemMutation.isPending}
-                      onClick={() => remove(index)}
-                    >
-                      <Trash2 className="size-4" />
-                      {t('problemEditor.testCases.remove')}
-                    </Button>
-                  </div>
-                  <div className="grid gap-3 md:grid-cols-2">
-                    <Field label={t('problemEditor.testCases.input')} htmlFor={`${item.id}-in`}>
+                    <Field label={t('problemEditor.fields.company')} htmlFor="problem-company">
                       <Input
-                        id={`${item.id}-in`}
-                        placeholder={t('problemEditor.testCases.inputPlaceholder')}
-                        {...register(`testCases.${index}.input`)}
+                        id="problem-company"
+                        placeholder={t('problemEditor.fields.companyPlaceholder')}
+                        {...register('company')}
                       />
                     </Field>
-                    <Field label={t('problemEditor.testCases.output')} htmlFor={`${item.id}-out`}>
-                      <Input
-                        id={`${item.id}-out`}
-                        placeholder={t('problemEditor.testCases.outputPlaceholder')}
-                        {...register(`testCases.${index}.expectedOutput`)}
-                      />
-                    </Field>
-                  </div>
-                  <Field
-                    label={t('problemEditor.testCases.description')}
-                    htmlFor={`${item.id}-description`}
-                  >
-                    <Input
-                      id={`${item.id}-description`}
-                      placeholder={t('problemEditor.testCases.descriptionPlaceholder')}
-                      {...register(`testCases.${index}.description`)}
+
+                    <Controller
+                      control={control}
+                      name="description"
+                      render={({ field }) => (
+                        <MarkdownEditor
+                          label={t('problemEditor.fields.description')}
+                          value={field.value}
+                          onChange={field.onChange}
+                          placeholder={t('problemEditor.fields.descriptionPlaceholder')}
+                        />
+                      )}
                     />
-                  </Field>
-                  <div className="grid gap-3 md:grid-cols-3">
+
                     <Field
-                      label={t('problemEditor.testCases.timeoutMs')}
-                      htmlFor={`${item.id}-timeout`}
+                      label={t('problemEditor.fields.constraints')}
+                      htmlFor="problem-constraints"
                     >
-                      <Input
-                        id={`${item.id}-timeout`}
-                        type="number"
-                        min={1}
-                        max={60000}
-                        placeholder={t('problemEditor.testCases.timeoutPlaceholder')}
-                        {...register(`testCases.${index}.timeoutMs`)}
+                      <textarea
+                        id="problem-constraints"
+                        placeholder={t('problemEditor.fields.constraintsPlaceholder')}
+                        className="min-h-28 w-full rounded-lg border border-input bg-background px-4 py-3 text-sm outline-none transition-[border-color,box-shadow] focus-visible:border-ring/60 focus-visible:ring-3 focus-visible:ring-ring/40"
+                        {...register('constraints')}
                       />
                     </Field>
+                  </section>
+
+                  <section className="grid gap-5 rounded-lg border border-border/50 p-5">
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <Field
+                        label={t('problemEditor.fields.timeLimit')}
+                        htmlFor="problem-time-limit"
+                      >
+                        <Input
+                          id="problem-time-limit"
+                          type="number"
+                          min={1}
+                          max={60000}
+                          placeholder={t('problemEditor.fields.timeLimitPlaceholder')}
+                          {...register('timeLimit')}
+                        />
+                      </Field>
+                      <Field
+                        label={t('problemEditor.fields.memoryLimit')}
+                        htmlFor="problem-memory-limit"
+                      >
+                        <Input
+                          id="problem-memory-limit"
+                          type="number"
+                          min={1}
+                          max={4096}
+                          placeholder={t('problemEditor.fields.memoryLimitPlaceholder')}
+                          {...register('memoryLimit')}
+                        />
+                      </Field>
+                    </div>
+
+                    <Field label={t('problemEditor.fields.examples')} htmlFor="problem-examples">
+                      <textarea
+                        id="problem-examples"
+                        placeholder={t('problemEditor.fields.examplesPlaceholder')}
+                        className="min-h-28 w-full rounded-lg border border-input bg-background px-4 py-3 font-mono text-sm outline-none transition-[border-color,box-shadow] focus-visible:border-ring/60 focus-visible:ring-3 focus-visible:ring-ring/40"
+                        {...register('examplesText')}
+                      />
+                    </Field>
+
                     <Field
                       label={t('problemEditor.testCases.memoryMb')}
                       htmlFor={`${item.id}-memory`}
