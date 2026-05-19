@@ -81,6 +81,61 @@ describe('StaticAnalysisAnalyzer', () => {
     expect(result.toolResults).toHaveLength(3);
   });
 
+  it.each([
+    ['javascript', 'const value = 1;'],
+    ['typescript', 'const value: number = 1;'],
+    ['java', 'class Main {}'],
+    ['c', 'int main(void) { return 0; }'],
+    ['cpp', 'int main() { return 0; }'],
+    ['go', 'package main\nfunc main() {}'],
+    ['rust', 'fn main() {}'],
+  ] as const)('GIVEN %s source WHEN analyzed THEN builds and parses the language toolchain', async (language, code) => {
+    const runner = {
+      run: vi.fn().mockImplementation(async (command: string, args: string[]) => {
+        if (command === 'biome') {
+          return { exitCode: 0, stdout: '{"diagnostics":[]}', stderr: '', timedOut: false };
+        }
+        if (command === 'pmd' && args[0] === 'check') {
+          return { exitCode: 0, stdout: '{"files":[]}', stderr: '', timedOut: false };
+        }
+        if (command === 'cppcheck') {
+          return {
+            exitCode: 0,
+            stdout: '',
+            stderr: '<results><errors /></results>',
+            timedOut: false,
+          };
+        }
+        if (command === 'golangci-lint') {
+          return { exitCode: 0, stdout: '{"Issues":[]}', stderr: '', timedOut: false };
+        }
+        if (command === 'cargo') {
+          return { exitCode: 0, stdout: '', stderr: '', timedOut: false };
+        }
+        if (command === 'lizard') {
+          return { exitCode: 0, stdout: '<cppncss />', stderr: '', timedOut: false };
+        }
+        return {
+          exitCode: 0,
+          stdout: '{"duplications":[]}',
+          stderr: '',
+          timedOut: false,
+        };
+      }),
+    } satisfies StaticAnalysisCommandRunner;
+    const analyzer = new StaticAnalysisAnalyzer(runner);
+
+    const result = await analyzer.analyze({
+      ...request,
+      language,
+      code,
+    });
+
+    expect(result.status).toBe('completed');
+    expect(result.summary.toolFailureCount).toBe(0);
+    expect(runner.run).toHaveBeenCalled();
+  });
+
   it('GIVEN code is empty WHEN analyzed THEN returns validation failure', async () => {
     const runner = makeRunner({
       exitCode: 0,
@@ -97,6 +152,38 @@ describe('StaticAnalysisAnalyzer', () => {
       error: 'Code cannot be empty',
       toolResults: [],
     });
+    expect(runner.run).not.toHaveBeenCalled();
+  });
+
+  it('GIVEN language is unsupported WHEN analyzed THEN returns validation failure', async () => {
+    const runner = makeRunner({
+      exitCode: 0,
+      stdout: '',
+      stderr: '',
+      timedOut: false,
+    });
+    const analyzer = new StaticAnalysisAnalyzer(runner);
+
+    const result = await analyzer.analyze({ ...request, language: 'ruby' as never });
+
+    expect(result.status).toBe('failed');
+    expect(result.error).toBe('Unsupported language: ruby');
+    expect(runner.run).not.toHaveBeenCalled();
+  });
+
+  it('GIVEN request has no target WHEN analyzed THEN returns validation failure', async () => {
+    const runner = makeRunner({
+      exitCode: 0,
+      stdout: '',
+      stderr: '',
+      timedOut: false,
+    });
+    const analyzer = new StaticAnalysisAnalyzer(runner);
+
+    const result = await analyzer.analyze({ ...request, runId: null });
+
+    expect(result.status).toBe('failed');
+    expect(result.error).toBe('Exactly one of runId or submissionId is required');
     expect(runner.run).not.toHaveBeenCalled();
   });
 

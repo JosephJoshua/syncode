@@ -211,49 +211,64 @@ function parseXmlAttributes(raw: string): Record<string, string> {
   let index = 0;
 
   while (index < raw.length) {
-    if (!isXmlNameStart(raw[index])) {
-      index += 1;
-      continue;
-    }
-
-    const nameStart = index;
-    index += 1;
-    while (index < raw.length && isXmlNameChar(raw[index])) {
-      index += 1;
-    }
-
-    const name = raw.slice(nameStart, index);
-    while (index < raw.length && isXmlWhitespace(raw[index])) {
-      index += 1;
-    }
-
-    if (raw[index] !== '=') {
-      continue;
-    }
-    index += 1;
-
-    while (index < raw.length && isXmlWhitespace(raw[index])) {
-      index += 1;
-    }
-
-    if (raw[index] !== '"') {
-      continue;
-    }
-    index += 1;
-
-    const valueStart = index;
-    while (index < raw.length && raw[index] !== '"') {
-      index += 1;
-    }
-
-    if (index >= raw.length) {
+    const nameStart = findNextXmlNameStart(raw, index);
+    if (nameStart == null) {
       break;
     }
 
-    attrs[name] = decodeXml(raw.slice(valueStart, index));
-    index += 1;
+    const nameEnd = readXmlNameEnd(raw, nameStart + 1);
+    const parsed = readXmlAttributeValue(raw, nameEnd);
+    if (parsed) {
+      attrs[raw.slice(nameStart, nameEnd)] = decodeXml(parsed.value);
+      index = parsed.nextIndex;
+    } else {
+      index = nameEnd;
+    }
   }
   return attrs;
+}
+
+function findNextXmlNameStart(raw: string, startIndex: number): number | null {
+  for (let index = startIndex; index < raw.length; index += 1) {
+    if (isXmlNameStart(raw[index])) return index;
+  }
+  return null;
+}
+
+function readXmlNameEnd(raw: string, startIndex: number): number {
+  let index = startIndex;
+  while (index < raw.length && isXmlNameChar(raw[index])) {
+    index += 1;
+  }
+  return index;
+}
+
+function readXmlAttributeValue(
+  raw: string,
+  afterNameIndex: number,
+): { value: string; nextIndex: number } | null {
+  let index = skipXmlWhitespace(raw, afterNameIndex);
+  if (raw[index] !== '=') return null;
+
+  index = skipXmlWhitespace(raw, index + 1);
+  if (raw[index] !== '"') return null;
+
+  const valueStart = index + 1;
+  const valueEnd = raw.indexOf('"', valueStart);
+  if (valueEnd === -1) return null;
+
+  return {
+    value: raw.slice(valueStart, valueEnd),
+    nextIndex: valueEnd + 1,
+  };
+}
+
+function skipXmlWhitespace(raw: string, startIndex: number): number {
+  let index = startIndex;
+  while (index < raw.length && isXmlWhitespace(raw[index])) {
+    index += 1;
+  }
+  return index;
 }
 
 function isXmlWhitespace(char: string | undefined): boolean {
