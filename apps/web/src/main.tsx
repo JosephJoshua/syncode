@@ -1,4 +1,5 @@
 import './lib/i18n';
+import './lib/monaco-workers';
 import './index.css';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';

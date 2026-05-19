@@ -33,6 +33,7 @@
     "lib0": "^0.2.117",
     "livekit-client": "^2.18.3",
     "lucide-react": "^0.576.0",
+    "monaco-editor": "^0.55.1",
     "motion": "^12.38.0",
     "prismjs": "^1.30.0",
     "radix-ui": "^1.4.3",
