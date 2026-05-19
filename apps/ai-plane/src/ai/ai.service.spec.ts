@@ -87,6 +87,10 @@ const llmProvider: ILlmProvider = {
     model: 'qwen-tts',
     mimeType: 'audio/mpeg',
   }),
+  generateTranscription: vi.fn().mockResolvedValue({
+    text: 'stub transcript',
+    model: 'glm-asr',
+  }),
 };
 
 const storageService: IStorageService = {
@@ -118,6 +122,10 @@ function createServiceWithLlmResponse(
       audio: Buffer.from('speech-bytes'),
       model: configValues?.AI_TTS_MODEL ?? 'qwen-tts',
       mimeType: 'audio/mpeg',
+    }),
+    generateTranscription: vi.fn().mockResolvedValue({
+      text: 'stub transcript',
+      model: configValues?.AI_STT_MODEL ?? 'glm-asr',
     }),
   };
   const configService = configValues
@@ -717,6 +725,31 @@ describe('AiService', () => {
       );
     });
 
+    it('GIVEN responseLanguage is zh but user message is English WHEN generating interview response THEN prompt keeps zh as default but uses English for current turn', async () => {
+      const { service, llmProvider } = createServiceWithLlmResponse(
+        JSON.stringify({
+          message: '好的，我们先看你的思路。',
+          followUpQuestion: '你能解释一下这个映射在每一步维护了什么不变量吗？',
+        }),
+      );
+
+      await service.generateInterviewResponse({
+        ...baseInterviewRequest,
+        responseLanguage: 'zh',
+      });
+
+      const generateTextArgs = vi.mocked(llmProvider.generateText).mock.calls[0]?.[0];
+      const systemPrompt = generateTextArgs?.messages.find(
+        (entry) => entry.role === 'system',
+      )?.content;
+      const userPrompt = generateTextArgs?.messages.find((entry) => entry.role === 'user')?.content;
+
+      expect(systemPrompt).toContain('Default interview language is Chinese');
+      expect(systemPrompt).toContain('in English');
+      expect(userPrompt).toContain('<UNTRUSTED_DEFAULT_RESPONSE_LANGUAGE>\nzh');
+      expect(userPrompt).toContain('<UNTRUSTED_TURN_RESPONSE_LANGUAGE>\nen');
+    });
+
     it('GIVEN interview model omits follow-up WHEN generateInterviewResponse is called THEN safe fallback includes one', async () => {
       const { service } = createServiceWithLlmResponse(
         JSON.stringify({
@@ -790,6 +823,76 @@ describe('AiService', () => {
       );
     });
 
+    it('GIVEN candidate asks for direct help AND model repeats trace prompt WHEN generateInterviewResponse is called THEN response escalates into direct coaching', async () => {
+      const { service } = createServiceWithLlmResponse(
+        JSON.stringify({
+          message: 'Trace your code step by step for [3,2,4] and explain each state change.',
+          followUpQuestion: 'Can you dry run it now and walk through every iteration?',
+          codeContext: {
+            language: 'typescript',
+            file: 'solution.ts',
+            codeSnippet: 'function twoSum() {}',
+            startLine: 1,
+            endLine: 1,
+            questionType: 'correctness',
+          },
+        }),
+      );
+
+      const result = await service.generateInterviewResponse({
+        ...baseInterviewRequest,
+        userMessage: "I don't know, you tell me what's wrong.",
+      });
+
+      expect(result.shouldRespond).toBe(true);
+      expect(result.message).toContain("Let's switch gears");
+      expect(result.followUpQuestion).toContain('debug checklist');
+      expect(result.followUpQuestion).toContain('wrap up');
+    });
+
+    it('GIVEN tests are failing and editor is stalled AND model repeats trace prompt WHEN generateInterviewResponse is called THEN response escalates into direct coaching', async () => {
+      const { service } = createServiceWithLlmResponse(
+        JSON.stringify({
+          message: 'Please trace this failing input step by step before changing anything.',
+          followUpQuestion: 'Can you simulate each iteration manually first?',
+          codeContext: {
+            language: 'typescript',
+            file: 'solution.ts',
+            codeSnippet: 'function twoSum() {}',
+            startLine: 1,
+            endLine: 1,
+            questionType: 'bug_risk',
+          },
+        }),
+      );
+
+      const result = await service.generateInterviewResponse({
+        ...baseInterviewRequest,
+        userMessage: 'Still failing, not sure what to do.',
+        latestExecutionSummary: {
+          status: 'completed',
+          passedTestCases: 3,
+          totalTestCases: 7,
+          failedTestCases: 4,
+          errorTestCases: 0,
+          allTestsPassed: false,
+          submittedAt: '2026-05-19T02:00:00.000Z',
+        },
+        interactionSignals: {
+          reason: 'manual_nudge',
+          roomStatus: 'coding',
+          elapsedSeconds: 900,
+          secondsSinceLastEditorActivity: 180,
+          recentEditorChanges: 0,
+        },
+      });
+
+      expect(result.shouldRespond).toBe(true);
+      expect(result.message).toContain("Let's switch gears");
+      expect(result.followUpQuestion).toContain('debug checklist');
+      expect(result.followUpQuestion).toContain('wrap up');
+    });
+
     it('GIVEN TTS upload fails WHEN generateInterviewResponse is called THEN text response still succeeds without audio', async () => {
       const { service, llmProvider } = createServiceWithLlmResponse(
         JSON.stringify({
@@ -832,6 +935,91 @@ describe('AiService', () => {
 
       expect(result).toEqual({ shouldRespond: false, audio: undefined });
       expect(llmProvider.generateSpeech).not.toHaveBeenCalled();
+    });
+
+    it('GIVEN TTS model is not configured WHEN generateInterviewResponse is called THEN skips audio generation', async () => {
+      const { service, llmProvider } = createServiceWithLlmResponse(
+        JSON.stringify({
+          message: 'Good direction. Explain your invariant clearly.',
+          followUpQuestion: 'What state do you validate before each insertion?',
+        }),
+        {},
+      );
+
+      const result = await service.generateInterviewResponse(baseInterviewRequest);
+
+      expect(result.shouldRespond).toBe(true);
+      expect(result.audio).toBeUndefined();
+      expect(llmProvider.generateSpeech).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('generateInterviewTranscription', () => {
+    it('GIVEN valid base64 audio WHEN generateInterviewTranscription is called THEN returns normalized transcript text', async () => {
+      const { service, llmProvider } = createServiceWithLlmResponse(
+        '{"hint":"ignored","suggestedApproach":"ignored"}',
+      );
+      vi.mocked(llmProvider.generateTranscription).mockResolvedValueOnce({
+        text: '  hello\\nworld  ',
+        model: 'glm-asr',
+      });
+
+      const result = await service.generateInterviewTranscription({
+        roomId: 'room-1',
+        sessionId: 'session-1',
+        participantId: 'user-1',
+        audioBase64: Buffer.from('audio-bytes').toString('base64'),
+        mimeType: 'audio/webm',
+        language: 'en-US',
+      });
+
+      expect(result).toEqual({ text: 'hello world' });
+      expect(llmProvider.generateTranscription).toHaveBeenCalledWith(
+        expect.objectContaining({
+          mimeType: 'audio/webm',
+          language: 'en',
+          audio: expect.any(Buffer),
+        }),
+      );
+    });
+
+    it('GIVEN invalid payload WHEN generateInterviewTranscription is called THEN throws', async () => {
+      const { service } = createServiceWithLlmResponse('{"hint":"ignored"}');
+
+      await expect(
+        service.generateInterviewTranscription({
+          roomId: 'room-1',
+          sessionId: 'session-1',
+          participantId: 'user-1',
+          audioBase64: '',
+          mimeType: 'audio/webm',
+        }),
+      ).rejects.toThrow('Audio payload is empty');
+    });
+
+    it('GIVEN invalid language hint WHEN generateInterviewTranscription is called THEN forwards undefined language', async () => {
+      const { service, llmProvider } = createServiceWithLlmResponse(
+        '{"hint":"ignored","suggestedApproach":"ignored"}',
+      );
+      vi.mocked(llmProvider.generateTranscription).mockResolvedValueOnce({
+        text: 'hello',
+        model: 'glm-asr',
+      });
+
+      await service.generateInterviewTranscription({
+        roomId: 'room-1',
+        sessionId: 'session-1',
+        participantId: 'user-1',
+        audioBase64: Buffer.from('audio-bytes').toString('base64'),
+        mimeType: 'audio/webm',
+        language: 'english',
+      });
+
+      expect(llmProvider.generateTranscription).toHaveBeenCalledWith(
+        expect.objectContaining({
+          language: undefined,
+        }),
+      );
     });
   });
 
