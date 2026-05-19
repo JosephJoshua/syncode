@@ -16,6 +16,7 @@ describe('OpenAiCompatibleLlmProvider', () => {
         baseUrl: 'https://example.com/v1',
         apiKey: 'secret',
         model: 'qwen3.5-mini',
+        sttModel: 'glm-asr',
         ttsModel: 'qwen-tts',
         ttsVoice: 'Chelsie',
         timeoutMs: 1000,
@@ -59,6 +60,7 @@ describe('OpenAiCompatibleLlmProvider', () => {
         baseUrl: 'https://example.com/v1',
         apiKey: 'secret',
         model: 'qwen3.5-mini',
+        sttModel: 'glm-asr',
         ttsModel: 'qwen-tts',
         ttsVoice: 'Chelsie',
         timeoutMs: 1000,
@@ -97,6 +99,7 @@ describe('OpenAiCompatibleLlmProvider', () => {
         baseUrl: 'https://example.com/v1',
         apiKey: 'secret',
         model: 'qwen3.5-mini',
+        sttModel: 'glm-asr',
         ttsModel: 'qwen-tts',
         ttsVoice: 'Chelsie',
         timeoutMs: 1000,
@@ -137,6 +140,7 @@ describe('OpenAiCompatibleLlmProvider', () => {
         baseUrl: 'https://example.com/v1',
         apiKey: 'secret',
         model: 'qwen3.6-plus',
+        sttModel: 'glm-asr',
         ttsModel: 'qwen-tts',
         ttsVoice: 'Chelsie',
         timeoutMs: 1000,
@@ -166,6 +170,7 @@ describe('OpenAiCompatibleLlmProvider', () => {
         baseUrl: 'https://example.com/v1',
         apiKey: 'secret',
         model: 'qwen3.5-mini',
+        sttModel: 'glm-asr',
         ttsModel: 'qwen-tts',
         ttsVoice: 'Chelsie',
         timeoutMs: 1000,
@@ -195,5 +200,133 @@ describe('OpenAiCompatibleLlmProvider', () => {
         }),
       }),
     );
+  });
+
+  it('GIVEN no default TTS model and no per-request model WHEN generateSpeech THEN throws config error', async () => {
+    const provider = new OpenAiCompatibleLlmProvider(
+      {
+        baseUrl: 'https://example.com/v1',
+        apiKey: 'secret',
+        model: 'qwen3.5-mini',
+        sttModel: 'glm-asr',
+        ttsVoice: 'Chelsie',
+        timeoutMs: 1000,
+      },
+      vi.fn() as typeof fetch,
+    );
+
+    await expect(
+      provider.generateSpeech({
+        text: 'Explain the invariant.',
+      }),
+    ).rejects.toThrow('TTS model is not configured');
+  });
+
+  it('GIVEN valid transcription response WHEN generateTranscription THEN returns transcript text', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        text: 'hello from speech',
+      }),
+    });
+
+    const provider = new OpenAiCompatibleLlmProvider(
+      {
+        baseUrl: 'https://example.com/v1',
+        apiKey: 'secret',
+        model: 'qwen3.5-mini',
+        sttModel: 'glm-asr',
+        ttsModel: 'qwen-tts',
+        ttsVoice: 'Chelsie',
+        timeoutMs: 1000,
+      },
+      fetchImpl as typeof fetch,
+    );
+
+    const result = await provider.generateTranscription({
+      audio: Buffer.from([1, 2, 3]),
+      mimeType: 'audio/webm',
+      fileName: 'sample.webm',
+      language: 'en-US',
+    });
+
+    expect(result).toEqual({
+      text: 'hello from speech',
+      model: 'glm-asr',
+    });
+    expect(fetchImpl).toHaveBeenCalledWith(
+      'https://example.com/v1/audio/transcriptions',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          Authorization: 'Bearer secret',
+        }),
+      }),
+    );
+  });
+
+  it('GIVEN failed transcription response WHEN generateTranscription THEN throws provider error', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 400,
+      text: async () => 'bad request',
+    });
+
+    const provider = new OpenAiCompatibleLlmProvider(
+      {
+        baseUrl: 'https://example.com/v1',
+        apiKey: 'secret',
+        model: 'qwen3.5-mini',
+        sttModel: 'glm-asr',
+        ttsModel: 'qwen-tts',
+        ttsVoice: 'Chelsie',
+        timeoutMs: 1000,
+      },
+      fetchImpl as typeof fetch,
+    );
+
+    await expect(
+      provider.generateTranscription({
+        audio: Buffer.from([1, 2, 3]),
+        mimeType: 'audio/webm',
+        fileName: 'sample.webm',
+      }),
+    ).rejects.toThrow('STT request failed with 400: bad request');
+  });
+
+  it('GIVEN codec-suffixed mime type WHEN generateTranscription THEN normalizes uploaded file metadata', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        text: 'hello from speech',
+      }),
+    });
+
+    const provider = new OpenAiCompatibleLlmProvider(
+      {
+        baseUrl: 'https://example.com/v1',
+        apiKey: 'secret',
+        model: 'qwen3.5-mini',
+        sttModel: 'glm-asr',
+        ttsModel: 'qwen-tts',
+        ttsVoice: 'Chelsie',
+        timeoutMs: 1000,
+      },
+      fetchImpl as typeof fetch,
+    );
+
+    await provider.generateTranscription({
+      audio: Buffer.from([1, 2, 3]),
+      mimeType: 'audio/webm;codecs=opus',
+      fileName: 'sample.raw',
+    });
+
+    const requestInit = fetchImpl.mock.calls[0]?.[1] as RequestInit;
+    const formData = requestInit.body as FormData;
+    const uploadedFile = formData.get('file');
+
+    expect(uploadedFile).toBeInstanceOf(File);
+    expect((uploadedFile as File).type).toBe('audio/webm');
+    expect((uploadedFile as File).name).toBe('sample.webm');
   });
 });

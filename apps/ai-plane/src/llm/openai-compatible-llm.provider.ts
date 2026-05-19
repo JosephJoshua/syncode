@@ -6,13 +6,16 @@ import type {
   LlmGenerateSpeechResult,
   LlmGenerateTextInput,
   LlmGenerateTextResult,
+  LlmGenerateTranscriptionInput,
+  LlmGenerateTranscriptionResult,
 } from './llm.types.js';
 
 interface OpenAiCompatibleProviderConfig {
   baseUrl: string;
   apiKey: string;
   model: string;
-  ttsModel: string;
+  sttModel: string;
+  ttsModel?: string;
   ttsVoice: string;
   timeoutMs: number;
 }
@@ -26,8 +29,14 @@ interface OpenAiChatCompletionResponse {
   }>;
 }
 
+interface OpenAiTranscriptionResponse {
+  text?: string | null;
+}
+
 const MAX_RETRY_ATTEMPTS = 3;
 const INITIAL_RETRY_DELAY_MS = 1_000;
+const STT_MAX_RETRY_ATTEMPTS = 1;
+const STT_TIMEOUT_CAP_MS = 10_000;
 
 @Injectable()
 export class OpenAiCompatibleLlmProvider implements ILlmProvider {
@@ -41,6 +50,7 @@ export class OpenAiCompatibleLlmProvider implements ILlmProvider {
       baseUrl: config.AI_PLATFORM_BASE_URL,
       apiKey: config.AI_PLATFORM_API_KEY,
       model: config.AI_PLATFORM_MODEL,
+      sttModel: config.AI_STT_MODEL,
       ttsModel: config.AI_TTS_MODEL,
       ttsVoice: config.AI_TTS_VOICE,
       timeoutMs: config.AI_REQUEST_TIMEOUT_MS,
@@ -112,6 +122,9 @@ export class OpenAiCompatibleLlmProvider implements ILlmProvider {
 
   async generateSpeech(input: LlmGenerateSpeechInput): Promise<LlmGenerateSpeechResult> {
     const model = input.model ?? this.config.ttsModel;
+    if (!model) {
+      throw new Error('TTS model is not configured');
+    }
     const format = input.format ?? 'mp3';
     const apiBaseUrl = normalizeOpenAiCompatibleBaseUrl(this.config.baseUrl);
     const requestBody = {
@@ -167,10 +180,139 @@ export class OpenAiCompatibleLlmProvider implements ILlmProvider {
 
     throw new Error('TTS request failed after retries');
   }
+
+  async generateTranscription(
+    input: LlmGenerateTranscriptionInput,
+  ): Promise<LlmGenerateTranscriptionResult> {
+    const model = input.model ?? this.config.sttModel;
+    const apiBaseUrl = normalizeOpenAiCompatibleBaseUrl(this.config.baseUrl);
+    const normalizedMimeType = normalizeTranscriptionMimeType(input.mimeType);
+    const normalizedFileName = normalizeTranscriptionFileName(input.fileName, normalizedMimeType);
+    const file = new Blob([Uint8Array.from(input.audio)], {
+      type: normalizedMimeType,
+    });
+    const formData = new FormData();
+    formData.append('model', model);
+    formData.append('file', file, normalizedFileName);
+    if (input.language?.trim()) {
+      formData.append('language', input.language.trim());
+    }
+
+    const timeoutMs = Math.min(this.config.timeoutMs, STT_TIMEOUT_CAP_MS);
+
+    for (let attempt = 1; attempt <= STT_MAX_RETRY_ATTEMPTS; attempt++) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+      try {
+        const response = await this.fetchImpl(`${apiBaseUrl}/audio/transcriptions`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${this.config.apiKey}`,
+          },
+          body: formData,
+          signal: controller.signal,
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          if (attempt < STT_MAX_RETRY_ATTEMPTS && isRetryableStatus(response.status)) {
+            await delay(getRetryDelayMs(attempt));
+            continue;
+          }
+          throw new Error(`STT request failed with ${response.status}: ${errorText}`);
+        }
+
+        const payload = (await response.json()) as OpenAiTranscriptionResponse;
+        const text = payload.text?.trim();
+        if (!text) {
+          throw new Error('STT response did not include transcript text');
+        }
+
+        return {
+          text,
+          model,
+        };
+      } catch (error) {
+        if (attempt < STT_MAX_RETRY_ATTEMPTS && isRetryableTransportError(error)) {
+          await delay(getRetryDelayMs(attempt));
+          continue;
+        }
+        if (error instanceof Error && error.name === 'AbortError') {
+          throw new Error(`STT request timed out after ${timeoutMs}ms`);
+        }
+        throw error;
+      } finally {
+        clearTimeout(timeout);
+      }
+    }
+
+    throw new Error('STT request failed after retries');
+  }
 }
 
 function mimeTypeForAudioFormat(format: 'mp3' | 'wav') {
   return format === 'wav' ? 'audio/wav' : 'audio/mpeg';
+}
+
+function normalizeTranscriptionMimeType(rawMimeType: string | undefined): string {
+  const normalized = rawMimeType?.split(';', 1)[0]?.trim().toLowerCase();
+  if (!normalized) {
+    return 'audio/webm';
+  }
+
+  if (normalized === 'audio/mp3') {
+    return 'audio/mpeg';
+  }
+
+  if (normalized === 'audio/x-wav') {
+    return 'audio/wav';
+  }
+
+  if (normalized === 'audio/x-m4a') {
+    return 'audio/m4a';
+  }
+
+  return normalized;
+}
+
+function normalizeTranscriptionFileName(fileName: string, mimeType: string): string {
+  const trimmed = fileName.trim();
+  if (trimmed.length === 0) {
+    return `transcription.${extensionForTranscriptionMimeType(mimeType)}`;
+  }
+
+  const normalizedExtension = extensionForTranscriptionMimeType(mimeType);
+  const extension = trimmed.split('.').pop()?.toLowerCase();
+  if (extension === normalizedExtension) {
+    return trimmed;
+  }
+
+  const dotIndex = trimmed.lastIndexOf('.');
+  const withoutExtension = dotIndex > 0 ? trimmed.slice(0, dotIndex) : trimmed;
+  return `${withoutExtension}.${normalizedExtension}`;
+}
+
+function extensionForTranscriptionMimeType(mimeType: string): string {
+  switch (mimeType) {
+    case 'audio/flac':
+      return 'flac';
+    case 'audio/m4a':
+      return 'm4a';
+    case 'audio/mp4':
+      return 'mp4';
+    case 'audio/mpeg':
+    case 'audio/mpga':
+      return 'mp3';
+    case 'audio/ogg':
+      return 'ogg';
+    case 'audio/wav':
+      return 'wav';
+    case 'audio/webm':
+      return 'webm';
+    default:
+      return 'webm';
+  }
 }
 
 function normalizeOpenAiCompatibleBaseUrl(baseUrl: string): string {

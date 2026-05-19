@@ -6,6 +6,8 @@ import {
   AI_HINT_RESULT_QUEUE,
   AI_INTERVIEW_QUEUE,
   AI_INTERVIEW_RESULT_QUEUE,
+  AI_INTERVIEW_TRANSCRIPTION_QUEUE,
+  AI_INTERVIEW_TRANSCRIPTION_RESULT_QUEUE,
   AI_REVIEW_QUEUE,
   AI_REVIEW_RESULT_QUEUE,
   AI_SESSION_REPORT_QUEUE,
@@ -284,6 +286,10 @@ describe('AiProcessor', () => {
               model: 'qwen-tts',
               mimeType: 'audio/mpeg',
             }),
+            generateTranscription: vi.fn().mockResolvedValue({
+              text: 'transcribed answer',
+              model: 'glm-asr',
+            }),
           },
         },
         {
@@ -297,15 +303,16 @@ describe('AiProcessor', () => {
   });
 
   describe('onModuleInit', () => {
-    it('GIVEN the processor WHEN onModuleInit is called THEN registers handlers on all 6 queues', () => {
+    it('GIVEN the processor WHEN onModuleInit is called THEN registers handlers on all 7 queues', () => {
       processor.onModuleInit();
 
-      expect(mockQueueService.process).toHaveBeenCalledTimes(6);
+      expect(mockQueueService.process).toHaveBeenCalledTimes(7);
       expect(handlers.has(AI_HINT_QUEUE)).toBe(true);
       expect(handlers.has(AI_CODE_ANALYSIS_QUEUE)).toBe(true);
       expect(handlers.has(AI_WEAKNESS_ANALYSIS_QUEUE)).toBe(true);
       expect(handlers.has(AI_REVIEW_QUEUE)).toBe(true);
       expect(handlers.has(AI_INTERVIEW_QUEUE)).toBe(true);
+      expect(handlers.has(AI_INTERVIEW_TRANSCRIPTION_QUEUE)).toBe(true);
       expect(handlers.has(AI_SESSION_REPORT_QUEUE)).toBe(true);
 
       const sessionReportProcessCall = mockQueueService.process.mock.calls.find(
@@ -620,6 +627,38 @@ describe('AiProcessor', () => {
               errorMessage: null,
             }),
           ],
+        }),
+        resultJobOptions,
+      );
+    });
+  });
+
+  describe('interview transcription job processing', () => {
+    it('GIVEN an interview transcription job WHEN processed THEN enqueues result to transcription result queue', async () => {
+      processor.onModuleInit();
+      mockQueueService.enqueue.mockClear();
+
+      const handler = handlers.get(AI_INTERVIEW_TRANSCRIPTION_QUEUE)!;
+      const job = createFakeJob(
+        {
+          roomId: 'room-1',
+          sessionId: 'session-1',
+          participantId: 'user-1',
+          audioBase64: Buffer.from('audio').toString('base64'),
+          mimeType: 'audio/webm',
+          language: 'en-US',
+        },
+        'interview-transcription-job-1',
+      );
+
+      await handler(job);
+
+      expect(mockQueueService.enqueue).toHaveBeenCalledWith(
+        AI_INTERVIEW_TRANSCRIPTION_RESULT_QUEUE,
+        'interview-transcription-result',
+        expect.objectContaining({
+          jobId: 'interview-transcription-job-1',
+          text: 'transcribed answer',
         }),
         resultJobOptions,
       );
