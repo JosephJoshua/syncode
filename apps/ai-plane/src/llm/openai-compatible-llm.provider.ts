@@ -186,18 +186,7 @@ export class OpenAiCompatibleLlmProvider implements ILlmProvider {
   ): Promise<LlmGenerateTranscriptionResult> {
     const model = input.model ?? this.config.sttModel;
     const apiBaseUrl = normalizeOpenAiCompatibleBaseUrl(this.config.baseUrl);
-    const normalizedMimeType = normalizeTranscriptionMimeType(input.mimeType);
-    const normalizedFileName = normalizeTranscriptionFileName(input.fileName, normalizedMimeType);
-    const file = new Blob([Uint8Array.from(input.audio)], {
-      type: normalizedMimeType,
-    });
-    const formData = new FormData();
-    formData.append('model', model);
-    formData.append('file', file, normalizedFileName);
-    if (input.language?.trim()) {
-      formData.append('language', input.language.trim());
-    }
-
+    const formData = createTranscriptionFormData(input, model);
     const timeoutMs = Math.min(this.config.timeoutMs, STT_TIMEOUT_CAP_MS);
 
     for (let attempt = 1; attempt <= STT_MAX_RETRY_ATTEMPTS; attempt++) {
@@ -214,25 +203,15 @@ export class OpenAiCompatibleLlmProvider implements ILlmProvider {
           signal: controller.signal,
         });
 
-        if (!response.ok) {
-          const errorText = await response.text();
-          if (attempt < STT_MAX_RETRY_ATTEMPTS && isRetryableStatus(response.status)) {
+        const parsed = await parseTranscriptionResponse(response, model);
+        if (parsed.kind === 'retryable') {
+          if (attempt < STT_MAX_RETRY_ATTEMPTS) {
             await delay(getRetryDelayMs(attempt));
             continue;
           }
-          throw new Error(`STT request failed with ${response.status}: ${errorText}`);
+          throw parsed.error;
         }
-
-        const payload = (await response.json()) as OpenAiTranscriptionResponse;
-        const text = payload.text?.trim();
-        if (!text) {
-          throw new Error('STT response did not include transcript text');
-        }
-
-        return {
-          text,
-          model,
-        };
+        return parsed.result;
       } catch (error) {
         if (attempt < STT_MAX_RETRY_ATTEMPTS && isRetryableTransportError(error)) {
           await delay(getRetryDelayMs(attempt));
@@ -253,6 +232,55 @@ export class OpenAiCompatibleLlmProvider implements ILlmProvider {
 
 function mimeTypeForAudioFormat(format: 'mp3' | 'wav') {
   return format === 'wav' ? 'audio/wav' : 'audio/mpeg';
+}
+
+function createTranscriptionFormData(
+  input: LlmGenerateTranscriptionInput,
+  model: string,
+): FormData {
+  const normalizedMimeType = normalizeTranscriptionMimeType(input.mimeType);
+  const normalizedFileName = normalizeTranscriptionFileName(input.fileName, normalizedMimeType);
+  const file = new Blob([Uint8Array.from(input.audio)], {
+    type: normalizedMimeType,
+  });
+  const formData = new FormData();
+  formData.append('model', model);
+  formData.append('file', file, normalizedFileName);
+  if (input.language?.trim()) {
+    formData.append('language', input.language.trim());
+  }
+  return formData;
+}
+
+async function parseTranscriptionResponse(
+  response: Response,
+  model: string,
+): Promise<
+  { kind: 'ok'; result: LlmGenerateTranscriptionResult } | { kind: 'retryable'; error: Error }
+> {
+  if (!response.ok) {
+    const errorText = await response.text();
+    if (isRetryableStatus(response.status)) {
+      return {
+        kind: 'retryable',
+        error: new Error(`STT request failed with ${response.status}: ${errorText}`),
+      };
+    }
+    throw new Error(`STT request failed with ${response.status}: ${errorText}`);
+  }
+
+  const payload = (await response.json()) as OpenAiTranscriptionResponse;
+  const text = payload.text?.trim();
+  if (!text) {
+    throw new Error('STT response did not include transcript text');
+  }
+  return {
+    kind: 'ok',
+    result: {
+      text,
+      model,
+    },
+  };
 }
 
 function normalizeTranscriptionMimeType(rawMimeType: string | undefined): string {

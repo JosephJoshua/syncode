@@ -294,6 +294,62 @@ describe('OpenAiCompatibleLlmProvider', () => {
     ).rejects.toThrow('STT request failed with 400: bad request');
   });
 
+  it('GIVEN retryable transcription status WHEN generateTranscription THEN surfaces final retryable error', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 502,
+      text: async () => 'bad gateway',
+    });
+
+    const provider = new OpenAiCompatibleLlmProvider(
+      {
+        baseUrl: 'https://example.com/v1',
+        apiKey: 'secret',
+        model: 'qwen3.5-mini',
+        sttModel: 'glm-asr',
+        ttsModel: 'qwen-tts',
+        ttsVoice: 'Chelsie',
+        timeoutMs: 1000,
+      },
+      fetchImpl as typeof fetch,
+    );
+
+    await expect(
+      provider.generateTranscription({
+        audio: Buffer.from([1, 2, 3]),
+        mimeType: 'audio/webm',
+        fileName: 'sample.webm',
+      }),
+    ).rejects.toThrow('STT request failed with 502: bad gateway');
+  });
+
+  it('GIVEN abort transport error WHEN generateTranscription THEN throws timeout message', async () => {
+    const abortError = new Error('aborted');
+    abortError.name = 'AbortError';
+    const fetchImpl = vi.fn().mockRejectedValue(abortError);
+
+    const provider = new OpenAiCompatibleLlmProvider(
+      {
+        baseUrl: 'https://example.com/v1',
+        apiKey: 'secret',
+        model: 'qwen3.5-mini',
+        sttModel: 'glm-asr',
+        ttsModel: 'qwen-tts',
+        ttsVoice: 'Chelsie',
+        timeoutMs: 1000,
+      },
+      fetchImpl as typeof fetch,
+    );
+
+    await expect(
+      provider.generateTranscription({
+        audio: Buffer.from([1, 2, 3]),
+        mimeType: 'audio/webm',
+        fileName: 'sample.webm',
+      }),
+    ).rejects.toThrow('STT request timed out after 1000ms');
+  });
+
   it('GIVEN codec-suffixed mime type WHEN generateTranscription THEN normalizes uploaded file metadata', async () => {
     const fetchImpl = vi.fn().mockResolvedValue({
       ok: true,
