@@ -878,6 +878,186 @@ function Field({
   );
 }
 
+function MarkdownEditor({
+  label,
+  value,
+  onChange,
+  placeholder,
+}: {
+  readonly label: string;
+  readonly value: string;
+  readonly onChange: (value: string) => void;
+  readonly placeholder: string;
+}) {
+  const [mode, setMode] = useState<'edit' | 'preview'>('edit');
+  const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
+
+  const apply = (before: string, after = '', fallback = '') => {
+    const editor = editorRef.current;
+    if (!editor) {
+      onChange(`${value}${fallback || before}${after}`);
+      return;
+    }
+    const selection = editor.getSelection();
+    if (!selection) {
+      onChange(`${value}${fallback || before}${after}`);
+      return;
+    }
+    editor.executeEdits('markdown-toolbar', [
+      {
+        range: selection,
+        text: `${before}${fallback}${after}`,
+        forceMoveMarkers: true,
+      },
+    ]);
+  };
+
+  return (
+    <div className="space-y-2">
+      <Label>{label}</Label>
+      <div className="overflow-hidden rounded-lg border border-input bg-background">
+        <div className="flex flex-wrap items-center gap-1 border-b border-border/60 bg-muted/30 p-1">
+          <ToolbarButton
+            label="Bold"
+            icon={<Bold className="size-4" />}
+            onClick={() => apply('**', '**', 'bold')}
+          />
+          <ToolbarButton
+            label="Italic"
+            icon={<Italic className="size-4" />}
+            onClick={() => apply('_', '_', 'italic')}
+          />
+          <ToolbarButton
+            label="Heading"
+            icon={<Heading2 className="size-4" />}
+            onClick={() => apply('## ', '', 'Heading')}
+          />
+          <ToolbarButton
+            label="Quote"
+            icon={<Quote className="size-4" />}
+            onClick={() => apply('> ', '', 'Quote')}
+          />
+          <ToolbarButton
+            label="Code"
+            icon={<Code2 className="size-4" />}
+            onClick={() => apply('`', '`', 'code')}
+          />
+          <ToolbarButton
+            label="Link"
+            icon={<LinkIcon className="size-4" />}
+            onClick={() => apply('[', '](https://)', 'link')}
+          />
+          <ToolbarButton
+            label="Bulleted list"
+            icon={<List className="size-4" />}
+            onClick={() => apply('- ', '', 'item')}
+          />
+          <ToolbarButton
+            label="Numbered list"
+            icon={<ListOrdered className="size-4" />}
+            onClick={() => apply('1. ', '', 'item')}
+          />
+          <ToolbarButton
+            label="Table"
+            icon={<Table2 className="size-4" />}
+            onClick={() => apply('\n| Input | Output |\\n| --- | --- |\\n|  |  |\\n')}
+          />
+          <div className="ml-auto flex gap-1">
+            <Button
+              type="button"
+              size="xs"
+              variant={mode === 'edit' ? 'secondary' : 'ghost'}
+              onClick={() => setMode('edit')}
+            >
+              <FileText className="size-4" />
+            </Button>
+            <Button
+              type="button"
+              size="xs"
+              variant={mode === 'preview' ? 'secondary' : 'ghost'}
+              onClick={() => setMode('preview')}
+            >
+              <Eye className="size-4" />
+            </Button>
+          </div>
+        </div>
+        {mode === 'edit' ? (
+          <div className="h-80">
+            <Suspense fallback={EDITOR_LOADING}>
+              <Editor
+                beforeMount={handleEditorWillMount}
+                defaultLanguage="markdown"
+                language="markdown"
+                loading={EDITOR_LOADING}
+                onMount={(editor) => {
+                  editorRef.current = editor;
+                }}
+                onChange={(next) => onChange(next ?? '')}
+                options={{
+                  ...EDITOR_OPTIONS_BASE,
+                  ariaLabel: label,
+                  glyphMargin: false,
+                  lineNumbers: 'on',
+                  wordWrap: 'on',
+                }}
+                theme="syncode-dark"
+                value={value}
+              />
+            </Suspense>
+          </div>
+        ) : (
+          <div className="min-h-80 px-4 py-3">
+            {value.trim() ? (
+              <ProblemMarkdown content={value} />
+            ) : (
+              <p className="text-sm text-muted-foreground">{placeholder}</p>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ToolbarButton({
+  label,
+  icon,
+  onClick,
+}: {
+  readonly label: string;
+  readonly icon: React.ReactNode;
+  readonly onClick: () => void;
+}) {
+  return (
+    <Button
+      type="button"
+      size="xs"
+      variant="ghost"
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+    >
+      {icon}
+    </Button>
+  );
+}
+
+function createDefaultFormValues(): AdminProblemFormValues {
+  return {
+    title: '',
+    difficulty: 'medium',
+    company: '',
+    description: '',
+    constraints: '',
+    examplesText: '[]',
+    starterCodeText: '{}',
+    timeLimit: '',
+    memoryLimit: '',
+    isPublished: false,
+    testCases: [createTestCase()],
+  };
+}
+
 function createTestCase(): AdminProblemFormValues['testCases'][number] {
   return {
     input: '',
@@ -916,6 +1096,36 @@ function buildCreateProblemInput(values: AdminProblemFormValues): CreateProblemI
       timeoutMs: parseOptionalPositiveInteger(item.timeoutMs, 60_000) ?? undefined,
       memoryMb: parseOptionalPositiveInteger(item.memoryMb, 4096) ?? undefined,
     })),
+  };
+}
+
+function buildUpdateProblemInput(values: AdminProblemFormValues): UpdateProblemInput {
+  const { isPublished: _isPublished, ...input } = buildCreateProblemInput(values);
+  return input;
+}
+
+function problemDetailToFormValues(problem: ProblemDetail): AdminProblemFormValues {
+  return {
+    title: problem.title,
+    difficulty: problem.difficulty,
+    company: problem.company ?? '',
+    description: problem.description,
+    constraints: problem.constraints ?? '',
+    examplesText: JSON.stringify(problem.examples, null, 2),
+    starterCodeText: JSON.stringify(problem.starterCode ?? {}, null, 2),
+    timeLimit: problem.timeLimit?.toString() ?? '',
+    memoryLimit: problem.memoryLimit?.toString() ?? '',
+    isPublished: problem.isPublished,
+    testCases: problem.testCases.length
+      ? problem.testCases.map((testCase) => ({
+          input: testCase.input,
+          expectedOutput: testCase.expectedOutput,
+          description: testCase.description ?? '',
+          isHidden: testCase.isHidden,
+          timeoutMs: testCase.timeoutMs?.toString() ?? '',
+          memoryMb: testCase.memoryMb?.toString() ?? '',
+        }))
+      : [createTestCase()],
   };
 }
 
@@ -1000,4 +1210,11 @@ function parseOptionalPositiveInteger(value: string, max: number): number | null
     return null;
   }
   return parsed;
+}
+
+async function invalidateProblemQueries(queryClient: ReturnType<typeof useQueryClient>) {
+  await Promise.all([
+    queryClient.invalidateQueries({ queryKey: ['admin', 'problems'] }),
+    queryClient.invalidateQueries({ queryKey: ['problems'] }),
+  ]);
 }
