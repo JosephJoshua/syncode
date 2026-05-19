@@ -330,30 +330,49 @@ export class AiService {
   ): Promise<InterviewResponseResult> {
     this.logger.debug(`Generating interview response for room ${request.roomId}`);
 
-    const llmResult = await this.llmProvider.generateText({
-      messages: [
-        {
-          role: 'system',
-          content: this.buildInterviewSystemPrompt(),
-        },
-        {
-          role: 'user',
-          content: this.buildInterviewPrompt(request),
-        },
-      ],
-      temperature: 0.4,
-      maxOutputTokens: 600,
-      jsonMode: true,
-      model: this.resolveInterviewModel(),
-    });
+    try {
+      const llmResult = await this.llmProvider.generateText({
+        messages: [
+          {
+            role: 'system',
+            content: this.buildInterviewSystemPrompt(),
+          },
+          {
+            role: 'user',
+            content: this.buildInterviewPrompt(request),
+          },
+        ],
+        temperature: 0.4,
+        maxOutputTokens: 600,
+        jsonMode: true,
+        model: this.resolveInterviewModel(),
+      });
 
-    const parsed = this.parseInterviewOutput(llmResult.text, request);
-    const audio = await this.generateInterviewAudio(request, parsed);
+      const parsed = this.parseInterviewOutput(llmResult.text, request);
+      const audio = await this.generateInterviewAudio(request, parsed);
 
-    return {
-      ...parsed,
-      audio,
-    };
+      return {
+        ...parsed,
+        audio,
+      };
+    } catch (error) {
+      this.logger.warn(
+        `Interview text generation failed for room ${request.roomId}; using deterministic fallback: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+
+      return this.postProcessInterviewResponse(
+        {
+          message:
+            "I can keep the interview moving. Let's focus on the reasoning behind your current approach.",
+          followUpQuestion:
+            'What invariant should hold after each iteration, and which edge case would break it first?',
+          codeContext: this.resolveInterviewCodeContext(request),
+        },
+        request,
+      );
+    }
   }
 
   async generateSessionReport(

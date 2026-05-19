@@ -56,6 +56,7 @@ export interface RoomWhiteboardPanelProps {
 }
 
 const VISIBILITY_PREFIX = 'whiteboard:visibility';
+const TLDRAW_LICENSE_KEY = import.meta.env.VITE_TLDRAW_LICENSE_KEY;
 
 function readVisibilityPrefs(
   roomId: string,
@@ -384,6 +385,7 @@ export function RoomWhiteboardPanel({
       <div className="relative flex-1 overflow-hidden">
         <Tldraw
           store={storeWithStatus}
+          licenseKey={TLDRAW_LICENSE_KEY}
           autoFocus={false}
           onMount={handleMount}
           components={{

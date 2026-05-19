@@ -811,6 +811,19 @@ describe('AiService', () => {
       expect(result.followUpQuestion).toContain('map contain');
       expect(result.audio).toBeUndefined();
     });
+
+    it('GIVEN interview model request fails WHEN generateInterviewResponse is called THEN returns deterministic fallback without audio', async () => {
+      const { service, llmProvider } = createServiceWithLlmResponse('unused');
+      vi.mocked(llmProvider.generateText).mockRejectedValueOnce(new Error('provider unavailable'));
+
+      const result = await service.generateInterviewResponse(baseInterviewRequest);
+
+      expect(result.message).toContain('keep the interview moving');
+      expect(result.followUpQuestion).toContain('invariant');
+      expect(result.codeContext).toEqual(baseInterviewRequest.codeContext);
+      expect(result.audio).toBeUndefined();
+      expect(llmProvider.generateSpeech).not.toHaveBeenCalled();
+    });
   });
 
   describe('generateSessionReport', () => {
