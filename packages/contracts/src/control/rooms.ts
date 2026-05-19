@@ -220,6 +220,67 @@ export const aiInterviewExecutionSummarySchema = z.object({
 
 export type AiInterviewExecutionSummary = z.infer<typeof aiInterviewExecutionSummarySchema>;
 
+export const staticAnalysisEvidenceSchema = z.object({
+  source: z.enum(['run', 'submission']),
+  runId: z.uuid().nullable(),
+  submissionId: z.uuid().nullable(),
+  language: z.enum(SUPPORTED_LANGUAGES),
+  createdAt: z.iso.datetime(),
+  completedAt: z.iso.datetime().nullable(),
+  summary: z.object({
+    diagnosticCount: z.number().int().nonnegative(),
+    errorCount: z.number().int().nonnegative(),
+    warningCount: z.number().int().nonnegative(),
+    maxCyclomaticComplexity: z.number().int().nullable(),
+    highComplexityCount: z.number().int().nonnegative(),
+    duplicationCount: z.number().int().nonnegative(),
+    toolFailureCount: z.number().int().nonnegative(),
+  }),
+  diagnostics: z
+    .array(
+      z.object({
+        tool: z.string(),
+        rule: z.string().nullable(),
+        severity: z.enum(['error', 'warning', 'info']),
+        message: z.string(),
+        file: z.string().nullable(),
+        line: z.number().int().nullable(),
+        column: z.number().int().nullable(),
+      }),
+    )
+    .default([]),
+  complexity: z
+    .array(
+      z.object({
+        tool: z.string(),
+        functionName: z.string(),
+        file: z.string().nullable(),
+        startLine: z.number().int(),
+        endLine: z.number().int().nullable(),
+        cyclomaticComplexity: z.number().int(),
+      }),
+    )
+    .default([]),
+  duplications: z
+    .array(
+      z.object({
+        tool: z.string(),
+        lines: z.number().int().nonnegative(),
+        tokens: z.number().int().nullable(),
+        occurrences: z.array(
+          z.object({
+            file: z.string().nullable(),
+            startLine: z.number().int(),
+            endLine: z.number().int().nullable(),
+          }),
+        ),
+      }),
+    )
+    .default([]),
+});
+
+export type StaticAnalysisEvidence = z.infer<typeof staticAnalysisEvidenceSchema>;
+
 export const aiInterviewCodeAnalysisContextSchema = z.object({
   summary: z.string().min(1).max(2000),
   focusAreas: z
@@ -230,6 +291,7 @@ export const aiInterviewCodeAnalysisContextSchema = z.object({
     })
     .optional(),
   followUpQuestions: z.array(z.string().min(1).max(500)).max(5).optional(),
+  staticAnalysis: staticAnalysisEvidenceSchema.optional(),
 });
 
 export type AiInterviewCodeAnalysisContext = z.infer<typeof aiInterviewCodeAnalysisContextSchema>;
@@ -466,6 +528,11 @@ export const submitResponseSchema = z.object({
     .uuid()
     .describe('Submission ID for polling results via GET /submissions/:submissionId')
     .meta({ examples: ['550e8400-e29b-41d4-a716-446655440000'] }),
+  staticAnalysisJobId: z
+    .string()
+    .nullable()
+    .describe('Static analysis job ID for polling lint, complexity, and duplication findings')
+    .meta({ examples: ['static-analysis-job-abc-123'] }),
 });
 
 export type SubmitResponse = z.infer<typeof submitResponseSchema>;
@@ -539,6 +606,11 @@ export const runCodeResponseSchema = z.object({
     .string()
     .describe('Job ID for polling execution result via GET /execution/:jobId')
     .meta({ examples: ['exec-job-abc-123'] }),
+  staticAnalysisJobId: z
+    .string()
+    .nullable()
+    .describe('Static analysis job ID for polling lint, complexity, and duplication findings')
+    .meta({ examples: ['static-analysis-job-abc-123'] }),
 });
 
 export type RunCodeResponse = z.infer<typeof runCodeResponseSchema>;

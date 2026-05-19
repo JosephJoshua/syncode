@@ -17,6 +17,7 @@ import {
   type JobStatusResponse,
   type ProblemDetail,
   type RoomDetail,
+  type StaticAnalysisResultResponse,
 } from '@syncode/contracts';
 import type { RoomRole, RoomStatus, SupportedLanguage } from '@syncode/shared';
 import { Avatar, AvatarFallback, AvatarImage, Badge, Button, cn } from '@syncode/ui';
@@ -32,7 +33,17 @@ import {
   TerminalSquare,
 } from 'lucide-react';
 import { motion } from 'motion/react';
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import {
+  type Dispatch,
+  type RefObject,
+  type SetStateAction,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import {
@@ -71,7 +82,10 @@ import { RoomHeaderBar } from './room-header-bar.js';
 import { type Participant, RoomParticipantCard } from './room-participant-card.js';
 import { type ProblemData, type RoomHintItem, RoomProblemPanel } from './room-problem-panel.js';
 import { RoomStatusBar } from './room-status-bar.js';
-import { shouldEnableWhiteboardKeyboardShortcuts } from './room-whiteboard-keyboard.js';
+import {
+  nextWhiteboardKeyboardFocusState,
+  shouldEnableWhiteboardKeyboardShortcuts,
+} from './room-whiteboard-keyboard.js';
 import { RoomWhiteboardPanel } from './room-whiteboard-panel.js';
 import {
   type CaseRunState,
@@ -88,6 +102,7 @@ import {
 } from './room-workspace-utils.js';
 import { RunResultsPanel } from './run-results-panel.js';
 import { StageTransitionOverlay } from './stage-transition-overlay.js';
+import { StaticAnalysisPanel, type StaticAnalysisPanelState } from './static-analysis-panel.js';
 import { SubmissionPreviewModal } from './submission-preview-modal.js';
 import { TestCaseEditor } from './testcase-editor.js';
 
@@ -296,6 +311,14 @@ export function RoomWorkspace({
   const aiInterviewSeenMessageIdsRef = useRef<Set<string>>(new Set());
   const aiInterviewToastInitializedRef = useRef(false);
   const aiInterviewReadMessageIdsRef = useRef<Set<string>>(new Set());
+  const cancelSubmitPollRef = useRef<(() => void) | null>(null);
+  const cancelRunStaticAnalysisPollRef = useRef<(() => void) | null>(null);
+  const cancelSubmitStaticAnalysisPollRef = useRef<(() => void) | null>(null);
+  const [runStaticAnalysisState, setRunStaticAnalysisState] = useState<StaticAnalysisPanelState>({
+    status: 'idle',
+  });
+  const [submitStaticAnalysisState, setSubmitStaticAnalysisState] =
+    useState<StaticAnalysisPanelState>({ status: 'idle' });
 
   useEffect(() => {
     if (!room.problemId) return;
@@ -354,6 +377,10 @@ export function RoomWorkspace({
 
     previousRoomIdRef.current = roomId;
     cancelAiInterviewPolling();
+    cancelRunStaticAnalysisPollRef.current?.();
+    cancelRunStaticAnalysisPollRef.current = null;
+    cancelSubmitStaticAnalysisPollRef.current?.();
+    cancelSubmitStaticAnalysisPollRef.current = null;
     setAiInterviewLoading(false);
     setAiInterviewError(null);
     setAiInterviewMessages([]);
@@ -369,6 +396,8 @@ export function RoomWorkspace({
     aiInterviewSeenMessageIdsRef.current.clear();
     aiInterviewReadMessageIdsRef.current.clear();
     aiInterviewToastInitializedRef.current = false;
+    setRunStaticAnalysisState({ status: 'idle' });
+    setSubmitStaticAnalysisState({ status: 'idle' });
   }, [cancelAiInterviewPolling, roomId]);
 
   useLayoutEffect(() => {
@@ -411,8 +440,6 @@ export function RoomWorkspace({
     observer.observe(el);
     return () => observer.disconnect();
   }, [rightCollapsed]);
-  const cancelSubmitPollRef = useRef<(() => void) | null>(null);
-
   const [testCases, setTestCases] = useState<TestCaseEntry[]>([]);
   const [activeCaseId, setActiveCaseId] = useState('');
   const [multiRunState, setMultiRunState] = useState<MultiRunState>({ status: 'idle' });
@@ -424,10 +451,26 @@ export function RoomWorkspace({
     isCodeEditorFocused,
     whiteboardHasKeyboardFocus,
   });
+  const updateWhiteboardKeyboardFocus = useCallback(
+    (event: Parameters<typeof nextWhiteboardKeyboardFocusState>[1]) => {
+      const next = nextWhiteboardKeyboardFocusState(
+        { isCodeEditorFocused, whiteboardHasKeyboardFocus },
+        event,
+      );
+      setIsCodeEditorFocused(next.isCodeEditorFocused);
+      setWhiteboardHasKeyboardFocus(next.whiteboardHasKeyboardFocus);
+    },
+    [isCodeEditorFocused, whiteboardHasKeyboardFocus],
+  );
+  const markCodeEditorKeyboardFocus = useCallback(
+    (focused: boolean) => {
+      updateWhiteboardKeyboardFocus({ source: 'code-editor', focused });
+    },
+    [updateWhiteboardKeyboardFocus],
+  );
   const markWhiteboardKeyboardFocus = useCallback(() => {
-    setWhiteboardHasKeyboardFocus(true);
-    setIsCodeEditorFocused(false);
-  }, []);
+    updateWhiteboardKeyboardFocus({ source: 'whiteboard' });
+  }, [updateWhiteboardKeyboardFocus]);
 
   useEffect(() => {
     const sourceCases = problem?.testCases ?? (isMockPreview ? MOCK_WORKSPACE_TEST_CASES : null);
@@ -447,6 +490,8 @@ export function RoomWorkspace({
   useEffect(() => {
     return () => {
       cancelSubmitPollRef.current?.();
+      cancelRunStaticAnalysisPollRef.current?.();
+      cancelSubmitStaticAnalysisPollRef.current?.();
       for (const cancel of cancelMultiRunRef.current.values()) cancel();
     };
   }, []);
@@ -821,11 +866,66 @@ export function RoomWorkspace({
     };
   }, [doc, language, room.mode]);
 
+  const startStaticAnalysisPoll = useCallback(
+    (
+      jobId: string | null,
+      setAnalysisState: Dispatch<SetStateAction<StaticAnalysisPanelState>>,
+      cancelRef: RefObject<(() => void) | null>,
+    ) => {
+      cancelRef.current?.();
+
+      if (!jobId) {
+        setAnalysisState({
+          status: 'request-error',
+          message: t('workspace.staticAnalysisUnavailable'),
+        });
+        return;
+      }
+
+      let cancelled = false;
+      cancelRef.current = () => {
+        cancelled = true;
+      };
+      setAnalysisState({ status: 'pending' });
+
+      const poll = async () => {
+        try {
+          const response: StaticAnalysisResultResponse = await api(
+            CONTROL_API.EXECUTION.GET_STATIC_ANALYSIS,
+            { params: { jobId } },
+          );
+
+          if (cancelled) return;
+
+          setAnalysisState(response);
+          if (response.status === 'pending') {
+            setTimeout(() => {
+              if (!cancelled) void poll();
+            }, EXECUTION_POLL_INTERVAL_MS);
+          }
+        } catch (error) {
+          const apiError = await readApiError(error);
+          if (!cancelled) {
+            setAnalysisState({
+              status: 'request-error',
+              message: apiError?.message ?? t('workspace.staticAnalysisFailedToLoad'),
+            });
+          }
+        }
+      };
+
+      void poll();
+    },
+    [t],
+  );
+
   const handleRunCode = async () => {
     if (testCases.length === 0) return;
 
     for (const cancel of cancelMultiRunRef.current.values()) cancel();
     cancelMultiRunRef.current.clear();
+    cancelRunStaticAnalysisPollRef.current?.();
+    setRunStaticAnalysisState({ status: 'idle' });
     setActiveBottomTab('output');
     setLatestRunSummary(createPendingInterviewExecutionSummary(testCases.length));
 
@@ -837,10 +937,15 @@ export function RoomWorkspace({
 
     const code = getCode();
     const results = await Promise.all(
-      testCases.map(async (tc) => {
-        const jobId = await runCase(tc, code);
-        return jobId
-          ? { caseId: tc.id, jobId, label: tc.label, expectedOutput: tc.expectedOutput }
+      testCases.map(async (tc, index) => {
+        const result = await runCase(tc, code, { trackStaticAnalysis: index === 0 });
+        return result
+          ? {
+              caseId: tc.id,
+              jobId: result.jobId,
+              label: tc.label,
+              expectedOutput: tc.expectedOutput,
+            }
           : null;
       }),
     );
@@ -911,7 +1016,9 @@ export function RoomWorkspace({
   const handleSubmitCode = useCallback(
     async (codeOverride?: string) => {
       cancelSubmitPollRef.current?.();
+      cancelSubmitStaticAnalysisPollRef.current?.();
       setSubmitState({ status: 'submitting' });
+      setSubmitStaticAnalysisState({ status: 'idle' });
       setActiveBottomTab('results');
 
       try {
@@ -921,6 +1028,11 @@ export function RoomWorkspace({
         });
 
         setSubmitState({ status: 'polling', submissionId: response.submissionId });
+        startStaticAnalysisPoll(
+          response.staticAnalysisJobId,
+          setSubmitStaticAnalysisState,
+          cancelSubmitStaticAnalysisPollRef,
+        );
         cancelSubmitPollRef.current = pollSubmission(response.submissionId);
         broadcastSubmit(currentUserName, response.submissionId);
       } catch (error) {
@@ -935,7 +1047,16 @@ export function RoomWorkspace({
         toast.error(message);
       }
     },
-    [broadcastSubmit, currentUserName, getCode, language, pollSubmission, roomId, t],
+    [
+      broadcastSubmit,
+      currentUserName,
+      getCode,
+      language,
+      pollSubmission,
+      roomId,
+      startStaticAnalysisPoll,
+      t,
+    ],
   );
 
   const requestSubmitCode = useCallback(() => {
@@ -955,7 +1076,11 @@ export function RoomWorkspace({
     void handleSubmitCode(codeSnapshot);
   }, [submissionPreviewCode, submitDisabled, handleSubmitCode]);
 
-  const runCase = async (tc: TestCaseEntry, code?: string): Promise<string | null> => {
+  const runCase = async (
+    tc: TestCaseEntry,
+    code?: string,
+    options: { trackStaticAnalysis?: boolean } = {},
+  ): Promise<{ jobId: string; staticAnalysisJobId: string | null } | null> => {
     cancelMultiRunRef.current.get(tc.id)?.();
     const token = { cancelled: false };
     cancelMultiRunRef.current.set(tc.id, () => {
@@ -978,7 +1103,15 @@ export function RoomWorkspace({
       });
 
       pollCaseExecution(tc.id, response.jobId, tc.expectedOutput, token);
-      return response.jobId;
+      if (options.trackStaticAnalysis ?? true) {
+        startStaticAnalysisPoll(
+          response.staticAnalysisJobId,
+          setRunStaticAnalysisState,
+          cancelRunStaticAnalysisPollRef,
+        );
+      }
+
+      return { jobId: response.jobId, staticAnalysisJobId: response.staticAnalysisJobId };
     } catch (error) {
       if (token.cancelled) return null;
       const apiError = await readApiError(error);
@@ -1837,6 +1970,8 @@ export function RoomWorkspace({
                       'absolute inset-0',
                       activeCenterTab === 'code' ? 'visible' : 'invisible',
                     )}
+                    onFocusCapture={() => markCodeEditorKeyboardFocus(true)}
+                    onPointerDownCapture={() => markCodeEditorKeyboardFocus(true)}
                   >
                     {doc && awareness && collabStatus === 'connected' ? (
                       <CollaborativeEditor
@@ -1859,7 +1994,7 @@ export function RoomWorkspace({
                         onRunCode={() => void handleRunCodeRef.current()}
                         onSubmitCode={() => void requestSubmitCodeRef.current()}
                         onCodeContextChange={setEditorCodeContext}
-                        onFocusChange={setIsCodeEditorFocused}
+                        onFocusChange={markCodeEditorKeyboardFocus}
                       />
                     ) : (
                       EDITOR_LOADING
@@ -1933,7 +2068,9 @@ export function RoomWorkspace({
               isEditorReadOnly={isEditorReadOnly}
               multiRunState={multiRunState}
               handleRunSingleCase={handleRunSingleCase}
+              runStaticAnalysisState={runStaticAnalysisState}
               submitState={submitState}
+              submitStaticAnalysisState={submitStaticAnalysisState}
               canSubmitCode={canSubmitCode}
               isSubmitBusy={isSubmitBusy}
               t={t}
@@ -2337,7 +2474,9 @@ function WorkspaceBottomPanel({
   isEditorReadOnly,
   multiRunState,
   handleRunSingleCase,
+  runStaticAnalysisState,
   submitState,
+  submitStaticAnalysisState,
   canSubmitCode,
   isSubmitBusy,
   t,
@@ -2355,7 +2494,9 @@ function WorkspaceBottomPanel({
   readonly isEditorReadOnly: boolean;
   readonly multiRunState: MultiRunState;
   readonly handleRunSingleCase: (id: string) => void;
+  readonly runStaticAnalysisState: StaticAnalysisPanelState;
   readonly submitState: SubmitState;
+  readonly submitStaticAnalysisState: StaticAnalysisPanelState;
   readonly canSubmitCode: boolean;
   readonly isSubmitBusy: boolean;
   readonly t: (key: string) => string;
@@ -2419,7 +2560,9 @@ function WorkspaceBottomPanel({
             isEditorReadOnly={isEditorReadOnly}
             multiRunState={multiRunState}
             handleRunSingleCase={handleRunSingleCase}
+            runStaticAnalysisState={runStaticAnalysisState}
             submitState={submitState}
+            submitStaticAnalysisState={submitStaticAnalysisState}
           />
         </div>
       </div>
@@ -2457,7 +2600,9 @@ function BottomTabContent({
   isEditorReadOnly,
   multiRunState,
   handleRunSingleCase,
+  runStaticAnalysisState,
   submitState,
+  submitStaticAnalysisState,
 }: {
   readonly activeBottomTab: 'testcases' | 'output' | 'results';
   readonly testCases: TestCaseEntry[];
@@ -2469,7 +2614,9 @@ function BottomTabContent({
   readonly isEditorReadOnly: boolean;
   readonly multiRunState: MultiRunState;
   readonly handleRunSingleCase: (id: string) => void;
+  readonly runStaticAnalysisState: StaticAnalysisPanelState;
   readonly submitState: SubmitState;
+  readonly submitStaticAnalysisState: StaticAnalysisPanelState;
 }) {
   if (activeBottomTab === 'testcases') {
     return (
@@ -2486,17 +2633,28 @@ function BottomTabContent({
   }
   if (activeBottomTab === 'output') {
     return (
-      <RunResultsPanel
-        multiRunState={multiRunState}
-        cases={testCases}
-        onRunCase={handleRunSingleCase}
-      />
+      <div className="space-y-3">
+        <RunResultsPanel
+          multiRunState={multiRunState}
+          cases={testCases}
+          onRunCase={handleRunSingleCase}
+        />
+        <StaticAnalysisPanel analysis={runStaticAnalysisState} />
+      </div>
     );
   }
-  return <SubmissionOutput submitState={submitState} />;
+  return (
+    <SubmissionOutput submitState={submitState} staticAnalysisState={submitStaticAnalysisState} />
+  );
 }
 
-function SubmissionOutput({ submitState }: { submitState: SubmitState }) {
+function SubmissionOutput({
+  submitState,
+  staticAnalysisState,
+}: {
+  readonly submitState: SubmitState;
+  readonly staticAnalysisState: StaticAnalysisPanelState;
+}) {
   const { t } = useTranslation('rooms');
 
   if (submitState.status === 'idle') {
@@ -2513,21 +2671,29 @@ function SubmissionOutput({ submitState }: { submitState: SubmitState }) {
 
   if (submitState.status === 'submitting') {
     return (
-      <div className="flex items-center gap-2">
-        <Loader2 className="size-3 animate-spin text-primary" />
-        <span className="font-mono text-xs text-muted-foreground">{t('workspace.submitting')}</span>
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <Loader2 className="size-3 animate-spin text-primary" />
+          <span className="font-mono text-xs text-muted-foreground">
+            {t('workspace.submitting')}
+          </span>
+        </div>
+        <StaticAnalysisPanel analysis={staticAnalysisState} />
       </div>
     );
   }
 
   if (submitState.status === 'polling') {
     return (
-      <div className="flex items-center gap-2">
-        <Loader2 className="size-3 animate-spin text-primary" />
-        <span className="font-mono text-xs text-primary/80">
-          {t('workspace.submissionPolling')}
-        </span>
-        <span className="terminal-cursor" />
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <Loader2 className="size-3 animate-spin text-primary" />
+          <span className="font-mono text-xs text-primary/80">
+            {t('workspace.submissionPolling')}
+          </span>
+          <span className="terminal-cursor" />
+        </div>
+        <StaticAnalysisPanel analysis={staticAnalysisState} />
       </div>
     );
   }
@@ -2536,7 +2702,12 @@ function SubmissionOutput({ submitState }: { submitState: SubmitState }) {
     return <p className="font-mono text-xs text-destructive">{submitState.message}</p>;
   }
 
-  return <ExecutionDetailsPanel details={submitState.details} />;
+  return (
+    <div className="space-y-3">
+      <ExecutionDetailsPanel details={submitState.details} />
+      <StaticAnalysisPanel analysis={staticAnalysisState} />
+    </div>
+  );
 }
 
 function buildInterviewCodeContext(

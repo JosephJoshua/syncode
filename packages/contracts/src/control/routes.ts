@@ -19,6 +19,7 @@ import type {
   executionDetailsResponseSchema,
   executionResultResponseSchema,
   jobStatusResponseSchema,
+  staticAnalysisResultResponseSchema,
 } from './execution.js';
 import type { sessionFeedbackResponseSchema, submitSessionFeedbackSchema } from './feedback.js';
 import type { healthCheckResponseSchema } from './health.js';
@@ -261,6 +262,10 @@ export const CONTROL_API = {
     >()('execution/:jobId', 'GET'),
     GET_STATUS: defineRoute<void, z.infer<typeof jobStatusResponseSchema>>()(
       'execution/:jobId/status',
+      'GET',
+    ),
+    GET_STATIC_ANALYSIS: defineRoute<void, z.infer<typeof staticAnalysisResultResponseSchema>>()(
+      'execution/static-analysis/:jobId',
       'GET',
     ),
     GET_SUBMISSION_DETAILS: defineRoute<void, z.infer<typeof executionDetailsResponseSchema>>()(

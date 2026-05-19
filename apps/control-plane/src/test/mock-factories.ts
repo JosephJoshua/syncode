@@ -69,6 +69,19 @@ export function createMockMediaService() {
 export function createMockExecutionClient() {
   return {
     submit: vi.fn().mockResolvedValue({ jobId: 'stub-job' }),
+    getResult: vi.fn().mockResolvedValue(null),
+    getJobStatus: vi.fn().mockResolvedValue('queued'),
+    submitStaticAnalysis: vi
+      .fn()
+      .mockImplementation((_request, options) =>
+        Promise.resolve({ jobId: options?.idempotencyKey ?? 'static-analysis-job' }),
+      ),
+    getStaticAnalysisResult: vi.fn().mockResolvedValue(null),
+    getStaticAnalysisJobStatus: vi.fn().mockResolvedValue('queued'),
+    cancel: vi.fn().mockResolvedValue(undefined),
+    healthCheck: vi.fn().mockResolvedValue(true),
+    onResult: vi.fn(),
+    onStaticAnalysisResult: vi.fn(),
   };
 }
 

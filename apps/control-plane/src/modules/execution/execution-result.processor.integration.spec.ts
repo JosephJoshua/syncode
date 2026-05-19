@@ -1,8 +1,8 @@
 import { Test } from '@nestjs/testing';
-import type { RunCodeResult } from '@syncode/contracts';
+import type { RunCodeResult, StaticAnalysisResult } from '@syncode/contracts';
 import { EXECUTION_CLIENT } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
-import { executionResults, submissions } from '@syncode/db';
+import { executionResults, staticAnalysisResults, submissions } from '@syncode/db';
 import { CACHE_SERVICE } from '@syncode/shared/ports';
 import { eq } from 'drizzle-orm';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
@@ -11,6 +11,7 @@ import {
   createTestDb,
   insertProblem,
   insertRoom,
+  insertRun,
   insertSubmission,
   insertTestCase,
   insertUser,
@@ -23,6 +24,7 @@ let db: Database;
 let cleanup: () => Promise<void>;
 let processor: ExecutionResultProcessor;
 let cacheService: InMemoryCacheService;
+let mockExecutionClient: ReturnType<typeof createMockExecutionClient>;
 
 const makeResult = (overrides: Partial<RunCodeResult> = {}): RunCodeResult => ({
   status: 'completed',
@@ -41,13 +43,14 @@ beforeEach(async () => {
   db = testDb.db;
   cleanup = testDb.cleanup;
   cacheService = new InMemoryCacheService();
+  mockExecutionClient = createMockExecutionClient();
 
   const module = await Test.createTestingModule({
     providers: [
       ExecutionResultProcessor,
       { provide: DB_CLIENT, useValue: db },
       { provide: CACHE_SERVICE, useValue: cacheService },
-      { provide: EXECUTION_CLIENT, useValue: createMockExecutionClient() },
+      { provide: EXECUTION_CLIENT, useValue: mockExecutionClient },
     ],
   }).compile();
 
@@ -182,5 +185,98 @@ describe('handleResult', () => {
     const [sub] = await db.select().from(submissions).where(eq(submissions.id, submission.id));
     expect(sub.status).toBe('completed');
     expect(sub.errorTestCases).toBe(1);
+  });
+});
+
+describe('handleStaticAnalysisResult', () => {
+  it('GIVEN pending static analysis row WHEN worker callback arrives THEN persists summary and report', async () => {
+    const user = await insertUser(db);
+    const problem = await insertProblem(db);
+    const room = await insertRoom(db, user.id, { problemId: problem.id });
+    const run = await insertRun(db, room.id, user.id);
+    const jobId = 'static-analysis-job';
+
+    await db.insert(staticAnalysisResults).values({
+      jobId,
+      userId: user.id,
+      roomId: room.id,
+      runId: run.id,
+      language: 'python',
+      source: 'run',
+      status: 'pending',
+    });
+
+    processor.onModuleInit();
+    const callback = mockExecutionClient.onStaticAnalysisResult.mock.calls[0]?.[0];
+    expect(callback).toBeDefined();
+
+    const result: StaticAnalysisResult = {
+      jobId,
+      userId: user.id,
+      roomId: room.id,
+      runId: run.id,
+      language: 'python',
+      source: 'run',
+      code: 'print("hello")',
+      status: 'completed',
+      diagnostics: [
+        {
+          tool: 'ruff',
+          rule: 'F841',
+          severity: 'warning',
+          message: 'Unused variable',
+          file: 'Main.py',
+          line: 3,
+          column: 5,
+        },
+      ],
+      complexity: [
+        {
+          tool: 'lizard',
+          functionName: 'solve',
+          file: 'Main.py',
+          startLine: 12,
+          endLine: 40,
+          cyclomaticComplexity: 14,
+        },
+      ],
+      duplications: [],
+      toolResults: [
+        {
+          tool: 'ruff',
+          status: 'completed',
+          exitCode: 1,
+          durationMs: 25,
+          timedOut: false,
+        },
+      ],
+      summary: {
+        diagnosticCount: 1,
+        errorCount: 0,
+        warningCount: 1,
+        maxCyclomaticComplexity: 14,
+        highComplexityCount: 1,
+        duplicationCount: 0,
+        toolFailureCount: 0,
+      },
+    };
+
+    await callback?.(jobId, result);
+
+    const [row] = await db
+      .select()
+      .from(staticAnalysisResults)
+      .where(eq(staticAnalysisResults.jobId, jobId));
+    expect(row.status).toBe('completed');
+    expect(row.diagnosticCount).toBe(1);
+    expect(row.warningCount).toBe(1);
+    expect(row.maxCyclomaticComplexity).toBe(14);
+    expect(row.completedAt).not.toBeNull();
+    expect(row.report).toMatchObject({
+      diagnostics: result.diagnostics,
+      complexity: result.complexity,
+      duplications: result.duplications,
+      toolResults: result.toolResults,
+    });
   });
 });

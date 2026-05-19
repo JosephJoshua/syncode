@@ -18,6 +18,7 @@ import {
   ExecutionDetailsResponseDto,
   ExecutionResultResponseDto,
   JobStatusResponseDto,
+  StaticAnalysisResultResponseDto,
 } from './dto/execution.dto.js';
 import { ExecutionService } from './execution.service.js';
 
@@ -124,5 +125,32 @@ export class ExecutionController {
   async getExecutionStatus(@Param('jobId') jobId: string): Promise<JobStatusResponseDto> {
     const status = await this.executionClient.getJobStatus(jobId);
     return { status };
+  }
+
+  @Get(CONTROL_API.EXECUTION.GET_STATIC_ANALYSIS.route)
+  @SkipThrottle()
+  @ApiOperation({
+    summary: 'Get static analysis result by job ID',
+    description:
+      'Returns pending while analysis is queued/running, then returns lint, complexity, ' +
+      'duplication, and tool status details once the worker result has been persisted.',
+  })
+  @ApiParam({
+    name: 'jobId',
+    description: 'Static analysis job ID',
+    example: 'static-analysis-job-abc-123',
+  })
+  @ApiResponse({
+    status: 200,
+    type: StaticAnalysisResultResponseDto,
+    description: 'Static analysis status or completed result payload',
+  })
+  @ApiResponse({ status: 401, type: ErrorResponseDto, description: 'Unauthorized' })
+  @ApiResponse({ status: 404, type: ErrorResponseDto, description: 'Static analysis not found' })
+  async getStaticAnalysisResult(
+    @Param('jobId') jobId: string,
+    @CurrentUser() user: AuthUser,
+  ): Promise<StaticAnalysisResultResponseDto> {
+    return this.executionService.getStaticAnalysisResult(jobId, user.id);
   }
 }

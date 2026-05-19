@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import {
   Inject,
   Injectable,
@@ -10,13 +11,24 @@ import {
   ERROR_CODES,
   EXECUTION_CLIENT,
   type IExecutionClient,
+  type JobId,
   type RunCodeRequest,
   type RunCodeResponse,
+  type StaticAnalysisReport,
+  type StaticAnalysisRequest,
+  type StaticAnalysisResultResponse,
   type SubmitProblemInput,
   type SubmitResponse,
 } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
-import { executionResults, problems, submissions, testCases } from '@syncode/db';
+import {
+  executionResults,
+  problems,
+  runs,
+  staticAnalysisResults,
+  submissions,
+  testCases,
+} from '@syncode/db';
 import { CACHE_SERVICE, type ICacheService } from '@syncode/shared/ports';
 import { and, asc, eq, isNull } from 'drizzle-orm';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
@@ -25,6 +37,8 @@ import {
   EXEC_META_TTL_SECONDS,
   type ExecutionDetailsResult,
   type JobMeta,
+  type RunCodeContext,
+  type SubmitProblemContext,
 } from './execution.types.js';
 
 @Injectable()
@@ -37,14 +51,53 @@ export class ExecutionService {
     @Inject(CACHE_SERVICE) private readonly cacheService: ICacheService,
   ) {}
 
-  async runCode(input: RunCodeRequest): Promise<RunCodeResponse> {
+  async runCode(input: RunCodeRequest, context?: RunCodeContext): Promise<RunCodeResponse> {
     const { jobId } = await this.executionClient.submit(input);
-    return { jobId };
+    let staticAnalysisJobId: string | null = null;
+
+    if (context) {
+      const [run] = await this.db
+        .insert(runs)
+        .values({
+          userId: context.userId,
+          roomId: context.roomId,
+          jobId,
+          code: input.code,
+          language: input.language,
+          stdin: input.stdin ?? null,
+          status: 'pending',
+        })
+        .returning({ id: runs.id });
+
+      if (!run) {
+        throw new InternalServerErrorException('Run insert returned no rows');
+      }
+
+      await this.cacheService.set(
+        `${EXEC_META_KEY_PREFIX}${jobId}`,
+        { kind: 'run', runId: run.id } satisfies JobMeta,
+        EXEC_META_TTL_SECONDS,
+      );
+
+      staticAnalysisJobId = await this.enqueueStaticAnalysis({
+        userId: context.userId,
+        roomId: context.roomId,
+        sessionId: context.sessionId ?? null,
+        runId: run.id,
+        submissionId: null,
+        language: input.language,
+        source: 'run',
+        code: input.code,
+      });
+    }
+
+    return { jobId, staticAnalysisJobId };
   }
 
   async submitProblem(
     userId: string,
     input: SubmitProblemInput & { problemId: string; roomId: string },
+    context: SubmitProblemContext = {},
   ): Promise<SubmitResponse> {
     const [problemRow, cases] = await Promise.all([
       this.db
@@ -106,6 +159,17 @@ export class ExecutionService {
       throw new InternalServerErrorException('Submission insert returned no rows');
     }
 
+    const staticAnalysisJobId = await this.enqueueStaticAnalysis({
+      userId,
+      roomId: input.roomId,
+      sessionId: context.sessionId ?? null,
+      runId: null,
+      submissionId: submission.id,
+      language: input.language,
+      source: 'submission',
+      code: input.code,
+    });
+
     const results = await Promise.allSettled(
       cases.map((tc, i) => {
         const timeoutMs = tc.timeoutMs ?? problemRow.timeLimit;
@@ -120,6 +184,7 @@ export class ExecutionService {
 
         return this.executionClient.submit(request).then(async ({ jobId }) => {
           const meta: JobMeta = {
+            kind: 'submission',
             submissionId: submission.id,
             testCaseIndex: i,
             expectedOutput: tc.expectedOutput,
@@ -148,7 +213,95 @@ export class ExecutionService {
         .where(eq(submissions.id, submission.id));
     }
 
-    return { submissionId: submission.id };
+    return { submissionId: submission.id, staticAnalysisJobId };
+  }
+
+  private async enqueueStaticAnalysis(request: StaticAnalysisRequest): Promise<string | null> {
+    const jobId = randomUUID() as JobId<'static-analysis'>;
+    await this.db.insert(staticAnalysisResults).values({
+      jobId,
+      userId: request.userId,
+      roomId: request.roomId,
+      sessionId: request.sessionId ?? null,
+      runId: request.runId ?? null,
+      submissionId: request.submissionId ?? null,
+      language: request.language,
+      source: request.source,
+      status: 'pending',
+    });
+
+    try {
+      const submitted = await this.executionClient.submitStaticAnalysis(request, {
+        idempotencyKey: jobId,
+      });
+      if (submitted.jobId !== jobId) {
+        this.logger.warn(
+          `Static analysis queue returned unexpected job ID ${submitted.jobId} for preallocated ${jobId}`,
+        );
+      }
+    } catch (error) {
+      await this.db.delete(staticAnalysisResults).where(eq(staticAnalysisResults.jobId, jobId));
+      this.logger.warn(
+        `Static analysis enqueue failed for ${request.source}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      return null;
+    }
+
+    return jobId;
+  }
+
+  async getStaticAnalysisResult(
+    jobId: string,
+    userId: string,
+  ): Promise<StaticAnalysisResultResponse> {
+    const [row] = await this.db
+      .select()
+      .from(staticAnalysisResults)
+      .where(and(eq(staticAnalysisResults.jobId, jobId), eq(staticAnalysisResults.userId, userId)))
+      .limit(1);
+
+    if (!row) {
+      throw new NotFoundException({
+        message: 'Static analysis result not found',
+        code: ERROR_CODES.ANALYSIS_JOB_NOT_FOUND,
+      });
+    }
+
+    const base = {
+      jobId: row.jobId,
+      source: row.source,
+      runId: row.runId,
+      submissionId: row.submissionId,
+      language: row.language,
+      createdAt: row.createdAt.toISOString(),
+      completedAt: row.completedAt?.toISOString() ?? null,
+    };
+
+    if (row.status === 'pending') {
+      return { ...base, status: 'pending' };
+    }
+
+    const report = normalizeStaticAnalysisReport(row.report);
+    return {
+      ...base,
+      status: row.status,
+      summary: {
+        diagnosticCount: row.diagnosticCount,
+        errorCount: row.errorCount,
+        warningCount: row.warningCount,
+        maxCyclomaticComplexity: row.maxCyclomaticComplexity,
+        highComplexityCount: row.highComplexityCount,
+        duplicationCount: row.duplicationCount,
+        toolFailureCount: row.toolFailureCount,
+      },
+      diagnostics: report.diagnostics,
+      complexity: report.complexity,
+      duplications: report.duplications,
+      toolResults: report.toolResults,
+      error: row.errorMessage,
+    };
   }
 
   async getSubmissionDetails(
@@ -223,4 +376,27 @@ export class ExecutionService {
       })),
     };
   }
+}
+
+function normalizeStaticAnalysisReport(report: unknown): StaticAnalysisReport {
+  if (!report || typeof report !== 'object') {
+    return emptyStaticAnalysisReport();
+  }
+
+  const candidate = report as Partial<StaticAnalysisReport>;
+  return {
+    diagnostics: Array.isArray(candidate.diagnostics) ? candidate.diagnostics : [],
+    complexity: Array.isArray(candidate.complexity) ? candidate.complexity : [],
+    duplications: Array.isArray(candidate.duplications) ? candidate.duplications : [],
+    toolResults: Array.isArray(candidate.toolResults) ? candidate.toolResults : [],
+  };
+}
+
+function emptyStaticAnalysisReport(): StaticAnalysisReport {
+  return {
+    diagnostics: [],
+    complexity: [],
+    duplications: [],
+    toolResults: [],
+  };
 }

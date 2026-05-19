@@ -43,6 +43,14 @@ export const submissionStatusEnum = pgEnum('submission_status', [
   'failed',
 ]);
 
+export const staticAnalysisStatusEnum = pgEnum('static_analysis_status', [
+  'pending',
+  'completed',
+  'failed',
+]);
+
+export const staticAnalysisSourceEnum = pgEnum('static_analysis_source', ['run', 'submission']);
+
 export const snapshotTriggerEnum = pgEnum('snapshot_trigger', [
   'submission',
   'phase_change',
