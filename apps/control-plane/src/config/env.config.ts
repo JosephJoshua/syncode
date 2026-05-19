@@ -78,7 +78,7 @@ const envSchema = z
       .positive()
       .default(60)
       .describe('Rate limit window in seconds'),
-    THROTTLE_LIMIT: z.coerce.number().positive().default(10),
+    THROTTLE_LIMIT: z.coerce.number().positive().default(120),
   })
   .refine(
     (env) => {
