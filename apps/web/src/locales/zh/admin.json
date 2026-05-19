@@ -142,6 +142,12 @@
       "unpublish": "\u53d6\u6d88\u53d1\u5e03",
       "edit": "\u7f16\u8f91",
       "delete": "\u5220\u9664",
+      "pagination": {
+        "summary": "\u672c\u9875 {{count}} \u9053\u9898\u76ee",
+        "previous": "\u4e0a\u4e00\u9875",
+        "next": "\u4e0b\u4e00\u9875",
+        "ariaLabel": "\u9898\u76ee\u5206\u9875"
+      },
       "columns": {
         "problem": "\u9898\u76ee",
         "status": "\u72b6\u6001",

@@ -302,6 +302,10 @@ describe('AdminProblemEditorPage', () => {
     await screen.findByRole('dialog', {
       name: 'problemEditor.editorDialog.editTitle title=Two Sum',
     });
+    expect(apiMock).toHaveBeenCalledWith(CONTROL_API.PROBLEMS.GET_BY_ID, {
+      params: { id: 'problem-1' },
+      searchParams: { includeHidden: true },
+    });
     expect(
       screen.getByRole('combobox', { name: 'problemEditor.fields.difficulty' }),
     ).toHaveTextContent('problemEditor.difficulty.medium');
@@ -323,6 +327,38 @@ describe('AdminProblemEditorPage', () => {
     expect(apiMock).toHaveBeenCalledWith(CONTROL_API.PROBLEMS.PUBLISH_STATUS, {
       params: { id: 'problem-1' },
       body: { isPublished: true },
+    });
+  });
+
+  it('GIVEN more problem pages WHEN paging forward THEN requests the next cursor', async () => {
+    apiMock.mockImplementation(async (_route, options) => {
+      if (options?.searchParams?.cursor === 'next-page') {
+        return mockProblemList([
+          { ...problemSummary(), id: 'problem-2', title: 'Three Sum' },
+        ]) as never;
+      }
+      return {
+        data: [problemSummary()],
+        pagination: { hasMore: true, nextCursor: 'next-page' },
+      } as never;
+    });
+    const user = userEvent.setup();
+
+    renderPage();
+    await screen.findByText('Two Sum');
+    await user.click(
+      screen.getByRole('button', { name: 'problemEditor.management.pagination.next' }),
+    );
+
+    expect(await screen.findByText('Three Sum')).toBeInTheDocument();
+    expect(apiMock).toHaveBeenCalledWith(CONTROL_API.PROBLEMS.LIST, {
+      searchParams: {
+        cursor: 'next-page',
+        limit: 20,
+        sortBy: 'createdAt',
+        sortOrder: 'desc',
+        includeDrafts: true,
+      },
     });
   });
 

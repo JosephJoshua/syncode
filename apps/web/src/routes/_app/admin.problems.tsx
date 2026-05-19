@@ -30,6 +30,11 @@ import {
   DialogTitle,
   Input,
   Label,
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationNext,
+  PaginationPrevious,
   Switch,
   Table,
   TableBody,
@@ -82,6 +87,14 @@ export const Route = createFileRoute('/_app/admin/problems')({
 });
 
 const difficulties = PROBLEM_DIFFICULTIES;
+const PAGE_SIZE = 20;
+
+function createPaginationState() {
+  return {
+    currentCursor: undefined as string | undefined,
+    cursorHistory: [] as Array<string | undefined>,
+  };
+}
 
 const optionalLimitSchema = (max: number, message: string) =>
   z.string().refine((value) => {
@@ -123,6 +136,7 @@ const adminProblemFormSchema = z.object({
 });
 
 type AdminProblemFormValues = z.infer<typeof adminProblemFormSchema>;
+type AdminTranslate = ReturnType<typeof useTranslation>['t'];
 
 function AdminProblemEditorPage() {
   const { t, i18n } = useTranslation('admin');
@@ -132,6 +146,7 @@ function AdminProblemEditorPage() {
   const [selectedProblemId, setSelectedProblemId] = useState<string | null>(null);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ProblemSummary | null>(null);
+  const [paginationState, setPaginationState] = useState(createPaginationState);
   const {
     control,
     formState: { errors },
@@ -147,18 +162,28 @@ function AdminProblemEditorPage() {
   const watchedValues = watch();
 
   const problemsQuery = useQuery({
-    queryKey: ['admin', 'problems', 'list'],
+    queryKey: ['admin', 'problems', 'list', paginationState.currentCursor],
     enabled: user?.role === 'admin',
     queryFn: () =>
       api(CONTROL_API.PROBLEMS.LIST, {
-        searchParams: { limit: 50, sortBy: 'createdAt', sortOrder: 'desc', includeDrafts: true },
+        searchParams: {
+          cursor: paginationState.currentCursor,
+          limit: PAGE_SIZE,
+          sortBy: 'createdAt',
+          sortOrder: 'desc',
+          includeDrafts: true,
+        },
       }),
   });
 
   const problemDetailQuery = useQuery({
     queryKey: ['admin', 'problems', 'detail', selectedProblemId],
     enabled: user?.role === 'admin' && selectedProblemId !== null,
-    queryFn: () => api(CONTROL_API.PROBLEMS.GET_BY_ID, { params: { id: selectedProblemId ?? '' } }),
+    queryFn: () =>
+      api(CONTROL_API.PROBLEMS.GET_BY_ID, {
+        params: { id: selectedProblemId ?? '' },
+        searchParams: { includeHidden: true },
+      }),
   });
 
   const createProblemMutation = useMutation({
@@ -246,7 +271,7 @@ function AdminProblemEditorPage() {
   });
 
   useEffect(() => {
-    if (problemDetailQuery.data && problemDetailQuery.data.id === selectedProblemId) {
+    if (problemDetailQuery.data?.id === selectedProblemId) {
       reset(problemDetailToFormValues(problemDetailQuery.data));
     }
   }, [problemDetailQuery.data, reset, selectedProblemId]);
@@ -259,6 +284,9 @@ function AdminProblemEditorPage() {
   );
   const formErrors = useMemo(() => collectErrorMessages(errors), [errors]);
   const problems = problemsQuery.data?.data ?? [];
+  const nextCursor = problemsQuery.data?.pagination.nextCursor ?? null;
+  const hasNextPage = problemsQuery.data?.pagination.hasMore === true && nextCursor !== null;
+  const hasPreviousPage = paginationState.cursorHistory.length > 0;
   const selectedProblem = problems.find((problem) => problem.id === selectedProblemId) ?? null;
   const isSaving = createProblemMutation.isPending || updateProblemMutation.isPending;
   const isProblemDetailError = selectedProblemId !== null && problemDetailQuery.isError;
@@ -374,124 +402,69 @@ function AdminProblemEditorPage() {
           </Button>
         </CardHeader>
         <CardContent className="px-0 pb-0">
-          {problemsQuery.isError ? (
-            <div role="alert" className="px-6 py-10 text-sm text-destructive">
-              {t('problemEditor.management.loadFailed')}
-            </div>
-          ) : problemsQuery.isLoading ? (
-            <div className="flex min-h-60 items-center justify-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="size-4 animate-spin" />
-              {t('problemEditor.management.loading')}
-            </div>
-          ) : problems.length === 0 ? (
-            <div className="px-6 py-10 text-sm text-muted-foreground">
-              {t('problemEditor.management.empty')}
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow className="hover:bg-transparent">
-                  <TableHead>{t('problemEditor.management.columns.problem')}</TableHead>
-                  <TableHead className="w-28">
-                    {t('problemEditor.management.columns.status')}
-                  </TableHead>
-                  <TableHead className="w-28">
-                    {t('problemEditor.management.columns.tests')}
-                  </TableHead>
-                  <TableHead className="w-36">
-                    {t('problemEditor.management.columns.updated')}
-                  </TableHead>
-                  <TableHead className="w-56 text-right">
-                    {t('problemEditor.management.columns.actions')}
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {problems.map((problem) => (
-                  <TableRow key={problem.id}>
-                    <TableCell>
-                      <div className="min-w-0">
-                        <div className="truncate font-medium text-foreground">{problem.title}</div>
-                        <div className="mt-1 flex flex-wrap gap-1.5">
-                          <Badge variant="outline">
-                            {t(`problemEditor.difficulty.${problem.difficulty}`)}
-                          </Badge>
-                          {problem.company ? (
-                            <Badge variant="neutral">{problem.company}</Badge>
-                          ) : null}
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={problem.isPublished ? 'success' : 'secondary'}>
-                        {problem.isPublished
-                          ? t('problemEditor.preview.statusPublished')
-                          : t('problemEditor.preview.statusDraft')}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">
-                      {problem.testCaseCount ?? 0}
-                      {problem.hiddenTestCaseCount
-                        ? ` (${t('problemEditor.management.hiddenCount', {
-                            count: problem.hiddenTestCaseCount,
-                          })})`
-                        : null}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {problem.updatedAt ? dateFormatter.format(new Date(problem.updatedAt)) : '-'}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-2">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          disabled={isMutating}
-                          onClick={() => selectProblemForEdit(problem.id)}
-                        >
-                          <Pencil className="size-4" />
-                          {t('problemEditor.management.edit')}
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          disabled={publishStatusMutation.isPending}
-                          onClick={() =>
-                            publishStatusMutation.mutate({
-                              problemId: problem.id,
-                              isPublished: !problem.isPublished,
-                            })
-                          }
-                        >
-                          {problem.isPublished ? (
-                            <EyeOff className="size-4" />
-                          ) : (
-                            <Eye className="size-4" />
-                          )}
-                          {problem.isPublished
-                            ? t('problemEditor.management.unpublish')
-                            : t('problemEditor.management.publish')}
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          disabled={deleteProblemMutation.isPending}
-                          onClick={() => setDeleteTarget(problem)}
-                        >
-                          <Trash2 className="size-4" />
-                          {t('problemEditor.management.delete')}
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
+          <AdminProblemsTable
+            dateFormatter={dateFormatter}
+            isDeleting={deleteProblemMutation.isPending}
+            isError={problemsQuery.isError}
+            isLoading={problemsQuery.isLoading}
+            isMutating={isMutating}
+            isPublishing={publishStatusMutation.isPending}
+            onDelete={setDeleteTarget}
+            onEdit={selectProblemForEdit}
+            onTogglePublish={(problem) =>
+              publishStatusMutation.mutate({
+                problemId: problem.id,
+                isPublished: !problem.isPublished,
+              })
+            }
+            problems={problems}
+            t={t}
+          />
         </CardContent>
       </Card>
+
+      <div className="flex flex-col gap-3 pt-5 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-sm text-muted-foreground">
+          {t('problemEditor.management.pagination.summary', { count: problems.length })}
+        </p>
+        <Pagination
+          className="justify-end"
+          aria-label={t('problemEditor.management.pagination.ariaLabel')}
+        >
+          <PaginationContent>
+            <PaginationItem>
+              <PaginationPrevious
+                aria-label={t('problemEditor.management.pagination.previous')}
+                disabled={!hasPreviousPage || problemsQuery.isFetching}
+                onClick={() => {
+                  if (!hasPreviousPage || problemsQuery.isFetching) return;
+                  setPaginationState((current) => ({
+                    currentCursor: current.cursorHistory.at(-1),
+                    cursorHistory: current.cursorHistory.slice(0, -1),
+                  }));
+                }}
+              >
+                {t('problemEditor.management.pagination.previous')}
+              </PaginationPrevious>
+            </PaginationItem>
+            <PaginationItem>
+              <PaginationNext
+                aria-label={t('problemEditor.management.pagination.next')}
+                disabled={!hasNextPage || problemsQuery.isFetching}
+                onClick={() => {
+                  if (!hasNextPage || !nextCursor || problemsQuery.isFetching) return;
+                  setPaginationState((current) => ({
+                    currentCursor: nextCursor,
+                    cursorHistory: [...current.cursorHistory, current.currentCursor],
+                  }));
+                }}
+              >
+                {t('problemEditor.management.pagination.next')}
+              </PaginationNext>
+            </PaginationItem>
+          </PaginationContent>
+        </Pagination>
+      </div>
 
       <Dialog
         open={isEditorOpen}
@@ -860,6 +833,144 @@ function AdminProblemEditorPage() {
 }
 
 export { AdminProblemEditorPage };
+
+function AdminProblemsTable({
+  dateFormatter,
+  isDeleting,
+  isError,
+  isLoading,
+  isMutating,
+  isPublishing,
+  onDelete,
+  onEdit,
+  onTogglePublish,
+  problems,
+  t,
+}: {
+  readonly dateFormatter: Intl.DateTimeFormat;
+  readonly isDeleting: boolean;
+  readonly isError: boolean;
+  readonly isLoading: boolean;
+  readonly isMutating: boolean;
+  readonly isPublishing: boolean;
+  readonly onDelete: (problem: ProblemSummary) => void;
+  readonly onEdit: (problemId: string) => void;
+  readonly onTogglePublish: (problem: ProblemSummary) => void;
+  readonly problems: ProblemSummary[];
+  readonly t: AdminTranslate;
+}) {
+  if (isError) {
+    return (
+      <div role="alert" className="px-6 py-10 text-sm text-destructive">
+        {t('problemEditor.management.loadFailed')}
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-60 items-center justify-center gap-2 text-sm text-muted-foreground">
+        <Loader2 className="size-4 animate-spin" />
+        {t('problemEditor.management.loading')}
+      </div>
+    );
+  }
+
+  if (problems.length === 0) {
+    return (
+      <div className="px-6 py-10 text-sm text-muted-foreground">
+        {t('problemEditor.management.empty')}
+      </div>
+    );
+  }
+
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow className="hover:bg-transparent">
+          <TableHead>{t('problemEditor.management.columns.problem')}</TableHead>
+          <TableHead className="w-28">{t('problemEditor.management.columns.status')}</TableHead>
+          <TableHead className="w-28">{t('problemEditor.management.columns.tests')}</TableHead>
+          <TableHead className="w-36">{t('problemEditor.management.columns.updated')}</TableHead>
+          <TableHead className="w-56 text-right">
+            {t('problemEditor.management.columns.actions')}
+          </TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {problems.map((problem) => (
+          <TableRow key={problem.id}>
+            <TableCell>
+              <div className="min-w-0">
+                <div className="truncate font-medium text-foreground">{problem.title}</div>
+                <div className="mt-1 flex flex-wrap gap-1.5">
+                  <Badge variant="outline">
+                    {t(`problemEditor.difficulty.${problem.difficulty}`)}
+                  </Badge>
+                  {problem.company ? <Badge variant="neutral">{problem.company}</Badge> : null}
+                </div>
+              </div>
+            </TableCell>
+            <TableCell>
+              <Badge variant={problem.isPublished ? 'success' : 'secondary'}>
+                {problem.isPublished
+                  ? t('problemEditor.preview.statusPublished')
+                  : t('problemEditor.preview.statusDraft')}
+              </Badge>
+            </TableCell>
+            <TableCell className="whitespace-nowrap text-muted-foreground">
+              {problem.testCaseCount ?? 0}
+              {problem.hiddenTestCaseCount
+                ? ` (${t('problemEditor.management.hiddenCount', {
+                    count: problem.hiddenTestCaseCount,
+                  })})`
+                : null}
+            </TableCell>
+            <TableCell className="text-muted-foreground">
+              {problem.updatedAt ? dateFormatter.format(new Date(problem.updatedAt)) : '-'}
+            </TableCell>
+            <TableCell className="text-right">
+              <div className="flex justify-end gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={isMutating}
+                  onClick={() => onEdit(problem.id)}
+                >
+                  <Pencil className="size-4" />
+                  {t('problemEditor.management.edit')}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={isPublishing}
+                  onClick={() => onTogglePublish(problem)}
+                >
+                  {problem.isPublished ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                  {problem.isPublished
+                    ? t('problemEditor.management.unpublish')
+                    : t('problemEditor.management.publish')}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  disabled={isDeleting}
+                  onClick={() => onDelete(problem)}
+                >
+                  <Trash2 className="size-4" />
+                  {t('problemEditor.management.delete')}
+                </Button>
+              </div>
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  );
+}
 
 function Field({
   label,

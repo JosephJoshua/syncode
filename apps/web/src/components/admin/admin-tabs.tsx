@@ -15,7 +15,7 @@ interface AdminTabsProps {
   labels: Record<AdminTab, string>;
 }
 
-export function AdminTabs({ active, labels }: AdminTabsProps) {
+export function AdminTabs({ active, labels }: Readonly<AdminTabsProps>) {
   return (
     <nav
       aria-label="Admin sections"
