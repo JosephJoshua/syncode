@@ -846,6 +846,25 @@ describe('AiService', () => {
       expect(result).toEqual({ shouldRespond: false, audio: undefined });
       expect(llmProvider.generateSpeech).not.toHaveBeenCalled();
     });
+
+    it('GIVEN proactive trigger with old response missing shouldRespond WHEN generateInterviewResponse is called THEN keeps the response', async () => {
+      const { service } = createServiceWithLlmResponse(
+        JSON.stringify({
+          message: 'You have been quiet for a while. Explain your current invariant.',
+          followUpQuestion: 'What state changes after each loop iteration?',
+        }),
+      );
+
+      const result = await service.generateInterviewResponse({
+        ...baseInterviewRequest,
+        trigger: 'proactive',
+        userMessage: undefined,
+      });
+
+      expect(result.shouldRespond).toBe(true);
+      expect(result.message).toContain('quiet for a while');
+      expect(result.followUpQuestion).toContain('state changes');
+    });
   });
 
   describe('generateSessionReport', () => {

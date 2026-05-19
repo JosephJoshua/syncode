@@ -683,6 +683,9 @@ export function RoomWorkspace({
         if (message.role !== 'assistant') {
           continue;
         }
+        if (message.isStreaming) {
+          continue;
+        }
         read.add(getAiInterviewMessageStableId(message, index));
       }
       setUnreadInterviewCount(0);
@@ -691,6 +694,9 @@ export function RoomWorkspace({
 
     const unreadCount = aiInterviewMessages.reduce((count, message, index) => {
       if (message.role !== 'assistant') {
+        return count;
+      }
+      if (message.isStreaming) {
         return count;
       }
       return read.has(getAiInterviewMessageStableId(message, index)) ? count : count + 1;
@@ -710,6 +716,9 @@ export function RoomWorkspace({
 
     const newAssistantMessages = aiInterviewMessages.filter((message, index) => {
       const id = getAiInterviewMessageStableId(message, index);
+      if (message.isStreaming) {
+        return false;
+      }
       if (seen.has(id)) {
         return false;
       }
@@ -1166,37 +1175,34 @@ export function RoomWorkspace({
   const buildInterviewSignals = useCallback(
     (reason: AiInterviewProactiveReason): AiInterviewInteractionSignals => {
       const now = Date.now();
-      return {
+      const signals: AiInterviewInteractionSignals = {
         reason,
         roomStatus: room.status,
         elapsedSeconds: Math.max(0, Math.floor(elapsedMs / 1000)),
-        ...(aiInterviewLastUserMessageAtRef.current != null
-          ? {
-              secondsSinceLastUserMessage: Math.max(
-                0,
-                Math.floor((now - aiInterviewLastUserMessageAtRef.current) / 1000),
-              ),
-            }
-          : {}),
-        ...(aiInterviewLastAssistantMessageAtRef.current != null
-          ? {
-              secondsSinceLastAssistantMessage: Math.max(
-                0,
-                Math.floor((now - aiInterviewLastAssistantMessageAtRef.current) / 1000),
-              ),
-            }
-          : {}),
-        ...(aiInterviewLastEditorActivityAtRef.current != null
-          ? {
-              secondsSinceLastEditorActivity: Math.max(
-                0,
-                Math.floor((now - aiInterviewLastEditorActivityAtRef.current) / 1000),
-              ),
-            }
-          : {}),
         recentEditorChanges: aiInterviewRecentEditorChangesRef.current,
         hintCount: hintHistory.length,
       };
+
+      if (aiInterviewLastUserMessageAtRef.current != null) {
+        signals.secondsSinceLastUserMessage = Math.max(
+          0,
+          Math.floor((now - aiInterviewLastUserMessageAtRef.current) / 1000),
+        );
+      }
+      if (aiInterviewLastAssistantMessageAtRef.current != null) {
+        signals.secondsSinceLastAssistantMessage = Math.max(
+          0,
+          Math.floor((now - aiInterviewLastAssistantMessageAtRef.current) / 1000),
+        );
+      }
+      if (aiInterviewLastEditorActivityAtRef.current != null) {
+        signals.secondsSinceLastEditorActivity = Math.max(
+          0,
+          Math.floor((now - aiInterviewLastEditorActivityAtRef.current) / 1000),
+        );
+      }
+
+      return signals;
     },
     [elapsedMs, hintHistory.length, room.status],
   );
@@ -1205,9 +1211,9 @@ export function RoomWorkspace({
     async (
       message: Extract<GetRoomAiInterviewResultResponse, { status: 'ready' }>,
       isCurrentRequest: () => boolean,
-    ) => {
+    ): Promise<boolean> => {
       if (!message.message?.trim()) {
-        return;
+        return true;
       }
 
       const fullText = message.message.trim();
@@ -1223,6 +1229,7 @@ export function RoomWorkspace({
           createdAt: Date.now(),
           role: 'assistant',
           content: firstChunk,
+          isStreaming: chunks.length > 1,
           codeContext: message.codeContext,
           codeAnnotations: message.codeAnnotations,
           audioUrl: message.audioUrl,
@@ -1231,7 +1238,7 @@ export function RoomWorkspace({
 
       for (const chunk of chunks.slice(1)) {
         if (!isCurrentRequest()) {
-          return;
+          return false;
         }
         streamed = `${streamed} ${chunk}`;
         setAiInterviewMessages((prev) =>
@@ -1248,7 +1255,7 @@ export function RoomWorkspace({
       }
 
       if (!isCurrentRequest()) {
-        return;
+        return false;
       }
 
       setAiInterviewMessages((prev) =>
@@ -1257,12 +1264,14 @@ export function RoomWorkspace({
             ? {
                 ...entry,
                 content: fullText,
+                isStreaming: false,
                 followUpQuestion: message.followUpQuestion,
               }
             : entry,
         ),
       );
       aiInterviewLastAssistantMessageAtRef.current = Date.now();
+      return true;
     },
     [],
   );
@@ -1293,9 +1302,8 @@ export function RoomWorkspace({
             continue;
           }
 
-          clearPendingAiInterviewJob(roomId, currentUserId);
-
           if (result.status === 'failed') {
+            clearPendingAiInterviewJob(roomId, currentUserId);
             if (trigger !== 'proactive') {
               setAiInterviewError(t('workspace.aiInterviewFailed'));
             }
@@ -1305,8 +1313,13 @@ export function RoomWorkspace({
           }
 
           if (result.shouldRespond && result.message) {
-            await streamInterviewAssistantMessage(result, isCurrentRequest);
+            const streamed = await streamInterviewAssistantMessage(result, isCurrentRequest);
+            if (!streamed) {
+              return;
+            }
           }
+
+          clearPendingAiInterviewJob(roomId, currentUserId);
 
           if (reason === 'hint_used') {
             aiInterviewLastHintCountRef.current = hintHistory.length;
@@ -1467,10 +1480,17 @@ export function RoomWorkspace({
   );
 
   const handleSendInterviewMessage = useCallback(
-    (userMessage: string) => {
+    (userMessage: string): boolean => {
+      if (!canSendInterviewMessage || aiInterviewInFlightRef.current) {
+        const message = t('workspace.aiInterviewBusy');
+        setAiInterviewError(message);
+        return false;
+      }
+
       void submitInterviewRequest({ trigger: 'user_message', userMessage });
+      return true;
     },
-    [submitInterviewRequest],
+    [canSendInterviewMessage, submitInterviewRequest, t],
   );
 
   useEffect(() => {
@@ -2125,7 +2145,7 @@ export function RoomWorkspace({
                       messages={aiInterviewMessages}
                       isLoading={aiInterviewLoading}
                       error={aiInterviewError}
-                      onSendMessage={(msg) => void handleSendInterviewMessage(msg)}
+                      onSendMessage={handleSendInterviewMessage}
                       canSendMessage={canSendInterviewMessage}
                       currentUser={
                         currentUserId ? (participantsById.get(currentUserId) ?? null) : null
@@ -2677,8 +2697,21 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+let aiInterviewMessageIdCounter = 0;
+
 function createAiInterviewMessageId(prefix: 'user' | 'assistant'): string {
-  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return `${prefix}-${crypto.randomUUID()}`;
+  }
+
+  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+    const bytes = crypto.getRandomValues(new Uint8Array(8));
+    const token = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+    return `${prefix}-${Date.now()}-${token}`;
+  }
+
+  aiInterviewMessageIdCounter += 1;
+  return `${prefix}-${Date.now()}-${aiInterviewMessageIdCounter}`;
 }
 
 function splitInterviewMessageChunks(text: string): string[] {

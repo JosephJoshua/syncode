@@ -5,7 +5,7 @@ import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import { AI_CLIENT, COLLAB_CLIENT, ERROR_CODES, EXECUTION_CLIENT } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
-import { aiHints, rooms } from '@syncode/db';
+import { aiHints, aiMessages, rooms } from '@syncode/db';
 import { CACHE_SERVICE, MEDIA_SERVICE, STORAGE_SERVICE } from '@syncode/shared/ports';
 import { eq } from 'drizzle-orm';
 import { ZodValidationPipe } from 'nestjs-zod';
@@ -1097,6 +1097,7 @@ describe('POST /rooms/:id/ai/interview', () => {
 
   it('GIVEN AI room candidate and selected problem WHEN requesting interview response THEN returns ready interview result', async () => {
     const { candidate, room } = await createAiInterviewRoom();
+    const session = await insertSession(db, room.id, { mode: 'ai' });
     mockAiClient.getInterviewResult.mockResolvedValueOnce({
       shouldRespond: true,
       message: 'Explain why your hash map lookup is correct.',
@@ -1150,6 +1151,203 @@ describe('POST /rooms/:id/ai/interview', () => {
       codeAnnotations: [{ line: 3, comment: 'Mention how this handles repeated values.' }],
       audioUrl: 'https://media.example.com/interview.mp3',
     });
+
+    const persistedMessages = await db
+      .select({
+        sessionId: aiMessages.sessionId,
+        userId: aiMessages.userId,
+        role: aiMessages.role,
+        content: aiMessages.content,
+        audioKey: aiMessages.audioKey,
+      })
+      .from(aiMessages)
+      .where(eq(aiMessages.sessionId, session.id));
+
+    expect(persistedMessages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          userId: candidate.id,
+          role: 'user',
+          content: 'I would scan once and store complements.',
+        }),
+        expect.objectContaining({
+          userId: candidate.id,
+          role: 'assistant',
+          content: 'Explain why your hash map lookup is correct.',
+          audioKey: 'ai/interview/ai-interview-job.mp3',
+        }),
+      ]),
+    );
+  });
+
+  it('GIVEN old interview result without shouldRespond WHEN polling interview THEN preserves response content', async () => {
+    const { candidate, room } = await createAiInterviewRoom();
+    mockAiClient.getInterviewResult.mockResolvedValueOnce({
+      message: 'Explain the invariant maintained by your loop.',
+      followUpQuestion: 'What happens when the input has duplicates?',
+    } as Awaited<ReturnType<typeof mockAiClient.getInterviewResult>>);
+
+    const submission = await asUser(
+      request(app.getHttpServer()).post(`/rooms/${room.id}/ai/interview`),
+      candidate,
+    )
+      .send({
+        userMessage: 'I would scan once and store complements.',
+        conversationHistory: [],
+        currentCode: 'def two_sum(nums, target):\n    return []',
+        codeContext: interviewCodeContext,
+      })
+      .expect(202);
+
+    const result = await asUser(
+      request(app.getHttpServer()).get(`/rooms/${room.id}/ai/interview/${submission.body.jobId}`),
+      candidate,
+    ).expect(200);
+
+    expect(result.body).toEqual(
+      expect.objectContaining({
+        status: 'ready',
+        shouldRespond: true,
+        message: 'Explain the invariant maintained by your loop.',
+        followUpQuestion: 'What happens when the input has duplicates?',
+      }),
+    );
+  });
+
+  it('GIVEN interview result callback fires before polling WHEN report context is loaded THEN assistant message is persisted', async () => {
+    const { candidate, room } = await createAiInterviewRoom();
+    const session = await insertSession(db, room.id, { mode: 'ai' });
+    const onInterviewResult = mockAiClient.onInterviewResult.mock.calls[0]?.[0];
+    expect(onInterviewResult).toBeDefined();
+
+    const submission = await asUser(
+      request(app.getHttpServer()).post(`/rooms/${room.id}/ai/interview`),
+      candidate,
+    )
+      .send({
+        userMessage: 'I would scan once and store complements.',
+        conversationHistory: [],
+        currentCode: 'def two_sum(nums, target):\n    return []',
+        codeContext: interviewCodeContext,
+      })
+      .expect(202);
+
+    await onInterviewResult?.(submission.body.jobId, {
+      shouldRespond: true,
+      message: 'Explain why your hash map lookup is correct.',
+      followUpQuestion: 'What happens with duplicate numbers?',
+    });
+
+    const persistedMessages = await db
+      .select({
+        role: aiMessages.role,
+        content: aiMessages.content,
+      })
+      .from(aiMessages)
+      .where(eq(aiMessages.sessionId, session.id));
+
+    expect(persistedMessages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: 'assistant',
+          content: 'Explain why your hash map lookup is correct.',
+        }),
+      ]),
+    );
+  });
+
+  it('GIVEN repeated proactive interview request WHEN one is already active THEN reuses active job and trusts server signals', async () => {
+    const { candidate, room } = await createAiInterviewRoom();
+
+    const sendProactiveRequest = () =>
+      asUser(request(app.getHttpServer()).post(`/rooms/${room.id}/ai/interview`), candidate).send({
+        trigger: 'proactive',
+        conversationHistory: [],
+        currentCode: 'def two_sum(nums, target):\n    return []',
+        codeContext: interviewCodeContext,
+        interactionSignals: {
+          reason: 'user_idle',
+          roomStatus: 'finished',
+          elapsedSeconds: 86_400,
+          secondsSinceLastUserMessage: 86_400,
+          secondsSinceLastAssistantMessage: 86_400,
+          secondsSinceLastEditorActivity: 86_400,
+          recentEditorChanges: 10_000,
+          hintCount: 200,
+        },
+      });
+
+    const [first, second] = await Promise.all([
+      sendProactiveRequest().expect(202),
+      sendProactiveRequest().expect(202),
+    ]);
+
+    expect(second.body.jobId).toBe(first.body.jobId);
+    expect(mockAiClient.submitInterviewResponse).toHaveBeenCalledTimes(1);
+    expect(mockAiClient.submitInterviewResponse).toHaveBeenCalledWith(
+      expect.objectContaining({
+        trigger: 'proactive',
+        interactionSignals: {
+          reason: 'user_idle',
+          roomStatus: 'coding',
+          elapsedSeconds: expect.any(Number),
+          secondsSinceLastUserMessage: 86_400,
+          secondsSinceLastAssistantMessage: 86_400,
+          secondsSinceLastEditorActivity: 86_400,
+          recentEditorChanges: 10_000,
+          hintCount: 0,
+        },
+      }),
+    );
+  });
+
+  it('GIVEN concurrent polling of ready interview result WHEN result is persisted THEN assistant message is stored once', async () => {
+    const { candidate, room } = await createAiInterviewRoom();
+    const session = await insertSession(db, room.id, { mode: 'ai' });
+    mockAiClient.getInterviewResult.mockResolvedValue({
+      shouldRespond: true,
+      message: 'Explain why your hash map lookup is correct.',
+      followUpQuestion: 'What happens with duplicate numbers?',
+    });
+
+    const submission = await asUser(
+      request(app.getHttpServer()).post(`/rooms/${room.id}/ai/interview`),
+      candidate,
+    )
+      .send({
+        userMessage: 'I would scan once and store complements.',
+        conversationHistory: [],
+        currentCode: 'def two_sum(nums, target):\n    return []',
+        codeContext: interviewCodeContext,
+      })
+      .expect(202);
+
+    await Promise.all([
+      asUser(
+        request(app.getHttpServer()).get(`/rooms/${room.id}/ai/interview/${submission.body.jobId}`),
+        candidate,
+      ).expect(200),
+      asUser(
+        request(app.getHttpServer()).get(`/rooms/${room.id}/ai/interview/${submission.body.jobId}`),
+        candidate,
+      ).expect(200),
+    ]);
+
+    const assistantMessages = await db
+      .select({
+        role: aiMessages.role,
+        content: aiMessages.content,
+      })
+      .from(aiMessages)
+      .where(eq(aiMessages.sessionId, session.id));
+
+    expect(
+      assistantMessages.filter(
+        (message) =>
+          message.role === 'assistant' &&
+          message.content === 'Explain why your hash map lookup is correct.',
+      ),
+    ).toHaveLength(1);
   });
 
   it('GIVEN AI returns different code context WHEN polling interview THEN returns verified submitted context', async () => {
@@ -1462,7 +1660,10 @@ describe('POST /rooms/:id/ai/interview', () => {
     const { candidate, room } = await createAiInterviewRoom();
     await db.update(rooms).set({ status: 'warmup' }).where(eq(rooms.id, room.id));
 
-    await asUser(request(app.getHttpServer()).post(`/rooms/${room.id}/ai/interview`), candidate)
+    const result = await asUser(
+      request(app.getHttpServer()).post(`/rooms/${room.id}/ai/interview`),
+      candidate,
+    )
       .send({
         userMessage: 'Can we discuss my plan before coding?',
         conversationHistory: [],
@@ -1470,13 +1671,21 @@ describe('POST /rooms/:id/ai/interview', () => {
         codeContext: { ...interviewCodeContext, codeSnippet: 'print("hello")', endLine: 1 },
       })
       .expect(202);
+
+    expect(result.body.jobId).toBe('ai-interview-job');
+    expect(mockAiClient.submitInterviewResponse).toHaveBeenCalledWith(
+      expect.objectContaining({ roomId: room.id, participantId: candidate.id }),
+    );
   });
 
   it('GIVEN AI room in wrapup phase WHEN requesting interview response THEN accepts request', async () => {
     const { candidate, room } = await createAiInterviewRoom();
     await db.update(rooms).set({ status: 'wrapup' }).where(eq(rooms.id, room.id));
 
-    await asUser(request(app.getHttpServer()).post(`/rooms/${room.id}/ai/interview`), candidate)
+    const result = await asUser(
+      request(app.getHttpServer()).post(`/rooms/${room.id}/ai/interview`),
+      candidate,
+    )
       .send({
         userMessage: 'Can we review my choices from this session?',
         conversationHistory: [],
@@ -1484,6 +1693,11 @@ describe('POST /rooms/:id/ai/interview', () => {
         codeContext: { ...interviewCodeContext, codeSnippet: 'print("hello")', endLine: 1 },
       })
       .expect(202);
+
+    expect(result.body.jobId).toBe('ai-interview-job');
+    expect(mockAiClient.submitInterviewResponse).toHaveBeenCalledWith(
+      expect.objectContaining({ roomId: room.id, participantId: candidate.id }),
+    );
   });
 
   it('GIVEN another participant owns interview job WHEN polling with wrong user THEN returns 404', async () => {

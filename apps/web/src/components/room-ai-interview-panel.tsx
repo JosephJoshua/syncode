@@ -11,6 +11,7 @@ export interface AiInterviewMessage {
   createdAt?: number;
   role: 'user' | 'assistant';
   content: string;
+  isStreaming?: boolean;
   followUpQuestion?: string;
   codeContext?: AiInterviewCodeContext;
   codeAnnotations?: Array<{ line: number; comment: string }>;
@@ -56,7 +57,7 @@ export function RoomAiInterviewPanel({
   messages: AiInterviewMessage[];
   isLoading: boolean;
   error: string | null;
-  onSendMessage: (message: string) => void;
+  onSendMessage: (message: string) => boolean | undefined;
   canSendMessage: boolean;
   currentUser: Participant | null;
 }) {
@@ -103,7 +104,10 @@ export function RoomAiInterviewPanel({
   function handleSend() {
     const trimmed = draft.trim();
     if (!trimmed || isLoading) return;
-    onSendMessage(trimmed);
+    const accepted = onSendMessage(trimmed);
+    if (accepted === false) {
+      return;
+    }
     setDraft('');
   }
 
