@@ -1,7 +1,7 @@
 import type { AiInterviewCodeContext } from '@syncode/contracts';
 import { Avatar, AvatarFallback, AvatarImage, Button } from '@syncode/ui';
 import { Bot, Loader2, Mic, MicOff, Send } from 'lucide-react';
-import type { KeyboardEvent } from 'react';
+import type { KeyboardEvent, ReactNode } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Participant } from './room-participant-card.js';
@@ -18,8 +18,8 @@ export interface AiInterviewMessage {
   audioUrl?: string;
 }
 
-type VoiceCaptureState = 'idle' | 'requesting' | 'listening' | 'transcribing';
-type VoicePermissionResult = 'granted' | 'denied' | 'no_device' | 'unavailable';
+export type VoiceCaptureState = 'idle' | 'requesting' | 'listening' | 'transcribing';
+export type VoicePermissionResult = 'granted' | 'denied' | 'no_device' | 'unavailable';
 
 interface VoiceTranscriptionRequest {
   audioBase64: string;
@@ -39,6 +39,243 @@ const VOICE_MAX_RECORDING_MS = 45_000;
 const VOICE_MAX_BLOB_BYTES = 2_800_000;
 const VOICE_TARGET_SAMPLE_RATE = 16_000;
 const VOICE_WAVE_OFFSETS = Array.from({ length: 21 }, (_, position) => position - 10);
+
+export function resolveVoiceStatusText(
+  t: (key: string) => string,
+  state: VoiceCaptureState,
+): string | null {
+  switch (state) {
+    case 'requesting':
+      return t('workspace.aiInterviewVoiceRequesting');
+    case 'transcribing':
+      return t('workspace.aiInterviewVoiceTranscribing');
+    case 'listening':
+      return t('workspace.aiInterviewVoiceListening');
+    default:
+      return null;
+  }
+}
+
+function renderVoiceInputIcon({
+  isListening,
+  isRequestingVoice,
+  isTranscribingVoice,
+}: {
+  isListening: boolean;
+  isRequestingVoice: boolean;
+  isTranscribingVoice: boolean;
+}): ReactNode {
+  if (isTranscribingVoice) {
+    return <Loader2 className="size-3.5 animate-spin" />;
+  }
+  if (isListening || isRequestingVoice) {
+    return <Mic className="size-3.5 animate-pulse" />;
+  }
+  return <MicOff className="size-3.5" />;
+}
+
+function renderMessageList({
+  messages,
+  showInitialLoadingState,
+  t,
+  currentUser,
+}: {
+  messages: AiInterviewMessage[];
+  showInitialLoadingState: boolean;
+  t: (key: string) => string;
+  currentUser: Participant | null;
+}): ReactNode {
+  if (showInitialLoadingState) {
+    return (
+      <div className="mt-4 rounded-xl border border-primary/30 bg-primary/5 px-3 py-3">
+        <div className="flex items-center gap-2 text-xs text-primary">
+          <Loader2 className="size-3.5 animate-spin" />
+          <span>{t('workspace.aiInterviewBusy')}</span>
+        </div>
+      </div>
+    );
+  }
+  if (messages.length === 0) {
+    return (
+      <p className="pt-4 text-center text-xs text-muted-foreground">
+        {t('workspace.aiInterviewEmpty')}
+      </p>
+    );
+  }
+  return messages.map((msg, index) => (
+    <AiInterviewMessageBubble
+      key={msg.id ?? `${msg.role}-${index}-${msg.content.slice(0, 20)}`}
+      message={msg}
+      t={t}
+      currentUser={currentUser}
+    />
+  ));
+}
+
+export function isVoiceCaptureStateActive(state: VoiceCaptureState): boolean {
+  switch (state) {
+    case 'requesting':
+    case 'listening':
+    case 'transcribing':
+      return true;
+    default:
+      return false;
+  }
+}
+
+export function resolveVoiceButtonTitle(
+  t: (key: string) => string,
+  isVoiceInputSupported: boolean,
+): string {
+  if (isVoiceInputSupported) {
+    return t('workspace.aiInterviewVoiceInput');
+  }
+  return t('workspace.aiInterviewVoiceUnsupported');
+}
+
+export function shouldShowSendingIndicator(
+  isLoading: boolean,
+  showInitialLoadingState: boolean,
+): boolean {
+  if (!isLoading) {
+    return false;
+  }
+  return !showInitialLoadingState;
+}
+
+function renderSendingIndicator({
+  show,
+  t,
+}: {
+  show: boolean;
+  t: (key: string) => string;
+}): ReactNode {
+  if (!show) {
+    return null;
+  }
+  return (
+    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+      <Bot className="size-3 shrink-0 animate-pulse text-primary" />
+      <span className="animate-pulse">{t('workspace.aiInterviewSending')}</span>
+    </div>
+  );
+}
+
+function renderErrorBanner(error: string | null): ReactNode {
+  if (!error) {
+    return null;
+  }
+  return <p className="rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive">{error}</p>;
+}
+
+function supportsVoiceInput(
+  onTranscribeVoiceInput: ((request: VoiceTranscriptionRequest) => Promise<string>) | undefined,
+): boolean {
+  if (!onTranscribeVoiceInput) {
+    return false;
+  }
+  return supportsMediaRecorderAndCapture();
+}
+
+function isInitialLoadingState(isLoading: boolean, messageCount: number): boolean {
+  if (!isLoading) {
+    return false;
+  }
+  return messageCount === 0;
+}
+
+function renderComposerArea({
+  isVoiceCaptureActive,
+  voiceLevel,
+  isListening,
+  voiceStatusText,
+  isTranscribingVoice,
+  draft,
+  canSendMessage,
+  isLoading,
+  voiceError,
+  isVoiceInputSupported,
+  onDraftChange,
+  onKeyDown,
+  onSend,
+  onToggleVoiceInput,
+  isRequestingVoice,
+  voiceButtonTitle,
+  t,
+}: {
+  isVoiceCaptureActive: boolean;
+  voiceLevel: number;
+  isListening: boolean;
+  voiceStatusText: string | null;
+  isTranscribingVoice: boolean;
+  draft: string;
+  canSendMessage: boolean;
+  isLoading: boolean;
+  voiceError: string | null;
+  isVoiceInputSupported: boolean;
+  onDraftChange: (value: string) => void;
+  onKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
+  onSend: () => void;
+  onToggleVoiceInput: () => void;
+  isRequestingVoice: boolean;
+  voiceButtonTitle: string;
+  t: (key: string) => string;
+}): ReactNode {
+  return (
+    <div className="space-y-2 border-t border-border p-3">
+      {isVoiceCaptureActive ? (
+        <div className="space-y-2 rounded-md border border-primary/30 bg-primary/5 px-3 py-3">
+          <VoiceActivityWave level={voiceLevel} active={isListening} />
+          {voiceStatusText ? (
+            <p
+              className={`text-xs ${isTranscribingVoice ? 'text-muted-foreground' : 'text-primary'}`}
+            >
+              {voiceStatusText}
+            </p>
+          ) : null}
+        </div>
+      ) : (
+        <textarea
+          value={draft}
+          onChange={(event: React.ChangeEvent<HTMLTextAreaElement>) => {
+            onDraftChange(event.target.value);
+          }}
+          onKeyDown={onKeyDown}
+          placeholder={t('workspace.aiInterviewPlaceholder')}
+          disabled={!canSendMessage || isLoading}
+          maxLength={2000}
+          rows={3}
+          className="w-full resize-none rounded-md border border-border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50"
+        />
+      )}
+      {voiceError ? <p className="text-xs text-destructive">{voiceError}</p> : null}
+      <div className="flex gap-2">
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="shrink-0 gap-1.5"
+          disabled={!canSendMessage || isLoading || !isVoiceInputSupported || isTranscribingVoice}
+          onClick={onToggleVoiceInput}
+          aria-pressed={isListening}
+          title={voiceButtonTitle}
+        >
+          {renderVoiceInputIcon({ isListening, isRequestingVoice, isTranscribingVoice })}
+          <span className="sr-only">{t('workspace.aiInterviewVoiceInput')}</span>
+        </Button>
+        <Button
+          size="sm"
+          className="min-w-0 flex-1 gap-1.5"
+          disabled={!draft.trim() || !canSendMessage || isLoading || isVoiceCaptureActive}
+          onClick={onSend}
+        >
+          <Send className="size-3.5 shrink-0" />
+          {isLoading ? t('workspace.aiInterviewSending') : t('workspace.aiInterviewSend')}
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 export function RoomAiInterviewPanel({
   messages,
@@ -71,7 +308,7 @@ export function RoomAiInterviewPanel({
   const analyserRef = useRef<AnalyserNode | null>(null);
   const analyserDataRef = useRef<Uint8Array<ArrayBuffer> | null>(null);
   const analyserAnimationFrameRef = useRef<number | null>(null);
-  const voiceStopFallbackTimeoutRef = useRef<number | null>(null);
+  const voiceStopFallbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const voiceActiveAtRef = useRef(0);
   const voiceStartedAtRef = useRef(0);
   const voiceAutoStopPendingRef = useRef(false);
@@ -81,30 +318,22 @@ export function RoomAiInterviewPanel({
   const voiceTimeoutMessage = t('workspace.aiInterviewVoiceTimeout');
   const isDevEnvironment =
     (import.meta as ImportMeta & { env?: Record<string, unknown> }).env?.DEV === true;
-  const isVoiceInputSupported =
-    Boolean(onTranscribeVoiceInput) && supportsMediaRecorderAndCapture();
+  const isVoiceInputSupported = supportsVoiceInput(onTranscribeVoiceInput);
   const isListening = voiceCaptureState === 'listening';
   const isRequestingVoice = voiceCaptureState === 'requesting';
   const isTranscribingVoice = voiceCaptureState === 'transcribing';
-  const isVoiceCaptureActive =
-    voiceCaptureState === 'listening' ||
-    voiceCaptureState === 'requesting' ||
-    voiceCaptureState === 'transcribing';
+  const isVoiceCaptureActive = isVoiceCaptureStateActive(voiceCaptureState);
 
-  const voiceStatusText = isRequestingVoice
-    ? t('workspace.aiInterviewVoiceRequesting')
-    : isTranscribingVoice
-      ? t('workspace.aiInterviewVoiceTranscribing')
-      : isListening
-        ? t('workspace.aiInterviewVoiceListening')
-        : null;
+  const voiceStatusText = resolveVoiceStatusText(t, voiceCaptureState);
 
   const latestAudioUrl = [...messages]
     .reverse()
     .find((m) => m.role === 'assistant' && m.audioUrl)?.audioUrl;
 
   const messageCount = messages.length;
-  const showInitialLoadingState = isLoading && messageCount === 0;
+  const showInitialLoadingState = isInitialLoadingState(isLoading, messageCount);
+  const showSendingIndicator = shouldShowSendingIndicator(isLoading, showInitialLoadingState);
+  const voiceButtonTitle = resolveVoiceButtonTitle(t, isVoiceInputSupported);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: scroll on new message
   useEffect(() => {
@@ -211,7 +440,7 @@ export function RoomAiInterviewPanel({
     if (voiceCaptureState !== 'transcribing') {
       return;
     }
-    const timeoutId = window.setTimeout(
+    const timeoutId = globalThis.setTimeout(
       () => {
         if (isUnmountedRef.current || voiceCaptureState !== 'transcribing') {
           return;
@@ -462,7 +691,7 @@ export function RoomAiInterviewPanel({
       recorder.requestData();
     } catch {}
     stopVoiceStreamsAndMeter();
-    voiceStopFallbackTimeoutRef.current = window.setTimeout(() => {
+    voiceStopFallbackTimeoutRef.current = globalThis.setTimeout(() => {
       if (voiceSessionRef.current !== expectedRequestId || isUnmountedRef.current) {
         return;
       }
@@ -593,103 +822,33 @@ export function RoomAiInterviewPanel({
   return (
     <div className="flex h-full flex-col">
       <div className="flex-1 space-y-3 overflow-y-auto p-3">
-        {showInitialLoadingState ? (
-          <div className="mt-4 rounded-xl border border-primary/30 bg-primary/5 px-3 py-3">
-            <div className="flex items-center gap-2 text-xs text-primary">
-              <Loader2 className="size-3.5 animate-spin" />
-              <span>{t('workspace.aiInterviewBusy')}</span>
-            </div>
-          </div>
-        ) : messages.length === 0 ? (
-          <p className="pt-4 text-center text-xs text-muted-foreground">
-            {t('workspace.aiInterviewEmpty')}
-          </p>
-        ) : (
-          messages.map((msg, index) => (
-            <AiInterviewMessageBubble
-              key={msg.id ?? `${msg.role}-${index}-${msg.content.slice(0, 20)}`}
-              message={msg}
-              t={t}
-              currentUser={currentUser}
-            />
-          ))
-        )}
-        {isLoading && !showInitialLoadingState ? (
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Bot className="size-3 shrink-0 animate-pulse text-primary" />
-            <span className="animate-pulse">{t('workspace.aiInterviewSending')}</span>
-          </div>
-        ) : null}
-        {error ? (
-          <p className="rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive">{error}</p>
-        ) : null}
+        {renderMessageList({ messages, showInitialLoadingState, t, currentUser })}
+        {renderSendingIndicator({ show: showSendingIndicator, t })}
+        {renderErrorBanner(error)}
         <div ref={bottomRef} />
       </div>
 
-      <div className="space-y-2 border-t border-border p-3">
-        {isVoiceCaptureActive ? (
-          <div className="space-y-2 rounded-md border border-primary/30 bg-primary/5 px-3 py-3">
-            <VoiceActivityWave level={voiceLevel} active={isListening} />
-            {voiceStatusText ? (
-              <p
-                className={`text-xs ${
-                  isTranscribingVoice ? 'text-muted-foreground' : 'text-primary'
-                }`}
-              >
-                {voiceStatusText}
-              </p>
-            ) : null}
-          </div>
-        ) : (
-          <textarea
-            value={draft}
-            onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setDraft(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={t('workspace.aiInterviewPlaceholder')}
-            disabled={!canSendMessage || isLoading}
-            maxLength={2000}
-            rows={3}
-            className="w-full resize-none rounded-md border border-border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50"
-          />
-        )}
-        {voiceError ? <p className="text-xs text-destructive">{voiceError}</p> : null}
-        <div className="flex gap-2">
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="shrink-0 gap-1.5"
-            disabled={!canSendMessage || isLoading || !isVoiceInputSupported || isTranscribingVoice}
-            onClick={() => {
-              void toggleVoiceInput();
-            }}
-            aria-pressed={isListening}
-            title={t(
-              isVoiceInputSupported
-                ? 'workspace.aiInterviewVoiceInput'
-                : 'workspace.aiInterviewVoiceUnsupported',
-            )}
-          >
-            {isTranscribingVoice ? (
-              <Loader2 className="size-3.5 animate-spin" />
-            ) : isListening || isRequestingVoice ? (
-              <Mic className="size-3.5 animate-pulse" />
-            ) : (
-              <MicOff className="size-3.5" />
-            )}
-            <span className="sr-only">{t('workspace.aiInterviewVoiceInput')}</span>
-          </Button>
-          <Button
-            size="sm"
-            className="min-w-0 flex-1 gap-1.5"
-            disabled={!draft.trim() || !canSendMessage || isLoading || isVoiceCaptureActive}
-            onClick={handleSend}
-          >
-            <Send className="size-3.5 shrink-0" />
-            {isLoading ? t('workspace.aiInterviewSending') : t('workspace.aiInterviewSend')}
-          </Button>
-        </div>
-      </div>
+      {renderComposerArea({
+        isVoiceCaptureActive,
+        voiceLevel,
+        isListening,
+        voiceStatusText,
+        isTranscribingVoice,
+        draft,
+        canSendMessage,
+        isLoading,
+        voiceError,
+        isVoiceInputSupported,
+        onDraftChange: setDraft,
+        onKeyDown: handleKeyDown,
+        onSend: handleSend,
+        onToggleVoiceInput: () => {
+          void toggleVoiceInput();
+        },
+        isRequestingVoice,
+        voiceButtonTitle,
+        t,
+      })}
     </div>
   );
 }
@@ -840,7 +999,7 @@ function AiInterviewCodeContextCard({
   );
 }
 
-function resolveRecognitionLanguage(language: string | undefined): string {
+export function resolveRecognitionLanguage(language: string | undefined): string {
   if (!language) {
     return 'en-US';
   }
@@ -942,14 +1101,14 @@ async function blobToBase64(blob: Blob): Promise<string> {
   }
 
   if (typeof btoa === 'undefined') {
-    throw new Error('Base64 encoding is unavailable');
+    throw new TypeError('Base64 encoding is unavailable');
   }
 
   let binary = '';
   const chunkSize = 32_768;
   for (let offset = 0; offset < bytes.length; offset += chunkSize) {
     const chunk = bytes.subarray(offset, offset + chunkSize);
-    binary += String.fromCharCode(...chunk);
+    binary += String.fromCodePoint(...chunk);
   }
   return btoa(binary);
 }
@@ -1081,11 +1240,11 @@ function encodeWavPcm16(samples: Float32Array, sampleRate: number): ArrayBuffer 
 
 function writeAscii(view: DataView, offset: number, text: string): void {
   for (let index = 0; index < text.length; index += 1) {
-    view.setUint8(offset + index, text.charCodeAt(index));
+    view.setUint8(offset + index, text.codePointAt(index) ?? 0);
   }
 }
 
-function normalizeTranscriptionMimeType(mimeType: string | undefined): string {
+export function normalizeTranscriptionMimeType(mimeType: string | undefined): string {
   const normalized = mimeType?.split(';', 1)[0]?.trim().toLowerCase();
   if (!normalized) {
     return 'audio/webm';
@@ -1102,7 +1261,7 @@ function normalizeTranscriptionMimeType(mimeType: string | undefined): string {
   return normalized;
 }
 
-function resolveVoicePermissionError(
+export function resolveVoicePermissionError(
   t: (key: string, options?: Record<string, unknown>) => string,
   result: VoicePermissionResult,
 ): string {
@@ -1115,7 +1274,7 @@ function resolveVoicePermissionError(
   return t('workspace.aiInterviewVoiceError');
 }
 
-function withTimeout<T>(
+export function withTimeout<T>(
   promise: Promise<T>,
   timeoutMs: number,
   errorFactory: () => Error,

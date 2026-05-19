@@ -1586,15 +1586,17 @@ export function RoomWorkspace({
       const requestSeq = aiInterviewRequestSeqRef.current;
 
       const isUserTriggered = trigger === 'user_message';
-      const isInitialAssistantKickoff =
-        reason === 'session_joined' &&
-        trigger === 'proactive' &&
-        (!userMessage || userMessage.trim().length === 0) &&
-        aiInterviewMessages.length === 0;
+      const trimmedUserMessage = userMessage?.trim();
+      const isInitialAssistantKickoff = isAiInterviewInitialAssistantKickoff({
+        trigger,
+        reason,
+        userMessage: trimmedUserMessage,
+        existingMessages: aiInterviewMessages.length,
+      });
       setAiInterviewError(null);
       setAiInterviewLoading(isUserTriggered || isInitialAssistantKickoff);
 
-      if (isUserTriggered && userMessage?.trim()) {
+      if (isUserTriggered && trimmedUserMessage) {
         aiInterviewLastUserMessageAtRef.current = Date.now();
         setAiInterviewMessages((prev) => [
           ...prev,
@@ -1602,7 +1604,7 @@ export function RoomWorkspace({
             id: createAiInterviewMessageId('user'),
             createdAt: Date.now(),
             role: 'user',
-            content: userMessage,
+            content: trimmedUserMessage,
           },
         ]);
       }
@@ -1627,7 +1629,7 @@ export function RoomWorkspace({
           params: { id: roomId },
           body: {
             trigger,
-            userMessage: userMessage?.trim() || undefined,
+            userMessage: trimmedUserMessage || undefined,
             conversationHistory: history,
             currentCode,
             codeContext,
@@ -1643,7 +1645,7 @@ export function RoomWorkspace({
         storePendingAiInterviewJob(roomId, currentUserId, {
           jobId: submission.jobId,
           trigger,
-          userMessage: userMessage?.trim() || undefined,
+          userMessage: trimmedUserMessage || undefined,
           reason,
         });
         if (trigger === 'proactive') {
@@ -3055,6 +3057,29 @@ function resolveAiInterviewResponseLanguage(locale: string | undefined): 'en' | 
   }
 
   return locale.toLowerCase().startsWith('zh') ? 'zh' : 'en';
+}
+
+function isAiInterviewInitialAssistantKickoff({
+  trigger,
+  reason,
+  userMessage,
+  existingMessages,
+}: {
+  trigger: AiInterviewRequestTrigger;
+  reason?: AiInterviewProactiveReason;
+  userMessage?: string;
+  existingMessages: number;
+}): boolean {
+  if (reason !== 'session_joined') {
+    return false;
+  }
+  if (trigger !== 'proactive') {
+    return false;
+  }
+  if ((userMessage?.length ?? 0) > 0) {
+    return false;
+  }
+  return existingMessages === 0;
 }
 
 function getAiInterviewMessageStableId(message: AiInterviewMessage, index: number): string {
