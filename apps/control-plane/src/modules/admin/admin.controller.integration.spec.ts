@@ -112,7 +112,10 @@ describe('GET /admin/users', () => {
   it('GIVEN non-admin user WHEN listing users THEN rejects the request', async () => {
     const user = await insertUser(db);
 
-    const res = await asUser(request(app.getHttpServer()).get('/admin/users'), user).expect(403);
+    const res = await asUser(
+      request(app.getHttpServer()).get('/admin/users?limit=20'),
+      user,
+    ).expect(403);
 
     expect(res.body).toMatchObject({
       code: 'FORBIDDEN',

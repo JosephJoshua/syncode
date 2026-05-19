@@ -207,4 +207,48 @@ describe('ExecutionController', () => {
 
     expect(result).toEqual({ status: 'running' });
   });
+
+  it('GIVEN static analysis job id WHEN fetching result THEN returns service payload', async () => {
+    const payload = {
+      jobId: 'static-analysis-job',
+      status: 'completed',
+      summary: {
+        diagnosticCount: 1,
+        errorCount: 0,
+        warningCount: 1,
+        maxCyclomaticComplexity: 12,
+        highComplexityCount: 1,
+        duplicationCount: 0,
+        toolFailureCount: 0,
+      },
+      diagnostics: [],
+      complexity: [],
+      duplications: [],
+      toolResults: [],
+    };
+    const mockExecutionService = {
+      getSubmissionDetails: vi.fn(),
+      getStaticAnalysisResult: vi.fn().mockResolvedValue(payload),
+    };
+    const module = await Test.createTestingModule({
+      controllers: [ExecutionController],
+      providers: [
+        {
+          provide: EXECUTION_CLIENT,
+          useValue: { getResult: vi.fn(), getJobStatus: vi.fn() },
+        },
+        { provide: ExecutionService, useValue: mockExecutionService },
+      ],
+    }).compile();
+
+    const controller = module.get(ExecutionController);
+    const user = { id: '11111111-2222-3333-4444-555555555555' };
+    const result = await controller.getStaticAnalysisResult('static-analysis-job', user);
+
+    expect(result).toEqual(payload);
+    expect(mockExecutionService.getStaticAnalysisResult).toHaveBeenCalledWith(
+      'static-analysis-job',
+      user.id,
+    );
+  });
 });

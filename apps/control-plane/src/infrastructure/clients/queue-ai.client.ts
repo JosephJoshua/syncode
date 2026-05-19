@@ -63,6 +63,10 @@ export class QueueAiClient implements IAiClient, OnModuleInit {
     jobId: string,
     result: GenerateWeaknessAnalysisResult,
   ) => Promise<void>;
+  private interviewResultCallback?: (
+    jobId: string,
+    result: InterviewResponseResult,
+  ) => Promise<void>;
 
   constructor(
     @Inject(QUEUE_SERVICE) private readonly queueService: IQueueService,
@@ -108,10 +112,26 @@ export class QueueAiClient implements IAiClient, OnModuleInit {
       'review',
       QueueAiClient.REVIEW_RESULT_NAMESPACE,
     );
-    this.helper.processResultQueue<InterviewResponseResult>(
+    this.queueService.process<InterviewResponseResult & { jobId: string }>(
       AI_INTERVIEW_RESULT_QUEUE,
-      'interview',
-      QueueAiClient.INTERVIEW_RESULT_NAMESPACE,
+      async (job) => {
+        if (!job.data.jobId) {
+          this.logger.warn('Received interview result without jobId, skipping');
+          return;
+        }
+
+        await this.cacheService.set(
+          `ai-result:${QueueAiClient.INTERVIEW_RESULT_NAMESPACE}:${job.data.jobId}`,
+          job.data,
+          24 * 60 * 60,
+        );
+        this.logger.debug(`Cached interview result for job ${job.data.jobId}`);
+
+        if (this.interviewResultCallback) {
+          await this.interviewResultCallback(job.data.jobId, job.data);
+        }
+      },
+      { concurrency: 10 },
     );
     this.helper.processResultQueue<InterviewTranscriptionResult>(
       AI_INTERVIEW_TRANSCRIPTION_RESULT_QUEUE,
@@ -230,6 +250,7 @@ export class QueueAiClient implements IAiClient, OnModuleInit {
         backoff: { type: 'exponential', delay: 1500 },
         removeOnComplete: 100,
         removeOnFail: false,
+        idempotencyKey: request.idempotencyKey,
       },
     );
 
@@ -357,6 +378,12 @@ export class QueueAiClient implements IAiClient, OnModuleInit {
     callback: (jobId: string, result: GenerateWeaknessAnalysisResult) => Promise<void>,
   ): void {
     this.weaknessAnalysisResultCallback = callback;
+  }
+
+  onInterviewResult(
+    callback: (jobId: string, result: InterviewResponseResult) => Promise<void>,
+  ): void {
+    this.interviewResultCallback = callback;
   }
 
   async healthCheck(): Promise<boolean> {
