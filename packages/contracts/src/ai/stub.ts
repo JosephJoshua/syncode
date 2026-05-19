@@ -12,6 +12,8 @@ import type {
   GenerateWeaknessAnalysisResult,
   InterviewResponseRequest,
   InterviewResponseResult,
+  InterviewTranscriptionRequest,
+  InterviewTranscriptionResult,
   ReviewCodeRequest,
   ReviewCodeResult,
 } from './types.js';
@@ -23,6 +25,7 @@ type AiJobType =
   | 'weakness-analysis'
   | 'review'
   | 'interview'
+  | 'interview-transcription'
   | 'session-report';
 
 interface StubJob {
@@ -33,6 +36,7 @@ interface StubJob {
   weaknessAnalysisResult?: GenerateWeaknessAnalysisResult;
   reviewResult?: ReviewCodeResult;
   interviewResult?: InterviewResponseResult;
+  interviewTranscriptionResult?: InterviewTranscriptionResult;
   sessionReportResult?: GenerateSessionReportResult;
 }
 
@@ -150,6 +154,24 @@ export class StubAiClient implements IAiClient {
     return job.interviewResult ?? null;
   }
 
+  async submitInterviewTranscription(
+    request: InterviewTranscriptionRequest,
+  ): Promise<SubmitResult<'ai:interview-transcription'>> {
+    const jobId = randomUUID() as JobId<'ai:interview-transcription'>;
+    this.jobs.set(jobId, { status: 'queued', type: 'interview-transcription' });
+
+    this.scheduleInterviewTranscriptionCompletion(jobId, request);
+    return { jobId };
+  }
+
+  async getInterviewTranscriptionResult(
+    jobId: JobId<'ai:interview-transcription'>,
+  ): Promise<InterviewTranscriptionResult | null> {
+    const job = this.jobs.get(jobId);
+    if (job?.type !== 'interview-transcription') return null;
+    return job.interviewTranscriptionResult ?? null;
+  }
+
   async submitSessionReportRequest(
     request: GenerateSessionReportRequest,
   ): Promise<SubmitResult<'ai:session-report'>> {
@@ -195,6 +217,14 @@ export class StubAiClient implements IAiClient {
   async getInterviewJobStatus(jobId: JobId<'ai:interview'>): Promise<JobStatus> {
     const job = this.jobs.get(jobId);
     if (job?.type !== 'interview') return 'failed';
+    return job.status;
+  }
+
+  async getInterviewTranscriptionJobStatus(
+    jobId: JobId<'ai:interview-transcription'>,
+  ): Promise<JobStatus> {
+    const job = this.jobs.get(jobId);
+    if (job?.type !== 'interview-transcription') return 'failed';
     return job.status;
   }
 
@@ -467,6 +497,28 @@ export class StubAiClient implements IAiClient {
           : {
               shouldRespond: false,
             };
+      }, this.delayMs),
+    );
+  }
+
+  private scheduleInterviewTranscriptionCompletion(
+    jobId: string,
+    request: InterviewTranscriptionRequest,
+  ): void {
+    this.timers.push(
+      setTimeout(() => {
+        const job = this.jobs.get(jobId);
+        if (job) job.status = 'running';
+      }, this.delayMs / 4),
+      setTimeout(() => {
+        const job = this.jobs.get(jobId);
+        if (!job) return;
+
+        job.status = 'completed';
+        const transcriptSeed = request.language ? ` (${request.language})` : '';
+        job.interviewTranscriptionResult = {
+          text: `Stub transcript${transcriptSeed}.`,
+        };
       }, this.delayMs),
     );
   }

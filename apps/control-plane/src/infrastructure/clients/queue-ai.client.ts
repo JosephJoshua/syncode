@@ -6,6 +6,8 @@ import {
   AI_HINT_RESULT_QUEUE,
   AI_INTERVIEW_QUEUE,
   AI_INTERVIEW_RESULT_QUEUE,
+  AI_INTERVIEW_TRANSCRIPTION_QUEUE,
+  AI_INTERVIEW_TRANSCRIPTION_RESULT_QUEUE,
   AI_REVIEW_QUEUE,
   AI_REVIEW_RESULT_QUEUE,
   AI_SESSION_REPORT_QUEUE,
@@ -23,6 +25,8 @@ import {
   type IAiClient,
   type InterviewResponseRequest,
   type InterviewResponseResult,
+  type InterviewTranscriptionRequest,
+  type InterviewTranscriptionResult,
   type JobId,
   type JobStatus,
   type ReviewCodeRequest,
@@ -49,6 +53,7 @@ export class QueueAiClient implements IAiClient, OnModuleInit {
   private static readonly WEAKNESS_ANALYSIS_RESULT_NAMESPACE = 'weakness-analysis';
   private static readonly REVIEW_RESULT_NAMESPACE = 'review';
   private static readonly INTERVIEW_RESULT_NAMESPACE = 'interview';
+  private static readonly INTERVIEW_TRANSCRIPTION_RESULT_NAMESPACE = 'interview-transcription';
   private static readonly SESSION_REPORT_RESULT_NAMESPACE = 'session-report';
   private sessionReportResultCallback?: (
     jobId: string,
@@ -107,6 +112,11 @@ export class QueueAiClient implements IAiClient, OnModuleInit {
       AI_INTERVIEW_RESULT_QUEUE,
       'interview',
       QueueAiClient.INTERVIEW_RESULT_NAMESPACE,
+    );
+    this.helper.processResultQueue<InterviewTranscriptionResult>(
+      AI_INTERVIEW_TRANSCRIPTION_RESULT_QUEUE,
+      'interview-transcription',
+      QueueAiClient.INTERVIEW_TRANSCRIPTION_RESULT_NAMESPACE,
     );
     this.queueService.process<GenerateSessionReportResult & { jobId: string }>(
       AI_SESSION_REPORT_RESULT_QUEUE,
@@ -233,6 +243,33 @@ export class QueueAiClient implements IAiClient, OnModuleInit {
     );
   }
 
+  async submitInterviewTranscription(
+    request: InterviewTranscriptionRequest,
+  ): Promise<SubmitResult<'ai:interview-transcription'>> {
+    const jobId = await this.queueService.enqueue(
+      AI_INTERVIEW_TRANSCRIPTION_QUEUE,
+      'interview-transcription',
+      request,
+      {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 1500 },
+        removeOnComplete: 100,
+        removeOnFail: false,
+      },
+    );
+
+    return { jobId: jobId as JobId<'ai:interview-transcription'> };
+  }
+
+  async getInterviewTranscriptionResult(
+    jobId: JobId<'ai:interview-transcription'>,
+  ): Promise<InterviewTranscriptionResult | null> {
+    return this.helper.getResult<InterviewTranscriptionResult>(
+      jobId,
+      QueueAiClient.INTERVIEW_TRANSCRIPTION_RESULT_NAMESPACE,
+    );
+  }
+
   async submitSessionReportRequest(
     request: GenerateSessionReportRequest,
   ): Promise<SubmitResult<'ai:session-report'>> {
@@ -292,6 +329,16 @@ export class QueueAiClient implements IAiClient, OnModuleInit {
     );
   }
 
+  async getInterviewTranscriptionJobStatus(
+    jobId: JobId<'ai:interview-transcription'>,
+  ): Promise<JobStatus> {
+    return this.helper.getJobStatus(
+      AI_INTERVIEW_TRANSCRIPTION_QUEUE,
+      jobId,
+      QueueAiClient.INTERVIEW_TRANSCRIPTION_RESULT_NAMESPACE,
+    );
+  }
+
   async getSessionReportJobStatus(jobId: JobId<'ai:session-report'>): Promise<JobStatus> {
     return this.helper.getJobStatus(
       AI_SESSION_REPORT_QUEUE,
@@ -320,6 +367,7 @@ export class QueueAiClient implements IAiClient, OnModuleInit {
         weaknessAnalysisStats,
         reviewStats,
         interviewStats,
+        interviewTranscriptionStats,
         sessionReportStats,
       ] = await Promise.all([
         this.queueService.getQueueStats(AI_HINT_QUEUE),
@@ -327,6 +375,7 @@ export class QueueAiClient implements IAiClient, OnModuleInit {
         this.queueService.getQueueStats(AI_WEAKNESS_ANALYSIS_QUEUE),
         this.queueService.getQueueStats(AI_REVIEW_QUEUE),
         this.queueService.getQueueStats(AI_INTERVIEW_QUEUE),
+        this.queueService.getQueueStats(AI_INTERVIEW_TRANSCRIPTION_QUEUE),
         this.queueService.getQueueStats(AI_SESSION_REPORT_QUEUE),
       ]);
 
@@ -336,6 +385,7 @@ export class QueueAiClient implements IAiClient, OnModuleInit {
         weaknessAnalysisStats != null &&
         reviewStats != null &&
         interviewStats != null &&
+        interviewTranscriptionStats != null &&
         sessionReportStats != null
       );
     } catch (error) {

@@ -304,6 +304,10 @@ export const requestRoomAiInterviewSchema = z
     latestExecutionSummary: aiInterviewExecutionSummarySchema.optional(),
     codeAnalysisContext: aiInterviewCodeAnalysisContextSchema.optional(),
     interactionSignals: aiInterviewInteractionSignalsSchema.optional(),
+    responseLanguage: z
+      .enum(['en', 'zh'])
+      .optional()
+      .describe('Preferred natural language for AI interviewer responses'),
   })
   .superRefine((value, ctx) => {
     if (value.trigger !== 'user_message') {
@@ -353,6 +357,35 @@ export const getRoomAiInterviewResultResponseSchema = z.discriminatedUnion('stat
 
 export type GetRoomAiInterviewResultResponse = z.infer<
   typeof getRoomAiInterviewResultResponseSchema
+>;
+
+export const requestRoomAiInterviewTranscriptionSchema = z
+  .object({
+    audioBase64: z
+      .string()
+      .min(1)
+      .max(4_000_000)
+      .describe('Base64 audio payload captured from the interviewer input'),
+    mimeType: z.string().min(1).max(120).describe('Audio MIME type'),
+    language: z
+      .string()
+      .min(2)
+      .max(20)
+      .optional()
+      .describe('Optional spoken language hint (for example en-US)'),
+  })
+  .strict();
+
+export type RequestRoomAiInterviewTranscriptionInput = z.infer<
+  typeof requestRoomAiInterviewTranscriptionSchema
+>;
+
+export const requestRoomAiInterviewTranscriptionResponseSchema = z.object({
+  text: z.string().describe('Transcribed text content'),
+});
+
+export type RequestRoomAiInterviewTranscriptionResponse = z.infer<
+  typeof requestRoomAiInterviewTranscriptionResponseSchema
 >;
 
 export const requestRoomCodeAnalysisSchema = z

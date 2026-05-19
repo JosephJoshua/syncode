@@ -176,6 +176,10 @@ export interface RequestRoomAiInterviewResult {
   jobId: string;
 }
 
+export interface RequestRoomAiInterviewTranscriptionResult {
+  text: string;
+}
+
 export type GetRoomAiInterviewResult =
   | { status: 'pending'; jobId: string }
   | {

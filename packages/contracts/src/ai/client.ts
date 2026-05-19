@@ -10,6 +10,8 @@ import type {
   GenerateWeaknessAnalysisResult,
   InterviewResponseRequest,
   InterviewResponseResult,
+  InterviewTranscriptionRequest,
+  InterviewTranscriptionResult,
   ReviewCodeRequest,
   ReviewCodeResult,
 } from './types.js';
@@ -29,6 +31,12 @@ export interface IAiClient {
   getReviewResult(jobId: JobId<'ai:review'>): Promise<ReviewCodeResult | null>;
   submitInterviewResponse(request: InterviewResponseRequest): Promise<SubmitResult<'ai:interview'>>;
   getInterviewResult(jobId: JobId<'ai:interview'>): Promise<InterviewResponseResult | null>;
+  submitInterviewTranscription(
+    request: InterviewTranscriptionRequest,
+  ): Promise<SubmitResult<'ai:interview-transcription'>>;
+  getInterviewTranscriptionResult(
+    jobId: JobId<'ai:interview-transcription'>,
+  ): Promise<InterviewTranscriptionResult | null>;
   submitSessionReportRequest(
     request: GenerateSessionReportRequest,
   ): Promise<SubmitResult<'ai:session-report'>>;
@@ -46,6 +54,9 @@ export interface IAiClient {
   getWeaknessAnalysisJobStatus(jobId: JobId<'ai:weakness-analysis'>): Promise<JobStatus>;
   getReviewJobStatus(jobId: JobId<'ai:review'>): Promise<JobStatus>;
   getInterviewJobStatus(jobId: JobId<'ai:interview'>): Promise<JobStatus>;
+  getInterviewTranscriptionJobStatus(
+    jobId: JobId<'ai:interview-transcription'>,
+  ): Promise<JobStatus>;
   getSessionReportJobStatus(jobId: JobId<'ai:session-report'>): Promise<JobStatus>;
   healthCheck(): Promise<boolean>;
 }

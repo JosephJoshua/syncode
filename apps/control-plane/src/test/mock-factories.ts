@@ -87,6 +87,10 @@ export function createMockAiClient() {
     getReviewResult: vi.fn().mockResolvedValue(null),
     submitInterviewResponse: vi.fn().mockResolvedValue({ jobId: 'ai-interview-job' }),
     getInterviewResult: vi.fn().mockResolvedValue(null),
+    submitInterviewTranscription: vi
+      .fn()
+      .mockResolvedValue({ jobId: 'ai-interview-transcription' }),
+    getInterviewTranscriptionResult: vi.fn().mockResolvedValue({ text: 'stub transcript' }),
     submitSessionReportRequest: vi.fn().mockResolvedValue({ jobId: 'session-report-job' }),
     getSessionReportResult: vi.fn().mockResolvedValue(null),
     onSessionReportResult: vi.fn(),
@@ -96,6 +100,7 @@ export function createMockAiClient() {
     getWeaknessAnalysisJobStatus: vi.fn().mockResolvedValue('queued'),
     getReviewJobStatus: vi.fn().mockResolvedValue('queued'),
     getInterviewJobStatus: vi.fn().mockResolvedValue('queued'),
+    getInterviewTranscriptionJobStatus: vi.fn().mockResolvedValue('queued'),
     getSessionReportJobStatus: vi.fn().mockResolvedValue('queued'),
     healthCheck: vi.fn().mockResolvedValue(true),
   };
