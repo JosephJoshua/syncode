@@ -1128,11 +1128,16 @@ export class RoomsService implements OnModuleInit {
       });
     }
 
-    return this.executionService.submitProblem(userId, {
-      ...body,
-      problemId: room.problemId,
-      roomId,
-    });
+    const sessionId = await this.loadCurrentRoomSessionId(roomId);
+    return this.executionService.submitProblem(
+      userId,
+      {
+        ...body,
+        problemId: room.problemId,
+        roomId,
+      },
+      { sessionId },
+    );
   }
 
   async requestAiHint(
