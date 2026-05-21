@@ -1,13 +1,16 @@
 import {
   BadRequestException,
-  ConflictException,
   ForbiddenException,
   Inject,
   Injectable,
   NotFoundException,
   Optional,
 } from '@nestjs/common';
-import { ERROR_CODES, type SubmitSessionFeedbackInput } from '@syncode/contracts';
+import {
+  ERROR_CODES,
+  type SkipSessionFeedbackInput,
+  type SubmitSessionFeedbackInput,
+} from '@syncode/contracts';
 import type { Database } from '@syncode/db';
 import { peerFeedback, sessionParticipants, sessions, users } from '@syncode/db';
 import { type IStorageService, STORAGE_SERVICE } from '@syncode/shared/ports';
@@ -18,7 +21,14 @@ import {
   filterReviewFeedback,
   isAllReviewFeedbackSubmitted,
 } from '@/modules/sessions/session-feedback-utils.js';
-import type { SessionFeedbackEntryResult, SessionFeedbackResult } from './feedback.types.js';
+import type {
+  SessionFeedbackEntryResult,
+  SessionFeedbackProgressResult,
+  SessionFeedbackProgressState,
+  SessionFeedbackProgressTargetResult,
+  SessionFeedbackResult,
+  SessionFeedbackStatus,
+} from './feedback.types.js';
 
 @Injectable()
 export class FeedbackService {
@@ -34,6 +44,7 @@ export class FeedbackService {
     isAdmin: boolean,
   ): Promise<SessionFeedbackResult> {
     const session = await this.getFinishedSession(sessionId);
+    this.assertPeerSession(session.mode);
 
     await this.assertReviewParticipant(sessionId, reviewerId);
 
@@ -46,33 +57,88 @@ export class FeedbackService {
 
     await this.assertReviewParticipant(sessionId, input.candidateId);
 
-    try {
-      await this.db.insert(peerFeedback).values({
+    await this.upsertFeedbackRow({
+      sessionId,
+      roomId: session.roomId,
+      reviewerId,
+      candidateId: input.candidateId,
+      status: 'submitted',
+      feedbackText: input.feedbackText.trim(),
+    });
+
+    return this.getSessionFeedback(sessionId, reviewerId, isAdmin);
+  }
+
+  async skipSessionFeedback(
+    sessionId: string,
+    reviewerId: string,
+    input: SkipSessionFeedbackInput,
+  ): Promise<SessionFeedbackProgressResult> {
+    const session = await this.getFinishedSession(sessionId);
+    this.assertPeerSession(session.mode);
+    await this.assertReviewParticipant(sessionId, reviewerId);
+
+    if (reviewerId === input.candidateId) {
+      throw new BadRequestException({
+        message: 'Reviewer and candidate must be different users',
+        code: ERROR_CODES.VALIDATION_FAILED,
+      });
+    }
+
+    await this.assertReviewParticipant(sessionId, input.candidateId);
+
+    await this.upsertFeedbackRow({
+      sessionId,
+      roomId: session.roomId,
+      reviewerId,
+      candidateId: input.candidateId,
+      status: 'skipped',
+      feedbackText: null,
+    });
+
+    return this.getSessionFeedbackProgress(sessionId, reviewerId);
+  }
+
+  async skipAllSessionFeedback(
+    sessionId: string,
+    reviewerId: string,
+  ): Promise<SessionFeedbackProgressResult> {
+    const session = await this.getFinishedSession(sessionId);
+    this.assertPeerSession(session.mode);
+    await this.assertReviewParticipant(sessionId, reviewerId);
+
+    const [participants, existingRows] = await Promise.all([
+      this.getReviewParticipants(sessionId),
+      this.getFeedbackRows(sessionId),
+    ]);
+
+    const existingByCandidateId = new Map(
+      existingRows
+        .filter((row) => row.reviewerId === reviewerId)
+        .map((row) => [row.candidateId, row] as const),
+    );
+
+    for (const participant of participants) {
+      if (participant.userId === reviewerId) {
+        continue;
+      }
+
+      const existing = existingByCandidateId.get(participant.userId);
+      if (existing?.status === 'submitted' || existing?.status === 'skipped') {
+        continue;
+      }
+
+      await this.upsertFeedbackRow({
         sessionId,
         roomId: session.roomId,
         reviewerId,
-        candidateId: input.candidateId,
-        problemSolvingRating: input.problemSolvingRating,
-        communicationRating: input.communicationRating,
-        codeQualityRating: input.codeQualityRating,
-        debuggingRating: input.debuggingRating,
-        overallRating: input.overallRating,
-        strengths: input.strengths,
-        improvements: input.improvements,
-        wouldPairAgain: input.wouldPairAgain,
+        candidateId: participant.userId,
+        status: 'skipped',
+        feedbackText: null,
       });
-    } catch (error) {
-      if (isUniqueViolation(error)) {
-        throw new ConflictException({
-          message: 'Feedback already submitted for this participant',
-          code: ERROR_CODES.FEEDBACK_ALREADY_SUBMITTED,
-        });
-      }
-
-      throw error;
     }
 
-    return this.getSessionFeedback(sessionId, reviewerId, isAdmin);
+    return this.getSessionFeedbackProgress(sessionId, reviewerId);
   }
 
   async getSessionFeedback(
@@ -80,10 +146,14 @@ export class FeedbackService {
     userId: string,
     isAdmin: boolean,
   ): Promise<SessionFeedbackResult> {
-    await this.getFinishedSession(sessionId);
+    const session = await this.getFinishedSession(sessionId);
 
     if (!isAdmin) {
       await this.assertParticipant(sessionId, userId);
+    }
+
+    if (session.mode !== 'peer') {
+      return { allSubmitted: true, data: [] };
     }
 
     const [participants, feedback] = await Promise.all([
@@ -92,16 +162,63 @@ export class FeedbackService {
     ]);
 
     const reviewParticipantIds = new Set(participants.map((participant) => participant.userId));
-    const reviewFeedback = filterReviewFeedback(feedback, reviewParticipantIds);
+    const resolvedFeedback = filterReviewFeedback(feedback, reviewParticipantIds);
     const allSubmitted = isAllReviewFeedbackSubmitted(
       reviewParticipantIds.size,
-      reviewFeedback.length,
+      resolvedFeedback.length,
     );
-    const visibleFeedback = isAdmin
-      ? feedback
-      : reviewFeedback.filter((entry) => allSubmitted || entry.reviewerId === userId);
+    const visibleFeedback = feedback.filter((entry) => entry.status === 'submitted');
+    const scopedFeedback = isAdmin
+      ? visibleFeedback
+      : visibleFeedback.filter((entry) => allSubmitted || entry.reviewerId === userId);
 
-    return { allSubmitted, data: visibleFeedback };
+    return { allSubmitted, data: scopedFeedback };
+  }
+
+  async getSessionFeedbackProgress(
+    sessionId: string,
+    userId: string,
+  ): Promise<SessionFeedbackProgressResult> {
+    const session = await this.getFinishedSession(sessionId);
+    await this.assertParticipant(sessionId, userId);
+
+    if (session.mode !== 'peer') {
+      return { allSubmitted: true, targets: [] };
+    }
+
+    const reviewerParticipant = await this.getParticipantRole(sessionId, userId);
+    if (!reviewerParticipant || reviewerParticipant.role === 'observer') {
+      return { allSubmitted: true, targets: [] };
+    }
+
+    const [participants, feedback] = await Promise.all([
+      this.getReviewParticipants(sessionId),
+      this.getFeedbackRows(sessionId),
+    ]);
+
+    const reviewerEntries = new Map(
+      feedback
+        .filter((entry) => entry.reviewerId === userId)
+        .map((entry) => [entry.candidateId, entry] as const),
+    );
+
+    const targets = participants
+      .filter((participant) => participant.userId !== userId)
+      .map((participant) => {
+        const entry = reviewerEntries.get(participant.userId);
+        return {
+          candidateId: participant.userId,
+          candidateName: participant.displayName ?? participant.username,
+          candidateAvatarUrl: participant.avatarUrl,
+          role: participant.role,
+          state: (entry?.status ?? 'pending') as SessionFeedbackProgressState,
+          createdAt: entry?.createdAt ?? null,
+        } satisfies SessionFeedbackProgressTargetResult;
+      });
+
+    const allSubmitted = targets.every((target) => target.state !== 'pending');
+
+    return { allSubmitted, targets };
   }
 
   async isAdmin(userId: string): Promise<boolean> {
@@ -114,7 +231,7 @@ export class FeedbackService {
 
   private async getFinishedSession(sessionId: string) {
     const [session] = await this.db
-      .select({ id: sessions.id, roomId: sessions.roomId })
+      .select({ id: sessions.id, roomId: sessions.roomId, mode: sessions.mode })
       .from(sessions)
       .where(and(eq(sessions.id, sessionId), eq(sessions.status, 'finished')));
 
@@ -142,6 +259,13 @@ export class FeedbackService {
     }
   }
 
+  private async getParticipantRole(sessionId: string, userId: string) {
+    return this.db.query.sessionParticipants.findFirst({
+      columns: { role: true },
+      where: (table, { and, eq }) => and(eq(table.sessionId, sessionId), eq(table.userId, userId)),
+    });
+  }
+
   private async assertReviewParticipant(sessionId: string, userId: string): Promise<void> {
     const participant = await this.db.query.sessionParticipants.findFirst({
       columns: { userId: true },
@@ -161,43 +285,76 @@ export class FeedbackService {
     }
   }
 
+  private assertPeerSession(mode: 'peer' | 'ai') {
+    if (mode === 'peer') {
+      return;
+    }
+
+    throw new ForbiddenException({
+      message: 'This action is only available in peer interview mode',
+      code: ERROR_CODES.ROOM_NOT_PEER_MODE,
+    });
+  }
+
   private async getReviewParticipants(sessionId: string) {
-    return this.db
-      .select({ userId: sessionParticipants.userId })
+    const rows = await this.db
+      .select({
+        userId: sessionParticipants.userId,
+        username: users.username,
+        displayName: users.displayName,
+        avatarUrl: users.avatarUrl,
+        role: sessionParticipants.role,
+        joinedAt: sessionParticipants.joinedAt,
+      })
       .from(sessionParticipants)
+      .innerJoin(users, eq(users.id, sessionParticipants.userId))
       .where(
         and(
           eq(sessionParticipants.sessionId, sessionId),
           inArray(sessionParticipants.role, ['candidate', 'interviewer']),
         ),
-      );
+      )
+      .orderBy(asc(sessionParticipants.joinedAt), asc(sessionParticipants.userId));
+
+    const resolvedRows = await this.resolveAvatarRows(rows);
+
+    return resolvedRows.map((row) => ({
+      userId: row.userId,
+      username: row.username,
+      displayName: row.displayName,
+      avatarUrl: row.avatarUrl,
+      role: row.role as 'candidate' | 'interviewer',
+      joinedAt: row.joinedAt,
+    }));
   }
 
-  private async getFeedbackRows(sessionId: string): Promise<SessionFeedbackEntryResult[]> {
+  private async getFeedbackRows(sessionId: string): Promise<
+    Array<
+      SessionFeedbackEntryResult & {
+        status: SessionFeedbackStatus;
+      }
+    >
+  > {
     const rows = await this.db
       .select({
         id: peerFeedback.id,
         sessionId: peerFeedback.sessionId,
         roomId: peerFeedback.roomId,
+        status: peerFeedback.status,
         reviewerId: peerFeedback.reviewerId,
         reviewerUsername: users.username,
         reviewerDisplayName: users.displayName,
         reviewerAvatarUrl: users.avatarUrl,
         candidateId: peerFeedback.candidateId,
-        problemSolvingRating: peerFeedback.problemSolvingRating,
-        communicationRating: peerFeedback.communicationRating,
-        codeQualityRating: peerFeedback.codeQualityRating,
-        debuggingRating: peerFeedback.debuggingRating,
-        overallRating: peerFeedback.overallRating,
+        feedbackText: peerFeedback.feedbackText,
         strengths: peerFeedback.strengths,
         improvements: peerFeedback.improvements,
-        wouldPairAgain: peerFeedback.wouldPairAgain,
         createdAt: peerFeedback.createdAt,
       })
       .from(peerFeedback)
       .innerJoin(users, eq(users.id, peerFeedback.reviewerId))
       .where(eq(peerFeedback.sessionId, sessionId))
-      .orderBy(asc(peerFeedback.createdAt));
+      .orderBy(asc(peerFeedback.createdAt), asc(peerFeedback.id));
 
     const candidateProfiles = await this.getUserProfiles(rows.map((row) => row.candidateId));
     const resolvedReviewerRows = await this.resolveAvatarRows(
@@ -214,22 +371,20 @@ export class FeedbackService {
       id: row.id,
       sessionId: row.sessionId ?? sessionId,
       roomId: row.roomId,
+      status: (row.status ?? 'submitted') as SessionFeedbackStatus,
       reviewerId: row.reviewerId,
       reviewerName: row.reviewerDisplayName ?? row.reviewerUsername,
       reviewerAvatarUrl: reviewerAvatars.get(row.reviewerId) ?? null,
       candidateId: row.candidateId,
       candidateName: candidateProfiles.get(row.candidateId)?.name ?? row.candidateId,
       candidateAvatarUrl: candidateProfiles.get(row.candidateId)?.avatarUrl ?? null,
-      problemSolvingRating: row.problemSolvingRating,
-      communicationRating: row.communicationRating,
-      codeQualityRating: row.codeQualityRating,
-      debuggingRating: row.debuggingRating,
-      overallRating: row.overallRating,
-      strengths: row.strengths,
-      improvements: row.improvements,
-      wouldPairAgain: row.wouldPairAgain,
+      feedbackText:
+        row.feedbackText ??
+        [row.strengths, row.improvements]
+          .filter((item): item is string => Boolean(item))
+          .join('\n\n'),
       createdAt: row.createdAt,
-    }));
+    })) as Array<SessionFeedbackEntryResult & { status: SessionFeedbackStatus }>;
   }
 
   private async getUserProfiles(
@@ -269,16 +424,58 @@ export class FeedbackService {
 
     return resolveAvatarUrls(rows, this.storageService);
   }
-}
 
-function isUniqueViolation(error: unknown): boolean {
-  if (typeof error !== 'object' || error === null) {
-    return false;
+  private async upsertFeedbackRow({
+    candidateId,
+    feedbackText,
+    reviewerId,
+    roomId,
+    sessionId,
+    status,
+  }: {
+    sessionId: string;
+    roomId: string;
+    reviewerId: string;
+    candidateId: string;
+    status: SessionFeedbackStatus;
+    feedbackText: string | null;
+  }) {
+    const legacyStrength = status === 'submitted' ? (feedbackText?.slice(0, 2000) ?? null) : null;
+
+    await this.db
+      .insert(peerFeedback)
+      .values({
+        sessionId,
+        roomId,
+        reviewerId,
+        candidateId,
+        status,
+        feedbackText,
+        strengths: legacyStrength,
+        improvements: null,
+        wouldPairAgain: null,
+        problemSolvingRating: null,
+        communicationRating: null,
+        codeQualityRating: null,
+        debuggingRating: null,
+        overallRating: null,
+      })
+      .onConflictDoUpdate({
+        target: [peerFeedback.roomId, peerFeedback.reviewerId, peerFeedback.candidateId],
+        set: {
+          sessionId,
+          status,
+          feedbackText,
+          strengths: legacyStrength,
+          improvements: null,
+          wouldPairAgain: null,
+          problemSolvingRating: null,
+          communicationRating: null,
+          codeQualityRating: null,
+          debuggingRating: null,
+          overallRating: null,
+          createdAt: new Date(),
+        },
+      });
   }
-
-  if ('code' in error && (error as { code?: unknown }).code === '23505') {
-    return true;
-  }
-
-  return 'cause' in error && isUniqueViolation((error as { cause?: unknown }).cause);
 }
