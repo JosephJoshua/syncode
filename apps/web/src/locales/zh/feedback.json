@@ -58,13 +58,13 @@
     "aiReview": "AI 评审",
     "aiReviewDescription": "根据最终代码、执行历史和会话证据生成的结构化反馈。",
     "timeline": "会话时间线",
-    "timelineDescription": "会话中重要的编码里程碑，不包含定期自动保存。",
+    "timelineDescription": "会话中的重要编码里程碑，不包含定期自动保存。",
     "strengths": "亮点",
     "areasForImprovement": "改进方向",
     "comparison": "与历史对比",
     "peerFeedback": "同伴反馈摘要",
     "peerFeedbackSection": "同伴反馈",
-    "peerFeedbackSectionDescription": "会话结束后来自搭档的结构化反馈。"
+    "peerFeedbackSectionDescription": "会话结束后来自搭档的文字反馈。"
   },
   "dimensions": {
     "correctness": {
@@ -158,21 +158,11 @@
     "retry": "重试",
     "statusHeading": "反馈状态",
     "awaitingResponses": "等待同伴评价中",
-    "hiddenUntilSubmitted": "所有参与者提交评价后即可查看反馈内容。",
+    "hiddenUntilSubmitted": "所有参与者完成评价后即可查看反馈内容。",
     "empty": "此会话暂无同伴反馈。",
-    "wouldPairAgain": "愿意再次结对",
-    "wouldNotPairAgain": "暂不愿再次结对",
     "feedbackFrom": "{{name}} 的评价",
     "submittedAt": "提交时间",
-    "summaryPanel": "综合评分",
-    "strengths": "表现亮点",
-    "improvements": "改进建议",
-    "ratings": {
-      "problemSolving": "解题能力",
-      "communication": "沟通表达",
-      "codeQuality": "代码质量",
-      "debugging": "调试能力"
-    }
+    "feedbackLabel": "文字反馈"
   },
   "evidence": {
     "type": {
@@ -209,6 +199,36 @@
     "themes": "主要主题",
     "none": "无"
   },
+  "modal": {
+    "eyebrow": "同伴反馈",
+    "title": "填写结束后的同伴反馈",
+    "description": "在打开 session report 之前，请先为这场 peer interview 中符合条件的参与者填写简短反馈。",
+    "loading": "正在加载待填写的反馈对象...",
+    "loadError": "暂时无法加载同伴反馈流程。",
+    "currentTargetLabel": "当前反馈对象",
+    "selectorLabel": "参与者选择",
+    "selectorPlaceholder": "选择参与者",
+    "progress": "第 {{current}} / {{total}} 位 · 剩余 {{pending}} 位待处理",
+    "feedbackLabel": "你的反馈",
+    "feedbackPlaceholder": "可以用中文或 English 输入具体、可执行的反馈。可以写对方做得好的地方、还可以提升的地方，或协作时的表现。",
+    "feedbackHint": "支持中文和英文输入。",
+    "characterCount": "{{count}} / {{max}}",
+    "empty": "当前没有剩余需要反馈的参与者。",
+    "skipAll": "全部跳过",
+    "skip": "跳过",
+    "submit": "提交",
+    "submitSuccess": "反馈已提交。",
+    "submitError": "提交反馈失败。",
+    "skipSuccess": "已跳过当前参与者。",
+    "skipError": "跳过当前参与者失败。",
+    "skipAllSuccess": "已跳过所有剩余参与者。",
+    "skipAllError": "全部跳过失败。",
+    "state": {
+      "pending": "待处理",
+      "submitted": "已提交",
+      "skipped": "已跳过"
+    }
+  },
   "form": {
     "title": "同伴评价",
     "description": "为搭档的面试表现打分，并留下可执行的文字反馈。",
@@ -225,7 +245,7 @@
     },
     "placeholder": {
       "candidate": "选择参与者",
-      "strengths": "对方在编码前澄清了假设，并清晰解释了权衡。",
+      "strengths": "对方在编码前澄清了假设，并清楚解释了权衡。",
       "improvements": "可以更早说明边缘情况，并保持变量命名更一致。"
     },
     "rating": {
