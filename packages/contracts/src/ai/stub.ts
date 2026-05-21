@@ -336,11 +336,7 @@ export class StubAiClient implements IAiClient {
         const historicalCommunication = request.historicalWeaknesses.find(
           (item) => item.category === 'communication',
         );
-        const peerCommunicationAverage =
-          request.peerFeedback.length > 0
-            ? request.peerFeedback.reduce((sum, item) => sum + item.communicationRating, 0) /
-              request.peerFeedback.length
-            : null;
+        const hasPeerFeedback = request.peerFeedback.length > 0;
 
         job.status = 'completed';
         job.weaknessAnalysisResult = {
@@ -372,10 +368,9 @@ export class StubAiClient implements IAiClient {
               category: 'communication',
               description:
                 'The candidate can improve how they explain trade-offs, invariants, and next debugging steps out loud.',
-              evidence:
-                peerCommunicationAverage != null
-                  ? `Peer communication rating averaged ${peerCommunicationAverage.toFixed(1)}/5 in this session.`
-                  : 'Peer feedback is limited, so the signal is based on sparse discussion evidence.',
+              evidence: hasPeerFeedback
+                ? 'Peer feedback mentioned collaboration and explanation quality during the session.'
+                : 'Peer feedback is limited, so the signal is based on sparse discussion evidence.',
               trend: historicalCommunication?.trend === 'worsening' ? 'worsening' : 'stable',
             },
           ],
@@ -502,13 +497,7 @@ export class StubAiClient implements IAiClient {
         const correctnessScore = latestSubmission
           ? Math.round((latestSubmission.passed / Math.max(latestSubmission.total, 1)) * 100)
           : 70;
-        const peerAverage =
-          request.peerFeedback.length > 0
-            ? request.peerFeedback.reduce((sum, item) => sum + item.overallRating, 0) /
-              request.peerFeedback.length
-            : null;
-        const peerAveragePct =
-          peerAverage == null ? null : Math.round((peerAverage / 5) * 100 * 10) / 10;
+        const hasPeerFeedback = request.peerFeedback.length > 0;
         const chatSignalScore = (request.roomChatMessages?.length ?? 0) > 0 ? 80 : 72;
         const overallScore = Math.max(
           0,
@@ -519,7 +508,7 @@ export class StubAiClient implements IAiClient {
                 correctnessScore,
                 request.runs.length > 0 ? 76 : 70,
                 request.snapshots.length > 0 ? 78 : 70,
-                peerAveragePct ?? 75,
+                hasPeerFeedback ? 80 : 75,
                 Math.max(chatSignalScore, request.aiMessages.length > 0 ? 80 : 72),
               ].reduce((sum, score) => sum + score, 0) / 5,
             ),
@@ -564,7 +553,7 @@ export class StubAiClient implements IAiClient {
               })),
             },
             communication: {
-              score: peerAveragePct ?? 75,
+              score: hasPeerFeedback ? 80 : 75,
               feedback:
                 request.peerFeedback.length > 0
                   ? 'Peer feedback indicates clear collaboration overall.'
@@ -572,7 +561,7 @@ export class StubAiClient implements IAiClient {
               evidence: request.peerFeedback.slice(0, 1).map((feedback) => ({
                 type: 'peer_feedback',
                 reference: feedback.reviewerId,
-                description: feedback.strengths,
+                description: feedback.feedbackText,
               })),
             },
             problemSolving: {
@@ -613,25 +602,7 @@ export class StubAiClient implements IAiClient {
                   averageScore: request.historicalContext.averageScore ?? overallScore,
                 }
               : null,
-          peerFeedbackSummary:
-            request.peerFeedback.length > 0
-              ? {
-                  averageRating:
-                    Math.round(
-                      (request.peerFeedback.reduce((sum, item) => sum + item.overallRating, 0) /
-                        request.peerFeedback.length) *
-                        10,
-                    ) / 10,
-                  wouldPairAgain: Math.round(
-                    (request.peerFeedback.filter((item) => item.wouldPairAgain).length /
-                      request.peerFeedback.length) *
-                      100,
-                  ),
-                  themes: request.peerFeedback
-                    .flatMap((item) => [item.strengths, item.improvements])
-                    .slice(0, 3),
-                }
-              : null,
+          peerFeedbackSummary: null,
           testCaseBreakdown: toPublicSessionReportTestCaseBreakdown(request.finalTestCaseBreakdown),
           model: 'stub-ai-client',
         };

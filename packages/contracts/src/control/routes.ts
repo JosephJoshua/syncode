@@ -21,7 +21,12 @@ import type {
   jobStatusResponseSchema,
   staticAnalysisResultResponseSchema,
 } from './execution.js';
-import type { sessionFeedbackResponseSchema, submitSessionFeedbackSchema } from './feedback.js';
+import type {
+  sessionFeedbackProgressResponseSchema,
+  sessionFeedbackResponseSchema,
+  skipSessionFeedbackSchema,
+  submitSessionFeedbackSchema,
+} from './feedback.js';
 import type { healthCheckResponseSchema } from './health.js';
 import type {
   enterMatchmakingQueueResponseSchema,
@@ -315,8 +320,20 @@ export const CONTROL_API = {
       z.infer<typeof submitSessionFeedbackSchema>,
       z.infer<typeof sessionFeedbackResponseSchema>
     >()('sessions/:id/feedback', 'POST'),
+    SKIP_SESSION: defineRoute<
+      z.infer<typeof skipSessionFeedbackSchema>,
+      z.infer<typeof sessionFeedbackProgressResponseSchema>
+    >()('sessions/:id/feedback/skip', 'POST'),
+    SKIP_ALL_SESSION: defineRoute<void, z.infer<typeof sessionFeedbackProgressResponseSchema>>()(
+      'sessions/:id/feedback/skip-all',
+      'POST',
+    ),
     GET_SESSION: defineRoute<void, z.infer<typeof sessionFeedbackResponseSchema>>()(
       'sessions/:id/feedback',
+      'GET',
+    ),
+    GET_PROGRESS: defineRoute<void, z.infer<typeof sessionFeedbackProgressResponseSchema>>()(
+      'sessions/:id/feedback/progress',
       'GET',
     ),
   },
