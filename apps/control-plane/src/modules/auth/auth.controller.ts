@@ -42,7 +42,7 @@ export class AuthController {
 
   private static readonly AUTH_THROTTLE = {
     default: {
-      limit: 5,
+      limit: 20,
       ttl: 60 * 1_000,
     },
   } as const;
