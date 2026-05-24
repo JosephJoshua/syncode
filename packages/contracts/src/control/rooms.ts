@@ -423,7 +423,10 @@ export const INTERVIEW_TRANSCRIPTION_MIME_TYPES = [
 
 function isAllowedInterviewTranscriptionMimeType(value: string) {
   const normalized = value.split(';', 1)[0]?.trim().toLowerCase();
-  return INTERVIEW_TRANSCRIPTION_MIME_TYPES.some((mimeType) => mimeType === normalized);
+  if (normalized === undefined) {
+    return false;
+  }
+  return (INTERVIEW_TRANSCRIPTION_MIME_TYPES as readonly string[]).includes(normalized);
 }
 
 export const requestRoomAiInterviewTranscriptionSchema = z
