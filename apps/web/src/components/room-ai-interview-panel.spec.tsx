@@ -57,7 +57,7 @@ describe('room-ai-interview-panel helpers', () => {
     expect(resolveRecognitionLanguage('zh-HK')).toBe('zh-TW');
     expect(resolveRecognitionLanguage('en-GB')).toBe('en-US');
     expect(resolveRecognitionLanguage('fr-CA')).toBe('fr-CA');
-    expect(resolveRecognitionLanguage('es')).toBe('es-US');
+    expect(resolveRecognitionLanguage('es')).toBe('es');
   });
 
   it('GIVEN mime types WHEN normalizing for transcription THEN maps aliases and strips codecs suffix', () => {
