@@ -126,7 +126,7 @@ export class AuditService {
 
   private buildActionFilter(action: string | undefined): SQL | undefined {
     const normalized = action?.trim();
-    return normalized ? eq(auditLogs.action, normalized) : undefined;
+    return normalized ? ilike(auditLogs.action, `%${normalized}%`) : undefined;
   }
 
   private buildActorFilter(actorId: string | undefined): SQL | undefined {

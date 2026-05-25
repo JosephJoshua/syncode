@@ -101,7 +101,7 @@ describe('GET /admin/audit-logs', () => {
     expect(secondPage.body.pagination).toEqual({ hasMore: false, nextCursor: null });
   });
 
-  it('GIVEN action and date filters WHEN querying logs THEN returns matching entries only', async () => {
+  it('GIVEN partial action and date filters WHEN querying logs THEN returns matching entries only', async () => {
     const admin = await insertUser(db, { role: 'admin' });
     const actor = await insertUser(db);
     const expected = await insertAuditLog(actor.id, {
@@ -122,7 +122,7 @@ describe('GET /admin/audit-logs', () => {
 
     const res = await asUser(
       request(app.getHttpServer()).get(
-        '/admin/audit-logs?action=auth.logout&from=2026-01-01T00:00:00.000Z&to=2026-01-03T00:00:00.000Z',
+        '/admin/audit-logs?action=logout&from=2026-01-01T00:00:00.000Z&to=2026-01-03T00:00:00.000Z',
       ),
       admin,
     ).expect(200);

@@ -3,7 +3,7 @@
   "navLinks": {
     "users": "Users",
     "auditLogs": "Audit logs",
-    "problems": "Problem editor"
+    "problems": "Problems"
   },
   "users": {
     "heading": "User management",
@@ -79,8 +79,8 @@
     "filters": {
       "searchLabel": "Search",
       "searchPlaceholder": "Search actor, action, or target",
-      "actionLabel": "Action",
-      "actionPlaceholder": "auth.login",
+      "actionLabel": "Search action",
+      "actionPlaceholder": "login, ban, unban",
       "fromLabel": "From",
       "toLabel": "To",
       "datePlaceholder": "Pick date",
@@ -127,6 +127,46 @@
   "problemEditor": {
     "heading": "Problem editor",
     "sub": "Draft, validate, and prepare interview problems for publishing.",
+    "management": {
+      "heading": "Problem management",
+      "sub": "Review, publish, and maintain the problem set used in interviews.",
+      "newProblem": "New problem",
+      "tableTitle": "Problems",
+      "refresh": "Refresh",
+      "loading": "Loading problems...",
+      "empty": "No problems found.",
+      "loadFailed": "Could not load problems.",
+      "hiddenCount_one": "{{count}} hidden",
+      "hiddenCount_other": "{{count}} hidden",
+      "publish": "Publish",
+      "unpublish": "Unpublish",
+      "edit": "Edit",
+      "delete": "Delete",
+      "pagination": {
+        "summary": "{{count}} problems on this page",
+        "previous": "Previous",
+        "next": "Next",
+        "ariaLabel": "Problem pages"
+      },
+      "columns": {
+        "problem": "Problem",
+        "status": "Status",
+        "tests": "Tests",
+        "updated": "Updated",
+        "actions": "Actions"
+      }
+    },
+    "editorDialog": {
+      "createTitle": "Create problem",
+      "editTitle": "Edit {{title}}",
+      "description": "Use Markdown for the statement and keep test cases aligned with the public contract.",
+      "loading": "Loading problem...",
+      "loadFailed": "Could not load this problem. Close the dialog and try again."
+    },
+    "deleteDialog": {
+      "title": "Delete {{title}}?",
+      "description": "This removes the problem from normal listings. Existing historical records are preserved."
+    },
     "forbidden": {
       "title": "Admin access required",
       "description": "This area is only available to SynCode administrators."
@@ -185,6 +225,7 @@
       "caseCount_other": "{{count}} cases"
     },
     "actions": {
+      "cancel": "Cancel",
       "save": "Save problem",
       "saving": "Saving..."
     },
@@ -200,7 +241,10 @@
     },
     "toast": {
       "saved": "Problem saved.",
-      "saveFailed": "Could not save problem."
+      "statusSaved": "Publish status updated.",
+      "deleted": "Problem deleted.",
+      "saveFailed": "Could not save problem.",
+      "deleteFailed": "Could not delete problem."
     }
   }
 }

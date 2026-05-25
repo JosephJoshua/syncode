@@ -6,6 +6,8 @@ import {
   AI_HINT_RESULT_QUEUE,
   AI_INTERVIEW_QUEUE,
   AI_INTERVIEW_RESULT_QUEUE,
+  AI_INTERVIEW_TRANSCRIPTION_QUEUE,
+  AI_INTERVIEW_TRANSCRIPTION_RESULT_QUEUE,
   AI_REVIEW_QUEUE,
   AI_REVIEW_RESULT_QUEUE,
   AI_SESSION_REPORT_QUEUE,
@@ -17,6 +19,7 @@ import {
   type GenerateSessionReportRequest,
   type GenerateWeaknessAnalysisRequest,
   type InterviewResponseRequest,
+  type InterviewTranscriptionRequest,
   type ReviewCodeRequest,
 } from '@syncode/contracts';
 import type { IQueueService, QueueJob } from '@syncode/shared/ports';
@@ -84,6 +87,15 @@ export class AiProcessor implements OnModuleInit {
       { concurrency: 3 },
     );
     this.logger.log(`Registered processor on ${AI_INTERVIEW_QUEUE}`);
+
+    this.queueService.process<InterviewTranscriptionRequest>(
+      AI_INTERVIEW_TRANSCRIPTION_QUEUE,
+      async (job: QueueJob<InterviewTranscriptionRequest>) => {
+        await this.handleInterviewTranscriptionJob(job);
+      },
+      { concurrency: 3 },
+    );
+    this.logger.log(`Registered processor on ${AI_INTERVIEW_TRANSCRIPTION_QUEUE}`);
 
     this.queueService.process<GenerateSessionReportRequest>(
       AI_SESSION_REPORT_QUEUE,
@@ -188,6 +200,35 @@ export class AiProcessor implements OnModuleInit {
     );
 
     this.logger.log(`Interview job ${jobId} completed`);
+  }
+
+  private async handleInterviewTranscriptionJob(
+    job: QueueJob<InterviewTranscriptionRequest>,
+  ): Promise<void> {
+    const { id: jobId, data: request } = job;
+    this.logger.log(`Processing interview transcription job ${jobId}`);
+    try {
+      const result = await this.aiService.generateInterviewTranscription(request);
+      await this.queueService.enqueue(
+        AI_INTERVIEW_TRANSCRIPTION_RESULT_QUEUE,
+        'interview-transcription-result',
+        {
+          ...result,
+          jobId,
+        },
+        RESULT_JOB_OPTIONS,
+      );
+
+      this.logger.log(`Interview transcription job ${jobId} completed`);
+    } catch (error) {
+      this.logger.error(
+        `Interview transcription job ${jobId} failed for room ${request.roomId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+        error instanceof Error ? error.stack : undefined,
+      );
+      throw error;
+    }
   }
 
   private async handleSessionReportJob(job: QueueJob<GenerateSessionReportRequest>): Promise<void> {
