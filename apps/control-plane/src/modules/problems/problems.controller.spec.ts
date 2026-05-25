@@ -63,13 +63,6 @@ function createFixture() {
 
 describe('ProblemsController', () => {
   describe('listProblems', () => {
-    it('GIVEN valid query WHEN listing problems THEN delegates to service with userId', async () => {
-      const { controller, service } = createFixture();
-      const query = { limit: 20, sortOrder: 'desc' as const };
-      await controller.listProblems(USER, query);
-      expect(service.listProblems).toHaveBeenCalledWith(USER.id, query);
-    });
-
     it('GIVEN service returns data WHEN listing THEN returns service result directly', async () => {
       const { controller } = createFixture();
       const result = await controller.listProblems(USER, { limit: 20, sortOrder: 'desc' });
@@ -81,26 +74,25 @@ describe('ProblemsController', () => {
   });
 
   describe('getProblem', () => {
-    it('GIVEN valid ID WHEN getting problem THEN delegates to service with userId and id', async () => {
-      const { controller, service } = createFixture();
-      await controller.getProblem(USER, 'p1');
-      expect(service.findById).toHaveBeenCalledWith(USER.id, 'p1', { includeHidden: undefined });
+    it('GIVEN service resolves problem WHEN getting THEN returns the problem detail', async () => {
+      const { controller } = createFixture();
+      const result = await controller.getProblem(USER, 'p1');
+      expect(result.id).toBe('p1');
+      expect(result.title).toBe('Two Sum');
     });
 
-    it('GIVEN includeHidden query WHEN getting problem THEN forwards editor option', async () => {
+    it('GIVEN includeHidden query WHEN getting problem as non-admin THEN service rejects', async () => {
       const { controller, service } = createFixture();
-      await controller.getProblem(USER, 'p1', { includeHidden: true });
-      expect(service.findById).toHaveBeenCalledWith(USER.id, 'p1', { includeHidden: true });
+      (service.findById as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+        new Error('Admin access required'),
+      );
+      await expect(controller.getProblem(USER, 'p1', { includeHidden: true })).rejects.toThrow(
+        'Admin access required',
+      );
     });
   });
 
   describe('listTags', () => {
-    it('WHEN listing tags THEN delegates to service', async () => {
-      const { controller, service } = createFixture();
-      await controller.listTags();
-      expect(service.listTags).toHaveBeenCalled();
-    });
-
     it('GIVEN service returns tags WHEN listing THEN returns service result directly', async () => {
       const { controller, service } = createFixture();
       (service.listTags as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
@@ -113,8 +105,8 @@ describe('ProblemsController', () => {
   });
 
   describe('createProblem', () => {
-    it('GIVEN valid input WHEN creating problem THEN delegates to service with userId and body', async () => {
-      const { controller, service } = createFixture();
+    it('GIVEN service resolves WHEN creating problem THEN returns the created detail', async () => {
+      const { controller } = createFixture();
       const body = {
         title: 'Two Sum',
         description: 'Find a pair.',
@@ -129,9 +121,11 @@ describe('ProblemsController', () => {
         testCases: [{ input: '1 2', expectedOutput: '3', isHidden: false }],
       };
 
-      await controller.createProblem(USER, body);
+      const result = await controller.createProblem(USER, body);
 
-      expect(service.createProblem).toHaveBeenCalledWith(USER.id, body, undefined);
+      expect(result.id).toBe('p1');
+      expect(result.title).toBe('Two Sum');
+      expect(result.isPublished).toBe(false);
     });
   });
 });

@@ -312,56 +312,71 @@ export class ProblemsService {
       });
     }
 
-    const created = await this.db.transaction(async (tx) => {
-      const [problem] = await tx
-        .insert(problems)
-        .values({
-          title: input.title,
-          description: input.description,
-          difficulty: input.difficulty,
-          isPublished: input.isPublished,
-          company: input.company ?? null,
-          constraints: input.constraints ?? null,
-          examples: input.examples,
-          starterCode: input.starterCode ?? null,
-          timeLimit: input.timeLimit ?? null,
-          memoryLimit: input.memoryLimit ?? null,
-        })
-        .returning({ id: problems.id });
-      if (!problem) {
-        throw new Error('Problem insert did not return a row');
-      }
+    // Pre-check above is a fast path / UX improvement. Two concurrent admin
+    // requests can still pass the SELECT before either INSERT runs, so we
+    // also translate the partial-unique-index violation (problems_title_unique)
+    // raised by Postgres into the same ConflictException — otherwise the
+    // race-loser would see a raw 23505 DB error.
+    const created = await this.db
+      .transaction(async (tx) => {
+        const [problem] = await tx
+          .insert(problems)
+          .values({
+            title: input.title,
+            description: input.description,
+            difficulty: input.difficulty,
+            isPublished: input.isPublished,
+            company: input.company ?? null,
+            constraints: input.constraints ?? null,
+            examples: input.examples,
+            starterCode: input.starterCode ?? null,
+            timeLimit: input.timeLimit ?? null,
+            memoryLimit: input.memoryLimit ?? null,
+          })
+          .returning({ id: problems.id });
+        if (!problem) {
+          throw new Error('Problem insert did not return a row');
+        }
 
-      await tx.insert(testCases).values(
-        input.testCases.map((testCase, index) => ({
-          problemId: problem.id,
-          input: testCase.input,
-          expectedOutput: testCase.expectedOutput,
-          description: testCase.description ?? null,
-          isHidden: testCase.isHidden,
-          sortOrder: index,
-          timeoutMs: testCase.timeoutMs ?? null,
-          memoryMb: testCase.memoryMb ?? null,
-        })),
-      );
+        await tx.insert(testCases).values(
+          input.testCases.map((testCase, index) => ({
+            problemId: problem.id,
+            input: testCase.input,
+            expectedOutput: testCase.expectedOutput,
+            description: testCase.description ?? null,
+            isHidden: testCase.isHidden,
+            sortOrder: index,
+            timeoutMs: testCase.timeoutMs ?? null,
+            memoryMb: testCase.memoryMb ?? null,
+          })),
+        );
 
-      await this.auditService.logWithClient(tx, {
-        actorId: userId,
-        action: 'admin.problem.create',
-        targetType: 'problem',
-        targetId: problem.id,
-        metadata: {
-          title: input.title,
-          difficulty: input.difficulty,
-          isPublished: input.isPublished,
-          testCaseCount: input.testCases.length,
-          hiddenTestCaseCount: input.testCases.filter((testCase) => testCase.isHidden).length,
-        },
-        ipAddress,
+        await this.auditService.logWithClient(tx, {
+          actorId: userId,
+          action: 'admin.problem.create',
+          targetType: 'problem',
+          targetId: problem.id,
+          metadata: {
+            title: input.title,
+            difficulty: input.difficulty,
+            isPublished: input.isPublished,
+            testCaseCount: input.testCases.length,
+            hiddenTestCaseCount: input.testCases.filter((testCase) => testCase.isHidden).length,
+          },
+          ipAddress,
+        });
+
+        return problem;
+      })
+      .catch((error: unknown) => {
+        if (isUniqueViolation(error)) {
+          throw new ConflictException({
+            message: 'Problem title already exists',
+            code: ERROR_CODES.PROBLEM_DUPLICATE_TITLE,
+          });
+        }
+        throw error;
       });
-
-      return problem;
-    });
 
     return this.findById(userId, created.id, { includeHidden: true });
   }
@@ -379,57 +394,68 @@ export class ProblemsService {
       await this.assertUniqueTitle(input.title, problemId);
     }
 
-    await this.db.transaction(async (tx) => {
-      const values: Partial<typeof problems.$inferInsert> = {};
+    await this.db
+      .transaction(async (tx) => {
+        const values: Partial<typeof problems.$inferInsert> = {};
 
-      if (input.title !== undefined) values.title = input.title;
-      if (input.description !== undefined) values.description = input.description;
-      if (input.difficulty !== undefined) values.difficulty = input.difficulty;
-      if (input.company !== undefined) values.company = input.company ?? null;
-      if (input.constraints !== undefined) values.constraints = input.constraints ?? null;
-      if (input.examples !== undefined) values.examples = input.examples;
-      if (input.starterCode !== undefined) values.starterCode = input.starterCode ?? null;
-      if (input.timeLimit !== undefined) values.timeLimit = input.timeLimit ?? null;
-      if (input.memoryLimit !== undefined) values.memoryLimit = input.memoryLimit ?? null;
+        if (input.title !== undefined) values.title = input.title;
+        if (input.description !== undefined) values.description = input.description;
+        if (input.difficulty !== undefined) values.difficulty = input.difficulty;
+        if (input.company !== undefined) values.company = input.company ?? null;
+        if (input.constraints !== undefined) values.constraints = input.constraints ?? null;
+        if (input.examples !== undefined) values.examples = input.examples;
+        if (input.starterCode !== undefined) values.starterCode = input.starterCode ?? null;
+        if (input.timeLimit !== undefined) values.timeLimit = input.timeLimit ?? null;
+        if (input.memoryLimit !== undefined) values.memoryLimit = input.memoryLimit ?? null;
 
-      if (Object.keys(values).length > 0) {
-        await tx.update(problems).set(values).where(eq(problems.id, problemId));
-      }
+        if (Object.keys(values).length > 0) {
+          await tx.update(problems).set(values).where(eq(problems.id, problemId));
+        }
 
-      if (input.testCases !== undefined) {
-        await tx.delete(testCases).where(eq(testCases.problemId, problemId));
-        await tx.insert(testCases).values(
-          input.testCases.map((testCase, index) => ({
-            problemId,
-            input: testCase.input,
-            expectedOutput: testCase.expectedOutput,
-            description: testCase.description ?? null,
-            isHidden: testCase.isHidden,
-            sortOrder: index,
-            timeoutMs: testCase.timeoutMs ?? null,
-            memoryMb: testCase.memoryMb ?? null,
-          })),
-        );
-      }
+        if (input.testCases !== undefined) {
+          await tx.delete(testCases).where(eq(testCases.problemId, problemId));
+          await tx.insert(testCases).values(
+            input.testCases.map((testCase, index) => ({
+              problemId,
+              input: testCase.input,
+              expectedOutput: testCase.expectedOutput,
+              description: testCase.description ?? null,
+              isHidden: testCase.isHidden,
+              sortOrder: index,
+              timeoutMs: testCase.timeoutMs ?? null,
+              memoryMb: testCase.memoryMb ?? null,
+            })),
+          );
+        }
 
-      await this.auditService.logWithClient(tx, {
-        actorId: userId,
-        action: 'admin.problem.update',
-        targetType: 'problem',
-        targetId: problemId,
-        metadata: {
-          title: existing.title,
-          changedFields: this.getUpdatedProblemFields(input),
-          ...(input.testCases
-            ? {
-                testCaseCount: input.testCases.length,
-                hiddenTestCaseCount: input.testCases.filter((testCase) => testCase.isHidden).length,
-              }
-            : {}),
-        },
-        ipAddress,
+        await this.auditService.logWithClient(tx, {
+          actorId: userId,
+          action: 'admin.problem.update',
+          targetType: 'problem',
+          targetId: problemId,
+          metadata: {
+            title: existing.title,
+            changedFields: this.getUpdatedProblemFields(input),
+            ...(input.testCases
+              ? {
+                  testCaseCount: input.testCases.length,
+                  hiddenTestCaseCount: input.testCases.filter((testCase) => testCase.isHidden)
+                    .length,
+                }
+              : {}),
+          },
+          ipAddress,
+        });
+      })
+      .catch((error: unknown) => {
+        if (isUniqueViolation(error)) {
+          throw new ConflictException({
+            message: 'Problem title already exists',
+            code: ERROR_CODES.PROBLEM_DUPLICATE_TITLE,
+          });
+        }
+        throw error;
       });
-    });
 
     return this.findById(userId, problemId, { includeHidden: true });
   }
@@ -670,12 +696,22 @@ export class ProblemsService {
   }
 
   private async assertProblemNotInUse(problemId: string): Promise<void> {
+    // Only block deletion when the problem is referenced by an *active*
+    // room or session. Once a room has ended (rooms.endedAt is set, which
+    // also coincides with rooms.status='finished') or a session has
+    // reached the terminal 'finished' state, the problem can be safely
+    // removed — the historical references stay because rooms/sessions
+    // record problemId as a snapshot, not a live FK to a published row.
     const [roomRef, sessionRef] = await Promise.all([
-      this.db.select({ id: rooms.id }).from(rooms).where(eq(rooms.problemId, problemId)).limit(1),
+      this.db
+        .select({ id: rooms.id })
+        .from(rooms)
+        .where(and(eq(rooms.problemId, problemId), isNull(rooms.endedAt)))
+        .limit(1),
       this.db
         .select({ id: sessions.id })
         .from(sessions)
-        .where(eq(sessions.problemId, problemId))
+        .where(and(eq(sessions.problemId, problemId), eq(sessions.status, 'ongoing')))
         .limit(1),
     ]);
 
@@ -902,4 +938,16 @@ export class ProblemsService {
         return row.createdAt.toISOString();
     }
   }
+}
+
+function isUniqueViolation(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) {
+    return false;
+  }
+
+  if ('code' in error && (error as { code?: unknown }).code === '23505') {
+    return true;
+  }
+
+  return 'cause' in error && isUniqueViolation((error as { cause?: unknown }).cause);
 }

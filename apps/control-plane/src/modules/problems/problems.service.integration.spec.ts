@@ -554,7 +554,7 @@ describe('findById', () => {
 });
 
 describe('deleteProblem', () => {
-  it('GIVEN problem referenced by a room WHEN deleting THEN throws ConflictException', async () => {
+  it('GIVEN problem referenced by an active room WHEN deleting THEN throws ConflictException', async () => {
     const admin = await insertUser(db, { role: 'admin' });
     const p = await insertProblem(db);
     await insertRoom(db, admin.id, { problemId: p.id });
@@ -564,15 +564,46 @@ describe('deleteProblem', () => {
     );
   });
 
-  it('GIVEN problem referenced by a session WHEN deleting THEN throws ConflictException', async () => {
+  it('GIVEN problem referenced only by an ended room WHEN deleting THEN succeeds', async () => {
     const admin = await insertUser(db, { role: 'admin' });
     const p = await insertProblem(db);
-    const room = await insertRoom(db, admin.id);
-    await insertSession(db, room.id, { problemId: p.id });
+    await insertRoom(db, admin.id, {
+      problemId: p.id,
+      status: 'finished',
+      endedAt: new Date(),
+    });
+
+    await expect(service.deleteProblem(admin.id, p.id)).resolves.toBeUndefined();
+  });
+
+  it('GIVEN problem referenced by an ongoing session WHEN deleting THEN throws ConflictException', async () => {
+    const admin = await insertUser(db, { role: 'admin' });
+    const p = await insertProblem(db);
+    const room = await insertRoom(db, admin.id, {
+      status: 'finished',
+      endedAt: new Date(),
+    });
+    await insertSession(db, room.id, { problemId: p.id, status: 'ongoing' });
 
     await expect(service.deleteProblem(admin.id, p.id)).rejects.toThrow(
       'Problem is used by existing rooms or sessions',
     );
+  });
+
+  it('GIVEN problem referenced only by a finished session WHEN deleting THEN succeeds', async () => {
+    const admin = await insertUser(db, { role: 'admin' });
+    const p = await insertProblem(db);
+    const room = await insertRoom(db, admin.id, {
+      status: 'finished',
+      endedAt: new Date(),
+    });
+    await insertSession(db, room.id, {
+      problemId: p.id,
+      status: 'finished',
+      finishedAt: new Date(),
+    });
+
+    await expect(service.deleteProblem(admin.id, p.id)).resolves.toBeUndefined();
   });
 });
 
