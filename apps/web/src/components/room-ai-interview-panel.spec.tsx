@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -9,7 +9,93 @@ vi.mock('react-i18next', () => ({
   }),
 }));
 
-import { RoomAiInterviewPanel } from './room-ai-interview-panel.js';
+import {
+  isVoiceCaptureStateActive,
+  normalizeTranscriptionMimeType,
+  RoomAiInterviewPanel,
+  resolveRecognitionLanguage,
+  resolveVoiceButtonTitle,
+  resolveVoicePermissionError,
+  resolveVoiceStatusText,
+  shouldShowSendingIndicator,
+  withTimeout,
+} from './room-ai-interview-panel.js';
+
+const t = (key: string) => key;
+
+describe('room-ai-interview-panel helpers', () => {
+  it('GIVEN voice capture state WHEN resolving status text THEN requesting/listening/transcribing return keys', () => {
+    expect(resolveVoiceStatusText(t, 'idle')).toBeNull();
+    expect(resolveVoiceStatusText(t, 'requesting')).toBe('workspace.aiInterviewVoiceRequesting');
+    expect(resolveVoiceStatusText(t, 'listening')).toBe('workspace.aiInterviewVoiceListening');
+    expect(resolveVoiceStatusText(t, 'transcribing')).toBe(
+      'workspace.aiInterviewVoiceTranscribing',
+    );
+  });
+
+  it('GIVEN voice capture state WHEN checking active flag THEN only non-idle states are active', () => {
+    expect(isVoiceCaptureStateActive('idle')).toBe(false);
+    expect(isVoiceCaptureStateActive('requesting')).toBe(true);
+    expect(isVoiceCaptureStateActive('listening')).toBe(true);
+    expect(isVoiceCaptureStateActive('transcribing')).toBe(true);
+  });
+
+  it('GIVEN voice support flag WHEN resolving voice button title THEN returns correct title key', () => {
+    expect(resolveVoiceButtonTitle(t, true)).toBe('workspace.aiInterviewVoiceInput');
+    expect(resolveVoiceButtonTitle(t, false)).toBe('workspace.aiInterviewVoiceUnsupported');
+  });
+
+  it('GIVEN loading flags WHEN checking sending indicator visibility THEN only non-initial loading shows indicator', () => {
+    expect(shouldShowSendingIndicator(false, false)).toBe(false);
+    expect(shouldShowSendingIndicator(true, true)).toBe(false);
+    expect(shouldShowSendingIndicator(true, false)).toBe(true);
+  });
+
+  it('GIVEN UI language WHEN resolving recognition language THEN maps zh/en and keeps region variants', () => {
+    expect(resolveRecognitionLanguage(undefined)).toBe('en-US');
+    expect(resolveRecognitionLanguage('zh')).toBe('zh-CN');
+    expect(resolveRecognitionLanguage('zh-HK')).toBe('zh-TW');
+    expect(resolveRecognitionLanguage('en-GB')).toBe('en-US');
+    expect(resolveRecognitionLanguage('fr-CA')).toBe('fr-CA');
+    expect(resolveRecognitionLanguage('es')).toBe('es');
+  });
+
+  it('GIVEN mime types WHEN normalizing for transcription THEN maps aliases and strips codecs suffix', () => {
+    expect(normalizeTranscriptionMimeType(undefined)).toBe('audio/webm');
+    expect(normalizeTranscriptionMimeType('audio/mp3')).toBe('audio/mpeg');
+    expect(normalizeTranscriptionMimeType('audio/x-wav')).toBe('audio/wav');
+    expect(normalizeTranscriptionMimeType('audio/webm;codecs=opus')).toBe('audio/webm');
+  });
+
+  it('GIVEN microphone permission result WHEN resolving error message THEN returns expected key', () => {
+    expect(resolveVoicePermissionError(t, 'denied')).toBe(
+      'workspace.aiInterviewVoicePermissionDenied',
+    );
+    expect(resolveVoicePermissionError(t, 'no_device')).toBe('workspace.aiInterviewVoiceNoDevice');
+    expect(resolveVoicePermissionError(t, 'unavailable')).toBe('workspace.aiInterviewVoiceError');
+  });
+
+  it('GIVEN a promise and timeout WHEN promise resolves first THEN withTimeout resolves value', async () => {
+    await expect(withTimeout(Promise.resolve('ok'), 100, () => new Error('timeout'))).resolves.toBe(
+      'ok',
+    );
+  });
+
+  it('GIVEN a promise and timeout WHEN timeout elapses first THEN withTimeout rejects', async () => {
+    vi.useFakeTimers();
+    try {
+      const never = new Promise<string>(() => {
+        // intentionally unresolved
+      });
+      const pending = withTimeout(never, 10, () => new Error('timeout'));
+      const assertion = expect(pending).rejects.toThrow('timeout');
+      await vi.advanceTimersByTimeAsync(10);
+      await assertion;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
 
 describe('RoomAiInterviewPanel', () => {
   it('GIVEN no messages WHEN rendered THEN shows empty state', () => {
@@ -44,7 +130,7 @@ describe('RoomAiInterviewPanel', () => {
     expect(screen.getByText('Tell me about your approach.')).toBeInTheDocument();
   });
 
-  it('GIVEN current user has an avatar WHEN rendering a user message THEN shows the real avatar', () => {
+  it('GIVEN current user avatar WHEN rendering user message THEN shows avatar image', () => {
     const { container } = render(
       <RoomAiInterviewPanel
         messages={[{ role: 'user', content: 'Hello interviewer' }]}
@@ -70,10 +156,24 @@ describe('RoomAiInterviewPanel', () => {
     );
   });
 
-  it('GIVEN isLoading WHEN rendered THEN shows sending indicator', () => {
+  it('GIVEN initial loading state WHEN rendered THEN shows preparing indicator', () => {
     render(
       <RoomAiInterviewPanel
         messages={[]}
+        isLoading={true}
+        error={null}
+        onSendMessage={vi.fn()}
+        canSendMessage={true}
+        currentUser={null}
+      />,
+    );
+    expect(screen.getByText('workspace.aiInterviewBusy')).toBeInTheDocument();
+  });
+
+  it('GIVEN loading with existing messages WHEN rendered THEN shows sending indicator', () => {
+    render(
+      <RoomAiInterviewPanel
+        messages={[{ role: 'assistant', content: 'Let us begin.' }]}
         isLoading={true}
         error={null}
         onSendMessage={vi.fn()}
@@ -98,7 +198,7 @@ describe('RoomAiInterviewPanel', () => {
     expect(screen.getByText('Something went wrong')).toBeInTheDocument();
   });
 
-  it('GIVEN user types and submits WHEN Enter pressed THEN onSendMessage called', async () => {
+  it('GIVEN user types and presses Enter WHEN not loading THEN sends message once', async () => {
     const onSend = vi.fn();
     render(
       <RoomAiInterviewPanel
@@ -110,12 +210,15 @@ describe('RoomAiInterviewPanel', () => {
         currentUser={null}
       />,
     );
+
     const textarea = screen.getByPlaceholderText('workspace.aiInterviewPlaceholder');
     await userEvent.type(textarea, 'My answer{Enter}');
+
+    expect(onSend).toHaveBeenCalledTimes(1);
     expect(onSend).toHaveBeenCalledWith('My answer');
   });
 
-  it('GIVEN user submits rapidly WHEN send button is double-clicked THEN emits one message', async () => {
+  it('GIVEN double click on send WHEN draft exists THEN only one message is emitted', async () => {
     const user = userEvent.setup();
     const onSend = vi.fn();
     render(
@@ -137,35 +240,15 @@ describe('RoomAiInterviewPanel', () => {
     expect(onSend).toHaveBeenCalledWith('My answer');
   });
 
-  it('GIVEN assistant message with codeAnnotations WHEN rendered THEN shows annotations', () => {
+  it('GIVEN assistant follow-up and annotations WHEN rendered THEN shows both', () => {
     render(
       <RoomAiInterviewPanel
         messages={[
           {
             role: 'assistant',
             content: 'Check line 3.',
-            codeAnnotations: [{ line: 3, comment: 'Off-by-one error here.' }],
-          },
-        ]}
-        isLoading={false}
-        error={null}
-        onSendMessage={vi.fn()}
-        canSendMessage={true}
-        currentUser={null}
-      />,
-    );
-    expect(screen.getByText('L3')).toBeInTheDocument();
-    expect(screen.getByText('Off-by-one error here.')).toBeInTheDocument();
-  });
-
-  it('GIVEN assistant message with follow-up question WHEN rendered THEN shows follow-up prompt', () => {
-    render(
-      <RoomAiInterviewPanel
-        messages={[
-          {
-            role: 'assistant',
-            content: 'Good direction.',
             followUpQuestion: 'What invariant does the map maintain?',
+            codeAnnotations: [{ line: 3, comment: 'Off-by-one error here.' }],
           },
         ]}
         isLoading={false}
@@ -178,9 +261,11 @@ describe('RoomAiInterviewPanel', () => {
 
     expect(screen.getByText('workspace.aiInterviewFollowUp')).toBeInTheDocument();
     expect(screen.getByText('What invariant does the map maintain?')).toBeInTheDocument();
+    expect(screen.getByText('L3')).toBeInTheDocument();
+    expect(screen.getByText('Off-by-one error here.')).toBeInTheDocument();
   });
 
-  it('GIVEN assistant message with codeContext WHEN rendered THEN shows line range and snippet', () => {
+  it('GIVEN code context message WHEN rendered THEN shows context card and line range', () => {
     render(
       <RoomAiInterviewPanel
         messages={[
@@ -213,32 +298,56 @@ describe('RoomAiInterviewPanel', () => {
     ).toBeInTheDocument();
   });
 
-  it('GIVEN speech recognition is available WHEN voice transcript returns THEN fills editable draft', async () => {
+  it('GIVEN recorder + transcription callback WHEN user records and stops THEN transcript is auto-sent', async () => {
     const user = userEvent.setup();
-    class MockSpeechRecognition {
-      continuous = false;
-      interimResults = false;
-      lang = 'en-US';
-      onresult:
-        | ((event: {
-            resultIndex: number;
-            results: ArrayLike<{ isFinal: boolean; 0: { transcript: string } }>;
-          }) => void)
-        | null = null;
-      onerror = null;
-      onend: (() => void) | null = null;
-      start() {
-        this.onresult?.({
-          resultIndex: 0,
-          results: [{ isFinal: true, 0: { transcript: 'spoken answer' } }],
-        });
-        this.onend?.();
-      }
-      stop() {}
-      abort() {}
+    const restoreMediaRecorder = installMediaRecorderMock();
+    const restoreMediaDevices = installMediaDevicesMock();
+    const onSendMessage = vi.fn();
+    const onTranscribeVoiceInput = vi.fn().mockResolvedValue('transcribed backend text');
+
+    try {
+      render(
+        <RoomAiInterviewPanel
+          messages={[]}
+          isLoading={false}
+          error={null}
+          onSendMessage={onSendMessage}
+          onTranscribeVoiceInput={onTranscribeVoiceInput}
+          canSendMessage={true}
+          currentUser={null}
+        />,
+      );
+
+      const voiceButton = screen.getByTitle('workspace.aiInterviewVoiceInput');
+      await user.click(voiceButton);
+      expect(screen.getByText('workspace.aiInterviewVoiceListening')).toBeInTheDocument();
+
+      await user.click(voiceButton);
+
+      await waitFor(() => {
+        expect(onTranscribeVoiceInput).toHaveBeenCalledTimes(1);
+      });
+      await waitFor(() => {
+        expect(onSendMessage).toHaveBeenCalledWith('transcribed backend text');
+      });
+
+      expect(screen.getByPlaceholderText('workspace.aiInterviewPlaceholder')).toBeInTheDocument();
+    } finally {
+      restoreMediaRecorder();
+      restoreMediaDevices();
     }
-    const original = (globalThis as { SpeechRecognition?: unknown }).SpeechRecognition;
-    (globalThis as { SpeechRecognition?: unknown }).SpeechRecognition = MockSpeechRecognition;
+  });
+
+  it('GIVEN in-flight transcription WHEN recorder stops THEN transcribing state is shown', async () => {
+    const user = userEvent.setup();
+    const restoreMediaRecorder = installMediaRecorderMock();
+    const restoreMediaDevices = installMediaDevicesMock();
+    const onTranscribeVoiceInput = vi.fn(
+      () =>
+        new Promise<string>(() => {
+          // keep pending for state assertion
+        }),
+    );
 
     try {
       render(
@@ -247,65 +356,143 @@ describe('RoomAiInterviewPanel', () => {
           isLoading={false}
           error={null}
           onSendMessage={vi.fn()}
-          canSendMessage={true}
-          currentUser={null}
-        />,
-      );
-
-      await user.click(screen.getByTitle('workspace.aiInterviewVoiceInput'));
-      const textarea = screen.getByPlaceholderText('workspace.aiInterviewPlaceholder');
-      expect(textarea).toHaveValue('spoken answer');
-
-      await user.type(textarea, ' edited');
-      expect(textarea).toHaveValue('spoken answer edited');
-    } finally {
-      (globalThis as { SpeechRecognition?: unknown }).SpeechRecognition = original;
-    }
-  });
-
-  it('GIVEN speech recognition is available WHEN toggling voice input THEN mic icon reflects off and listening states', async () => {
-    const user = userEvent.setup();
-    class MockSpeechRecognition {
-      continuous = false;
-      interimResults = false;
-      lang = 'en-US';
-      onresult = null;
-      onerror = null;
-      onend: (() => void) | null = null;
-      start() {}
-      stop() {
-        this.onend?.();
-      }
-      abort() {}
-    }
-    const original = (globalThis as { SpeechRecognition?: unknown }).SpeechRecognition;
-    (globalThis as { SpeechRecognition?: unknown }).SpeechRecognition = MockSpeechRecognition;
-
-    try {
-      const { container } = render(
-        <RoomAiInterviewPanel
-          messages={[]}
-          isLoading={false}
-          error={null}
-          onSendMessage={vi.fn()}
+          onTranscribeVoiceInput={onTranscribeVoiceInput}
           canSendMessage={true}
           currentUser={null}
         />,
       );
 
       const voiceButton = screen.getByTitle('workspace.aiInterviewVoiceInput');
-      expect(voiceButton).toHaveAttribute('aria-pressed', 'false');
-      expect(container.querySelector('.lucide-mic-off')).toBeInTheDocument();
-
       await user.click(voiceButton);
-      expect(voiceButton).toHaveAttribute('aria-pressed', 'true');
-      expect(container.querySelector('.lucide-mic')).toBeInTheDocument();
-
       await user.click(voiceButton);
-      expect(voiceButton).toHaveAttribute('aria-pressed', 'false');
-      expect(container.querySelector('.lucide-mic-off')).toBeInTheDocument();
+
+      await waitFor(() => {
+        expect(onTranscribeVoiceInput).toHaveBeenCalledTimes(1);
+      });
+      expect(screen.getByText('workspace.aiInterviewVoiceTranscribing')).toBeInTheDocument();
     } finally {
-      (globalThis as { SpeechRecognition?: unknown }).SpeechRecognition = original;
+      restoreMediaRecorder();
+      restoreMediaDevices();
     }
   });
+
+  it('GIVEN microphone permission denied WHEN user starts voice capture THEN permission error is shown', async () => {
+    const user = userEvent.setup();
+    const restoreMediaRecorder = installMediaRecorderMock();
+    const restoreMediaDevices = installMediaDevicesMock({
+      error: new DOMException('Permission denied', 'NotAllowedError'),
+    });
+
+    try {
+      render(
+        <RoomAiInterviewPanel
+          messages={[]}
+          isLoading={false}
+          error={null}
+          onSendMessage={vi.fn()}
+          onTranscribeVoiceInput={vi.fn()}
+          canSendMessage={true}
+          currentUser={null}
+        />,
+      );
+
+      await user.click(screen.getByTitle('workspace.aiInterviewVoiceInput'));
+      expect(screen.getByText('workspace.aiInterviewVoicePermissionDenied')).toBeInTheDocument();
+    } finally {
+      restoreMediaRecorder();
+      restoreMediaDevices();
+    }
+  });
+
+  it('GIVEN no transcription callback WHEN rendered THEN voice button is disabled', () => {
+    render(
+      <RoomAiInterviewPanel
+        messages={[]}
+        isLoading={false}
+        error={null}
+        onSendMessage={vi.fn()}
+        canSendMessage={true}
+        currentUser={null}
+      />,
+    );
+
+    expect(screen.getByTitle('workspace.aiInterviewVoiceUnsupported')).toBeDisabled();
+  });
 });
+
+function installMediaRecorderMock(): () => void {
+  const originalMediaRecorder = (globalThis as { MediaRecorder?: typeof MediaRecorder })
+    .MediaRecorder;
+
+  class MockMediaRecorder {
+    static isTypeSupported() {
+      return true;
+    }
+
+    state: 'inactive' | 'recording' = 'inactive';
+    mimeType: string;
+    ondataavailable: ((event: { data: Blob }) => void) | null = null;
+    onerror: (() => void) | null = null;
+    onstop: (() => void) | null = null;
+
+    constructor(_stream: MediaStream, options?: { mimeType?: string }) {
+      this.mimeType = options?.mimeType ?? 'audio/webm';
+    }
+
+    start() {
+      this.state = 'recording';
+    }
+
+    requestData() {
+      if (this.state !== 'recording') {
+        return;
+      }
+      this.ondataavailable?.({ data: new Blob(['voice-bytes']) });
+    }
+
+    stop() {
+      if (this.state !== 'recording') {
+        return;
+      }
+      this.state = 'inactive';
+      this.ondataavailable?.({ data: new Blob(['voice-bytes']) });
+      this.onstop?.();
+    }
+  }
+
+  (globalThis as { MediaRecorder?: typeof MediaRecorder }).MediaRecorder =
+    MockMediaRecorder as unknown as typeof MediaRecorder;
+
+  return () => {
+    if (originalMediaRecorder) {
+      (globalThis as { MediaRecorder?: typeof MediaRecorder }).MediaRecorder =
+        originalMediaRecorder;
+      return;
+    }
+
+    delete (globalThis as { MediaRecorder?: typeof MediaRecorder }).MediaRecorder;
+  };
+}
+
+function installMediaDevicesMock(options?: { error?: Error }): () => void {
+  const originalMediaDevices = navigator.mediaDevices;
+  const stop = vi.fn();
+
+  const getUserMedia = options?.error
+    ? vi.fn().mockRejectedValue(options.error)
+    : vi.fn().mockResolvedValue({
+        getTracks: () => [{ stop }],
+      });
+
+  Object.defineProperty(navigator, 'mediaDevices', {
+    configurable: true,
+    value: { getUserMedia },
+  });
+
+  return () => {
+    Object.defineProperty(navigator, 'mediaDevices', {
+      configurable: true,
+      value: originalMediaDevices,
+    });
+  };
+}

@@ -14,8 +14,8 @@ describe('validateEnv', () => {
     const env = validateEnv(baseEnv);
 
     expect(env.AI_PLATFORM_API_KEY).toBe('test-key');
-    expect(env.AI_PLATFORM_MODEL).toBe('qwen3.5-mini');
-    expect(env.AI_TTS_MODEL).toBe('qwen-tts');
+    expect(env.AI_PLATFORM_MODEL).toBe('DeepSeek-V3.2-Instruct');
+    expect(env.AI_TTS_MODEL).toBeUndefined();
     expect(env.S3_BUCKET).toBe('syncode');
   });
 

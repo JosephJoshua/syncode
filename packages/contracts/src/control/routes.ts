@@ -60,6 +60,8 @@ import type {
   requestRoomAiHintSchema,
   requestRoomAiInterviewResponseSchema,
   requestRoomAiInterviewSchema,
+  requestRoomAiInterviewTranscriptionResponseSchema,
+  requestRoomAiInterviewTranscriptionSchema,
   requestRoomCodeAnalysisResponseSchema,
   requestRoomCodeAnalysisSchema,
   roomChatMediaUploadRequestSchema,
@@ -220,6 +222,10 @@ export const CONTROL_API = {
       void,
       z.infer<typeof getRoomAiInterviewResultResponseSchema>
     >()('rooms/:id/ai/interview/:jobId', 'GET'),
+    AI_INTERVIEW_TRANSCRIBE: defineRoute<
+      z.infer<typeof requestRoomAiInterviewTranscriptionSchema>,
+      z.infer<typeof requestRoomAiInterviewTranscriptionResponseSchema>
+    >()('rooms/:id/ai/interview/transcribe', 'POST'),
     CODE_ANALYSIS: defineRoute<
       z.infer<typeof requestRoomCodeAnalysisSchema>,
       z.infer<typeof requestRoomCodeAnalysisResponseSchema>
