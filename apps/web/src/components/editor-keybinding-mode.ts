@@ -59,12 +59,12 @@ export async function mountEditorKeybindingMode({
 }
 
 export function readStoredEditorKeybindingMode(): EditorKeybindingMode {
-  if (typeof window === 'undefined') {
+  if (typeof globalThis.window === 'undefined') {
     return 'default';
   }
 
   try {
-    const stored = window.localStorage.getItem(EDITOR_KEYBINDING_MODE_STORAGE_KEY);
+    const stored = globalThis.localStorage.getItem(EDITOR_KEYBINDING_MODE_STORAGE_KEY);
     return isEditorKeybindingMode(stored) ? stored : 'default';
   } catch {
     return 'default';
@@ -73,7 +73,7 @@ export function readStoredEditorKeybindingMode(): EditorKeybindingMode {
 
 export function writeStoredEditorKeybindingMode(mode: EditorKeybindingMode): void {
   try {
-    window.localStorage.setItem(EDITOR_KEYBINDING_MODE_STORAGE_KEY, mode);
+    globalThis.localStorage.setItem(EDITOR_KEYBINDING_MODE_STORAGE_KEY, mode);
   } catch {
     // Ignore storage failures; the in-memory selection still applies for this session.
   }

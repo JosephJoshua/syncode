@@ -15,7 +15,7 @@ import { LazyMonacoEditor as Editor } from './lazy-monaco-editor.js';
 import {
   EDITOR_LOADING,
   EDITOR_OPTIONS_BASE,
-  handleEditorWillMount,
+  handleCollaborativeEditorWillMount,
 } from './room-workspace-utils.js';
 
 const INLINE_COMMENT_PANEL_GAP_PX = 6;
@@ -761,7 +761,7 @@ export function CollaborativeEditor({
             height="100%"
             language={language}
             theme="syncode-dark"
-            beforeMount={handleEditorWillMount}
+            beforeMount={handleCollaborativeEditorWillMount}
             onMount={handleMount}
             options={editorOptions}
             loading={EDITOR_LOADING}

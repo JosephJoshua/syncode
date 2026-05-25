@@ -136,6 +136,12 @@ export function LineDiffBlock({
   );
 }
 
+// Shared by every Monaco instance in the app, including read-only viewers
+// (submission preview, session-report snapshot, problem panel code blocks).
+// Intentionally limited to the visual theme so read-only viewers don't get
+// surprise TS/JS type-check squiggles. The collaborative editor uses
+// `handleCollaborativeEditorWillMount` below, which layers diagnostics +
+// compiler options on top for active authoring.
 export const handleEditorWillMount: BeforeMount = (monaco) => {
   monaco.editor.defineTheme('syncode-dark', {
     base: 'vs-dark',
@@ -164,6 +170,15 @@ export const handleEditorWillMount: BeforeMount = (monaco) => {
       'editorBracketMatch.border': '#00e59940',
     },
   });
+};
+
+// Use only for the collaborative (authoring) editor. These calls mutate
+// Monaco's *global* TS/JS language-service singletons, so we keep them off
+// the shared `handleEditorWillMount` path; read-only viewers that never go
+// through here stay free of squiggles when the user opens, e.g., the session
+// report page without ever entering an active room.
+export const handleCollaborativeEditorWillMount: BeforeMount = (monaco) => {
+  handleEditorWillMount(monaco);
 
   monaco.languages.typescript.typescriptDefaults.setDiagnosticsOptions({
     noSemanticValidation: false,
