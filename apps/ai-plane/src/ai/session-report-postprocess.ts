@@ -56,10 +56,6 @@ const REQUIRED_DIMENSION_KEYS = [
   'problemSolving',
 ] as const satisfies readonly (keyof NonNullable<SessionReport['dimensions']>)[];
 
-const MAX_REPORT_TEXT_LENGTH = 900;
-const MAX_REPORT_LIST_ITEM_LENGTH = 240;
-const MAX_EVIDENCE_DESCRIPTION_LENGTH = 220;
-
 export function postprocessSessionReport(
   request: GenerateSessionReportRequest,
   report: SessionReport,
@@ -239,9 +235,7 @@ function repairPartialMissingDimensionEvidence(
   for (const key of missingOrInvalid) {
     const current = nextDimensions[key];
     const score = normalizeDimensionScore(current?.score, report.overallScore);
-    const feedback =
-      sanitizeReportText(current?.feedback, MAX_REPORT_LIST_ITEM_LENGTH) ??
-      defaultDimensionFeedback(key);
+    const feedback = sanitizeReportText(current?.feedback) ?? defaultDimensionFeedback(key);
     const normalizedEvidence = normalizeSpecificEvidence(
       current?.evidence ?? [],
       finalCode,
@@ -355,11 +349,10 @@ function sanitizeReportOutput(report: SessionReport) {
       }
 
       dimension.feedback =
-        sanitizeReportText(dimension.feedback, MAX_REPORT_LIST_ITEM_LENGTH) ??
-        `No safe ${key} feedback was provided.`;
+        sanitizeReportText(dimension.feedback) ?? `No safe ${key} feedback was provided.`;
       dimension.evidence = dimension.evidence
         .map((item) => {
-          const description = sanitizeReportText(item.description, MAX_EVIDENCE_DESCRIPTION_LENGTH);
+          const description = sanitizeReportText(item.description);
           return description ? { ...item, description } : null;
         })
         .filter((item): item is NonNullable<typeof item> => item !== null);
@@ -368,8 +361,8 @@ function sanitizeReportOutput(report: SessionReport) {
 
   report.strengths = sanitizeReportList(report.strengths);
   report.areasForImprovement = sanitizeReportList(report.areasForImprovement);
-  report.detailedFeedback = sanitizeReportText(report.detailedFeedback, MAX_REPORT_TEXT_LENGTH);
-  report.feedback = sanitizeReportText(report.feedback, MAX_REPORT_TEXT_LENGTH);
+  report.detailedFeedback = sanitizeReportText(report.detailedFeedback);
+  report.feedback = sanitizeReportText(report.feedback);
 
   if (report.peerFeedbackSummary) {
     report.peerFeedbackSummary.themes = sanitizeReportList(
@@ -384,11 +377,11 @@ function sanitizeReportList(items: string[] | undefined) {
   }
 
   return items
-    .map((item) => sanitizeReportText(item, MAX_REPORT_LIST_ITEM_LENGTH))
+    .map((item) => sanitizeReportText(item))
     .filter((item): item is string => Boolean(item));
 }
 
-function sanitizeReportText(value: string | undefined, maxLength: number): string | undefined {
+function sanitizeReportText(value: string | undefined): string | undefined {
   if (!value) {
     return undefined;
   }
@@ -408,11 +401,7 @@ function sanitizeReportText(value: string | undefined, maxLength: number): strin
     return undefined;
   }
 
-  if (normalized.length <= maxLength) {
-    return normalized;
-  }
-
-  return `${normalized.slice(0, maxLength).trim()}...`;
+  return closeUnbalancedColorTags(normalized);
 }
 
 function isUnsafeReportText(value: string) {
@@ -664,7 +653,7 @@ function normalizeEvidenceItem(
   finalCode: string,
   sessionEvents: SessionReportEventContext[],
 ): SessionReportEvidence | null {
-  const description = sanitizeReportText(item.description, MAX_EVIDENCE_DESCRIPTION_LENGTH);
+  const description = sanitizeReportText(item.description);
   if (!description) {
     return null;
   }
@@ -972,4 +961,35 @@ function isGenericEvidenceReference(reference: string) {
   return /^(?:code|final code|code structure|final snapshot(?: code)?|solution|session data|overall performance)$/i.test(
     reference.trim(),
   );
+}
+
+function closeUnbalancedColorTags(value: string) {
+  const tagPattern = /<\/?(green|yellow|orange|red)>/gu;
+  const stack: string[] = [];
+  for (const match of value.matchAll(tagPattern)) {
+    const tag = match[1];
+    const raw = match[0];
+    if (!tag) {
+      continue;
+    }
+
+    if (raw.startsWith('</')) {
+      const top = stack.at(-1);
+      if (top === tag) {
+        stack.pop();
+      }
+      continue;
+    }
+
+    stack.push(tag);
+  }
+
+  if (stack.length === 0) {
+    return value;
+  }
+
+  return `${value}${[...stack]
+    .reverse()
+    .map((tag) => `</${tag}>`)
+    .join('')}`;
 }

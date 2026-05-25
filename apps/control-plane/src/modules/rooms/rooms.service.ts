@@ -35,13 +35,14 @@ import {
   type ListRoomsQuery,
   type RequestRoomAiHintInput,
   type RequestRoomAiInterviewInput,
+  type RequestRoomAiInterviewTranscriptionInput,
   type RequestRoomCodeAnalysisInput,
   type RoleAssignmentReason,
   type RoomChatMediaUploadInput,
   type RoomConfig,
   type RunCodeRequest,
   type RunCodeResponse,
-  type StaticAnalysisEvidence,
+  type StaticAnalysisEvidenceContext,
   type SubmitProblemInput,
   type SubmitResponse,
 } from '@syncode/contracts';
@@ -104,6 +105,7 @@ import type {
   PublicRoomSummaryResult,
   RequestRoomAiHintResult,
   RequestRoomAiInterviewResult,
+  RequestRoomAiInterviewTranscriptionResult,
   RequestRoomCodeAnalysisResult,
   RoomChatMediaUploadResult,
   RoomDetailResult,
@@ -1408,6 +1410,7 @@ export class RoomsService implements OnModuleInit {
         trigger: body.trigger,
         interactionSignals,
         language: activeLanguage,
+        responseLanguage: body.responseLanguage,
         userMessage,
         conversationHistory: body.conversationHistory,
         idempotencyKey: body.trigger === 'proactive' ? proactiveJobId : undefined,
@@ -1451,6 +1454,85 @@ export class RoomsService implements OnModuleInit {
     );
 
     return { jobId: submitted.jobId };
+  }
+
+  async requestAiInterviewTranscription(
+    roomId: string,
+    userId: string,
+    body: RequestRoomAiInterviewTranscriptionInput,
+  ): Promise<RequestRoomAiInterviewTranscriptionResult> {
+    await this.getAiRequestRoomContext(roomId, userId, undefined, 'Interview');
+    const sessionId = await this.loadCurrentRoomSessionId(roomId);
+    const limitKey = `${RoomsService.AI_INTERVIEW_TRANSCRIPTION_LIMIT_PREFIX}${roomId}:${userId}`;
+    const usage = await this.cacheService.incrBy(
+      limitKey,
+      1,
+      RoomsService.AI_INTERVIEW_TRANSCRIPTION_LIMIT_WINDOW_SECONDS,
+    );
+
+    if (usage > RoomsService.AI_INTERVIEW_TRANSCRIPTION_LIMIT_COUNT) {
+      throw new HttpException(
+        {
+          message: 'AI interview transcription rate limit exceeded (10 per 5 minutes)',
+          code: ERROR_CODES.AI_TRANSCRIPTION_RATE_LIMIT,
+        },
+        429,
+      );
+    }
+
+    let submitted: { jobId: JobId<'ai:interview-transcription'> };
+    try {
+      submitted = await withTimeout(
+        this.aiClient.submitInterviewTranscription({
+          roomId,
+          sessionId,
+          participantId: userId,
+          audioBase64: body.audioBase64,
+          mimeType: body.mimeType,
+          language: body.language,
+        }),
+        RoomsService.AI_INTERVIEW_TRANSCRIPTION_CLIENT_TIMEOUT_MS,
+      );
+    } catch (error) {
+      await this.cacheService.incrBy(limitKey, -1);
+      this.logger.warn(`AI interview transcription submission failed for room ${roomId}`, error);
+      throw new ServiceUnavailableException({
+        message: 'AI service unavailable',
+        code: ERROR_CODES.AI_SERVICE_UNAVAILABLE,
+      });
+    }
+
+    for (let attempt = 1; attempt <= RoomsService.AI_INTERVIEW_TRANSCRIPTION_MAX_POLLS; attempt++) {
+      const result = await withTimeout(
+        this.aiClient.getInterviewTranscriptionResult(submitted.jobId),
+        RoomsService.AI_INTERVIEW_TRANSCRIPTION_CLIENT_TIMEOUT_MS,
+      );
+      if (result?.text?.trim()) {
+        return {
+          text: result.text.trim(),
+        };
+      }
+
+      const status = await withTimeout(
+        this.aiClient.getInterviewTranscriptionJobStatus(submitted.jobId),
+        RoomsService.AI_INTERVIEW_TRANSCRIPTION_CLIENT_TIMEOUT_MS,
+      );
+      if (status === 'failed') {
+        throw new ServiceUnavailableException({
+          message: 'AI service unavailable',
+          code: ERROR_CODES.AI_SERVICE_UNAVAILABLE,
+        });
+      }
+
+      if (attempt < RoomsService.AI_INTERVIEW_TRANSCRIPTION_MAX_POLLS) {
+        await delay(RoomsService.AI_INTERVIEW_TRANSCRIPTION_POLL_INTERVAL_MS);
+      }
+    }
+
+    throw new ServiceUnavailableException({
+      message: 'AI service unavailable',
+      code: ERROR_CODES.AI_SERVICE_UNAVAILABLE,
+    });
   }
 
   async getAiInterviewResult(
@@ -1737,12 +1819,19 @@ export class RoomsService implements OnModuleInit {
   private static readonly AI_INTERVIEW_PROACTIVE_LIMIT_PREFIX = 'ai-interview-proactive-limit:';
   private static readonly AI_INTERVIEW_PROACTIVE_LIMIT_COUNT = 6;
   private static readonly AI_INTERVIEW_PROACTIVE_LIMIT_WINDOW_SECONDS = 5 * 60;
+  private static readonly AI_INTERVIEW_TRANSCRIPTION_LIMIT_PREFIX =
+    'ai-interview-transcription-limit:';
+  private static readonly AI_INTERVIEW_TRANSCRIPTION_LIMIT_COUNT = 10;
+  private static readonly AI_INTERVIEW_TRANSCRIPTION_LIMIT_WINDOW_SECONDS = 5 * 60;
   private static readonly AI_INTERVIEW_ALLOWED_STATUSES = new Set<RoomStatus>([
     RoomStatus.WARMUP,
     RoomStatus.CODING,
     RoomStatus.WRAPUP,
   ]);
   private static readonly AI_INTERVIEW_HINT_CONTEXT_LIMIT = 8;
+  private static readonly AI_INTERVIEW_TRANSCRIPTION_CLIENT_TIMEOUT_MS = 12_000;
+  private static readonly AI_INTERVIEW_TRANSCRIPTION_MAX_POLLS = 80;
+  private static readonly AI_INTERVIEW_TRANSCRIPTION_POLL_INTERVAL_MS = 250;
   private static readonly AI_CODE_ANALYSIS_MAX_CODE_LENGTH = 16_000;
   private static readonly AI_CODE_ANALYSIS_LIMIT_COUNT = 10;
   private static readonly AI_CODE_ANALYSIS_LIMIT_WINDOW_SECONDS = 5 * 60;
@@ -3007,7 +3096,7 @@ export class RoomsService implements OnModuleInit {
     userId: string,
     currentCode: string,
     language: SupportedLanguage,
-  ): Promise<StaticAnalysisEvidence | null> {
+  ): Promise<StaticAnalysisEvidenceContext | null> {
     const rows = await this.db
       .select({
         source: staticAnalysisResults.source,
@@ -3063,9 +3152,12 @@ export class RoomsService implements OnModuleInit {
         duplicationCount: row.duplicationCount,
         toolFailureCount: row.toolFailureCount,
       },
-      diagnostics: report.diagnostics.slice(0, 10) as StaticAnalysisEvidence['diagnostics'],
-      complexity: report.complexity.slice(0, 10) as StaticAnalysisEvidence['complexity'],
-      duplications: report.duplications.slice(0, 5) as StaticAnalysisEvidence['duplications'],
+      diagnostics: report.diagnostics.slice(0, 10) as StaticAnalysisEvidenceContext['diagnostics'],
+      complexity: report.complexity.slice(0, 10) as StaticAnalysisEvidenceContext['complexity'],
+      duplications: report.duplications.slice(
+        0,
+        5,
+      ) as StaticAnalysisEvidenceContext['duplications'],
     };
   }
 
@@ -3222,7 +3314,8 @@ export class RoomsService implements OnModuleInit {
   }
 
   private buildProactiveInterviewJobId(roomId: string, userId: string): JobId<'ai:interview'> {
-    return `ai-interview-proactive-${roomId}-${userId}`;
+    const nonce = randomBytes(6).toString('hex');
+    return `ai-interview-proactive-${roomId}-${userId}-${Date.now()}-${nonce}`;
   }
 
   private async persistAiInterviewMessage({
@@ -3636,4 +3729,25 @@ function normalizeStaticAnalysisReport(value: unknown) {
     complexity: Array.isArray(report.complexity) ? report.complexity : [],
     duplications: Array.isArray(report.duplications) ? report.duplications : [],
   };
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error(`Operation timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+  });
+
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    if (timeoutId != null) {
+      clearTimeout(timeoutId);
+    }
+  });
 }

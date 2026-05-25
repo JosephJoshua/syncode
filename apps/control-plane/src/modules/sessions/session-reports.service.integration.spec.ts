@@ -263,6 +263,14 @@ describe('enqueueForFinishedSession', () => {
       role: 'assistant',
       content: 'Talk through your complexity reasoning.',
     });
+    await db.insert(aiMessages).values({
+      roomId: room.id,
+      sessionId: null,
+      userId: candidate.id,
+      role: 'user',
+      content: 'I can explain why my map update stays consistent.',
+      createdAt: new Date(),
+    });
     mockCollabClient.getRoomChatHistory.mockResolvedValueOnce({
       messages: [
         {
@@ -338,6 +346,18 @@ describe('enqueueForFinishedSession', () => {
       ([request]) => request.participantId === candidate.id,
     )?.[0];
     expect(candidateRequest).toBeDefined();
+    expect(candidateRequest?.aiMessages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: 'assistant',
+          content: 'Talk through your complexity reasoning.',
+        }),
+        expect.objectContaining({
+          role: 'user',
+          content: 'I can explain why my map update stays consistent.',
+        }),
+      ]),
+    );
     expect(candidateRequest?.sessionEvents).not.toEqual(
       expect.arrayContaining([
         expect.objectContaining({

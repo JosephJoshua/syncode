@@ -240,6 +240,7 @@ export interface InterviewResponseRequest {
   interactionSignals?: InterviewInteractionSignals;
   problemDescription: string;
   language: SupportedLanguage;
+  responseLanguage?: 'en' | 'zh';
   userMessage?: string;
 }
 
@@ -256,6 +257,19 @@ export interface InterviewResponseResult {
   codeContext?: InterviewCodeContext;
   codeAnnotations?: Array<{ line: number; comment: string }>;
   audio?: InterviewResponseAudio;
+}
+
+export interface InterviewTranscriptionRequest {
+  roomId: string;
+  sessionId?: string | null;
+  participantId: string;
+  audioBase64: string;
+  mimeType: string;
+  language?: string;
+}
+
+export interface InterviewTranscriptionResult {
+  text: string;
 }
 
 export interface SessionReportParticipantContext {
