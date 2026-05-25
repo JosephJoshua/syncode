@@ -143,6 +143,47 @@ describe('FeedbackService', () => {
     });
   });
 
+  it('GIVEN stale skip-all write races with submitted feedback THEN preserves the submitted row', async () => {
+    const { reviewer, candidate, session, room } = await seedPeerSession();
+
+    await service.submitSessionFeedback(
+      session.id,
+      reviewer.id,
+      { ...FEEDBACK_INPUT, candidateId: candidate.id },
+      false,
+    );
+
+    const upsertFeedbackRow = (
+      service as unknown as {
+        upsertFeedbackRow(input: {
+          sessionId: string;
+          roomId: string;
+          reviewerId: string;
+          candidateId: string;
+          status: 'skipped';
+          feedbackText: null;
+        }): Promise<void>;
+      }
+    ).upsertFeedbackRow.bind(service);
+
+    await upsertFeedbackRow({
+      sessionId: session.id,
+      roomId: room.id,
+      reviewerId: reviewer.id,
+      candidateId: candidate.id,
+      status: 'skipped',
+      feedbackText: null,
+    });
+
+    const result = await service.getSessionFeedback(session.id, reviewer.id, false);
+
+    expect(result.data[0]).toMatchObject({
+      status: 'submitted',
+      candidateId: candidate.id,
+      feedbackText: FEEDBACK_INPUT.feedbackText,
+    });
+  });
+
   it('GIVEN reviewer skips all remaining targets WHEN reading progress THEN all targets are resolved', async () => {
     const { reviewer, candidate, interviewer, session } = await seedPeerSession();
 

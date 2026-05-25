@@ -14,7 +14,7 @@ import {
 import type { Database } from '@syncode/db';
 import { peerFeedback, sessionParticipants, sessions, users } from '@syncode/db';
 import { type IStorageService, STORAGE_SERVICE } from '@syncode/shared/ports';
-import { and, asc, eq, inArray } from 'drizzle-orm';
+import { and, asc, eq, inArray, ne } from 'drizzle-orm';
 import { resolveAvatarUrls } from '@/common/resolve-avatar-urls.js';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
 import {
@@ -353,7 +353,7 @@ export class FeedbackService {
         ),
       );
 
-    return row ? ((row.status ?? 'submitted') as SessionFeedbackStatus) : null;
+    return row ? row.status : null;
   }
 
   private async getFeedbackRows(sessionId: string): Promise<
@@ -399,7 +399,7 @@ export class FeedbackService {
       id: row.id,
       sessionId: row.sessionId ?? sessionId,
       roomId: row.roomId,
-      status: (row.status ?? 'submitted') as SessionFeedbackStatus,
+      status: row.status,
       reviewerId: row.reviewerId,
       reviewerName: row.reviewerDisplayName ?? row.reviewerUsername,
       reviewerAvatarUrl: reviewerAvatars.get(row.reviewerId) ?? null,
@@ -470,6 +470,15 @@ export class FeedbackService {
   }) {
     const legacyStrength = status === 'submitted' ? (feedbackText?.slice(0, 2000) ?? null) : null;
 
+    // A skip must never overwrite a row that already holds 'submitted'
+    // feedback; otherwise a race between submitSessionFeedback and
+    // skipAllSessionFeedback (which fetches a snapshot before looping)
+    // would silently destroy submitted text. A submit, by contrast, can
+    // freely override a prior 'skipped' status (the reviewer changes
+    // their mind). The DB-level guard is the correct enforcement point
+    // because the in-memory check in skipAllSessionFeedback is racy.
+    const setWhere = status === 'skipped' ? ne(peerFeedback.status, 'submitted') : undefined;
+
     await this.db
       .insert(peerFeedback)
       .values({
@@ -490,6 +499,7 @@ export class FeedbackService {
       })
       .onConflictDoUpdate({
         target: [peerFeedback.roomId, peerFeedback.reviewerId, peerFeedback.candidateId],
+        setWhere,
         set: {
           sessionId,
           status,

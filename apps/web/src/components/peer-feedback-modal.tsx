@@ -17,20 +17,20 @@ import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { SessionFeedbackProgressTarget } from '@/lib/session-feedback-progress.js';
 
-export interface PeerFeedbackModalTarget extends SessionFeedbackProgressTarget {}
+export type PeerFeedbackModalTarget = SessionFeedbackProgressTarget;
 
-interface PeerFeedbackModalProps {
+type PeerFeedbackModalProps = Readonly<{
   open: boolean;
   isLoading: boolean;
   isSubmitting: boolean;
   errorMessage: string | null;
-  targets: PeerFeedbackModalTarget[];
+  targets: ReadonlyArray<PeerFeedbackModalTarget>;
   activeCandidateId: string | null;
   onActiveCandidateIdChange: (candidateId: string) => void;
   onSubmit: (candidateId: string, feedbackText: string) => void | Promise<void>;
   onSkip: (candidateId: string) => void | Promise<void>;
   onSkipAll: () => void | Promise<void>;
-}
+}>;
 
 export function PeerFeedbackModal({
   open,
@@ -58,6 +58,9 @@ export function PeerFeedbackModal({
   const pendingCount = targets.filter((target) => target.state === 'pending').length;
   const feedbackText = draft.candidateId === activeTargetId ? draft.text : '';
 
+  // Extracted from JSX to avoid a nested ternary (SonarCloud S3358).
+  const bodyState: 'loading' | 'active' | 'empty' = resolveBodyState(isLoading, activeTarget);
+
   return (
     <Dialog.Root open={open}>
       <Dialog.Portal>
@@ -77,12 +80,13 @@ export function PeerFeedbackModal({
               </Dialog.Description>
             </div>
 
-            {isLoading ? (
+            {bodyState === 'loading' ? (
               <div className="flex min-h-56 flex-col items-center justify-center gap-3 rounded-3xl border border-border/50 bg-background/50 px-6 py-8 text-center">
                 <Loader2 className="size-6 animate-spin text-primary" />
                 <p className="text-sm text-muted-foreground">{t('modal.loading')}</p>
               </div>
-            ) : activeTarget ? (
+            ) : null}
+            {bodyState === 'active' && activeTarget ? (
               <div className="space-y-5">
                 <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_220px]">
                   <div className="rounded-3xl border border-border/50 bg-background/55 p-4">
@@ -172,11 +176,12 @@ export function PeerFeedbackModal({
                   {errorMessage ? <p className="text-sm text-destructive">{errorMessage}</p> : null}
                 </div>
               </div>
-            ) : (
+            ) : null}
+            {bodyState === 'empty' ? (
               <div className="rounded-3xl border border-border/50 bg-background/50 px-6 py-8 text-center">
                 <p className="text-sm text-muted-foreground">{t('modal.empty')}</p>
               </div>
-            )}
+            ) : null}
 
             <div className="flex flex-col-reverse gap-3 pt-1 sm:flex-row sm:justify-end">
               <Button
@@ -227,6 +232,19 @@ export function PeerFeedbackModal({
 
 function getNameInitial(name: string) {
   return name.trim().charAt(0).toUpperCase() || '?';
+}
+
+function resolveBodyState(
+  isLoading: boolean,
+  activeTarget: PeerFeedbackModalTarget | null,
+): 'loading' | 'active' | 'empty' {
+  if (isLoading) {
+    return 'loading';
+  }
+  if (activeTarget) {
+    return 'active';
+  }
+  return 'empty';
 }
 
 function formatTargetState(t: (key: string) => string, state: PeerFeedbackModalTarget['state']) {
