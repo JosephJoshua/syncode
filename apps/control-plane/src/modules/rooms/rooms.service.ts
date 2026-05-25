@@ -1463,6 +1463,21 @@ export class RoomsService implements OnModuleInit {
   ): Promise<RequestRoomAiInterviewTranscriptionResult> {
     await this.getAiRequestRoomContext(roomId, userId, undefined, 'Interview');
     const sessionId = await this.loadCurrentRoomSessionId(roomId);
+    const limitKey = `${RoomsService.AI_INTERVIEW_TRANSCRIPTION_LIMIT_PREFIX}${roomId}:${userId}`;
+    const usage = await this.cacheService.incrBy(
+      limitKey,
+      1,
+      RoomsService.AI_INTERVIEW_TRANSCRIPTION_LIMIT_WINDOW_SECONDS,
+    );
+    if (usage > RoomsService.AI_INTERVIEW_TRANSCRIPTION_LIMIT_COUNT) {
+      throw new HttpException(
+        {
+          message: 'AI interview transcription rate limit exceeded (12 per 5 minutes)',
+          code: ERROR_CODES.AI_MESSAGE_RATE_LIMIT,
+        },
+        429,
+      );
+    }
 
     let submitted: { jobId: JobId<'ai:interview-transcription'> };
     try {
@@ -1809,8 +1824,11 @@ export class RoomsService implements OnModuleInit {
   ]);
   private static readonly AI_INTERVIEW_HINT_CONTEXT_LIMIT = 8;
   private static readonly AI_INTERVIEW_TRANSCRIPTION_CLIENT_TIMEOUT_MS = 2_500;
-  private static readonly AI_INTERVIEW_TRANSCRIPTION_MAX_POLLS = 30;
+  private static readonly AI_INTERVIEW_TRANSCRIPTION_MAX_POLLS = 60;
   private static readonly AI_INTERVIEW_TRANSCRIPTION_POLL_INTERVAL_MS = 250;
+  private static readonly AI_INTERVIEW_TRANSCRIPTION_LIMIT_PREFIX = 'ai-interview-stt-limit:';
+  private static readonly AI_INTERVIEW_TRANSCRIPTION_LIMIT_COUNT = 12;
+  private static readonly AI_INTERVIEW_TRANSCRIPTION_LIMIT_WINDOW_SECONDS = 5 * 60;
   private static readonly AI_CODE_ANALYSIS_MAX_CODE_LENGTH = 16_000;
   private static readonly AI_CODE_ANALYSIS_LIMIT_COUNT = 10;
   private static readonly AI_CODE_ANALYSIS_LIMIT_WINDOW_SECONDS = 5 * 60;

@@ -1168,6 +1168,28 @@ describe('AiService', () => {
         peerFeedback: [],
         aiMessages: [],
         historicalContext: null,
+        staticAnalysis: [
+          {
+            source: 'run',
+            runId: '550e8400-e29b-41d4-a716-446655440111',
+            submissionId: null,
+            language: 'typescript',
+            createdAt: '2026-04-20T01:01:45.000Z',
+            completedAt: '2026-04-20T01:01:46.000Z',
+            summary: {
+              diagnosticCount: 1,
+              errorCount: 0,
+              warningCount: 1,
+              maxCyclomaticComplexity: 2,
+              highComplexityCount: 0,
+              duplicationCount: 0,
+              toolFailureCount: 0,
+            },
+            diagnostics: [],
+            complexity: [],
+            duplications: [],
+          },
+        ],
       };
 
       const result = await service.generateSessionReport(request);
@@ -1183,6 +1205,7 @@ describe('AiService', () => {
       ]);
       expect(result.overallScore).toBe(82);
       expect(result.generatedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+      expect(result.staticAnalysis).toEqual(request.staticAnalysis);
       expect(result.categoryScores).toEqual({
         correctness: 84,
         efficiency: 78,

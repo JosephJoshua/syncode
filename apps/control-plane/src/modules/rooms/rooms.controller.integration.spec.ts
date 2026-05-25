@@ -1573,6 +1573,60 @@ describe('POST /rooms/:id/ai/interview/transcribe', () => {
     );
   });
 
+  it('GIVEN transcription completes after polling WHEN requesting transcription THEN waits for text', async () => {
+    const { candidate, room } = await createAiInterviewRoomForTranscription();
+    mockAiClient.getInterviewTranscriptionResult
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ text: 'Delayed transcript' });
+    mockAiClient.getInterviewTranscriptionJobStatus.mockResolvedValue('active');
+
+    const response = await asUser(
+      request(app.getHttpServer()).post(`/rooms/${room.id}/ai/interview/transcribe`),
+      candidate,
+    )
+      .send({
+        audioBase64: Buffer.from('audio-bytes').toString('base64'),
+        mimeType: 'audio/webm',
+      })
+      .expect(200);
+
+    expect(response.body).toEqual({ text: 'Delayed transcript' });
+    expect(mockAiClient.getInterviewTranscriptionResult).toHaveBeenCalledTimes(3);
+  });
+
+  it('GIVEN too many transcription requests WHEN requesting transcription THEN returns 429', async () => {
+    const { candidate, room } = await createAiInterviewRoomForTranscription();
+    mockAiClient.getInterviewTranscriptionResult.mockResolvedValue({ text: 'ok' });
+
+    for (let i = 0; i < 12; i += 1) {
+      await asUser(
+        request(app.getHttpServer()).post(`/rooms/${room.id}/ai/interview/transcribe`),
+        candidate,
+      )
+        .send({
+          audioBase64: Buffer.from(`audio-${i}`).toString('base64'),
+          mimeType: 'audio/webm',
+        })
+        .expect(200);
+    }
+
+    const response = await asUser(
+      request(app.getHttpServer()).post(`/rooms/${room.id}/ai/interview/transcribe`),
+      candidate,
+    )
+      .send({
+        audioBase64: Buffer.from('audio-limited').toString('base64'),
+        mimeType: 'audio/webm',
+      })
+      .expect(429);
+
+    expect(response.body.code).toBe(ERROR_CODES.AI_MESSAGE_RATE_LIMIT);
+    expect(response.body.message).toBe(
+      'AI interview transcription rate limit exceeded (12 per 5 minutes)',
+    );
+  });
+
   it('GIVEN transcription job fails WHEN requesting transcription THEN returns 503', async () => {
     const { candidate, room } = await createAiInterviewRoomForTranscription();
     mockAiClient.getInterviewTranscriptionResult.mockResolvedValue(null);
