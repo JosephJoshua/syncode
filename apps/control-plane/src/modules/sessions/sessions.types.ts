@@ -113,13 +113,6 @@ export interface SessionPeerFeedbackResult {
   candidateId: string;
   candidateName: string;
   candidateAvatarUrl: string | null;
-  problemSolvingRating: number;
-  communicationRating: number;
-  codeQualityRating: number;
-  debuggingRating: number;
-  overallRating: number;
-  strengths: string;
-  improvements: string;
-  wouldPairAgain: boolean;
+  feedbackText: string;
   createdAt: Date;
 }

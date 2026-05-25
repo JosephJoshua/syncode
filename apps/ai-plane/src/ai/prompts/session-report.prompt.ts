@@ -71,7 +71,7 @@ export function buildSessionReportPrompt(
       'When comparisonToHistory is present, it must be an object with trend, sessionsCompared, and averageScore.',
       'comparisonToHistory.trend must be exactly one of: improving, stable, declining.',
       'If peer feedback is unavailable, set peerFeedbackSummary to null. Do not use strings.',
-      'When peerFeedbackSummary is present, it must be an object with averageRating, wouldPairAgain, and themes.',
+      'When peerFeedbackSummary is present, it must be an object with summary and themes, grounded only in submitted feedback text.',
       'Never reveal raw test inputs, expected outputs, actual outputs, or hidden test case contents in any field.',
       'When discussing failing tests, refer only to test case indexes, pass/fail, timeout, or error categories.',
       'Do not include sessionId, generatedAt, or testCaseBreakdown in your response; those are injected by the system.',
