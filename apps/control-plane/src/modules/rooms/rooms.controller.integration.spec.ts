@@ -1573,6 +1573,28 @@ describe('POST /rooms/:id/ai/interview/transcribe', () => {
     );
   });
 
+  it('GIVEN transcription completes after polling WHEN requesting transcription THEN waits for text', async () => {
+    const { candidate, room } = await createAiInterviewRoomForTranscription();
+    mockAiClient.getInterviewTranscriptionResult
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ text: 'Delayed transcript' });
+    mockAiClient.getInterviewTranscriptionJobStatus.mockResolvedValue('active');
+
+    const response = await asUser(
+      request(app.getHttpServer()).post(`/rooms/${room.id}/ai/interview/transcribe`),
+      candidate,
+    )
+      .send({
+        audioBase64: Buffer.from('audio-bytes').toString('base64'),
+        mimeType: 'audio/webm',
+      })
+      .expect(200);
+
+    expect(response.body).toEqual({ text: 'Delayed transcript' });
+    expect(mockAiClient.getInterviewTranscriptionResult).toHaveBeenCalledTimes(3);
+  });
+
   it('GIVEN transcription job fails WHEN requesting transcription THEN returns 503', async () => {
     const { candidate, room } = await createAiInterviewRoomForTranscription();
     mockAiClient.getInterviewTranscriptionResult.mockResolvedValue(null);
@@ -1589,6 +1611,89 @@ describe('POST /rooms/:id/ai/interview/transcribe', () => {
       .expect(503);
 
     expect(response.body.code).toBe(ERROR_CODES.AI_SERVICE_UNAVAILABLE);
+  });
+
+  it('GIVEN transcription polling throws WHEN requesting transcription THEN returns 503 and rolls back quota', async () => {
+    const { candidate, room } = await createAiInterviewRoomForTranscription();
+    mockAiClient.getInterviewTranscriptionResult
+      .mockRejectedValueOnce(new Error('queue unavailable'))
+      .mockResolvedValue({ text: 'transcribed text' });
+
+    const failedResponse = await asUser(
+      request(app.getHttpServer()).post(`/rooms/${room.id}/ai/interview/transcribe`),
+      candidate,
+    )
+      .send({
+        audioBase64: Buffer.from('audio-fails').toString('base64'),
+        mimeType: 'audio/webm',
+      })
+      .expect(503);
+
+    expect(failedResponse.body.code).toBe(ERROR_CODES.AI_SERVICE_UNAVAILABLE);
+
+    for (let i = 0; i < 10; i++) {
+      await asUser(
+        request(app.getHttpServer()).post(`/rooms/${room.id}/ai/interview/transcribe`),
+        candidate,
+      )
+        .send({
+          audioBase64: Buffer.from(`audio-after-error-${i}`).toString('base64'),
+          mimeType: 'audio/webm',
+        })
+        .expect(200);
+    }
+
+    await asUser(
+      request(app.getHttpServer()).post(`/rooms/${room.id}/ai/interview/transcribe`),
+      candidate,
+    )
+      .send({
+        audioBase64: Buffer.from('audio-over-limit').toString('base64'),
+        mimeType: 'audio/webm',
+      })
+      .expect(429);
+  });
+
+  it('GIVEN transcription job fails WHEN retrying later THEN failed attempt does not consume quota', async () => {
+    const { candidate, room } = await createAiInterviewRoomForTranscription();
+    mockAiClient.getInterviewTranscriptionResult
+      .mockResolvedValueOnce(null)
+      .mockResolvedValue({ text: 'transcribed text' });
+    mockAiClient.getInterviewTranscriptionJobStatus
+      .mockResolvedValueOnce('failed')
+      .mockResolvedValue('queued');
+
+    await asUser(
+      request(app.getHttpServer()).post(`/rooms/${room.id}/ai/interview/transcribe`),
+      candidate,
+    )
+      .send({
+        audioBase64: Buffer.from('audio-job-fails').toString('base64'),
+        mimeType: 'audio/webm',
+      })
+      .expect(503);
+
+    for (let i = 0; i < 10; i++) {
+      await asUser(
+        request(app.getHttpServer()).post(`/rooms/${room.id}/ai/interview/transcribe`),
+        candidate,
+      )
+        .send({
+          audioBase64: Buffer.from(`audio-after-job-failure-${i}`).toString('base64'),
+          mimeType: 'audio/webm',
+        })
+        .expect(200);
+    }
+
+    await asUser(
+      request(app.getHttpServer()).post(`/rooms/${room.id}/ai/interview/transcribe`),
+      candidate,
+    )
+      .send({
+        audioBase64: Buffer.from('audio-over-limit').toString('base64'),
+        mimeType: 'audio/webm',
+      })
+      .expect(429);
   });
 
   it('GIVEN unsupported audio MIME type WHEN requesting transcription THEN returns 400 before enqueue', async () => {
@@ -1636,6 +1741,9 @@ describe('POST /rooms/:id/ai/interview/transcribe', () => {
       .expect(429);
 
     expect(response.body.code).toBe(ERROR_CODES.AI_TRANSCRIPTION_RATE_LIMIT);
+    expect(response.body.message).toBe(
+      'AI interview transcription rate limit exceeded (10 per 5 minutes)',
+    );
     expect(mockAiClient.submitInterviewTranscription).toHaveBeenCalledTimes(10);
   });
 });

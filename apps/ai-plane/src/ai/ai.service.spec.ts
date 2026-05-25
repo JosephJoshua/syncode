@@ -1170,12 +1170,24 @@ describe('AiService', () => {
         historicalContext: null,
         staticAnalysis: [
           {
-            kind: 'run',
+            source: 'run',
+            runId: '550e8400-e29b-41d4-a716-446655440111',
+            submissionId: null,
+            language: 'typescript',
             createdAt: '2026-04-20T01:01:45.000Z',
-            summary: 'Static analysis found no blocking issues.',
-            report: {
-              correctness: 'Looks correct for the exercised path.',
+            completedAt: '2026-04-20T01:01:46.000Z',
+            summary: {
+              diagnosticCount: 1,
+              errorCount: 0,
+              warningCount: 1,
+              maxCyclomaticComplexity: 2,
+              highComplexityCount: 0,
+              duplicationCount: 0,
+              toolFailureCount: 0,
             },
+            diagnostics: [],
+            complexity: [],
+            duplications: [],
           },
         ],
       };

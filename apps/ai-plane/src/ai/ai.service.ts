@@ -29,7 +29,12 @@ import {
 import { z } from 'zod';
 import type { EnvConfig } from '../config/env.config.js';
 import { LLM_PROVIDER } from '../llm/llm.constants.js';
-import type { ILlmProvider } from '../llm/llm.types.js';
+import type {
+  ILlmProvider,
+  LlmGenerateSpeechInput,
+  LlmGenerateTextInput,
+  LlmGenerateTranscriptionInput,
+} from '../llm/llm.types.js';
 import { buildSessionReportPrompt } from './prompts/session-report.prompt.js';
 import { parseSessionReportJson } from './report-json.js';
 import { postprocessSessionReport } from './session-report-postprocess.js';
@@ -61,6 +66,7 @@ const MAX_WEAKNESS_DETAIL_LENGTH = 220;
 const MAX_RECURRING_PATTERN_LENGTH = 140;
 const INTERVIEW_STALLED_EDITOR_SECONDS = 90;
 const INTERVIEW_STALLED_RECENT_CHANGES_MAX = 0;
+const ESTIMATED_CHARS_PER_TOKEN = 4;
 
 const PROMPT_INJECTION_PATTERNS: RegExp[] = [
   /\bignore\b[\s\S]{0,80}\binstructions?\b/i,
@@ -255,7 +261,7 @@ export class AiService {
       latestSubmissionSummary: request.latestSubmissionSummary,
     });
 
-    const llmResult = await this.llmProvider.generateText({
+    const llmInput: LlmGenerateTextInput = {
       messages: [
         {
           role: 'system',
@@ -266,6 +272,13 @@ export class AiService {
       temperature: 0.3,
       maxOutputTokens: 500,
       model: this.resolveHintModel(),
+    };
+
+    const llmResult = await this.generateTextWithTelemetry('hint_generation', llmInput, {
+      roomId: request.roomId,
+      participantId: request.participantId,
+      hintLevel: adaptiveHintLevel,
+      hintStage,
     });
 
     return this.parseHintOutput(llmResult.text, {
@@ -279,7 +292,7 @@ export class AiService {
   async analyzeCode(request: AnalyzeCodeRequest): Promise<AnalyzeCodeResult> {
     this.logger.debug(`Analyzing code for room ${request.roomId}`);
 
-    const llmResult = await this.llmProvider.generateText({
+    const llmInput: LlmGenerateTextInput = {
       messages: [
         {
           role: 'system',
@@ -294,6 +307,11 @@ export class AiService {
       maxOutputTokens: 700,
       jsonMode: true,
       model: this.resolveAnalysisModel(),
+    };
+
+    const llmResult = await this.generateTextWithTelemetry('code_analysis', llmInput, {
+      roomId: request.roomId,
+      participantId: request.participantId,
     });
 
     return this.parseCodeAnalysisOutput(llmResult.text);
@@ -304,7 +322,7 @@ export class AiService {
   ): Promise<GenerateWeaknessAnalysisResult> {
     this.logger.debug(`Generating weakness analysis for session ${request.sessionId}`);
 
-    const llmResult = await this.llmProvider.generateText({
+    const llmInput: LlmGenerateTextInput = {
       messages: [
         { role: 'system', content: this.buildWeaknessAnalysisSystemPrompt() },
         { role: 'user', content: this.buildWeaknessAnalysisPrompt(request) },
@@ -313,6 +331,11 @@ export class AiService {
       maxOutputTokens: 900,
       jsonMode: true,
       model: this.resolveAnalysisModel(),
+    };
+
+    const llmResult = await this.generateTextWithTelemetry('weakness_analysis', llmInput, {
+      sessionId: request.sessionId,
+      participantId: request.participantId,
     });
 
     return {
@@ -393,12 +416,21 @@ export class AiService {
     this.logger.debug(`Generating interview transcription for room ${request.roomId}`);
 
     const decodedAudio = decodeBase64Audio(request.audioBase64);
-    const result = await this.llmProvider.generateTranscription({
+    const transcriptionInput: LlmGenerateTranscriptionInput = {
       audio: decodedAudio,
       mimeType: request.mimeType,
       language: normalizeTranscriptionLanguage(request.language),
       fileName: `interview-${request.roomId}-${request.participantId}.webm`,
-    });
+    };
+    const result = await this.generateTranscriptionWithTelemetry(
+      'interview_transcription',
+      transcriptionInput,
+      {
+        roomId: request.roomId,
+        participantId: request.participantId,
+        sessionId: request.sessionId ?? undefined,
+      },
+    );
 
     const text = normalizeTranscript(result.text);
     if (!text) {
@@ -416,7 +448,7 @@ export class AiService {
     this.logger.debug(`Generating session report for session ${request.sessionId}`);
     try {
       const prompt = buildSessionReportPrompt(request);
-      const llmResult = await this.llmProvider.generateText({
+      const llmInput: LlmGenerateTextInput = {
         messages: [
           { role: 'system', content: prompt.systemPrompt },
           { role: 'user', content: prompt.userPrompt },
@@ -424,7 +456,15 @@ export class AiService {
         temperature: 0.1,
         maxOutputTokens: 2500,
         jsonMode: true,
-      });
+      };
+      const llmResult = await this.generateTextWithTelemetry(
+        'session_report_generation',
+        llmInput,
+        {
+          sessionId: request.sessionId,
+          participantId: request.participantId,
+        },
+      );
 
       const parsed = parseSessionReportJson(llmResult.text);
       const normalizedReport = postprocessSessionReport(request, parsed);
@@ -1387,22 +1427,28 @@ export class AiService {
     let lastError: unknown;
 
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      const llmInput: LlmGenerateTextInput = {
+        messages: [
+          {
+            role: 'system',
+            content: this.buildInterviewSystemPrompt(request),
+          },
+          {
+            role: 'user',
+            content: this.buildInterviewPrompt(request),
+          },
+        ],
+        temperature: 0.35,
+        maxOutputTokens: 700,
+        jsonMode: true,
+        model: this.resolveInterviewModel(),
+      };
       try {
-        return await this.llmProvider.generateText({
-          messages: [
-            {
-              role: 'system',
-              content: this.buildInterviewSystemPrompt(request),
-            },
-            {
-              role: 'user',
-              content: this.buildInterviewPrompt(request),
-            },
-          ],
-          temperature: 0.35,
-          maxOutputTokens: 700,
-          jsonMode: true,
-          model: this.resolveInterviewModel(),
+        return await this.generateTextWithTelemetry('interview_response_generation', llmInput, {
+          roomId: request.roomId,
+          participantId: request.participantId,
+          sessionId: request.sessionId ?? undefined,
+          attempt,
         });
       } catch (error) {
         lastError = error;
@@ -1805,10 +1851,19 @@ export class AiService {
   ): Promise<InterviewResponseAudio | undefined> {
     const spokenText = [response.message, response.followUpQuestion].filter(Boolean).join(' ');
     try {
-      const speech = await this.llmProvider.generateSpeech({
+      const speechInput: LlmGenerateSpeechInput = {
         text: spokenText,
         format: 'mp3',
-      });
+      };
+      const speech = await this.generateSpeechWithTelemetry(
+        'interview_tts_generation',
+        speechInput,
+        {
+          roomId: request.roomId,
+          participantId: request.participantId,
+          sessionId: request.sessionId ?? undefined,
+        },
+      );
 
       const audioKey = [
         'ai',
@@ -1845,6 +1900,103 @@ export class AiService {
       );
       return undefined;
     }
+  }
+
+  private async generateTextWithTelemetry(
+    taskName: string,
+    input: LlmGenerateTextInput,
+    context: Record<string, string | number | undefined>,
+  ): Promise<Awaited<ReturnType<ILlmProvider['generateText']>>> {
+    const startedAt = Date.now();
+    const result = await this.llmProvider.generateText(input);
+    const latencyMs = Date.now() - startedAt;
+    this.logAiTaskTelemetry(taskName, {
+      model: result.model,
+      latencyMs,
+      inputTokens: this.estimateMessageTokenCount(input.messages),
+      outputTokens: this.estimateTokenCount(result.text),
+      ...context,
+      tokenSource: 'estimated_text',
+    });
+    return result;
+  }
+
+  private async generateSpeechWithTelemetry(
+    taskName: string,
+    input: LlmGenerateSpeechInput,
+    context: Record<string, string | number | undefined>,
+  ): Promise<Awaited<ReturnType<ILlmProvider['generateSpeech']>>> {
+    const startedAt = Date.now();
+    const result = await this.llmProvider.generateSpeech(input);
+    const latencyMs = Date.now() - startedAt;
+    this.logAiTaskTelemetry(taskName, {
+      model: result.model,
+      latencyMs,
+      inputTokens: this.estimateTokenCount(input.text),
+      outputTokens: null,
+      ...context,
+      tokenSource: 'estimated_text',
+    });
+    return result;
+  }
+
+  private async generateTranscriptionWithTelemetry(
+    taskName: string,
+    input: LlmGenerateTranscriptionInput,
+    context: Record<string, string | number | undefined>,
+  ): Promise<Awaited<ReturnType<ILlmProvider['generateTranscription']>>> {
+    const startedAt = Date.now();
+    const result = await this.llmProvider.generateTranscription(input);
+    const latencyMs = Date.now() - startedAt;
+    this.logAiTaskTelemetry(taskName, {
+      model: result.model,
+      latencyMs,
+      inputTokens: null,
+      outputTokens: this.estimateTokenCount(result.text),
+      inputBytes: input.audio.byteLength,
+      ...context,
+      tokenSource: 'estimated_text_output',
+    });
+    return result;
+  }
+
+  private estimateMessageTokenCount(messages: Array<{ content: string }>): number {
+    const contentChars = messages.reduce((sum, message) => sum + message.content.length, 0);
+    return this.estimateTokenCountByCharLength(contentChars);
+  }
+
+  private estimateTokenCount(text: string): number {
+    return this.estimateTokenCountByCharLength(text.length);
+  }
+
+  private estimateTokenCountByCharLength(charLength: number): number {
+    const normalizedLength = Math.max(charLength, 1);
+    return Math.ceil(normalizedLength / ESTIMATED_CHARS_PER_TOKEN);
+  }
+
+  private logAiTaskTelemetry(
+    taskName: string,
+    payload: {
+      model: string;
+      latencyMs: number;
+      inputTokens: number | null;
+      outputTokens: number | null;
+      tokenSource: 'estimated_text' | 'estimated_text_output';
+      inputBytes?: number;
+      roomId?: string;
+      participantId?: string;
+      sessionId?: string;
+      hintLevel?: string;
+      hintStage?: string;
+      attempt?: number;
+    },
+  ): void {
+    this.logger.log(
+      `[ai-task-telemetry] ${JSON.stringify({
+        task: taskName,
+        ...payload,
+      })}`,
+    );
   }
 
   private resolveInterviewModel(): string {

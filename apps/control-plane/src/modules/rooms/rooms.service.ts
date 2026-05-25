@@ -1469,8 +1469,10 @@ export class RoomsService implements OnModuleInit {
       1,
       RoomsService.AI_INTERVIEW_TRANSCRIPTION_LIMIT_WINDOW_SECONDS,
     );
+    const rollbackUsage = () => this.rollbackAiInterviewTranscriptionUsage(limitKey);
 
     if (usage > RoomsService.AI_INTERVIEW_TRANSCRIPTION_LIMIT_COUNT) {
+      await rollbackUsage();
       throw new HttpException(
         {
           message: 'AI interview transcription rate limit exceeded (10 per 5 minutes)',
@@ -1491,10 +1493,10 @@ export class RoomsService implements OnModuleInit {
           mimeType: body.mimeType,
           language: body.language,
         }),
-        RoomsService.AI_INTERVIEW_TRANSCRIPTION_CLIENT_TIMEOUT_MS,
+        RoomsService.AI_INTERVIEW_TRANSCRIPTION_SUBMIT_TIMEOUT_MS,
       );
     } catch (error) {
-      await this.cacheService.incrBy(limitKey, -1);
+      await rollbackUsage();
       this.logger.warn(`AI interview transcription submission failed for room ${roomId}`, error);
       throw new ServiceUnavailableException({
         message: 'AI service unavailable',
@@ -1502,37 +1504,62 @@ export class RoomsService implements OnModuleInit {
       });
     }
 
-    for (let attempt = 1; attempt <= RoomsService.AI_INTERVIEW_TRANSCRIPTION_MAX_POLLS; attempt++) {
-      const result = await withTimeout(
-        this.aiClient.getInterviewTranscriptionResult(submitted.jobId),
-        RoomsService.AI_INTERVIEW_TRANSCRIPTION_CLIENT_TIMEOUT_MS,
-      );
-      if (result?.text?.trim()) {
-        return {
-          text: result.text.trim(),
-        };
+    try {
+      for (
+        let attempt = 1;
+        attempt <= RoomsService.AI_INTERVIEW_TRANSCRIPTION_MAX_POLLS;
+        attempt++
+      ) {
+        const result = await withTimeout(
+          this.aiClient.getInterviewTranscriptionResult(submitted.jobId),
+          RoomsService.AI_INTERVIEW_TRANSCRIPTION_POLL_TIMEOUT_MS,
+        );
+        if (result?.text?.trim()) {
+          return {
+            text: result.text.trim(),
+          };
+        }
+
+        const status = await withTimeout(
+          this.aiClient.getInterviewTranscriptionJobStatus(submitted.jobId),
+          RoomsService.AI_INTERVIEW_TRANSCRIPTION_POLL_TIMEOUT_MS,
+        );
+        if (status === 'failed') {
+          throw new ServiceUnavailableException({
+            message: 'AI service unavailable',
+            code: ERROR_CODES.AI_SERVICE_UNAVAILABLE,
+          });
+        }
+
+        if (attempt < RoomsService.AI_INTERVIEW_TRANSCRIPTION_MAX_POLLS) {
+          await delay(RoomsService.AI_INTERVIEW_TRANSCRIPTION_POLL_INTERVAL_MS);
+        }
       }
 
-      const status = await withTimeout(
-        this.aiClient.getInterviewTranscriptionJobStatus(submitted.jobId),
-        RoomsService.AI_INTERVIEW_TRANSCRIPTION_CLIENT_TIMEOUT_MS,
-      );
-      if (status === 'failed') {
-        throw new ServiceUnavailableException({
-          message: 'AI service unavailable',
-          code: ERROR_CODES.AI_SERVICE_UNAVAILABLE,
-        });
+      throw new ServiceUnavailableException({
+        message: 'AI service unavailable',
+        code: ERROR_CODES.AI_SERVICE_UNAVAILABLE,
+      });
+    } catch (error) {
+      await rollbackUsage();
+      if (error instanceof ServiceUnavailableException) {
+        throw error;
       }
 
-      if (attempt < RoomsService.AI_INTERVIEW_TRANSCRIPTION_MAX_POLLS) {
-        await delay(RoomsService.AI_INTERVIEW_TRANSCRIPTION_POLL_INTERVAL_MS);
-      }
+      this.logger.warn(`AI interview transcription polling failed for room ${roomId}`, error);
+      throw new ServiceUnavailableException({
+        message: 'AI service unavailable',
+        code: ERROR_CODES.AI_SERVICE_UNAVAILABLE,
+      });
     }
+  }
 
-    throw new ServiceUnavailableException({
-      message: 'AI service unavailable',
-      code: ERROR_CODES.AI_SERVICE_UNAVAILABLE,
-    });
+  private async rollbackAiInterviewTranscriptionUsage(limitKey: string): Promise<void> {
+    try {
+      await this.cacheService.incrBy(limitKey, -1);
+    } catch (error) {
+      this.logger.warn('Failed to roll back AI interview transcription rate limit usage', error);
+    }
   }
 
   async getAiInterviewResult(
@@ -1829,9 +1856,10 @@ export class RoomsService implements OnModuleInit {
     RoomStatus.WRAPUP,
   ]);
   private static readonly AI_INTERVIEW_HINT_CONTEXT_LIMIT = 8;
-  private static readonly AI_INTERVIEW_TRANSCRIPTION_CLIENT_TIMEOUT_MS = 12_000;
-  private static readonly AI_INTERVIEW_TRANSCRIPTION_MAX_POLLS = 80;
-  private static readonly AI_INTERVIEW_TRANSCRIPTION_POLL_INTERVAL_MS = 250;
+  private static readonly AI_INTERVIEW_TRANSCRIPTION_SUBMIT_TIMEOUT_MS = 2_500;
+  private static readonly AI_INTERVIEW_TRANSCRIPTION_POLL_TIMEOUT_MS = 500;
+  private static readonly AI_INTERVIEW_TRANSCRIPTION_MAX_POLLS = 30;
+  private static readonly AI_INTERVIEW_TRANSCRIPTION_POLL_INTERVAL_MS = 500;
   private static readonly AI_CODE_ANALYSIS_MAX_CODE_LENGTH = 16_000;
   private static readonly AI_CODE_ANALYSIS_LIMIT_COUNT = 10;
   private static readonly AI_CODE_ANALYSIS_LIMIT_WINDOW_SECONDS = 5 * 60;
