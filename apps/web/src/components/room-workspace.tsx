@@ -20,13 +20,26 @@ import {
   type StaticAnalysisResultResponse,
 } from '@syncode/contracts';
 import type { RoomRole, RoomStatus, SupportedLanguage } from '@syncode/shared';
-import { Avatar, AvatarFallback, AvatarImage, Badge, Button, cn } from '@syncode/ui';
+import {
+  Avatar,
+  AvatarFallback,
+  AvatarImage,
+  Badge,
+  Button,
+  cn,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@syncode/ui';
 import {
   Bot,
   CheckCircle2,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Keyboard,
   Loader2,
   Play,
   Send,
@@ -70,6 +83,13 @@ import { buildInviteLink } from '@/lib/room-stage.js';
 import { authorColor } from '@/lib/whiteboard-author-color.js';
 import { codeTextKey } from '@/lib/yjs-collab-provider.js';
 import { CollaborativeEditor, type EditorCodeContext } from './collaborative-editor.js';
+import {
+  EDITOR_KEYBINDING_MODES,
+  type EditorKeybindingMode,
+  isEditorKeybindingMode,
+  readStoredEditorKeybindingMode,
+  writeStoredEditorKeybindingMode,
+} from './editor-keybinding-mode.js';
 import { ExecutionDetailsPanel } from './execution-details-panel.js';
 import { FloatingWhiteboardPanel } from './floating-whiteboard-panel.js';
 import { HostControlPanel } from './host-control-panel.js';
@@ -296,6 +316,9 @@ export function RoomWorkspace({
   const [aiInterviewError, setAiInterviewError] = useState<string | null>(null);
   const [unreadInterviewCount, setUnreadInterviewCount] = useState(0);
   const [editorCodeContext, setEditorCodeContext] = useState<EditorCodeContext | null>(null);
+  const [editorKeybindingMode, setEditorKeybindingMode] = useState<EditorKeybindingMode>(() =>
+    readStoredEditorKeybindingMode(),
+  );
   const [latestRunSummary, setLatestRunSummary] = useState<AiInterviewExecutionSummary | null>(
     null,
   );
@@ -495,6 +518,11 @@ export function RoomWorkspace({
     },
     [updateWhiteboardKeyboardFocus],
   );
+
+  const handleEditorKeybindingModeChange = useCallback((mode: EditorKeybindingMode) => {
+    setEditorKeybindingMode(mode);
+    writeStoredEditorKeybindingMode(mode);
+  }, []);
   const markWhiteboardKeyboardFocus = useCallback(() => {
     updateWhiteboardKeyboardFocus({ source: 'whiteboard' });
   }, [updateWhiteboardKeyboardFocus]);
@@ -2012,6 +2040,29 @@ export function RoomWorkspace({
                     ) : null}
                   </div>
                   <div className="flex items-center gap-2">
+                    <Select
+                      value={editorKeybindingMode}
+                      onValueChange={(value) => {
+                        if (isEditorKeybindingMode(value)) {
+                          handleEditorKeybindingModeChange(value);
+                        }
+                      }}
+                    >
+                      <SelectTrigger
+                        aria-label={t('workspace.editorModeLabel')}
+                        className="h-7 w-[7.5rem] gap-1 border-border/60 bg-background/60 px-2 font-mono text-[11px] shadow-none"
+                      >
+                        <Keyboard className="size-3 text-muted-foreground" />
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent align="end">
+                        {EDITOR_KEYBINDING_MODES.map((mode) => (
+                          <SelectItem key={mode.value} value={mode.value} className="text-xs">
+                            {t(mode.labelKey)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     <LanguagePicker
                       roomId={roomId}
                       currentLanguage={room.language}
@@ -2085,6 +2136,7 @@ export function RoomWorkspace({
                         awareness={awareness}
                         language={monacoLanguage}
                         readOnly={isEditorReadOnly}
+                        keybindingMode={editorKeybindingMode}
                         comments={comments}
                         commentLineNumbers={commentLineNumbers}
                         canAddComments={Boolean(currentUserId) || isMockPreview}
