@@ -59,7 +59,7 @@ export async function mountEditorKeybindingMode({
 }
 
 export function readStoredEditorKeybindingMode(): EditorKeybindingMode {
-  if (typeof globalThis.window === 'undefined') {
+  if (globalThis.window === undefined) {
     return 'default';
   }
 
