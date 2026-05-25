@@ -113,6 +113,36 @@ describe('FeedbackService', () => {
     );
   });
 
+  it('GIVEN reviewer already submitted feedback WHEN skipping same target THEN keeps submitted feedback', async () => {
+    const { reviewer, candidate, session } = await seedPeerSession();
+
+    await service.submitSessionFeedback(
+      session.id,
+      reviewer.id,
+      { ...FEEDBACK_INPUT, candidateId: candidate.id },
+      false,
+    );
+
+    const progress = await service.skipSessionFeedback(session.id, reviewer.id, {
+      candidateId: candidate.id,
+    });
+    const result = await service.getSessionFeedback(session.id, reviewer.id, false);
+
+    expect(progress.targets).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          candidateId: candidate.id,
+          state: 'submitted',
+        }),
+      ]),
+    );
+    expect(result.data[0]).toMatchObject({
+      status: 'submitted',
+      candidateId: candidate.id,
+      feedbackText: FEEDBACK_INPUT.feedbackText,
+    });
+  });
+
   it('GIVEN reviewer skips all remaining targets WHEN reading progress THEN all targets are resolved', async () => {
     const { reviewer, candidate, interviewer, session } = await seedPeerSession();
 

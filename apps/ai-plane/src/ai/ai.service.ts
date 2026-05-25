@@ -1236,10 +1236,12 @@ export class AiService {
     const communicationHistory = request.historicalWeaknesses.find(
       (item) => item.category === 'communication',
     );
-    const peerCommunicationAverage =
-      request.peerFeedback.length > 0
-        ? request.peerFeedback.reduce((sum, item) => sum + item.communicationRating, 0) /
-          request.peerFeedback.length
+    const firstPeerFeedback = request.peerFeedback[0];
+    const peerFeedbackEvidence =
+      firstPeerFeedback != null
+        ? `The session includes ${request.peerFeedback.length} submitted peer feedback entr${
+            request.peerFeedback.length === 1 ? 'y' : 'ies'
+          }, including: "${firstPeerFeedback.feedbackText.slice(0, 180)}"`
         : null;
 
     return {
@@ -1269,8 +1271,8 @@ export class AiService {
           description:
             'The candidate can improve how they explain trade-offs, invariants, and debugging steps out loud.',
           evidence:
-            peerCommunicationAverage != null
-              ? `Peer communication rating averaged ${peerCommunicationAverage.toFixed(1)}/5 in this session.`
+            peerFeedbackEvidence != null
+              ? peerFeedbackEvidence
               : 'Peer feedback is limited, so this is based on sparse communication evidence.',
           trend: communicationHistory?.trend === 'worsening' ? 'worsening' : 'stable',
         },

@@ -194,8 +194,7 @@
     "declining": "有所下降"
   },
   "peerFeedback": {
-    "averageRating": "平均评分",
-    "wouldPairAgain": "愿意再次结对",
+    "summary": "同伴摘要",
     "themes": "主要主题",
     "none": "无"
   },

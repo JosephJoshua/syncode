@@ -102,8 +102,7 @@ export const sessionReportComparisonSchema = z.object({
 });
 
 export const sessionReportPeerFeedbackSummarySchema = z.object({
-  averageRating: z.number().min(0).max(5),
-  wouldPairAgain: z.number().min(0).max(100),
+  summary: z.string(),
   themes: z.array(z.string()).default([]),
 });
 

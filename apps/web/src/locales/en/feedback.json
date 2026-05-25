@@ -224,8 +224,7 @@
     "declining": "Declining"
   },
   "peerFeedback": {
-    "averageRating": "Average rating",
-    "wouldPairAgain": "Would pair again",
+    "summary": "Peer summary",
     "themes": "Themes",
     "none": "None"
   },

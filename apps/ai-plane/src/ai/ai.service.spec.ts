@@ -1685,6 +1685,27 @@ describe('AiService', () => {
       expect(result.peerFeedbackSummary).toBeNull();
     });
 
+    it('GIVEN text peerFeedbackSummary WHEN parsing THEN preserves summary and themes', () => {
+      const result = parseSessionReportJson(
+        JSON.stringify({
+          overallScore: 82,
+          strengths: ['Strong iteration'],
+          areasForImprovement: ['Explain tradeoffs earlier'],
+          detailedFeedback: 'Detailed feedback',
+          comparisonToHistory: null,
+          peerFeedbackSummary: {
+            summary: 'Peer feedback praised the explanation and asked for earlier edge cases.',
+            themes: ['communication', 'edge cases'],
+          },
+        }),
+      );
+
+      expect(result.peerFeedbackSummary).toEqual({
+        summary: 'Peer feedback praised the explanation and asked for earlier edge cases.',
+        themes: ['communication', 'edge cases'],
+      });
+    });
+
     it('GIVEN a dimension without feedback WHEN parsing THEN injects a fallback feedback string', () => {
       const result = parseSessionReportJson(
         JSON.stringify({

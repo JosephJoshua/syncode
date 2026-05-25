@@ -87,6 +87,15 @@ export class FeedbackService {
 
     await this.assertReviewParticipant(sessionId, input.candidateId);
 
+    const existingStatus = await this.getFeedbackStatusForTarget(
+      session.roomId,
+      reviewerId,
+      input.candidateId,
+    );
+    if (existingStatus === 'submitted') {
+      return this.getSessionFeedbackProgress(sessionId, reviewerId);
+    }
+
     await this.upsertFeedbackRow({
       sessionId,
       roomId: session.roomId,
@@ -326,6 +335,25 @@ export class FeedbackService {
       role: row.role as 'candidate' | 'interviewer',
       joinedAt: row.joinedAt,
     }));
+  }
+
+  private async getFeedbackStatusForTarget(
+    roomId: string,
+    reviewerId: string,
+    candidateId: string,
+  ): Promise<SessionFeedbackStatus | null> {
+    const [row] = await this.db
+      .select({ status: peerFeedback.status })
+      .from(peerFeedback)
+      .where(
+        and(
+          eq(peerFeedback.roomId, roomId),
+          eq(peerFeedback.reviewerId, reviewerId),
+          eq(peerFeedback.candidateId, candidateId),
+        ),
+      );
+
+    return row ? ((row.status ?? 'submitted') as SessionFeedbackStatus) : null;
   }
 
   private async getFeedbackRows(sessionId: string): Promise<
