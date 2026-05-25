@@ -31,10 +31,13 @@ import type {
 } from './matchmaking.js';
 import type {
   createProblemSchema,
+  problemDetailQuerySchema,
   problemDetailSchema,
   problemsListQuerySchema,
   problemsListResponseSchema,
   problemsTagsResponseSchema,
+  publishProblemStatusSchema,
+  updateProblemSchema,
 } from './problems.js';
 import type {
   browseRoomsQuerySchema,
@@ -284,12 +287,23 @@ export const CONTROL_API = {
       z.infer<typeof problemsListQuerySchema>,
       z.infer<typeof problemsListResponseSchema>
     >()('problems', 'GET'),
-    GET_BY_ID: defineRoute<void, z.infer<typeof problemDetailSchema>>()('problems/:id', 'GET'),
+    GET_BY_ID: defineRoute<
+      z.infer<typeof problemDetailQuerySchema>,
+      z.infer<typeof problemDetailSchema>
+    >()('problems/:id', 'GET'),
     TAGS: defineRoute<void, z.infer<typeof problemsTagsResponseSchema>>()('problems/tags', 'GET'),
     CREATE: defineRoute<z.infer<typeof createProblemSchema>, z.infer<typeof problemDetailSchema>>()(
       'problems',
       'POST',
     ),
+    UPDATE: defineRoute<z.infer<typeof updateProblemSchema>, z.infer<typeof problemDetailSchema>>()(
+      'problems/:id',
+      'PATCH',
+    ),
+    PUBLISH_STATUS: defineRoute<
+      z.infer<typeof publishProblemStatusSchema>,
+      z.infer<typeof problemDetailSchema>
+    >()('problems/:id/publish-status', 'PATCH'),
     DELETE: defineRoute<void, void>()('problems/:id', 'DELETE'),
   },
   BOOKMARKS: {

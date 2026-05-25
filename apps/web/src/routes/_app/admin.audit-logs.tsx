@@ -19,10 +19,11 @@ import {
   TableRow,
 } from '@syncode/ui';
 import { useQuery } from '@tanstack/react-query';
-import { createFileRoute, Link } from '@tanstack/react-router';
+import { createFileRoute } from '@tanstack/react-router';
 import { ChevronDown, ChevronRight, Loader2, RefreshCw, Search, ShieldAlert } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { AdminTabs } from '@/components/admin/admin-tabs.js';
 import { api } from '@/lib/api-client.js';
 import { useAuthStore } from '@/stores/auth.store.js';
 
@@ -133,12 +134,14 @@ export function AdminAuditLogsPage() {
           <p className="mt-3 text-sm text-muted-foreground sm:text-base">{t('audit.sub')}</p>
         </div>
         <div className="flex flex-wrap gap-2 self-start md:self-auto">
-          <Button variant="outline" asChild>
-            <Link to="/admin/problems">{t('navLinks.problems')}</Link>
-          </Button>
-          <Button variant="outline" asChild>
-            <Link to="/admin/users">{t('navLinks.users')}</Link>
-          </Button>
+          <AdminTabs
+            active="auditLogs"
+            labels={{
+              users: t('navLinks.users'),
+              problems: t('navLinks.problems'),
+              auditLogs: t('navLinks.auditLogs'),
+            }}
+          />
           <Button
             variant="outline"
             className="gap-2"
@@ -153,7 +156,7 @@ export function AdminAuditLogsPage() {
         </div>
       </section>
 
-      <section className="mt-8 grid gap-4 rounded-xl border border-border/50 bg-card/50 p-4 backdrop-blur-sm md:grid-cols-[minmax(0,1fr)_180px_160px_160px_auto] md:items-end">
+      <section className="mt-8 grid gap-4 rounded-xl border border-border/50 bg-card/50 p-4 backdrop-blur-sm md:grid-cols-[minmax(0,1fr)_minmax(200px,0.65fr)_160px_160px_auto] md:items-end">
         <div className="space-y-2">
           <Label htmlFor="audit-search">{t('audit.filters.searchLabel')}</Label>
           <div className="relative">
@@ -172,15 +175,19 @@ export function AdminAuditLogsPage() {
         </div>
         <div className="space-y-2">
           <Label htmlFor="audit-action">{t('audit.filters.actionLabel')}</Label>
-          <Input
-            id="audit-action"
-            value={action}
-            placeholder={t('audit.filters.actionPlaceholder')}
-            onChange={(event) => {
-              setAction(event.target.value);
-              resetPagination();
-            }}
-          />
+          <div className="relative">
+            <Search className="-translate-y-1/2 pointer-events-none absolute top-1/2 left-3 size-4 text-muted-foreground" />
+            <Input
+              id="audit-action"
+              value={action}
+              placeholder={t('audit.filters.actionPlaceholder')}
+              className="pl-9"
+              onChange={(event) => {
+                setAction(event.target.value);
+                resetPagination();
+              }}
+            />
+          </div>
         </div>
         <div className="space-y-2">
           <DateFilterPicker
@@ -204,7 +211,7 @@ export function AdminAuditLogsPage() {
             }}
           />
         </div>
-        <Button variant="outline" onClick={resetFilters}>
+        <Button variant="outline" className="h-11" onClick={resetFilters}>
           {t('audit.filters.clear')}
         </Button>
       </section>

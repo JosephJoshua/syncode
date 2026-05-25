@@ -22,3 +22,28 @@ export function parseQueryMultiSelect(value: unknown) {
 
   return [...new Set(normalized)];
 }
+
+export function parseQueryBoolean(value: unknown) {
+  if (value == null || value === '') {
+    return undefined;
+  }
+
+  const raw = Array.isArray(value) ? value[0] : value;
+  if (typeof raw === 'boolean') {
+    return raw;
+  }
+
+  if (typeof raw !== 'string') {
+    return undefined;
+  }
+
+  const normalized = raw.trim().toLowerCase();
+  if (normalized === 'true') {
+    return true;
+  }
+  if (normalized === 'false') {
+    return false;
+  }
+
+  return undefined;
+}

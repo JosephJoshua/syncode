@@ -1,6 +1,7 @@
 import { NotFoundException } from '@nestjs/common';
 import type { Database } from '@syncode/db';
 import { describe, expect, it, vi } from 'vitest';
+import type { AuditService } from '../admin/audit.service.js';
 import { ProblemsService } from './problems.service.js';
 
 const USER_ID = '00000000-0000-0000-0000-000000000099';
@@ -34,18 +35,27 @@ function createMockDb(rows: unknown[] = []) {
   return { select: mockSelect, insert, delete: deleteFn };
 }
 
+function createService(db: unknown) {
+  return new ProblemsService(
+    db as Database,
+    {
+      logWithClient: vi.fn().mockResolvedValue(undefined),
+    } as unknown as AuditService,
+  );
+}
+
 describe('ProblemsService', () => {
   describe('addBookmark', () => {
     it('GIVEN existing problem WHEN addBookmark THEN resolves without error', async () => {
       const db = createMockDb([{ id: 'problem-1' }]);
-      const service = new ProblemsService(db as unknown as Database);
+      const service = createService(db);
 
       await expect(service.addBookmark('user-1', 'problem-1')).resolves.toBeUndefined();
     });
 
     it('GIVEN non-existent problem WHEN addBookmark THEN throws NotFoundException', async () => {
       const db = createMockDb([]);
-      const service = new ProblemsService(db as unknown as Database);
+      const service = createService(db);
 
       await expect(service.addBookmark('user-1', 'nonexistent')).rejects.toBeInstanceOf(
         NotFoundException,
@@ -56,7 +66,7 @@ describe('ProblemsService', () => {
   describe('removeBookmark', () => {
     it('GIVEN any problemId WHEN removeBookmark THEN resolves without error', async () => {
       const db = createMockDb();
-      const service = new ProblemsService(db as unknown as Database);
+      const service = createService(db);
 
       await expect(service.removeBookmark('user-1', 'problem-1')).resolves.toBeUndefined();
     });
@@ -65,7 +75,7 @@ describe('ProblemsService', () => {
   describe('findById', () => {
     it('GIVEN non-existent problem WHEN finding THEN throws NotFoundException with PROBLEM_NOT_FOUND', async () => {
       const db = createMockDb([]);
-      const service = new ProblemsService(db as unknown as Database);
+      const service = createService(db);
 
       const error = await service.findById(USER_ID, 'missing').catch((e) => e);
 
@@ -98,7 +108,7 @@ describe('ProblemsService', () => {
       };
 
       const db = createMockDb([row]);
-      const service = new ProblemsService(db as unknown as Database);
+      const service = createService(db);
       const result = await service.findById(USER_ID, row.id);
 
       // Tags split from comma-separated aggregate
@@ -138,7 +148,7 @@ describe('ProblemsService', () => {
       };
 
       const db = createMockDb([row]);
-      const service = new ProblemsService(db as unknown as Database);
+      const service = createService(db);
       const result = await service.findById(USER_ID, row.id);
 
       expect(result.company).toBeNull();

@@ -5,6 +5,7 @@ import { bookmarks, problemTags, rooms, submissions, tags } from '@syncode/db';
 import { and, eq } from 'drizzle-orm';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
 import { createTestDb, insertProblem, insertUser } from '@/test/integration-setup.js';
+import { AuditService } from '../admin/audit.service.js';
 import { ProblemsService } from './problems.service.js';
 
 let db: Database;
@@ -17,7 +18,7 @@ beforeEach(async () => {
   cleanup = testDb.cleanup;
 
   const module = await Test.createTestingModule({
-    providers: [ProblemsService, { provide: DB_CLIENT, useValue: db }],
+    providers: [ProblemsService, AuditService, { provide: DB_CLIENT, useValue: db }],
   }).compile();
 
   service = module.get(ProblemsService);

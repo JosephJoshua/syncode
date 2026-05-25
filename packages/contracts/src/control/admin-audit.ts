@@ -28,7 +28,7 @@ export const adminAuditLogsQuerySchema = z.object({
   cursor: z.string().optional().describe('Opaque pagination cursor'),
   limit: z.coerce.number().int().min(1).max(100).default(20).describe('Page size'),
   search: z.string().trim().max(100).optional().describe('Search action, target, or actor'),
-  action: z.string().trim().max(100).optional().describe('Filter by action'),
+  action: z.string().trim().max(100).optional().describe('Search within action names'),
   actorId: z.uuid().optional().describe('Filter by actor user ID'),
   targetId: z.string().trim().max(255).optional().describe('Filter by target ID'),
   from: z.iso.datetime().optional().describe('Created-at lower bound'),
