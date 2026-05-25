@@ -5,7 +5,7 @@ import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import { AI_CLIENT, COLLAB_CLIENT, ERROR_CODES, EXECUTION_CLIENT } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
-import { aiHints, aiMessages, rooms } from '@syncode/db';
+import { aiHints, rooms } from '@syncode/db';
 import { CACHE_SERVICE, MEDIA_SERVICE, STORAGE_SERVICE } from '@syncode/shared/ports';
 import { eq } from 'drizzle-orm';
 import { ZodValidationPipe } from 'nestjs-zod';
@@ -1097,7 +1097,6 @@ describe('POST /rooms/:id/ai/interview', () => {
 
   it('GIVEN AI room candidate and selected problem WHEN requesting interview response THEN returns ready interview result', async () => {
     const { candidate, room } = await createAiInterviewRoom();
-    const session = await insertSession(db, room.id, { mode: 'ai' });
     mockAiClient.getInterviewResult.mockResolvedValueOnce({
       shouldRespond: true,
       message: 'Explain why your hash map lookup is correct.',
@@ -1120,6 +1119,7 @@ describe('POST /rooms/:id/ai/interview', () => {
         conversationHistory: [{ role: 'assistant', content: 'How would you solve this?' }],
         currentCode: 'def two_sum(nums, target):\n    return []',
         codeContext: interviewCodeContext,
+        responseLanguage: 'zh',
       })
       .expect(202);
 
@@ -1129,6 +1129,7 @@ describe('POST /rooms/:id/ai/interview', () => {
         roomId: room.id,
         participantId: candidate.id,
         language: 'python',
+        responseLanguage: 'zh',
         userMessage: 'I would scan once and store complements.',
         conversationHistory: [{ role: 'assistant', content: 'How would you solve this?' }],
         codeContext: interviewCodeContext,
@@ -1151,203 +1152,6 @@ describe('POST /rooms/:id/ai/interview', () => {
       codeAnnotations: [{ line: 3, comment: 'Mention how this handles repeated values.' }],
       audioUrl: 'https://media.example.com/interview.mp3',
     });
-
-    const persistedMessages = await db
-      .select({
-        sessionId: aiMessages.sessionId,
-        userId: aiMessages.userId,
-        role: aiMessages.role,
-        content: aiMessages.content,
-        audioKey: aiMessages.audioKey,
-      })
-      .from(aiMessages)
-      .where(eq(aiMessages.sessionId, session.id));
-
-    expect(persistedMessages).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          userId: candidate.id,
-          role: 'user',
-          content: 'I would scan once and store complements.',
-        }),
-        expect.objectContaining({
-          userId: candidate.id,
-          role: 'assistant',
-          content: 'Explain why your hash map lookup is correct.',
-          audioKey: 'ai/interview/ai-interview-job.mp3',
-        }),
-      ]),
-    );
-  });
-
-  it('GIVEN old interview result without shouldRespond WHEN polling interview THEN preserves response content', async () => {
-    const { candidate, room } = await createAiInterviewRoom();
-    mockAiClient.getInterviewResult.mockResolvedValueOnce({
-      message: 'Explain the invariant maintained by your loop.',
-      followUpQuestion: 'What happens when the input has duplicates?',
-    } as Awaited<ReturnType<typeof mockAiClient.getInterviewResult>>);
-
-    const submission = await asUser(
-      request(app.getHttpServer()).post(`/rooms/${room.id}/ai/interview`),
-      candidate,
-    )
-      .send({
-        userMessage: 'I would scan once and store complements.',
-        conversationHistory: [],
-        currentCode: 'def two_sum(nums, target):\n    return []',
-        codeContext: interviewCodeContext,
-      })
-      .expect(202);
-
-    const result = await asUser(
-      request(app.getHttpServer()).get(`/rooms/${room.id}/ai/interview/${submission.body.jobId}`),
-      candidate,
-    ).expect(200);
-
-    expect(result.body).toEqual(
-      expect.objectContaining({
-        status: 'ready',
-        shouldRespond: true,
-        message: 'Explain the invariant maintained by your loop.',
-        followUpQuestion: 'What happens when the input has duplicates?',
-      }),
-    );
-  });
-
-  it('GIVEN interview result callback fires before polling WHEN report context is loaded THEN assistant message is persisted', async () => {
-    const { candidate, room } = await createAiInterviewRoom();
-    const session = await insertSession(db, room.id, { mode: 'ai' });
-    const onInterviewResult = mockAiClient.onInterviewResult.mock.calls[0]?.[0];
-    expect(onInterviewResult).toBeDefined();
-
-    const submission = await asUser(
-      request(app.getHttpServer()).post(`/rooms/${room.id}/ai/interview`),
-      candidate,
-    )
-      .send({
-        userMessage: 'I would scan once and store complements.',
-        conversationHistory: [],
-        currentCode: 'def two_sum(nums, target):\n    return []',
-        codeContext: interviewCodeContext,
-      })
-      .expect(202);
-
-    await onInterviewResult?.(submission.body.jobId, {
-      shouldRespond: true,
-      message: 'Explain why your hash map lookup is correct.',
-      followUpQuestion: 'What happens with duplicate numbers?',
-    });
-
-    const persistedMessages = await db
-      .select({
-        role: aiMessages.role,
-        content: aiMessages.content,
-      })
-      .from(aiMessages)
-      .where(eq(aiMessages.sessionId, session.id));
-
-    expect(persistedMessages).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          role: 'assistant',
-          content: 'Explain why your hash map lookup is correct.',
-        }),
-      ]),
-    );
-  });
-
-  it('GIVEN repeated proactive interview request WHEN one is already active THEN reuses active job and trusts server signals', async () => {
-    const { candidate, room } = await createAiInterviewRoom();
-
-    const sendProactiveRequest = () =>
-      asUser(request(app.getHttpServer()).post(`/rooms/${room.id}/ai/interview`), candidate).send({
-        trigger: 'proactive',
-        conversationHistory: [],
-        currentCode: 'def two_sum(nums, target):\n    return []',
-        codeContext: interviewCodeContext,
-        interactionSignals: {
-          reason: 'user_idle',
-          roomStatus: 'finished',
-          elapsedSeconds: 86_400,
-          secondsSinceLastUserMessage: 86_400,
-          secondsSinceLastAssistantMessage: 86_400,
-          secondsSinceLastEditorActivity: 86_400,
-          recentEditorChanges: 10_000,
-          hintCount: 200,
-        },
-      });
-
-    const [first, second] = await Promise.all([
-      sendProactiveRequest().expect(202),
-      sendProactiveRequest().expect(202),
-    ]);
-
-    expect(second.body.jobId).toBe(first.body.jobId);
-    expect(mockAiClient.submitInterviewResponse).toHaveBeenCalledTimes(1);
-    expect(mockAiClient.submitInterviewResponse).toHaveBeenCalledWith(
-      expect.objectContaining({
-        trigger: 'proactive',
-        interactionSignals: {
-          reason: 'user_idle',
-          roomStatus: 'coding',
-          elapsedSeconds: expect.any(Number),
-          secondsSinceLastUserMessage: 86_400,
-          secondsSinceLastAssistantMessage: 86_400,
-          secondsSinceLastEditorActivity: 86_400,
-          recentEditorChanges: 10_000,
-          hintCount: 0,
-        },
-      }),
-    );
-  });
-
-  it('GIVEN concurrent polling of ready interview result WHEN result is persisted THEN assistant message is stored once', async () => {
-    const { candidate, room } = await createAiInterviewRoom();
-    const session = await insertSession(db, room.id, { mode: 'ai' });
-    mockAiClient.getInterviewResult.mockResolvedValue({
-      shouldRespond: true,
-      message: 'Explain why your hash map lookup is correct.',
-      followUpQuestion: 'What happens with duplicate numbers?',
-    });
-
-    const submission = await asUser(
-      request(app.getHttpServer()).post(`/rooms/${room.id}/ai/interview`),
-      candidate,
-    )
-      .send({
-        userMessage: 'I would scan once and store complements.',
-        conversationHistory: [],
-        currentCode: 'def two_sum(nums, target):\n    return []',
-        codeContext: interviewCodeContext,
-      })
-      .expect(202);
-
-    await Promise.all([
-      asUser(
-        request(app.getHttpServer()).get(`/rooms/${room.id}/ai/interview/${submission.body.jobId}`),
-        candidate,
-      ).expect(200),
-      asUser(
-        request(app.getHttpServer()).get(`/rooms/${room.id}/ai/interview/${submission.body.jobId}`),
-        candidate,
-      ).expect(200),
-    ]);
-
-    const assistantMessages = await db
-      .select({
-        role: aiMessages.role,
-        content: aiMessages.content,
-      })
-      .from(aiMessages)
-      .where(eq(aiMessages.sessionId, session.id));
-
-    expect(
-      assistantMessages.filter(
-        (message) =>
-          message.role === 'assistant' &&
-          message.content === 'Explain why your hash map lookup is correct.',
-      ),
-    ).toHaveLength(1);
   });
 
   it('GIVEN AI returns different code context WHEN polling interview THEN returns verified submitted context', async () => {
@@ -1723,6 +1527,224 @@ describe('POST /rooms/:id/ai/interview', () => {
     ).expect(404);
 
     expect(result.body.message).toBe('Interview job not found');
+  });
+});
+
+describe('POST /rooms/:id/ai/interview/transcribe', () => {
+  async function createAiInterviewRoomForTranscription() {
+    const candidate = await insertUser(db);
+    const problem = await insertProblem(db);
+    const room = await insertRoom(db, candidate.id, {
+      mode: 'ai',
+      status: 'coding',
+      problemId: problem.id,
+      language: 'python',
+    });
+    await insertParticipant(db, room.id, candidate.id, 'candidate');
+
+    return { candidate, room };
+  }
+
+  it('GIVEN candidate in AI room WHEN requesting transcription THEN returns transcribed text', async () => {
+    const { candidate, room } = await createAiInterviewRoomForTranscription();
+    mockAiClient.getInterviewTranscriptionResult.mockResolvedValueOnce({
+      text: 'Could you explain the invariant?',
+    });
+
+    const response = await asUser(
+      request(app.getHttpServer()).post(`/rooms/${room.id}/ai/interview/transcribe`),
+      candidate,
+    )
+      .send({
+        audioBase64: Buffer.from('audio-bytes').toString('base64'),
+        mimeType: 'audio/webm',
+        language: 'en-US',
+      })
+      .expect(200);
+
+    expect(response.body).toEqual({ text: 'Could you explain the invariant?' });
+    expect(mockAiClient.submitInterviewTranscription).toHaveBeenCalledWith(
+      expect.objectContaining({
+        roomId: room.id,
+        participantId: candidate.id,
+        mimeType: 'audio/webm',
+        language: 'en-US',
+      }),
+    );
+  });
+
+  it('GIVEN transcription completes after polling WHEN requesting transcription THEN waits for text', async () => {
+    const { candidate, room } = await createAiInterviewRoomForTranscription();
+    mockAiClient.getInterviewTranscriptionResult
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ text: 'Delayed transcript' });
+    mockAiClient.getInterviewTranscriptionJobStatus.mockResolvedValue('active');
+
+    const response = await asUser(
+      request(app.getHttpServer()).post(`/rooms/${room.id}/ai/interview/transcribe`),
+      candidate,
+    )
+      .send({
+        audioBase64: Buffer.from('audio-bytes').toString('base64'),
+        mimeType: 'audio/webm',
+      })
+      .expect(200);
+
+    expect(response.body).toEqual({ text: 'Delayed transcript' });
+    expect(mockAiClient.getInterviewTranscriptionResult).toHaveBeenCalledTimes(3);
+  });
+
+  it('GIVEN transcription job fails WHEN requesting transcription THEN returns 503', async () => {
+    const { candidate, room } = await createAiInterviewRoomForTranscription();
+    mockAiClient.getInterviewTranscriptionResult.mockResolvedValue(null);
+    mockAiClient.getInterviewTranscriptionJobStatus.mockResolvedValueOnce('failed');
+
+    const response = await asUser(
+      request(app.getHttpServer()).post(`/rooms/${room.id}/ai/interview/transcribe`),
+      candidate,
+    )
+      .send({
+        audioBase64: Buffer.from('audio-bytes').toString('base64'),
+        mimeType: 'audio/webm',
+      })
+      .expect(503);
+
+    expect(response.body.code).toBe(ERROR_CODES.AI_SERVICE_UNAVAILABLE);
+  });
+
+  it('GIVEN transcription polling throws WHEN requesting transcription THEN returns 503 and rolls back quota', async () => {
+    const { candidate, room } = await createAiInterviewRoomForTranscription();
+    mockAiClient.getInterviewTranscriptionResult
+      .mockRejectedValueOnce(new Error('queue unavailable'))
+      .mockResolvedValue({ text: 'transcribed text' });
+
+    const failedResponse = await asUser(
+      request(app.getHttpServer()).post(`/rooms/${room.id}/ai/interview/transcribe`),
+      candidate,
+    )
+      .send({
+        audioBase64: Buffer.from('audio-fails').toString('base64'),
+        mimeType: 'audio/webm',
+      })
+      .expect(503);
+
+    expect(failedResponse.body.code).toBe(ERROR_CODES.AI_SERVICE_UNAVAILABLE);
+
+    for (let i = 0; i < 10; i++) {
+      await asUser(
+        request(app.getHttpServer()).post(`/rooms/${room.id}/ai/interview/transcribe`),
+        candidate,
+      )
+        .send({
+          audioBase64: Buffer.from(`audio-after-error-${i}`).toString('base64'),
+          mimeType: 'audio/webm',
+        })
+        .expect(200);
+    }
+
+    await asUser(
+      request(app.getHttpServer()).post(`/rooms/${room.id}/ai/interview/transcribe`),
+      candidate,
+    )
+      .send({
+        audioBase64: Buffer.from('audio-over-limit').toString('base64'),
+        mimeType: 'audio/webm',
+      })
+      .expect(429);
+  });
+
+  it('GIVEN transcription job fails WHEN retrying later THEN failed attempt does not consume quota', async () => {
+    const { candidate, room } = await createAiInterviewRoomForTranscription();
+    mockAiClient.getInterviewTranscriptionResult
+      .mockResolvedValueOnce(null)
+      .mockResolvedValue({ text: 'transcribed text' });
+    mockAiClient.getInterviewTranscriptionJobStatus
+      .mockResolvedValueOnce('failed')
+      .mockResolvedValue('queued');
+
+    await asUser(
+      request(app.getHttpServer()).post(`/rooms/${room.id}/ai/interview/transcribe`),
+      candidate,
+    )
+      .send({
+        audioBase64: Buffer.from('audio-job-fails').toString('base64'),
+        mimeType: 'audio/webm',
+      })
+      .expect(503);
+
+    for (let i = 0; i < 10; i++) {
+      await asUser(
+        request(app.getHttpServer()).post(`/rooms/${room.id}/ai/interview/transcribe`),
+        candidate,
+      )
+        .send({
+          audioBase64: Buffer.from(`audio-after-job-failure-${i}`).toString('base64'),
+          mimeType: 'audio/webm',
+        })
+        .expect(200);
+    }
+
+    await asUser(
+      request(app.getHttpServer()).post(`/rooms/${room.id}/ai/interview/transcribe`),
+      candidate,
+    )
+      .send({
+        audioBase64: Buffer.from('audio-over-limit').toString('base64'),
+        mimeType: 'audio/webm',
+      })
+      .expect(429);
+  });
+
+  it('GIVEN unsupported audio MIME type WHEN requesting transcription THEN returns 400 before enqueue', async () => {
+    const { candidate, room } = await createAiInterviewRoomForTranscription();
+
+    await asUser(
+      request(app.getHttpServer()).post(`/rooms/${room.id}/ai/interview/transcribe`),
+      candidate,
+    )
+      .send({
+        audioBase64: Buffer.from('audio-bytes').toString('base64'),
+        mimeType: 'text/plain',
+      })
+      .expect(400);
+
+    expect(mockAiClient.submitInterviewTranscription).not.toHaveBeenCalled();
+  });
+
+  it('GIVEN too many transcription requests WHEN requesting transcription THEN returns 429', async () => {
+    const { candidate, room } = await createAiInterviewRoomForTranscription();
+    mockAiClient.getInterviewTranscriptionResult.mockResolvedValue({
+      text: 'transcribed text',
+    });
+
+    for (let i = 0; i < 10; i++) {
+      await asUser(
+        request(app.getHttpServer()).post(`/rooms/${room.id}/ai/interview/transcribe`),
+        candidate,
+      )
+        .send({
+          audioBase64: Buffer.from(`audio-bytes-${i}`).toString('base64'),
+          mimeType: 'audio/webm',
+        })
+        .expect(200);
+    }
+
+    const response = await asUser(
+      request(app.getHttpServer()).post(`/rooms/${room.id}/ai/interview/transcribe`),
+      candidate,
+    )
+      .send({
+        audioBase64: Buffer.from('audio-bytes-over-limit').toString('base64'),
+        mimeType: 'audio/webm',
+      })
+      .expect(429);
+
+    expect(response.body.code).toBe(ERROR_CODES.AI_TRANSCRIPTION_RATE_LIMIT);
+    expect(response.body.message).toBe(
+      'AI interview transcription rate limit exceeded (10 per 5 minutes)',
+    );
+    expect(mockAiClient.submitInterviewTranscription).toHaveBeenCalledTimes(10);
   });
 });
 

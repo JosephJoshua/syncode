@@ -308,6 +308,40 @@ describe('listSessions', () => {
     expect(result.data[0].hasFeedback).toBe(true);
   });
 
+  it('GIVEN only skipped peer feedback WHEN listing THEN hasFeedback stays false', async () => {
+    const user1 = await insertUser(db);
+    const user2 = await insertUser(db);
+
+    const room = await insertRoom(db, user1.id);
+    const session = await insertSession(db, room.id);
+    await insertSessionParticipant(db, session.id, user1.id);
+    await insertSessionParticipant(db, session.id, user2.id);
+    await insertPeerFeedbackRow(
+      db,
+      {
+        sessionId: session.id,
+        roomId: room.id,
+        reviewerId: user1.id,
+        candidateId: user2.id,
+      },
+      {
+        status: 'skipped',
+        feedbackText: null,
+        strengths: null,
+        improvements: null,
+        wouldPairAgain: null,
+        problemSolvingRating: null,
+        communicationRating: null,
+        codeQualityRating: null,
+        debuggingRating: null,
+        overallRating: null,
+      },
+    );
+
+    const result = await service.listSessions(user1.id, BASE_QUERY, false);
+    expect(result.data[0].hasFeedback).toBe(false);
+  });
+
   it('GIVEN one session with multiple participant reports WHEN listing THEN returns one row with the current user score', async () => {
     const interviewer = await insertUser(db);
     const candidate = await insertUser(db);
@@ -453,6 +487,41 @@ describe('getSession', () => {
 
     const result = await service.getSession(session.id, candidate.id, false);
 
+    expect(result.peerFeedback).toHaveLength(0);
+  });
+
+  it('GIVEN only skipped peer feedback WHEN getting detail THEN hasFeedback stays false', async () => {
+    const interviewer = await insertUser(db);
+    const candidate = await insertUser(db);
+    const room = await insertRoom(db, interviewer.id);
+    const session = await insertSession(db, room.id);
+    await insertSessionParticipant(db, session.id, interviewer.id, 'interviewer');
+    await insertSessionParticipant(db, session.id, candidate.id, 'candidate');
+    await insertPeerFeedbackRow(
+      db,
+      {
+        sessionId: session.id,
+        roomId: room.id,
+        reviewerId: interviewer.id,
+        candidateId: candidate.id,
+      },
+      {
+        status: 'skipped',
+        feedbackText: null,
+        strengths: null,
+        improvements: null,
+        wouldPairAgain: null,
+        problemSolvingRating: null,
+        communicationRating: null,
+        codeQualityRating: null,
+        debuggingRating: null,
+        overallRating: null,
+      },
+    );
+
+    const result = await service.getSession(session.id, interviewer.id, false);
+
+    expect(result.hasFeedback).toBe(false);
     expect(result.peerFeedback).toHaveLength(0);
   });
 

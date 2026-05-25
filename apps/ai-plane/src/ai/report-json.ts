@@ -67,10 +67,9 @@ function normalizePeerFeedbackSummary(report: Record<string, unknown>) {
   }
 
   const candidate = { ...summary } as Record<string, unknown>;
-  const averageRating = toNumber(candidate.averageRating);
-  const wouldPairAgain = toNumber(candidate.wouldPairAgain);
+  const summaryText = typeof candidate.summary === 'string' ? candidate.summary.trim() : '';
 
-  if (averageRating === null || wouldPairAgain === null) {
+  if (summaryText.length === 0) {
     report.peerFeedbackSummary = null;
     return;
   }
@@ -79,8 +78,7 @@ function normalizePeerFeedbackSummary(report: Record<string, unknown>) {
     candidate.themes = [];
   }
 
-  candidate.averageRating = averageRating;
-  candidate.wouldPairAgain = wouldPairAgain;
+  candidate.summary = summaryText;
   report.peerFeedbackSummary = candidate;
 }
 

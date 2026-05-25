@@ -62,6 +62,8 @@ import {
   RequestRoomAiHintResponseDto,
   RequestRoomAiInterviewDto,
   RequestRoomAiInterviewResponseDto,
+  RequestRoomAiInterviewTranscriptionDto,
+  RequestRoomAiInterviewTranscriptionResponseDto,
   RequestRoomCodeAnalysisDto,
   RequestRoomCodeAnalysisResponseDto,
   RoomChatMediaUploadDto,
@@ -418,6 +420,35 @@ export class RoomsController {
     @Body() body: RequestRoomAiInterviewDto,
   ): Promise<RequestRoomAiInterviewResponseDto> {
     return this.roomsService.requestAiInterview(id, user.id, body);
+  }
+
+  @Post(CONTROL_API.ROOMS.AI_INTERVIEW_TRANSCRIBE.route)
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Transcribe AI interview voice input',
+    description:
+      'Accepts captured microphone audio and returns transcribed text for AI interview input.',
+  })
+  @ApiParam({ name: 'id', description: 'Room ID (UUID)' })
+  @ApiBody({ type: RequestRoomAiInterviewTranscriptionDto })
+  @ApiResponse({
+    status: 200,
+    type: RequestRoomAiInterviewTranscriptionResponseDto,
+    description: 'Voice input transcribed successfully',
+  })
+  @ApiResponse({
+    status: 403,
+    type: ErrorResponseDto,
+    description: 'No ai:request-hint capability',
+  })
+  @ApiResponse({ status: 404, type: ErrorResponseDto, description: 'No problem selected in room' })
+  @ApiResponse({ status: 503, type: ErrorResponseDto, description: 'AI service unavailable' })
+  async requestAiInterviewTranscription(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: RequestRoomAiInterviewTranscriptionDto,
+  ): Promise<RequestRoomAiInterviewTranscriptionResponseDto> {
+    return this.roomsService.requestAiInterviewTranscription(id, user.id, body);
   }
 
   @Get(CONTROL_API.ROOMS.AI_INTERVIEW_RESULT.route)

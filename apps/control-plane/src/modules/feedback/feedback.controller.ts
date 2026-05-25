@@ -12,9 +12,14 @@ import { CurrentUser } from '@/common/decorators/current-user.decorator.js';
 import { ErrorResponseDto } from '@/common/dto/error-response.dto.js';
 import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard.js';
 import type { AuthUser } from '@/modules/auth/auth.types.js';
-import { SessionFeedbackResponseDto, SubmitSessionFeedbackDto } from './dto/feedback.dto.js';
+import {
+  SessionFeedbackProgressResponseDto,
+  SessionFeedbackResponseDto,
+  SkipSessionFeedbackDto,
+  SubmitSessionFeedbackDto,
+} from './dto/feedback.dto.js';
 import { FeedbackService } from './feedback.service.js';
-import type { SessionFeedbackResult } from './feedback.types.js';
+import type { SessionFeedbackProgressResult, SessionFeedbackResult } from './feedback.types.js';
 
 @ApiTags('feedback')
 @ApiBearerAuth()
@@ -33,7 +38,6 @@ export class FeedbackController {
   @ApiResponse({ status: 401, type: ErrorResponseDto, description: 'Unauthorized' })
   @ApiResponse({ status: 403, type: ErrorResponseDto, description: 'Not a participant' })
   @ApiResponse({ status: 404, type: ErrorResponseDto, description: 'Session not found' })
-  @ApiResponse({ status: 409, type: ErrorResponseDto, description: 'Feedback already submitted' })
   async submitSessionFeedback(
     @CurrentUser() user: AuthUser,
     @Param('id') sessionId: string,
@@ -47,6 +51,41 @@ export class FeedbackController {
       isAdmin,
     );
     return serializeFeedback(result);
+  }
+
+  @Post(CONTROL_API.FEEDBACK.SKIP_SESSION.route)
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Skip peer feedback for one participant in a session' })
+  @ApiParam({ name: 'id', description: 'Session ID (UUID)' })
+  @ApiBody({ type: SkipSessionFeedbackDto })
+  @ApiResponse({ status: 200, type: SessionFeedbackProgressResponseDto })
+  @ApiResponse({ status: 400, type: ErrorResponseDto, description: 'Validation error' })
+  @ApiResponse({ status: 401, type: ErrorResponseDto, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, type: ErrorResponseDto, description: 'Not a participant' })
+  @ApiResponse({ status: 404, type: ErrorResponseDto, description: 'Session not found' })
+  async skipSessionFeedback(
+    @CurrentUser() user: AuthUser,
+    @Param('id') sessionId: string,
+    @Body() body: SkipSessionFeedbackDto,
+  ): Promise<SessionFeedbackProgressResponseDto> {
+    const result = await this.feedbackService.skipSessionFeedback(sessionId, user.id, body);
+    return serializeProgress(result);
+  }
+
+  @Post(CONTROL_API.FEEDBACK.SKIP_ALL_SESSION.route)
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Skip all remaining peer feedback targets for a session' })
+  @ApiParam({ name: 'id', description: 'Session ID (UUID)' })
+  @ApiResponse({ status: 200, type: SessionFeedbackProgressResponseDto })
+  @ApiResponse({ status: 401, type: ErrorResponseDto, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, type: ErrorResponseDto, description: 'Not a participant' })
+  @ApiResponse({ status: 404, type: ErrorResponseDto, description: 'Session not found' })
+  async skipAllSessionFeedback(
+    @CurrentUser() user: AuthUser,
+    @Param('id') sessionId: string,
+  ): Promise<SessionFeedbackProgressResponseDto> {
+    const result = await this.feedbackService.skipAllSessionFeedback(sessionId, user.id);
+    return serializeProgress(result);
   }
 
   @Get(CONTROL_API.FEEDBACK.GET_SESSION.route)
@@ -64,6 +103,21 @@ export class FeedbackController {
     const result = await this.feedbackService.getSessionFeedback(sessionId, user.id, isAdmin);
     return serializeFeedback(result);
   }
+
+  @Get(CONTROL_API.FEEDBACK.GET_PROGRESS.route)
+  @ApiOperation({ summary: 'Get current reviewer peer feedback progress for a session' })
+  @ApiParam({ name: 'id', description: 'Session ID (UUID)' })
+  @ApiResponse({ status: 200, type: SessionFeedbackProgressResponseDto })
+  @ApiResponse({ status: 401, type: ErrorResponseDto, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, type: ErrorResponseDto, description: 'Not a participant' })
+  @ApiResponse({ status: 404, type: ErrorResponseDto, description: 'Session not found' })
+  async getSessionFeedbackProgress(
+    @CurrentUser() user: AuthUser,
+    @Param('id') sessionId: string,
+  ): Promise<SessionFeedbackProgressResponseDto> {
+    const result = await this.feedbackService.getSessionFeedbackProgress(sessionId, user.id);
+    return serializeProgress(result);
+  }
 }
 
 function serializeFeedback(result: SessionFeedbackResult): SessionFeedbackResponseDto {
@@ -72,6 +126,18 @@ function serializeFeedback(result: SessionFeedbackResult): SessionFeedbackRespon
     data: result.data.map((entry) => ({
       ...entry,
       createdAt: entry.createdAt.toISOString(),
+    })),
+  };
+}
+
+function serializeProgress(
+  result: SessionFeedbackProgressResult,
+): SessionFeedbackProgressResponseDto {
+  return {
+    allSubmitted: result.allSubmitted,
+    targets: result.targets.map((target) => ({
+      ...target,
+      createdAt: target.createdAt?.toISOString() ?? null,
     })),
   };
 }

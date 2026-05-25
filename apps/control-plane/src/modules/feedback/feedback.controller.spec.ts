@@ -10,43 +10,54 @@ const FEEDBACK_RESULT = {
       id: 'feedback-1',
       sessionId: 'session-1',
       roomId: 'room-1',
+      status: 'submitted' as const,
       reviewerId: 'reviewer-1',
       reviewerName: 'Reviewer',
+      reviewerAvatarUrl: null,
       candidateId: 'candidate-1',
       candidateName: 'Candidate',
-      problemSolvingRating: 4,
-      communicationRating: 5,
-      codeQualityRating: 4,
-      debuggingRating: 3,
-      overallRating: 4,
-      strengths: 'Clear reasoning',
-      improvements: 'Name edge cases earlier',
-      wouldPairAgain: true,
+      candidateAvatarUrl: null,
+      feedbackText: 'Clear reasoning',
       createdAt: new Date('2026-04-01T00:00:00Z'),
+    },
+  ],
+};
+
+const PROGRESS_RESULT = {
+  allSubmitted: false,
+  targets: [
+    {
+      candidateId: 'candidate-1',
+      candidateName: 'Candidate',
+      candidateAvatarUrl: null,
+      role: 'candidate' as const,
+      state: 'pending' as const,
+      createdAt: null,
     },
   ],
 };
 
 const FEEDBACK_BODY = {
   candidateId: 'candidate-1',
-  problemSolvingRating: 4,
-  communicationRating: 5,
-  codeQualityRating: 4,
-  debuggingRating: 3,
-  overallRating: 4,
-  strengths: 'Clear reasoning',
-  improvements: 'Name edge cases earlier',
-  wouldPairAgain: true,
+  feedbackText: 'Clear reasoning',
 };
 
 function createFixture() {
   const feedbackService: Pick<
     FeedbackService,
-    'isAdmin' | 'submitSessionFeedback' | 'getSessionFeedback'
+    | 'isAdmin'
+    | 'submitSessionFeedback'
+    | 'skipSessionFeedback'
+    | 'skipAllSessionFeedback'
+    | 'getSessionFeedback'
+    | 'getSessionFeedbackProgress'
   > = {
     isAdmin: vi.fn(async () => false),
     submitSessionFeedback: vi.fn(async () => FEEDBACK_RESULT),
+    skipSessionFeedback: vi.fn(async () => PROGRESS_RESULT),
+    skipAllSessionFeedback: vi.fn(async () => ({ ...PROGRESS_RESULT, allSubmitted: true })),
     getSessionFeedback: vi.fn(async () => FEEDBACK_RESULT),
+    getSessionFeedbackProgress: vi.fn(async () => PROGRESS_RESULT),
   };
 
   return {
@@ -56,7 +67,7 @@ function createFixture() {
 }
 
 describe('FeedbackController', () => {
-  it('GIVEN structured feedback WHEN submitting THEN serializes createdAt and returns visibility state', async () => {
+  it('GIVEN text feedback WHEN submitting THEN serializes createdAt and returns visibility state', async () => {
     const { controller, feedbackService } = createFixture();
 
     const result = await controller.submitSessionFeedback(AUTH_USER, 'session-1', FEEDBACK_BODY);
@@ -69,6 +80,7 @@ describe('FeedbackController', () => {
     );
     expect(result.allSubmitted).toBe(false);
     expect(result.data[0].createdAt).toBe('2026-04-01T00:00:00.000Z');
+    expect(result.data[0].feedbackText).toBe('Clear reasoning');
   });
 
   it('GIVEN a session id WHEN retrieving feedback THEN serializes createdAt and returns entries', async () => {
@@ -83,5 +95,17 @@ describe('FeedbackController', () => {
     );
     expect(result.data[0].reviewerName).toBe('Reviewer');
     expect(result.data[0].createdAt).toBe('2026-04-01T00:00:00.000Z');
+  });
+
+  it('GIVEN feedback progress WHEN retrieving THEN serializes nullable timestamps', async () => {
+    const { controller, feedbackService } = createFixture();
+
+    const result = await controller.getSessionFeedbackProgress(AUTH_USER, 'session-1');
+
+    expect(feedbackService.getSessionFeedbackProgress).toHaveBeenCalledWith(
+      'session-1',
+      'reviewer-1',
+    );
+    expect(result.targets[0]?.createdAt).toBeNull();
   });
 });

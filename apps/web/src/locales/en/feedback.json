@@ -64,7 +64,7 @@
     "comparison": "Comparison to History",
     "peerFeedback": "Peer Feedback Summary",
     "peerFeedbackSection": "Peer Feedback",
-    "peerFeedbackSectionDescription": "Structured feedback from your peer after the session."
+    "peerFeedbackSectionDescription": "Written feedback shared by your peer after the session."
   },
   "dimensions": {
     "correctness": {
@@ -160,18 +160,38 @@
     "awaitingResponses": "Awaiting peer responses",
     "hiddenUntilSubmitted": "Feedback will be revealed once all participants have submitted their evaluations.",
     "empty": "No peer feedback was submitted for this session.",
-    "wouldPairAgain": "Would pair again",
-    "wouldNotPairAgain": "Would not pair again",
     "feedbackFrom": "Feedback from {{name}}",
     "submittedAt": "Submitted",
-    "summaryPanel": "Overall",
-    "strengths": "Strengths",
-    "improvements": "Improvements",
-    "ratings": {
-      "problemSolving": "Problem solving",
-      "communication": "Communication",
-      "codeQuality": "Code quality",
-      "debugging": "Debugging"
+    "feedbackLabel": "Written feedback"
+  },
+  "modal": {
+    "eyebrow": "Peer Feedback",
+    "title": "Wrap up with peer feedback",
+    "description": "Before we open the session report, leave quick written feedback for each eligible participant in this peer interview.",
+    "loading": "Loading the remaining feedback targets...",
+    "loadError": "We couldn't load the peer feedback flow right now.",
+    "currentTargetLabel": "Current participant",
+    "selectorLabel": "Participant selector",
+    "selectorPlaceholder": "Choose a participant",
+    "progress": "{{current}} / {{total}} targets · {{pending}} pending",
+    "feedbackLabel": "Your feedback",
+    "feedbackPlaceholder": "Share practical, specific feedback in English or 中文. Mention what they did well, what could improve, or how they collaborated.",
+    "feedbackHint": "Chinese and English are both supported.",
+    "characterCount": "{{count}} / {{max}}",
+    "empty": "There are no remaining participants who need feedback.",
+    "skipAll": "Skip all",
+    "skip": "Skip",
+    "submit": "Submit",
+    "submitSuccess": "Feedback submitted.",
+    "submitError": "We couldn't submit this feedback.",
+    "skipSuccess": "Skipped this participant.",
+    "skipError": "We couldn't skip this participant.",
+    "skipAllSuccess": "Skipped all remaining participants.",
+    "skipAllError": "We couldn't skip all remaining participants.",
+    "state": {
+      "pending": "Pending",
+      "submitted": "Submitted",
+      "skipped": "Skipped"
     }
   },
   "evidence": {
@@ -204,8 +224,7 @@
     "declining": "Declining"
   },
   "peerFeedback": {
-    "averageRating": "Average rating",
-    "wouldPairAgain": "Would pair again",
+    "summary": "Peer summary",
     "themes": "Themes",
     "none": "None"
   },

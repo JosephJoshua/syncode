@@ -5,6 +5,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { LoggerModule } from 'nestjs-pino';
 import { AppController } from './app.controller.js';
+import { getClientIpFromRequest } from './common/client-ip.js';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter.js';
 import { type EnvConfig, validateEnv } from './config/env.config.js';
 import { InfrastructureModule } from './infrastructure/infrastructure.module.js';
@@ -107,9 +108,10 @@ if (!isProd) {
         throttlers: [
           {
             ttl: (config.get('THROTTLE_TTL_SECS', { infer: true }) ?? 60) * 1_000, // seconds -> ms
-            limit: config.get('THROTTLE_LIMIT', { infer: true }) ?? 10,
+            limit: config.get('THROTTLE_LIMIT', { infer: true }) ?? 120,
           },
         ],
+        getTracker: (request) => getClientIpFromRequest(request),
         skipIf: () => config.get('NODE_ENV', { infer: true }) === 'development',
       }),
     }),

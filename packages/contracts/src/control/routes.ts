@@ -21,7 +21,12 @@ import type {
   jobStatusResponseSchema,
   staticAnalysisResultResponseSchema,
 } from './execution.js';
-import type { sessionFeedbackResponseSchema, submitSessionFeedbackSchema } from './feedback.js';
+import type {
+  sessionFeedbackProgressResponseSchema,
+  sessionFeedbackResponseSchema,
+  skipSessionFeedbackSchema,
+  submitSessionFeedbackSchema,
+} from './feedback.js';
 import type { healthCheckResponseSchema } from './health.js';
 import type {
   enterMatchmakingQueueResponseSchema,
@@ -31,10 +36,13 @@ import type {
 } from './matchmaking.js';
 import type {
   createProblemSchema,
+  problemDetailQuerySchema,
   problemDetailSchema,
   problemsListQuerySchema,
   problemsListResponseSchema,
   problemsTagsResponseSchema,
+  publishProblemStatusSchema,
+  updateProblemSchema,
 } from './problems.js';
 import type {
   browseRoomsQuerySchema,
@@ -57,6 +65,8 @@ import type {
   requestRoomAiHintSchema,
   requestRoomAiInterviewResponseSchema,
   requestRoomAiInterviewSchema,
+  requestRoomAiInterviewTranscriptionResponseSchema,
+  requestRoomAiInterviewTranscriptionSchema,
   requestRoomCodeAnalysisResponseSchema,
   requestRoomCodeAnalysisSchema,
   roomChatMediaUploadRequestSchema,
@@ -217,6 +227,10 @@ export const CONTROL_API = {
       void,
       z.infer<typeof getRoomAiInterviewResultResponseSchema>
     >()('rooms/:id/ai/interview/:jobId', 'GET'),
+    AI_INTERVIEW_TRANSCRIBE: defineRoute<
+      z.infer<typeof requestRoomAiInterviewTranscriptionSchema>,
+      z.infer<typeof requestRoomAiInterviewTranscriptionResponseSchema>
+    >()('rooms/:id/ai/interview/transcribe', 'POST'),
     CODE_ANALYSIS: defineRoute<
       z.infer<typeof requestRoomCodeAnalysisSchema>,
       z.infer<typeof requestRoomCodeAnalysisResponseSchema>
@@ -278,12 +292,23 @@ export const CONTROL_API = {
       z.infer<typeof problemsListQuerySchema>,
       z.infer<typeof problemsListResponseSchema>
     >()('problems', 'GET'),
-    GET_BY_ID: defineRoute<void, z.infer<typeof problemDetailSchema>>()('problems/:id', 'GET'),
+    GET_BY_ID: defineRoute<
+      z.infer<typeof problemDetailQuerySchema>,
+      z.infer<typeof problemDetailSchema>
+    >()('problems/:id', 'GET'),
     TAGS: defineRoute<void, z.infer<typeof problemsTagsResponseSchema>>()('problems/tags', 'GET'),
     CREATE: defineRoute<z.infer<typeof createProblemSchema>, z.infer<typeof problemDetailSchema>>()(
       'problems',
       'POST',
     ),
+    UPDATE: defineRoute<z.infer<typeof updateProblemSchema>, z.infer<typeof problemDetailSchema>>()(
+      'problems/:id',
+      'PATCH',
+    ),
+    PUBLISH_STATUS: defineRoute<
+      z.infer<typeof publishProblemStatusSchema>,
+      z.infer<typeof problemDetailSchema>
+    >()('problems/:id/publish-status', 'PATCH'),
     DELETE: defineRoute<void, void>()('problems/:id', 'DELETE'),
   },
   BOOKMARKS: {
@@ -315,8 +340,20 @@ export const CONTROL_API = {
       z.infer<typeof submitSessionFeedbackSchema>,
       z.infer<typeof sessionFeedbackResponseSchema>
     >()('sessions/:id/feedback', 'POST'),
+    SKIP_SESSION: defineRoute<
+      z.infer<typeof skipSessionFeedbackSchema>,
+      z.infer<typeof sessionFeedbackProgressResponseSchema>
+    >()('sessions/:id/feedback/skip', 'POST'),
+    SKIP_ALL_SESSION: defineRoute<void, z.infer<typeof sessionFeedbackProgressResponseSchema>>()(
+      'sessions/:id/feedback/skip-all',
+      'POST',
+    ),
     GET_SESSION: defineRoute<void, z.infer<typeof sessionFeedbackResponseSchema>>()(
       'sessions/:id/feedback',
+      'GET',
+    ),
+    GET_PROGRESS: defineRoute<void, z.infer<typeof sessionFeedbackProgressResponseSchema>>()(
+      'sessions/:id/feedback/progress',
       'GET',
     ),
   },

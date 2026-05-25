@@ -6,6 +6,8 @@ import {
   AI_HINT_RESULT_QUEUE,
   AI_INTERVIEW_QUEUE,
   AI_INTERVIEW_RESULT_QUEUE,
+  AI_INTERVIEW_TRANSCRIPTION_QUEUE,
+  AI_INTERVIEW_TRANSCRIPTION_RESULT_QUEUE,
   AI_REVIEW_QUEUE,
   AI_REVIEW_RESULT_QUEUE,
   AI_SESSION_REPORT_QUEUE,
@@ -63,6 +65,16 @@ function createFakeJob<T>(data: T, id = 'job-123'): QueueJob<T> {
   };
 }
 
+function createDeferred<T = void>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
 function createMockStorageService(): IStorageService {
   return {
     upload: vi.fn().mockResolvedValue(undefined),
@@ -90,6 +102,7 @@ describe('AiProcessor', () => {
   const { mock: mockQueueService, handlers } = createMockQueueService();
 
   let processor: AiProcessor;
+  let aiService: AiService;
 
   beforeAll(async () => {
     const module = await Test.createTestingModule({
@@ -284,6 +297,10 @@ describe('AiProcessor', () => {
               model: 'qwen-tts',
               mimeType: 'audio/mpeg',
             }),
+            generateTranscription: vi.fn().mockResolvedValue({
+              text: 'transcribed answer',
+              model: 'glm-asr',
+            }),
           },
         },
         {
@@ -294,18 +311,20 @@ describe('AiProcessor', () => {
     }).compile();
 
     processor = module.get(AiProcessor);
+    aiService = module.get(AiService);
   });
 
   describe('onModuleInit', () => {
-    it('GIVEN the processor WHEN onModuleInit is called THEN registers handlers on all 6 queues', () => {
+    it('GIVEN the processor WHEN onModuleInit is called THEN registers handlers on all 7 queues', () => {
       processor.onModuleInit();
 
-      expect(mockQueueService.process).toHaveBeenCalledTimes(6);
+      expect(mockQueueService.process).toHaveBeenCalledTimes(7);
       expect(handlers.has(AI_HINT_QUEUE)).toBe(true);
       expect(handlers.has(AI_CODE_ANALYSIS_QUEUE)).toBe(true);
       expect(handlers.has(AI_WEAKNESS_ANALYSIS_QUEUE)).toBe(true);
       expect(handlers.has(AI_REVIEW_QUEUE)).toBe(true);
       expect(handlers.has(AI_INTERVIEW_QUEUE)).toBe(true);
+      expect(handlers.has(AI_INTERVIEW_TRANSCRIPTION_QUEUE)).toBe(true);
       expect(handlers.has(AI_SESSION_REPORT_QUEUE)).toBe(true);
 
       const sessionReportProcessCall = mockQueueService.process.mock.calls.find(
@@ -313,6 +332,260 @@ describe('AiProcessor', () => {
       );
 
       expect(sessionReportProcessCall?.[2]).toEqual({ concurrency: 1 });
+    });
+  });
+
+  describe('global concurrency cap', () => {
+    it('GIVEN 6 jobs across multiple queues WHEN processed in parallel THEN at most 5 run concurrently', async () => {
+      processor.onModuleInit();
+      mockQueueService.enqueue.mockClear();
+
+      const hintHandler = handlers.get(AI_HINT_QUEUE)!;
+      const reviewHandler = handlers.get(AI_REVIEW_QUEUE)!;
+      const interviewHandler = handlers.get(AI_INTERVIEW_QUEUE)!;
+
+      const blockers = Array.from({ length: 6 }, () => createDeferred<void>());
+      let nextBlockerIndex = 0;
+      let activeJobs = 0;
+      let maxActiveJobs = 0;
+
+      const waitInCriticalSection = async () => {
+        const blockerIndex = nextBlockerIndex++;
+        activeJobs += 1;
+        maxActiveJobs = Math.max(maxActiveJobs, activeJobs);
+        await blockers[blockerIndex]?.promise;
+        activeJobs -= 1;
+      };
+
+      const hintSpy = vi.spyOn(aiService, 'generateHint').mockImplementation(async () => {
+        await waitInCriticalSection();
+        return {
+          hint: 'Hint',
+          suggestedApproach: 'Approach',
+        };
+      });
+
+      const reviewSpy = vi.spyOn(aiService, 'reviewCode').mockImplementation(async () => {
+        await waitInCriticalSection();
+        return {
+          overallScore: 80,
+          summary: 'Solid implementation.',
+          categories: [],
+        };
+      });
+
+      const interviewSpy = vi
+        .spyOn(aiService, 'generateInterviewResponse')
+        .mockImplementation(async () => {
+          await waitInCriticalSection();
+          return {
+            shouldRespond: true,
+            message: 'Can you explain your approach?',
+          };
+        });
+
+      try {
+        const jobs = [
+          hintHandler(
+            createFakeJob({
+              roomId: 'room-1',
+              participantId: 'user-1',
+              problemDescription: 'Two Sum',
+              currentCode: 'function twoSum() {}',
+              language: 'typescript',
+              hintLevel: 'gentle',
+            }),
+          ),
+          hintHandler(
+            createFakeJob({
+              roomId: 'room-2',
+              participantId: 'user-2',
+              problemDescription: 'Two Sum',
+              currentCode: 'function twoSum() {}',
+              language: 'typescript',
+              hintLevel: 'gentle',
+            }),
+          ),
+          reviewHandler(
+            createFakeJob({
+              roomId: 'room-3',
+              participantId: 'user-3',
+              problemDescription: 'Two Sum',
+              code: 'function twoSum() {}',
+              language: 'typescript',
+            }),
+          ),
+          reviewHandler(
+            createFakeJob({
+              roomId: 'room-4',
+              participantId: 'user-4',
+              problemDescription: 'Two Sum',
+              code: 'function twoSum() {}',
+              language: 'typescript',
+            }),
+          ),
+          interviewHandler(
+            createFakeJob({
+              roomId: 'room-5',
+              participantId: 'user-5',
+              problemDescription: 'Two Sum',
+              currentCode: 'function twoSum() {}',
+              language: 'typescript',
+              userMessage: 'I am using a map.',
+              conversationHistory: [],
+            }),
+          ),
+          interviewHandler(
+            createFakeJob({
+              roomId: 'room-6',
+              participantId: 'user-6',
+              problemDescription: 'Two Sum',
+              currentCode: 'function twoSum() {}',
+              language: 'typescript',
+              userMessage: 'I am using a set.',
+              conversationHistory: [],
+            }),
+          ),
+        ];
+
+        for (let attempt = 0; attempt < 20 && maxActiveJobs < 5; attempt += 1) {
+          await new Promise<void>((resolve) => {
+            setTimeout(resolve, 0);
+          });
+        }
+        expect(maxActiveJobs).toBe(5);
+
+        for (const blocker of blockers) {
+          blocker.resolve();
+        }
+        await Promise.all(jobs);
+
+        expect(maxActiveJobs).toBe(5);
+      } finally {
+        hintSpy.mockRestore();
+        reviewSpy.mockRestore();
+        interviewSpy.mockRestore();
+      }
+    });
+
+    it('GIVEN many batch jobs WHEN realtime job arrives THEN reserved realtime slots keep it responsive', async () => {
+      processor.onModuleInit();
+      mockQueueService.enqueue.mockClear();
+
+      const weaknessHandler = handlers.get(AI_WEAKNESS_ANALYSIS_QUEUE)!;
+      const hintHandler = handlers.get(AI_HINT_QUEUE)!;
+
+      const blockers = Array.from({ length: 6 }, () => createDeferred<void>());
+      let blockerIndex = 0;
+      let startedBatchJobs = 0;
+      let startedRealtimeJobs = 0;
+
+      const blockUntilReleased = async () => {
+        const current = blockerIndex++;
+        await blockers[current]?.promise;
+      };
+
+      const weaknessSpy = vi
+        .spyOn(aiService, 'generateWeaknessAnalysis')
+        .mockImplementation(async () => {
+          startedBatchJobs += 1;
+          await blockUntilReleased();
+          return {
+            sessionId: 'session-1',
+            participantId: 'user-1',
+            reportedAt: '2026-04-20T00:00:00.000Z',
+            summary: 'summary',
+            recurringPatterns: [],
+            weaknesses: [],
+          };
+        });
+
+      const hintSpy = vi.spyOn(aiService, 'generateHint').mockImplementation(async () => {
+        startedRealtimeJobs += 1;
+        await blockUntilReleased();
+        return {
+          hint: 'Hint',
+          suggestedApproach: 'Approach',
+        };
+      });
+
+      const makeWeaknessJob = (id: string) =>
+        createFakeJob(
+          {
+            sessionId: id,
+            roomId: `room-${id}`,
+            participantId: 'user-1',
+            participantRole: 'candidate',
+            sessionReportGeneratedAt: '2026-04-20T06:00:00.000Z',
+            problem: {
+              id: 'problem-1',
+              title: 'Two Sum',
+              description: 'Find two numbers.',
+              difficulty: 'easy',
+              constraints: null,
+            },
+            language: 'typescript',
+            durationMs: 120000,
+            snapshots: [],
+            runs: [],
+            submissions: [],
+            peerFeedback: [],
+            aiMessages: [],
+            sessionReportSummary: {
+              overallScore: 72,
+              feedback: 'Needs better edge-case reasoning.',
+            },
+            historicalWeaknesses: [],
+          },
+          `weakness-job-${id}`,
+        );
+
+      try {
+        const batchJobs = [
+          weaknessHandler(makeWeaknessJob('session-1')),
+          weaknessHandler(makeWeaknessJob('session-2')),
+          weaknessHandler(makeWeaknessJob('session-3')),
+          weaknessHandler(makeWeaknessJob('session-4')),
+          weaknessHandler(makeWeaknessJob('session-5')),
+        ];
+
+        for (let attempt = 0; attempt < 20 && startedBatchJobs < 3; attempt += 1) {
+          await new Promise<void>((resolve) => {
+            setTimeout(resolve, 0);
+          });
+        }
+        expect(startedBatchJobs).toBe(3);
+
+        const realtimeJob = hintHandler(
+          createFakeJob(
+            {
+              roomId: 'room-realtime',
+              participantId: 'user-realtime',
+              problemDescription: 'Two Sum',
+              currentCode: 'function twoSum() {}',
+              language: 'typescript',
+              hintLevel: 'gentle',
+            },
+            'hint-job-realtime',
+          ),
+        );
+
+        for (let attempt = 0; attempt < 20 && startedRealtimeJobs < 1; attempt += 1) {
+          await new Promise<void>((resolve) => {
+            setTimeout(resolve, 0);
+          });
+        }
+        expect(startedRealtimeJobs).toBe(1);
+
+        for (const blocker of blockers) {
+          blocker.resolve();
+        }
+
+        await Promise.all([...batchJobs, realtimeJob]);
+      } finally {
+        weaknessSpy.mockRestore();
+        hintSpy.mockRestore();
+      }
     });
   });
 
@@ -620,6 +893,38 @@ describe('AiProcessor', () => {
               errorMessage: null,
             }),
           ],
+        }),
+        resultJobOptions,
+      );
+    });
+  });
+
+  describe('interview transcription job processing', () => {
+    it('GIVEN an interview transcription job WHEN processed THEN enqueues result to transcription result queue', async () => {
+      processor.onModuleInit();
+      mockQueueService.enqueue.mockClear();
+
+      const handler = handlers.get(AI_INTERVIEW_TRANSCRIPTION_QUEUE)!;
+      const job = createFakeJob(
+        {
+          roomId: 'room-1',
+          sessionId: 'session-1',
+          participantId: 'user-1',
+          audioBase64: Buffer.from('audio').toString('base64'),
+          mimeType: 'audio/webm',
+          language: 'en-US',
+        },
+        'interview-transcription-job-1',
+      );
+
+      await handler(job);
+
+      expect(mockQueueService.enqueue).toHaveBeenCalledWith(
+        AI_INTERVIEW_TRANSCRIPTION_RESULT_QUEUE,
+        'interview-transcription-result',
+        expect.objectContaining({
+          jobId: 'interview-transcription-job-1',
+          text: 'transcribed answer',
         }),
         resultJobOptions,
       );

@@ -220,67 +220,6 @@ export const aiInterviewExecutionSummarySchema = z.object({
 
 export type AiInterviewExecutionSummary = z.infer<typeof aiInterviewExecutionSummarySchema>;
 
-export const staticAnalysisEvidenceSchema = z.object({
-  source: z.enum(['run', 'submission']),
-  runId: z.uuid().nullable(),
-  submissionId: z.uuid().nullable(),
-  language: z.enum(SUPPORTED_LANGUAGES),
-  createdAt: z.iso.datetime(),
-  completedAt: z.iso.datetime().nullable(),
-  summary: z.object({
-    diagnosticCount: z.number().int().nonnegative(),
-    errorCount: z.number().int().nonnegative(),
-    warningCount: z.number().int().nonnegative(),
-    maxCyclomaticComplexity: z.number().int().nullable(),
-    highComplexityCount: z.number().int().nonnegative(),
-    duplicationCount: z.number().int().nonnegative(),
-    toolFailureCount: z.number().int().nonnegative(),
-  }),
-  diagnostics: z
-    .array(
-      z.object({
-        tool: z.string(),
-        rule: z.string().nullable(),
-        severity: z.enum(['error', 'warning', 'info']),
-        message: z.string(),
-        file: z.string().nullable(),
-        line: z.number().int().nullable(),
-        column: z.number().int().nullable(),
-      }),
-    )
-    .default([]),
-  complexity: z
-    .array(
-      z.object({
-        tool: z.string(),
-        functionName: z.string(),
-        file: z.string().nullable(),
-        startLine: z.number().int(),
-        endLine: z.number().int().nullable(),
-        cyclomaticComplexity: z.number().int(),
-      }),
-    )
-    .default([]),
-  duplications: z
-    .array(
-      z.object({
-        tool: z.string(),
-        lines: z.number().int().nonnegative(),
-        tokens: z.number().int().nullable(),
-        occurrences: z.array(
-          z.object({
-            file: z.string().nullable(),
-            startLine: z.number().int(),
-            endLine: z.number().int().nullable(),
-          }),
-        ),
-      }),
-    )
-    .default([]),
-});
-
-export type StaticAnalysisEvidence = z.infer<typeof staticAnalysisEvidenceSchema>;
-
 export const aiInterviewCodeAnalysisContextSchema = z.object({
   summary: z.string().min(1).max(2000),
   focusAreas: z
@@ -291,7 +230,60 @@ export const aiInterviewCodeAnalysisContextSchema = z.object({
     })
     .optional(),
   followUpQuestions: z.array(z.string().min(1).max(500)).max(5).optional(),
-  staticAnalysis: staticAnalysisEvidenceSchema.optional(),
+  staticAnalysis: z
+    .object({
+      source: z.enum(['run', 'submission']),
+      runId: z.uuid().nullable(),
+      submissionId: z.uuid().nullable(),
+      language: z.enum(SUPPORTED_LANGUAGES),
+      createdAt: z.iso.datetime(),
+      completedAt: z.iso.datetime().nullable(),
+      summary: z.object({
+        diagnosticCount: z.number().int().nonnegative(),
+        errorCount: z.number().int().nonnegative(),
+        warningCount: z.number().int().nonnegative(),
+        maxCyclomaticComplexity: z.number().int().nullable(),
+        highComplexityCount: z.number().int().nonnegative(),
+        duplicationCount: z.number().int().nonnegative(),
+        toolFailureCount: z.number().int().nonnegative(),
+      }),
+      diagnostics: z.array(
+        z.object({
+          tool: z.string(),
+          rule: z.string().nullable(),
+          severity: z.enum(['error', 'warning', 'info']),
+          message: z.string(),
+          file: z.string().nullable(),
+          line: z.number().int().nullable(),
+          column: z.number().int().nullable(),
+        }),
+      ),
+      complexity: z.array(
+        z.object({
+          tool: z.string(),
+          functionName: z.string(),
+          file: z.string().nullable(),
+          startLine: z.number().int(),
+          endLine: z.number().int().nullable(),
+          cyclomaticComplexity: z.number().int(),
+        }),
+      ),
+      duplications: z.array(
+        z.object({
+          tool: z.string(),
+          lines: z.number().int(),
+          tokens: z.number().int().nullable(),
+          occurrences: z.array(
+            z.object({
+              file: z.string().nullable(),
+              startLine: z.number().int(),
+              endLine: z.number().int().nullable(),
+            }),
+          ),
+        }),
+      ),
+    })
+    .optional(),
 });
 
 export type AiInterviewCodeAnalysisContext = z.infer<typeof aiInterviewCodeAnalysisContextSchema>;
@@ -366,6 +358,10 @@ export const requestRoomAiInterviewSchema = z
     latestExecutionSummary: aiInterviewExecutionSummarySchema.optional(),
     codeAnalysisContext: aiInterviewCodeAnalysisContextSchema.optional(),
     interactionSignals: aiInterviewInteractionSignalsSchema.optional(),
+    responseLanguage: z
+      .enum(['en', 'zh'])
+      .optional()
+      .describe('Preferred natural language for AI interviewer responses'),
   })
   .superRefine((value, ctx) => {
     if (value.trigger !== 'user_message') {
@@ -382,8 +378,7 @@ export const requestRoomAiInterviewSchema = z
   })
   .strict();
 
-export type RequestRoomAiInterviewRequest = z.input<typeof requestRoomAiInterviewSchema>;
-export type RequestRoomAiInterviewInput = z.output<typeof requestRoomAiInterviewSchema>;
+export type RequestRoomAiInterviewInput = z.infer<typeof requestRoomAiInterviewSchema>;
 
 export const requestRoomAiInterviewResponseSchema = z.object({
   jobId: z
@@ -393,47 +388,86 @@ export const requestRoomAiInterviewResponseSchema = z.object({
 
 export type RequestRoomAiInterviewResponse = z.infer<typeof requestRoomAiInterviewResponseSchema>;
 
-const aiInterviewPendingResultSchema = z.object({
-  status: z.literal('pending'),
-  jobId: z.string(),
-});
-
-const aiInterviewReadyRespondingResultSchema = z.object({
-  status: z.literal('ready'),
-  jobId: z.string(),
-  shouldRespond: z.literal(true),
-  message: z.string().min(1),
-  followUpQuestion: z.string().optional(),
-  codeContext: aiInterviewCodeContextSchema.optional(),
-  codeAnnotations: z.array(z.object({ line: z.number().int(), comment: z.string() })).optional(),
-  audioUrl: z.string().url().optional(),
-});
-
-const aiInterviewReadySilentResultSchema = z.object({
-  status: z.literal('ready'),
-  jobId: z.string(),
-  shouldRespond: z.literal(false),
-  message: z.undefined().optional(),
-  followUpQuestion: z.undefined().optional(),
-  codeContext: z.undefined().optional(),
-  codeAnnotations: z.undefined().optional(),
-  audioUrl: z.undefined().optional(),
-});
-
-const aiInterviewFailedResultSchema = z.object({
-  status: z.literal('failed'),
-  jobId: z.string(),
-});
-
 export const getRoomAiInterviewResultResponseSchema = z.union([
-  aiInterviewPendingResultSchema,
-  aiInterviewReadyRespondingResultSchema,
-  aiInterviewReadySilentResultSchema,
-  aiInterviewFailedResultSchema,
+  z.object({
+    status: z.literal('pending'),
+    jobId: z.string(),
+  }),
+  z.object({
+    status: z.literal('ready'),
+    jobId: z.string(),
+    shouldRespond: z.literal(true),
+    message: z.string().trim().min(1),
+    followUpQuestion: z.string().optional(),
+    codeContext: aiInterviewCodeContextSchema.optional(),
+    codeAnnotations: z.array(z.object({ line: z.number().int(), comment: z.string() })).optional(),
+    audioUrl: z.string().url().optional(),
+  }),
+  z
+    .object({
+      status: z.literal('ready'),
+      jobId: z.string(),
+      shouldRespond: z.literal(false),
+    })
+    .strict(),
+  z.object({
+    status: z.literal('failed'),
+    jobId: z.string(),
+  }),
 ]);
 
 export type GetRoomAiInterviewResultResponse = z.infer<
   typeof getRoomAiInterviewResultResponseSchema
+>;
+
+export const INTERVIEW_TRANSCRIPTION_MIME_TYPES = [
+  'audio/webm',
+  'audio/ogg',
+  'audio/mpeg',
+  'audio/mp4',
+  'audio/wav',
+] as const;
+
+function isAllowedInterviewTranscriptionMimeType(value: string) {
+  const normalized = value.split(';', 1)[0]?.trim().toLowerCase();
+  if (normalized === undefined) {
+    return false;
+  }
+  return (INTERVIEW_TRANSCRIPTION_MIME_TYPES as readonly string[]).includes(normalized);
+}
+
+export const requestRoomAiInterviewTranscriptionSchema = z
+  .object({
+    audioBase64: z
+      .string()
+      .min(1)
+      .max(4_000_000)
+      .describe('Base64 audio payload captured from the interviewer input'),
+    mimeType: z
+      .string()
+      .min(1)
+      .max(120)
+      .refine(isAllowedInterviewTranscriptionMimeType, 'Unsupported audio MIME type')
+      .describe('Audio MIME type'),
+    language: z
+      .string()
+      .min(2)
+      .max(20)
+      .optional()
+      .describe('Optional spoken language hint (for example en-US)'),
+  })
+  .strict();
+
+export type RequestRoomAiInterviewTranscriptionInput = z.infer<
+  typeof requestRoomAiInterviewTranscriptionSchema
+>;
+
+export const requestRoomAiInterviewTranscriptionResponseSchema = z.object({
+  text: z.string().describe('Transcribed text content'),
+});
+
+export type RequestRoomAiInterviewTranscriptionResponse = z.infer<
+  typeof requestRoomAiInterviewTranscriptionResponseSchema
 >;
 
 export const requestRoomCodeAnalysisSchema = z
@@ -529,10 +563,11 @@ export const submitResponseSchema = z.object({
     .describe('Submission ID for polling results via GET /submissions/:submissionId')
     .meta({ examples: ['550e8400-e29b-41d4-a716-446655440000'] }),
   staticAnalysisJobId: z
-    .string()
+    .uuid()
     .nullable()
-    .describe('Static analysis job ID for polling lint, complexity, and duplication findings')
-    .meta({ examples: ['static-analysis-job-abc-123'] }),
+    .optional()
+    .describe('Optional static analysis job ID for polling code-quality diagnostics')
+    .meta({ examples: ['660e8400-e29b-41d4-a716-446655440000'] }),
 });
 
 export type SubmitResponse = z.infer<typeof submitResponseSchema>;
@@ -607,10 +642,11 @@ export const runCodeResponseSchema = z.object({
     .describe('Job ID for polling execution result via GET /execution/:jobId')
     .meta({ examples: ['exec-job-abc-123'] }),
   staticAnalysisJobId: z
-    .string()
+    .uuid()
     .nullable()
-    .describe('Static analysis job ID for polling lint, complexity, and duplication findings')
-    .meta({ examples: ['static-analysis-job-abc-123'] }),
+    .optional()
+    .describe('Optional static analysis job ID for polling code-quality diagnostics')
+    .meta({ examples: ['660e8400-e29b-41d4-a716-446655440000'] }),
 });
 
 export type RunCodeResponse = z.infer<typeof runCodeResponseSchema>;

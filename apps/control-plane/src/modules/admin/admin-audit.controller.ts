@@ -24,7 +24,7 @@ export class AdminAuditController {
   @ApiQuery({ name: 'cursor', required: false, description: 'Opaque pagination cursor' })
   @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Page size' })
   @ApiQuery({ name: 'search', required: false, description: 'Search action, target, or actor' })
-  @ApiQuery({ name: 'action', required: false, description: 'Filter by action' })
+  @ApiQuery({ name: 'action', required: false, description: 'Search within action names' })
   @ApiQuery({
     name: 'actorId',
     required: false,

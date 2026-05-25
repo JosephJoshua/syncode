@@ -16,6 +16,8 @@ export type {
   InterviewResponseAudio,
   InterviewResponseRequest,
   InterviewResponseResult,
+  InterviewTranscriptionRequest,
+  InterviewTranscriptionResult,
   ReviewCodeRequest,
   ReviewCodeResult,
   SessionReportEventContext,
