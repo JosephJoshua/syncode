@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Awareness } from 'y-protocols/awareness';
@@ -30,6 +30,34 @@ vi.mock('react-i18next', () => ({
 
 vi.mock('y-monaco', () => ({
   MonacoBinding: vi.fn().mockImplementation(() => ({ destroy: vi.fn() })),
+}));
+
+vi.mock('monaco-vim', () => ({
+  initVimMode: (_editor: unknown, statusNode: HTMLElement) => {
+    statusNode.textContent = '-- NORMAL --';
+    return {
+      dispose: () => {
+        statusNode.textContent = '';
+      },
+    };
+  },
+}));
+
+vi.mock('monaco-emacs', () => ({
+  default: class {
+    start() {
+      return undefined;
+    }
+
+    onDidChangeKey(listener: (key: string) => void) {
+      listener('C-x');
+      return { dispose: () => undefined };
+    }
+
+    dispose() {
+      return undefined;
+    }
+  },
 }));
 
 vi.mock('./lazy-monaco-editor.js', async () => {
@@ -253,6 +281,54 @@ describe('CollaborativeEditor inline comments', () => {
     expect(composer).not.toBeNull();
     expect((composer as HTMLElement).style.bottom).not.toBe('');
     expect((composer as HTMLElement).style.top).toBe('');
+    awareness.destroy();
+    doc.destroy();
+  });
+});
+
+describe('CollaborativeEditor keybinding modes', () => {
+  it('GIVEN Vim mode WHEN the editor mounts THEN the Vim status is visible to the user', async () => {
+    const doc = new Y.Doc();
+    const awareness = new Awareness(doc);
+    fakeMonacoState.editor = createFakeEditor();
+
+    render(
+      <CollaborativeEditor
+        doc={doc}
+        awareness={awareness}
+        language="python"
+        readOnly={false}
+        keybindingMode="vim"
+        onRunCode={vi.fn()}
+        onSubmitCode={vi.fn()}
+      />,
+    );
+
+    expect(await screen.findByText('-- NORMAL --')).toBeInTheDocument();
+    awareness.destroy();
+    doc.destroy();
+  });
+
+  it('GIVEN Emacs mode WHEN the editor mounts THEN the Emacs key status is visible to the user', async () => {
+    const doc = new Y.Doc();
+    const awareness = new Awareness(doc);
+    fakeMonacoState.editor = createFakeEditor();
+
+    render(
+      <CollaborativeEditor
+        doc={doc}
+        awareness={awareness}
+        language="python"
+        readOnly={false}
+        keybindingMode="emacs"
+        onRunCode={vi.fn()}
+        onSubmitCode={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('C-x')).toBeInTheDocument();
+    });
     awareness.destroy();
     doc.destroy();
   });
