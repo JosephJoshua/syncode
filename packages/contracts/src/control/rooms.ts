@@ -388,7 +388,7 @@ export const requestRoomAiInterviewResponseSchema = z.object({
 
 export type RequestRoomAiInterviewResponse = z.infer<typeof requestRoomAiInterviewResponseSchema>;
 
-export const getRoomAiInterviewResultResponseSchema = z.discriminatedUnion('status', [
+export const getRoomAiInterviewResultResponseSchema = z.union([
   z.object({
     status: z.literal('pending'),
     jobId: z.string(),
@@ -396,13 +396,20 @@ export const getRoomAiInterviewResultResponseSchema = z.discriminatedUnion('stat
   z.object({
     status: z.literal('ready'),
     jobId: z.string(),
-    shouldRespond: z.boolean(),
-    message: z.string().optional(),
+    shouldRespond: z.literal(true),
+    message: z.string().trim().min(1),
     followUpQuestion: z.string().optional(),
     codeContext: aiInterviewCodeContextSchema.optional(),
     codeAnnotations: z.array(z.object({ line: z.number().int(), comment: z.string() })).optional(),
     audioUrl: z.string().url().optional(),
   }),
+  z
+    .object({
+      status: z.literal('ready'),
+      jobId: z.string(),
+      shouldRespond: z.literal(false),
+    })
+    .strict(),
   z.object({
     status: z.literal('failed'),
     jobId: z.string(),

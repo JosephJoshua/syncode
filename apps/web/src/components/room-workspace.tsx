@@ -1377,7 +1377,7 @@ export function RoomWorkspace({
 
   const streamInterviewAssistantMessage = useCallback(
     async (
-      message: Extract<GetRoomAiInterviewResultResponse, { status: 'ready' }>,
+      message: Extract<GetRoomAiInterviewResultResponse, { status: 'ready'; shouldRespond: true }>,
       isCurrentRequest: () => boolean,
     ): Promise<boolean> => {
       if (!message.message?.trim()) {
