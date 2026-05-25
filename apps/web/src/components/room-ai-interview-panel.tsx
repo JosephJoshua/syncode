@@ -1014,7 +1014,10 @@ export function resolveRecognitionLanguage(language: string | undefined): string
   if (language.includes('-')) {
     return language;
   }
-  return `${language}-US`;
+  // For unknown ISO 639-1 codes we leave the tag without a region: appending
+  // an arbitrary region (e.g. `de-US`) yields an invalid locale that STT
+  // providers may reject. The Web Speech API tolerates language-only tags.
+  return language;
 }
 
 async function requestMicrophoneStream(): Promise<{

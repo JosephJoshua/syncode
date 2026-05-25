@@ -1204,8 +1204,8 @@ describe('AiService', () => {
         },
       ]);
       expect(result.overallScore).toBe(82);
-      expect(result.generatedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
       expect(result.staticAnalysis).toEqual(request.staticAnalysis);
+      expect(result.generatedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
       expect(result.categoryScores).toEqual({
         correctness: 84,
         efficiency: 78,
@@ -1313,6 +1313,7 @@ describe('AiService', () => {
         peerFeedback: [],
         aiMessages: [],
         historicalContext: null,
+        staticAnalysis: [],
       };
 
       const result = await service.generateSessionReport(request);
@@ -1403,6 +1404,7 @@ describe('AiService', () => {
         peerFeedback: [],
         aiMessages: [],
         historicalContext: null,
+        staticAnalysis: [],
       };
 
       const result = await service.generateSessionReport(request);
@@ -1536,6 +1538,7 @@ describe('AiService', () => {
         peerFeedback: [],
         aiMessages: [],
         historicalContext: null,
+        staticAnalysis: [],
       };
 
       await expect(service.generateSessionReport(request)).rejects.toThrow(
@@ -1653,6 +1656,7 @@ describe('AiService', () => {
           peerFeedback: [],
           aiMessages: [],
           historicalContext: null,
+          staticAnalysis: [],
         }),
       ).rejects.toThrow(/omitted evidence-backed scores/i);
     });
@@ -1724,6 +1728,7 @@ describe('AiService', () => {
           peerFeedback: [],
           aiMessages: [],
           historicalContext: null,
+          staticAnalysis: [],
         }),
       ).rejects.toThrow(/omitted required scored dimensions/i);
     });
@@ -1896,6 +1901,7 @@ describe('AiService', () => {
         peerFeedback: [],
         aiMessages: [],
         historicalContext: null,
+        staticAnalysis: [],
       });
 
       expect(result.dimensions?.efficiency?.score).toBe(95);

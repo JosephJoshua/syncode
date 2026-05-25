@@ -350,6 +350,38 @@ describe('OpenAiCompatibleLlmProvider', () => {
     ).rejects.toThrow('STT request timed out after 1000ms');
   });
 
+  it('GIVEN fetch network failure WHEN generateText THEN retries until success', async () => {
+    const networkError = new TypeError('fetch failed');
+    const fetchImpl = vi
+      .fn()
+      .mockRejectedValueOnce(networkError)
+      .mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          model: 'qwen3.5-mini',
+          choices: [{ message: { content: '{"ok":true}' } }],
+        }),
+      });
+
+    const provider = new OpenAiCompatibleLlmProvider(
+      {
+        baseUrl: 'https://example.com/v1',
+        apiKey: 'secret',
+        model: 'qwen3.5-mini',
+        sttModel: 'glm-asr',
+        ttsModel: 'qwen-tts',
+        ttsVoice: 'Chelsie',
+        timeoutMs: 1000,
+      },
+      fetchImpl as typeof fetch,
+    );
+
+    const result = await provider.generateText({
+      messages: [{ role: 'user', content: 'ping' }],
+    });
+    expect(result.text).toBe('{"ok":true}');
+  });
+
   it('GIVEN codec-suffixed mime type WHEN generateTranscription THEN normalizes uploaded file metadata', async () => {
     const fetchImpl = vi.fn().mockResolvedValue({
       ok: true,
