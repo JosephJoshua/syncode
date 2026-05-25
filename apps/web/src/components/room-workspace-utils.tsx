@@ -164,6 +164,26 @@ export const handleEditorWillMount: BeforeMount = (monaco) => {
       'editorBracketMatch.border': '#00e59940',
     },
   });
+
+  monaco.languages.typescript.typescriptDefaults.setDiagnosticsOptions({
+    noSemanticValidation: false,
+    noSyntaxValidation: false,
+  });
+  monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions({
+    noSemanticValidation: false,
+    noSyntaxValidation: false,
+  });
+
+  const compilerOptions = {
+    allowJs: true,
+    allowNonTsExtensions: true,
+    checkJs: true,
+    noEmit: true,
+    target: monaco.languages.typescript.ScriptTarget.ES2020,
+    moduleResolution: monaco.languages.typescript.ModuleResolutionKind.NodeJs,
+  };
+  monaco.languages.typescript.typescriptDefaults.setCompilerOptions(compilerOptions);
+  monaco.languages.typescript.javascriptDefaults.setCompilerOptions(compilerOptions);
 };
 
 export const EDITOR_OPTIONS_BASE = {
@@ -179,9 +199,33 @@ export const EDITOR_OPTIONS_BASE = {
   smoothScrolling: true,
   bracketPairColorization: { enabled: true },
   guides: { indentation: true },
+  quickSuggestions: { other: true, comments: true, strings: true },
+  suggestOnTriggerCharacters: true,
+  acceptSuggestionOnEnter: 'on' as const,
+  tabCompletion: 'on' as const,
+  parameterHints: { enabled: true },
+  hover: { enabled: true },
+  wordBasedSuggestions: 'matchingDocuments' as const,
+  suggestSelection: 'first' as const,
   tabSize: 2,
   wordWrap: 'off' as const,
   automaticLayout: true,
+  // Force Monaco's legacy <textarea class="inputarea"> input path instead
+  // of the new EditContext API surface (<div class="native-edit-context">),
+  // which is enabled by default in Chrome/Edge since Monaco 0.52. The
+  // tldraw whiteboard panel — always mounted alongside the editor to
+  // preserve canvas state across tab switches — registers a *document*-
+  // level keydown listener (tldraw's OverflowingToolbar) that maps digit
+  // keys 1-0 to toolbar tool positions (8 → Insert Media). Its only "bail
+  // out while the user is typing" check is tldraw's
+  // activeElementShouldCaptureKeys, which recognizes only
+  // <input>/<textarea>/contenteditable. Monaco's EditContext <div> matches
+  // none of those, so without this option tldraw swallows every digit
+  // (preventing them from reaching the editor) and opens its file picker
+  // on 8. Falling back to the textarea path satisfies the
+  // tagName === "textarea" check, so tldraw correctly stays out of the way
+  // while the user types in the code editor.
+  editContext: false,
 };
 
 export const EDITOR_LOADING = (

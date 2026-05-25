@@ -8,6 +8,7 @@ import { CollaborativeEditor } from './collaborative-editor.js';
 
 const fakeMonacoState = vi.hoisted(() => ({
   editor: null as FakeEditor | null,
+  props: null as { options?: Record<string, unknown> } | null,
   monaco: {
     KeyMod: { CtrlCmd: 2048, Shift: 1024 },
     KeyCode: { Enter: 3 },
@@ -65,7 +66,9 @@ vi.mock('./lazy-monaco-editor.js', async () => {
   return {
     LazyMonacoEditor: (props: {
       onMount?: (editor: FakeEditor, monaco: typeof fakeMonacoState.monaco) => void;
+      options?: Record<string, unknown>;
     }) => {
+      fakeMonacoState.props = props;
       React.useEffect(() => {
         if (fakeMonacoState.editor) {
           props.onMount?.(fakeMonacoState.editor, fakeMonacoState.monaco);
@@ -79,6 +82,7 @@ vi.mock('./lazy-monaco-editor.js', async () => {
 
 afterEach(() => {
   fakeMonacoState.editor = null;
+  fakeMonacoState.props = null;
 });
 
 interface FakeMouseEvent {
@@ -329,6 +333,37 @@ describe('CollaborativeEditor keybinding modes', () => {
     await waitFor(() => {
       expect(screen.getByText('C-x')).toBeInTheDocument();
     });
+    awareness.destroy();
+    doc.destroy();
+  });
+});
+
+describe('CollaborativeEditor input surface', () => {
+  // Regression guard for the digit-key hijack: when Monaco's EditContext API
+  // is enabled (the Chrome default since 0.52), Monaco renders a
+  // <div class="native-edit-context"> as the input surface. Tldraw's
+  // OverflowingToolbar registers a *document*-level keydown that maps digits
+  // 1-0 to toolbar buttons, gated only by activeElementShouldCaptureKeys —
+  // which recognizes <input>/<textarea>/contenteditable but not the
+  // EditContext div. Without editContext: false, every digit typed in the
+  // code editor is swallowed by tldraw (and `8` opens the file picker).
+  it('GIVEN the editor mounts THEN it passes editContext: false to Monaco so tldraw cannot hijack digit keys', () => {
+    const doc = new Y.Doc();
+    const awareness = new Awareness(doc);
+    fakeMonacoState.editor = createFakeEditor();
+
+    render(
+      <CollaborativeEditor
+        doc={doc}
+        awareness={awareness}
+        language="python"
+        readOnly={false}
+        onRunCode={vi.fn()}
+        onSubmitCode={vi.fn()}
+      />,
+    );
+
+    expect(fakeMonacoState.props?.options?.editContext).toBe(false);
     awareness.destroy();
     doc.destroy();
   });
