@@ -103,7 +103,11 @@ export class E2bSandboxAdapter implements ISandboxProvider, OnModuleDestroy {
 
     const startTime = Date.now();
 
-    const sandbox = await Sandbox.create({ apiKey: this.apiKey });
+    const sandbox = await Sandbox.create({
+      apiKey: this.apiKey,
+      allowInternetAccess: false,
+      network: { denyOut: ['0.0.0.0/0', '::/0'] },
+    });
     this.activeSandboxes.add(sandbox);
 
     try {
@@ -257,7 +261,11 @@ export class E2bSandboxAdapter implements ISandboxProvider, OnModuleDestroy {
 
   async healthCheck(): Promise<boolean> {
     try {
-      const sandbox = await Sandbox.create({ apiKey: this.apiKey });
+      const sandbox = await Sandbox.create({
+        apiKey: this.apiKey,
+        allowInternetAccess: false,
+        network: { denyOut: ['0.0.0.0/0', '::/0'] },
+      });
       await sandbox.kill();
       return true;
     } catch {
