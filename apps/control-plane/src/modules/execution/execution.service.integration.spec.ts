@@ -9,6 +9,7 @@ import { DB_CLIENT } from '@/modules/db/db.module.js';
 import { InMemoryCacheService } from '@/test/in-memory-cache.service.js';
 import {
   createTestDb,
+  insertParticipant,
   insertProblem,
   insertRoom,
   insertTestCase,
@@ -375,5 +376,114 @@ describe('getStaticAnalysisResult', () => {
     await expect(
       service.getStaticAnalysisResult(ownerAnalysis[0]?.jobId ?? '', other.id),
     ).rejects.toThrow(NotFoundException);
+  });
+});
+
+describe('execution job access control', () => {
+  it('GIVEN run owner WHEN polling result and status THEN returns execution payload', async () => {
+    const owner = await insertUser(db);
+    const room = await insertRoom(db, owner.id);
+    const run = await service.runCode(
+      { language: 'python', code: 'print("owner")' },
+      { userId: owner.id, roomId: room.id, sessionId: null },
+    );
+
+    mockExecutionClient.getResult.mockResolvedValue({
+      status: 'completed',
+      stdout: 'owner\n',
+      stderr: '',
+      exitCode: 0,
+      durationMs: 12,
+      memoryUsageMb: 16,
+      timedOut: false,
+    });
+    mockExecutionClient.getJobStatus.mockResolvedValue('running');
+
+    await expect(service.getExecutionResult(run.jobId, owner.id)).resolves.toMatchObject({
+      status: 'completed',
+      stdout: 'owner\n',
+    });
+    await expect(service.getExecutionStatus(run.jobId, owner.id)).resolves.toEqual({
+      status: 'running',
+    });
+  });
+
+  it('GIVEN active room participant WHEN polling another user run THEN access is allowed', async () => {
+    const owner = await insertUser(db);
+    const participant = await insertUser(db);
+    const room = await insertRoom(db, owner.id);
+    await insertParticipant(db, room.id, participant.id, 'observer');
+
+    const run = await service.runCode(
+      { language: 'python', code: 'print("shared")' },
+      { userId: owner.id, roomId: room.id, sessionId: null },
+    );
+
+    mockExecutionClient.getResult.mockResolvedValue({
+      status: 'completed',
+      stdout: 'shared\n',
+      stderr: '',
+      exitCode: 0,
+      durationMs: 10,
+      memoryUsageMb: 12,
+      timedOut: false,
+    });
+
+    await expect(service.getExecutionResult(run.jobId, participant.id)).resolves.toMatchObject({
+      status: 'completed',
+      stdout: 'shared\n',
+    });
+  });
+
+  it('GIVEN non-participant user WHEN polling another user run THEN throws NotFoundException', async () => {
+    const owner = await insertUser(db);
+    const outsider = await insertUser(db);
+    const room = await insertRoom(db, owner.id);
+    const run = await service.runCode(
+      { language: 'python', code: 'print("private")' },
+      { userId: owner.id, roomId: room.id, sessionId: null },
+    );
+
+    await expect(service.getExecutionResult(run.jobId, outsider.id)).rejects.toThrow(
+      NotFoundException,
+    );
+    expect(mockExecutionClient.getResult).not.toHaveBeenCalled();
+    expect(mockExecutionClient.getJobStatus).not.toHaveBeenCalled();
+  });
+
+  it('GIVEN admin user WHEN polling another user run THEN access is allowed', async () => {
+    const owner = await insertUser(db);
+    const admin = await insertUser(db, { role: 'admin' });
+    const room = await insertRoom(db, owner.id);
+    const run = await service.runCode(
+      { language: 'python', code: 'print("admin-visible")' },
+      { userId: owner.id, roomId: room.id, sessionId: null },
+    );
+
+    mockExecutionClient.getResult.mockResolvedValue({
+      status: 'completed',
+      stdout: 'admin-visible\n',
+      stderr: '',
+      exitCode: 0,
+      durationMs: 11,
+      memoryUsageMb: 13,
+      timedOut: false,
+    });
+
+    await expect(service.getExecutionResult(run.jobId, admin.id)).resolves.toMatchObject({
+      status: 'completed',
+      stdout: 'admin-visible\n',
+    });
+  });
+
+  it('GIVEN unknown job id WHEN polling THEN throws NotFoundException with execution code', async () => {
+    const user = await insertUser(db);
+
+    await expect(service.getExecutionResult('missing-job', user.id)).rejects.toMatchObject(
+      new NotFoundException({
+        message: 'Execution job missing-job not found',
+        code: ERROR_CODES.EXECUTION_JOB_NOT_FOUND,
+      }),
+    );
   });
 });
