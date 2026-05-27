@@ -887,6 +887,45 @@ function buildSubmissionReviewKey(context: AiInterviewerContextResponse): string
   ].join(':');
 }
 
+function buildMissingSubmissionReviewResponse(useChinese: boolean): string {
+  return useChinese
+    ? '我看到你刚提交了代码，但还没有拿到完整结果。我们先基于当前代码继续讨论复杂度和边界情况。'
+    : "I see that you submitted, but I don't have a complete result yet. Let's continue from the current code and discuss complexity and edge cases.";
+}
+
+function buildIncompleteSubmissionReviewResponse(status: string, useChinese: boolean): string {
+  return useChinese
+    ? `我看到你的提交状态是 ${status}。等结果完成后，我会基于通过情况和当前代码继续追问。`
+    : `I see your submission is ${status}. Once the result completes, I will review the outcome and current code.`;
+}
+
+function buildPassingSubmissionReviewResponse(params: {
+  totalTestCases: number;
+  reviewedCode: string;
+  useChinese: boolean;
+}): string {
+  const { totalTestCases, reviewedCode, useChinese } = params;
+  if (hasRepeatedLoopStructure(reviewedCode)) {
+    return useChinese
+      ? `我看到这次提交通过了全部 ${totalTestCases} 个测试。你提交的代码是重复遍历型方案，正确性在这些用例上没有问题；请你简短说明它的时间复杂度，以及在题目约束下这个取舍是否可以接受，然后我们准备进入总结。`
+      : `I see your submitted code passed all ${totalTestCases} test cases. The code you submitted is a repeated-iteration solution, and it is correct for these tests; briefly state its time complexity and whether that tradeoff is acceptable for the constraints, then we can move toward wrapup.`;
+  }
+  return useChinese
+    ? `我看到这次提交通过了全部 ${totalTestCases} 个测试。请你简短说明最终复杂度和核心正确性理由，然后我们准备进入总结。`
+    : `I see your submission passed all ${totalTestCases} test cases. Briefly explain the final complexity and the core correctness argument, then we can move toward wrapup.`;
+}
+
+function buildPartialSubmissionReviewResponse(params: {
+  passedTestCases: number;
+  totalTestCases: number;
+  useChinese: boolean;
+}): string {
+  const { passedTestCases, totalTestCases, useChinese } = params;
+  return useChinese
+    ? `我看到这次提交通过了 ${passedTestCases}/${totalTestCases} 个测试。先不要换到全新的实现，回到当前代码：哪个假设最可能导致剩余用例失败？`
+    : `I see your submission passed ${passedTestCases}/${totalTestCases} test cases. Do not jump to a new implementation yet; in your current code, which assumption is most likely causing the remaining case to fail?`;
+}
+
 function buildSubmissionReviewResponse(params: {
   context: AiInterviewerContextResponse;
   interfaceLanguage?: string;
@@ -894,33 +933,25 @@ function buildSubmissionReviewResponse(params: {
   const latest = params.context.latestSubmission;
   const useChinese = isChineseLanguageHint(params.interfaceLanguage);
   if (!latest) {
-    return useChinese
-      ? '我看到你刚提交了代码，但还没有拿到完整结果。我们先基于当前代码继续讨论复杂度和边界情况。'
-      : "I see that you submitted, but I don't have a complete result yet. Let's continue from the current code and discuss complexity and edge cases.";
+    return buildMissingSubmissionReviewResponse(useChinese);
   }
-
   if (latest.status !== 'completed') {
-    return useChinese
-      ? `我看到你的提交状态是 ${latest.status}。等结果完成后，我会基于通过情况和当前代码继续追问。`
-      : `I see your submission is ${latest.status}. Once the result completes, I will review the outcome and current code.`;
+    return buildIncompleteSubmissionReviewResponse(latest.status, useChinese);
   }
 
   const passedAll = latest.totalTestCases > 0 && latest.passedTestCases === latest.totalTestCases;
-  const reviewedCode = latest.code || params.context.currentCode.code;
   if (passedAll) {
-    if (hasRepeatedLoopStructure(reviewedCode)) {
-      return useChinese
-        ? `我看到这次提交通过了全部 ${latest.totalTestCases} 个测试。你提交的代码是重复遍历型方案，正确性在这些用例上没有问题；请你简短说明它的时间复杂度，以及在题目约束下这个取舍是否可以接受，然后我们准备进入总结。`
-        : `I see your submitted code passed all ${latest.totalTestCases} test cases. The code you submitted is a repeated-iteration solution, and it is correct for these tests; briefly state its time complexity and whether that tradeoff is acceptable for the constraints, then we can move toward wrapup.`;
-    }
-    return useChinese
-      ? `我看到这次提交通过了全部 ${latest.totalTestCases} 个测试。请你简短说明最终复杂度和核心正确性理由，然后我们准备进入总结。`
-      : `I see your submission passed all ${latest.totalTestCases} test cases. Briefly explain the final complexity and the core correctness argument, then we can move toward wrapup.`;
+    return buildPassingSubmissionReviewResponse({
+      totalTestCases: latest.totalTestCases,
+      reviewedCode: latest.code || params.context.currentCode.code,
+      useChinese,
+    });
   }
-
-  return useChinese
-    ? `我看到这次提交通过了 ${latest.passedTestCases}/${latest.totalTestCases} 个测试。先不要换到全新的实现，回到当前代码：哪个假设最可能导致剩余用例失败？`
-    : `I see your submission passed ${latest.passedTestCases}/${latest.totalTestCases} test cases. Do not jump to a new implementation yet; in your current code, which assumption is most likely causing the remaining case to fail?`;
+  return buildPartialSubmissionReviewResponse({
+    passedTestCases: latest.passedTestCases,
+    totalTestCases: latest.totalTestCases,
+    useChinese,
+  });
 }
 
 function buildRepeatedNonPassingSubmissionBoundaryResponse(params: {
