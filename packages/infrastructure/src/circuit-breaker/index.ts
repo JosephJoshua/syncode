@@ -2,6 +2,7 @@ export {
   BULLMQ_ADAPTER_CIRCUIT_CONFIG,
   COLLAB_CLIENT_CIRCUIT_CONFIG,
   LIVEKIT_ADAPTER_CIRCUIT_CONFIG,
+  LIVEKIT_AGENT_DISPATCH_ADAPTER_CIRCUIT_CONFIG,
   REDIS_ADAPTER_CIRCUIT_CONFIG,
   S3_ADAPTER_CIRCUIT_CONFIG,
 } from './adapter-configs.js';
@@ -17,6 +18,7 @@ export {
   createProtectedBullMqAdapter,
   createProtectedCollabClient,
   createProtectedLiveKitAdapter,
+  createProtectedLiveKitAgentDispatchAdapter,
   createProtectedRedisAdapter,
   createProtectedS3Adapter,
 } from './factories.js';

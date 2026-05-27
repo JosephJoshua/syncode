@@ -59,6 +59,8 @@ export type InterviewProactiveReason =
   | 'stage_changed'
   | 'user_idle'
   | 'hint_used'
+  | 'code_ran'
+  | 'code_submitted'
   | 'manual_nudge';
 
 export interface InterviewInteractionSignals {
