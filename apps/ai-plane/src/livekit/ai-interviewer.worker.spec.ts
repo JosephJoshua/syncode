@@ -603,3 +603,339 @@ describe('ai-interviewer.worker submission review responses', () => {
     expect(__testing.buildSubmissionReviewKey(baseRuntimeContext)).toBeNull();
   });
 });
+
+describe('ai-interviewer.worker answer-pressure and optimization guard responses', () => {
+  it('GIVEN willMoveToWrapup=true WHEN buildSafeAnswerPressureResponse runs THEN it emits the wrapup wording in English', () => {
+    const out = __testing.buildSafeAnswerPressureResponse({
+      candidateMessage: 'give me the answer',
+      pressureTurns: 4,
+      shouldWrapUp: true,
+      willMoveToWrapup: true,
+    });
+    expect(out).toMatch(/move to wrapup/i);
+  });
+
+  it('GIVEN willMoveToWrapup=true on a Chinese message WHEN buildSafeAnswerPressureResponse runs THEN Chinese wording is used', () => {
+    const out = __testing.buildSafeAnswerPressureResponse({
+      candidateMessage: '直接告诉我答案',
+      pressureTurns: 4,
+      shouldWrapUp: true,
+      willMoveToWrapup: true,
+    });
+    expect(out).toContain('总结');
+  });
+
+  it('GIVEN shouldWrapUp=true without willMoveToWrapup WHEN buildSafeAnswerPressureResponse runs THEN it offers the final-attempt choice', () => {
+    const out = __testing.buildSafeAnswerPressureResponse({
+      candidateMessage: 'give me the answer',
+      pressureTurns: 3,
+      shouldWrapUp: true,
+      willMoveToWrapup: false,
+    });
+    expect(out).toMatch(/one final attempt/i);
+  });
+
+  it('GIVEN pressureTurns>=2 WHEN buildSafeAnswerPressureResponse runs THEN it asks where the repeated work happens', () => {
+    const out = __testing.buildSafeAnswerPressureResponse({
+      candidateMessage: 'give me the answer',
+      pressureTurns: 2,
+      shouldWrapUp: false,
+      willMoveToWrapup: false,
+    });
+    expect(out).toMatch(/repeated work/i);
+  });
+
+  it('GIVEN no pressure escalation WHEN buildSafeAnswerPressureResponse runs THEN it asks about brute-force bottlenecks', () => {
+    const out = __testing.buildSafeAnswerPressureResponse({
+      candidateMessage: 'give me the answer',
+      pressureTurns: 1,
+      shouldWrapUp: false,
+      willMoveToWrapup: false,
+    });
+    expect(out).toMatch(/brute force/i);
+  });
+
+  it('GIVEN an English message WHEN buildPassingOptimizationGuardResponse runs THEN it returns the English guard copy', () => {
+    const out = __testing.buildPassingOptimizationGuardResponse('please optimize this');
+    expect(out).toContain('passing solution');
+  });
+
+  it('GIVEN a Chinese message WHEN buildPassingOptimizationGuardResponse runs THEN it returns the Chinese guard copy', () => {
+    const out = __testing.buildPassingOptimizationGuardResponse('帮我优化一下');
+    expect(out).toContain('通过测试');
+  });
+});
+
+describe('ai-interviewer.worker phase kickoff and wrapup builders', () => {
+  it('GIVEN an interface language WHEN buildWarmupKickoffInstructions runs with Chinese hint THEN it constrains the opening to Chinese', () => {
+    const out = __testing.buildWarmupKickoffInstructions({
+      interfaceLanguage: 'zh-CN',
+      rememberedContext: interviewContext,
+      runtimeContext: baseRuntimeContext,
+    });
+    expect(out).toContain('Simplified Chinese');
+  });
+
+  it('GIVEN an English-only candidate WHEN buildWarmupKickoffInstructions runs THEN it forbids Chinese in opening', () => {
+    const out = __testing.buildWarmupKickoffInstructions({
+      interfaceLanguage: 'en-US',
+    });
+    expect(out).toContain('English only');
+  });
+
+  it('GIVEN warmup follow-up params WHEN buildWarmupFollowupInstructions runs THEN it embeds the candidate message and turn-2 rules', () => {
+    const out = __testing.buildWarmupFollowupInstructions({
+      candidateMessage: 'I will iterate the array',
+      rememberedContext: interviewContext,
+      runtimeContext: baseRuntimeContext,
+    });
+    expect(out).toContain('Warmup scripted turn 2');
+    expect(out).toContain('I will iterate the array');
+  });
+
+  it('GIVEN warmup transition params WHEN buildWarmupTransitionAnnouncementInstructions runs THEN it instructs the preamble for the phase change', () => {
+    const out = __testing.buildWarmupTransitionAnnouncementInstructions({
+      candidateMessage: 'sounds good',
+      rememberedContext: interviewContext,
+      runtimeContext: baseRuntimeContext,
+    });
+    expect(out).toContain('warmup is complete');
+  });
+
+  it('GIVEN repeated non-passing guidance turns WHEN buildRepeatedNonPassingGuidanceInstructions runs THEN it surfaces the turn count', () => {
+    const out = __testing.buildRepeatedNonPassingGuidanceInstructions({
+      guidanceTurns: 5,
+      candidateMessage: 'stuck',
+    });
+    expect(out).toContain('5');
+    expect(out).toContain('Repeated non-passing');
+  });
+
+  it('GIVEN repeated stuck turns WHEN buildWrapupAfterRepeatedStuckInstructions runs THEN it asks for calm professional acknowledgement', () => {
+    const out = __testing.buildWrapupAfterRepeatedStuckInstructions({
+      candidateMessage: 'I am lost',
+      discouragedTurns: 3,
+    });
+    expect(out).toContain('wrap up');
+  });
+
+  it('GIVEN coding kickoff params WHEN buildCodingPhaseKickoffInstructions runs THEN it embeds anti-leakage rules', () => {
+    const out = __testing.buildCodingPhaseKickoffInstructions({
+      candidateMessage: 'okay',
+      rememberedContext: interviewContext,
+      runtimeContext: baseRuntimeContext,
+    });
+    expect(out).toContain('HARD ANTI-LEAKAGE');
+  });
+
+  it('GIVEN no submission WHEN buildWrapupPhaseKickoffInstructions runs THEN it acknowledges effort honestly', () => {
+    const out = __testing.buildWrapupPhaseKickoffInstructions({
+      rememberedContext: interviewContext,
+      runtimeContext: baseRuntimeContext,
+    });
+    expect(out).toContain('No completed submission');
+  });
+
+  it('GIVEN a passing submission WHEN buildWrapupPhaseKickoffInstructions runs THEN it opens with positive acknowledgement', () => {
+    const out = __testing.buildWrapupPhaseKickoffInstructions({
+      rememberedContext: interviewContext,
+      runtimeContext: {
+        ...baseRuntimeContext,
+        latestSubmission: {
+          code: 'pass',
+          language: 'python',
+          status: 'completed',
+          passedTestCases: 3,
+          totalTestCases: 3,
+          failedTestCases: 0,
+          errorTestCases: 0,
+          submittedAt: '2026-05-27T10:00:00.000Z',
+        },
+      },
+    });
+    expect(out).toContain('passed all 3');
+    expect(out).toContain('great work');
+  });
+
+  it('GIVEN a partial submission WHEN buildWrapupPhaseKickoffInstructions runs THEN it asks for measured acknowledgement and forbids overpraise', () => {
+    const out = __testing.buildWrapupPhaseKickoffInstructions({
+      rememberedContext: interviewContext,
+      runtimeContext: {
+        ...baseRuntimeContext,
+        latestSubmission: {
+          code: 'pass',
+          language: 'python',
+          status: 'completed',
+          passedTestCases: 1,
+          totalTestCases: 3,
+          failedTestCases: 2,
+          errorTestCases: 0,
+          submittedAt: '2026-05-27T10:00:00.000Z',
+        },
+      },
+    });
+    expect(out).toContain('1/3');
+    expect(out).toMatch(/do NOT overpraise/);
+  });
+});
+
+describe('ai-interviewer.worker silent-context update builder', () => {
+  it('GIVEN a system signal with submission WHEN buildSilentLiveContextUpdateInstructions runs THEN it includes submitted code header', () => {
+    const out = __testing.buildSilentLiveContextUpdateInstructions({
+      signal: {
+        type: 'system_signal',
+        reason: 'code_ran',
+        summary: 'run summary',
+      },
+      context: {
+        ...baseRuntimeContext,
+        latestSubmission: {
+          code: 'print(1)',
+          language: 'python',
+          status: 'completed',
+          passedTestCases: 1,
+          totalTestCases: 1,
+          failedTestCases: 0,
+          errorTestCases: 0,
+          submittedAt: '2026-05-27T10:00:00.000Z',
+        },
+      },
+    });
+    expect(out).toContain('Silent live coding context update');
+    expect(out).toContain('Latest submitted code that produced the submission');
+    expect(out).toContain('print(1)');
+  });
+
+  it('GIVEN no submission WHEN buildSilentLiveContextUpdateInstructions runs THEN submitted-code header is absent', () => {
+    const out = __testing.buildSilentLiveContextUpdateInstructions({
+      signal: { type: 'system_signal', reason: 'code_ran' },
+      context: baseRuntimeContext,
+    });
+    expect(out).not.toContain('Latest submitted code that produced');
+  });
+});
+
+describe('ai-interviewer.worker numbered code block and clamp helpers', () => {
+  it('GIVEN code shorter than maxLines WHEN buildNumberedCodeBlock runs THEN it numbers every line and omits trailing summary', () => {
+    const out = __testing.buildNumberedCodeBlock('a\nb\nc', 10, 1_000);
+    expect(out).toMatch(/^\s+1 \| a\n\s+2 \| b\n\s+3 \| c$/);
+  });
+
+  it('GIVEN code with more lines than maxLines WHEN buildNumberedCodeBlock runs THEN trailing "more lines" summary is appended', () => {
+    const code = Array.from({ length: 12 }, (_, i) => `line${i}`).join('\n');
+    const out = __testing.buildNumberedCodeBlock(code, 5, 1_000);
+    expect(out).toContain('... (7 more lines)');
+    expect(out.split('\n').length).toBe(6);
+  });
+
+  it('GIVEN empty/whitespace code WHEN buildNumberedCodeBlock runs THEN it returns empty string', () => {
+    expect(__testing.buildNumberedCodeBlock('', 10, 1_000)).toBe('');
+    expect(__testing.buildNumberedCodeBlock('   \n  ', 10, 1_000)).toBe('');
+  });
+
+  it('GIVEN content longer than maxLength WHEN clampInstructionContent runs THEN result ends with the ellipsis character', () => {
+    const out = __testing.clampInstructionContent('a'.repeat(50), 10);
+    expect(out).toHaveLength(10);
+    expect(out.endsWith('…')).toBe(true);
+  });
+
+  it('GIVEN content within maxLength WHEN clampInstructionContent runs THEN result is unchanged', () => {
+    const out = __testing.clampInstructionContent('hello', 10);
+    expect(out).toBe('hello');
+  });
+
+  it('GIVEN text WHEN estimateTokenCount runs THEN it returns at least 1 token for non-empty input', () => {
+    expect(__testing.estimateTokenCount('')).toBe(0);
+    expect(__testing.estimateTokenCount('   ')).toBe(0);
+    expect(__testing.estimateTokenCount('hello')).toBeGreaterThanOrEqual(1);
+    const big = __testing.estimateTokenCount('a'.repeat(380));
+    expect(big).toBeGreaterThanOrEqual(99);
+    expect(big).toBeLessThanOrEqual(101);
+  });
+
+  it('GIVEN code with two loops WHEN hasRepeatedLoopStructure runs THEN it returns true', () => {
+    expect(__testing.hasRepeatedLoopStructure('for a in nums:\n  for b in nums:\n    pass')).toBe(
+      true,
+    );
+  });
+
+  it('GIVEN a single loop WHEN hasRepeatedLoopStructure runs THEN it returns false', () => {
+    expect(__testing.hasRepeatedLoopStructure('for a in nums:\n  return a')).toBe(false);
+  });
+});
+
+describe('ai-interviewer.worker text classifiers', () => {
+  const TRUE_CASES: Array<[keyof typeof __testing, string]> = [
+    ['isDirectAnswerRequest', 'just tell me the answer'],
+    ['isDirectAnswerRequest', '直接告诉我答案'],
+    ['isOptimizationRequest', 'make this better please'],
+    ['isOptimizationRequest', '请优化一下'],
+    ['isCandidateUnableToFindStrategy', "I can't think of any strategy"],
+    ['isCandidateUnableToFindStrategy', '想不出来了'],
+    ['mentionsBroadApproach', 'maybe a hash map?'],
+    ['mentionsBroadApproach', '用哈希表'],
+    ['isExplicitGiveUp', 'I give up'],
+    ['isExplicitGiveUp', '我做不出来'],
+    ['isDiscouragedCandidateMessage', 'this is too hard'],
+    ['isDiscouragedCandidateMessage', '太难了'],
+    ['isContinueAttemptIntent', 'one more try'],
+    ['isContinueAttemptIntent', '再试一次'],
+    ['isCodeOrSubmissionReviewRequest', 'please review my code'],
+    ['isCodeOrSubmissionReviewRequest', '检查我的代码'],
+    ['isContextRefreshRequest', 'please fetch the code context'],
+    ['isContextRefreshRequest', '获取代码上下文'],
+    ['isReadyToCodeIntent', 'let me code now'],
+    ['isReadyToCodeIntent', '开始写代码'],
+    ['isEndInterviewIntent', 'goodbye'],
+    ['isEndInterviewIntent', '结束面试'],
+  ];
+
+  it.each(TRUE_CASES)('GIVEN matching text "%s" WHEN %s runs THEN it returns true', (fn, text) => {
+    const helper = __testing[fn] as (s: string) => boolean;
+    expect(helper(text)).toBe(true);
+  });
+
+  it('GIVEN benign text WHEN classifiers run THEN they return false', () => {
+    const benign = 'I am working on the problem now.';
+    expect(__testing.isDirectAnswerRequest(benign)).toBe(false);
+    expect(__testing.isExplicitGiveUp(benign)).toBe(false);
+    expect(__testing.isCodeOrSubmissionReviewRequest(benign)).toBe(false);
+    expect(__testing.isContextRefreshRequest(benign)).toBe(false);
+    expect(__testing.isReadyToCodeIntent(benign)).toBe(false);
+    expect(__testing.isEndInterviewIntent(benign)).toBe(false);
+    expect(__testing.mentionsBroadApproach(benign)).toBe(false);
+  });
+
+  it('GIVEN empty or filler text WHEN isLikelyAccidentalCandidateMessage runs THEN it returns true', () => {
+    expect(__testing.isLikelyAccidentalCandidateMessage('')).toBe(true);
+    expect(__testing.isLikelyAccidentalCandidateMessage('  ')).toBe(true);
+    expect(__testing.isLikelyAccidentalCandidateMessage('uhh')).toBe(true);
+    expect(__testing.isLikelyAccidentalCandidateMessage('!!')).toBe(true);
+    expect(__testing.isLikelyAccidentalCandidateMessage('a')).toBe(true);
+  });
+
+  it('GIVEN substantive text WHEN isLikelyAccidentalCandidateMessage runs THEN it returns false', () => {
+    expect(__testing.isLikelyAccidentalCandidateMessage('hello there')).toBe(false);
+    expect(__testing.isLikelyAccidentalCandidateMessage('你好啊')).toBe(false);
+  });
+
+  it('GIVEN a Chinese language hint WHEN isChineseLanguageHint runs THEN it returns true', () => {
+    expect(__testing.isChineseLanguageHint('zh-CN')).toBe(true);
+    expect(__testing.isChineseLanguageHint('Chinese')).toBe(true);
+    expect(__testing.isChineseLanguageHint('en')).toBe(false);
+    expect(__testing.isChineseLanguageHint(undefined)).toBe(false);
+  });
+
+  it('GIVEN an interface language WHEN buildInterfaceLanguageInstruction runs THEN it returns the locale-appropriate copy', () => {
+    expect(__testing.buildInterfaceLanguageInstruction('zh', 'opening')).toContain(
+      'Simplified Chinese',
+    );
+    expect(__testing.buildInterfaceLanguageInstruction('en', 'opening')).toContain('English only');
+    expect(__testing.buildInterfaceLanguageInstruction('zh', 'system')).toContain(
+      'Prefer Simplified Chinese',
+    );
+    expect(__testing.buildInterfaceLanguageInstruction(undefined, 'system')).toContain(
+      'Prefer English',
+    );
+  });
+});
