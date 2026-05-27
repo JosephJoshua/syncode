@@ -1288,3 +1288,433 @@ function parseSubmissionSignalSummary(
       summary,
     );
   if (!match) {
+    return null;
+  }
+  const passedTestCases = Number(match[1]);
+  const totalTestCases = Number(match[2]);
+  if (
+    !Number.isFinite(passedTestCases) ||
+    !Number.isFinite(totalTestCases) ||
+    totalTestCases <= 0 ||
+    passedTestCases < 0
+  ) {
+    return null;
+  }
+  const submittedAt = normalizeSubmissionSignalTimestamp(match[3]);
+  return {
+    passedTestCases,
+    totalTestCases,
+    ...(submittedAt ? { submittedAt } : {}),
+  };
+}
+
+function normalizeSubmissionSignalTimestamp(timestamp: string | undefined): string | undefined {
+  const normalized = timestamp?.trim().replace(/[),.;]+$/u, '');
+  if (!normalized) {
+    return undefined;
+  }
+  return Number.isFinite(Date.parse(normalized)) ? normalized : undefined;
+}
+
+function resolveInlineCommentLine(
+  requestedLine: number,
+  lineText: string | undefined,
+  code: string,
+): number {
+  const lines = code.split(/\r?\n/);
+  if (lines.length === 0) {
+    return 1;
+  }
+
+  const bounded = Math.min(Math.max(1, Math.floor(requestedLine)), lines.length);
+  const needle = lineText?.trim();
+  if (!needle) {
+    return bounded;
+  }
+
+  const normalizedNeedle = needle.replace(/\s+/g, ' ').trim();
+  const current = lines[bounded - 1]?.replace(/\s+/g, ' ').trim() ?? '';
+  if (current.includes(normalizedNeedle) || normalizedNeedle.includes(current)) {
+    return bounded;
+  }
+
+  const directMatch = lines.findIndex((line) => {
+    const normalized = line.replace(/\s+/g, ' ').trim();
+    return normalized.includes(normalizedNeedle) || normalizedNeedle.includes(normalized);
+  });
+  if (directMatch >= 0) {
+    return directMatch + 1;
+  }
+
+  return bounded;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function buildReasonSpecificInstructions(
+  reason: AiInterviewerSignalReason,
+  summary: string | undefined,
+): string {
+  switch (reason) {
+    case 'session_joined':
+      return [
+        'Kick off naturally: greet briefly, introduce the problem context, then ask one opening interview question.',
+        'Do not ask company HR-style questions unless the candidate explicitly asks for that format.',
+      ].join('\n');
+    case 'stage_changed':
+      return [
+        'Adjust tone for the new stage and keep interview progression coherent.',
+        'Do not repeat the previous phase. Make the new phase expectations clear once.',
+        'If stage changed to coding, announce that the candidate can start coding now and keep strict interviewer behavior.',
+      ].join('\n');
+    case 'user_idle':
+      return [
+        'User appears quiet/idle.',
+        'Only speak if a short nudge adds clear value. Otherwise stay silent.',
+        'Never interrupt focused coding just to fill silence.',
+      ].join('\n');
+    case 'hint_used':
+      return 'A hint was used. Prefer one concise check-in question instead of a long explanation.';
+    case 'code_ran': {
+      const run = parseRunSummary(summary);
+      if (run && run.passed === run.total) {
+        return 'Visible run passed fully. Usually remain quiet unless a brief optimization prompt is warranted.';
+      }
+      return 'A run finished with non-passing tests. Ask one targeted debugging question, not a full solution.';
+    }
+    case 'code_submitted':
+      return [
+        'Submission finished. This is a strong cue to speak as the interviewer.',
+        'Start by saying you see that the candidate submitted a run.',
+        'Fetch fresh context if needed and evaluate the actual outcome.',
+        'If the solution is passing or the review is complete, summarize the assessment and steer toward wrapup instead of asking more coding questions.',
+        'If it is failing, ask at most one targeted debugging question or give one concise next step without giving away the full fix.',
+        'The debugging question must not name a new exact data structure, loop shape, or implementation condition for the candidate.',
+      ].join('\n');
+    case 'manual_nudge':
+      return 'User explicitly asked for interviewer input. Respond clearly and directly.';
+    default:
+      return 'Respond naturally and stay concise.';
+  }
+}
+
+function parseRunSummary(summary: string | undefined): { passed: number; total: number } | null {
+  if (!summary) {
+    return null;
+  }
+  const match = NOISE_RUN_SUMMARY_PATTERN.exec(summary);
+  if (!match) {
+    return null;
+  }
+  const passed = Number(match[1]);
+  const total = Number(match[2]);
+  if (!Number.isFinite(passed) || !Number.isFinite(total) || total <= 0) {
+    return null;
+  }
+  return { passed, total };
+}
+
+function isNonPassingSubmission(context: AiInterviewerContextResponse | undefined): boolean {
+  const latest = context?.latestSubmission;
+  if (!latest || latest.status !== 'completed' || latest.totalTestCases <= 0) {
+    return false;
+  }
+  return latest.passedTestCases < latest.totalTestCases;
+}
+
+function isPassingSubmission(context: AiInterviewerContextResponse | undefined): boolean {
+  const latest = context?.latestSubmission;
+  if (!latest || latest.status !== 'completed' || latest.totalTestCases <= 0) {
+    return false;
+  }
+  return latest.passedTestCases === latest.totalTestCases;
+}
+
+function matchesExpectedSubmission(
+  latest: AiInterviewerContextResponse['latestSubmission'],
+  expected: ParsedSubmissionSignalSummary,
+): boolean {
+  if (
+    !latest ||
+    latest.totalTestCases !== expected.totalTestCases ||
+    latest.passedTestCases !== expected.passedTestCases
+  ) {
+    return false;
+  }
+
+  if (!expected.submittedAt) {
+    return true;
+  }
+
+  const latestTime = Date.parse(latest.submittedAt);
+  const expectedTime = Date.parse(expected.submittedAt);
+  if (!Number.isFinite(latestTime) || !Number.isFinite(expectedTime)) {
+    return false;
+  }
+  return latestTime >= expectedTime;
+}
+
+function toRealtimeInterviewContext(
+  roomContext: AiInterviewerContextResponse,
+): AiInterviewerContext | undefined {
+  if (!roomContext.problem) {
+    return undefined;
+  }
+  return {
+    problemTitle: roomContext.problem.title,
+    difficulty: roomContext.problem.difficulty ?? undefined,
+    problemDescription: roomContext.problem.description,
+    language: roomContext.language,
+    starterCode:
+      roomContext.problem.starterCode ??
+      'No official starter code is provided for this language in this problem.',
+  };
+}
+
+function shouldRespondToSystemSignal(params: {
+  signal: Extract<AiInterviewerSignalPayload, { type: 'system_signal' }>;
+  now: number;
+  signalLastSentAt: Map<AiInterviewerSignalReason, number>;
+  lastSystemReplyAt: number;
+  hasInterviewStarted: boolean;
+  lastUserTurnAt: number;
+  lastAssistantTurnAt: number;
+}): boolean {
+  const {
+    signal,
+    now,
+    signalLastSentAt,
+    lastSystemReplyAt,
+    hasInterviewStarted,
+    lastUserTurnAt,
+    lastAssistantTurnAt,
+  } = params;
+
+  if (signal.reason === 'manual_nudge') {
+    return true;
+  }
+
+  if (signal.reason === 'session_joined') {
+    return !hasInterviewStarted;
+  }
+
+  const previousForReason = signalLastSentAt.get(signal.reason) ?? 0;
+  const minInterval = SIGNAL_REASON_MIN_INTERVAL_MS[signal.reason];
+  if (now - previousForReason < minInterval) {
+    return false;
+  }
+  if (
+    signal.reason !== 'code_submitted' &&
+    now - lastSystemReplyAt < SYSTEM_SIGNAL_GLOBAL_MIN_INTERVAL_MS
+  ) {
+    return false;
+  }
+
+  switch (signal.reason) {
+    case 'user_idle':
+      if (lastUserTurnAt <= 0) {
+        return false;
+      }
+      if (now - lastUserTurnAt < 3 * 60_000) {
+        return false;
+      }
+      return now - lastAssistantTurnAt >= 4 * 60_000;
+    case 'code_ran': {
+      if (now - lastAssistantTurnAt < 2 * 60_000) {
+        return false;
+      }
+      const run = parseRunSummary(signal.summary);
+      if (!run) {
+        return true;
+      }
+      return run.passed < run.total;
+    }
+    case 'hint_used':
+      return now - lastAssistantTurnAt >= 90_000;
+    case 'stage_changed':
+      return now - lastAssistantTurnAt >= 45_000;
+    case 'code_submitted':
+      return now - lastAssistantTurnAt >= 5_000;
+    default:
+      return true;
+  }
+}
+
+const agent = defineAgent({
+  entry: async (ctx: JobContext) => {
+    const metadata = parseDispatchMetadata(ctx.job.metadata);
+    const roomId = metadata.roomId ?? ctx.room.name ?? ctx.job.room?.name;
+    if (!roomId) {
+      throw new Error('Missing room id in AI interviewer dispatch metadata and context');
+    }
+
+    const participantUserId = metadata.participantUserId;
+    if (!participantUserId) {
+      console.warn(
+        `[ai-interviewer-worker] missing participantUserId in dispatch metadata for room ${roomId}; transcript persistence is disabled`,
+      );
+    }
+
+    const session = createInterviewSession();
+    const systemInstructions = createInterviewerInstructions();
+    const seenTurnIds = new Set<string>();
+    const signalLastSentAt = new Map<AiInterviewerSignalReason, number>();
+    const pendingInlineComments: Array<{ line: number; comment: string }> = [];
+    let lastUserSpeakerId: string | null = participantUserId ?? null;
+    let latestInterviewContext: AiInterviewerContext | undefined;
+    let latestRuntimeRoomContext: AiInterviewerContextResponse | undefined;
+    let preferredInterfaceLanguage: string | undefined;
+    let warmupFlowState: WarmupFlowState = 'not_started';
+    let warmupAssistantTurnCount = 0;
+    let warmupKickoffInFlight = false;
+    let warmupAwaitingCandidateAnswerForTransition = false;
+    let warmupAutoTransitionInFlight = false;
+    let warmupTransitionPendingAfterAssistant = false;
+    let warmupTransitionReason = 'Warmup question cap reached';
+    let queuedPhaseTransitionAfterAssistant: {
+      targetStatus: RoomPhaseStatus;
+      reason?: string;
+    } | null = null;
+    let queuedPhaseTransitionInFlight = false;
+    let codingKickoffAnnounced = false;
+    let wrapupKickoffAnnounced = false;
+    let hasInterviewStarted = false;
+    let lastUserTurnAt = 0;
+    let lastAssistantTurnAt = 0;
+    let lastSystemReplyAt = 0;
+    let nonPassingGuidanceTurnCount = 0;
+    let discouragedTurnCount = 0;
+    let lastNonPassingSubmissionKey: string | null = null;
+    let lastReviewedSubmissionKey: string | null = null;
+    let suppressRealtimeAssistantTranscriptsUntil = 0;
+    let currentAgentState: voice.AgentState = 'initializing';
+    let agentStoppedSpeakingAt = 0;
+    let askedContinueAfterRepeatedFailure = false;
+    let answerPressureTurnCount = 0;
+    let answerPressureWrapupPrompted = false;
+    let approxPromptInputTokensTotal = 0;
+    let approxOutputTokensTotal = 0;
+    let approxConversationTokensTotal = 0;
+    let lastContextBudgetLogAt = 0;
+    let promptCachePrefix = buildPromptCachePrefix({
+      systemInstructions,
+      context: latestInterviewContext,
+    });
+    let promptCacheSignature = 'no-context';
+
+    const computePromptCacheSignature = (context?: AiInterviewerContext): string => {
+      if (!context) {
+        return 'no-context';
+      }
+      return createHash('sha256')
+        .update(
+          [
+            context.problemTitle,
+            context.difficulty ?? '',
+            context.language,
+            context.problemDescription,
+            context.starterCode,
+          ].join('||'),
+        )
+        .digest('hex');
+    };
+
+    const refreshPromptCachePrefix = () => {
+      const nextSignature = computePromptCacheSignature(latestInterviewContext);
+      if (nextSignature === promptCacheSignature && promptCachePrefix.length > 0) {
+        return;
+      }
+      promptCacheSignature = nextSignature;
+      promptCachePrefix = buildPromptCachePrefix({
+        systemInstructions,
+        context: latestInterviewContext,
+      });
+      console.debug(
+        `[ai-interviewer-worker] prompt-cache-prefix updated room=${roomId} signature=${promptCacheSignature} approxTokens=${estimateTokenCount(promptCachePrefix)}`,
+      );
+    };
+
+    const maybeLogContextBudgetRisk = () => {
+      const now = Date.now();
+      if (now - lastContextBudgetLogAt < 10_000) {
+        return;
+      }
+      if (approxConversationTokensTotal >= REALTIME_CONTEXT_CRITICAL_TOKENS) {
+        lastContextBudgetLogAt = now;
+        console.warn(
+          `[ai-interviewer-worker] room ${roomId} realtime context risk HIGH: conversationTokens≈${approxConversationTokensTotal}, promptInputTokens≈${approxPromptInputTokensTotal}, outputTokens≈${approxOutputTokensTotal}`,
+        );
+        return;
+      }
+      if (approxConversationTokensTotal >= REALTIME_CONTEXT_WARN_TOKENS) {
+        lastContextBudgetLogAt = now;
+        console.warn(
+          `[ai-interviewer-worker] room ${roomId} realtime context risk MEDIUM: conversationTokens≈${approxConversationTokensTotal}, promptInputTokens≈${approxPromptInputTokensTotal}, outputTokens≈${approxOutputTokensTotal}`,
+        );
+      }
+    };
+
+    const generateReplyWithTelemetry = async (params: {
+      instructions: string;
+      reason: string;
+      inputModality?: 'text' | 'audio';
+      userInput?: string;
+      toolChoice?: llm.ToolChoice;
+    }) => {
+      const answerLeakGuardInstructions = [
+        'Global answer-leak guard for this turn:',
+        'During warmup/coding, do not introduce a new concrete algorithm, data structure, storage plan, loop condition, or exact implementation mechanic that the candidate has not already stated or written.',
+        'If the candidate asks for the missing strategy, asks what to use, or says they cannot think of it, ask about constraints, repeated work, or complexity instead of naming the answer.',
+        'If the candidate repeatedly cannot proceed, steer to wrapup rather than revealing the implementation.',
+      ].join('\n');
+      const contextPressureInstructions =
+        approxConversationTokensTotal >= REALTIME_CONTEXT_WARN_TOKENS
+          ? [
+              'Context budget guard:',
+              'Keep response concise (prefer <= 2 short sentences unless user explicitly asks for detail).',
+              'If live code/submission details are needed, call get_room_context instead of relying on older memory.',
+            ].join('\n')
+          : '';
+      const finalInstructions = [
+        params.instructions,
+        answerLeakGuardInstructions,
+        contextPressureInstructions,
+      ]
+        .filter((part) => part.length > 0)
+        .join('\n');
+      const promptPayload = `${promptCachePrefix}\n\n${finalInstructions}`;
+      const inputTokens = estimateTokenCount(promptPayload);
+      approxPromptInputTokensTotal += inputTokens;
+      console.debug(
+        `[ai-interviewer-worker] reply-prompt room=${roomId} reason=${params.reason} inputTokens≈${inputTokens} promptInputTotal≈${approxPromptInputTokensTotal} conversationTokens≈${approxConversationTokensTotal}`,
+      );
+      await session.generateReply({
+        userInput: params.userInput,
+        instructions: promptPayload,
+        toolChoice: params.toolChoice,
+        inputModality: params.inputModality ?? 'text',
+      });
+      maybeLogContextBudgetRisk();
+    };
+
+    const suppressRealtimeAssistantTranscripts = (durationMs: number) => {
+      suppressRealtimeAssistantTranscriptsUntil = Math.max(
+        suppressRealtimeAssistantTranscriptsUntil,
+        Date.now() + durationMs,
+      );
+    };
+
+    const interruptRealtimeSpeech = async (reason: string) => {
+      try {
+        await session.interrupt({ force: true }).await;
+      } catch (error) {
+        console.warn(
+          `[ai-interviewer-worker] failed to interrupt realtime speech for room ${roomId} (${reason}): ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+    };
+
