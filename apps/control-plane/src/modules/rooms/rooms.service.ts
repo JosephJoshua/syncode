@@ -1649,65 +1649,87 @@ export class RoomsService implements OnModuleInit {
       return 0;
     }
 
+    const knownParticipantIdSet = await this.loadKnownRoomParticipantIds(roomId, participantIds);
+
+    let persisted = 0;
+    for (const turn of payload.turns) {
+      const inserted = await this.tryPersistAiInterviewTranscriptTurn({
+        roomId,
+        sessionId,
+        turn,
+        knownParticipantIdSet,
+      });
+      if (inserted) {
+        persisted += 1;
+      }
+    }
+
+    return persisted;
+  }
+
+  private async loadKnownRoomParticipantIds(
+    roomId: string,
+    participantIds: string[],
+  ): Promise<Set<string>> {
     const knownParticipants = await this.db
       .select({ userId: roomParticipants.userId })
       .from(roomParticipants)
       .where(
         and(eq(roomParticipants.roomId, roomId), inArray(roomParticipants.userId, participantIds)),
       );
-    const knownParticipantIdSet = new Set(
-      knownParticipants.map((participant) => participant.userId),
-    );
+    return new Set(knownParticipants.map((participant) => participant.userId));
+  }
 
-    let persisted = 0;
-    for (const turn of payload.turns) {
-      const content = turn.content.trim();
-      if (content.length === 0) {
-        continue;
-      }
-      if (!knownParticipantIdSet.has(turn.participantId)) {
-        continue;
-      }
+  // Attempts to persist a single transcript turn. Returns true when a new row
+  // was inserted, false when the turn was skipped (empty/unknown participant/
+  // duplicate by dedupe key) or the insert failed. On insert failure the
+  // dedupe key is released so the worker's retry is not silently dropped.
+  private async tryPersistAiInterviewTranscriptTurn(params: {
+    roomId: string;
+    sessionId: string;
+    turn: AiInterviewTranscriptPayload['turns'][number];
+    knownParticipantIdSet: Set<string>;
+  }): Promise<boolean> {
+    const { roomId, sessionId, turn, knownParticipantIdSet } = params;
+    const content = turn.content.trim();
+    if (content.length === 0 || !knownParticipantIdSet.has(turn.participantId)) {
+      return false;
+    }
 
-      const dedupeKey = turn.turnId
-        ? `${RoomsService.AI_INTERVIEW_TRANSCRIPT_TURN_DEDUPE_PREFIX}${turn.turnId}`
-        : null;
-      if (dedupeKey) {
-        const firstWrite = await this.cacheService.setIfNotExists(
-          dedupeKey,
-          true,
-          RoomsService.AI_INTERVIEW_TRANSCRIPT_TURN_DEDUPE_TTL_SECONDS,
-        );
-        if (!firstWrite) {
-          continue;
-        }
-      }
-
-      try {
-        await this.db.insert(aiMessages).values({
-          roomId,
-          sessionId,
-          userId: turn.participantId,
-          role: turn.role,
-          content,
-          audioKey: turn.audioKey,
-          createdAt: turn.timestamp ? new Date(turn.timestamp) : new Date(),
-        });
-        persisted += 1;
-      } catch (error) {
-        // Insert failed (e.g. transient deadlock). Release the dedupe key so the
-        // worker's retry of the same turnId is not silently dropped for 12h.
-        if (dedupeKey) {
-          await this.cacheService.del(dedupeKey).catch(() => undefined);
-        }
-        this.logger.warn(
-          `Unable to persist AI interview transcript turn for room ${roomId}`,
-          error,
-        );
+    const dedupeKey = turn.turnId
+      ? `${RoomsService.AI_INTERVIEW_TRANSCRIPT_TURN_DEDUPE_PREFIX}${turn.turnId}`
+      : null;
+    if (dedupeKey) {
+      const firstWrite = await this.cacheService.setIfNotExists(
+        dedupeKey,
+        true,
+        RoomsService.AI_INTERVIEW_TRANSCRIPT_TURN_DEDUPE_TTL_SECONDS,
+      );
+      if (!firstWrite) {
+        return false;
       }
     }
 
-    return persisted;
+    try {
+      await this.db.insert(aiMessages).values({
+        roomId,
+        sessionId,
+        userId: turn.participantId,
+        role: turn.role,
+        content,
+        audioKey: turn.audioKey,
+        createdAt: turn.timestamp ? new Date(turn.timestamp) : new Date(),
+      });
+      return true;
+    } catch (error) {
+      // Insert failed (e.g. transient deadlock). Release the dedupe key so the
+      // worker's retry of the same turnId is not silently dropped for 12h.
+      if (dedupeKey) {
+        await this.cacheService.del(dedupeKey).catch(() => undefined);
+      }
+      this.logger.warn(`Unable to persist AI interview transcript turn for room ${roomId}`, error);
+      return false;
+    }
   }
 
   async getAiInterviewerContext(
