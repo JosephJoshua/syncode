@@ -4,6 +4,7 @@ import { Bot, Loader2, Mic, MicOff, Send } from 'lucide-react';
 import type { KeyboardEvent, ReactNode } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { InlineCommentMarkdown } from './inline-comment-markdown.js';
 import type { Participant } from './room-participant-card.js';
 
 export interface AiInterviewMessage {
@@ -18,7 +19,9 @@ export interface AiInterviewMessage {
   audioUrl?: string;
 }
 
-export type VoiceCaptureState = 'idle' | 'requesting' | 'listening' | 'transcribing';
+export type AiInterviewPanelMode = 'legacy' | 'realtime';
+
+export type VoiceCaptureState = 'idle' | 'requesting' | 'listening' | 'transcribing' | 'responding';
 export type VoicePermissionResult = 'granted' | 'denied' | 'no_device' | 'unavailable';
 
 interface VoiceTranscriptionRequest {
@@ -38,7 +41,16 @@ const VOICE_BASE64_ENCODE_TIMEOUT_MS = 4_000;
 const VOICE_MAX_RECORDING_MS = 45_000;
 const VOICE_MAX_BLOB_BYTES = 2_800_000;
 const VOICE_TARGET_SAMPLE_RATE = 16_000;
+const VOICE_AUTO_RESTART_DELAY_MS = 220;
+const VOICE_INTERRUPTION_THRESHOLD = 0.06;
+const VOICE_INTERRUPTION_HOLD_MS = 260;
 const VOICE_WAVE_OFFSETS = Array.from({ length: 21 }, (_, position) => position - 10);
+const VOICE_SPEECH_SYNTHESIS_CHUNK_LENGTH = 220;
+
+interface LatestAssistantMessage {
+  stableId: string;
+  message: AiInterviewMessage;
+}
 
 export function resolveVoiceStatusText(
   t: (key: string) => string,
@@ -49,6 +61,8 @@ export function resolveVoiceStatusText(
       return t('workspace.aiInterviewVoiceRequesting');
     case 'transcribing':
       return t('workspace.aiInterviewVoiceTranscribing');
+    case 'responding':
+      return t('workspace.aiInterviewVoiceResponding');
     case 'listening':
       return t('workspace.aiInterviewVoiceListening');
     default:
@@ -56,17 +70,42 @@ export function resolveVoiceStatusText(
   }
 }
 
+function resolveRealtimeAgentStatusText(
+  t: (key: string) => string,
+  state: 'initializing' | 'idle' | 'listening' | 'thinking' | 'speaking',
+  userState: 'speaking' | 'listening' | 'away',
+): string {
+  if (userState === 'away') {
+    return t('workspace.aiInterviewVoiceListening');
+  }
+  if (userState === 'speaking') {
+    return t('workspace.aiInterviewVoiceListening');
+  }
+  if (state === 'speaking') {
+    return t('workspace.aiInterviewVoiceResponding');
+  }
+  if (state === 'thinking' || state === 'initializing') {
+    return t('workspace.aiInterviewBusy');
+  }
+  return t('workspace.aiInterviewVoiceListening');
+}
+
 function renderVoiceInputIcon({
   isListening,
   isRequestingVoice,
   isTranscribingVoice,
+  isAssistantResponding,
 }: {
   isListening: boolean;
   isRequestingVoice: boolean;
   isTranscribingVoice: boolean;
+  isAssistantResponding: boolean;
 }): ReactNode {
   if (isTranscribingVoice) {
     return <Loader2 className="size-3.5 animate-spin" />;
+  }
+  if (isAssistantResponding) {
+    return <Bot className="size-3.5 animate-pulse" />;
   }
   if (isListening || isRequestingVoice) {
     return <Mic className="size-3.5 animate-pulse" />;
@@ -117,6 +156,7 @@ export function isVoiceCaptureStateActive(state: VoiceCaptureState): boolean {
     case 'requesting':
     case 'listening':
     case 'transcribing':
+    case 'responding':
       return true;
     default:
       return false;
@@ -188,6 +228,7 @@ function renderComposerArea({
   isVoiceCaptureActive,
   voiceLevel,
   isListening,
+  isAssistantResponding,
   voiceStatusText,
   isTranscribingVoice,
   draft,
@@ -206,6 +247,7 @@ function renderComposerArea({
   isVoiceCaptureActive: boolean;
   voiceLevel: number;
   isListening: boolean;
+  isAssistantResponding: boolean;
   voiceStatusText: string | null;
   isTranscribingVoice: boolean;
   draft: string;
@@ -225,10 +267,20 @@ function renderComposerArea({
     <div className="space-y-2 border-t border-border p-3">
       {isVoiceCaptureActive ? (
         <div className="space-y-2 rounded-md border border-primary/30 bg-primary/5 px-3 py-3">
-          <VoiceActivityWave level={voiceLevel} active={isListening} />
+          <VoiceActivityWave
+            level={voiceLevel}
+            active={isListening || isAssistantResponding}
+            tone={isAssistantResponding ? 'assistant' : 'user'}
+          />
           {voiceStatusText ? (
             <p
-              className={`text-xs ${isTranscribingVoice ? 'text-muted-foreground' : 'text-primary'}`}
+              className={`text-xs ${
+                isTranscribingVoice
+                  ? 'text-muted-foreground'
+                  : isAssistantResponding
+                    ? 'text-sky-300'
+                    : 'text-primary'
+              }`}
             >
               {voiceStatusText}
             </p>
@@ -255,12 +307,17 @@ function renderComposerArea({
           size="sm"
           variant="outline"
           className="shrink-0 gap-1.5"
-          disabled={!canSendMessage || isLoading || !isVoiceInputSupported || isTranscribingVoice}
+          disabled={!canSendMessage || !isVoiceInputSupported}
           onClick={onToggleVoiceInput}
-          aria-pressed={isListening}
+          aria-pressed={isVoiceCaptureActive}
           title={voiceButtonTitle}
         >
-          {renderVoiceInputIcon({ isListening, isRequestingVoice, isTranscribingVoice })}
+          {renderVoiceInputIcon({
+            isListening,
+            isRequestingVoice,
+            isTranscribingVoice,
+            isAssistantResponding,
+          })}
           <span className="sr-only">{t('workspace.aiInterviewVoiceInput')}</span>
         </Button>
         <Button
@@ -278,6 +335,10 @@ function renderComposerArea({
 }
 
 export function RoomAiInterviewPanel({
+  mode = 'legacy',
+  realtimeAgentState = 'idle',
+  realtimeUserState = 'listening',
+  realtimeInterruptionAt = null,
   messages,
   isLoading,
   error,
@@ -286,6 +347,10 @@ export function RoomAiInterviewPanel({
   currentUser,
   onTranscribeVoiceInput,
 }: {
+  mode?: AiInterviewPanelMode;
+  realtimeAgentState?: 'initializing' | 'idle' | 'listening' | 'thinking' | 'speaking';
+  realtimeUserState?: 'speaking' | 'listening' | 'away';
+  realtimeInterruptionAt?: number | null;
   messages: AiInterviewMessage[];
   isLoading: boolean;
   error: string | null;
@@ -295,12 +360,15 @@ export function RoomAiInterviewPanel({
   onTranscribeVoiceInput?: (request: VoiceTranscriptionRequest) => Promise<string>;
 }) {
   const { t, i18n } = useTranslation('rooms');
+  const isRealtimeMode = mode === 'realtime';
   const [draft, setDraft] = useState('');
   const [voiceCaptureState, setVoiceCaptureState] = useState<VoiceCaptureState>('idle');
+  const [voiceConversationEnabled, setVoiceConversationEnabled] = useState(false);
   const [voiceError, setVoiceError] = useState<string | null>(null);
   const [voiceLevel, setVoiceLevel] = useState(0);
   const bottomRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const speechUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const mediaChunksRef = useRef<BlobPart[]>([]);

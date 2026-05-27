@@ -24,13 +24,14 @@ import {
 const t = (key: string) => key;
 
 describe('room-ai-interview-panel helpers', () => {
-  it('GIVEN voice capture state WHEN resolving status text THEN requesting/listening/transcribing return keys', () => {
+  it('GIVEN voice capture state WHEN resolving status text THEN active phases return keys', () => {
     expect(resolveVoiceStatusText(t, 'idle')).toBeNull();
     expect(resolveVoiceStatusText(t, 'requesting')).toBe('workspace.aiInterviewVoiceRequesting');
     expect(resolveVoiceStatusText(t, 'listening')).toBe('workspace.aiInterviewVoiceListening');
     expect(resolveVoiceStatusText(t, 'transcribing')).toBe(
       'workspace.aiInterviewVoiceTranscribing',
     );
+    expect(resolveVoiceStatusText(t, 'responding')).toBe('workspace.aiInterviewVoiceResponding');
   });
 
   it('GIVEN voice capture state WHEN checking active flag THEN only non-idle states are active', () => {
@@ -38,6 +39,7 @@ describe('room-ai-interview-panel helpers', () => {
     expect(isVoiceCaptureStateActive('requesting')).toBe(true);
     expect(isVoiceCaptureStateActive('listening')).toBe(true);
     expect(isVoiceCaptureStateActive('transcribing')).toBe(true);
+    expect(isVoiceCaptureStateActive('responding')).toBe(true);
   });
 
   it('GIVEN voice support flag WHEN resolving voice button title THEN returns correct title key', () => {
