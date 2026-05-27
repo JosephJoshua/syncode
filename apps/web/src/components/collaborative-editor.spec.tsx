@@ -179,6 +179,29 @@ describe('CollaborativeEditor Y.Text selection', () => {
 });
 
 describe('CollaborativeEditor inline comments', () => {
+  it('GIVEN the editor mounts WHEN registering shortcuts THEN plain Enter remains reserved for editing', () => {
+    const doc = new Y.Doc();
+    const awareness = new Awareness(doc);
+    const fakeEditor = createFakeEditor();
+    fakeMonacoState.editor = fakeEditor;
+
+    render(
+      <CollaborativeEditor
+        doc={doc}
+        awareness={awareness}
+        language="python"
+        readOnly={false}
+        onRunCode={vi.fn()}
+        onSubmitCode={vi.fn()}
+      />,
+    );
+
+    const keybindings = fakeEditor.addAction.mock.calls.flatMap(([action]) => action.keybindings);
+    expect(keybindings).not.toContain(fakeMonacoState.monaco.KeyCode.Enter);
+    awareness.destroy();
+    doc.destroy();
+  });
+
   it('GIVEN a gutter hover on a non-cursor line WHEN adding a comment THEN targets the hovered line', async () => {
     const user = userEvent.setup();
     const doc = new Y.Doc();

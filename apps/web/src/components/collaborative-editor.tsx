@@ -10,6 +10,7 @@ import type { InlineComment } from '@/lib/inline-comments.js';
 import { clientIdFromElement, remoteCursorSelector } from '@/lib/remote-cursor-dom.js';
 import { codeTextKey } from '@/lib/yjs-collab-provider.js';
 import { buildCursorCssRules, IDLE_HIDE_MS } from './cursor-styles.js';
+import { InlineCommentMarkdown } from './inline-comment-markdown.js';
 import { LazyMonacoEditor as Editor } from './lazy-monaco-editor.js';
 import {
   EDITOR_LOADING,
@@ -895,9 +896,9 @@ export function CollaborativeEditor({
                       {formatTime(comment.createdAt)}
                     </span>
                   </div>
-                  <p className="mt-1 whitespace-pre-wrap text-xs text-muted-foreground">
-                    {comment.content}
-                  </p>
+                  <div className="text-xs">
+                    <InlineCommentMarkdown markdown={comment.content} />
+                  </div>
                 </div>
               ))}
             </div>
