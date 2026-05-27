@@ -38,6 +38,10 @@
     "studio": {
       "cache": false,
       "persistent": true
+    },
+    "render": {
+      "cache": false,
+      "outputs": ["out/**"]
     }
   }
 }
