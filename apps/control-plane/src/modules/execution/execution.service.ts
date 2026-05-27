@@ -12,8 +12,10 @@ import {
   EXECUTION_CLIENT,
   type IExecutionClient,
   type JobId,
+  type JobStatus,
   type RunCodeRequest,
   type RunCodeResponse,
+  type RunCodeResult,
   type StaticAnalysisReport,
   type StaticAnalysisRequest,
   type StaticAnalysisResultResponse,
@@ -24,11 +26,15 @@ import type { Database } from '@syncode/db';
 import {
   executionResults,
   problems,
+  roomParticipants,
+  rooms,
   runs,
   staticAnalysisResults,
   submissions,
   testCases,
+  users,
 } from '@syncode/db';
+import { hasResolvedRoomPermission } from '@syncode/shared';
 import { CACHE_SERVICE, type ICacheService } from '@syncode/shared/ports';
 import { and, asc, eq, isNull } from 'drizzle-orm';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
@@ -216,6 +222,27 @@ export class ExecutionService {
     return { submissionId: submission.id, staticAnalysisJobId };
   }
 
+  async getExecutionResult(
+    jobId: string,
+    userId: string,
+  ): Promise<RunCodeResult | { status: JobStatus }> {
+    await this.assertCanAccessExecutionJob(jobId, userId);
+
+    const result = await this.executionClient.getResult(jobId as JobId<'execution'>);
+    if (result) {
+      return result;
+    }
+
+    const status = await this.executionClient.getJobStatus(jobId as JobId<'execution'>);
+    return { status };
+  }
+
+  async getExecutionStatus(jobId: string, userId: string): Promise<{ status: JobStatus }> {
+    await this.assertCanAccessExecutionJob(jobId, userId);
+    const status = await this.executionClient.getJobStatus(jobId as JobId<'execution'>);
+    return { status };
+  }
+
   private async enqueueStaticAnalysis(request: StaticAnalysisRequest): Promise<string | null> {
     const jobId = randomUUID() as JobId<'static-analysis'>;
     await this.db.insert(staticAnalysisResults).values({
@@ -375,6 +402,67 @@ export class ExecutionService {
         errorMessage: row.errorMessage,
       })),
     };
+  }
+
+  private async assertCanAccessExecutionJob(jobId: string, userId: string): Promise<void> {
+    const [run] = await this.db
+      .select({
+        userId: runs.userId,
+        roomId: runs.roomId,
+      })
+      .from(runs)
+      .where(eq(runs.jobId, jobId))
+      .limit(1);
+
+    if (!run) {
+      throw this.executionJobNotFound(jobId);
+    }
+
+    if (run.userId === userId) {
+      return;
+    }
+
+    if (await this.isAdmin(userId)) {
+      return;
+    }
+
+    const [membership] = await this.db
+      .select({
+        role: roomParticipants.role,
+        isActive: roomParticipants.isActive,
+        removedAt: roomParticipants.removedAt,
+        hostId: rooms.hostId,
+      })
+      .from(roomParticipants)
+      .innerJoin(rooms, eq(rooms.id, roomParticipants.roomId))
+      .where(and(eq(roomParticipants.roomId, run.roomId), eq(roomParticipants.userId, userId)))
+      .limit(1);
+
+    if (!membership || !membership.isActive || membership.removedAt !== null) {
+      throw this.executionJobNotFound(jobId);
+    }
+
+    const isHost = membership.hostId === userId;
+    if (!hasResolvedRoomPermission(membership.role, 'code:view', { isHost })) {
+      throw this.executionJobNotFound(jobId);
+    }
+  }
+
+  private async isAdmin(userId: string): Promise<boolean> {
+    const [user] = await this.db
+      .select({ role: users.role })
+      .from(users)
+      .where(and(eq(users.id, userId), isNull(users.deletedAt)))
+      .limit(1);
+
+    return user?.role === 'admin';
+  }
+
+  private executionJobNotFound(jobId: string): NotFoundException {
+    return new NotFoundException({
+      message: `Execution job ${jobId} not found`,
+      code: ERROR_CODES.EXECUTION_JOB_NOT_FOUND,
+    });
   }
 }
 

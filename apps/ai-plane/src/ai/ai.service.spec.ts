@@ -1170,6 +1170,28 @@ describe('AiService', () => {
         peerFeedback: [],
         aiMessages: [],
         historicalContext: null,
+        staticAnalysis: [
+          {
+            source: 'run',
+            runId: '550e8400-e29b-41d4-a716-446655440111',
+            submissionId: null,
+            language: 'typescript',
+            createdAt: '2026-04-20T01:01:45.000Z',
+            completedAt: '2026-04-20T01:01:46.000Z',
+            summary: {
+              diagnosticCount: 1,
+              errorCount: 0,
+              warningCount: 1,
+              maxCyclomaticComplexity: 2,
+              highComplexityCount: 0,
+              duplicationCount: 0,
+              toolFailureCount: 0,
+            },
+            diagnostics: [],
+            complexity: [],
+            duplications: [],
+          },
+        ],
       };
 
       const result = await service.generateSessionReport(request);
@@ -1184,6 +1206,7 @@ describe('AiService', () => {
         },
       ]);
       expect(result.overallScore).toBe(82);
+      expect(result.staticAnalysis).toEqual(request.staticAnalysis);
       expect(result.generatedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
       expect(result.categoryScores).toEqual({
         correctness: 84,
@@ -1292,6 +1315,7 @@ describe('AiService', () => {
         peerFeedback: [],
         aiMessages: [],
         historicalContext: null,
+        staticAnalysis: [],
       };
 
       const result = await service.generateSessionReport(request);
@@ -1382,6 +1406,7 @@ describe('AiService', () => {
         peerFeedback: [],
         aiMessages: [],
         historicalContext: null,
+        staticAnalysis: [],
       };
 
       const result = await service.generateSessionReport(request);
@@ -1515,6 +1540,7 @@ describe('AiService', () => {
         peerFeedback: [],
         aiMessages: [],
         historicalContext: null,
+        staticAnalysis: [],
       };
 
       await expect(service.generateSessionReport(request)).rejects.toThrow(
@@ -1632,6 +1658,7 @@ describe('AiService', () => {
           peerFeedback: [],
           aiMessages: [],
           historicalContext: null,
+          staticAnalysis: [],
         }),
       ).rejects.toThrow(/omitted evidence-backed scores/i);
     });
@@ -1703,6 +1730,7 @@ describe('AiService', () => {
           peerFeedback: [],
           aiMessages: [],
           historicalContext: null,
+          staticAnalysis: [],
         }),
       ).rejects.toThrow(/omitted required scored dimensions/i);
     });
@@ -1875,6 +1903,7 @@ describe('AiService', () => {
         peerFeedback: [],
         aiMessages: [],
         historicalContext: null,
+        staticAnalysis: [],
       });
 
       expect(result.dimensions?.efficiency?.score).toBe(95);
@@ -1904,6 +1933,27 @@ describe('AiService', () => {
       );
 
       expect(result.peerFeedbackSummary).toBeNull();
+    });
+
+    it('GIVEN text peerFeedbackSummary WHEN parsing THEN preserves summary and themes', () => {
+      const result = parseSessionReportJson(
+        JSON.stringify({
+          overallScore: 82,
+          strengths: ['Strong iteration'],
+          areasForImprovement: ['Explain tradeoffs earlier'],
+          detailedFeedback: 'Detailed feedback',
+          comparisonToHistory: null,
+          peerFeedbackSummary: {
+            summary: 'Peer feedback praised the explanation and asked for earlier edge cases.',
+            themes: ['communication', 'edge cases'],
+          },
+        }),
+      );
+
+      expect(result.peerFeedbackSummary).toEqual({
+        summary: 'Peer feedback praised the explanation and asked for earlier edge cases.',
+        themes: ['communication', 'edge cases'],
+      });
     });
 
     it('GIVEN a dimension without feedback WHEN parsing THEN injects a fallback feedback string', () => {

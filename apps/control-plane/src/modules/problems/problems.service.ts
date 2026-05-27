@@ -13,9 +13,20 @@ import {
   type ProblemSummary,
   type ProblemsListQuery,
   type ProblemsTagsResponse,
+  type PublishProblemStatusInput,
+  type UpdateProblemInput,
 } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
-import { bookmarks, problems, problemTags, tags, testCases, users } from '@syncode/db';
+import {
+  bookmarks,
+  problems,
+  problemTags,
+  rooms,
+  sessions,
+  tags,
+  testCases,
+  users,
+} from '@syncode/db';
 import type { ProblemSortBy } from '@syncode/shared';
 import { type PaginatedResult, paginate } from '@syncode/shared/server';
 import {
@@ -34,13 +45,26 @@ import {
   sql,
 } from 'drizzle-orm';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
+import { AuditService } from '../admin/audit.service.js';
 
 type ProblemSummaryRow = ProblemSummary & { sortValue: string };
 type BookmarkRow = ProblemSummary & { bookmarkedAt: Date };
+type ActiveProblemAuditSnapshot = {
+  id: string;
+  title: string;
+  difficulty: ProblemSummary['difficulty'];
+  isPublished: boolean;
+};
+type FindProblemOptions = {
+  readonly includeHidden?: boolean;
+};
 
 @Injectable()
 export class ProblemsService {
-  constructor(@Inject(DB_CLIENT) private readonly db: Database) {}
+  constructor(
+    @Inject(DB_CLIENT) private readonly db: Database,
+    private readonly auditService: AuditService,
+  ) {}
 
   async listProblems(
     userId: string,
@@ -49,7 +73,7 @@ export class ProblemsService {
     const sortField = query.sortBy ?? 'createdAt';
     const sortDir = query.sortOrder === 'asc' ? asc : desc;
     const compareOp = query.sortOrder === 'asc' ? gt : lt;
-    const canViewDrafts = await this.isAdmin(userId);
+    const canViewDrafts = query.includeDrafts === true && (await this.isAdmin(userId));
 
     const result = await paginate<ProblemSummaryRow>({
       cursor: query.cursor,
@@ -126,6 +150,10 @@ export class ProblemsService {
             acceptanceRate: this.acceptanceRateExpr(),
             isBookmarked: this.isBookmarkedExpr(userId),
             attemptStatus: this.attemptStatusExpr(userId),
+            testCaseCount: canViewDrafts ? this.testCaseCountExpr() : sql<null>`NULL`,
+            hiddenTestCaseCount: canViewDrafts
+              ? this.testCaseCountExpr({ hiddenOnly: true })
+              : sql<null>`NULL`,
             totalSubmissions: problems.totalSubmissions,
             acceptedSubmissions: problems.acceptedSubmissions,
             updatedAt: problems.updatedAt,
@@ -151,15 +179,26 @@ export class ProblemsService {
     };
   }
 
-  async findById(userId: string, problemId: string): Promise<ProblemDetail> {
+  async findById(
+    userId: string,
+    problemId: string,
+    options: FindProblemOptions = {},
+  ): Promise<ProblemDetail> {
     const canViewDrafts = await this.isAdmin(userId);
+    const canViewHidden = options.includeHidden === true && canViewDrafts;
+    if (options.includeHidden === true && !canViewDrafts) {
+      throw new ForbiddenException({
+        message: 'Admin access required',
+        code: ERROR_CODES.FORBIDDEN,
+      });
+    }
     const userAttemptsExpr = sql<number>`(
       SELECT COUNT(*)::int FROM submissions s
       WHERE s.problem_id = "problems"."id"
       AND s.user_id = ${userId}
     )`.as('user_attempts');
 
-    const [problemRows, visibleTestCases] = await Promise.all([
+    const [problemRows, problemTestCases] = await Promise.all([
       this.db
         .select({
           id: problems.id,
@@ -202,7 +241,14 @@ export class ProblemsService {
           memoryMb: testCases.memoryMb,
         })
         .from(testCases)
-        .where(and(eq(testCases.problemId, problemId), eq(testCases.isHidden, false)))
+        .where(
+          and(
+            ...[
+              eq(testCases.problemId, problemId),
+              canViewHidden ? undefined : eq(testCases.isHidden, false),
+            ].filter((item): item is SQL => Boolean(item)),
+          ),
+        )
         .orderBy(asc(testCases.sortOrder)),
     ]);
 
@@ -233,7 +279,7 @@ export class ProblemsService {
       isBookmarked: Boolean(problem.isBookmarked),
       attemptStatus: problem.attemptStatus as ProblemDetail['attemptStatus'],
       userAttempts: Number(problem.userAttempts),
-      testCases: visibleTestCases.map((tc) => ({
+      testCases: problemTestCases.map((tc) => ({
         input: tc.input,
         expectedOutput: tc.expectedOutput,
         description: tc.description ?? undefined,
@@ -246,7 +292,11 @@ export class ProblemsService {
     };
   }
 
-  async createProblem(userId: string, input: CreateProblemInput): Promise<ProblemDetail> {
+  async createProblem(
+    userId: string,
+    input: CreateProblemInput,
+    ipAddress?: string,
+  ): Promise<ProblemDetail> {
     await this.assertAdmin(userId);
 
     const [existing] = await this.db
@@ -262,43 +312,207 @@ export class ProblemsService {
       });
     }
 
-    const created = await this.db.transaction(async (tx) => {
-      const [problem] = await tx
-        .insert(problems)
-        .values({
-          title: input.title,
-          description: input.description,
-          difficulty: input.difficulty,
+    // Pre-check above is a fast path / UX improvement. Two concurrent admin
+    // requests can still pass the SELECT before either INSERT runs, so we
+    // also translate the partial-unique-index violation (problems_title_unique)
+    // raised by Postgres into the same ConflictException — otherwise the
+    // race-loser would see a raw 23505 DB error.
+    const created = await this.db
+      .transaction(async (tx) => {
+        const [problem] = await tx
+          .insert(problems)
+          .values({
+            title: input.title,
+            description: input.description,
+            difficulty: input.difficulty,
+            isPublished: input.isPublished,
+            company: input.company ?? null,
+            constraints: input.constraints ?? null,
+            examples: input.examples,
+            starterCode: input.starterCode ?? null,
+            timeLimit: input.timeLimit ?? null,
+            memoryLimit: input.memoryLimit ?? null,
+          })
+          .returning({ id: problems.id });
+        if (!problem) {
+          throw new Error('Problem insert did not return a row');
+        }
+
+        await tx.insert(testCases).values(
+          input.testCases.map((testCase, index) => ({
+            problemId: problem.id,
+            input: testCase.input,
+            expectedOutput: testCase.expectedOutput,
+            description: testCase.description ?? null,
+            isHidden: testCase.isHidden,
+            sortOrder: index,
+            timeoutMs: testCase.timeoutMs ?? null,
+            memoryMb: testCase.memoryMb ?? null,
+          })),
+        );
+
+        await this.auditService.logWithClient(tx, {
+          actorId: userId,
+          action: 'admin.problem.create',
+          targetType: 'problem',
+          targetId: problem.id,
+          metadata: {
+            title: input.title,
+            difficulty: input.difficulty,
+            isPublished: input.isPublished,
+            testCaseCount: input.testCases.length,
+            hiddenTestCaseCount: input.testCases.filter((testCase) => testCase.isHidden).length,
+          },
+          ipAddress,
+        });
+
+        return problem;
+      })
+      .catch((error: unknown) => {
+        if (isUniqueViolation(error)) {
+          throw new ConflictException({
+            message: 'Problem title already exists',
+            code: ERROR_CODES.PROBLEM_DUPLICATE_TITLE,
+          });
+        }
+        throw error;
+      });
+
+    return this.findById(userId, created.id, { includeHidden: true });
+  }
+
+  async updateProblem(
+    userId: string,
+    problemId: string,
+    input: UpdateProblemInput,
+    ipAddress?: string,
+  ): Promise<ProblemDetail> {
+    await this.assertAdmin(userId);
+    const existing = await this.assertActiveProblem(problemId);
+
+    if (input.title) {
+      await this.assertUniqueTitle(input.title, problemId);
+    }
+
+    await this.db
+      .transaction(async (tx) => {
+        const values: Partial<typeof problems.$inferInsert> = {};
+
+        if (input.title !== undefined) values.title = input.title;
+        if (input.description !== undefined) values.description = input.description;
+        if (input.difficulty !== undefined) values.difficulty = input.difficulty;
+        if (input.company !== undefined) values.company = input.company ?? null;
+        if (input.constraints !== undefined) values.constraints = input.constraints ?? null;
+        if (input.examples !== undefined) values.examples = input.examples;
+        if (input.starterCode !== undefined) values.starterCode = input.starterCode ?? null;
+        if (input.timeLimit !== undefined) values.timeLimit = input.timeLimit ?? null;
+        if (input.memoryLimit !== undefined) values.memoryLimit = input.memoryLimit ?? null;
+
+        if (Object.keys(values).length > 0) {
+          await tx.update(problems).set(values).where(eq(problems.id, problemId));
+        }
+
+        if (input.testCases !== undefined) {
+          await tx.delete(testCases).where(eq(testCases.problemId, problemId));
+          await tx.insert(testCases).values(
+            input.testCases.map((testCase, index) => ({
+              problemId,
+              input: testCase.input,
+              expectedOutput: testCase.expectedOutput,
+              description: testCase.description ?? null,
+              isHidden: testCase.isHidden,
+              sortOrder: index,
+              timeoutMs: testCase.timeoutMs ?? null,
+              memoryMb: testCase.memoryMb ?? null,
+            })),
+          );
+        }
+
+        await this.auditService.logWithClient(tx, {
+          actorId: userId,
+          action: 'admin.problem.update',
+          targetType: 'problem',
+          targetId: problemId,
+          metadata: {
+            title: existing.title,
+            changedFields: this.getUpdatedProblemFields(input),
+            ...(input.testCases
+              ? {
+                  testCaseCount: input.testCases.length,
+                  hiddenTestCaseCount: input.testCases.filter((testCase) => testCase.isHidden)
+                    .length,
+                }
+              : {}),
+          },
+          ipAddress,
+        });
+      })
+      .catch((error: unknown) => {
+        if (isUniqueViolation(error)) {
+          throw new ConflictException({
+            message: 'Problem title already exists',
+            code: ERROR_CODES.PROBLEM_DUPLICATE_TITLE,
+          });
+        }
+        throw error;
+      });
+
+    return this.findById(userId, problemId, { includeHidden: true });
+  }
+
+  async changePublishStatus(
+    userId: string,
+    problemId: string,
+    input: PublishProblemStatusInput,
+    ipAddress?: string,
+  ): Promise<ProblemDetail> {
+    await this.assertAdmin(userId);
+    const existing = await this.assertActiveProblem(problemId);
+
+    await this.db.transaction(async (tx) => {
+      await tx
+        .update(problems)
+        .set({ isPublished: input.isPublished })
+        .where(eq(problems.id, problemId));
+
+      await this.auditService.logWithClient(tx, {
+        actorId: userId,
+        action: input.isPublished ? 'admin.problem.publish' : 'admin.problem.unpublish',
+        targetType: 'problem',
+        targetId: problemId,
+        metadata: {
+          title: existing.title,
+          previousIsPublished: existing.isPublished,
           isPublished: input.isPublished,
-          company: input.company ?? null,
-          constraints: input.constraints ?? null,
-          examples: input.examples,
-          starterCode: input.starterCode ?? null,
-          timeLimit: input.timeLimit ?? null,
-          memoryLimit: input.memoryLimit ?? null,
-        })
-        .returning({ id: problems.id });
-      if (!problem) {
-        throw new Error('Problem insert did not return a row');
-      }
-
-      await tx.insert(testCases).values(
-        input.testCases.map((testCase, index) => ({
-          problemId: problem.id,
-          input: testCase.input,
-          expectedOutput: testCase.expectedOutput,
-          description: testCase.description ?? null,
-          isHidden: testCase.isHidden,
-          sortOrder: index,
-          timeoutMs: testCase.timeoutMs ?? null,
-          memoryMb: testCase.memoryMb ?? null,
-        })),
-      );
-
-      return problem;
+        },
+        ipAddress,
+      });
     });
 
-    return this.findById(userId, created.id);
+    return this.findById(userId, problemId, { includeHidden: true });
+  }
+
+  async deleteProblem(userId: string, problemId: string, ipAddress?: string): Promise<void> {
+    await this.assertAdmin(userId);
+    const existing = await this.assertActiveProblem(problemId);
+    await this.assertProblemNotInUse(problemId);
+
+    await this.db.transaction(async (tx) => {
+      await tx.update(problems).set({ deletedAt: new Date() }).where(eq(problems.id, problemId));
+
+      await this.auditService.logWithClient(tx, {
+        actorId: userId,
+        action: 'admin.problem.delete',
+        targetType: 'problem',
+        targetId: problemId,
+        metadata: {
+          title: existing.title,
+          difficulty: existing.difficulty,
+          wasPublished: existing.isPublished,
+        },
+        ipAddress,
+      });
+    });
   }
 
   async listTags(): Promise<ProblemsTagsResponse> {
@@ -416,6 +630,8 @@ export class ProblemsService {
       company: string | null;
       acceptanceRate: number | null;
       attemptStatus: string | null;
+      testCaseCount?: number | null;
+      hiddenTestCaseCount?: number | null;
     },
     isBookmarked: boolean,
   ): ProblemSummary {
@@ -429,6 +645,10 @@ export class ProblemsService {
       acceptanceRate: row.acceptanceRate == null ? null : Number(row.acceptanceRate),
       isBookmarked,
       attemptStatus: row.attemptStatus as ProblemSummary['attemptStatus'],
+      ...(row.testCaseCount == null ? {} : { testCaseCount: Number(row.testCaseCount) }),
+      ...(row.hiddenTestCaseCount == null
+        ? {}
+        : { hiddenTestCaseCount: Number(row.hiddenTestCaseCount) }),
     };
   }
 
@@ -453,6 +673,87 @@ export class ProblemsService {
     return user?.role === 'admin';
   }
 
+  private async assertActiveProblem(problemId: string): Promise<ActiveProblemAuditSnapshot> {
+    const [problem] = await this.db
+      .select({
+        id: problems.id,
+        title: problems.title,
+        difficulty: problems.difficulty,
+        isPublished: problems.isPublished,
+      })
+      .from(problems)
+      .where(and(eq(problems.id, problemId), isNull(problems.deletedAt)))
+      .limit(1);
+
+    if (problem) {
+      return problem;
+    }
+
+    throw new NotFoundException({
+      message: 'Problem not found',
+      code: ERROR_CODES.PROBLEM_NOT_FOUND,
+    });
+  }
+
+  private async assertProblemNotInUse(problemId: string): Promise<void> {
+    // Only block deletion when the problem is referenced by an *active*
+    // room or session. Once a room has ended (rooms.endedAt is set, which
+    // also coincides with rooms.status='finished') or a session has
+    // reached the terminal 'finished' state, the problem can be safely
+    // removed — the historical references stay because rooms/sessions
+    // record problemId as a snapshot, not a live FK to a published row.
+    const [roomRef, sessionRef] = await Promise.all([
+      this.db
+        .select({ id: rooms.id })
+        .from(rooms)
+        .where(and(eq(rooms.problemId, problemId), isNull(rooms.endedAt)))
+        .limit(1),
+      this.db
+        .select({ id: sessions.id })
+        .from(sessions)
+        .where(and(eq(sessions.problemId, problemId), eq(sessions.status, 'ongoing')))
+        .limit(1),
+    ]);
+
+    if (!roomRef[0] && !sessionRef[0]) {
+      return;
+    }
+
+    throw new ConflictException({
+      message: 'Problem is used by existing rooms or sessions',
+      code: ERROR_CODES.PROBLEM_IN_USE,
+    });
+  }
+
+  private getUpdatedProblemFields(input: UpdateProblemInput): string[] {
+    return Object.entries(input)
+      .filter(([, value]) => value !== undefined)
+      .map(([key]) => key);
+  }
+
+  private async assertUniqueTitle(title: string, problemId: string): Promise<void> {
+    const [existing] = await this.db
+      .select({ id: problems.id })
+      .from(problems)
+      .where(
+        and(
+          eq(problems.title, title),
+          isNull(problems.deletedAt),
+          sql`${problems.id} <> ${problemId}`,
+        ),
+      )
+      .limit(1);
+
+    if (!existing) {
+      return;
+    }
+
+    throw new ConflictException({
+      message: 'Problem title already exists',
+      code: ERROR_CODES.PROBLEM_DUPLICATE_TITLE,
+    });
+  }
+
   private tagsAggExpr() {
     return sql<string>`(
       SELECT string_agg(t.slug, ',' ORDER BY t.name)
@@ -460,6 +761,15 @@ export class ProblemsService {
       JOIN tags t ON t.id = pt.tag_id
       WHERE pt.problem_id = "problems"."id"
     )`.as('tags_agg');
+  }
+
+  private testCaseCountExpr({ hiddenOnly = false }: { hiddenOnly?: boolean } = {}): SQL<number> {
+    return sql<number>`(
+      SELECT COUNT(*)::int
+      FROM test_cases tc
+      WHERE tc.problem_id = "problems"."id"
+      ${hiddenOnly ? sql`AND tc.is_hidden = true` : sql``}
+    )`;
   }
 
   private isBookmarkedExpr(userId: string) {
@@ -628,4 +938,16 @@ export class ProblemsService {
         return row.createdAt.toISOString();
     }
   }
+}
+
+function isUniqueViolation(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) {
+    return false;
+  }
+
+  if ('code' in error && (error as { code?: unknown }).code === '23505') {
+    return true;
+  }
+
+  return 'cause' in error && isUniqueViolation((error as { cause?: unknown }).cause);
 }

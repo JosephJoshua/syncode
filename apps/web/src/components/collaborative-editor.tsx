@@ -10,12 +10,13 @@ import type { InlineComment } from '@/lib/inline-comments.js';
 import { clientIdFromElement, remoteCursorSelector } from '@/lib/remote-cursor-dom.js';
 import { codeTextKey } from '@/lib/yjs-collab-provider.js';
 import { buildCursorCssRules, IDLE_HIDE_MS } from './cursor-styles.js';
+import { type EditorKeybindingMode, mountEditorKeybindingMode } from './editor-keybinding-mode.js';
 import { InlineCommentMarkdown } from './inline-comment-markdown.js';
 import { LazyMonacoEditor as Editor } from './lazy-monaco-editor.js';
 import {
   EDITOR_LOADING,
   EDITOR_OPTIONS_BASE,
-  handleEditorWillMount,
+  handleCollaborativeEditorWillMount,
 } from './room-workspace-utils.js';
 
 const INLINE_COMMENT_PANEL_GAP_PX = 6;
@@ -37,6 +38,7 @@ interface CollaborativeEditorProps {
   readonly awareness: Awareness;
   readonly language: string;
   readonly readOnly: boolean;
+  readonly keybindingMode?: EditorKeybindingMode;
   readonly comments?: InlineComment[];
   readonly commentLineNumbers?: number[];
   readonly canAddComments?: boolean;
@@ -144,6 +146,7 @@ export function CollaborativeEditor({
   awareness,
   language,
   readOnly,
+  keybindingMode = 'default',
   comments = [],
   commentLineNumbers = [],
   canAddComments = false,
@@ -156,6 +159,8 @@ export function CollaborativeEditor({
 }: CollaborativeEditorProps) {
   const { t } = useTranslation('rooms');
   const bindingRef = useRef<MonacoBinding | null>(null);
+  const keybindingRef = useRef<{ dispose: () => void } | null>(null);
+  const keybindingStatusRef = useRef<HTMLDivElement | null>(null);
   type EditorInstance = Parameters<OnMount>[0];
   const [editor, setEditor] = useState<EditorInstance | null>(null);
   const [editorRoot, setEditorRoot] = useState<HTMLElement | null>(null);
@@ -294,6 +299,39 @@ export function CollaborativeEditor({
     setEditor(editorInstance);
     setEditorRoot(editorApi.getDomNode());
   };
+
+  useEffect(() => {
+    if (!editor || !keybindingStatusRef.current) {
+      return;
+    }
+
+    let cancelled = false;
+    keybindingRef.current?.dispose();
+    keybindingRef.current = null;
+    const statusNode = keybindingStatusRef.current;
+
+    mountEditorKeybindingMode({
+      editor,
+      mode: keybindingMode,
+      statusNode,
+    })
+      .then((binding) => {
+        if (cancelled) {
+          binding.dispose();
+          return;
+        }
+        keybindingRef.current = binding;
+      })
+      .catch(() => {
+        statusNode.textContent = '';
+      });
+
+    return () => {
+      cancelled = true;
+      keybindingRef.current?.dispose();
+      keybindingRef.current = null;
+    };
+  }, [editor, keybindingMode]);
 
   useEffect(() => {
     if (!editor) return;
@@ -717,18 +755,30 @@ export function CollaborativeEditor({
   }, [awareness, doc.clientID, editorRoot]);
 
   return (
-    <div className="relative h-full">
-      <Suspense fallback={EDITOR_LOADING}>
-        <Editor
-          height="100%"
-          language={language}
-          theme="syncode-dark"
-          beforeMount={handleEditorWillMount}
-          onMount={handleMount}
-          options={editorOptions}
-          loading={EDITOR_LOADING}
-        />
-      </Suspense>
+    <div className="relative flex h-full flex-col">
+      <div className="min-h-0 flex-1">
+        <Suspense fallback={EDITOR_LOADING}>
+          <Editor
+            height="100%"
+            language={language}
+            theme="syncode-dark"
+            beforeMount={handleCollaborativeEditorWillMount}
+            onMount={handleMount}
+            options={editorOptions}
+            loading={EDITOR_LOADING}
+          />
+        </Suspense>
+      </div>
+
+      <div
+        ref={keybindingStatusRef}
+        data-testid="editor-keybinding-status"
+        aria-live="polite"
+        className={cn(
+          'h-5 shrink-0 border-t border-border bg-card px-2 font-mono text-[10px] leading-5 text-muted-foreground',
+          keybindingMode === 'default' ? 'sr-only' : '',
+        )}
+      />
 
       <div className="pointer-events-none absolute inset-0 z-10">
         {commentGlyphOverlays.map((marker) => (

@@ -326,14 +326,7 @@ export interface SessionReportSubmissionContext {
 export interface SessionReportPeerFeedbackContext {
   reviewerId: string;
   reviewerUsername: string;
-  overallRating: number;
-  problemSolvingRating: number;
-  communicationRating: number;
-  codeQualityRating: number;
-  debuggingRating: number;
-  strengths: string;
-  improvements: string;
-  wouldPairAgain: boolean;
+  feedbackText: string;
   createdAt: string;
 }
 

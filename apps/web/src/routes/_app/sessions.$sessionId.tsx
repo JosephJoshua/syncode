@@ -271,14 +271,7 @@ function SessionFeedbackPage() {
                 <CompactInsightCard
                   title={t('sections.peerFeedback')}
                   rows={[
-                    [
-                      t('peerFeedback.averageRating'),
-                      String(report.peerFeedbackSummary.averageRating),
-                    ],
-                    [
-                      t('peerFeedback.wouldPairAgain'),
-                      `${Math.round(report.peerFeedbackSummary.wouldPairAgain)}%`,
-                    ],
+                    [t('peerFeedback.summary'), report.peerFeedbackSummary.summary],
                     [
                       t('peerFeedback.themes'),
                       report.peerFeedbackSummary.themes.length > 0

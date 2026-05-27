@@ -18,6 +18,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { MediaControls } from '@/components/media-controls.js';
+import { PeerFeedbackModal } from '@/components/peer-feedback-modal.js';
 import { RoomLobby } from '@/components/room-lobby.js';
 import { RoomWorkspace } from '@/components/room-workspace.js';
 import { STAGE_TRANSITION_OVERLAY_DURATION_MS } from '@/components/stage-transition-overlay.js';
@@ -32,6 +33,13 @@ import { useYjsCollab } from '@/hooks/use-yjs-collab.js';
 import { api, readApiError, resolveErrorMessage } from '@/lib/api-client.js';
 import { resolveJoinError } from '@/lib/join-errors.js';
 import { computeRoomElapsedMs, isWorkspaceStage, ROLE_LABEL_KEYS } from '@/lib/room-stage.js';
+import {
+  fetchSessionFeedbackProgress,
+  type SessionFeedbackProgress,
+  skipAllSessionFeedbackTargets,
+  skipSessionFeedbackTarget,
+} from '@/lib/session-feedback-progress.js';
+import { submitSessionPeerFeedback } from '@/lib/session-peer-feedback.js';
 import { useAuthStore } from '@/stores/auth.store.js';
 import { useMediaSettingsStore } from '@/stores/media-settings.store.js';
 
@@ -185,10 +193,17 @@ function RoomPage() {
   const [latestLiveKitDataPacket, setLatestLiveKitDataPacket] = useState<LiveKitDataPacket | null>(
     null,
   );
+  const [feedbackProgress, setFeedbackProgress] = useState<SessionFeedbackProgress | null>(null);
+  const [feedbackModalSessionId, setFeedbackModalSessionId] = useState<string | null>(null);
+  const [activeFeedbackCandidateId, setActiveFeedbackCandidateId] = useState<string | null>(null);
+  const [isFeedbackLoading, setIsFeedbackLoading] = useState(false);
+  const [isFeedbackSubmitting, setIsFeedbackSubmitting] = useState(false);
+  const [feedbackErrorMessage, setFeedbackErrorMessage] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
   const joinPromiseRef = useRef<Promise<void> | null>(null);
   const previousStatusRef = useRef<RoomStatus | null>(null);
   const shouldRedirectToSessionRef = useRef(false);
+  const sessionRedirectTimerRef = useRef<number | null>(null);
   // Capture collab credentials once — subsequent polls generate fresh JWTs which would
   // cause the WebSocket to reconnect on every poll if used directly. The collab JWT has
   // a 24h lifetime, so the first token is valid for the entire session.
@@ -288,22 +303,88 @@ function RoomPage() {
     previousStatusRef.current = currentStatus;
   }, [room?.status]);
 
+  const scheduleSessionRedirect = useCallback(
+    (sessionId: string) => {
+      if (sessionRedirectTimerRef.current) {
+        window.clearTimeout(sessionRedirectTimerRef.current);
+      }
+
+      sessionRedirectTimerRef.current = window.setTimeout(() => {
+        sessionRedirectTimerRef.current = null;
+        navigate({
+          to: '/sessions/$sessionId',
+          params: { sessionId },
+        }).catch(() => {});
+      }, STAGE_TRANSITION_OVERLAY_DURATION_MS + 2000);
+    },
+    [navigate],
+  );
+
   useEffect(() => {
     if (!shouldRedirectToSessionRef.current || room?.status !== 'finished' || !room.sessionId) {
       return;
     }
 
+    shouldRedirectToSessionRef.current = false;
     const finishedSessionId = room.sessionId;
-    const redirectTimer = window.setTimeout(() => {
-      shouldRedirectToSessionRef.current = false;
-      navigate({
-        to: '/sessions/$sessionId',
-        params: { sessionId: finishedSessionId },
-      }).catch(() => {});
-    }, STAGE_TRANSITION_OVERLAY_DURATION_MS + 2000);
 
-    return () => window.clearTimeout(redirectTimer);
-  }, [navigate, room?.sessionId, room?.status]);
+    if (room.mode !== 'peer') {
+      scheduleSessionRedirect(finishedSessionId);
+      return;
+    }
+
+    let cancelled = false;
+    setFeedbackModalSessionId(finishedSessionId);
+    setFeedbackProgress(null);
+    setActiveFeedbackCandidateId(null);
+    setFeedbackErrorMessage(null);
+    setIsFeedbackLoading(true);
+
+    fetchSessionFeedbackProgress(finishedSessionId)
+      .then((progress) => {
+        if (cancelled) {
+          return;
+        }
+
+        const nextCandidateId = resolveNextFeedbackTargetId(progress);
+
+        if (progress.allSubmitted || nextCandidateId === null) {
+          setFeedbackModalSessionId(null);
+          scheduleSessionRedirect(finishedSessionId);
+          return;
+        }
+
+        setFeedbackProgress(progress);
+        setActiveFeedbackCandidateId(nextCandidateId);
+      })
+      .catch(() => {
+        if (cancelled) {
+          return;
+        }
+
+        toast.error(t('workspace.feedbackProgressFailed'));
+        setFeedbackModalSessionId(null);
+        scheduleSessionRedirect(finishedSessionId);
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsFeedbackLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [room?.mode, room?.sessionId, room?.status, scheduleSessionRedirect, t]);
+
+  useEffect(
+    () => () => {
+      if (sessionRedirectTimerRef.current) {
+        window.clearTimeout(sessionRedirectTimerRef.current);
+      }
+    },
+    [],
+  );
 
   const roomStatus = room?.status;
   useEffect(() => {
@@ -879,6 +960,94 @@ function RoomPage() {
     [roomId],
   );
 
+  const completeFeedbackStep = useCallback(
+    (sessionId: string, progress: SessionFeedbackProgress) => {
+      const nextCandidateId = resolveNextFeedbackTargetId(progress);
+      setFeedbackProgress(progress);
+      setActiveFeedbackCandidateId(nextCandidateId);
+      setFeedbackErrorMessage(null);
+
+      if (progress.allSubmitted || nextCandidateId === null) {
+        setFeedbackModalSessionId(null);
+        scheduleSessionRedirect(sessionId);
+      }
+    },
+    [scheduleSessionRedirect],
+  );
+
+  const handlePeerFeedbackSubmit = useCallback(
+    async (candidateId: string, feedbackText: string) => {
+      if (!feedbackModalSessionId || isFeedbackSubmitting) {
+        return;
+      }
+
+      setIsFeedbackSubmitting(true);
+      setFeedbackErrorMessage(null);
+
+      try {
+        await submitSessionPeerFeedback(feedbackModalSessionId, {
+          candidateId,
+          feedbackText,
+        });
+        const progress = await fetchSessionFeedbackProgress(feedbackModalSessionId);
+        completeFeedbackStep(feedbackModalSessionId, progress);
+      } catch (error) {
+        const apiError = await readApiError(error);
+        const message = apiError?.message ?? t('workspace.feedbackSubmitFailed');
+        setFeedbackErrorMessage(message);
+        toast.error(message);
+      } finally {
+        setIsFeedbackSubmitting(false);
+      }
+    },
+    [completeFeedbackStep, feedbackModalSessionId, isFeedbackSubmitting, t],
+  );
+
+  const handlePeerFeedbackSkip = useCallback(
+    async (candidateId: string) => {
+      if (!feedbackModalSessionId || isFeedbackSubmitting) {
+        return;
+      }
+
+      setIsFeedbackSubmitting(true);
+      setFeedbackErrorMessage(null);
+
+      try {
+        const progress = await skipSessionFeedbackTarget(feedbackModalSessionId, candidateId);
+        completeFeedbackStep(feedbackModalSessionId, progress);
+      } catch (error) {
+        const apiError = await readApiError(error);
+        const message = apiError?.message ?? t('workspace.feedbackSkipFailed');
+        setFeedbackErrorMessage(message);
+        toast.error(message);
+      } finally {
+        setIsFeedbackSubmitting(false);
+      }
+    },
+    [completeFeedbackStep, feedbackModalSessionId, isFeedbackSubmitting, t],
+  );
+
+  const handlePeerFeedbackSkipAll = useCallback(async () => {
+    if (!feedbackModalSessionId || isFeedbackSubmitting) {
+      return;
+    }
+
+    setIsFeedbackSubmitting(true);
+    setFeedbackErrorMessage(null);
+
+    try {
+      const progress = await skipAllSessionFeedbackTargets(feedbackModalSessionId);
+      completeFeedbackStep(feedbackModalSessionId, progress);
+    } catch (error) {
+      const apiError = await readApiError(error);
+      const message = apiError?.message ?? t('workspace.feedbackSkipFailed');
+      setFeedbackErrorMessage(message);
+      toast.error(message);
+    } finally {
+      setIsFeedbackSubmitting(false);
+    }
+  }, [completeFeedbackStep, feedbackModalSessionId, isFeedbackSubmitting, t]);
+
   const confirmRemoveParticipant = () => {
     if (!pendingRemoval || removeParticipantMutation.isPending) return;
     removeParticipantMutation.mutate(pendingRemoval);
@@ -977,11 +1146,27 @@ function RoomPage() {
     </AlertDialog>
   );
 
+  const peerFeedbackModalElement = (
+    <PeerFeedbackModal
+      open={feedbackModalSessionId !== null}
+      isLoading={isFeedbackLoading}
+      isSubmitting={isFeedbackSubmitting}
+      errorMessage={feedbackErrorMessage}
+      targets={feedbackProgress?.targets ?? []}
+      activeCandidateId={activeFeedbackCandidateId}
+      onActiveCandidateIdChange={setActiveFeedbackCandidateId}
+      onSubmit={handlePeerFeedbackSubmit}
+      onSkip={handlePeerFeedbackSkip}
+      onSkipAll={handlePeerFeedbackSkipAll}
+    />
+  );
+
   if (workspaceRoom && (isWorkspace || shouldShowMockWorkspace)) {
     return (
       <>
         {transferDialog}
         {removeParticipantDialog}
+        {peerFeedbackModalElement}
         <RoomWorkspace
           room={workspaceRoom}
           currentUserId={stableCurrentUserId}
@@ -1056,6 +1241,7 @@ function RoomPage() {
     <>
       {transferDialog}
       {removeParticipantDialog}
+      {peerFeedbackModalElement}
       <RoomLobby
         roomName={room.name}
         roomCode={room.roomCode}
@@ -1121,6 +1307,14 @@ function buildJoinNotice(
   }
 
   return t('lobby.autoAssigned', { role: roleLabel });
+}
+
+function resolveNextFeedbackTargetId(progress: SessionFeedbackProgress): string | null {
+  return (
+    progress.targets.find((target) => target.state === 'pending')?.candidateId ??
+    progress.targets[0]?.candidateId ??
+    null
+  );
 }
 
 const TRANSITION_ERROR_KEYS: Partial<Record<string, string>> = {

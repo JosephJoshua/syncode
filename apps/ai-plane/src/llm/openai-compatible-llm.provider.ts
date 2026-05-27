@@ -35,7 +35,10 @@ interface OpenAiTranscriptionResponse {
 
 const MAX_RETRY_ATTEMPTS = 3;
 const INITIAL_RETRY_DELAY_MS = 1_000;
-const STT_MAX_RETRY_ATTEMPTS = 1;
+// STT requests are user-blocking and audio uploads are large — keep retries
+// minimal but allow one retry on transient transport errors so a single
+// dropped packet doesn't fail the UX.
+const STT_MAX_RETRY_ATTEMPTS = 2;
 const STT_TIMEOUT_CAP_MS = 10_000;
 
 @Injectable()
@@ -383,7 +386,12 @@ function isRetryableStatus(status: number) {
 }
 
 function isRetryableTransportError(error: unknown) {
-  return error instanceof Error && error.name === 'AbortError';
+  if (!(error instanceof Error)) {
+    return false;
+  }
+  // AbortError = self-inflicted timeout; TypeError = fetch() network failure
+  // (ECONNRESET, ECONNREFUSED, socket hang up, DNS lookup failure, etc.).
+  return error.name === 'AbortError' || error.name === 'TypeError';
 }
 
 function getRetryDelayMs(attempt: number) {
