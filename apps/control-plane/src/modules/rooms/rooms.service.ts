@@ -1695,6 +1695,11 @@ export class RoomsService implements OnModuleInit {
         });
         persisted += 1;
       } catch (error) {
+        // Insert failed (e.g. transient deadlock). Release the dedupe key so the
+        // worker's retry of the same turnId is not silently dropped for 12h.
+        if (dedupeKey) {
+          await this.cacheService.del(dedupeKey).catch(() => undefined);
+        }
         this.logger.warn(
           `Unable to persist AI interview transcript turn for room ${roomId}`,
           error,
@@ -4108,30 +4113,53 @@ export class RoomsService implements OnModuleInit {
       return;
     }
 
-    const agentName = this.resolveAiInterviewerAgentName();
-    const existingDispatches = await this.agentDispatchService.listDispatch(roomId);
-    const existing = existingDispatches.find((dispatch) => dispatch.agentName === agentName);
-    if (existing) {
-      await this.cacheService.set(
-        cacheKey,
-        existing.dispatchId,
-        RoomsService.AI_INTERVIEWER_DISPATCH_CACHE_TTL_SECONDS,
-      );
+    // Two participants joining concurrently can both miss the cache and both
+    // miss listDispatch (LiveKit propagation latency), leading to duplicate
+    // worker dispatches in the same room. Guard the whole check-then-create
+    // block with a short Redis lock via setIfNotExists, then re-check the
+    // cache after acquiring it (double-checked locking).
+    const lockKey = `${cacheKey}:lock`;
+    const acquired = await this.cacheService.setIfNotExists(lockKey, true, 10);
+    if (!acquired) {
+      // Another caller is dispatching. They will populate the cache; skip.
       return;
     }
 
-    const sessionId = await this.loadCurrentRoomSessionId(roomId);
-    const metadata = JSON.stringify({
-      roomId,
-      participantUserId,
-      sessionId,
-    });
-    const created = await this.agentDispatchService.createDispatch(roomId, agentName, { metadata });
-    await this.cacheService.set(
-      cacheKey,
-      created.dispatchId,
-      RoomsService.AI_INTERVIEWER_DISPATCH_CACHE_TTL_SECONDS,
-    );
+    try {
+      const cachedAfterLock = await this.cacheService.get<string>(cacheKey);
+      if (cachedAfterLock?.length) {
+        return;
+      }
+
+      const agentName = this.resolveAiInterviewerAgentName();
+      const existingDispatches = await this.agentDispatchService.listDispatch(roomId);
+      const existing = existingDispatches.find((dispatch) => dispatch.agentName === agentName);
+      if (existing) {
+        await this.cacheService.set(
+          cacheKey,
+          existing.dispatchId,
+          RoomsService.AI_INTERVIEWER_DISPATCH_CACHE_TTL_SECONDS,
+        );
+        return;
+      }
+
+      const sessionId = await this.loadCurrentRoomSessionId(roomId);
+      const metadata = JSON.stringify({
+        roomId,
+        participantUserId,
+        sessionId,
+      });
+      const created = await this.agentDispatchService.createDispatch(roomId, agentName, {
+        metadata,
+      });
+      await this.cacheService.set(
+        cacheKey,
+        created.dispatchId,
+        RoomsService.AI_INTERVIEWER_DISPATCH_CACHE_TTL_SECONDS,
+      );
+    } finally {
+      await this.cacheService.del(lockKey).catch(() => undefined);
+    }
   }
 
   private async deleteAiInterviewerDispatch(roomId: string): Promise<boolean> {

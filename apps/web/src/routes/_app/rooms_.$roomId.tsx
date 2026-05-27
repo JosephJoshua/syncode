@@ -620,10 +620,6 @@ function RoomPage() {
     onDataReceived: setLatestLiveKitDataPacket,
   });
 
-  useEffect(() => {
-    setLatestLiveKitDataPacket(null);
-  }, []);
-
   const mediaConnectedSet = useMemo(() => {
     const set = new Set<string>();
     if (mediaLocalParticipant) set.add(mediaLocalParticipant.identity);

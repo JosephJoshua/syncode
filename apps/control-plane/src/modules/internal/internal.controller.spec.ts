@@ -290,15 +290,14 @@ describe('InternalController', () => {
       participantId: '11111111-1111-4111-8111-111111111111',
     });
 
+    // The controller is a pure pass-through here — assert only the result
+    // shape. Per AGENTS.md: don't add toHaveBeenCalledWith() delegation
+    // assertions; the integration test covers the full service path.
     expect(result).toEqual(
       expect.objectContaining({
         roomId: 'room-1',
         participantId: '11111111-1111-4111-8111-111111111111',
       }),
-    );
-    expect(mocks.roomsService.getAiInterviewerContext).toHaveBeenCalledWith(
-      'room-1',
-      '11111111-1111-4111-8111-111111111111',
     );
   });
 
@@ -312,6 +311,9 @@ describe('InternalController', () => {
       reason: 'candidate explicitly asked to start coding',
     });
 
+    // The meaningful behavior here is Date → ISO serialization (the service
+    // returns transitionedAt as a Date). Asserting the full result shape
+    // verifies that and avoids a delegation-only toHaveBeenCalledWith assertion.
     expect(result).toEqual({
       roomId: 'room-1',
       previousStatus: 'warmup',
@@ -319,11 +321,6 @@ describe('InternalController', () => {
       transitionedAt: '2026-05-25T10:00:00.000Z',
       transitionedBy: '11111111-1111-4111-8111-111111111111',
     });
-    expect(mocks.roomsService.transitionPhase).toHaveBeenCalledWith(
-      'room-1',
-      '11111111-1111-4111-8111-111111111111',
-      'coding',
-    );
   });
 
   it('GIVEN valid snapshot WHEN handleSnapshotReady THEN also persists binary state via RoomsService', async () => {

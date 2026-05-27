@@ -359,6 +359,11 @@ function createInterviewSession(): voice.AgentSession {
   }
 }
 
+// All internal-callback fetches use this timeout so a hung control-plane
+// cannot park the realtime worker indefinitely (refreshRoomContext is
+// already wrapped in a retry loop, multiplying any stall).
+const INTERNAL_CALLBACK_TIMEOUT_MS = 5_000;
+
 async function postTranscriptTurn(roomId: string, turn: TranscriptTurnPayload): Promise<void> {
   const response = await fetch(resolveTranscriptUrl(roomId), {
     method: 'POST',
@@ -369,6 +374,7 @@ async function postTranscriptTurn(roomId: string, turn: TranscriptTurnPayload): 
     body: JSON.stringify({
       turns: [turn],
     }),
+    signal: AbortSignal.timeout(INTERNAL_CALLBACK_TIMEOUT_MS),
   });
 
   if (!response.ok) {
@@ -391,6 +397,7 @@ async function fetchAiInterviewerRoomContext(
       'X-Internal-Secret': env.INTERNAL_CALLBACK_SECRET,
     },
     body: JSON.stringify(requestPayload),
+    signal: AbortSignal.timeout(INTERNAL_CALLBACK_TIMEOUT_MS),
   });
   if (!response.ok) {
     const body = await response.text();
@@ -417,6 +424,7 @@ async function requestAiInterviewerPhaseTransition(params: {
       'X-Internal-Secret': env.INTERNAL_CALLBACK_SECRET,
     },
     body: JSON.stringify(requestPayload),
+    signal: AbortSignal.timeout(INTERNAL_CALLBACK_TIMEOUT_MS),
   });
   if (!response.ok) {
     const body = await response.text();
