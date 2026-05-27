@@ -858,3 +858,433 @@ function buildPassingOptimizationGuardResponse(candidateMessage: string): string
   return useChinese
     ? '你已经有一个通过测试的方案了。作为面试官，我不会直接给出优化实现；请你先指出当前重复遍历中最浪费的一步，以及如果想少做重复检查，需要在遍历过程中记住哪类信息。'
     : "You already have a passing solution. As the interviewer, I won't prescribe the optimized implementation; first identify the most wasteful repeated check in your current loops, and what kind of information you would need to remember while scanning.";
+}
+
+function hasRepeatedLoopStructure(code: string): boolean {
+  return (code.match(/\b(for|while)\b/gi)?.length ?? 0) >= 2;
+}
+
+function buildSubmissionReviewKey(context: AiInterviewerContextResponse): string | null {
+  const latest = context.latestSubmission;
+  if (!latest) {
+    return null;
+  }
+  return [
+    latest.submittedAt,
+    latest.status,
+    latest.passedTestCases,
+    latest.totalTestCases,
+    latest.failedTestCases,
+    latest.errorTestCases,
+  ].join(':');
+}
+
+function buildSubmissionReviewResponse(params: {
+  context: AiInterviewerContextResponse;
+  interfaceLanguage?: string;
+}): string {
+  const latest = params.context.latestSubmission;
+  const useChinese = isChineseLanguageHint(params.interfaceLanguage);
+  if (!latest) {
+    return useChinese
+      ? '我看到你刚提交了代码，但还没有拿到完整结果。我们先基于当前代码继续讨论复杂度和边界情况。'
+      : "I see that you submitted, but I don't have a complete result yet. Let's continue from the current code and discuss complexity and edge cases.";
+  }
+
+  if (latest.status !== 'completed') {
+    return useChinese
+      ? `我看到你的提交状态是 ${latest.status}。等结果完成后，我会基于通过情况和当前代码继续追问。`
+      : `I see your submission is ${latest.status}. Once the result completes, I will review the outcome and current code.`;
+  }
+
+  const passedAll = latest.totalTestCases > 0 && latest.passedTestCases === latest.totalTestCases;
+  const reviewedCode = latest.code || params.context.currentCode.code;
+  if (passedAll) {
+    if (hasRepeatedLoopStructure(reviewedCode)) {
+      return useChinese
+        ? `我看到这次提交通过了全部 ${latest.totalTestCases} 个测试。你提交的代码是重复遍历型方案，正确性在这些用例上没有问题；请你简短说明它的时间复杂度，以及在题目约束下这个取舍是否可以接受，然后我们准备进入总结。`
+        : `I see your submitted code passed all ${latest.totalTestCases} test cases. The code you submitted is a repeated-iteration solution, and it is correct for these tests; briefly state its time complexity and whether that tradeoff is acceptable for the constraints, then we can move toward wrapup.`;
+    }
+    return useChinese
+      ? `我看到这次提交通过了全部 ${latest.totalTestCases} 个测试。请你简短说明最终复杂度和核心正确性理由，然后我们准备进入总结。`
+      : `I see your submission passed all ${latest.totalTestCases} test cases. Briefly explain the final complexity and the core correctness argument, then we can move toward wrapup.`;
+  }
+
+  return useChinese
+    ? `我看到这次提交通过了 ${latest.passedTestCases}/${latest.totalTestCases} 个测试。先不要换到全新的实现，回到当前代码：哪个假设最可能导致剩余用例失败？`
+    : `I see your submission passed ${latest.passedTestCases}/${latest.totalTestCases} test cases. Do not jump to a new implementation yet; in your current code, which assumption is most likely causing the remaining case to fail?`;
+}
+
+function buildRepeatedNonPassingSubmissionBoundaryResponse(params: {
+  context: AiInterviewerContextResponse;
+  guidanceTurns: number;
+  interfaceLanguage?: string;
+}): string {
+  const useChinese = isChineseLanguageHint(params.interfaceLanguage);
+  const latest = params.context.latestSubmission;
+  const resultSegment = latest
+    ? `${latest.passedTestCases}/${latest.totalTestCases}`
+    : 'not fully passing';
+  if (useChinese) {
+    return `我们已经做了 ${params.guidanceTurns} 轮调试引导，最新提交仍然是 ${resultSegment}。你可以最后再尝试一次，或者我们现在进入总结，回顾当前方案的问题。`;
+  }
+  return `We have already done ${params.guidanceTurns} debugging passes, and the latest submission is still ${resultSegment}. You can take one final attempt, or we can move to wrapup and review the issue in your current approach.`;
+}
+
+function buildCodingPhaseKickoffInstructions(params: {
+  candidateMessage?: string;
+  rememberedContext?: AiInterviewerContext;
+  runtimeContext?: AiInterviewerContextResponse;
+}): string {
+  const parts = [
+    'Coding phase kickoff turn (follow strictly):',
+    '1) Say warmup is complete and that coding phase is starting now.',
+    "2) Use wording similar to: 'Sounds good, let's start the coding phase now. You can begin implementing.'",
+    '3) State that you will challenge reasoning and not provide direct final answers.',
+    '4) Keep this concise and interviewer-like.',
+    'HARD ANTI-LEAKAGE RULES FOR THIS TURN:',
+    '- Do NOT name any data structure, algorithm, or technique for the active problem.',
+    '- Do NOT describe what the solution should store, look up, check, or iterate over.',
+    "- Do NOT use lead-ins like 'one approach is', 'you could use', 'a common way is', 'consider using'.",
+    'STOP IMMEDIATELY after the brief kickoff. Do not continue with hints or strategy.',
+  ];
+  if (params.candidateMessage) {
+    parts.push(`Recent candidate message: ${params.candidateMessage}`);
+  }
+  if (params.rememberedContext) {
+    parts.push(buildCompactInterviewContextReminder(params.rememberedContext));
+  }
+  if (params.runtimeContext) {
+    parts.push(buildLiveRoomContextInstructions(params.runtimeContext, 'compact'));
+  }
+  return parts.join('\n');
+}
+
+function buildWrapupPhaseKickoffInstructions(params: {
+  rememberedContext?: AiInterviewerContext;
+  runtimeContext?: AiInterviewerContextResponse;
+}): string {
+  const latest = params.runtimeContext?.latestSubmission;
+  const passingAll =
+    latest &&
+    latest.status === 'completed' &&
+    latest.totalTestCases > 0 &&
+    latest.passedTestCases === latest.totalTestCases;
+  const outcomeGuidance = latest
+    ? passingAll
+      ? `Latest submission passed all ${latest.totalTestCases} tests — open with sincere positive acknowledgement (e.g. "great work").`
+      : `Latest submission passed ${latest.passedTestCases}/${latest.totalTestCases} tests — open with measured, respectful acknowledgement (e.g. "good effort", "nice work pushing through this"); do NOT overpraise as if everything passed.`
+    : 'No completed submission on record — acknowledge the effort honestly without claiming the solution was finished.';
+
+  const parts = [
+    'Wrapup phase kickoff turn (follow strictly):',
+    '1) Open by acknowledging that the interview is moving into the wrapup phase.',
+    `2) ${outcomeGuidance}`,
+    '3) Give a brief overall assessment of the candidate (1-2 sentences) grounded in the submitted code and submission stats: cover correctness and approach. Avoid revealing optimized algorithms or implementation details the candidate did not already state or write.',
+    '4) Explicitly invite the candidate to share any final reflections, questions, or anything they would like to discuss before ending.',
+    '5) Keep the whole turn to roughly 3-5 sentences. Interviewer tone, warm but professional.',
+    '6) Do not request another phase transition in this turn — wrapup ends only when the candidate explicitly signs off.',
+  ];
+  if (params.rememberedContext) {
+    parts.push(buildCompactInterviewContextReminder(params.rememberedContext));
+  }
+  if (params.runtimeContext) {
+    parts.push(buildLiveRoomContextInstructions(params.runtimeContext, 'detailed'));
+  }
+  return parts.join('\n');
+}
+
+function buildConstraintGuidance(context: AiInterviewerContextResponse): string {
+  const description = context.problem?.description ?? '';
+  const normalized = description.toLowerCase();
+  const hasGuaranteedSolution =
+    normalized.includes('exactly one solution') ||
+    normalized.includes('guaranteed') ||
+    normalized.includes('one valid answer') ||
+    description.includes('保证有解') ||
+    description.includes('唯一解') ||
+    description.includes('恰好一个解');
+  if (hasGuaranteedSolution) {
+    return 'Constraint note: problem statement indicates a guaranteed valid solution; avoid no-solution edge-case drills unless user asks.';
+  }
+  return 'Constraint note: only reason about constraints explicitly present in the provided statement; do not invent extra assumptions.';
+}
+
+function buildPhaseBehaviorGuidance(
+  roomStatus: AiInterviewerContextResponse['roomStatus'],
+): string {
+  switch (roomStatus) {
+    case 'waiting':
+      return 'Do not start interview conversation yet; wait until warmup/coding/wrapup.';
+    case 'warmup':
+      return 'Ask no more than 2 warmup questions total, then state that coding is starting and move to coding.';
+    case 'coding':
+      return 'Prioritize evaluation, keep quiet during focused coding, and move to wrapup once the solution review is complete.';
+    case 'wrapup':
+      return 'Summarize performance and ask reflective final questions. End only on explicit user intent.';
+    case 'finished':
+      return 'Interview has ended. Do not continue active questioning.';
+    default:
+      return 'Keep responses phase-appropriate and concise.';
+  }
+}
+
+function buildNumberedCodeBlock(code: string, maxLines: number, maxChars: number): string {
+  if (!code.trim()) {
+    return '';
+  }
+
+  const lines = code.split(/\r?\n/);
+  const numbered: string[] = [];
+  const limit = Math.min(lines.length, maxLines);
+  for (let index = 0; index < limit; index += 1) {
+    const lineNumber = String(index + 1).padStart(3, ' ');
+    numbered.push(`${lineNumber} | ${lines[index]}`);
+  }
+  if (lines.length > maxLines) {
+    numbered.push(`... (${lines.length - maxLines} more lines)`);
+  }
+  return clampInstructionContent(numbered.join('\n'), maxChars);
+}
+
+function clampInstructionContent(content: string, maxLength: number): string {
+  if (content.length <= maxLength) {
+    return content;
+  }
+  return `${content.slice(0, maxLength - 1).trimEnd()}…`;
+}
+
+function estimateTokenCount(text: string): number {
+  if (!text) {
+    return 0;
+  }
+  const trimmed = text.trim();
+  if (!trimmed) {
+    return 0;
+  }
+  // Rough cross-language estimate for telemetry; not model-accurate billing tokens.
+  return Math.max(1, Math.ceil(trimmed.length / 3.8));
+}
+
+function isDirectAnswerRequest(text: string): boolean {
+  const normalized = text.toLowerCase();
+  return (
+    normalized.includes('give me the answer') ||
+    normalized.includes('just tell me the answer') ||
+    normalized.includes('tell me exactly') ||
+    normalized.includes('tell me how exactly') ||
+    normalized.includes('exactly how') ||
+    normalized.includes('show me step by step') ||
+    normalized.includes('walk me through the solution') ||
+    normalized.includes('guide me through making it better') ||
+    normalized.includes('guide me through the better solution') ||
+    normalized.includes('what should we use') ||
+    normalized.includes('what should i use') ||
+    normalized.includes('tell me how to solve') ||
+    normalized.includes('how should i solve') ||
+    normalized.includes('what approach should i use') ||
+    normalized.includes('which algorithm') ||
+    normalized.includes('what algorithm') ||
+    normalized.includes('which data structure') ||
+    normalized.includes('what data structure') ||
+    normalized.includes('which data type') ||
+    normalized.includes('what data type') ||
+    normalized.includes('solve it for me') ||
+    normalized.includes('write the code for me') ||
+    normalized.includes('不知道用什么算法') ||
+    normalized.includes('用什么算法') ||
+    normalized.includes('用什么数据结构') ||
+    normalized.includes('直接告诉') ||
+    normalized.includes('给我答案') ||
+    normalized.includes('告诉我怎么做') ||
+    normalized.includes('一步一步教我') ||
+    normalized.includes('直接给代码')
+  );
+}
+
+function isOptimizationRequest(text: string): boolean {
+  const normalized = text.toLowerCase();
+  return (
+    normalized.includes('make it better') ||
+    normalized.includes('make this better') ||
+    normalized.includes('refine the solution') ||
+    normalized.includes('refine this solution') ||
+    normalized.includes('improve the solution') ||
+    normalized.includes('optimize') ||
+    normalized.includes('more efficient') ||
+    normalized.includes('better complexity') ||
+    normalized.includes('更优') ||
+    normalized.includes('优化') ||
+    normalized.includes('提高效率')
+  );
+}
+
+function isCandidateUnableToFindStrategy(text: string): boolean {
+  const normalized = text.toLowerCase();
+  return (
+    normalized.includes("couldn't think") ||
+    normalized.includes('could not think') ||
+    normalized.includes("can't think") ||
+    normalized.includes('cannot think') ||
+    normalized.includes("couldn't come up") ||
+    normalized.includes('could not come up') ||
+    normalized.includes("don't know another strategy") ||
+    normalized.includes('do not know another strategy') ||
+    normalized.includes("don't know the strategy") ||
+    normalized.includes('do not know the strategy') ||
+    normalized.includes("don't know the algorithm") ||
+    normalized.includes('do not know the algorithm') ||
+    normalized.includes('no idea what to use') ||
+    normalized.includes('想不出来') ||
+    normalized.includes('不知道其他方法') ||
+    normalized.includes('不知道策略') ||
+    normalized.includes('不知道算法')
+  );
+}
+
+function mentionsBroadApproach(text: string): boolean {
+  const normalized = text.toLowerCase();
+  return (
+    normalized.includes('hash map') ||
+    normalized.includes('hashmap') ||
+    normalized.includes('dictionary') ||
+    normalized.includes('dict') ||
+    normalized.includes('map structure') ||
+    normalized.includes('two pointer') ||
+    normalized.includes('two-pointer') ||
+    normalized.includes('binary search') ||
+    normalized.includes('哈希') ||
+    normalized.includes('字典') ||
+    normalized.includes('双指针') ||
+    normalized.includes('二分')
+  );
+}
+
+function isExplicitGiveUp(text: string): boolean {
+  const normalized = text.toLowerCase();
+  return (
+    normalized.includes('i give up') ||
+    normalized.includes("i don't know anymore") ||
+    normalized.includes('i am stuck') ||
+    normalized.includes("i can't do it") ||
+    normalized.includes('i cannot do it') ||
+    normalized.includes("i don't think i can do it") ||
+    normalized.includes('i have no idea') ||
+    normalized.includes("i don't know what to do") ||
+    normalized.includes('放弃') ||
+    normalized.includes('我不会了') ||
+    normalized.includes('我做不出来') ||
+    normalized.includes('我不知道怎么做') ||
+    normalized.includes('告诉我答案吧')
+  );
+}
+
+function isDiscouragedCandidateMessage(text: string): boolean {
+  const normalized = text.toLowerCase();
+  return (
+    isExplicitGiveUp(text) ||
+    normalized.includes('this is too hard') ||
+    normalized.includes("i don't think this works") ||
+    normalized.includes("i'm lost") ||
+    normalized.includes('i am lost') ||
+    normalized.includes('算了') ||
+    normalized.includes('太难了') ||
+    normalized.includes('没思路') ||
+    normalized.includes('没有思路')
+  );
+}
+
+function isContinueAttemptIntent(text: string): boolean {
+  const normalized = text.toLowerCase();
+  return (
+    normalized.includes('one more') ||
+    normalized.includes('try again') ||
+    normalized.includes('continue') ||
+    normalized.includes('keep going') ||
+    normalized.includes('再试') ||
+    normalized.includes('继续') ||
+    normalized.includes('再来一次')
+  );
+}
+
+function isCodeOrSubmissionReviewRequest(text: string): boolean {
+  const normalized = text.toLowerCase();
+  return (
+    normalized.includes('review my code') ||
+    normalized.includes('check my code') ||
+    normalized.includes('review the submission') ||
+    normalized.includes('check submission') ||
+    normalized.includes('look at my code') ||
+    normalized.includes('看我的代码') ||
+    normalized.includes('检查我的代码') ||
+    normalized.includes('看一下提交') ||
+    normalized.includes('检查提交结果')
+  );
+}
+
+function isContextRefreshRequest(text: string): boolean {
+  const normalized = text.toLowerCase();
+  return (
+    normalized.includes('retrieve the code context') ||
+    normalized.includes('get the code context') ||
+    normalized.includes('fetch the code context') ||
+    normalized.includes('check the latest code context') ||
+    normalized.includes('refresh context') ||
+    normalized.includes('获取代码上下文') ||
+    normalized.includes('重新获取上下文') ||
+    normalized.includes('再获取一次上下文')
+  );
+}
+
+function isReadyToCodeIntent(text: string): boolean {
+  const normalized = text.toLowerCase();
+  return (
+    normalized.includes('start coding') ||
+    normalized.includes('let me code') ||
+    normalized.includes('i will code now') ||
+    normalized.includes('开始写代码') ||
+    normalized.includes('我来写代码') ||
+    normalized.includes('进入编码')
+  );
+}
+
+function isEndInterviewIntent(text: string): boolean {
+  const normalized = text.toLowerCase();
+  return (
+    normalized.includes('end session') ||
+    normalized.includes('end the interview') ||
+    normalized.includes('stop the interview') ||
+    normalized.includes('thank you for the interview') ||
+    normalized.includes('goodbye') ||
+    normalized.includes('结束面试') ||
+    normalized.includes('结束会话') ||
+    normalized.includes('谢谢面试') ||
+    normalized.includes('再见')
+  );
+}
+
+function isLikelyAccidentalCandidateMessage(text: string): boolean {
+  const normalized = text.trim().toLowerCase();
+  if (!normalized) {
+    return true;
+  }
+  if (/^(#|[.,!?;:，。！？；：]+|uh+|um+|ah+|er+|hmm+)$/i.test(normalized)) {
+    return true;
+  }
+
+  const meaningfulCharacters = Array.from(normalized).filter((char) => /[\p{L}\p{N}]/u.test(char));
+  const containsCjk = /[\u3400-\u9fff]/u.test(normalized);
+  return !containsCjk && meaningfulCharacters.length <= 1;
+}
+
+function parseSubmissionSignalSummary(
+  summary: string | undefined,
+): ParsedSubmissionSignalSummary | null {
+  if (!summary) {
+    return null;
+  }
+  const match =
+    /submission completed with\s+(\d+)\s*\/\s*(\d+)\s+test cases passed(?:\s+at\s+(\S+))?/i.exec(
+      summary,
+    );
+  if (!match) {
