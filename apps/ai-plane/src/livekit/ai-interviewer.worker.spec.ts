@@ -939,3 +939,412 @@ describe('ai-interviewer.worker text classifiers', () => {
     );
   });
 });
+
+describe('ai-interviewer.worker submission parsers and predicates', () => {
+  it('GIVEN a well-formed submission summary WHEN parseSubmissionSignalSummary runs THEN it parses counts and timestamp', () => {
+    expect(
+      __testing.parseSubmissionSignalSummary(
+        'submission completed with 3/5 test cases passed at 2026-05-27T10:00:00.000Z',
+      ),
+    ).toEqual({
+      passedTestCases: 3,
+      totalTestCases: 5,
+      submittedAt: '2026-05-27T10:00:00.000Z',
+    });
+  });
+
+  it('GIVEN a summary with trailing punctuation WHEN parseSubmissionSignalSummary runs THEN timestamp is normalized', () => {
+    expect(
+      __testing.parseSubmissionSignalSummary(
+        'submission completed with 3/5 test cases passed at 2026-05-27T10:00:00.000Z.',
+      )?.submittedAt,
+    ).toBe('2026-05-27T10:00:00.000Z');
+  });
+
+  it('GIVEN a malformed summary WHEN parseSubmissionSignalSummary runs THEN it returns null', () => {
+    expect(__testing.parseSubmissionSignalSummary('not a submission')).toBeNull();
+    expect(__testing.parseSubmissionSignalSummary(undefined)).toBeNull();
+    expect(
+      __testing.parseSubmissionSignalSummary('submission completed with 0/0 test cases passed'),
+    ).toBeNull();
+  });
+
+  it('GIVEN a non-parseable timestamp WHEN normalizeSubmissionSignalTimestamp runs THEN it returns undefined', () => {
+    expect(__testing.normalizeSubmissionSignalTimestamp('not-a-time')).toBeUndefined();
+    expect(__testing.normalizeSubmissionSignalTimestamp(undefined)).toBeUndefined();
+  });
+
+  it('GIVEN a parseable timestamp WHEN normalizeSubmissionSignalTimestamp runs THEN it returns normalized value', () => {
+    expect(__testing.normalizeSubmissionSignalTimestamp('2026-05-27T10:00:00.000Z')).toBe(
+      '2026-05-27T10:00:00.000Z',
+    );
+  });
+
+  it('GIVEN a well-formed run summary WHEN parseRunSummary runs THEN it parses passed/total', () => {
+    expect(__testing.parseRunSummary('Latest run: 2/3 passed.')).toEqual({ passed: 2, total: 3 });
+  });
+
+  it('GIVEN garbage input WHEN parseRunSummary runs THEN it returns null', () => {
+    expect(__testing.parseRunSummary(undefined)).toBeNull();
+    expect(__testing.parseRunSummary('nothing')).toBeNull();
+  });
+
+  it('GIVEN a passing submission WHEN isPassingSubmission runs THEN it returns true', () => {
+    expect(
+      __testing.isPassingSubmission({
+        ...baseRuntimeContext,
+        latestSubmission: {
+          code: 'pass',
+          language: 'python',
+          status: 'completed',
+          passedTestCases: 3,
+          totalTestCases: 3,
+          failedTestCases: 0,
+          errorTestCases: 0,
+          submittedAt: '2026-05-27T10:00:00.000Z',
+        },
+      }),
+    ).toBe(true);
+  });
+
+  it('GIVEN a non-passing submission WHEN isNonPassingSubmission runs THEN it returns true', () => {
+    expect(
+      __testing.isNonPassingSubmission({
+        ...baseRuntimeContext,
+        latestSubmission: {
+          code: 'pass',
+          language: 'python',
+          status: 'completed',
+          passedTestCases: 2,
+          totalTestCases: 3,
+          failedTestCases: 1,
+          errorTestCases: 0,
+          submittedAt: '2026-05-27T10:00:00.000Z',
+        },
+      }),
+    ).toBe(true);
+  });
+
+  it('GIVEN no submission WHEN isPassingSubmission/isNonPassingSubmission run THEN they return false', () => {
+    expect(__testing.isPassingSubmission(baseRuntimeContext)).toBe(false);
+    expect(__testing.isNonPassingSubmission(baseRuntimeContext)).toBe(false);
+    expect(__testing.isPassingSubmission(undefined)).toBe(false);
+    expect(__testing.isNonPassingSubmission(undefined)).toBe(false);
+  });
+
+  it('GIVEN a matching latest submission WHEN matchesExpectedSubmission runs THEN it returns true', () => {
+    const latest = {
+      code: 'pass',
+      language: 'python' as const,
+      status: 'completed' as const,
+      passedTestCases: 2,
+      totalTestCases: 3,
+      failedTestCases: 1,
+      errorTestCases: 0,
+      submittedAt: '2026-05-27T10:00:00.000Z',
+    };
+    expect(
+      __testing.matchesExpectedSubmission(latest, {
+        passedTestCases: 2,
+        totalTestCases: 3,
+        submittedAt: '2026-05-27T09:59:00.000Z',
+      }),
+    ).toBe(true);
+  });
+
+  it('GIVEN a mismatched submission WHEN matchesExpectedSubmission runs THEN it returns false', () => {
+    const latest = {
+      code: 'pass',
+      language: 'python' as const,
+      status: 'completed' as const,
+      passedTestCases: 1,
+      totalTestCases: 3,
+      failedTestCases: 2,
+      errorTestCases: 0,
+      submittedAt: '2026-05-27T10:00:00.000Z',
+    };
+    expect(
+      __testing.matchesExpectedSubmission(latest, {
+        passedTestCases: 2,
+        totalTestCases: 3,
+      }),
+    ).toBe(false);
+    expect(
+      __testing.matchesExpectedSubmission(null, { passedTestCases: 1, totalTestCases: 3 }),
+    ).toBe(false);
+  });
+
+  it('GIVEN a runtime context with a problem WHEN toRealtimeInterviewContext runs THEN it returns the mapped context', () => {
+    const out = __testing.toRealtimeInterviewContext(baseRuntimeContext);
+    expect(out).toMatchObject({
+      problemTitle: 'Two Sum',
+      problemDescription: baseRuntimeContext.problem?.description,
+    });
+  });
+
+  it('GIVEN a runtime context without a problem WHEN toRealtimeInterviewContext runs THEN it returns undefined', () => {
+    expect(
+      __testing.toRealtimeInterviewContext({ ...baseRuntimeContext, problem: null }),
+    ).toBeUndefined();
+  });
+
+  it('GIVEN starter code missing WHEN toRealtimeInterviewContext runs THEN it falls back to placeholder text', () => {
+    const out = __testing.toRealtimeInterviewContext({
+      ...baseRuntimeContext,
+      problem: {
+        title: 'Two Sum',
+        description: 'desc',
+        difficulty: null,
+        starterCode: null,
+      },
+    });
+    expect(out?.starterCode).toMatch(/No official starter code/);
+  });
+});
+
+describe('ai-interviewer.worker resolveInlineCommentLine', () => {
+  const sample = ['def f(x):', '  return x', '  # placeholder', '  return None'].join('\n');
+
+  it('GIVEN a matching lineText WHEN resolveInlineCommentLine runs THEN it returns the matched line', () => {
+    expect(__testing.resolveInlineCommentLine(1, 'return x', sample)).toBe(2);
+  });
+
+  it('GIVEN an out-of-bounds requested line WHEN resolveInlineCommentLine runs THEN it clamps within bounds', () => {
+    expect(__testing.resolveInlineCommentLine(99, undefined, sample)).toBe(4);
+    expect(__testing.resolveInlineCommentLine(0, undefined, sample)).toBe(1);
+  });
+
+  it('GIVEN no matching needle WHEN resolveInlineCommentLine runs THEN it falls back to the bounded line', () => {
+    expect(__testing.resolveInlineCommentLine(2, 'not in code', sample)).toBe(2);
+  });
+
+  it('GIVEN empty code WHEN resolveInlineCommentLine runs THEN it returns 1', () => {
+    // split('\n') of empty returns [''] which yields lines.length === 1, so result is bounded at 1.
+    expect(__testing.resolveInlineCommentLine(1, undefined, '')).toBe(1);
+  });
+});
+
+describe('ai-interviewer.worker reason-specific and constraint guidance', () => {
+  const reasons: AiInterviewerSignalReason[] = [
+    'session_joined',
+    'stage_changed',
+    'user_idle',
+    'hint_used',
+    'code_ran',
+    'code_submitted',
+    'manual_nudge',
+  ];
+
+  it.each(
+    reasons,
+  )('GIVEN reason %s WHEN buildReasonSpecificInstructions runs THEN it returns reason-tailored text', (reason) => {
+    const out = __testing.buildReasonSpecificInstructions(reason, undefined);
+    expect(typeof out).toBe('string');
+    expect(out.length).toBeGreaterThan(0);
+  });
+
+  it('GIVEN a code_ran summary with a fully passing run WHEN buildReasonSpecificInstructions runs THEN it asks to stay quiet', () => {
+    const out = __testing.buildReasonSpecificInstructions('code_ran', 'Latest run: 3/3 passed.');
+    expect(out).toContain('Visible run passed fully');
+  });
+
+  it('GIVEN a code_ran summary with a partial run WHEN buildReasonSpecificInstructions runs THEN it asks for a targeted debug question', () => {
+    const out = __testing.buildReasonSpecificInstructions('code_ran', 'Latest run: 1/3 passed.');
+    expect(out).toContain('non-passing tests');
+  });
+
+  it('GIVEN a problem description hinting guaranteed solutions WHEN buildConstraintGuidance runs THEN it returns the no-no-solution-drill copy', () => {
+    const out = __testing.buildConstraintGuidance({
+      ...baseRuntimeContext,
+      problem: {
+        title: 'p',
+        description: 'You are guaranteed a valid solution exists.',
+        difficulty: null,
+        starterCode: null,
+      },
+    });
+    expect(out).toContain('guaranteed valid solution');
+  });
+
+  it('GIVEN no special hints WHEN buildConstraintGuidance runs THEN it returns the conservative default', () => {
+    const out = __testing.buildConstraintGuidance(baseRuntimeContext);
+    expect(out).toContain('do not invent extra assumptions');
+  });
+
+  it.each([
+    'waiting',
+    'warmup',
+    'coding',
+    'wrapup',
+    'finished',
+  ] as const)('GIVEN room status %s WHEN buildPhaseBehaviorGuidance runs THEN it returns a phase-specific tip', (status) => {
+    const out = __testing.buildPhaseBehaviorGuidance(status);
+    expect(typeof out).toBe('string');
+    expect(out.length).toBeGreaterThan(0);
+  });
+});
+
+describe('ai-interviewer.worker error message resolver', () => {
+  it('GIVEN an Error WHEN resolveErrorEventMessage runs THEN it returns the error message', () => {
+    expect(__testing.resolveErrorEventMessage(new Error('boom'))).toBe('boom');
+  });
+
+  it('GIVEN a string WHEN resolveErrorEventMessage runs THEN it returns the string', () => {
+    expect(__testing.resolveErrorEventMessage('plain')).toBe('plain');
+  });
+
+  it('GIVEN an unknown value WHEN resolveErrorEventMessage runs THEN it returns a generic fallback', () => {
+    expect(__testing.resolveErrorEventMessage({})).toBe('AI interviewer error');
+    expect(__testing.resolveErrorEventMessage(null)).toBe('AI interviewer error');
+  });
+});
+
+describe('ai-interviewer.worker shouldRespondToSystemSignal', () => {
+  const baseParams = {
+    now: 1_000_000,
+    signalLastSentAt: new Map<AiInterviewerSignalReason, number>(),
+    lastSystemReplyAt: 0,
+    hasInterviewStarted: true,
+    lastUserTurnAt: 0,
+    lastAssistantTurnAt: 0,
+  };
+
+  it('GIVEN reason manual_nudge WHEN shouldRespondToSystemSignal runs THEN it always returns true', () => {
+    expect(
+      __testing.shouldRespondToSystemSignal({
+        ...baseParams,
+        signal: { type: 'system_signal', reason: 'manual_nudge' },
+      }),
+    ).toBe(true);
+  });
+
+  it('GIVEN session_joined while interview already started WHEN shouldRespondToSystemSignal runs THEN it returns false', () => {
+    expect(
+      __testing.shouldRespondToSystemSignal({
+        ...baseParams,
+        signal: { type: 'system_signal', reason: 'session_joined' },
+      }),
+    ).toBe(false);
+  });
+
+  it('GIVEN session_joined while interview not yet started WHEN shouldRespondToSystemSignal runs THEN it returns true', () => {
+    expect(
+      __testing.shouldRespondToSystemSignal({
+        ...baseParams,
+        hasInterviewStarted: false,
+        signal: { type: 'system_signal', reason: 'session_joined' },
+      }),
+    ).toBe(true);
+  });
+
+  it('GIVEN a recent same-reason signal WHEN shouldRespondToSystemSignal runs THEN it returns false due to min interval', () => {
+    const map = new Map<AiInterviewerSignalReason, number>([['code_ran', 1_000_000 - 5_000]]);
+    expect(
+      __testing.shouldRespondToSystemSignal({
+        ...baseParams,
+        signalLastSentAt: map,
+        signal: { type: 'system_signal', reason: 'code_ran' },
+      }),
+    ).toBe(false);
+  });
+
+  it('GIVEN a recent global system reply (non-submission) WHEN shouldRespondToSystemSignal runs THEN it returns false', () => {
+    expect(
+      __testing.shouldRespondToSystemSignal({
+        ...baseParams,
+        lastSystemReplyAt: 1_000_000 - 10_000, // < SYSTEM_SIGNAL_GLOBAL_MIN_INTERVAL_MS (60s)
+        signal: { type: 'system_signal', reason: 'hint_used' },
+      }),
+    ).toBe(false);
+  });
+
+  it('GIVEN user_idle but recent user activity WHEN shouldRespondToSystemSignal runs THEN it returns false', () => {
+    expect(
+      __testing.shouldRespondToSystemSignal({
+        ...baseParams,
+        lastUserTurnAt: 1_000_000 - 60_000, // 1m < 3m gate
+        signal: { type: 'system_signal', reason: 'user_idle' },
+      }),
+    ).toBe(false);
+  });
+
+  it('GIVEN user_idle with no prior user turn WHEN shouldRespondToSystemSignal runs THEN it returns false', () => {
+    expect(
+      __testing.shouldRespondToSystemSignal({
+        ...baseParams,
+        lastUserTurnAt: 0,
+        signal: { type: 'system_signal', reason: 'user_idle' },
+      }),
+    ).toBe(false);
+  });
+
+  it('GIVEN user_idle with old user/assistant turns WHEN shouldRespondToSystemSignal runs THEN it returns true', () => {
+    expect(
+      __testing.shouldRespondToSystemSignal({
+        ...baseParams,
+        lastUserTurnAt: 1_000_000 - 5 * 60_000,
+        lastAssistantTurnAt: 1_000_000 - 5 * 60_000,
+        signal: { type: 'system_signal', reason: 'user_idle' },
+      }),
+    ).toBe(true);
+  });
+
+  it('GIVEN code_ran with a recent assistant turn WHEN shouldRespondToSystemSignal runs THEN it returns false', () => {
+    expect(
+      __testing.shouldRespondToSystemSignal({
+        ...baseParams,
+        lastAssistantTurnAt: 1_000_000 - 30_000,
+        signal: { type: 'system_signal', reason: 'code_ran', summary: 'Latest run: 1/3 passed.' },
+      }),
+    ).toBe(false);
+  });
+
+  it('GIVEN code_ran with a passing run summary and an old assistant turn WHEN shouldRespondToSystemSignal runs THEN it returns false', () => {
+    expect(
+      __testing.shouldRespondToSystemSignal({
+        ...baseParams,
+        lastAssistantTurnAt: 1_000_000 - 10 * 60_000,
+        signal: { type: 'system_signal', reason: 'code_ran', summary: 'Latest run: 3/3 passed.' },
+      }),
+    ).toBe(false);
+  });
+
+  it('GIVEN code_submitted with a sufficient gap WHEN shouldRespondToSystemSignal runs THEN it returns true', () => {
+    expect(
+      __testing.shouldRespondToSystemSignal({
+        ...baseParams,
+        lastAssistantTurnAt: 1_000_000 - 10_000,
+        signal: { type: 'system_signal', reason: 'code_submitted' },
+      }),
+    ).toBe(true);
+  });
+
+  it('GIVEN stage_changed shortly after assistant turn WHEN shouldRespondToSystemSignal runs THEN it returns false', () => {
+    expect(
+      __testing.shouldRespondToSystemSignal({
+        ...baseParams,
+        lastAssistantTurnAt: 1_000_000 - 10_000,
+        signal: { type: 'system_signal', reason: 'stage_changed' },
+      }),
+    ).toBe(false);
+  });
+
+  it('GIVEN hint_used long after the last assistant turn WHEN shouldRespondToSystemSignal runs THEN it returns true', () => {
+    expect(
+      __testing.shouldRespondToSystemSignal({
+        ...baseParams,
+        lastAssistantTurnAt: 1_000_000 - 5 * 60_000,
+        lastSystemReplyAt: 1_000_000 - 5 * 60_000,
+        signal: { type: 'system_signal', reason: 'hint_used' },
+      }),
+    ).toBe(true);
+  });
+});
+
+describe('ai-interviewer.worker createInterviewerInstructions', () => {
+  it('GIVEN no parameters WHEN createInterviewerInstructions runs THEN it returns a string containing the interviewer policy header', () => {
+    const out = __testing.createInterviewerInstructions();
+    expect(out).toContain('SynCode Interviewer');
+    expect(out).toContain('interviewer-safe prompts');
+  });
+});
