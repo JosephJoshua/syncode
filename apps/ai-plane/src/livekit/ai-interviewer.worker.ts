@@ -428,3 +428,433 @@ async function requestAiInterviewerPhaseTransition(params: {
 function buildSystemSignalInstructions(
   signal: Extract<AiInterviewerSignalPayload, { type: 'system_signal' }>,
   rememberedContext?: AiInterviewerContext,
+  runtimeContext?: AiInterviewerContextResponse,
+): string {
+  const parts: string[] = [
+    'A non-verbal interview signal was received from the coding workspace.',
+    `Signal reason: ${signal.reason}.`,
+  ];
+
+  if (signal.summary) {
+    parts.push(`Signal summary: ${signal.summary}`);
+  }
+  if (signal.language) {
+    parts.push(buildInterfaceLanguageInstruction(signal.language, 'system'));
+  }
+
+  const context = signal.interviewContext ?? rememberedContext;
+  if (context) {
+    parts.push(buildInterviewContextInstructions(context));
+  }
+  if (runtimeContext) {
+    parts.push(
+      buildLiveRoomContextInstructions(
+        runtimeContext,
+        signal.reason === 'code_submitted' ? 'detailed' : 'compact',
+      ),
+    );
+  }
+
+  if (signal.codeContext) {
+    parts.push('Code context (with line range):');
+    parts.push(
+      `${signal.codeContext.file} L${signal.codeContext.startLine}-${signal.codeContext.endLine}`,
+    );
+    parts.push(signal.codeContext.codeSnippet);
+    parts.push(
+      'If a focused correction would help, call add_inline_comment with a precise line and concise feedback.',
+    );
+  }
+
+  parts.push(buildReasonSpecificInstructions(signal.reason, signal.summary));
+  if (signal.reason === 'code_submitted') {
+    parts.push(
+      'Do not ignore this signal. Give a concise interviewer evaluation of the submission outcome.',
+    );
+  } else {
+    parts.push(
+      'Decide naturally whether to speak now. If this is quiet work time, keep the response brief or skip asking a follow-up.',
+    );
+  }
+
+  return parts.join('\n');
+}
+
+function buildUserTextInstructions(
+  signal: Extract<AiInterviewerSignalPayload, { type: 'user_text' }>,
+  context?: AiInterviewerContext,
+  runtimeContext?: AiInterviewerContextResponse,
+): string {
+  const parts = [
+    'Candidate sent a typed text message.',
+    `Candidate message: ${signal.text}`,
+    'Respond naturally as the interviewer and keep continuity with prior conversation context.',
+  ];
+
+  if (signal.language) {
+    parts.push(`Candidate language hint: ${signal.language}`);
+  }
+
+  if (context) {
+    parts.push(buildCompactInterviewContextReminder(context));
+  }
+  if (runtimeContext) {
+    parts.push(buildLiveRoomContextInstructions(runtimeContext, 'compact'));
+  }
+  if (signal.latestSubmissionSummary) {
+    parts.push(
+      [
+        'Candidate-visible latest submission summary (authoritative from UI):',
+        `status=${signal.latestSubmissionSummary.status}, passed=${signal.latestSubmissionSummary.passedTestCases}/${signal.latestSubmissionSummary.totalTestCases}, failed=${signal.latestSubmissionSummary.failedTestCases}, errors=${signal.latestSubmissionSummary.errorTestCases}, at=${signal.latestSubmissionSummary.submittedAt}`,
+      ].join('\n'),
+    );
+  }
+  if (isDirectAnswerRequest(signal.text) && !isExplicitGiveUp(signal.text)) {
+    parts.push(
+      [
+        'Policy reminder: candidate is requesting direct solution help.',
+        'Do not reveal full solution, concrete algorithm steps, or complete data-structure choice yet.',
+        'Avoid naming the final canonical approach directly at this stage.',
+        'Reply with exactly one probing question and at most one constrained hint sentence.',
+        'The probing question must not contain the answer, data structure, loop condition, or exact implementation mechanic.',
+      ].join('\n'),
+    );
+  }
+  if (mentionsBroadApproach(signal.text) && !isExplicitGiveUp(signal.text)) {
+    parts.push(
+      [
+        'Candidate named a broad approach or data structure.',
+        'Do not complete the algorithm for them.',
+        'Do not mention exact storage, matching, or lookup mechanics unless their current code already does so and this is a review.',
+        'Acknowledge briefly, then ask them to explain the invariant, correctness condition, or complexity in their own words.',
+        'The question must not smuggle in implementation details they have not said.',
+      ].join('\n'),
+    );
+  }
+  if (isExplicitGiveUp(signal.text)) {
+    parts.push(
+      'Candidate explicitly gave up or says they are stuck. During coding, do not dump the solution; give brief professional encouragement and ask whether they want one final attempt or prefer to wrap up. Save direct solution explanation for wrapup/post-session review.',
+    );
+  }
+  if (isCodeOrSubmissionReviewRequest(signal.text)) {
+    parts.push(
+      [
+        'Mandatory behavior for this turn:',
+        '1) Call get_room_context before answering.',
+        '2) Base review on the returned code + latestSubmission.',
+        '3) If they differ from earlier memory, trust the latest tool result only.',
+        '4) If latestSubmission is passing or the review is complete, give a concise assessment and steer to wrapup instead of asking more coding questions.',
+      ].join('\n'),
+    );
+  }
+  if (isReadyToCodeIntent(signal.text)) {
+    parts.push(
+      [
+        'Candidate indicated readiness to implement.',
+        'If room is in warmup and transition is appropriate, first say coding is starting in the same turn. The worker will transition after your spoken turn.',
+      ].join('\n'),
+    );
+  }
+  if (isEndInterviewIntent(signal.text)) {
+    parts.push(
+      [
+        'Candidate may be signaling interview end.',
+        'If room is in coding, first summarize and guide toward wrapup before requesting a phase transition.',
+        'If room is in wrapup and intent is explicit goodbye/end, acknowledge the sign-off before requesting finish.',
+      ].join('\n'),
+    );
+  }
+  if (isLikelyAccidentalCandidateMessage(signal.text)) {
+    parts.push(
+      [
+        'The candidate message looks accidental or has no interview content.',
+        'Do not ask a new technical question.',
+        'If a response is necessary, keep it to one short clarification.',
+      ].join('\n'),
+    );
+  }
+
+  return parts.join('\n');
+}
+
+function buildInterviewContextInstructions(
+  context: AiInterviewerContext,
+  detail: LiveContextDetail = 'compact',
+): string {
+  const difficultySegment = context.difficulty ? ` (${context.difficulty})` : '';
+  const descriptionLimit = detail === 'detailed' ? 2_800 : 900;
+  const starterCodeLimit = detail === 'detailed' ? 2_200 : 700;
+  return [
+    'Interview context (authoritative):',
+    `Problem: ${context.problemTitle}${difficultySegment}`,
+    `Language: ${context.language}`,
+    `Problem description:\n${clampInstructionContent(context.problemDescription, descriptionLimit)}`,
+    'Starter code (platform scaffold, not candidate-authored by default):',
+    clampInstructionContent(context.starterCode, starterCodeLimit),
+    'Reference this context when evaluating candidate progress and framing questions.',
+  ].join('\n');
+}
+
+function buildCompactInterviewContextReminder(context: AiInterviewerContext): string {
+  const difficultySegment = context.difficulty ? ` (${context.difficulty})` : '';
+  return [
+    `Current interview problem: ${context.problemTitle}${difficultySegment} in ${context.language}.`,
+    'The existing starter code is scaffold code for this platform.',
+  ].join('\n');
+}
+
+function buildLiveRoomContextInstructions(
+  context: AiInterviewerContextResponse,
+  detail: LiveContextDetail = 'compact',
+): string {
+  const latestSubmissionSummary = context.latestSubmission
+    ? `${context.latestSubmission.passedTestCases}/${context.latestSubmission.totalTestCases} passed, failed=${context.latestSubmission.failedTestCases}, errors=${context.latestSubmission.errorTestCases}, status=${context.latestSubmission.status}, language=${context.latestSubmission.language}, at=${context.latestSubmission.submittedAt}`
+    : 'none';
+  const codeLines = context.currentCode.code.split(/\r?\n/).length;
+  const codeBlock =
+    detail === 'detailed'
+      ? buildNumberedCodeBlock(context.currentCode.code, 220, 9_000)
+      : buildNumberedCodeBlock(context.currentCode.code, 40, 1_800);
+
+  const sections = [
+    'Live room context (fresh from control-plane):',
+    `Room status: ${context.roomStatus}`,
+    `Current code source: ${context.currentCode.source}`,
+    `Current code language: ${context.currentCode.language}`,
+    `Current code lines: ${codeLines}`,
+    `Latest submission summary: ${latestSubmissionSummary}`,
+    'Treat these numbers as canonical unless a newer get_room_context call returns fresher data.',
+    buildConstraintGuidance(context),
+    'Current code (live editor state):',
+    codeBlock.length > 0 ? codeBlock : '(empty)',
+    `Phase behavior guidance: ${buildPhaseBehaviorGuidance(context.roomStatus)}`,
+  ];
+
+  if (detail === 'detailed' && context.latestSubmission) {
+    sections.push(
+      'Submitted code under evaluation (this is the exact code the candidate submitted that produced the submission result above — base your review on this code together with the submission summary; do not claim the code is missing, incomplete, or unsubmitted):',
+    );
+    sections.push(buildNumberedCodeBlock(context.latestSubmission.code, 220, 9_000) || '(empty)');
+  }
+
+  if (detail === 'compact') {
+    sections.splice(
+      7,
+      0,
+      'Code excerpt only (compact mode). Use get_room_context for full review.',
+    );
+  }
+
+  return sections.join('\n');
+}
+
+function buildSilentLiveContextUpdateInstructions(params: {
+  context: AiInterviewerContextResponse;
+  signal: Extract<AiInterviewerSignalPayload, { type: 'system_signal' }>;
+}): string {
+  const latestSubmissionSummary = params.context.latestSubmission
+    ? `${params.context.latestSubmission.passedTestCases}/${params.context.latestSubmission.totalTestCases} passed, failed=${params.context.latestSubmission.failedTestCases}, errors=${params.context.latestSubmission.errorTestCases}, status=${params.context.latestSubmission.status}, language=${params.context.latestSubmission.language}, at=${params.context.latestSubmission.submittedAt}`
+    : 'none';
+
+  return [
+    'Silent live coding context update from the workspace.',
+    'Do not respond because of this message alone.',
+    'Use this as background context only. For candidate-requested reviews, call get_room_context before speaking. For system-triggered submission_review instructions, trust the fresh response text computed by the worker.',
+    `Signal reason: ${params.signal.reason}.`,
+    params.signal.summary ? `Signal summary: ${params.signal.summary}` : undefined,
+    `Room status: ${params.context.roomStatus}`,
+    `Problem: ${params.context.problem?.title ?? 'unknown'}`,
+    `Language: ${params.context.language}`,
+    `Latest submission/run summary: ${latestSubmissionSummary}`,
+    params.context.latestSubmission
+      ? 'Latest submitted code that produced the submission result:'
+      : undefined,
+    params.context.latestSubmission
+      ? buildNumberedCodeBlock(params.context.latestSubmission.code, 160, 7_000) || '(empty)'
+      : undefined,
+    'Current code snapshot:',
+    buildNumberedCodeBlock(params.context.currentCode.code, 160, 7_000) || '(empty)',
+  ]
+    .filter((part): part is string => typeof part === 'string' && part.length > 0)
+    .join('\n');
+}
+
+function buildWarmupKickoffInstructions(params: {
+  rememberedContext?: AiInterviewerContext;
+  runtimeContext?: AiInterviewerContextResponse;
+  interfaceLanguage?: string;
+}): string {
+  const parts = [
+    'Warmup scripted turn 1 (follow strictly):',
+    buildInterfaceLanguageInstruction(params.interfaceLanguage, 'opening'),
+    '1) Briefly welcome the candidate.',
+    '2) Explicitly introduce the current interview problem and language from provided context. State only what the problem is asking for — do NOT hint at how to solve it.',
+    '3) Ask exactly one plan question (single question only in this turn).',
+    '4) Keep total output to at most 3 short sentences.',
+    '5) Use at most 1 question mark in this turn.',
+    '6) Do not mention unrelated problems (for example linked list) unless candidate asks to compare.',
+    'HARD ANTI-LEAKAGE RULES FOR THIS TURN (these override any tendency to be helpful):',
+    "- Do NOT name any data structure or container (hash map, hash table, dict/dictionary, set, array, list, queue, stack, heap, tree, graph, trie, deque, etc.) — not as advice, not as a hint, not as 'one common approach', not even as an example.",
+    '- Do NOT name any algorithm or technique (two-pointer, sliding window, binary search, brute force, hashing, memoization, dynamic programming, BFS, DFS, greedy, divide-and-conquer, recursion, sorting first, etc.).',
+    "- Do NOT describe what to store, what to look up, what to check, what to iterate over, or what to compare. Phrases like 'store seen values', 'check if the complement exists', 'iterate and look up' are forbidden.",
+    "- Do NOT use lead-ins like 'one approach is…', 'you could use…', 'a common way is…', 'consider using…'. These leak the answer.",
+    '- Your plan question must ask the candidate how THEY would approach the problem — not propose an approach for them to confirm.',
+    'STOP IMMEDIATELY after asking your single plan question. Do not continue with explanations, examples, or hints. Wait silently for the candidate to respond.',
+  ];
+  if (params.rememberedContext) {
+    parts.push(buildInterviewContextInstructions(params.rememberedContext, 'detailed'));
+  }
+  if (params.runtimeContext) {
+    parts.push(buildLiveRoomContextInstructions(params.runtimeContext, 'compact'));
+  }
+  return parts.join('\n');
+}
+
+function isChineseLanguageHint(language: string | undefined): boolean {
+  const normalized = language?.trim().toLowerCase() ?? '';
+  return normalized.startsWith('zh') || normalized.includes('chinese');
+}
+
+function buildInterfaceLanguageInstruction(
+  language: string | undefined,
+  turnType: 'opening' | 'system',
+): string {
+  if (isChineseLanguageHint(language)) {
+    return turnType === 'opening'
+      ? 'Candidate UI language is Chinese. The opening greeting must be in Simplified Chinese; keep only problem names and code terms in English when necessary.'
+      : 'Candidate UI language is Chinese. Prefer Simplified Chinese unless the candidate most recently used another language.';
+  }
+  return turnType === 'opening'
+    ? 'Candidate UI language is English or unknown. The opening greeting must be in English only; do not include Chinese.'
+    : 'Candidate UI language is English or unknown. Prefer English unless the candidate most recently used another language.';
+}
+
+function buildWarmupFollowupInstructions(params: {
+  candidateMessage: string;
+  rememberedContext?: AiInterviewerContext;
+  runtimeContext?: AiInterviewerContextResponse;
+}): string {
+  const parts = [
+    'Warmup scripted turn 2 (follow strictly):',
+    `Candidate message: ${params.candidateMessage}`,
+    'Ask exactly one focused reasoning question about this exact problem only (single question only).',
+    'If the candidate named a broad approach, do not explain the concrete implementation; ask them to state the invariant or correctness condition.',
+    'Keep this turn to at most 2 short sentences and avoid any extra mini-questions.',
+    'HARD ANTI-LEAKAGE RULES FOR THIS TURN (override any tendency to be helpful):',
+    "- Do NOT name any data structure or container (hash map, hash table, dict, set, array, list, queue, stack, heap, tree, graph, trie, deque) — not as advice, hint, 'one approach', or example.",
+    '- Do NOT name any algorithm or technique (two-pointer, sliding window, binary search, brute force, hashing, memoization, DP, BFS, DFS, greedy, sorting first).',
+    "- Do NOT describe what the solution should store, look up, check, iterate over, or compare. Phrases like 'store seen values', 'check the complement', 'use a lookup' are forbidden.",
+    "- Do NOT use lead-ins like 'one approach is', 'you could use', 'a common way is', 'consider using'. These leak the answer.",
+    "- Your question must probe the candidate's OWN reasoning (e.g. about complexity, invariant, tradeoff, brute-force bottleneck). It must not propose any answer for them to confirm.",
+    'STOP IMMEDIATELY after asking your single reasoning question. Do not continue with explanations, examples, or hints. Wait silently for the candidate to respond.',
+  ];
+  if (params.rememberedContext) {
+    parts.push(buildCompactInterviewContextReminder(params.rememberedContext));
+  }
+  if (params.runtimeContext) {
+    parts.push(buildLiveRoomContextInstructions(params.runtimeContext, 'compact'));
+  }
+  return parts.join('\n');
+}
+
+function buildWarmupTransitionAnnouncementInstructions(params: {
+  candidateMessage: string;
+  rememberedContext?: AiInterviewerContext;
+  runtimeContext?: AiInterviewerContextResponse;
+}): string {
+  const parts = [
+    'Warmup final turn (follow strictly):',
+    `Candidate message: ${params.candidateMessage}`,
+    'Acknowledge the candidate answer briefly.',
+    'Clearly say that warmup is complete and the coding phase is starting now.',
+    'Use this as the transition preamble before the system changes the phase.',
+    'Do not ask another warmup question.',
+    'Keep this to at most 2 short sentences.',
+  ];
+  if (params.rememberedContext) {
+    parts.push(buildCompactInterviewContextReminder(params.rememberedContext));
+  }
+  if (params.runtimeContext) {
+    parts.push(buildLiveRoomContextInstructions(params.runtimeContext, 'compact'));
+  }
+  return parts.join('\n');
+}
+
+function buildRepeatedNonPassingGuidanceInstructions(params: {
+  candidateMessage?: string;
+  guidanceTurns: number;
+  runtimeContext?: AiInterviewerContextResponse;
+}): string {
+  const parts = [
+    'Repeated non-passing guidance boundary:',
+    `You have already tried ${params.guidanceTurns} guidance/review turns while the latest submission is still not passing.`,
+    'Do not keep asking another debugging question.',
+    'Do not reveal the full answer or exact implementation.',
+    'Ask the candidate to choose: one final attempt, or wrap up and review what went wrong.',
+    'Keep it to at most 2 short sentences.',
+  ];
+
+  if (params.candidateMessage) {
+    parts.push(`Candidate message: ${params.candidateMessage}`);
+  }
+  if (params.runtimeContext) {
+    parts.push(buildLiveRoomContextInstructions(params.runtimeContext, 'compact'));
+  }
+
+  return parts.join('\n');
+}
+
+function buildWrapupAfterRepeatedStuckInstructions(params: {
+  candidateMessage: string;
+  discouragedTurns: number;
+  runtimeContext?: AiInterviewerContextResponse;
+}): string {
+  const parts = [
+    'Candidate appears unable or unwilling to continue after repeated guidance.',
+    `Discouraged/give-up turns observed: ${params.discouragedTurns}.`,
+    `Candidate message: ${params.candidateMessage}`,
+    'Acknowledge calmly and professionally.',
+    'Say that you will wrap up the interview here and review the learning points.',
+    'Do not give the full implementation answer.',
+    'Keep it to at most 2 short sentences.',
+  ];
+
+  if (params.runtimeContext) {
+    parts.push(buildLiveRoomContextInstructions(params.runtimeContext, 'compact'));
+  }
+
+  return parts.join('\n');
+}
+
+function buildSafeAnswerPressureResponse(params: {
+  candidateMessage: string;
+  pressureTurns: number;
+  shouldWrapUp: boolean;
+  willMoveToWrapup: boolean;
+}): string {
+  const useChinese = /[\u3400-\u9fff]/u.test(params.candidateMessage);
+  if (params.willMoveToWrapup) {
+    return useChinese
+      ? '我们先到这里，不再继续追问最优实现了。接下来进入总结阶段，回顾你目前方案的复杂度和可以改进的方向。'
+      : "We'll stop pushing the optimized implementation here. Let's move to wrapup and review the complexity and improvement direction from your current approach.";
+  }
+  if (params.shouldWrapUp) {
+    return useChinese
+      ? '我们先不继续逼出最优做法了。你可以最后再试一次，或者我们现在进入总结，回顾目前思路的优缺点。'
+      : "Let's not force the optimized approach further right now. You can take one final attempt, or we can move to wrapup and review the tradeoffs from your current approach.";
+  }
+  if (params.pressureTurns >= 2) {
+    return useChinese
+      ? '我不会直接给出算法或实现细节。先用你已经能说明白的做法写出来，然后告诉我它最耗时的重复工作在哪里。'
+      : "I won't give you the algorithm or implementation details directly. Start with the approach you can explain, then tell me where the repeated work happens.";
+  }
+  return useChinese
+    ? '先不要急着要答案。你从暴力做法出发，告诉我哪一步重复检查最多，以及如果想减少重复，需要记住哪类信息。'
+    : "Don't jump straight to the answer. Starting from brute force, tell me which check is repeated most often and what kind of information would reduce that repetition.";
+}
+
+function buildPassingOptimizationGuardResponse(candidateMessage: string): string {
+  const useChinese = /[\u3400-\u9fff]/u.test(candidateMessage);
+  return useChinese
+    ? '你已经有一个通过测试的方案了。作为面试官，我不会直接给出优化实现；请你先指出当前重复遍历中最浪费的一步，以及如果想少做重复检查，需要在遍历过程中记住哪类信息。'
+    : "You already have a passing solution. As the interviewer, I won't prescribe the optimized implementation; first identify the most wasteful repeated check in your current loops, and what kind of information you would need to remember while scanning.";
