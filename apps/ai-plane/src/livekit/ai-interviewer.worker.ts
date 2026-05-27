@@ -2148,3 +2148,433 @@ const agent = defineAgent({
       }
       if (hasNonPassingCodingSubmission && isDiscouragedCandidateMessage(content)) {
         discouragedTurnCount += 1;
+      }
+      if (
+        hasNonPassingCodingSubmission &&
+        (isDirectAnswerRequest(content) ||
+          mentionsBroadApproach(content) ||
+          isCodeOrSubmissionReviewRequest(content) ||
+          isContextRefreshRequest(content) ||
+          isDiscouragedCandidateMessage(content))
+      ) {
+        nonPassingGuidanceTurnCount += 1;
+      }
+
+      if (
+        hasNonPassingCodingSubmission &&
+        discouragedTurnCount >= 3 &&
+        !queuedPhaseTransitionAfterAssistant
+      ) {
+        queuePhaseTransitionAfterAssistant(
+          'wrapup',
+          'Candidate remained stuck after repeated guidance',
+        );
+        await generateReplyWithTelemetry({
+          reason: 'wrapup_after_repeated_stuck',
+          instructions: buildWrapupAfterRepeatedStuckInstructions({
+            candidateMessage: content,
+            discouragedTurns: discouragedTurnCount,
+            runtimeContext,
+          }),
+        });
+        return;
+      }
+
+      if (
+        hasNonPassingCodingSubmission &&
+        nonPassingGuidanceTurnCount >= 5 &&
+        !askedContinueAfterRepeatedFailure
+      ) {
+        askedContinueAfterRepeatedFailure = true;
+        await generateReplyWithTelemetry({
+          reason: 'repeated_nonpassing_guidance_boundary',
+          instructions: buildRepeatedNonPassingGuidanceInstructions({
+            candidateMessage: content,
+            guidanceTurns: nonPassingGuidanceTurnCount,
+            runtimeContext,
+          }),
+        });
+        return;
+      }
+
+      if (runtimeContext?.roomStatus === 'warmup') {
+        if (isReadyToCodeIntent(content)) {
+          const queued = queueWarmupTransitionAfterAssistant(
+            'Candidate explicitly requested to start coding',
+          );
+          if (queued) {
+            await generateReplyWithTelemetry({
+              reason: 'warmup_explicit_ready_to_code',
+              instructions: buildCodingPhaseKickoffInstructions({
+                candidateMessage: content,
+                rememberedContext: latestInterviewContext,
+                runtimeContext,
+              }),
+            });
+            return;
+          }
+        }
+
+        if (warmupFlowState === 'not_started') {
+          warmupFlowState = 'kickoff_sent';
+          await generateReplyWithTelemetry({
+            reason: 'warmup_turn_1',
+            instructions: buildWarmupKickoffInstructions({
+              rememberedContext: latestInterviewContext,
+              runtimeContext,
+              interfaceLanguage: params.language ?? preferredInterfaceLanguage,
+            }),
+          });
+          return;
+        }
+
+        if (warmupFlowState === 'kickoff_sent') {
+          warmupFlowState = 'followup_sent';
+          warmupAwaitingCandidateAnswerForTransition = true;
+          await generateReplyWithTelemetry({
+            reason: 'warmup_turn_2',
+            instructions: buildWarmupFollowupInstructions({
+              candidateMessage: content,
+              rememberedContext: latestInterviewContext,
+              runtimeContext,
+            }),
+          });
+          return;
+        }
+
+        if (
+          warmupFlowState === 'followup_sent' &&
+          warmupAwaitingCandidateAnswerForTransition &&
+          !warmupAutoTransitionInFlight
+        ) {
+          const queued = queueWarmupTransitionAfterAssistant(
+            'Warmup follow-up answered by candidate',
+          );
+          if (queued) {
+            await generateReplyWithTelemetry({
+              reason: 'warmup_transition_after_final_answer',
+              instructions: buildWarmupTransitionAnnouncementInstructions({
+                candidateMessage: content,
+                rememberedContext: latestInterviewContext,
+                runtimeContext,
+              }),
+            });
+          }
+          return;
+        }
+      }
+
+      if (
+        isContextRefreshRequest(content) &&
+        (runtimeContext?.roomStatus === 'coding' || runtimeContext?.roomStatus === 'wrapup')
+      ) {
+        if (runtimeContext) {
+          await generateReplyWithTelemetry({
+            reason: 'context_refresh_with_runtime_context',
+            instructions: [
+              'Candidate asked you to refresh/review live code context.',
+              `Candidate message: ${content}`,
+              'You now have the latest room context below. Review using this context directly.',
+              'Do not ask the candidate to summarize code unless context is empty.',
+              buildLiveRoomContextInstructions(runtimeContext, 'detailed'),
+            ].join('\n'),
+          });
+          return;
+        }
+
+        await generateReplyWithTelemetry({
+          reason: 'context_refresh_unavailable',
+          instructions: [
+            'Candidate asked to review live code, but fresh code data is unavailable to you this turn.',
+            'Do not mention backend, tool, context retrieval, or implementation details.',
+            'Respond as the interviewer with one high-level reasoning question about their intended invariant or latest test outcome.',
+          ].join('\n'),
+        });
+        return;
+      }
+
+      const instructions = buildUserTextInstructions(
+        signal,
+        latestInterviewContext,
+        runtimeContext,
+      );
+      await generateReplyWithTelemetry({
+        reason: `user_text_${signal.language ?? 'voice'}`,
+        instructions,
+        inputModality: 'text',
+      });
+    };
+
+    const inlineCommentTool = llm.tool({
+      description:
+        'Attach a focused inline code comment for the candidate. Use only for specific, actionable suggestions tied to a line number.',
+      parameters: z.object({
+        line: z
+          .number()
+          .int()
+          .positive()
+          .describe('1-based line number in the latest provided code context'),
+        comment: z
+          .string()
+          .min(1)
+          .max(800)
+          .describe('Short inline feedback, ideally with a concrete fix or question'),
+        lineText: z
+          .string()
+          .min(1)
+          .max(300)
+          .optional()
+          .describe('Exact or near-exact text from the target line to help line alignment'),
+      }),
+      execute: async ({ line, comment, lineText }) => {
+        const cleanedComment = comment.trim();
+        if (!cleanedComment) {
+          return { applied: false };
+        }
+
+        const runtimeContext = await refreshRoomContext();
+        const liveCode =
+          runtimeContext?.currentCode.code ?? latestRuntimeRoomContext?.currentCode.code ?? '';
+        const resolvedLine = resolveInlineCommentLine(line, lineText, liveCode);
+        const normalized = { line: resolvedLine, comment: cleanedComment };
+        pendingInlineComments.push(normalized);
+
+        await publishRealtimeEvent({
+          type: 'inline_comment_added',
+          occurredAt: Date.now(),
+          comments: [normalized],
+        });
+
+        return { applied: true };
+      },
+    });
+
+    const getRoomContextTool = llm.tool({
+      description:
+        'Fetch the latest room context (current code, language, and latest submission summary). Use whenever current code, problem, stage, or test outcomes would improve the answer. Never expose tool or backend failures to the candidate.',
+      parameters: z.object({
+        purpose: z.string().optional().describe('Brief reason for requesting fresh room context'),
+      }),
+      execute: async () => {
+        const cachedContext = latestRuntimeRoomContext;
+        const context = (await refreshRoomContext({ forceAttempts: 4 })) ?? cachedContext;
+        if (!context) {
+          return {
+            available: false,
+            contextQuality: 'unavailable',
+            interviewerInstruction:
+              'Do not mention backend, tools, context fetching, or retrieval failure. Continue with one high-level interview question based on the known problem, or ask the candidate to run or submit when ready.',
+            problem: latestInterviewContext
+              ? {
+                  title: latestInterviewContext.problemTitle,
+                  difficulty: latestInterviewContext.difficulty,
+                  language: latestInterviewContext.language,
+                }
+              : null,
+          };
+        }
+        return {
+          available: true,
+          contextQuality: context === cachedContext ? 'cached' : 'fresh',
+          interviewerInstruction:
+            'Use this data directly. Do not mention that it came from an internal tool.',
+          roomStatus: context.roomStatus,
+          language: context.language,
+          problem: context.problem,
+          currentCodeSource: context.currentCode.source,
+          currentCodeLanguage: context.currentCode.language,
+          currentCode: context.currentCode.code,
+          currentCodeNumbered: buildNumberedCodeBlock(context.currentCode.code, 220, 9_000),
+          latestSubmission: context.latestSubmission,
+          latestSubmittedCodeNumbered: context.latestSubmission
+            ? buildNumberedCodeBlock(context.latestSubmission.code, 220, 9_000)
+            : null,
+        };
+      },
+    });
+
+    const transitionRoomPhaseTool = llm.tool({
+      description:
+        'Queue a room phase transition after your current spoken turn. First speak a clear transition preamble to the candidate, then call this tool. Never call it silently.',
+      parameters: z.object({
+        targetStatus: z.enum(['warmup', 'coding', 'wrapup', 'finished']),
+        reason: z
+          .string()
+          .min(1)
+          .max(240)
+          .optional()
+          .describe('Short interview rationale for this phase transition'),
+        spokenPreamble: z
+          .string()
+          .min(1)
+          .max(240)
+          .optional()
+          .describe('The transition sentence you spoke or are about to speak to the candidate'),
+      }),
+      execute: async ({ targetStatus, reason, spokenPreamble }) => {
+        if (!participantUserId) {
+          return {
+            transitioned: false,
+            error: 'missing-participant',
+          };
+        }
+
+        const runtimeContext = (await refreshRoomContext()) ?? latestRuntimeRoomContext;
+        const fromStatus = runtimeContext?.roomStatus;
+        if (fromStatus === targetStatus) {
+          return {
+            transitioned: false,
+            reason: 'already-in-target-status',
+            fromStatus,
+            targetStatus,
+          };
+        }
+
+        const queued = queuePhaseTransitionAfterAssistant(targetStatus, reason);
+        if (!queued) {
+          return {
+            transitioned: false,
+            fromStatus: runtimeContext?.roomStatus,
+            targetStatus,
+            reason: 'transition-already-queued',
+          };
+        }
+        return {
+          transitioned: false,
+          queued: true,
+          fromStatus: runtimeContext?.roomStatus,
+          targetStatus,
+          spokenPreamble: spokenPreamble?.trim() || null,
+          interviewerInstruction:
+            'The transition is queued and will run after this spoken turn. Finish the preamble naturally and do not repeat it.',
+        };
+      },
+    });
+
+    const interviewAgent = new voice.Agent({
+      instructions: systemInstructions,
+      tools: {
+        add_inline_comment: inlineCommentTool,
+        get_room_context: getRoomContextTool,
+        transition_room_phase: transitionRoomPhaseTool,
+      },
+    });
+
+    const syncSilentLiveContextUpdate = async (
+      runtimeContext: AiInterviewerContextResponse,
+      signal: Extract<AiInterviewerSignalPayload, { type: 'system_signal' }>,
+    ) => {
+      try {
+        const nextChatContext = session.chatCtx.copy({
+          excludeEmptyMessage: true,
+          excludeHandoff: true,
+          excludeConfigUpdate: true,
+        });
+        nextChatContext.items = nextChatContext.items.filter(
+          (item) => item.id !== LIVE_CODE_CONTEXT_MESSAGE_ID,
+        );
+        nextChatContext.addMessage({
+          id: LIVE_CODE_CONTEXT_MESSAGE_ID,
+          role: 'system',
+          content: buildSilentLiveContextUpdateInstructions({
+            context: runtimeContext,
+            signal,
+          }),
+          createdAt: Date.now(),
+        });
+        await interviewAgent.updateChatCtx(nextChatContext);
+        console.debug(
+          `[ai-interviewer-worker] silent live context updated room=${roomId} reason=${signal.reason}`,
+        );
+      } catch (error) {
+        console.warn(
+          `[ai-interviewer-worker] failed to sync silent live context for room ${roomId}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+    };
+
+    session.on(
+      voice.AgentSessionEventTypes.AgentStateChanged,
+      (event: voice.AgentStateChangedEvent) => {
+        const previousState = currentAgentState;
+        currentAgentState = event.newState;
+        if (previousState === 'speaking' && event.newState !== 'speaking') {
+          agentStoppedSpeakingAt = Date.now();
+        }
+        void publishRealtimeEvent({
+          type: 'agent_state',
+          state: event.newState,
+          occurredAt: event.createdAt,
+        });
+      },
+    );
+
+    session.on(voice.AgentSessionEventTypes.UserStateChanged, (event) => {
+      void publishRealtimeEvent({
+        type: 'user_state',
+        state: event.newState,
+        occurredAt: event.createdAt,
+      });
+    });
+
+    session.on(voice.AgentSessionEventTypes.OverlappingSpeech, (event) => {
+      void publishRealtimeEvent({
+        type: 'overlapping_speech',
+        occurredAt: event.detectedAt,
+        isInterruption: event.isInterruption,
+        probability: event.probability,
+      });
+    });
+
+    session.on(voice.AgentSessionEventTypes.Error, (event: voice.ErrorEvent) => {
+      const message =
+        event.error instanceof Error
+          ? event.error.message
+          : typeof event.error === 'string'
+            ? event.error
+            : 'AI interviewer error';
+      void publishRealtimeEvent({
+        type: 'error',
+        message,
+        occurredAt: event.createdAt,
+      });
+    });
+
+    session.on(
+      voice.AgentSessionEventTypes.UserInputTranscribed,
+      (event: voice.UserInputTranscribedEvent) => {
+        if (!event.isFinal) {
+          return;
+        }
+
+        const content = event.transcript.trim();
+        if (!content) {
+          return;
+        }
+        if (isLikelyAccidentalCandidateMessage(content)) {
+          return;
+        }
+        if (
+          currentAgentState === 'speaking' ||
+          Date.now() - agentStoppedSpeakingAt < USER_INPUT_ECHO_GUARD_MS
+        ) {
+          console.debug(
+            `[ai-interviewer-worker] suppressed likely-echo user transcript room=${roomId} agentState=${currentAgentState} content="${content.slice(0, 80)}"`,
+          );
+          return;
+        }
+        const userTokens = estimateTokenCount(content);
+        approxConversationTokensTotal += userTokens;
+        maybeLogContextBudgetRisk();
+
+        const participantId = event.speakerId ?? participantUserId ?? null;
+        if (!participantId) {
+          return;
+        }
+
+        lastUserSpeakerId = participantId;
+        lastUserTurnAt = event.createdAt;
+        const turnId = createTranscriptTurnId(
+          'user',
