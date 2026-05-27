@@ -54,4 +54,20 @@ describe('fetchSessionReport', () => {
       state: 'pending',
     });
   });
+
+  it('GIVEN unavailable 404 response WHEN fetching THEN returns an unavailable result', async () => {
+    const error = new Error('candidate-only report');
+    mockApi.mockRejectedValue(error);
+    mockReadApiError.mockResolvedValue({
+      statusCode: 404,
+      code: ERROR_CODES.SESSION_REPORT_UNAVAILABLE,
+      message: 'Session report is only generated for the candidate',
+      timestamp: '2026-04-20T14:00:00.000Z',
+      details: null,
+    });
+
+    await expect(fetchSessionReport('550e8400-e29b-41d4-a716-446655440000')).resolves.toEqual({
+      state: 'unavailable',
+    });
+  });
 });

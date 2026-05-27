@@ -89,7 +89,7 @@ async function insertRequiredSessionEndSnapshot(
 }
 
 describe('enqueueForFinishedSession', () => {
-  it('GIVEN finished session data WHEN enqueuing reports THEN creates pending rows and submits participant-scoped evidence to AI', async () => {
+  it('GIVEN finished session data WHEN enqueuing reports THEN creates one pending candidate row and submits candidate-scoped evidence to AI', async () => {
     const interviewer = await insertUser(db, { username: 'interviewer' });
     const candidate = await insertUser(db, { username: 'candidate' });
     const problem = await insertProblem(db, {
@@ -318,9 +318,7 @@ describe('enqueueForFinishedSession', () => {
       status: 'completed',
     });
 
-    mockAiClient.submitSessionReportRequest
-      .mockResolvedValueOnce({ jobId: 'report-job-1' })
-      .mockResolvedValueOnce({ jobId: 'report-job-2' });
+    mockAiClient.submitSessionReportRequest.mockResolvedValueOnce({ jobId: 'report-job-1' });
 
     await service.enqueueForFinishedSession(session.id);
 
@@ -333,15 +331,9 @@ describe('enqueueForFinishedSession', () => {
       .where(eq(sessionReports.sessionId, session.id))
       .orderBy(asc(sessionReports.userId));
 
-    expect(reportRows).toHaveLength(2);
-    expect(reportRows).toEqual(
-      expect.arrayContaining([
-        { userId: candidate.id, status: 'pending' },
-        { userId: interviewer.id, status: 'pending' },
-      ]),
-    );
+    expect(reportRows).toEqual([{ userId: candidate.id, status: 'pending' }]);
 
-    expect(mockAiClient.submitSessionReportRequest).toHaveBeenCalledTimes(2);
+    expect(mockAiClient.submitSessionReportRequest).toHaveBeenCalledTimes(1);
     const candidateRequest = mockAiClient.submitSessionReportRequest.mock.calls.find(
       ([request]) => request.participantId === candidate.id,
     )?.[0];
@@ -455,6 +447,26 @@ describe('enqueueForFinishedSession', () => {
         ],
       }),
     );
+  });
+
+  it('GIVEN finished session without a candidate WHEN enqueuing reports THEN skips AI jobs', async () => {
+    const interviewer = await insertUser(db, { username: 'interviewer-only-report' });
+    const room = await insertRoom(db, interviewer.id, { language: 'python' });
+    const session = await insertSession(db, room.id, {
+      language: 'python',
+      status: 'finished',
+      durationMs: 90000,
+    });
+    await insertSessionParticipant(db, session.id, interviewer.id, 'interviewer');
+
+    await service.enqueueForFinishedSession(session.id);
+
+    expect(mockAiClient.submitSessionReportRequest).not.toHaveBeenCalled();
+    const reportRows = await db
+      .select({ id: sessionReports.id })
+      .from(sessionReports)
+      .where(eq(sessionReports.sessionId, session.id));
+    expect(reportRows).toHaveLength(0);
   });
 
   it('GIVEN no session_end snapshot WHEN enqueuing reports THEN fails closed before submitting AI jobs', async () => {
@@ -1320,6 +1332,21 @@ describe('getReport', () => {
       Partial<NotFoundException>
     >({
       response: expect.objectContaining({ code: ERROR_CODES.SESSION_REPORT_NOT_READY }),
+    });
+  });
+
+  it('GIVEN interviewer has no report row WHEN getting THEN throws unavailable 404', async () => {
+    const interviewer = await insertUser(db);
+    const candidate = await insertUser(db);
+    const room = await insertRoom(db, interviewer.id);
+    const session = await insertSession(db, room.id);
+    await insertSessionParticipant(db, session.id, interviewer.id, 'interviewer');
+    await insertSessionParticipant(db, session.id, candidate.id, 'candidate');
+
+    await expect(service.getReport(session.id, interviewer.id, false)).rejects.toMatchObject<
+      Partial<NotFoundException>
+    >({
+      response: expect.objectContaining({ code: ERROR_CODES.SESSION_REPORT_UNAVAILABLE }),
     });
   });
 });

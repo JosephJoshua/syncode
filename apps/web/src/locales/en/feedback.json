@@ -10,7 +10,7 @@
     "title": "Report in progress",
     "subtitle": "Reports are generated asynchronously after the session ends.",
     "body": "This usually finishes within about a minute. You can stay on this page while the report loads.",
-    "polling": "Checking for the report automatically every 10 seconds."
+    "polling": "Checking for the report automatically every 5 seconds."
   },
   "error": {
     "title": "Report unavailable",
