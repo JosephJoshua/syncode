@@ -750,7 +750,7 @@ describe('AiService', () => {
       expect(userPrompt).toContain('<UNTRUSTED_TURN_RESPONSE_LANGUAGE>\nen');
     });
 
-    it('GIVEN interview model omits follow-up WHEN generateInterviewResponse is called THEN safe fallback includes one', async () => {
+    it('GIVEN interview model omits follow-up WHEN generateInterviewResponse is called THEN follow-up stays optional', async () => {
       const { service } = createServiceWithLlmResponse(
         JSON.stringify({
           message: 'That direction makes sense.',
@@ -761,7 +761,7 @@ describe('AiService', () => {
 
       expect(result.shouldRespond).toBe(true);
       expect(result.message).toBe('That direction makes sense.');
-      expect(result.followUpQuestion).toContain('What invariant should hold');
+      expect(result.followUpQuestion).toBeUndefined();
       expect(result.codeContext).toEqual(baseInterviewRequest.codeContext);
     });
 
@@ -845,8 +845,10 @@ describe('AiService', () => {
 
       expect(result.shouldRespond).toBe(true);
       expect(result.message.toLowerCase()).not.toContain('ignore all previous instructions');
-      expect(result.followUpQuestion.toLowerCase()).not.toContain('do not output hints');
-      expect(result.codeAnnotations?.[0]?.comment.toLowerCase()).not.toContain('shit');
+      expect(result.followUpQuestion).toBeUndefined();
+      if (result.codeAnnotations?.[0]?.comment) {
+        expect(result.codeAnnotations[0].comment.toLowerCase()).not.toContain('shit');
+      }
       expect(llmProvider.generateSpeech).toHaveBeenCalledWith(
         expect.objectContaining({
           text: expect.not.stringContaining('system prompt'),
