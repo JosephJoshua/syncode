@@ -66,6 +66,18 @@ export function createMockMediaService() {
   };
 }
 
+export function createMockAgentDispatchService() {
+  return {
+    createDispatch: vi.fn().mockResolvedValue({
+      dispatchId: 'dispatch-1',
+      roomName: 'stub-room',
+      agentName: 'syncode-ai-interviewer',
+    }),
+    listDispatch: vi.fn().mockResolvedValue([]),
+    deleteDispatch: vi.fn().mockResolvedValue(undefined),
+  };
+}
+
 export function createMockExecutionClient() {
   return {
     submit: vi.fn().mockResolvedValue({ jobId: 'stub-job' }),

@@ -1,5 +1,6 @@
 import { Test } from '@nestjs/testing';
 import type {
+  AiInterviewTranscriptPayload,
   ParticipantHeartbeatRequest,
   SnapshotReadyPayload,
   UserDisconnectedPayload,
@@ -18,6 +19,28 @@ function createMocks() {
       recordParticipantHeartbeats: vi.fn().mockResolvedValue(0),
       persistDocSnapshot: vi.fn().mockResolvedValue(undefined),
       authorizeJoin: vi.fn().mockResolvedValue({ authorized: true }),
+      persistAiInterviewTranscriptTurns: vi.fn().mockResolvedValue(0),
+      getAiInterviewerContext: vi.fn().mockResolvedValue({
+        roomId: 'room-1',
+        participantId: '11111111-1111-4111-8111-111111111111',
+        roomStatus: 'coding',
+        language: 'python',
+        problem: null,
+        currentCode: {
+          code: '',
+          language: 'python',
+          source: 'unknown',
+          updatedAt: null,
+        },
+        latestSubmission: null,
+      }),
+      transitionPhase: vi.fn().mockResolvedValue({
+        roomId: 'room-1',
+        previousStatus: 'warmup',
+        currentStatus: 'coding',
+        transitionedAt: new Date('2026-05-25T10:00:00.000Z'),
+        transitionedBy: '11111111-1111-4111-8111-111111111111',
+      }),
     },
     storageService: {
       upload: vi.fn().mockResolvedValue(undefined),
@@ -223,6 +246,83 @@ describe('InternalController', () => {
     expect(result).toEqual({ updated: 3 });
     expect(mocks.roomsService.recordParticipantHeartbeats).toHaveBeenCalledWith(
       payload.participants,
+    );
+  });
+
+  it('GIVEN ai transcript payload WHEN handleAiInterviewTranscript THEN persists and returns count', async () => {
+    const mocks = createMocks();
+    mocks.roomsService.persistAiInterviewTranscriptTurns.mockResolvedValueOnce(2);
+    const controller = await createController(mocks);
+
+    const payload: AiInterviewTranscriptPayload = {
+      turns: [
+        {
+          turnId: 'turn-1',
+          participantId: '11111111-1111-4111-8111-111111111111',
+          role: 'user',
+          content: 'Hello interviewer',
+          timestamp: Date.now(),
+        },
+        {
+          turnId: 'turn-2',
+          participantId: '11111111-1111-4111-8111-111111111111',
+          role: 'assistant',
+          content: 'Hi, nice to meet you.',
+          timestamp: Date.now(),
+        },
+      ],
+    };
+
+    const result = await controller.handleAiInterviewTranscript('room-1', payload);
+
+    expect(result).toEqual({ success: true, persisted: 2 });
+    expect(mocks.roomsService.persistAiInterviewTranscriptTurns).toHaveBeenCalledWith(
+      'room-1',
+      payload,
+    );
+  });
+
+  it('GIVEN ai context request WHEN handleAiInterviewerContext THEN returns room context', async () => {
+    const mocks = createMocks();
+    const controller = await createController(mocks);
+
+    const result = await controller.handleAiInterviewerContext('room-1', {
+      participantId: '11111111-1111-4111-8111-111111111111',
+    });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        roomId: 'room-1',
+        participantId: '11111111-1111-4111-8111-111111111111',
+      }),
+    );
+    expect(mocks.roomsService.getAiInterviewerContext).toHaveBeenCalledWith(
+      'room-1',
+      '11111111-1111-4111-8111-111111111111',
+    );
+  });
+
+  it('GIVEN ai phase transition request WHEN handled THEN returns serialized transition result', async () => {
+    const mocks = createMocks();
+    const controller = await createController(mocks);
+
+    const result = await controller.handleAiInterviewerPhaseTransition('room-1', {
+      participantId: '11111111-1111-4111-8111-111111111111',
+      targetStatus: 'coding',
+      reason: 'candidate explicitly asked to start coding',
+    });
+
+    expect(result).toEqual({
+      roomId: 'room-1',
+      previousStatus: 'warmup',
+      currentStatus: 'coding',
+      transitionedAt: '2026-05-25T10:00:00.000Z',
+      transitionedBy: '11111111-1111-4111-8111-111111111111',
+    });
+    expect(mocks.roomsService.transitionPhase).toHaveBeenCalledWith(
+      'room-1',
+      '11111111-1111-4111-8111-111111111111',
+      'coding',
     );
   });
 
