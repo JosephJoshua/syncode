@@ -1,5 +1,20 @@
-import { WEAKNESS_CATEGORIES, WEAKNESS_TRENDS } from '@syncode/shared';
+import * as shared from '@syncode/shared';
 import { pgEnum } from 'drizzle-orm/pg-core';
+
+type WeaknessEnumConstants = Pick<typeof shared, 'WEAKNESS_CATEGORIES' | 'WEAKNESS_TRENDS'>;
+
+function resolveWeaknessEnumConstants(): WeaknessEnumConstants {
+  const runtimeShared = shared as typeof shared & { default?: WeaknessEnumConstants };
+  if (runtimeShared.WEAKNESS_CATEGORIES && runtimeShared.WEAKNESS_TRENDS) {
+    return runtimeShared;
+  }
+  if (runtimeShared.default) {
+    return runtimeShared.default;
+  }
+  throw new Error('Shared weakness enum constants are unavailable');
+}
+
+const weaknessEnumConstants = resolveWeaknessEnumConstants();
 
 export const userRoleEnum = pgEnum('user_role', ['user', 'admin']);
 
@@ -84,6 +99,9 @@ export const roleSwapStatusEnum = pgEnum('role_swap_status', [
   'expired',
 ]);
 
-export const weaknessCategoryEnum = pgEnum('weakness_category', WEAKNESS_CATEGORIES);
+export const weaknessCategoryEnum = pgEnum(
+  'weakness_category',
+  weaknessEnumConstants.WEAKNESS_CATEGORIES,
+);
 
-export const weaknessTrendEnum = pgEnum('weakness_trend', WEAKNESS_TRENDS);
+export const weaknessTrendEnum = pgEnum('weakness_trend', weaknessEnumConstants.WEAKNESS_TRENDS);
