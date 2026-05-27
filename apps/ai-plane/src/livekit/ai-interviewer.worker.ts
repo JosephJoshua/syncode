@@ -1839,6 +1839,70 @@ const agent = defineAgent({
       }
     };
 
+    // Resets phase-flow flags so they reflect the freshly fetched room status.
+    // Extracted from refreshRoomContext to keep cognitive complexity low.
+    const applyRefreshedRoomStatusFlags = (
+      roomStatus: AiInterviewerContextResponse['roomStatus'],
+    ) => {
+      if (roomStatus === 'warmup' && warmupFlowState === 'completed') {
+        warmupFlowState = 'not_started';
+        warmupAssistantTurnCount = 0;
+        warmupAwaitingCandidateAnswerForTransition = false;
+        warmupAutoTransitionInFlight = false;
+        warmupTransitionPendingAfterAssistant = false;
+        codingKickoffAnnounced = false;
+        wrapupKickoffAnnounced = false;
+        return;
+      }
+      if (roomStatus === 'coding') {
+        warmupFlowState = 'completed';
+        warmupAssistantTurnCount = 2;
+        warmupAwaitingCandidateAnswerForTransition = false;
+        warmupAutoTransitionInFlight = false;
+        warmupTransitionPendingAfterAssistant = false;
+        wrapupKickoffAnnounced = false;
+        return;
+      }
+      if (roomStatus === 'wrapup' || roomStatus === 'finished') {
+        warmupFlowState = 'completed';
+        warmupAssistantTurnCount = 2;
+        warmupAwaitingCandidateAnswerForTransition = false;
+        warmupAutoTransitionInFlight = false;
+        warmupTransitionPendingAfterAssistant = false;
+        codingKickoffAnnounced = true;
+        if (roomStatus === 'finished') {
+          wrapupKickoffAnnounced = true;
+        }
+      }
+    };
+
+    // Resets the non-passing-submission guidance counters whenever the latest
+    // submission is passing. Extracted from refreshRoomContext.
+    const resetGuidanceCountersForPassingSubmission = () => {
+      nonPassingGuidanceTurnCount = 0;
+      discouragedTurnCount = 0;
+      lastNonPassingSubmissionKey = null;
+      askedContinueAfterRepeatedFailure = false;
+      answerPressureTurnCount = 0;
+      answerPressureWrapupPrompted = false;
+    };
+
+    // Performs the side effects of a successful context fetch: caches the
+    // latest runtime/interview context, updates phase-flow flags, refreshes
+    // the prompt cache prefix, and resets guidance counters if appropriate.
+    const applyFetchedRoomContext = (context: AiInterviewerContextResponse) => {
+      latestRuntimeRoomContext = context;
+      applyRefreshedRoomStatusFlags(context.roomStatus);
+      const interviewContext = toRealtimeInterviewContext(context);
+      if (interviewContext) {
+        latestInterviewContext = interviewContext;
+        refreshPromptCachePrefix();
+      }
+      if (isPassingSubmission(context)) {
+        resetGuidanceCountersForPassingSubmission();
+      }
+    };
+
     const refreshRoomContext = async (options?: {
       expectedSubmission?: ParsedSubmissionSignalSummary;
       forceAttempts?: number;
@@ -1847,76 +1911,29 @@ const agent = defineAgent({
         return undefined;
       }
       const maxAttempts = options?.forceAttempts ?? (options?.expectedSubmission ? 4 : 3);
+      const expected = options?.expectedSubmission;
       for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
         try {
           const context = await fetchAiInterviewerRoomContext(roomId, participantUserId);
-          latestRuntimeRoomContext = context;
-          if (context.roomStatus === 'warmup' && warmupFlowState === 'completed') {
-            warmupFlowState = 'not_started';
-            warmupAssistantTurnCount = 0;
-            warmupAwaitingCandidateAnswerForTransition = false;
-            warmupAutoTransitionInFlight = false;
-            warmupTransitionPendingAfterAssistant = false;
-            codingKickoffAnnounced = false;
-            wrapupKickoffAnnounced = false;
-          } else if (context.roomStatus === 'coding') {
-            warmupFlowState = 'completed';
-            warmupAssistantTurnCount = 2;
-            warmupAwaitingCandidateAnswerForTransition = false;
-            warmupAutoTransitionInFlight = false;
-            warmupTransitionPendingAfterAssistant = false;
-            wrapupKickoffAnnounced = false;
-          } else if (context.roomStatus === 'wrapup' || context.roomStatus === 'finished') {
-            warmupFlowState = 'completed';
-            warmupAssistantTurnCount = 2;
-            warmupAwaitingCandidateAnswerForTransition = false;
-            warmupAutoTransitionInFlight = false;
-            warmupTransitionPendingAfterAssistant = false;
-            codingKickoffAnnounced = true;
-            if (context.roomStatus === 'finished') {
-              wrapupKickoffAnnounced = true;
-            }
-          }
-          const interviewContext = toRealtimeInterviewContext(context);
-          if (interviewContext) {
-            latestInterviewContext = interviewContext;
-            refreshPromptCachePrefix();
-          }
+          applyFetchedRoomContext(context);
 
-          const expected = options?.expectedSubmission;
-          if (isPassingSubmission(context)) {
-            nonPassingGuidanceTurnCount = 0;
-            discouragedTurnCount = 0;
-            lastNonPassingSubmissionKey = null;
-            askedContinueAfterRepeatedFailure = false;
-            answerPressureTurnCount = 0;
-            answerPressureWrapupPrompted = false;
-          }
-          if (!expected) {
+          if (!expected || matchesExpectedSubmission(context.latestSubmission, expected)) {
             return context;
           }
-          if (matchesExpectedSubmission(context.latestSubmission, expected)) {
+          if (attempt >= maxAttempts) {
             return context;
           }
-
-          if (attempt < maxAttempts) {
-            await sleep(300);
-            continue;
-          }
-          return context;
+          await sleep(300);
         } catch (error) {
-          if (attempt === maxAttempts) {
+          if (attempt >= maxAttempts) {
             console.warn(
               `[ai-interviewer-worker] failed to refresh room context for room ${roomId}: ${
                 error instanceof Error ? error.message : String(error)
               }`,
             );
+            return undefined;
           }
-          if (attempt < maxAttempts) {
-            await sleep(250);
-            continue;
-          }
-          return undefined;
+          await sleep(250);
         }
       }
       return undefined;
