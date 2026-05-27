@@ -2820,11 +2820,281 @@ const agent = defineAgent({
       ctx.room.off('participantDisconnected', onParticipantDisconnected);
     });
 
+    // Handles a decoded user_text signal coming over the LiveKit data channel.
+    const handleUserTextSignal = (
+      signal: Extract<AiInterviewerSignalPayload, { type: 'user_text' }>,
+      participant: { identity?: string } | undefined,
+    ) => {
+      const content = signal.text.trim();
+      if (!content || isLikelyAccidentalCandidateMessage(content)) {
+        return;
+      }
+      const userTokens = estimateTokenCount(content);
+      approxConversationTokensTotal += userTokens;
+      maybeLogContextBudgetRisk();
+
+      const participantId = participantUserId ?? participant?.identity;
+      if (participantId) {
+        lastUserSpeakerId = participantId;
+        lastUserTurnAt = Date.now();
+        const turnId = createTranscriptTurnId('user', roomId, participantId, Date.now(), content);
+        void emitTurn({
+          turnId,
+          role: 'user',
+          participantId,
+          content,
+          occurredAt: Date.now(),
+        });
+      }
+      if (signal.language) {
+        preferredInterfaceLanguage = signal.language;
+      }
+      void handleCandidateText({
+        content,
+        language: signal.language,
+        latestSubmissionSummary: signal.latestSubmissionSummary,
+      });
+    };
+
+    type SystemSignal = Extract<AiInterviewerSignalPayload, { type: 'system_signal' }>;
+
+    // Repeatedly refreshes runtime context for join/stage signals received
+    // while the room is still in `waiting`, until it advances or attempts are
+    // exhausted. Returns the most up-to-date context.
+    const waitOutWaitingStatus = async (
+      signal: SystemSignal,
+      initial: AiInterviewerContextResponse | undefined,
+    ): Promise<AiInterviewerContextResponse | undefined> => {
+      if (
+        initial?.roomStatus !== 'waiting' ||
+        (signal.reason !== 'session_joined' && signal.reason !== 'stage_changed')
+      ) {
+        return initial;
+      }
+      let current = initial;
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        await sleep(250);
+        current = (await refreshRoomContext()) ?? current;
+        if (current?.roomStatus !== 'waiting') {
+          break;
+        }
+      }
+      return current;
+    };
+
+    // Bumps non-passing-submission guidance state on a code_submitted signal,
+    // emitting the boundary-response turn when the guidance threshold is hit.
+    // Returns true when the boundary turn was emitted so the caller can stop.
+    const handleNonPassingSubmissionTracking = async (
+      signal: SystemSignal,
+      runtimeContext: AiInterviewerContextResponse,
+    ): Promise<boolean> => {
+      const latest = runtimeContext.latestSubmission;
+      const submissionKey = latest
+        ? `${latest.submittedAt}:${latest.passedTestCases}/${latest.totalTestCases}`
+        : null;
+      if (submissionKey && submissionKey !== lastNonPassingSubmissionKey) {
+        lastNonPassingSubmissionKey = submissionKey;
+        nonPassingGuidanceTurnCount += 1;
+      }
+      if (nonPassingGuidanceTurnCount < 5 || askedContinueAfterRepeatedFailure) {
+        return false;
+      }
+      askedContinueAfterRepeatedFailure = true;
+      const boundaryNow = Date.now();
+      lastSystemReplyAt = boundaryNow;
+      signalLastSentAt.set(signal.reason, boundaryNow);
+      await generateGuidedInterviewerMessage({
+        reason: 'repeated_nonpassing_submission_boundary',
+        message: buildRepeatedNonPassingSubmissionBoundaryResponse({
+          context: runtimeContext,
+          guidanceTurns: nonPassingGuidanceTurnCount,
+          interfaceLanguage: preferredInterfaceLanguage,
+        }),
+        context: runtimeContext,
+      });
+      return true;
+    };
+
+    // Handles a code_submitted system signal when the room is in coding phase.
+    const handleCodeSubmittedReview = async (
+      signal: SystemSignal,
+      runtimeContext: AiInterviewerContextResponse,
+    ): Promise<void> => {
+      console.debug(
+        `[ai-interviewer-worker] submission context room=${roomId} codeSource=${runtimeContext.currentCode.source} codeUpdatedAt=${runtimeContext.currentCode.updatedAt ?? 'none'} latestSubmission=${
+          runtimeContext.latestSubmission
+            ? `${runtimeContext.latestSubmission.passedTestCases}/${runtimeContext.latestSubmission.totalTestCases}@${runtimeContext.latestSubmission.submittedAt}`
+            : 'none'
+        }`,
+      );
+      const submissionReviewKey = buildSubmissionReviewKey(runtimeContext);
+      if (submissionReviewKey && submissionReviewKey === lastReviewedSubmissionKey) {
+        return;
+      }
+      lastReviewedSubmissionKey = submissionReviewKey;
+
+      if (isPassingSubmission(runtimeContext)) {
+        nonPassingGuidanceTurnCount = 0;
+        discouragedTurnCount = 0;
+        lastNonPassingSubmissionKey = null;
+        askedContinueAfterRepeatedFailure = false;
+      } else if (isNonPassingSubmission(runtimeContext)) {
+        const emittedBoundary = await handleNonPassingSubmissionTracking(signal, runtimeContext);
+        if (emittedBoundary) {
+          return;
+        }
+      }
+
+      const reviewNow = Date.now();
+      lastSystemReplyAt = reviewNow;
+      signalLastSentAt.set(signal.reason, reviewNow);
+      await generateGuidedInterviewerMessage({
+        reason: 'submission_review',
+        message: buildSubmissionReviewResponse({
+          context: runtimeContext,
+          interfaceLanguage: preferredInterfaceLanguage,
+        }),
+        context: runtimeContext,
+      });
+    };
+
+    // Handles scripted phase-kickoff signals (warmup/coding/wrapup). Returns
+    // true when the signal matched and was handled.
+    const tryHandlePhaseKickoffSignal = async (
+      signal: SystemSignal,
+      runtimeContext: AiInterviewerContextResponse | undefined,
+    ): Promise<boolean> => {
+      if (
+        runtimeContext?.roomStatus === 'warmup' &&
+        warmupFlowState === 'not_started' &&
+        (signal.reason === 'session_joined' || signal.reason === 'stage_changed')
+      ) {
+        await startWarmupKickoffIfNeeded(`system_${signal.reason}_warmup_kickoff`);
+        return true;
+      }
+
+      if (
+        runtimeContext?.roomStatus === 'coding' &&
+        signal.reason === 'stage_changed' &&
+        !codingKickoffAnnounced
+      ) {
+        const scriptedNow = Date.now();
+        lastSystemReplyAt = scriptedNow;
+        signalLastSentAt.set(signal.reason, scriptedNow);
+        codingKickoffAnnounced = true;
+        await generateReplyWithTelemetry({
+          reason: `system_${signal.reason}_coding_kickoff`,
+          instructions: buildCodingPhaseKickoffInstructions({
+            rememberedContext: latestInterviewContext,
+            runtimeContext,
+          }),
+        });
+        return true;
+      }
+
+      if (
+        runtimeContext?.roomStatus === 'wrapup' &&
+        (signal.reason === 'stage_changed' || signal.reason === 'session_joined') &&
+        !wrapupKickoffAnnounced
+      ) {
+        const scriptedNow = Date.now();
+        lastSystemReplyAt = scriptedNow;
+        signalLastSentAt.set(signal.reason, scriptedNow);
+        wrapupKickoffAnnounced = true;
+        await generateReplyWithTelemetry({
+          reason: `system_${signal.reason}_wrapup_kickoff`,
+          instructions: buildWrapupPhaseKickoffInstructions({
+            rememberedContext: latestInterviewContext,
+            runtimeContext,
+          }),
+        });
+        return true;
+      }
+      return false;
+    };
+
+    // Routes a decoded system_signal through the appropriate handler chain.
+    const handleSystemSignal = async (signal: SystemSignal) => {
+      if (signal.reason === 'code_submitted') {
+        suppressRealtimeAssistantTranscripts(350);
+        await interruptRealtimeSpeech('code_submitted');
+      }
+      if (signal.language) {
+        preferredInterfaceLanguage = signal.language;
+      }
+      if (signal.interviewContext) {
+        latestInterviewContext = signal.interviewContext;
+        refreshPromptCachePrefix();
+      }
+
+      let runtimeContextForSignal = latestRuntimeRoomContext;
+      if (signal.reason === 'code_ran' || signal.reason === 'code_submitted') {
+        const expectedSubmission =
+          signal.reason === 'code_submitted'
+            ? (parseSubmissionSignalSummary(signal.summary) ?? undefined)
+            : undefined;
+        runtimeContextForSignal =
+          (await refreshRoomContext({ expectedSubmission })) ?? runtimeContextForSignal;
+      }
+      runtimeContextForSignal = await waitOutWaitingStatus(signal, runtimeContextForSignal);
+
+      if (runtimeContextForSignal?.roomStatus === 'waiting' && signal.reason !== 'manual_nudge') {
+        return;
+      }
+      if (runtimeContextForSignal?.roomStatus === 'finished') {
+        return;
+      }
+
+      if (signal.reason === 'code_ran') {
+        if (runtimeContextForSignal) {
+          await syncSilentLiveContextUpdate(runtimeContextForSignal, signal);
+        }
+        return;
+      }
+
+      if (signal.reason === 'code_submitted' && runtimeContextForSignal?.roomStatus === 'coding') {
+        await handleCodeSubmittedReview(signal, runtimeContextForSignal);
+        return;
+      }
+
+      if (await tryHandlePhaseKickoffSignal(signal, runtimeContextForSignal)) {
+        return;
+      }
+
+      const now = Date.now();
+      if (
+        !shouldRespondToSystemSignal({
+          signal,
+          now,
+          signalLastSentAt,
+          lastSystemReplyAt,
+          hasInterviewStarted,
+          lastUserTurnAt,
+          lastAssistantTurnAt,
+        })
+      ) {
+        return;
+      }
+
+      lastSystemReplyAt = now;
+      signalLastSentAt.set(signal.reason, now);
+
+      const instructions = buildSystemSignalInstructions(
+        signal,
+        latestInterviewContext,
+        runtimeContextForSignal,
+      );
+      await generateReplyWithTelemetry({
+        reason: `system_${signal.reason}`,
+        instructions,
+      });
+    };
+
     ctx.room.on('dataReceived', (payload, participant, _kind, topic) => {
       if (topic !== AI_INTERVIEWER_SIGNAL_TOPIC) {
         return;
       }
-
       if (participantUserId && participant?.identity !== participantUserId) {
         return;
       }
@@ -2835,231 +3105,13 @@ const agent = defineAgent({
       }
 
       if (signal.type === 'user_text') {
-        const content = signal.text.trim();
-        if (!content) {
-          return;
-        }
-        if (isLikelyAccidentalCandidateMessage(content)) {
-          return;
-        }
-        const userTokens = estimateTokenCount(content);
-        approxConversationTokensTotal += userTokens;
-        maybeLogContextBudgetRisk();
-
-        const participantId = participantUserId ?? participant?.identity;
-        if (participantId) {
-          lastUserSpeakerId = participantId;
-          lastUserTurnAt = Date.now();
-          const turnId = createTranscriptTurnId('user', roomId, participantId, Date.now(), content);
-          void emitTurn({
-            turnId,
-            role: 'user',
-            participantId,
-            content,
-            occurredAt: Date.now(),
-          });
-        }
-        if (signal.language) {
-          preferredInterfaceLanguage = signal.language;
-        }
-        void handleCandidateText({
-          content,
-          language: signal.language,
-          latestSubmissionSummary: signal.latestSubmissionSummary,
-        });
+        handleUserTextSignal(signal, participant);
         return;
       }
-
       if (signal.type !== 'system_signal') {
         return;
       }
-      void (async () => {
-        if (signal.reason === 'code_submitted') {
-          suppressRealtimeAssistantTranscripts(350);
-          await interruptRealtimeSpeech('code_submitted');
-        }
-        if (signal.language) {
-          preferredInterfaceLanguage = signal.language;
-        }
-        if (signal.interviewContext) {
-          latestInterviewContext = signal.interviewContext;
-          refreshPromptCachePrefix();
-        }
-        let runtimeContextForSignal = latestRuntimeRoomContext;
-        if (signal.reason === 'code_ran' || signal.reason === 'code_submitted') {
-          const expectedSubmission =
-            signal.reason === 'code_submitted'
-              ? (parseSubmissionSignalSummary(signal.summary) ?? undefined)
-              : undefined;
-          runtimeContextForSignal =
-            (await refreshRoomContext({ expectedSubmission })) ?? runtimeContextForSignal;
-        }
-
-        if (
-          runtimeContextForSignal?.roomStatus === 'waiting' &&
-          (signal.reason === 'session_joined' || signal.reason === 'stage_changed')
-        ) {
-          for (let attempt = 0; attempt < 3; attempt += 1) {
-            await sleep(250);
-            runtimeContextForSignal = (await refreshRoomContext()) ?? runtimeContextForSignal;
-            if (runtimeContextForSignal?.roomStatus !== 'waiting') {
-              break;
-            }
-          }
-        }
-
-        if (runtimeContextForSignal?.roomStatus === 'waiting' && signal.reason !== 'manual_nudge') {
-          return;
-        }
-        if (runtimeContextForSignal?.roomStatus === 'finished') {
-          return;
-        }
-
-        if (signal.reason === 'code_ran') {
-          if (runtimeContextForSignal) {
-            await syncSilentLiveContextUpdate(runtimeContextForSignal, signal);
-          }
-          return;
-        }
-
-        if (
-          signal.reason === 'code_submitted' &&
-          runtimeContextForSignal?.roomStatus === 'coding'
-        ) {
-          console.debug(
-            `[ai-interviewer-worker] submission context room=${roomId} codeSource=${runtimeContextForSignal.currentCode.source} codeUpdatedAt=${runtimeContextForSignal.currentCode.updatedAt ?? 'none'} latestSubmission=${
-              runtimeContextForSignal.latestSubmission
-                ? `${runtimeContextForSignal.latestSubmission.passedTestCases}/${runtimeContextForSignal.latestSubmission.totalTestCases}@${runtimeContextForSignal.latestSubmission.submittedAt}`
-                : 'none'
-            }`,
-          );
-          const submissionReviewKey = buildSubmissionReviewKey(runtimeContextForSignal);
-          if (submissionReviewKey && submissionReviewKey === lastReviewedSubmissionKey) {
-            return;
-          }
-          lastReviewedSubmissionKey = submissionReviewKey;
-
-          if (isPassingSubmission(runtimeContextForSignal)) {
-            nonPassingGuidanceTurnCount = 0;
-            discouragedTurnCount = 0;
-            lastNonPassingSubmissionKey = null;
-            askedContinueAfterRepeatedFailure = false;
-          } else if (isNonPassingSubmission(runtimeContextForSignal)) {
-            const latest = runtimeContextForSignal.latestSubmission;
-            const submissionKey = latest
-              ? `${latest.submittedAt}:${latest.passedTestCases}/${latest.totalTestCases}`
-              : null;
-            if (submissionKey && submissionKey !== lastNonPassingSubmissionKey) {
-              lastNonPassingSubmissionKey = submissionKey;
-              nonPassingGuidanceTurnCount += 1;
-            }
-            if (nonPassingGuidanceTurnCount >= 5 && !askedContinueAfterRepeatedFailure) {
-              askedContinueAfterRepeatedFailure = true;
-              const boundaryNow = Date.now();
-              lastSystemReplyAt = boundaryNow;
-              signalLastSentAt.set(signal.reason, boundaryNow);
-              await generateGuidedInterviewerMessage({
-                reason: 'repeated_nonpassing_submission_boundary',
-                message: buildRepeatedNonPassingSubmissionBoundaryResponse({
-                  context: runtimeContextForSignal,
-                  guidanceTurns: nonPassingGuidanceTurnCount,
-                  interfaceLanguage: preferredInterfaceLanguage,
-                }),
-                context: runtimeContextForSignal,
-              });
-              return;
-            }
-          }
-
-          const reviewNow = Date.now();
-          lastSystemReplyAt = reviewNow;
-          signalLastSentAt.set(signal.reason, reviewNow);
-          await generateGuidedInterviewerMessage({
-            reason: 'submission_review',
-            message: buildSubmissionReviewResponse({
-              context: runtimeContextForSignal,
-              interfaceLanguage: preferredInterfaceLanguage,
-            }),
-            context: runtimeContextForSignal,
-          });
-          return;
-        }
-
-        if (
-          runtimeContextForSignal?.roomStatus === 'warmup' &&
-          warmupFlowState === 'not_started' &&
-          (signal.reason === 'session_joined' || signal.reason === 'stage_changed')
-        ) {
-          await startWarmupKickoffIfNeeded(`system_${signal.reason}_warmup_kickoff`);
-          return;
-        }
-
-        if (
-          runtimeContextForSignal?.roomStatus === 'coding' &&
-          signal.reason === 'stage_changed' &&
-          !codingKickoffAnnounced
-        ) {
-          const scriptedNow = Date.now();
-          lastSystemReplyAt = scriptedNow;
-          signalLastSentAt.set(signal.reason, scriptedNow);
-          codingKickoffAnnounced = true;
-          await generateReplyWithTelemetry({
-            reason: `system_${signal.reason}_coding_kickoff`,
-            instructions: buildCodingPhaseKickoffInstructions({
-              rememberedContext: latestInterviewContext,
-              runtimeContext: runtimeContextForSignal,
-            }),
-          });
-          return;
-        }
-
-        if (
-          runtimeContextForSignal?.roomStatus === 'wrapup' &&
-          (signal.reason === 'stage_changed' || signal.reason === 'session_joined') &&
-          !wrapupKickoffAnnounced
-        ) {
-          const scriptedNow = Date.now();
-          lastSystemReplyAt = scriptedNow;
-          signalLastSentAt.set(signal.reason, scriptedNow);
-          wrapupKickoffAnnounced = true;
-          await generateReplyWithTelemetry({
-            reason: `system_${signal.reason}_wrapup_kickoff`,
-            instructions: buildWrapupPhaseKickoffInstructions({
-              rememberedContext: latestInterviewContext,
-              runtimeContext: runtimeContextForSignal,
-            }),
-          });
-          return;
-        }
-
-        const now = Date.now();
-        if (
-          !shouldRespondToSystemSignal({
-            signal,
-            now,
-            signalLastSentAt,
-            lastSystemReplyAt,
-            hasInterviewStarted,
-            lastUserTurnAt,
-            lastAssistantTurnAt,
-          })
-        ) {
-          return;
-        }
-
-        lastSystemReplyAt = now;
-        signalLastSentAt.set(signal.reason, now);
-
-        const instructions = buildSystemSignalInstructions(
-          signal,
-          latestInterviewContext,
-          runtimeContextForSignal,
-        );
-        await generateReplyWithTelemetry({
-          reason: `system_${signal.reason}`,
-          instructions,
-        });
-      })();
+      void handleSystemSignal(signal);
     });
 
     await publishRealtimeEvent({
