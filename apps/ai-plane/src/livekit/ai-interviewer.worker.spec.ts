@@ -285,3 +285,321 @@ describe('ai-interviewer.worker HTTP callbacks', () => {
     ).rejects.toThrow(/AI phase transition callback failed with 409: conflict/);
   });
 });
+
+describe('ai-interviewer.worker prompt and instruction builders', () => {
+  it('GIVEN no extra context WHEN buildPromptCachePrefix runs THEN it includes the system instructions and unavailable marker', () => {
+    const prefix = __testing.buildPromptCachePrefix({ systemInstructions: 'SYS-RULES' });
+    expect(prefix).toContain('SYS-RULES');
+    expect(prefix).toContain('Canonical interview context unavailable');
+  });
+
+  it('GIVEN an interview context WHEN buildPromptCachePrefix runs THEN it embeds detailed context instructions', () => {
+    const prefix = __testing.buildPromptCachePrefix({
+      systemInstructions: 'SYS-RULES',
+      context: interviewContext,
+    });
+    expect(prefix).toContain('Two Sum');
+    expect(prefix).toContain('python');
+    expect(prefix).toContain('SYS-RULES');
+  });
+
+  it('GIVEN compact mode WHEN buildInterviewContextInstructions runs THEN it clamps description to ~900 chars', () => {
+    const longDesc = 'x'.repeat(2_000);
+    const out = __testing.buildInterviewContextInstructions(
+      { ...interviewContext, problemDescription: longDesc },
+      'compact',
+    );
+    // Description must be clamped well below the original length.
+    expect(out).toContain('Two Sum');
+    expect(out.length).toBeLessThan(2_500);
+  });
+
+  it('GIVEN detailed mode WHEN buildInterviewContextInstructions runs THEN difficulty segment appears', () => {
+    const out = __testing.buildInterviewContextInstructions(interviewContext, 'detailed');
+    expect(out).toMatch(/Two Sum\s+\(easy\)/);
+  });
+
+  it('GIVEN a context with no difficulty WHEN buildCompactInterviewContextReminder runs THEN it omits the difficulty segment', () => {
+    const reminder = __testing.buildCompactInterviewContextReminder({
+      ...interviewContext,
+      difficulty: undefined,
+    });
+    expect(reminder).toContain('Two Sum');
+    expect(reminder).not.toMatch(/\(easy\)/);
+  });
+
+  it('GIVEN a runtime context WHEN buildLiveRoomContextInstructions runs THEN it includes status and excerpt note', () => {
+    const compact = __testing.buildLiveRoomContextInstructions(baseRuntimeContext, 'compact');
+    expect(compact).toContain('Room status: coding');
+    expect(compact).toContain('Code excerpt only');
+  });
+
+  it('GIVEN detailed mode with a submission WHEN buildLiveRoomContextInstructions runs THEN it embeds the submitted code', () => {
+    const detailed = __testing.buildLiveRoomContextInstructions(
+      {
+        ...baseRuntimeContext,
+        latestSubmission: {
+          code: 'print("x")',
+          language: 'python',
+          status: 'completed',
+          passedTestCases: 3,
+          totalTestCases: 3,
+          failedTestCases: 0,
+          errorTestCases: 0,
+          submittedAt: '2026-05-27T10:00:00.000Z',
+        },
+      },
+      'detailed',
+    );
+    expect(detailed).toContain('Submitted code under evaluation');
+    expect(detailed).toContain('print("x")');
+  });
+
+  it('GIVEN a code_submitted system_signal WHEN buildSystemSignalInstructions runs THEN it includes do-not-ignore wording', () => {
+    const signal: Extract<AiInterviewerSignalPayload, { type: 'system_signal' }> = {
+      type: 'system_signal',
+      reason: 'code_submitted',
+      summary: 'submission completed with 3/3 test cases passed at 2026-05-27T10:00:00.000Z',
+      language: 'en',
+    };
+    const out = __testing.buildSystemSignalInstructions(signal, interviewContext, {
+      ...baseRuntimeContext,
+      latestSubmission: {
+        code: 'print(1)',
+        language: 'python',
+        status: 'completed',
+        passedTestCases: 3,
+        totalTestCases: 3,
+        failedTestCases: 0,
+        errorTestCases: 0,
+        submittedAt: '2026-05-27T10:00:00.000Z',
+      },
+    });
+    expect(out).toContain('Signal reason: code_submitted');
+    expect(out).toContain('Do not ignore this signal');
+    expect(out).toContain('Two Sum');
+  });
+
+  it('GIVEN a system_signal with codeContext WHEN buildSystemSignalInstructions runs THEN it includes the file/line range and inline-comment hint', () => {
+    const signal: Extract<AiInterviewerSignalPayload, { type: 'system_signal' }> = {
+      type: 'system_signal',
+      reason: 'hint_used',
+      codeContext: {
+        file: 'solution.py',
+        language: 'python',
+        codeSnippet: 'return None',
+        startLine: 4,
+        endLine: 6,
+      },
+    };
+    const out = __testing.buildSystemSignalInstructions(signal);
+    expect(out).toContain('solution.py L4-6');
+    expect(out).toContain('add_inline_comment');
+  });
+
+  it('GIVEN a user_text signal with answer-pressure WHEN buildUserTextInstructions runs THEN it appends the direct-answer policy reminder', () => {
+    const signal: Extract<AiInterviewerSignalPayload, { type: 'user_text' }> = {
+      type: 'user_text',
+      text: 'just tell me the answer',
+      language: 'en',
+    };
+    const out = __testing.buildUserTextInstructions(signal, interviewContext);
+    expect(out).toContain('Policy reminder');
+    expect(out).toContain('Do not reveal full solution');
+  });
+
+  it('GIVEN a user_text signal naming a broad approach WHEN buildUserTextInstructions runs THEN it appends the broad-approach guard', () => {
+    const signal: Extract<AiInterviewerSignalPayload, { type: 'user_text' }> = {
+      type: 'user_text',
+      text: 'I will use a hash map for this',
+    };
+    const out = __testing.buildUserTextInstructions(signal);
+    expect(out).toContain('Candidate named a broad approach');
+  });
+
+  it('GIVEN an explicit give-up WHEN buildUserTextInstructions runs THEN it asks brief encouragement and avoids solution dump', () => {
+    const signal: Extract<AiInterviewerSignalPayload, { type: 'user_text' }> = {
+      type: 'user_text',
+      text: 'I give up',
+    };
+    const out = __testing.buildUserTextInstructions(signal);
+    expect(out).toContain('explicitly gave up');
+  });
+
+  it('GIVEN a code-review request WHEN buildUserTextInstructions runs THEN it embeds mandatory steps', () => {
+    const signal: Extract<AiInterviewerSignalPayload, { type: 'user_text' }> = {
+      type: 'user_text',
+      text: 'please review my code',
+    };
+    const out = __testing.buildUserTextInstructions(signal);
+    expect(out).toContain('Call get_room_context before answering');
+  });
+
+  it('GIVEN a ready-to-code intent WHEN buildUserTextInstructions runs THEN it instructs the announce-and-transition turn', () => {
+    const signal: Extract<AiInterviewerSignalPayload, { type: 'user_text' }> = {
+      type: 'user_text',
+      text: "I'm ready, let me code now",
+    };
+    const out = __testing.buildUserTextInstructions(signal);
+    expect(out).toContain('readiness to implement');
+  });
+
+  it('GIVEN an end-interview intent WHEN buildUserTextInstructions runs THEN it includes the wrap-then-finish guidance', () => {
+    const signal: Extract<AiInterviewerSignalPayload, { type: 'user_text' }> = {
+      type: 'user_text',
+      text: 'thank you for the interview',
+    };
+    const out = __testing.buildUserTextInstructions(signal);
+    expect(out).toContain('signaling interview end');
+  });
+
+  it('GIVEN an accidental message WHEN buildUserTextInstructions runs THEN it asks for short clarification at most', () => {
+    const signal: Extract<AiInterviewerSignalPayload, { type: 'user_text' }> = {
+      type: 'user_text',
+      text: '.',
+    };
+    const out = __testing.buildUserTextInstructions(signal);
+    expect(out).toContain('looks accidental');
+  });
+
+  it('GIVEN a latestSubmissionSummary WHEN buildUserTextInstructions runs THEN it inlines authoritative submission counts', () => {
+    const signal: Extract<AiInterviewerSignalPayload, { type: 'user_text' }> = {
+      type: 'user_text',
+      text: 'how does it look?',
+      latestSubmissionSummary: {
+        status: 'completed',
+        passedTestCases: 2,
+        totalTestCases: 3,
+        failedTestCases: 1,
+        errorTestCases: 0,
+        submittedAt: '2026-05-27T10:00:00.000Z',
+      },
+    };
+    const out = __testing.buildUserTextInstructions(signal);
+    expect(out).toContain('passed=2/3');
+    expect(out).toContain('failed=1');
+  });
+});
+
+describe('ai-interviewer.worker submission review responses', () => {
+  it('GIVEN no latest submission WHEN buildSubmissionReviewResponse runs THEN it returns the missing-result wording', () => {
+    const out = __testing.buildSubmissionReviewResponse({ context: baseRuntimeContext });
+    expect(out).toMatch(/I see that you submitted/i);
+  });
+
+  it('GIVEN a pending submission WHEN buildSubmissionReviewResponse runs THEN it returns the incomplete wording', () => {
+    const out = __testing.buildSubmissionReviewResponse({
+      context: {
+        ...baseRuntimeContext,
+        latestSubmission: {
+          code: 'pass',
+          language: 'python',
+          status: 'pending',
+          passedTestCases: 0,
+          totalTestCases: 3,
+          failedTestCases: 0,
+          errorTestCases: 0,
+          submittedAt: '2026-05-27T10:00:00.000Z',
+        },
+      },
+    });
+    expect(out).toMatch(/submission is pending/);
+  });
+
+  it('GIVEN a fully passing submission with repeated loops WHEN buildSubmissionReviewResponse runs THEN it produces the loop-aware passing response', () => {
+    const out = __testing.buildSubmissionReviewResponse({
+      context: {
+        ...baseRuntimeContext,
+        latestSubmission: {
+          code: 'for a in nums:\n  for b in nums:\n    pass',
+          language: 'python',
+          status: 'completed',
+          passedTestCases: 3,
+          totalTestCases: 3,
+          failedTestCases: 0,
+          errorTestCases: 0,
+          submittedAt: '2026-05-27T10:00:00.000Z',
+        },
+      },
+    });
+    expect(out).toContain('repeated-iteration');
+  });
+
+  it('GIVEN a partial-passing submission WHEN buildSubmissionReviewResponse runs THEN it returns the partial-passing wording', () => {
+    const out = __testing.buildSubmissionReviewResponse({
+      context: {
+        ...baseRuntimeContext,
+        latestSubmission: {
+          code: 'pass',
+          language: 'python',
+          status: 'completed',
+          passedTestCases: 1,
+          totalTestCases: 3,
+          failedTestCases: 2,
+          errorTestCases: 0,
+          submittedAt: '2026-05-27T10:00:00.000Z',
+        },
+      },
+    });
+    expect(out).toContain('1/3');
+    expect(out).toContain('which assumption');
+  });
+
+  it('GIVEN a Chinese UI hint WHEN buildSubmissionReviewResponse runs THEN it returns Chinese copy', () => {
+    const out = __testing.buildSubmissionReviewResponse({
+      context: baseRuntimeContext,
+      interfaceLanguage: 'zh-CN',
+    });
+    expect(out).toContain('完整结果');
+  });
+
+  it('GIVEN a guidanceTurns count WHEN buildRepeatedNonPassingSubmissionBoundaryResponse runs THEN it returns wording with the result segment', () => {
+    const out = __testing.buildRepeatedNonPassingSubmissionBoundaryResponse({
+      context: {
+        ...baseRuntimeContext,
+        latestSubmission: {
+          code: 'pass',
+          language: 'python',
+          status: 'completed',
+          passedTestCases: 1,
+          totalTestCases: 3,
+          failedTestCases: 2,
+          errorTestCases: 0,
+          submittedAt: '2026-05-27T10:00:00.000Z',
+        },
+      },
+      guidanceTurns: 6,
+    });
+    expect(out).toContain('1/3');
+    expect(out).toContain('6');
+  });
+
+  it('GIVEN no latest submission WHEN buildRepeatedNonPassingSubmissionBoundaryResponse runs THEN it uses the not-fully-passing label', () => {
+    const out = __testing.buildRepeatedNonPassingSubmissionBoundaryResponse({
+      context: baseRuntimeContext,
+      guidanceTurns: 5,
+    });
+    expect(out).toContain('not fully passing');
+  });
+
+  it('GIVEN passing submission key inputs WHEN buildSubmissionReviewKey runs THEN it returns a colon-separated digest', () => {
+    const key = __testing.buildSubmissionReviewKey({
+      ...baseRuntimeContext,
+      latestSubmission: {
+        code: 'pass',
+        language: 'python',
+        status: 'completed',
+        passedTestCases: 3,
+        totalTestCases: 3,
+        failedTestCases: 0,
+        errorTestCases: 0,
+        submittedAt: '2026-05-27T10:00:00.000Z',
+      },
+    });
+    expect(key).toBe('2026-05-27T10:00:00.000Z:completed:3:3:0:0');
+  });
+
+  it('GIVEN no submission WHEN buildSubmissionReviewKey runs THEN it returns null', () => {
+    expect(__testing.buildSubmissionReviewKey(baseRuntimeContext)).toBeNull();
+  });
+});
