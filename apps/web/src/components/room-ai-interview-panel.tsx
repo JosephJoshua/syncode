@@ -783,6 +783,89 @@ export function RoomAiInterviewPanel({
     }
   }
 
+  // Resets capture state to idle with an optional error message and re-arms
+  // the auto-restart timer when continuous voice conversation is enabled.
+  const finalizeVoiceCaptureIdle = useCallback(
+    (errorMessage: string | null) => {
+      setVoiceCaptureState('idle');
+      if (errorMessage !== null) {
+        setVoiceError(errorMessage);
+      }
+      if (voiceConversationEnabledRef.current) {
+        scheduleVoiceCaptureRestart();
+      }
+    },
+    [scheduleVoiceCaptureRestart],
+  );
+
+  // Runs the prepare → base64 → transcribe pipeline. Returns the trimmed
+  // transcript string, an empty string when the audio yielded no speech, or
+  // null when the caller should abort silently (stale session / unmounted /
+  // oversized prepared audio — those branches set state themselves).
+  const transcribeRecordedBlob = useCallback(
+    async (requestId: number, recordedBlob: Blob): Promise<string | null> => {
+      if (!onTranscribeVoiceInput) {
+        return null;
+      }
+
+      const preparedAudio = await withTimeout(
+        prepareVoiceAudioForTranscription(recordedBlob),
+        VOICE_AUDIO_PREPARE_TIMEOUT_MS,
+        () => new Error(voiceTimeoutMessage),
+      );
+      logVoice('prepare-audio-done', {
+        requestId,
+        sourceSize: recordedBlob.size,
+        sourceType: recordedBlob.type,
+        preparedSize: preparedAudio.blob.size,
+        preparedType: preparedAudio.mimeType,
+      });
+      if (preparedAudio.blob.size > VOICE_MAX_BLOB_BYTES) {
+        finalizeVoiceCaptureIdle(t('workspace.aiInterviewVoiceTooLong'));
+        return null;
+      }
+
+      logVoice('encode-start', {
+        requestId,
+        size: preparedAudio.blob.size,
+        type: preparedAudio.mimeType,
+      });
+      const audioBase64 = await withTimeout(
+        blobToBase64(preparedAudio.blob),
+        VOICE_BASE64_ENCODE_TIMEOUT_MS,
+        () => new Error(voiceTimeoutMessage),
+      );
+      logVoice('encode-done', { requestId, base64Length: audioBase64.length });
+      if (voiceSessionRef.current !== requestId || isUnmountedRef.current) {
+        return null;
+      }
+
+      logVoice('transcribe-start', { requestId });
+      const transcript = await withTimeout(
+        onTranscribeVoiceInput({
+          audioBase64,
+          mimeType: preparedAudio.mimeType,
+          language: resolveRecognitionLanguage(i18n.language),
+        }),
+        VOICE_TRANSCRIPTION_TIMEOUT_MS,
+        () => new Error(voiceTimeoutMessage),
+      );
+      logVoice('transcribe-done', { requestId, transcriptLength: transcript.length });
+      if (voiceSessionRef.current !== requestId || isUnmountedRef.current) {
+        return null;
+      }
+      return transcript.trim();
+    },
+    [
+      finalizeVoiceCaptureIdle,
+      i18n.language,
+      logVoice,
+      onTranscribeVoiceInput,
+      t,
+      voiceTimeoutMessage,
+    ],
+  );
+
   const finalizeVoiceCapture = useCallback(
     async (requestId: number, recordedBlob: Blob) => {
       if (
@@ -794,103 +877,30 @@ export function RoomAiInterviewPanel({
       }
 
       if (recordedBlob.size === 0) {
-        setVoiceCaptureState('idle');
-        setVoiceError(t('workspace.aiInterviewVoiceNoSpeech'));
-        if (voiceConversationEnabledRef.current) {
-          scheduleVoiceCaptureRestart();
-        }
+        finalizeVoiceCaptureIdle(t('workspace.aiInterviewVoiceNoSpeech'));
         return;
       }
       if (recordedBlob.size > VOICE_MAX_BLOB_BYTES) {
-        setVoiceCaptureState('idle');
-        setVoiceError(t('workspace.aiInterviewVoiceTooLong'));
-        if (voiceConversationEnabledRef.current) {
-          scheduleVoiceCaptureRestart();
-        }
+        finalizeVoiceCaptureIdle(t('workspace.aiInterviewVoiceTooLong'));
         return;
       }
 
       try {
         setVoiceCaptureState('transcribing');
-        const preparedAudio = await withTimeout(
-          prepareVoiceAudioForTranscription(recordedBlob),
-          VOICE_AUDIO_PREPARE_TIMEOUT_MS,
-          () => new Error(voiceTimeoutMessage),
-        );
-        logVoice('prepare-audio-done', {
-          requestId,
-          sourceSize: recordedBlob.size,
-          sourceType: recordedBlob.type,
-          preparedSize: preparedAudio.blob.size,
-          preparedType: preparedAudio.mimeType,
-        });
-        if (preparedAudio.blob.size > VOICE_MAX_BLOB_BYTES) {
-          setVoiceCaptureState('idle');
-          setVoiceError(t('workspace.aiInterviewVoiceTooLong'));
-          if (voiceConversationEnabledRef.current) {
-            scheduleVoiceCaptureRestart();
-          }
+        const normalized = await transcribeRecordedBlob(requestId, recordedBlob);
+        if (normalized === null) {
           return;
         }
-
-        logVoice('encode-start', {
-          requestId,
-          size: preparedAudio.blob.size,
-          type: preparedAudio.mimeType,
-        });
-        const audioBase64 = await withTimeout(
-          blobToBase64(preparedAudio.blob),
-          VOICE_BASE64_ENCODE_TIMEOUT_MS,
-          () => new Error(voiceTimeoutMessage),
-        );
-        logVoice('encode-done', {
-          requestId,
-          base64Length: audioBase64.length,
-        });
-        if (voiceSessionRef.current !== requestId || isUnmountedRef.current) {
-          return;
-        }
-
-        logVoice('transcribe-start', { requestId });
-        const transcript = await withTimeout(
-          onTranscribeVoiceInput({
-            audioBase64,
-            mimeType: preparedAudio.mimeType,
-            language: resolveRecognitionLanguage(i18n.language),
-          }),
-          VOICE_TRANSCRIPTION_TIMEOUT_MS,
-          () => new Error(voiceTimeoutMessage),
-        );
-        logVoice('transcribe-done', {
-          requestId,
-          transcriptLength: transcript.length,
-        });
-
-        if (voiceSessionRef.current !== requestId || isUnmountedRef.current) {
-          return;
-        }
-
-        const normalized = transcript.trim();
-        if (!normalized) {
-          setVoiceError(t('workspace.aiInterviewVoiceNoSpeech'));
-          setVoiceCaptureState('idle');
-          if (voiceConversationEnabledRef.current) {
-            scheduleVoiceCaptureRestart();
-          }
+        if (normalized.length === 0) {
+          finalizeVoiceCaptureIdle(t('workspace.aiInterviewVoiceNoSpeech'));
           return;
         }
 
         onSendMessage(normalized);
         setDraft('');
-        setVoiceCaptureState('idle');
-        if (voiceConversationEnabledRef.current) {
-          scheduleVoiceCaptureRestart();
-        }
+        finalizeVoiceCaptureIdle(null);
       } catch (error) {
-        logVoice('finalize-error', {
-          requestId,
-          error,
-        });
+        logVoice('finalize-error', { requestId, error });
         if (voiceSessionRef.current !== requestId || isUnmountedRef.current) {
           return;
         }
@@ -898,21 +908,16 @@ export function RoomAiInterviewPanel({
           error instanceof Error && error.message.trim().length > 0
             ? error.message
             : t('workspace.aiInterviewVoiceNetworkError');
-        setVoiceError(message);
-        setVoiceCaptureState('idle');
-        if (voiceConversationEnabledRef.current) {
-          scheduleVoiceCaptureRestart();
-        }
+        finalizeVoiceCaptureIdle(message);
       }
     },
     [
-      i18n.language,
+      finalizeVoiceCaptureIdle,
       logVoice,
       onSendMessage,
       onTranscribeVoiceInput,
-      scheduleVoiceCaptureRestart,
       t,
-      voiceTimeoutMessage,
+      transcribeRecordedBlob,
     ],
   );
 

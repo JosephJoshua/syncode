@@ -547,20 +547,52 @@ export function RoomWorkspace({
     [],
   );
 
+  const applyRealtimeAiInterviewerEvent = useCallback(
+    (event: AiInterviewerEventPayload) => {
+      switch (event.type) {
+        case 'agent_state':
+          setAiInterviewerAgentState(event.state);
+          setAiInterviewLoading(event.state === 'initializing' || event.state === 'thinking');
+          return;
+        case 'user_state':
+          setAiInterviewerUserState(event.state);
+          return;
+        case 'overlapping_speech':
+          if (event.isInterruption) {
+            setAiInterviewerInterruptionAt(event.occurredAt);
+          }
+          return;
+        case 'transcript_turn':
+          appendRealtimeInterviewTurn(event);
+          if (event.role === 'assistant') {
+            setAiInterviewLoading(false);
+            setAiInterviewerInterruptionAt(null);
+          }
+          return;
+        case 'error':
+          setAiInterviewError(event.message);
+          setAiInterviewLoading(false);
+          return;
+        case 'session_ready':
+          setAiInterviewError(null);
+          setAiInterviewLoading(false);
+          return;
+        default:
+          return;
+      }
+    },
+    [appendRealtimeInterviewTurn],
+  );
+
   useEffect(() => {
-    if (!useRealtimeAiInterviewer) {
-      return;
-    }
-    if (!latestLiveKitDataPacket) {
+    if (!useRealtimeAiInterviewer || !latestLiveKitDataPacket) {
       return;
     }
     if (latestLiveKitDataPacket.topic !== AI_INTERVIEWER_EVENT_TOPIC) {
       return;
     }
-    if (
-      latestLiveKitDataPacket.participantIdentity &&
-      latestLiveKitDataPacket.participantIdentity !== aiInterviewerIdentity
-    ) {
+    const identity = latestLiveKitDataPacket.participantIdentity;
+    if (identity && identity !== aiInterviewerIdentity) {
       return;
     }
 
@@ -568,47 +600,10 @@ export function RoomWorkspace({
     if (!event) {
       return;
     }
-
-    if (event.type === 'agent_state') {
-      setAiInterviewerAgentState(event.state);
-      setAiInterviewLoading(event.state === 'initializing' || event.state === 'thinking');
-      return;
-    }
-
-    if (event.type === 'user_state') {
-      setAiInterviewerUserState(event.state);
-      return;
-    }
-
-    if (event.type === 'overlapping_speech') {
-      if (event.isInterruption) {
-        setAiInterviewerInterruptionAt(event.occurredAt);
-      }
-      return;
-    }
-
-    if (event.type === 'transcript_turn') {
-      appendRealtimeInterviewTurn(event);
-      if (event.role === 'assistant') {
-        setAiInterviewLoading(false);
-        setAiInterviewerInterruptionAt(null);
-      }
-      return;
-    }
-
-    if (event.type === 'error') {
-      setAiInterviewError(event.message);
-      setAiInterviewLoading(false);
-      return;
-    }
-
-    if (event.type === 'session_ready') {
-      setAiInterviewError(null);
-      setAiInterviewLoading(false);
-    }
+    applyRealtimeAiInterviewerEvent(event);
   }, [
     aiInterviewerIdentity,
-    appendRealtimeInterviewTurn,
+    applyRealtimeAiInterviewerEvent,
     latestLiveKitDataPacket,
     useRealtimeAiInterviewer,
   ]);
@@ -1051,41 +1046,15 @@ export function RoomWorkspace({
     let addedCount = 0;
 
     for (const [index, message] of aiInterviewMessages.entries()) {
-      if (message.role !== 'assistant' || message.isStreaming) {
-        continue;
-      }
-      if (!message.codeAnnotations || message.codeAnnotations.length === 0) {
-        continue;
-      }
-
-      const stableId = getAiInterviewMessageStableId(message, index);
-      if (appliedMessageIds.has(stableId)) {
-        continue;
-      }
-
-      for (const annotation of message.codeAnnotations) {
-        const lineNumber = Math.min(codeLineCount, Math.max(1, Math.floor(annotation.line)));
-        const content = annotation.comment.trim();
-        if (!content) {
-          continue;
-        }
-
-        const signature = `${lineNumber}:${content}`;
-        if (existingSignatures.has(signature)) {
-          continue;
-        }
-        existingSignatures.add(signature);
-
-        addComment({
-          authorId: AI_INTERVIEW_INLINE_COMMENT_AUTHOR_ID,
-          authorName: t('workspace.aiInterviewAi'),
-          content,
-          lineNumber,
-        });
-        addedCount += 1;
-      }
-
-      appliedMessageIds.add(stableId);
+      addedCount += applyAiInterviewMessageAnnotations({
+        message,
+        messageIndex: index,
+        appliedMessageIds,
+        existingSignatures,
+        codeLineCount,
+        addComment,
+        authorName: t('workspace.aiInterviewAi'),
+      });
     }
 
     if (addedCount > 0) {
@@ -3713,6 +3682,76 @@ const AI_INTERVIEW_CONVERSATION_STORAGE_KEY_PREFIX = 'syncode:ai-interview-conve
 const AI_INTERVIEW_PERSISTED_HISTORY_LIMIT = 80;
 const AI_INTERVIEW_ALLOWED_STATUSES = new Set<RoomStatus>(['warmup', 'coding', 'wrapup']);
 const AI_INTERVIEW_INLINE_COMMENT_AUTHOR_ID = 'ai-interviewer-inline';
+
+interface ApplyAiInterviewMessageAnnotationsParams {
+  message: AiInterviewMessage;
+  messageIndex: number;
+  appliedMessageIds: Set<string>;
+  existingSignatures: Set<string>;
+  codeLineCount: number;
+  addComment: (input: {
+    authorId: string;
+    authorName: string;
+    content: string;
+    lineNumber: number;
+  }) => void;
+  authorName: string;
+}
+
+// Applies code annotations from a single AI interview assistant message to the
+// inline-comments doc. Returns the number of comments actually added so the
+// caller can show a single toast for the batch.
+function applyAiInterviewMessageAnnotations(
+  params: ApplyAiInterviewMessageAnnotationsParams,
+): number {
+  const {
+    message,
+    messageIndex,
+    appliedMessageIds,
+    existingSignatures,
+    codeLineCount,
+    addComment,
+    authorName,
+  } = params;
+
+  if (message.role !== 'assistant' || message.isStreaming) {
+    return 0;
+  }
+  if (!message.codeAnnotations || message.codeAnnotations.length === 0) {
+    return 0;
+  }
+
+  const stableId = getAiInterviewMessageStableId(message, messageIndex);
+  if (appliedMessageIds.has(stableId)) {
+    return 0;
+  }
+
+  let added = 0;
+  for (const annotation of message.codeAnnotations) {
+    const lineNumber = Math.min(codeLineCount, Math.max(1, Math.floor(annotation.line)));
+    const content = annotation.comment.trim();
+    if (!content) {
+      continue;
+    }
+
+    const signature = `${lineNumber}:${content}`;
+    if (existingSignatures.has(signature)) {
+      continue;
+    }
+    existingSignatures.add(signature);
+
+    addComment({
+      authorId: AI_INTERVIEW_INLINE_COMMENT_AUTHOR_ID,
+      authorName,
+      content,
+      lineNumber,
+    });
+    added += 1;
+  }
+
+  appliedMessageIds.add(stableId);
+  return added;
+}
 
 interface PendingAiInterviewJob {
   jobId: string;
