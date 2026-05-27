@@ -2578,3 +2578,384 @@ const agent = defineAgent({
         lastUserTurnAt = event.createdAt;
         const turnId = createTranscriptTurnId(
           'user',
+          roomId,
+          participantId,
+          event.createdAt,
+          content,
+        );
+
+        void emitTurn({
+          turnId,
+          role: 'user',
+          participantId,
+          content,
+          occurredAt: event.createdAt,
+        });
+        void handleCandidateText({ content });
+      },
+    );
+
+    session.on(
+      voice.AgentSessionEventTypes.ConversationItemAdded,
+      (event: voice.ConversationItemAddedEvent) => {
+        if (event.item.type !== 'message' || event.item.role !== 'assistant') {
+          return;
+        }
+
+        const content = event.item.textContent?.trim();
+        if (!content) {
+          return;
+        }
+        if (Date.now() <= suppressRealtimeAssistantTranscriptsUntil) {
+          console.debug(
+            `[ai-interviewer-worker] suppressed interrupted realtime assistant transcript room=${roomId}`,
+          );
+          return;
+        }
+        if (suppressRealtimeAssistantTranscriptsUntil > 0) {
+          suppressRealtimeAssistantTranscriptsUntil = 0;
+        }
+        const assistantTokens = estimateTokenCount(content);
+        approxOutputTokensTotal += assistantTokens;
+        approxConversationTokensTotal += assistantTokens;
+        console.debug(
+          `[ai-interviewer-worker] assistant-turn room=${roomId} outputTokens≈${assistantTokens} outputTotal≈${approxOutputTokensTotal} conversationTokens≈${approxConversationTokensTotal}`,
+        );
+        maybeLogContextBudgetRisk();
+
+        const participantId = lastUserSpeakerId ?? participantUserId ?? null;
+        if (!participantId) {
+          return;
+        }
+
+        const codeAnnotations = pendingInlineComments.splice(0, pendingInlineComments.length);
+        lastAssistantTurnAt = event.item.createdAt;
+        hasInterviewStarted = true;
+
+        void emitTurn({
+          turnId: event.item.id,
+          role: 'assistant',
+          participantId,
+          content,
+          occurredAt: event.item.createdAt,
+          codeAnnotations: codeAnnotations.length > 0 ? codeAnnotations : undefined,
+        });
+
+        void (async () => {
+          const runtimeContext = (await refreshRoomContext()) ?? latestRuntimeRoomContext;
+          if (queuedPhaseTransitionAfterAssistant) {
+            transitionQueuedPhaseAfterAssistant();
+            return;
+          }
+          if (warmupTransitionPendingAfterAssistant && runtimeContext?.roomStatus === 'warmup') {
+            transitionQueuedWarmupAfterAssistant();
+            return;
+          }
+          if (runtimeContext?.roomStatus !== 'warmup') {
+            return;
+          }
+          warmupAssistantTurnCount += 1;
+          if (warmupAssistantTurnCount >= 2 && warmupFlowState !== 'completed') {
+            warmupFlowState = 'followup_sent';
+            warmupAwaitingCandidateAnswerForTransition = true;
+          }
+        })();
+      },
+    );
+
+    await session.start({
+      agent: interviewAgent,
+      room: ctx.room,
+      inputOptions: {
+        participantIdentity: participantUserId,
+        closeOnDisconnect: true,
+      },
+    });
+
+    void refreshRoomContext();
+
+    const onParticipantDisconnected = (participant: { identity?: string }) => {
+      if (!participantUserId) {
+        return;
+      }
+      if (participant.identity !== participantUserId) {
+        return;
+      }
+      ctx.shutdown('participant-disconnected');
+    };
+    ctx.room.on('participantDisconnected', onParticipantDisconnected);
+    ctx.addShutdownCallback(async () => {
+      ctx.room.off('participantDisconnected', onParticipantDisconnected);
+    });
+
+    ctx.room.on('dataReceived', (payload, participant, _kind, topic) => {
+      if (topic !== AI_INTERVIEWER_SIGNAL_TOPIC) {
+        return;
+      }
+
+      if (participantUserId && participant?.identity !== participantUserId) {
+        return;
+      }
+
+      const signal = decodeAiInterviewerSignalPayload(payload);
+      if (!signal) {
+        return;
+      }
+
+      if (signal.type === 'user_text') {
+        const content = signal.text.trim();
+        if (!content) {
+          return;
+        }
+        if (isLikelyAccidentalCandidateMessage(content)) {
+          return;
+        }
+        const userTokens = estimateTokenCount(content);
+        approxConversationTokensTotal += userTokens;
+        maybeLogContextBudgetRisk();
+
+        const participantId = participantUserId ?? participant?.identity;
+        if (participantId) {
+          lastUserSpeakerId = participantId;
+          lastUserTurnAt = Date.now();
+          const turnId = createTranscriptTurnId('user', roomId, participantId, Date.now(), content);
+          void emitTurn({
+            turnId,
+            role: 'user',
+            participantId,
+            content,
+            occurredAt: Date.now(),
+          });
+        }
+        if (signal.language) {
+          preferredInterfaceLanguage = signal.language;
+        }
+        void handleCandidateText({
+          content,
+          language: signal.language,
+          latestSubmissionSummary: signal.latestSubmissionSummary,
+        });
+        return;
+      }
+
+      if (signal.type !== 'system_signal') {
+        return;
+      }
+      void (async () => {
+        if (signal.reason === 'code_submitted') {
+          suppressRealtimeAssistantTranscripts(350);
+          await interruptRealtimeSpeech('code_submitted');
+        }
+        if (signal.language) {
+          preferredInterfaceLanguage = signal.language;
+        }
+        if (signal.interviewContext) {
+          latestInterviewContext = signal.interviewContext;
+          refreshPromptCachePrefix();
+        }
+        let runtimeContextForSignal = latestRuntimeRoomContext;
+        if (signal.reason === 'code_ran' || signal.reason === 'code_submitted') {
+          const expectedSubmission =
+            signal.reason === 'code_submitted'
+              ? (parseSubmissionSignalSummary(signal.summary) ?? undefined)
+              : undefined;
+          runtimeContextForSignal =
+            (await refreshRoomContext({ expectedSubmission })) ?? runtimeContextForSignal;
+        }
+
+        if (
+          runtimeContextForSignal?.roomStatus === 'waiting' &&
+          (signal.reason === 'session_joined' || signal.reason === 'stage_changed')
+        ) {
+          for (let attempt = 0; attempt < 3; attempt += 1) {
+            await sleep(250);
+            runtimeContextForSignal = (await refreshRoomContext()) ?? runtimeContextForSignal;
+            if (runtimeContextForSignal?.roomStatus !== 'waiting') {
+              break;
+            }
+          }
+        }
+
+        if (runtimeContextForSignal?.roomStatus === 'waiting' && signal.reason !== 'manual_nudge') {
+          return;
+        }
+        if (runtimeContextForSignal?.roomStatus === 'finished') {
+          return;
+        }
+
+        if (signal.reason === 'code_ran') {
+          if (runtimeContextForSignal) {
+            await syncSilentLiveContextUpdate(runtimeContextForSignal, signal);
+          }
+          return;
+        }
+
+        if (
+          signal.reason === 'code_submitted' &&
+          runtimeContextForSignal?.roomStatus === 'coding'
+        ) {
+          console.debug(
+            `[ai-interviewer-worker] submission context room=${roomId} codeSource=${runtimeContextForSignal.currentCode.source} codeUpdatedAt=${runtimeContextForSignal.currentCode.updatedAt ?? 'none'} latestSubmission=${
+              runtimeContextForSignal.latestSubmission
+                ? `${runtimeContextForSignal.latestSubmission.passedTestCases}/${runtimeContextForSignal.latestSubmission.totalTestCases}@${runtimeContextForSignal.latestSubmission.submittedAt}`
+                : 'none'
+            }`,
+          );
+          const submissionReviewKey = buildSubmissionReviewKey(runtimeContextForSignal);
+          if (submissionReviewKey && submissionReviewKey === lastReviewedSubmissionKey) {
+            return;
+          }
+          lastReviewedSubmissionKey = submissionReviewKey;
+
+          if (isPassingSubmission(runtimeContextForSignal)) {
+            nonPassingGuidanceTurnCount = 0;
+            discouragedTurnCount = 0;
+            lastNonPassingSubmissionKey = null;
+            askedContinueAfterRepeatedFailure = false;
+          } else if (isNonPassingSubmission(runtimeContextForSignal)) {
+            const latest = runtimeContextForSignal.latestSubmission;
+            const submissionKey = latest
+              ? `${latest.submittedAt}:${latest.passedTestCases}/${latest.totalTestCases}`
+              : null;
+            if (submissionKey && submissionKey !== lastNonPassingSubmissionKey) {
+              lastNonPassingSubmissionKey = submissionKey;
+              nonPassingGuidanceTurnCount += 1;
+            }
+            if (nonPassingGuidanceTurnCount >= 5 && !askedContinueAfterRepeatedFailure) {
+              askedContinueAfterRepeatedFailure = true;
+              const boundaryNow = Date.now();
+              lastSystemReplyAt = boundaryNow;
+              signalLastSentAt.set(signal.reason, boundaryNow);
+              await generateGuidedInterviewerMessage({
+                reason: 'repeated_nonpassing_submission_boundary',
+                message: buildRepeatedNonPassingSubmissionBoundaryResponse({
+                  context: runtimeContextForSignal,
+                  guidanceTurns: nonPassingGuidanceTurnCount,
+                  interfaceLanguage: preferredInterfaceLanguage,
+                }),
+                context: runtimeContextForSignal,
+              });
+              return;
+            }
+          }
+
+          const reviewNow = Date.now();
+          lastSystemReplyAt = reviewNow;
+          signalLastSentAt.set(signal.reason, reviewNow);
+          await generateGuidedInterviewerMessage({
+            reason: 'submission_review',
+            message: buildSubmissionReviewResponse({
+              context: runtimeContextForSignal,
+              interfaceLanguage: preferredInterfaceLanguage,
+            }),
+            context: runtimeContextForSignal,
+          });
+          return;
+        }
+
+        if (
+          runtimeContextForSignal?.roomStatus === 'warmup' &&
+          warmupFlowState === 'not_started' &&
+          (signal.reason === 'session_joined' || signal.reason === 'stage_changed')
+        ) {
+          await startWarmupKickoffIfNeeded(`system_${signal.reason}_warmup_kickoff`);
+          return;
+        }
+
+        if (
+          runtimeContextForSignal?.roomStatus === 'coding' &&
+          signal.reason === 'stage_changed' &&
+          !codingKickoffAnnounced
+        ) {
+          const scriptedNow = Date.now();
+          lastSystemReplyAt = scriptedNow;
+          signalLastSentAt.set(signal.reason, scriptedNow);
+          codingKickoffAnnounced = true;
+          await generateReplyWithTelemetry({
+            reason: `system_${signal.reason}_coding_kickoff`,
+            instructions: buildCodingPhaseKickoffInstructions({
+              rememberedContext: latestInterviewContext,
+              runtimeContext: runtimeContextForSignal,
+            }),
+          });
+          return;
+        }
+
+        if (
+          runtimeContextForSignal?.roomStatus === 'wrapup' &&
+          (signal.reason === 'stage_changed' || signal.reason === 'session_joined') &&
+          !wrapupKickoffAnnounced
+        ) {
+          const scriptedNow = Date.now();
+          lastSystemReplyAt = scriptedNow;
+          signalLastSentAt.set(signal.reason, scriptedNow);
+          wrapupKickoffAnnounced = true;
+          await generateReplyWithTelemetry({
+            reason: `system_${signal.reason}_wrapup_kickoff`,
+            instructions: buildWrapupPhaseKickoffInstructions({
+              rememberedContext: latestInterviewContext,
+              runtimeContext: runtimeContextForSignal,
+            }),
+          });
+          return;
+        }
+
+        const now = Date.now();
+        if (
+          !shouldRespondToSystemSignal({
+            signal,
+            now,
+            signalLastSentAt,
+            lastSystemReplyAt,
+            hasInterviewStarted,
+            lastUserTurnAt,
+            lastAssistantTurnAt,
+          })
+        ) {
+          return;
+        }
+
+        lastSystemReplyAt = now;
+        signalLastSentAt.set(signal.reason, now);
+
+        const instructions = buildSystemSignalInstructions(
+          signal,
+          latestInterviewContext,
+          runtimeContextForSignal,
+        );
+        await generateReplyWithTelemetry({
+          reason: `system_${signal.reason}`,
+          instructions,
+        });
+      })();
+    });
+
+    await publishRealtimeEvent({
+      type: 'session_ready',
+      occurredAt: Date.now(),
+    });
+    void (async () => {
+      await sleep(500);
+      await startWarmupKickoffIfNeeded('system_worker_session_ready_warmup_kickoff');
+    })();
+  },
+});
+
+export default agent;
+
+const currentFilePath = fileURLToPath(import.meta.url);
+if (process.argv[1] === currentFilePath) {
+  cli.runApp(
+    new ServerOptions({
+      agent: currentFilePath,
+      agentName: env.AI_INTERVIEWER_AGENT_NAME,
+      requestFunc: async (job) => {
+        await job.accept(
+          'AI Interviewer',
+          env.AI_INTERVIEWER_AGENT_IDENTITY,
+          job.job.metadata || undefined,
+        );
+      },
+    }),
+  );
+}
