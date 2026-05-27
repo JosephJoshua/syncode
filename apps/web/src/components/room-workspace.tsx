@@ -605,7 +605,6 @@ export function RoomWorkspace({
     if (event.type === 'session_ready') {
       setAiInterviewError(null);
       setAiInterviewLoading(false);
-      return;
     }
   }, [
     aiInterviewerIdentity,

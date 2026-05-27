@@ -1902,9 +1902,9 @@ export class AiService {
 
     let normalized = value
       .trim()
-      .replaceAll('\\n', '\n')
-      .replaceAll('\\t', '\t')
-      .replaceAll('\\"', '"')
+      .replaceAll(String.raw`\n`, '\n')
+      .replaceAll(String.raw`\t`, '\t')
+      .replaceAll(String.raw`\"`, '"')
       .replaceAll(/\r\n?/g, '\n');
 
     normalized = normalized.replace(/^"+|"+$/g, '').trim();

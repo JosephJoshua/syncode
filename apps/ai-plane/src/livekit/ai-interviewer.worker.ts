@@ -134,7 +134,7 @@ function loadWorkerEnvFiles(): void {
 }
 
 function loadWorkerEnv(): WorkerEnv {
-  const parsed = validateEnv(process.env as Record<string, unknown>);
+  const parsed = validateEnv(process.env);
   if (!parsed.INTERNAL_CALLBACK_SECRET) {
     throw new Error('INTERNAL_CALLBACK_SECRET is required for AI interviewer worker');
   }
@@ -282,8 +282,10 @@ function buildPromptCachePrefix(params: {
   ];
 
   if (params.context) {
-    sections.push('Canonical interview context (stable across the session):');
-    sections.push(buildInterviewContextInstructions(params.context, 'detailed'));
+    sections.push(
+      'Canonical interview context (stable across the session):',
+      buildInterviewContextInstructions(params.context, 'detailed'),
+    );
   } else {
     sections.push(
       'Canonical interview context unavailable yet. Retry get_room_context when needed.',
@@ -464,12 +466,10 @@ function buildSystemSignalInstructions(
   }
 
   if (signal.codeContext) {
-    parts.push('Code context (with line range):');
     parts.push(
+      'Code context (with line range):',
       `${signal.codeContext.file} L${signal.codeContext.startLine}-${signal.codeContext.endLine}`,
-    );
-    parts.push(signal.codeContext.codeSnippet);
-    parts.push(
+      signal.codeContext.codeSnippet,
       'If a focused correction would help, call add_inline_comment with a precise line and concise feedback.',
     );
   }
@@ -641,8 +641,8 @@ function buildLiveRoomContextInstructions(
   if (detail === 'detailed' && context.latestSubmission) {
     sections.push(
       'Submitted code under evaluation (this is the exact code the candidate submitted that produced the submission result above — base your review on this code together with the submission summary; do not claim the code is missing, incomplete, or unsubmitted):',
+      buildNumberedCodeBlock(context.latestSubmission.code, 220, 9_000) || '(empty)',
     );
-    sections.push(buildNumberedCodeBlock(context.latestSubmission.code, 220, 9_000) || '(empty)');
   }
 
   if (detail === 'compact') {
@@ -974,15 +974,18 @@ function buildWrapupPhaseKickoffInstructions(params: {
 }): string {
   const latest = params.runtimeContext?.latestSubmission;
   const passingAll =
-    latest &&
-    latest.status === 'completed' &&
+    latest?.status === 'completed' &&
     latest.totalTestCases > 0 &&
     latest.passedTestCases === latest.totalTestCases;
-  const outcomeGuidance = latest
-    ? passingAll
-      ? `Latest submission passed all ${latest.totalTestCases} tests — open with sincere positive acknowledgement (e.g. "great work").`
-      : `Latest submission passed ${latest.passedTestCases}/${latest.totalTestCases} tests — open with measured, respectful acknowledgement (e.g. "good effort", "nice work pushing through this"); do NOT overpraise as if everything passed.`
-    : 'No completed submission on record — acknowledge the effort honestly without claiming the solution was finished.';
+  let outcomeGuidance: string;
+  if (!latest) {
+    outcomeGuidance =
+      'No completed submission on record — acknowledge the effort honestly without claiming the solution was finished.';
+  } else if (passingAll) {
+    outcomeGuidance = `Latest submission passed all ${latest.totalTestCases} tests — open with sincere positive acknowledgement (e.g. "great work").`;
+  } else {
+    outcomeGuidance = `Latest submission passed ${latest.passedTestCases}/${latest.totalTestCases} tests — open with measured, respectful acknowledgement (e.g. "good effort", "nice work pushing through this"); do NOT overpraise as if everything passed.`;
+  }
 
   const parts = [
     'Wrapup phase kickoff turn (follow strictly):',
@@ -1387,7 +1390,7 @@ function buildReasonSpecificInstructions(
       return 'A hint was used. Prefer one concise check-in question instead of a long explanation.';
     case 'code_ran': {
       const run = parseRunSummary(summary);
-      if (run && run.passed === run.total) {
+      if (run != null && run.passed === run.total) {
         return 'Visible run passed fully. Usually remain quiet unless a brief optimization prompt is warranted.';
       }
       return 'A run finished with non-passing tests. Ask one targeted debugging question, not a full solution.';
@@ -1406,6 +1409,16 @@ function buildReasonSpecificInstructions(
     default:
       return 'Respond naturally and stay concise.';
   }
+}
+
+function resolveErrorEventMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === 'string') {
+    return error;
+  }
+  return 'AI interviewer error';
 }
 
 function parseRunSummary(summary: string | undefined): { passed: number; total: number } | null {
@@ -2537,12 +2550,7 @@ const agent = defineAgent({
     });
 
     session.on(voice.AgentSessionEventTypes.Error, (event: voice.ErrorEvent) => {
-      const message =
-        event.error instanceof Error
-          ? event.error.message
-          : typeof event.error === 'string'
-            ? event.error
-            : 'AI interviewer error';
+      const message = resolveErrorEventMessage(event.error);
       void publishRealtimeEvent({
         type: 'error',
         message,

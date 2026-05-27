@@ -46,6 +46,7 @@ const VOICE_INTERRUPTION_THRESHOLD = 0.06;
 const VOICE_INTERRUPTION_HOLD_MS = 260;
 const VOICE_WAVE_OFFSETS = Array.from({ length: 21 }, (_, position) => position - 10);
 const VOICE_SPEECH_SYNTHESIS_CHUNK_LENGTH = 220;
+const STOP_VOICE_CAPTURE_DEFAULT_OPTIONS: Readonly<{ transcribe: boolean }> = { transcribe: true };
 
 interface LatestAssistantMessage {
   stableId: string;
@@ -263,6 +264,14 @@ function renderComposerArea({
   voiceButtonTitle: string;
   t: (key: string) => string;
 }): ReactNode {
+  let voiceStatusToneClass: string;
+  if (isTranscribingVoice) {
+    voiceStatusToneClass = 'text-muted-foreground';
+  } else if (isAssistantResponding) {
+    voiceStatusToneClass = 'text-sky-300';
+  } else {
+    voiceStatusToneClass = 'text-primary';
+  }
   return (
     <div className="space-y-2 border-t border-border p-3">
       {isVoiceCaptureActive ? (
@@ -273,17 +282,7 @@ function renderComposerArea({
             tone={isAssistantResponding ? 'assistant' : 'user'}
           />
           {voiceStatusText ? (
-            <p
-              className={`text-xs ${
-                isTranscribingVoice
-                  ? 'text-muted-foreground'
-                  : isAssistantResponding
-                    ? 'text-sky-300'
-                    : 'text-primary'
-              }`}
-            >
-              {voiceStatusText}
-            </p>
+            <p className={`text-xs ${voiceStatusToneClass}`}>{voiceStatusText}</p>
           ) : null}
         </div>
       ) : (
@@ -944,7 +943,7 @@ export function RoomAiInterviewPanel({
 
   function stopVoiceCapture(
     expectedRequestId: number,
-    options: Readonly<{ transcribe: boolean }> = { transcribe: true },
+    options: Readonly<{ transcribe: boolean }> = STOP_VOICE_CAPTURE_DEFAULT_OPTIONS,
   ) {
     if (voiceSessionRef.current !== expectedRequestId) {
       return;
@@ -1302,7 +1301,7 @@ function AiInterviewMessageBubble({
           <AiInterviewCodeContextCard context={message.codeContext} t={t} />
         ) : null}
 
-        {message.codeAnnotations && message.codeAnnotations.length > 0 ? (
+        {message.codeAnnotations?.length ? (
           <div className="w-full rounded-xl bg-muted/40 px-3 py-2 ring-1 ring-border/40">
             <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
               {t('workspace.aiInterviewAnnotations')}
