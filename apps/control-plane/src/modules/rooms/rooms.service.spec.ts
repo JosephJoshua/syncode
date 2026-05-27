@@ -3,12 +3,18 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import { AI_CLIENT, COLLAB_CLIENT } from '@syncode/contracts';
-import { CACHE_SERVICE, MEDIA_SERVICE, STORAGE_SERVICE } from '@syncode/shared/ports';
+import {
+  AGENT_DISPATCH_SERVICE,
+  CACHE_SERVICE,
+  MEDIA_SERVICE,
+  STORAGE_SERVICE,
+} from '@syncode/shared/ports';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
 import { ExecutionService } from '@/modules/execution/execution.service.js';
 import { SessionReportsService } from '@/modules/sessions/session-reports.service.js';
 import { InMemoryCacheService } from '@/test/in-memory-cache.service.js';
 import {
+  createMockAgentDispatchService,
   createMockAiClient,
   createMockCollabClient,
   createMockConfigService,
@@ -93,12 +99,14 @@ describe('RoomsService', () => {
   let mockAiClient: ReturnType<typeof createMockAiClient>;
   let mockCollabClient: ReturnType<typeof createMockCollabClient>;
   let mockMediaService: ReturnType<typeof createMockMediaService>;
+  let mockAgentDispatchService: ReturnType<typeof createMockAgentDispatchService>;
 
   beforeEach(async () => {
     dbSetup = createMockDb();
     mockAiClient = createMockAiClient();
     mockCollabClient = createMockCollabClient();
     mockMediaService = createMockMediaService();
+    mockAgentDispatchService = createMockAgentDispatchService();
 
     const module = await Test.createTestingModule({
       providers: [
@@ -108,6 +116,7 @@ describe('RoomsService', () => {
         { provide: AI_CLIENT, useValue: mockAiClient },
         { provide: COLLAB_CLIENT, useValue: mockCollabClient },
         { provide: MEDIA_SERVICE, useValue: mockMediaService },
+        { provide: AGENT_DISPATCH_SERVICE, useValue: mockAgentDispatchService },
         { provide: STORAGE_SERVICE, useValue: createMockStorageService() },
         { provide: CACHE_SERVICE, useValue: new InMemoryCacheService() },
         { provide: JwtService, useValue: createMockJwtService('mock-collab-token') },
