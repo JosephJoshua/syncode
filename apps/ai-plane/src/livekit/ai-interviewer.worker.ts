@@ -1718,3 +1718,433 @@ const agent = defineAgent({
       }
     };
 
+    const generateGuidedInterviewerMessage = async (params: {
+      message: string;
+      reason: string;
+      context?: AiInterviewerContextResponse;
+    }) => {
+      suppressRealtimeAssistantTranscripts(350);
+      await interruptRealtimeSpeech(params.reason);
+      await sleep(250);
+
+      const contextInstructions = params.context
+        ? [
+            'Fresh room context for this turn:',
+            buildLiveRoomContextInstructions(params.context, 'detailed'),
+          ].join('\n')
+        : '';
+      const instructions = [
+        'Realtime interviewer response directive.',
+        'Respond to the candidate naturally as the interviewer. Do not mention prompts, directives, handoffs, tools, or internal context.',
+        'A private system event will provide the intended response and any fresh room context. Deliver that meaning directly; do not read labels or metadata aloud.',
+        'If fresh room context is provided, treat it as canonical and ignore older memory that conflicts with it.',
+        'Never claim code is incomplete, hardcoded, or unsubmitted if the fresh latestSubmission says the submitted code passed.',
+        'Do not reveal an optimized algorithm, data structure, storage plan, or exact implementation unless the candidate already stated or wrote it.',
+      ]
+        .filter((part) => part.length > 0)
+        .join('\n\n');
+      const userInput = [
+        'Internal interviewer event. This is not a candidate message.',
+        'Speak one natural interviewer response using the private guidance and fresh context.',
+        'Do not mention this internal event.',
+        `Private guidance: ${params.message}`,
+        contextInstructions,
+      ].join('\n');
+      await generateReplyWithTelemetry({
+        reason: params.reason,
+        userInput,
+        instructions,
+        toolChoice: 'none',
+        inputModality: 'text',
+      });
+    };
+
+    const publishRealtimeEvent = async (event: AiInterviewerEventPayload) => {
+      if (!ctx.agent) {
+        return;
+      }
+
+      await ctx.agent.publishData(encodeAiInterviewerEventPayload(event), {
+        reliable: true,
+        topic: AI_INTERVIEWER_EVENT_TOPIC,
+        destination_identities: participantUserId ? [participantUserId] : undefined,
+      });
+    };
+
+    const recordTurn = async (turn: TranscriptTurnPayload) => {
+      if (seenTurnIds.has(turn.turnId)) {
+        return;
+      }
+      seenTurnIds.add(turn.turnId);
+      try {
+        await postTranscriptTurn(roomId, turn);
+      } catch (error) {
+        console.warn(
+          `[ai-interviewer-worker] failed to persist transcript turn ${turn.turnId} for room ${roomId}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+    };
+
+    const refreshRoomContext = async (options?: {
+      expectedSubmission?: ParsedSubmissionSignalSummary;
+      forceAttempts?: number;
+    }) => {
+      if (!participantUserId) {
+        return undefined;
+      }
+      const maxAttempts = options?.forceAttempts ?? (options?.expectedSubmission ? 4 : 3);
+      for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+        try {
+          const context = await fetchAiInterviewerRoomContext(roomId, participantUserId);
+          latestRuntimeRoomContext = context;
+          if (context.roomStatus === 'warmup' && warmupFlowState === 'completed') {
+            warmupFlowState = 'not_started';
+            warmupAssistantTurnCount = 0;
+            warmupAwaitingCandidateAnswerForTransition = false;
+            warmupAutoTransitionInFlight = false;
+            warmupTransitionPendingAfterAssistant = false;
+            codingKickoffAnnounced = false;
+            wrapupKickoffAnnounced = false;
+          } else if (context.roomStatus === 'coding') {
+            warmupFlowState = 'completed';
+            warmupAssistantTurnCount = 2;
+            warmupAwaitingCandidateAnswerForTransition = false;
+            warmupAutoTransitionInFlight = false;
+            warmupTransitionPendingAfterAssistant = false;
+            wrapupKickoffAnnounced = false;
+          } else if (context.roomStatus === 'wrapup' || context.roomStatus === 'finished') {
+            warmupFlowState = 'completed';
+            warmupAssistantTurnCount = 2;
+            warmupAwaitingCandidateAnswerForTransition = false;
+            warmupAutoTransitionInFlight = false;
+            warmupTransitionPendingAfterAssistant = false;
+            codingKickoffAnnounced = true;
+            if (context.roomStatus === 'finished') {
+              wrapupKickoffAnnounced = true;
+            }
+          }
+          const interviewContext = toRealtimeInterviewContext(context);
+          if (interviewContext) {
+            latestInterviewContext = interviewContext;
+            refreshPromptCachePrefix();
+          }
+
+          const expected = options?.expectedSubmission;
+          if (isPassingSubmission(context)) {
+            nonPassingGuidanceTurnCount = 0;
+            discouragedTurnCount = 0;
+            lastNonPassingSubmissionKey = null;
+            askedContinueAfterRepeatedFailure = false;
+            answerPressureTurnCount = 0;
+            answerPressureWrapupPrompted = false;
+          }
+          if (!expected) {
+            return context;
+          }
+          if (matchesExpectedSubmission(context.latestSubmission, expected)) {
+            return context;
+          }
+
+          if (attempt < maxAttempts) {
+            await sleep(300);
+            continue;
+          }
+          return context;
+        } catch (error) {
+          if (attempt === maxAttempts) {
+            console.warn(
+              `[ai-interviewer-worker] failed to refresh room context for room ${roomId}: ${
+                error instanceof Error ? error.message : String(error)
+              }`,
+            );
+          }
+          if (attempt < maxAttempts) {
+            await sleep(250);
+            continue;
+          }
+          return undefined;
+        }
+      }
+      return undefined;
+    };
+
+    const markPhaseTransitionState = (targetStatus: RoomPhaseStatus) => {
+      if (targetStatus === 'coding') {
+        warmupFlowState = 'completed';
+        warmupAssistantTurnCount = 2;
+        warmupAwaitingCandidateAnswerForTransition = false;
+        warmupTransitionPendingAfterAssistant = false;
+        codingKickoffAnnounced = true;
+      }
+      if (targetStatus === 'wrapup' || targetStatus === 'finished') {
+        codingKickoffAnnounced = true;
+      }
+      if (targetStatus === 'finished') {
+        wrapupKickoffAnnounced = true;
+      }
+    };
+
+    const transitionWarmupToCoding = async (reason: string): Promise<boolean> => {
+      if (!participantUserId) {
+        return false;
+      }
+      const runtimeContext = (await refreshRoomContext()) ?? latestRuntimeRoomContext;
+      if (!runtimeContext || runtimeContext.roomStatus !== 'warmup') {
+        return runtimeContext?.roomStatus === 'coding';
+      }
+      try {
+        await requestAiInterviewerPhaseTransition({
+          roomId,
+          participantId: participantUserId,
+          targetStatus: 'coding',
+          reason,
+        });
+        await refreshRoomContext();
+        markPhaseTransitionState('coding');
+        return true;
+      } catch (error) {
+        console.warn(
+          `[ai-interviewer-worker] warmup->coding transition failed for room ${roomId}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+        return false;
+      }
+    };
+
+    const queueWarmupTransitionAfterAssistant = (reason: string): boolean => {
+      if (
+        warmupAutoTransitionInFlight ||
+        warmupTransitionPendingAfterAssistant ||
+        codingKickoffAnnounced
+      ) {
+        return false;
+      }
+      warmupTransitionReason = reason;
+      warmupTransitionPendingAfterAssistant = true;
+      warmupAwaitingCandidateAnswerForTransition = false;
+      return true;
+    };
+
+    const queuePhaseTransitionAfterAssistant = (
+      targetStatus: RoomPhaseStatus,
+      reason?: string,
+    ): boolean => {
+      if (queuedPhaseTransitionAfterAssistant || queuedPhaseTransitionInFlight) {
+        return false;
+      }
+      queuedPhaseTransitionAfterAssistant = { targetStatus, reason };
+      return true;
+    };
+
+    const transitionQueuedPhaseAfterAssistant = () => {
+      if (!queuedPhaseTransitionAfterAssistant || queuedPhaseTransitionInFlight) {
+        return;
+      }
+      if (!participantUserId) {
+        queuedPhaseTransitionAfterAssistant = null;
+        return;
+      }
+
+      const queued = queuedPhaseTransitionAfterAssistant;
+      queuedPhaseTransitionAfterAssistant = null;
+      queuedPhaseTransitionInFlight = true;
+      void (async () => {
+        try {
+          const runtimeContext = (await refreshRoomContext()) ?? latestRuntimeRoomContext;
+          if (runtimeContext?.roomStatus === queued.targetStatus) {
+            markPhaseTransitionState(queued.targetStatus);
+            return;
+          }
+          await requestAiInterviewerPhaseTransition({
+            roomId,
+            participantId: participantUserId,
+            targetStatus: queued.targetStatus,
+            reason: queued.reason,
+          });
+          await refreshRoomContext();
+          markPhaseTransitionState(queued.targetStatus);
+        } catch (error) {
+          console.warn(
+            `[ai-interviewer-worker] queued phase transition to ${queued.targetStatus} failed for room ${roomId}: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
+        } finally {
+          queuedPhaseTransitionInFlight = false;
+        }
+      })();
+    };
+
+    const transitionQueuedWarmupAfterAssistant = () => {
+      if (
+        !warmupTransitionPendingAfterAssistant ||
+        warmupAutoTransitionInFlight ||
+        codingKickoffAnnounced
+      ) {
+        return;
+      }
+      warmupAutoTransitionInFlight = true;
+      void (async () => {
+        try {
+          const transitioned = await transitionWarmupToCoding(warmupTransitionReason);
+          if (!transitioned) {
+            warmupTransitionPendingAfterAssistant = false;
+            return;
+          }
+          warmupFlowState = 'completed';
+          warmupAssistantTurnCount = 2;
+          warmupAwaitingCandidateAnswerForTransition = false;
+          warmupTransitionPendingAfterAssistant = false;
+          codingKickoffAnnounced = true;
+        } finally {
+          warmupAutoTransitionInFlight = false;
+        }
+      })();
+    };
+
+    const startWarmupKickoffIfNeeded = async (reason: string) => {
+      if (warmupKickoffInFlight || warmupFlowState !== 'not_started' || hasInterviewStarted) {
+        return;
+      }
+
+      warmupKickoffInFlight = true;
+      try {
+        const runtimeContext =
+          (await refreshRoomContext({ forceAttempts: 4 })) ?? latestRuntimeRoomContext;
+        if (
+          runtimeContext?.roomStatus !== 'warmup' ||
+          warmupFlowState !== 'not_started' ||
+          hasInterviewStarted
+        ) {
+          return;
+        }
+
+        const scriptedNow = Date.now();
+        lastSystemReplyAt = scriptedNow;
+        signalLastSentAt.set('session_joined', scriptedNow);
+        warmupFlowState = 'kickoff_sent';
+        await generateReplyWithTelemetry({
+          reason,
+          instructions: buildWarmupKickoffInstructions({
+            rememberedContext: latestInterviewContext,
+            runtimeContext,
+            interfaceLanguage: preferredInterfaceLanguage,
+          }),
+        });
+      } finally {
+        warmupKickoffInFlight = false;
+      }
+    };
+
+    const emitTurn = async (params: {
+      turnId: string;
+      role: 'user' | 'assistant';
+      participantId: string;
+      content: string;
+      occurredAt: number;
+      followUpQuestion?: string;
+      codeAnnotations?: Array<{ line: number; comment: string }>;
+    }) => {
+      const transcriptTurn: TranscriptTurnPayload = {
+        turnId: params.turnId,
+        participantId: params.participantId,
+        role: params.role,
+        content: params.content,
+        timestamp: params.occurredAt,
+      };
+
+      await recordTurn(transcriptTurn);
+      await publishRealtimeEvent({
+        type: 'transcript_turn',
+        occurredAt: params.occurredAt,
+        turnId: params.turnId,
+        role: params.role,
+        participantId: params.participantId,
+        content: params.content,
+        followUpQuestion: params.followUpQuestion,
+        codeAnnotations: params.codeAnnotations,
+      });
+    };
+
+    const handleCandidateText = async (params: {
+      content: string;
+      language?: string;
+      latestSubmissionSummary?: Extract<
+        AiInterviewerSignalPayload,
+        { type: 'user_text' }
+      >['latestSubmissionSummary'];
+    }) => {
+      const content = params.content.trim();
+      if (!content || isLikelyAccidentalCandidateMessage(content)) {
+        return;
+      }
+
+      const signal: Extract<AiInterviewerSignalPayload, { type: 'user_text' }> = {
+        type: 'user_text',
+        text: content,
+        ...(params.language ? { language: params.language } : {}),
+        ...(params.latestSubmissionSummary
+          ? { latestSubmissionSummary: params.latestSubmissionSummary }
+          : {}),
+      };
+
+      const runtimeContext =
+        (await refreshRoomContext({
+          forceAttempts: isContextRefreshRequest(content) ? 5 : 3,
+        })) ?? latestRuntimeRoomContext;
+
+      const isPreWrapupAnswerPressure =
+        runtimeContext?.roomStatus !== 'wrapup' &&
+        runtimeContext?.roomStatus !== 'finished' &&
+        (isDirectAnswerRequest(content) || isCandidateUnableToFindStrategy(content));
+      if (isPreWrapupAnswerPressure) {
+        answerPressureTurnCount += 1;
+        const shouldWrapUp = answerPressureTurnCount >= 3;
+        const willMoveToWrapup = answerPressureWrapupPrompted && answerPressureTurnCount >= 4;
+        if (willMoveToWrapup && runtimeContext?.roomStatus === 'coding') {
+          queuePhaseTransitionAfterAssistant(
+            'wrapup',
+            'Candidate repeatedly requested answer or could not identify strategy',
+          );
+        }
+        if (shouldWrapUp) {
+          answerPressureWrapupPrompted = true;
+        }
+        await generateGuidedInterviewerMessage({
+          reason: 'answer_pressure_guard',
+          message: buildSafeAnswerPressureResponse({
+            candidateMessage: content,
+            pressureTurns: answerPressureTurnCount,
+            shouldWrapUp,
+            willMoveToWrapup,
+          }),
+        });
+        return;
+      }
+
+      if (
+        runtimeContext?.roomStatus === 'coding' &&
+        isPassingSubmission(runtimeContext) &&
+        (isOptimizationRequest(content) || isDirectAnswerRequest(content))
+      ) {
+        answerPressureTurnCount += 1;
+        await generateGuidedInterviewerMessage({
+          reason: 'passing_solution_optimization_guard',
+          message: buildPassingOptimizationGuardResponse(content),
+          context: runtimeContext,
+        });
+        return;
+      }
+
+      const hasNonPassingCodingSubmission =
+        runtimeContext?.roomStatus === 'coding' && isNonPassingSubmission(runtimeContext);
+      if (hasNonPassingCodingSubmission && isContinueAttemptIntent(content)) {
+        askedContinueAfterRepeatedFailure = false;
+        discouragedTurnCount = 0;
+        nonPassingGuidanceTurnCount = Math.min(nonPassingGuidanceTurnCount, 4);
+      }
+      if (hasNonPassingCodingSubmission && isDiscouragedCandidateMessage(content)) {
+        discouragedTurnCount += 1;
