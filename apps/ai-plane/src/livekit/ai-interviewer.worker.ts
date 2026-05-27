@@ -2138,6 +2138,241 @@ const agent = defineAgent({
       });
     };
 
+    // Returns true when the answer-pressure guard handled the turn.
+    const tryHandleAnswerPressure = async (
+      content: string,
+      runtimeContext: AiInterviewerContextResponse | undefined,
+    ): Promise<boolean> => {
+      const isPreWrapupAnswerPressure =
+        runtimeContext?.roomStatus !== 'wrapup' &&
+        runtimeContext?.roomStatus !== 'finished' &&
+        (isDirectAnswerRequest(content) || isCandidateUnableToFindStrategy(content));
+      if (!isPreWrapupAnswerPressure) {
+        return false;
+      }
+      answerPressureTurnCount += 1;
+      const shouldWrapUp = answerPressureTurnCount >= 3;
+      const willMoveToWrapup = answerPressureWrapupPrompted && answerPressureTurnCount >= 4;
+      if (willMoveToWrapup && runtimeContext?.roomStatus === 'coding') {
+        queuePhaseTransitionAfterAssistant(
+          'wrapup',
+          'Candidate repeatedly requested answer or could not identify strategy',
+        );
+      }
+      if (shouldWrapUp) {
+        answerPressureWrapupPrompted = true;
+      }
+      await generateGuidedInterviewerMessage({
+        reason: 'answer_pressure_guard',
+        message: buildSafeAnswerPressureResponse({
+          candidateMessage: content,
+          pressureTurns: answerPressureTurnCount,
+          shouldWrapUp,
+          willMoveToWrapup,
+        }),
+      });
+      return true;
+    };
+
+    // Returns true when the passing-submission optimization guard handled the turn.
+    const tryHandlePassingOptimizationGuard = async (
+      content: string,
+      runtimeContext: AiInterviewerContextResponse | undefined,
+    ): Promise<boolean> => {
+      if (
+        runtimeContext?.roomStatus !== 'coding' ||
+        !isPassingSubmission(runtimeContext) ||
+        !(isOptimizationRequest(content) || isDirectAnswerRequest(content))
+      ) {
+        return false;
+      }
+      answerPressureTurnCount += 1;
+      await generateGuidedInterviewerMessage({
+        reason: 'passing_solution_optimization_guard',
+        message: buildPassingOptimizationGuardResponse(content),
+        context: runtimeContext,
+      });
+      return true;
+    };
+
+    // Updates the non-passing-guidance counters in place for the current turn.
+    const updateNonPassingGuidanceCounters = (
+      content: string,
+      hasNonPassingCodingSubmission: boolean,
+    ) => {
+      if (!hasNonPassingCodingSubmission) {
+        return;
+      }
+      if (isContinueAttemptIntent(content)) {
+        askedContinueAfterRepeatedFailure = false;
+        discouragedTurnCount = 0;
+        nonPassingGuidanceTurnCount = Math.min(nonPassingGuidanceTurnCount, 4);
+      }
+      if (isDiscouragedCandidateMessage(content)) {
+        discouragedTurnCount += 1;
+      }
+      if (
+        isDirectAnswerRequest(content) ||
+        mentionsBroadApproach(content) ||
+        isCodeOrSubmissionReviewRequest(content) ||
+        isContextRefreshRequest(content) ||
+        isDiscouragedCandidateMessage(content)
+      ) {
+        nonPassingGuidanceTurnCount += 1;
+      }
+    };
+
+    // Returns true when a non-passing-submission boundary turn was emitted.
+    const tryHandleNonPassingBoundary = async (
+      content: string,
+      runtimeContext: AiInterviewerContextResponse | undefined,
+      hasNonPassingCodingSubmission: boolean,
+    ): Promise<boolean> => {
+      if (!hasNonPassingCodingSubmission) {
+        return false;
+      }
+      if (discouragedTurnCount >= 3 && !queuedPhaseTransitionAfterAssistant) {
+        queuePhaseTransitionAfterAssistant(
+          'wrapup',
+          'Candidate remained stuck after repeated guidance',
+        );
+        await generateReplyWithTelemetry({
+          reason: 'wrapup_after_repeated_stuck',
+          instructions: buildWrapupAfterRepeatedStuckInstructions({
+            candidateMessage: content,
+            discouragedTurns: discouragedTurnCount,
+            runtimeContext,
+          }),
+        });
+        return true;
+      }
+      if (nonPassingGuidanceTurnCount >= 5 && !askedContinueAfterRepeatedFailure) {
+        askedContinueAfterRepeatedFailure = true;
+        await generateReplyWithTelemetry({
+          reason: 'repeated_nonpassing_guidance_boundary',
+          instructions: buildRepeatedNonPassingGuidanceInstructions({
+            candidateMessage: content,
+            guidanceTurns: nonPassingGuidanceTurnCount,
+            runtimeContext,
+          }),
+        });
+        return true;
+      }
+      return false;
+    };
+
+    // Returns true when the warmup-phase candidate-text flow handled the turn.
+    const tryHandleWarmupCandidateText = async (params: {
+      content: string;
+      language?: string;
+      runtimeContext: AiInterviewerContextResponse | undefined;
+    }): Promise<boolean> => {
+      const { content, language, runtimeContext } = params;
+      if (runtimeContext?.roomStatus !== 'warmup') {
+        return false;
+      }
+      if (isReadyToCodeIntent(content)) {
+        const queued = queueWarmupTransitionAfterAssistant(
+          'Candidate explicitly requested to start coding',
+        );
+        if (queued) {
+          await generateReplyWithTelemetry({
+            reason: 'warmup_explicit_ready_to_code',
+            instructions: buildCodingPhaseKickoffInstructions({
+              candidateMessage: content,
+              rememberedContext: latestInterviewContext,
+              runtimeContext,
+            }),
+          });
+          return true;
+        }
+      }
+
+      if (warmupFlowState === 'not_started') {
+        warmupFlowState = 'kickoff_sent';
+        await generateReplyWithTelemetry({
+          reason: 'warmup_turn_1',
+          instructions: buildWarmupKickoffInstructions({
+            rememberedContext: latestInterviewContext,
+            runtimeContext,
+            interfaceLanguage: language ?? preferredInterfaceLanguage,
+          }),
+        });
+        return true;
+      }
+
+      if (warmupFlowState === 'kickoff_sent') {
+        warmupFlowState = 'followup_sent';
+        warmupAwaitingCandidateAnswerForTransition = true;
+        await generateReplyWithTelemetry({
+          reason: 'warmup_turn_2',
+          instructions: buildWarmupFollowupInstructions({
+            candidateMessage: content,
+            rememberedContext: latestInterviewContext,
+            runtimeContext,
+          }),
+        });
+        return true;
+      }
+
+      if (
+        warmupFlowState === 'followup_sent' &&
+        warmupAwaitingCandidateAnswerForTransition &&
+        !warmupAutoTransitionInFlight
+      ) {
+        const queued = queueWarmupTransitionAfterAssistant(
+          'Warmup follow-up answered by candidate',
+        );
+        if (queued) {
+          await generateReplyWithTelemetry({
+            reason: 'warmup_transition_after_final_answer',
+            instructions: buildWarmupTransitionAnnouncementInstructions({
+              candidateMessage: content,
+              rememberedContext: latestInterviewContext,
+              runtimeContext,
+            }),
+          });
+        }
+        return true;
+      }
+      return false;
+    };
+
+    // Returns true when a context-refresh candidate request was handled.
+    const tryHandleCandidateContextRefresh = async (
+      content: string,
+      runtimeContext: AiInterviewerContextResponse | undefined,
+    ): Promise<boolean> => {
+      if (
+        !isContextRefreshRequest(content) ||
+        (runtimeContext?.roomStatus !== 'coding' && runtimeContext?.roomStatus !== 'wrapup')
+      ) {
+        return false;
+      }
+      if (runtimeContext) {
+        await generateReplyWithTelemetry({
+          reason: 'context_refresh_with_runtime_context',
+          instructions: [
+            'Candidate asked you to refresh/review live code context.',
+            `Candidate message: ${content}`,
+            'You now have the latest room context below. Review using this context directly.',
+            'Do not ask the candidate to summarize code unless context is empty.',
+            buildLiveRoomContextInstructions(runtimeContext, 'detailed'),
+          ].join('\n'),
+        });
+        return true;
+      }
+      await generateReplyWithTelemetry({
+        reason: 'context_refresh_unavailable',
+        instructions: [
+          'Candidate asked to review live code, but fresh code data is unavailable to you this turn.',
+          'Do not mention backend, tool, context retrieval, or implementation details.',
+          'Respond as the interviewer with one high-level reasoning question about their intended invariant or latest test outcome.',
+        ].join('\n'),
+      });
+      return true;
+    };
+
     const handleCandidateText = async (params: {
       content: string;
       language?: string;
@@ -2165,200 +2400,33 @@ const agent = defineAgent({
           forceAttempts: isContextRefreshRequest(content) ? 5 : 3,
         })) ?? latestRuntimeRoomContext;
 
-      const isPreWrapupAnswerPressure =
-        runtimeContext?.roomStatus !== 'wrapup' &&
-        runtimeContext?.roomStatus !== 'finished' &&
-        (isDirectAnswerRequest(content) || isCandidateUnableToFindStrategy(content));
-      if (isPreWrapupAnswerPressure) {
-        answerPressureTurnCount += 1;
-        const shouldWrapUp = answerPressureTurnCount >= 3;
-        const willMoveToWrapup = answerPressureWrapupPrompted && answerPressureTurnCount >= 4;
-        if (willMoveToWrapup && runtimeContext?.roomStatus === 'coding') {
-          queuePhaseTransitionAfterAssistant(
-            'wrapup',
-            'Candidate repeatedly requested answer or could not identify strategy',
-          );
-        }
-        if (shouldWrapUp) {
-          answerPressureWrapupPrompted = true;
-        }
-        await generateGuidedInterviewerMessage({
-          reason: 'answer_pressure_guard',
-          message: buildSafeAnswerPressureResponse({
-            candidateMessage: content,
-            pressureTurns: answerPressureTurnCount,
-            shouldWrapUp,
-            willMoveToWrapup,
-          }),
-        });
+      if (await tryHandleAnswerPressure(content, runtimeContext)) {
         return;
       }
-
-      if (
-        runtimeContext?.roomStatus === 'coding' &&
-        isPassingSubmission(runtimeContext) &&
-        (isOptimizationRequest(content) || isDirectAnswerRequest(content))
-      ) {
-        answerPressureTurnCount += 1;
-        await generateGuidedInterviewerMessage({
-          reason: 'passing_solution_optimization_guard',
-          message: buildPassingOptimizationGuardResponse(content),
-          context: runtimeContext,
-        });
+      if (await tryHandlePassingOptimizationGuard(content, runtimeContext)) {
         return;
       }
 
       const hasNonPassingCodingSubmission =
         runtimeContext?.roomStatus === 'coding' && isNonPassingSubmission(runtimeContext);
-      if (hasNonPassingCodingSubmission && isContinueAttemptIntent(content)) {
-        askedContinueAfterRepeatedFailure = false;
-        discouragedTurnCount = 0;
-        nonPassingGuidanceTurnCount = Math.min(nonPassingGuidanceTurnCount, 4);
-      }
-      if (hasNonPassingCodingSubmission && isDiscouragedCandidateMessage(content)) {
-        discouragedTurnCount += 1;
-      }
+      updateNonPassingGuidanceCounters(content, hasNonPassingCodingSubmission);
       if (
-        hasNonPassingCodingSubmission &&
-        (isDirectAnswerRequest(content) ||
-          mentionsBroadApproach(content) ||
-          isCodeOrSubmissionReviewRequest(content) ||
-          isContextRefreshRequest(content) ||
-          isDiscouragedCandidateMessage(content))
+        await tryHandleNonPassingBoundary(content, runtimeContext, hasNonPassingCodingSubmission)
       ) {
-        nonPassingGuidanceTurnCount += 1;
-      }
-
-      if (
-        hasNonPassingCodingSubmission &&
-        discouragedTurnCount >= 3 &&
-        !queuedPhaseTransitionAfterAssistant
-      ) {
-        queuePhaseTransitionAfterAssistant(
-          'wrapup',
-          'Candidate remained stuck after repeated guidance',
-        );
-        await generateReplyWithTelemetry({
-          reason: 'wrapup_after_repeated_stuck',
-          instructions: buildWrapupAfterRepeatedStuckInstructions({
-            candidateMessage: content,
-            discouragedTurns: discouragedTurnCount,
-            runtimeContext,
-          }),
-        });
         return;
       }
 
       if (
-        hasNonPassingCodingSubmission &&
-        nonPassingGuidanceTurnCount >= 5 &&
-        !askedContinueAfterRepeatedFailure
+        await tryHandleWarmupCandidateText({
+          content,
+          language: params.language,
+          runtimeContext,
+        })
       ) {
-        askedContinueAfterRepeatedFailure = true;
-        await generateReplyWithTelemetry({
-          reason: 'repeated_nonpassing_guidance_boundary',
-          instructions: buildRepeatedNonPassingGuidanceInstructions({
-            candidateMessage: content,
-            guidanceTurns: nonPassingGuidanceTurnCount,
-            runtimeContext,
-          }),
-        });
         return;
       }
 
-      if (runtimeContext?.roomStatus === 'warmup') {
-        if (isReadyToCodeIntent(content)) {
-          const queued = queueWarmupTransitionAfterAssistant(
-            'Candidate explicitly requested to start coding',
-          );
-          if (queued) {
-            await generateReplyWithTelemetry({
-              reason: 'warmup_explicit_ready_to_code',
-              instructions: buildCodingPhaseKickoffInstructions({
-                candidateMessage: content,
-                rememberedContext: latestInterviewContext,
-                runtimeContext,
-              }),
-            });
-            return;
-          }
-        }
-
-        if (warmupFlowState === 'not_started') {
-          warmupFlowState = 'kickoff_sent';
-          await generateReplyWithTelemetry({
-            reason: 'warmup_turn_1',
-            instructions: buildWarmupKickoffInstructions({
-              rememberedContext: latestInterviewContext,
-              runtimeContext,
-              interfaceLanguage: params.language ?? preferredInterfaceLanguage,
-            }),
-          });
-          return;
-        }
-
-        if (warmupFlowState === 'kickoff_sent') {
-          warmupFlowState = 'followup_sent';
-          warmupAwaitingCandidateAnswerForTransition = true;
-          await generateReplyWithTelemetry({
-            reason: 'warmup_turn_2',
-            instructions: buildWarmupFollowupInstructions({
-              candidateMessage: content,
-              rememberedContext: latestInterviewContext,
-              runtimeContext,
-            }),
-          });
-          return;
-        }
-
-        if (
-          warmupFlowState === 'followup_sent' &&
-          warmupAwaitingCandidateAnswerForTransition &&
-          !warmupAutoTransitionInFlight
-        ) {
-          const queued = queueWarmupTransitionAfterAssistant(
-            'Warmup follow-up answered by candidate',
-          );
-          if (queued) {
-            await generateReplyWithTelemetry({
-              reason: 'warmup_transition_after_final_answer',
-              instructions: buildWarmupTransitionAnnouncementInstructions({
-                candidateMessage: content,
-                rememberedContext: latestInterviewContext,
-                runtimeContext,
-              }),
-            });
-          }
-          return;
-        }
-      }
-
-      if (
-        isContextRefreshRequest(content) &&
-        (runtimeContext?.roomStatus === 'coding' || runtimeContext?.roomStatus === 'wrapup')
-      ) {
-        if (runtimeContext) {
-          await generateReplyWithTelemetry({
-            reason: 'context_refresh_with_runtime_context',
-            instructions: [
-              'Candidate asked you to refresh/review live code context.',
-              `Candidate message: ${content}`,
-              'You now have the latest room context below. Review using this context directly.',
-              'Do not ask the candidate to summarize code unless context is empty.',
-              buildLiveRoomContextInstructions(runtimeContext, 'detailed'),
-            ].join('\n'),
-          });
-          return;
-        }
-
-        await generateReplyWithTelemetry({
-          reason: 'context_refresh_unavailable',
-          instructions: [
-            'Candidate asked to review live code, but fresh code data is unavailable to you this turn.',
-            'Do not mention backend, tool, context retrieval, or implementation details.',
-            'Respond as the interviewer with one high-level reasoning question about their intended invariant or latest test outcome.',
-          ].join('\n'),
-        });
+      if (await tryHandleCandidateContextRefresh(content, runtimeContext)) {
         return;
       }
 
