@@ -1895,20 +1895,82 @@ export class AiService {
     return normalized;
   }
 
+  private normalizeInterviewAnnotationEscapes(value: string): string {
+    let normalized = '';
+    for (let index = 0; index < value.length; index += 1) {
+      const char = value[index];
+
+      if (char === '\r') {
+        if (value[index + 1] === '\n') {
+          index += 1;
+        }
+        normalized += '\n';
+        continue;
+      }
+
+      if (char === '\\') {
+        const next = value[index + 1];
+        if (next === 'n') {
+          normalized += '\n';
+          index += 1;
+          continue;
+        }
+        if (next === 't') {
+          normalized += '\t';
+          index += 1;
+          continue;
+        }
+        if (next === '"') {
+          normalized += '"';
+          index += 1;
+          continue;
+        }
+      }
+
+      normalized += char;
+    }
+    return normalized;
+  }
+
+  private trimWrappingDoubleQuotes(value: string): string {
+    let start = 0;
+    let end = value.length;
+    while (start < end && value[start] === '"') {
+      start += 1;
+    }
+    while (end > start && value[end - 1] === '"') {
+      end -= 1;
+    }
+    return value.slice(start, end);
+  }
+
+  private collapseLongNewlineRuns(value: string): string {
+    let normalized = '';
+    let newlineCount = 0;
+    for (const char of value) {
+      if (char === '\n') {
+        newlineCount += 1;
+        if (newlineCount <= 3) {
+          normalized += char;
+        }
+        continue;
+      }
+
+      newlineCount = 0;
+      normalized += char;
+    }
+    return normalized;
+  }
+
   private sanitizeInterviewAnnotationText(value: string | undefined): string | undefined {
     if (!value) {
       return undefined;
     }
 
-    let normalized = value
-      .trim()
-      .replaceAll(String.raw`\n`, '\n')
-      .replaceAll(String.raw`\t`, '\t')
-      .replaceAll(String.raw`\"`, '"')
-      .replaceAll(/\r\n?/g, '\n');
+    let normalized = this.normalizeInterviewAnnotationEscapes(value.trim());
 
-    normalized = normalized.replace(/^"+|"+$/g, '').trim();
-    normalized = normalized.replaceAll(/\n{4,}/g, '\n\n\n');
+    normalized = this.trimWrappingDoubleQuotes(normalized).trim();
+    normalized = this.collapseLongNewlineRuns(normalized);
     normalized = this.truncateHintText(normalized, MAX_INTERVIEW_ANNOTATION_LENGTH).trim();
 
     if (!normalized || this.isUnsafeModelText(normalized)) {

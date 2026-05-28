@@ -109,6 +109,26 @@ function createStableDigest(value: string): string {
   return hash.toString(16).padStart(16, '0');
 }
 
+function trimTrailingSlashes(value: string): string {
+  let normalized = value.trim();
+  while (normalized.endsWith('/')) {
+    normalized = normalized.slice(0, -1);
+  }
+  return normalized;
+}
+
+function trimTrailingSubmissionPunctuation(value: string): string {
+  let end = value.length;
+  while (end > 0) {
+    const char = value.at(end - 1);
+    if (char !== ')' && char !== ',' && char !== '.' && char !== ';') {
+      break;
+    }
+    end -= 1;
+  }
+  return value.slice(0, end);
+}
+
 loadWorkerEnvFiles();
 const env = loadWorkerEnv();
 
@@ -169,7 +189,7 @@ function loadWorkerEnv(): WorkerEnv {
 }
 
 function normalizeOpenAiSdkBaseUrl(baseUrl: string): string {
-  const normalized = baseUrl.trim().replace(/\/+$/, '');
+  const normalized = trimTrailingSlashes(baseUrl);
   return normalized.endsWith('/v1') ? normalized : `${normalized}/v1`;
 }
 
@@ -182,19 +202,19 @@ function resolveOpenAiTtsVoice(voiceName: string): openai.TTSVoices {
 
 function resolveTranscriptUrl(roomId: string): string {
   const route = CONTROL_INTERNAL.AI_INTERVIEW_TRANSCRIPT.route.replace(':roomId', roomId);
-  const base = env.AI_INTERVIEWER_CONTROL_PLANE_URL.replace(/\/+$/, '');
+  const base = trimTrailingSlashes(env.AI_INTERVIEWER_CONTROL_PLANE_URL);
   return `${base}/${route}`;
 }
 
 function resolveAiInterviewerContextUrl(roomId: string): string {
   const route = CONTROL_INTERNAL.AI_INTERVIEWER_CONTEXT.route.replace(':roomId', roomId);
-  const base = env.AI_INTERVIEWER_CONTROL_PLANE_URL.replace(/\/+$/, '');
+  const base = trimTrailingSlashes(env.AI_INTERVIEWER_CONTROL_PLANE_URL);
   return `${base}/${route}`;
 }
 
 function resolveAiInterviewerPhaseTransitionUrl(roomId: string): string {
   const route = CONTROL_INTERNAL.AI_INTERVIEWER_PHASE_TRANSITION.route.replace(':roomId', roomId);
-  const base = env.AI_INTERVIEWER_CONTROL_PLANE_URL.replace(/\/+$/, '');
+  const base = trimTrailingSlashes(env.AI_INTERVIEWER_CONTROL_PLANE_URL);
   return `${base}/${route}`;
 }
 
@@ -1358,7 +1378,7 @@ function parseSubmissionSignalSummary(
 }
 
 function normalizeSubmissionSignalTimestamp(timestamp: string | undefined): string | undefined {
-  const normalized = timestamp?.trim().replace(/[),.;]+$/u, '');
+  const normalized = timestamp ? trimTrailingSubmissionPunctuation(timestamp.trim()) : undefined;
   if (!normalized) {
     return undefined;
   }
