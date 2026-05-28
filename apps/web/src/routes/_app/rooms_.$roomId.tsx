@@ -27,7 +27,7 @@ import {
   FloatingVideoPanel,
   type VideoPanelParticipant,
 } from '@/components/video-panel.js';
-import { useLiveKit } from '@/hooks/use-livekit.js';
+import { type LiveKitDataPacket, useLiveKit } from '@/hooks/use-livekit.js';
 import { useMediaShortcuts } from '@/hooks/use-media-shortcuts.js';
 import { useYjsCollab } from '@/hooks/use-yjs-collab.js';
 import { api, readApiError, resolveErrorMessage } from '@/lib/api-client.js';
@@ -67,6 +67,13 @@ const CURSOR_COLORS = [
   '#f97316',
   '#a78bfa',
 ];
+
+const AI_INTERVIEWER_IDENTITY =
+  (import.meta.env.VITE_AI_INTERVIEWER_IDENTITY as string | undefined)?.trim() || 'ai-interviewer';
+const AI_INTERVIEWER_REALTIME_ENABLED =
+  ((import.meta.env.VITE_AI_INTERVIEWER_LIVEKIT_ENABLED as string | undefined)
+    ?.trim()
+    .toLowerCase() ?? 'true') === 'true';
 
 function userCursorColor(participants: { userId: string }[], currentUserId: string | null): string {
   const defaultColor = CURSOR_COLORS[0] ?? '#00e599';
@@ -183,6 +190,9 @@ function RoomPage() {
     userId: string;
     displayName: string;
   } | null>(null);
+  const [latestLiveKitDataPacket, setLatestLiveKitDataPacket] = useState<LiveKitDataPacket | null>(
+    null,
+  );
   const [feedbackProgress, setFeedbackProgress] = useState<SessionFeedbackProgress | null>(null);
   const [feedbackModalSessionId, setFeedbackModalSessionId] = useState<string | null>(null);
   const [activeFeedbackCandidateId, setActiveFeedbackCandidateId] = useState<string | null>(null);
@@ -598,6 +608,7 @@ function RoomPage() {
     speakingMap,
     remoteParticipants: mediaRemoteParticipants,
     localParticipant: mediaLocalParticipant,
+    publishData,
   } = useLiveKit({
     url: mediaCredsRef.current?.url ?? null,
     token: mediaCredsRef.current?.token ?? null,
@@ -606,6 +617,7 @@ function RoomPage() {
     preferredAudioDeviceId,
     preferredVideoDeviceId,
     onDevicesDiscovered: reconcileDevices,
+    onDataReceived: setLatestLiveKitDataPacket,
   });
 
   const mediaConnectedSet = useMemo(() => {
@@ -688,6 +700,7 @@ function RoomPage() {
         identity: stableCurrentUserId,
         displayName: me?.displayName ?? me?.username ?? 'You',
         avatarUrl: me?.avatarUrl ?? null,
+        isAiInterviewer: false,
         hasVideo: mediaLocalParticipant.hasVideo,
         videoTrack: mediaLocalParticipant.videoTrack,
         hasScreenShare: mediaLocalParticipant.hasScreenShare,
@@ -698,12 +711,16 @@ function RoomPage() {
     }
 
     for (const mp of mediaRemoteParticipants) {
+      const isAiInterviewer = mp.identity === AI_INTERVIEWER_IDENTITY;
       const p = room?.participants.find((rp) => rp.userId === mp.identity);
       const hidden = videoHiddenSet.has(mp.identity);
       tiles.push({
         identity: mp.identity,
-        displayName: p?.displayName ?? p?.username ?? mp.identity,
+        displayName: isAiInterviewer
+          ? t('workspace.aiInterviewAi')
+          : (p?.displayName ?? p?.username ?? mp.identity),
         avatarUrl: p?.avatarUrl ?? null,
+        isAiInterviewer,
         hasVideo: hidden ? false : mp.hasVideo,
         videoTrack: hidden ? null : mp.videoTrack,
         hasScreenShare: mp.hasScreenShare,
@@ -720,6 +737,7 @@ function RoomPage() {
     speakingMap,
     stableCurrentUserId,
     room?.participants,
+    t,
     videoHiddenSet,
   ]);
 
@@ -1198,6 +1216,10 @@ function RoomPage() {
               <DockedVideoPanel tiles={videoTiles} onUndock={() => setVideoPanelMode('floating')} />
             ) : null
           }
+          aiInterviewerIdentity={AI_INTERVIEWER_IDENTITY}
+          aiInterviewerRealtimeEnabled={AI_INTERVIEWER_REALTIME_ENABLED}
+          latestLiveKitDataPacket={latestLiveKitDataPacket}
+          publishLiveKitData={publishData}
         />
         {showMediaPanel && videoPanelMode === 'floating' ? (
           <FloatingVideoPanel

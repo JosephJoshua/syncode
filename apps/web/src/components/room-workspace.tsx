@@ -1,6 +1,11 @@
 import {
+  AI_INTERVIEWER_EVENT_TOPIC,
+  AI_INTERVIEWER_SIGNAL_TOPIC,
   type AiInterviewCodeContext,
   type AiInterviewExecutionSummary,
+  type AiInterviewerContext,
+  type AiInterviewerEventPayload,
+  type AiInterviewerSignalPayload,
   type AiInterviewInteractionSignals,
   type AiInterviewProactiveReason,
   type AiInterviewRequestTrigger,
@@ -9,9 +14,11 @@ import {
   type ChatReactToggleEventData,
   type ChatSendEventData,
   CONTROL_API,
+  decodeAiInterviewerEventPayload,
   ERROR_CODES,
   type ExecutionDetailsResponse,
   type ExecutionResultResponse,
+  encodeAiInterviewerSignalPayload,
   type GetRoomAiHintResultResponse,
   type GetRoomAiInterviewResultResponse,
   type JobStatusResponse,
@@ -69,6 +76,7 @@ import { toast } from 'sonner';
 import type { Awareness } from 'y-protocols/awareness';
 import type * as Y from 'yjs';
 import { useInlineComments } from '@/hooks/use-inline-comments.js';
+import type { LiveKitDataPacket } from '@/hooks/use-livekit.js';
 import { useSharedExecution } from '@/hooks/use-shared-execution.js';
 import type { CollabConnectionStatus } from '@/hooks/use-yjs-collab.js';
 import { api, readApiError, resolveErrorMessage } from '@/lib/api-client.js';
@@ -171,6 +179,17 @@ interface RoomWorkspaceProps {
   selfMicrophoneEnabled?: boolean;
   onSelfMicrophoneToggle?: () => void;
   dockedVideoPanel?: React.ReactNode;
+  aiInterviewerIdentity?: string;
+  aiInterviewerRealtimeEnabled?: boolean;
+  latestLiveKitDataPacket?: LiveKitDataPacket | null;
+  publishLiveKitData?: (
+    payload: Uint8Array,
+    options?: {
+      reliable?: boolean;
+      topic?: string;
+      destinationIdentities?: string[];
+    },
+  ) => Promise<void>;
 }
 
 interface CasePollDeps {
@@ -289,6 +308,10 @@ export function RoomWorkspace({
   selfMicrophoneEnabled,
   onSelfMicrophoneToggle,
   dockedVideoPanel,
+  aiInterviewerIdentity = 'ai-interviewer',
+  aiInterviewerRealtimeEnabled = false,
+  latestLiveKitDataPacket,
+  publishLiveKitData,
 }: RoomWorkspaceProps) {
   const { t, i18n } = useTranslation('rooms');
 
@@ -331,10 +354,26 @@ export function RoomWorkspace({
   const aiInterviewLastAssistantMessageAtRef = useRef<number | null>(null);
   const aiInterviewLastEditorActivityAtRef = useRef<number | null>(null);
   const aiInterviewRecentEditorChangesRef = useRef(0);
+  const aiInterviewLastRunSignalRef = useRef<string | null>(null);
+  const aiInterviewLastSubmissionSignalRef = useRef<string | null>(null);
+  const aiInterviewRealtimeLastSignalAtByReasonRef = useRef<
+    Map<Extract<AiInterviewerSignalPayload, { type: 'system_signal' }>['reason'], number>
+  >(new Map());
+  const aiInterviewAppliedAnnotationMessageIdsRef = useRef<Set<string>>(new Set());
   const aiInterviewSeenMessageIdsRef = useRef<Set<string>>(new Set());
   const aiInterviewToastInitializedRef = useRef(false);
   const aiInterviewReadMessageIdsRef = useRef<Set<string>>(new Set());
   const aiInterviewIntroRequestedRef = useRef(false);
+  const aiInterviewRealtimeTurnIdsRef = useRef<Set<string>>(new Set());
+  const [aiInterviewerAgentState, setAiInterviewerAgentState] = useState<
+    'initializing' | 'idle' | 'listening' | 'thinking' | 'speaking'
+  >('idle');
+  const [aiInterviewerUserState, setAiInterviewerUserState] = useState<
+    'speaking' | 'listening' | 'away'
+  >('listening');
+  const [aiInterviewerInterruptionAt, setAiInterviewerInterruptionAt] = useState<number | null>(
+    null,
+  );
   const cancelSubmitPollRef = useRef<(() => void) | null>(null);
   const cancelRunStaticAnalysisPollRef = useRef<(() => void) | null>(null);
   const cancelSubmitStaticAnalysisPollRef = useRef<(() => void) | null>(null);
@@ -382,6 +421,7 @@ export function RoomWorkspace({
   const [activeRightTab, setActiveRightTab] = useState<'participants' | 'chat' | 'interview'>(
     'participants',
   );
+  const useRealtimeAiInterviewer = aiInterviewerRealtimeEnabled && room.mode === 'ai';
 
   useEffect(() => {
     if (room.mode !== 'ai' && activeRightTab === 'interview') {
@@ -417,10 +457,18 @@ export function RoomWorkspace({
     aiInterviewLastAssistantMessageAtRef.current = null;
     aiInterviewLastEditorActivityAtRef.current = null;
     aiInterviewRecentEditorChangesRef.current = 0;
+    aiInterviewLastRunSignalRef.current = null;
+    aiInterviewLastSubmissionSignalRef.current = null;
+    aiInterviewRealtimeLastSignalAtByReasonRef.current.clear();
+    aiInterviewAppliedAnnotationMessageIdsRef.current.clear();
     aiInterviewSeenMessageIdsRef.current.clear();
     aiInterviewReadMessageIdsRef.current.clear();
     aiInterviewToastInitializedRef.current = false;
     aiInterviewIntroRequestedRef.current = false;
+    aiInterviewRealtimeTurnIdsRef.current.clear();
+    setAiInterviewerAgentState('idle');
+    setAiInterviewerUserState('listening');
+    setAiInterviewerInterruptionAt(null);
     setRunStaticAnalysisState({ status: 'idle' });
     setSubmitStaticAnalysisState({ status: 'idle' });
   }, [cancelAiInterviewPolling, roomId]);
@@ -442,6 +490,7 @@ export function RoomWorkspace({
     setAiInterviewMessages([]);
     setEditorCodeContext(null);
     aiInterviewIntroRequestedRef.current = false;
+    aiInterviewAppliedAnnotationMessageIdsRef.current.clear();
   }, [cancelAiInterviewPolling, room.mode, room.status]);
 
   useLayoutEffect(() => {
@@ -467,6 +516,97 @@ export function RoomWorkspace({
     aiInterviewToastInitializedRef.current = true;
     aiInterviewIntroRequestedRef.current = true;
   }, [aiInterviewMessages.length, currentUserId, room.mode, room.status, roomId]);
+
+  const appendRealtimeInterviewTurn = useCallback(
+    (event: Extract<AiInterviewerEventPayload, { type: 'transcript_turn' }>) => {
+      if (aiInterviewRealtimeTurnIdsRef.current.has(event.turnId)) {
+        return;
+      }
+      aiInterviewRealtimeTurnIdsRef.current.add(event.turnId);
+
+      const createdAt = event.occurredAt;
+      if (event.role === 'user') {
+        aiInterviewLastUserMessageAtRef.current = createdAt;
+      } else {
+        aiInterviewLastAssistantMessageAtRef.current = createdAt;
+        aiInterviewIntroRequestedRef.current = true;
+      }
+
+      setAiInterviewMessages((prev) => [
+        ...prev,
+        {
+          id: event.turnId,
+          createdAt,
+          role: event.role,
+          content: event.content,
+          followUpQuestion: event.followUpQuestion,
+          codeAnnotations: event.codeAnnotations,
+        },
+      ]);
+    },
+    [],
+  );
+
+  const applyRealtimeAiInterviewerEvent = useCallback(
+    (event: AiInterviewerEventPayload) => {
+      switch (event.type) {
+        case 'agent_state':
+          setAiInterviewerAgentState(event.state);
+          setAiInterviewLoading(event.state === 'initializing' || event.state === 'thinking');
+          return;
+        case 'user_state':
+          setAiInterviewerUserState(event.state);
+          return;
+        case 'overlapping_speech':
+          if (event.isInterruption) {
+            setAiInterviewerInterruptionAt(event.occurredAt);
+          }
+          return;
+        case 'transcript_turn':
+          appendRealtimeInterviewTurn(event);
+          if (event.role === 'assistant') {
+            setAiInterviewLoading(false);
+            setAiInterviewerInterruptionAt(null);
+          }
+          return;
+        case 'error':
+          setAiInterviewError(event.message);
+          setAiInterviewLoading(false);
+          return;
+        case 'session_ready':
+          setAiInterviewError(null);
+          setAiInterviewLoading(false);
+          return;
+        default:
+          return;
+      }
+    },
+    [appendRealtimeInterviewTurn],
+  );
+
+  useEffect(() => {
+    if (!useRealtimeAiInterviewer || !latestLiveKitDataPacket) {
+      return;
+    }
+    if (latestLiveKitDataPacket.topic !== AI_INTERVIEWER_EVENT_TOPIC) {
+      return;
+    }
+    const identity = latestLiveKitDataPacket.participantIdentity;
+    if (identity && identity !== aiInterviewerIdentity) {
+      return;
+    }
+
+    const event = decodeAiInterviewerEventPayload(latestLiveKitDataPacket.payload);
+    if (!event) {
+      return;
+    }
+    applyRealtimeAiInterviewerEvent(event);
+  }, [
+    aiInterviewerIdentity,
+    applyRealtimeAiInterviewerEvent,
+    latestLiveKitDataPacket,
+    useRealtimeAiInterviewer,
+  ]);
 
   const [bottomCollapsed, setBottomCollapsed] = useState(false);
   const [activeCenterTab, setActiveCenterTab] = useState<'code' | 'whiteboard'>('code');
@@ -616,7 +756,10 @@ export function RoomWorkspace({
   const canSendChat = room.myCapabilities.includes('chat:send');
   const canRequestHint = room.myCapabilities.includes('ai:request-hint');
   const canSendInterviewMessage =
-    canRequestHint && room.mode === 'ai' && AI_INTERVIEW_ALLOWED_STATUSES.has(room.status);
+    canRequestHint &&
+    room.mode === 'ai' &&
+    AI_INTERVIEW_ALLOWED_STATUSES.has(room.status) &&
+    (!useRealtimeAiInterviewer || Boolean(publishLiveKitData));
   const canManageParticipants = room.myCapabilities.includes('participant:assign-role');
   const isEditorReadOnly = !canEditCode || room.editorLocked || room.status === 'finished';
 
@@ -778,6 +921,13 @@ export function RoomWorkspace({
 
   useEffect(() => {
     const read = aiInterviewReadMessageIdsRef.current;
+    if (useRealtimeAiInterviewer) {
+      for (const [index, message] of aiInterviewMessages.entries()) {
+        read.add(getAiInterviewMessageStableId(message, index));
+      }
+      setUnreadInterviewCount(0);
+      return;
+    }
     if (activeRightTab === 'interview') {
       for (const [index, message] of aiInterviewMessages.entries()) {
         if (message.role !== 'assistant') {
@@ -802,9 +952,17 @@ export function RoomWorkspace({
       return read.has(getAiInterviewMessageStableId(message, index)) ? count : count + 1;
     }, 0);
     setUnreadInterviewCount(unreadCount);
-  }, [activeRightTab, aiInterviewMessages]);
+  }, [activeRightTab, aiInterviewMessages, useRealtimeAiInterviewer]);
 
   useEffect(() => {
+    if (useRealtimeAiInterviewer) {
+      for (const [index, message] of aiInterviewMessages.entries()) {
+        aiInterviewSeenMessageIdsRef.current.add(getAiInterviewMessageStableId(message, index));
+      }
+      aiInterviewToastInitializedRef.current = true;
+      return;
+    }
+
     const seen = aiInterviewSeenMessageIdsRef.current;
     if (!aiInterviewToastInitializedRef.current) {
       for (const [index, message] of aiInterviewMessages.entries()) {
@@ -862,7 +1020,7 @@ export function RoomWorkspace({
         },
       );
     }
-  }, [activeRightTab, aiInterviewMessages, playIncomingChatDing, t]);
+  }, [activeRightTab, aiInterviewMessages, playIncomingChatDing, t, useRealtimeAiInterviewer]);
 
   useEffect(() => {
     if (room.mode !== 'ai') {
@@ -871,6 +1029,47 @@ export function RoomWorkspace({
     }
     persistAiInterviewConversation(roomId, currentUserId, aiInterviewMessages);
   }, [aiInterviewMessages, currentUserId, room.mode, roomId]);
+
+  useEffect(() => {
+    if (!canSendInterviewMessage || room.mode !== 'ai') {
+      return;
+    }
+
+    const appliedMessageIds = aiInterviewAppliedAnnotationMessageIdsRef.current;
+    const existingSignatures = new Set(
+      comments
+        .filter((comment) => comment.authorId === AI_INTERVIEW_INLINE_COMMENT_AUTHOR_ID)
+        .map((comment) => `${comment.lineNumber}:${comment.content.trim()}`),
+    );
+    const liveCode = doc?.getText(codeTextKey(language)).toJSON() ?? '';
+    const codeLineCount = Math.max(1, liveCode.split(/\r?\n/).length);
+    let addedCount = 0;
+
+    for (const [index, message] of aiInterviewMessages.entries()) {
+      addedCount += applyAiInterviewMessageAnnotations({
+        message,
+        messageIndex: index,
+        appliedMessageIds,
+        existingSignatures,
+        codeLineCount,
+        addComment,
+        authorName: t('workspace.aiInterviewAi'),
+      });
+    }
+
+    if (addedCount > 0) {
+      toast.info(t('workspace.aiInterviewInlineCommentAdded', { count: addedCount }));
+    }
+  }, [
+    addComment,
+    aiInterviewMessages,
+    canSendInterviewMessage,
+    comments,
+    doc,
+    language,
+    room.mode,
+    t,
+  ]);
 
   const handleAddCase = useCallback(() => {
     const idx = nextCustomId.current++;
@@ -911,7 +1110,7 @@ export function RoomWorkspace({
   const isSubmissionPreviewOpen = submissionPreviewCode !== null;
 
   const getCode = useCallback(() => {
-    return doc?.getText(codeTextKey(language)).toString() ?? '';
+    return doc?.getText(codeTextKey(language)).toJSON() ?? '';
   }, [doc, language]);
 
   useEffect(() => {
@@ -1368,6 +1567,20 @@ export function RoomWorkspace({
     [getCode, language, roomId, t],
   );
 
+  const publishAiInterviewerSignal = useCallback(
+    async (payload: AiInterviewerSignalPayload) => {
+      if (!publishLiveKitData) {
+        throw new Error(t('workspace.aiInterviewUnavailable'));
+      }
+      await publishLiveKitData(encodeAiInterviewerSignalPayload(payload), {
+        reliable: true,
+        topic: AI_INTERVIEWER_SIGNAL_TOPIC,
+        destinationIdentities: aiInterviewerIdentity ? [aiInterviewerIdentity] : undefined,
+      });
+    },
+    [aiInterviewerIdentity, publishLiveKitData, t],
+  );
+
   const buildInterviewSignals = useCallback(
     (reason: AiInterviewProactiveReason): AiInterviewInteractionSignals => {
       const now = Date.now();
@@ -1727,14 +1940,56 @@ export function RoomWorkspace({
         return false;
       }
 
+      if (useRealtimeAiInterviewer) {
+        const normalized = userMessage.trim();
+        if (!normalized) {
+          return false;
+        }
+        aiInterviewLastUserMessageAtRef.current = Date.now();
+        setAiInterviewLoading(true);
+        setAiInterviewError(null);
+        const latestSubmissionSummary =
+          latestRunSummary && latestRunSummary.status !== 'running'
+            ? {
+                status: latestRunSummary.status,
+                passedTestCases: latestRunSummary.passedTestCases,
+                totalTestCases: latestRunSummary.totalTestCases,
+                failedTestCases: latestRunSummary.failedTestCases,
+                errorTestCases: latestRunSummary.errorTestCases,
+                submittedAt: latestRunSummary.submittedAt,
+              }
+            : undefined;
+        void publishAiInterviewerSignal({
+          type: 'user_text',
+          text: normalized,
+          language: i18n.resolvedLanguage ?? i18n.language,
+          latestSubmissionSummary,
+        }).catch(() => {
+          setAiInterviewError(t('workspace.aiInterviewUnavailable'));
+        });
+        return true;
+      }
+
       void submitInterviewRequest({ trigger: 'user_message', userMessage });
       return true;
     },
-    [canSendInterviewMessage, submitInterviewRequest, t],
+    [
+      canSendInterviewMessage,
+      i18n.language,
+      i18n.resolvedLanguage,
+      publishAiInterviewerSignal,
+      submitInterviewRequest,
+      t,
+      useRealtimeAiInterviewer,
+      latestRunSummary,
+    ],
   );
 
   const handleTranscribeInterviewVoice = useCallback(
     async (request: { audioBase64: string; mimeType: string; language?: string }) => {
+      if (useRealtimeAiInterviewer) {
+        throw new Error(t('workspace.aiInterviewVoiceUnsupported'));
+      }
       try {
         if ((import.meta as ImportMeta & { env?: Record<string, unknown> }).env?.DEV === true) {
           console.debug('[ai-interview-voice] transcribe-request', {
@@ -1769,10 +2024,13 @@ export function RoomWorkspace({
         throw new Error(message);
       }
     },
-    [roomId, t],
+    [roomId, t, useRealtimeAiInterviewer],
   );
 
   useEffect(() => {
+    if (useRealtimeAiInterviewer) {
+      return;
+    }
     if (!canSendInterviewMessage || room.mode !== 'ai') {
       return;
     }
@@ -1786,10 +2044,100 @@ export function RoomWorkspace({
       reason: pending.reason,
       pendingJobId: pending.jobId,
     });
-  }, [canSendInterviewMessage, currentUserId, room.mode, roomId, submitInterviewRequest]);
+  }, [
+    canSendInterviewMessage,
+    currentUserId,
+    room.mode,
+    roomId,
+    submitInterviewRequest,
+    useRealtimeAiInterviewer,
+  ]);
+
+  useEffect(() => {
+    if (useRealtimeAiInterviewer) {
+      return;
+    }
+    if (!canSendInterviewMessage || room.mode !== 'ai' || aiInterviewInFlightRef.current) {
+      return;
+    }
+    if (!latestRunSummary || latestRunSummary.status === 'running') {
+      return;
+    }
+
+    const signalId = [
+      latestRunSummary.submittedAt,
+      latestRunSummary.status,
+      latestRunSummary.passedTestCases,
+      latestRunSummary.totalTestCases,
+      latestRunSummary.failedTestCases,
+      latestRunSummary.errorTestCases,
+    ].join(':');
+
+    if (aiInterviewLastRunSignalRef.current === signalId) {
+      return;
+    }
+
+    aiInterviewLastRunSignalRef.current = signalId;
+    if (
+      Date.now() - aiInterviewLastProactiveAtRef.current <
+      AI_INTERVIEW_PROACTIVE_EVENT_MIN_INTERVAL_MS
+    ) {
+      return;
+    }
+
+    void submitInterviewRequest({
+      trigger: 'proactive',
+      reason: 'code_ran',
+    });
+  }, [
+    canSendInterviewMessage,
+    latestRunSummary,
+    room.mode,
+    submitInterviewRequest,
+    useRealtimeAiInterviewer,
+  ]);
+
+  useEffect(() => {
+    if (useRealtimeAiInterviewer) {
+      return;
+    }
+    if (!canSendInterviewMessage || room.mode !== 'ai' || aiInterviewInFlightRef.current) {
+      return;
+    }
+    if (submitState.status !== 'completed') {
+      return;
+    }
+
+    const signalId = `${submitState.submissionId}:${submitState.details.submittedAt}`;
+    if (aiInterviewLastSubmissionSignalRef.current === signalId) {
+      return;
+    }
+
+    aiInterviewLastSubmissionSignalRef.current = signalId;
+    if (
+      Date.now() - aiInterviewLastProactiveAtRef.current <
+      AI_INTERVIEW_PROACTIVE_EVENT_MIN_INTERVAL_MS
+    ) {
+      return;
+    }
+
+    void submitInterviewRequest({
+      trigger: 'proactive',
+      reason: 'code_submitted',
+    });
+  }, [
+    canSendInterviewMessage,
+    room.mode,
+    submitInterviewRequest,
+    submitState,
+    useRealtimeAiInterviewer,
+  ]);
 
   const previousAiInterviewStageRef = useRef<RoomStatus | null>(null);
   useEffect(() => {
+    if (useRealtimeAiInterviewer) {
+      return;
+    }
     if (room.mode !== 'ai') {
       previousAiInterviewStageRef.current = null;
       return;
@@ -1819,9 +2167,12 @@ export function RoomWorkspace({
       trigger: 'proactive',
       reason: 'stage_changed',
     });
-  }, [room.mode, room.status, submitInterviewRequest]);
+  }, [room.mode, room.status, submitInterviewRequest, useRealtimeAiInterviewer]);
 
   useEffect(() => {
+    if (useRealtimeAiInterviewer) {
+      return;
+    }
     if (!canSendInterviewMessage || room.mode !== 'ai') {
       return;
     }
@@ -1855,9 +2206,13 @@ export function RoomWorkspace({
     currentUserId,
     room.mode,
     submitInterviewRequest,
+    useRealtimeAiInterviewer,
   ]);
 
   useEffect(() => {
+    if (useRealtimeAiInterviewer) {
+      return;
+    }
     if (!canSendInterviewMessage || room.mode !== 'ai') {
       return;
     }
@@ -1902,7 +2257,228 @@ export function RoomWorkspace({
     }, AI_INTERVIEW_PROACTIVE_TICK_MS);
 
     return () => clearInterval(timer);
-  }, [canSendInterviewMessage, hintHistory.length, room.mode, submitInterviewRequest]);
+  }, [
+    canSendInterviewMessage,
+    hintHistory.length,
+    room.mode,
+    submitInterviewRequest,
+    useRealtimeAiInterviewer,
+  ]);
+
+  const sendRealtimeInterviewSignal = useCallback(
+    (
+      reason: Extract<AiInterviewerSignalPayload, { type: 'system_signal' }>['reason'],
+      summary?: string,
+      options: Readonly<{ force?: boolean; includeInterviewContext?: boolean }> = {},
+    ) => {
+      if (!useRealtimeAiInterviewer || !canSendInterviewMessage) {
+        return;
+      }
+      if (reason === 'session_joined' && !AI_INTERVIEW_ALLOWED_STATUSES.has(room.status)) {
+        return;
+      }
+
+      const now = Date.now();
+      const reasonInterval = AI_INTERVIEW_REALTIME_REASON_MIN_INTERVAL_MS[reason];
+      const lastForReason = aiInterviewRealtimeLastSignalAtByReasonRef.current.get(reason) ?? 0;
+      if (!options.force && now - lastForReason < reasonInterval) {
+        return;
+      }
+      if (
+        !options.force &&
+        reason !== 'manual_nudge' &&
+        reason !== 'code_submitted' &&
+        now - aiInterviewLastProactiveAtRef.current < AI_INTERVIEW_REALTIME_GLOBAL_MIN_INTERVAL_MS
+      ) {
+        return;
+      }
+      aiInterviewRealtimeLastSignalAtByReasonRef.current.set(reason, now);
+      aiInterviewLastProactiveAtRef.current = now;
+      const shouldShowLoading = reason === 'session_joined' || reason === 'manual_nudge';
+      if (shouldShowLoading) {
+        setAiInterviewLoading(true);
+      }
+      setAiInterviewError(null);
+
+      const codeContext = buildInterviewCodeContext(editorCodeContext, getCode(), language);
+      const interviewContext = options.includeInterviewContext
+        ? buildRealtimeInterviewContext(problem, language)
+        : undefined;
+      void publishAiInterviewerSignal({
+        type: 'system_signal',
+        reason,
+        summary: summary?.slice(0, 1000),
+        language: i18n.resolvedLanguage ?? i18n.language,
+        interviewContext,
+        codeContext: codeContext
+          ? {
+              file: codeContext.file,
+              language: codeContext.language,
+              codeSnippet: codeContext.codeSnippet,
+              startLine: codeContext.startLine,
+              endLine: codeContext.endLine,
+            }
+          : undefined,
+      }).catch(() => {
+        setAiInterviewError(t('workspace.aiInterviewUnavailable'));
+      });
+    },
+    [
+      problem,
+      canSendInterviewMessage,
+      editorCodeContext,
+      getCode,
+      i18n.language,
+      i18n.resolvedLanguage,
+      language,
+      publishAiInterviewerSignal,
+      t,
+      useRealtimeAiInterviewer,
+      room.status,
+    ],
+  );
+
+  useEffect(() => {
+    if (!useRealtimeAiInterviewer || !canSendInterviewMessage) {
+      return;
+    }
+    if (!AI_INTERVIEW_ALLOWED_STATUSES.has(room.status)) {
+      return;
+    }
+    if (!problem) {
+      return;
+    }
+    if (aiInterviewMessages.length > 0 || aiInterviewIntroRequestedRef.current) {
+      return;
+    }
+
+    aiInterviewIntroRequestedRef.current = true;
+    sendRealtimeInterviewSignal('session_joined', undefined, {
+      force: true,
+      includeInterviewContext: true,
+    });
+  }, [
+    aiInterviewMessages.length,
+    canSendInterviewMessage,
+    problem,
+    room.status,
+    sendRealtimeInterviewSignal,
+    useRealtimeAiInterviewer,
+  ]);
+
+  useEffect(() => {
+    if (!useRealtimeAiInterviewer || !canSendInterviewMessage) {
+      return;
+    }
+    if (!latestRunSummary || latestRunSummary.status === 'running') {
+      return;
+    }
+
+    const signalId = [
+      latestRunSummary.submittedAt,
+      latestRunSummary.status,
+      latestRunSummary.passedTestCases,
+      latestRunSummary.totalTestCases,
+      latestRunSummary.failedTestCases,
+      latestRunSummary.errorTestCases,
+    ].join(':');
+    if (aiInterviewLastRunSignalRef.current === signalId) {
+      return;
+    }
+    aiInterviewLastRunSignalRef.current = signalId;
+
+    sendRealtimeInterviewSignal(
+      'code_ran',
+      `Latest run: ${latestRunSummary.passedTestCases}/${latestRunSummary.totalTestCases} passed.`,
+      { force: true },
+    );
+  }, [
+    canSendInterviewMessage,
+    latestRunSummary,
+    sendRealtimeInterviewSignal,
+    useRealtimeAiInterviewer,
+  ]);
+
+  useEffect(() => {
+    if (!useRealtimeAiInterviewer || !canSendInterviewMessage) {
+      return;
+    }
+    if (submitState.status !== 'completed') {
+      return;
+    }
+    const signalId = `${submitState.submissionId}:${submitState.details.submittedAt}`;
+    if (aiInterviewLastSubmissionSignalRef.current === signalId) {
+      return;
+    }
+    aiInterviewLastSubmissionSignalRef.current = signalId;
+
+    sendRealtimeInterviewSignal(
+      'code_submitted',
+      `Submission completed with ${submitState.details.passedTestCases}/${submitState.details.totalTestCases} test cases passed at ${submitState.details.submittedAt}.`,
+    );
+  }, [canSendInterviewMessage, sendRealtimeInterviewSignal, submitState, useRealtimeAiInterviewer]);
+
+  useEffect(() => {
+    if (!useRealtimeAiInterviewer) {
+      previousAiInterviewStageRef.current = null;
+      return;
+    }
+    const previous = previousAiInterviewStageRef.current;
+    previousAiInterviewStageRef.current = room.status;
+    if (previous == null || previous === room.status) {
+      return;
+    }
+    if (!AI_INTERVIEW_ALLOWED_STATUSES.has(room.status)) {
+      return;
+    }
+    sendRealtimeInterviewSignal('stage_changed', `Stage changed to ${room.status}.`, {
+      includeInterviewContext: true,
+    });
+  }, [room.status, sendRealtimeInterviewSignal, useRealtimeAiInterviewer]);
+
+  useEffect(() => {
+    if (!useRealtimeAiInterviewer || !canSendInterviewMessage) {
+      return;
+    }
+    if (hintHistory.length <= aiInterviewLastHintCountRef.current) {
+      return;
+    }
+    aiInterviewLastHintCountRef.current = hintHistory.length;
+    sendRealtimeInterviewSignal('hint_used', 'Candidate requested a hint.');
+  }, [
+    canSendInterviewMessage,
+    hintHistory.length,
+    sendRealtimeInterviewSignal,
+    useRealtimeAiInterviewer,
+  ]);
+
+  useEffect(() => {
+    if (!useRealtimeAiInterviewer || !canSendInterviewMessage) {
+      return;
+    }
+
+    const timer = setInterval(() => {
+      const now = Date.now();
+      const sinceLastEditorActivity =
+        aiInterviewLastEditorActivityAtRef.current == null
+          ? Number.POSITIVE_INFINITY
+          : now - aiInterviewLastEditorActivityAtRef.current;
+      const sinceLastUserMessage =
+        aiInterviewLastUserMessageAtRef.current == null
+          ? Number.POSITIVE_INFINITY
+          : now - aiInterviewLastUserMessageAtRef.current;
+
+      if (
+        room.status === 'coding' &&
+        sinceLastEditorActivity >= AI_INTERVIEW_REALTIME_IDLE_EDITOR_MS &&
+        sinceLastUserMessage >= AI_INTERVIEW_REALTIME_IDLE_USER_MESSAGE_MS
+      ) {
+        sendRealtimeInterviewSignal('user_idle');
+      }
+    }, AI_INTERVIEW_REALTIME_PROACTIVE_TICK_MS);
+
+    return () => clearInterval(timer);
+  }, [canSendInterviewMessage, room.status, sendRealtimeInterviewSignal, useRealtimeAiInterviewer]);
 
   return (
     <div className="fixed inset-0 z-40 flex flex-col overflow-hidden bg-background">
@@ -2463,11 +3039,17 @@ export function RoomWorkspace({
                     </div>
                   ) : (
                     <RoomAiInterviewPanel
+                      mode={useRealtimeAiInterviewer ? 'realtime' : 'legacy'}
+                      realtimeAgentState={aiInterviewerAgentState}
+                      realtimeUserState={aiInterviewerUserState}
+                      realtimeInterruptionAt={aiInterviewerInterruptionAt}
                       messages={aiInterviewMessages}
                       isLoading={aiInterviewLoading}
                       error={aiInterviewError}
                       onSendMessage={handleSendInterviewMessage}
-                      onTranscribeVoiceInput={handleTranscribeInterviewVoice}
+                      onTranscribeVoiceInput={
+                        useRealtimeAiInterviewer ? undefined : handleTranscribeInterviewVoice
+                      }
                       canSendMessage={canSendInterviewMessage}
                       currentUser={
                         currentUserId ? (participantsById.get(currentUserId) ?? null) : null
@@ -2893,6 +3475,37 @@ function buildInterviewCodeContext(
   };
 }
 
+function buildRealtimeInterviewContext(
+  problem: ProblemDetail | null,
+  language: SupportedLanguage,
+): AiInterviewerContext | undefined {
+  if (!problem) {
+    return undefined;
+  }
+
+  const starterFromProblem = problem.starterCode?.[language]?.trim();
+  const starterCode =
+    starterFromProblem && starterFromProblem.length > 0
+      ? starterFromProblem
+      : 'No official starter code is provided for this language in this problem.';
+
+  return {
+    problemTitle: clampInterviewContextField(problem.title, 200),
+    difficulty: problem.difficulty,
+    problemDescription: clampInterviewContextField(problem.description, 16_000),
+    language,
+    starterCode: clampInterviewContextField(starterCode, 12_000),
+  };
+}
+
+function clampInterviewContextField(value: string, maxLength: number): string {
+  const trimmed = value.trim();
+  if (trimmed.length <= maxLength) {
+    return trimmed;
+  }
+  return `${trimmed.slice(0, maxLength - 1).trimEnd()}…`;
+}
+
 function buildFallbackEditorCodeContext(currentCode: string): EditorCodeContext {
   const lines = currentCode.split('\n');
   const snippetLines = lines.slice(0, Math.min(5, Math.max(1, lines.length)));
@@ -3045,12 +3658,100 @@ const AI_INTERVIEW_MAX_RETRY_ERRORS = 3;
 const AI_INTERVIEW_STREAM_CHUNK_DELAY_MS = 32;
 const AI_INTERVIEW_PROACTIVE_TICK_MS = 12_000;
 const AI_INTERVIEW_PROACTIVE_MIN_INTERVAL_MS = 45_000;
+const AI_INTERVIEW_PROACTIVE_EVENT_MIN_INTERVAL_MS = 18_000;
 const AI_INTERVIEW_IDLE_EDITOR_MS = 90_000;
 const AI_INTERVIEW_IDLE_USER_MESSAGE_MS = 75_000;
+const AI_INTERVIEW_REALTIME_PROACTIVE_TICK_MS = 15_000;
+const AI_INTERVIEW_REALTIME_IDLE_EDITOR_MS = 4 * 60_000;
+const AI_INTERVIEW_REALTIME_IDLE_USER_MESSAGE_MS = 3 * 60_000;
+const AI_INTERVIEW_REALTIME_GLOBAL_MIN_INTERVAL_MS = 45_000;
+const AI_INTERVIEW_REALTIME_REASON_MIN_INTERVAL_MS: Record<
+  Extract<AiInterviewerSignalPayload, { type: 'system_signal' }>['reason'],
+  number
+> = {
+  session_joined: 10 * 60_000,
+  stage_changed: 90_000,
+  user_idle: 3 * 60_000,
+  hint_used: 90_000,
+  code_ran: 2 * 60_000,
+  code_submitted: 10_000,
+  manual_nudge: 10_000,
+};
 const AI_INTERVIEW_PENDING_STORAGE_KEY_PREFIX = 'syncode:ai-interview-pending:';
 const AI_INTERVIEW_CONVERSATION_STORAGE_KEY_PREFIX = 'syncode:ai-interview-conversation:';
 const AI_INTERVIEW_PERSISTED_HISTORY_LIMIT = 80;
 const AI_INTERVIEW_ALLOWED_STATUSES = new Set<RoomStatus>(['warmup', 'coding', 'wrapup']);
+const AI_INTERVIEW_INLINE_COMMENT_AUTHOR_ID = 'ai-interviewer-inline';
+
+interface ApplyAiInterviewMessageAnnotationsParams {
+  message: AiInterviewMessage;
+  messageIndex: number;
+  appliedMessageIds: Set<string>;
+  existingSignatures: Set<string>;
+  codeLineCount: number;
+  addComment: (input: {
+    authorId: string;
+    authorName: string;
+    content: string;
+    lineNumber: number;
+  }) => void;
+  authorName: string;
+}
+
+// Applies code annotations from a single AI interview assistant message to the
+// inline-comments doc. Returns the number of comments actually added so the
+// caller can show a single toast for the batch.
+function applyAiInterviewMessageAnnotations(
+  params: ApplyAiInterviewMessageAnnotationsParams,
+): number {
+  const {
+    message,
+    messageIndex,
+    appliedMessageIds,
+    existingSignatures,
+    codeLineCount,
+    addComment,
+    authorName,
+  } = params;
+
+  if (message.role !== 'assistant' || message.isStreaming) {
+    return 0;
+  }
+  if (!message.codeAnnotations || message.codeAnnotations.length === 0) {
+    return 0;
+  }
+
+  const stableId = getAiInterviewMessageStableId(message, messageIndex);
+  if (appliedMessageIds.has(stableId)) {
+    return 0;
+  }
+
+  let added = 0;
+  for (const annotation of message.codeAnnotations) {
+    const lineNumber = Math.min(codeLineCount, Math.max(1, Math.floor(annotation.line)));
+    const content = annotation.comment.trim();
+    if (!content) {
+      continue;
+    }
+
+    const signature = `${lineNumber}:${content}`;
+    if (existingSignatures.has(signature)) {
+      continue;
+    }
+    existingSignatures.add(signature);
+
+    addComment({
+      authorId: AI_INTERVIEW_INLINE_COMMENT_AUTHOR_ID,
+      authorName,
+      content,
+      lineNumber,
+    });
+    added += 1;
+  }
+
+  appliedMessageIds.add(stableId);
+  return added;
+}
 
 interface PendingAiInterviewJob {
   jobId: string;

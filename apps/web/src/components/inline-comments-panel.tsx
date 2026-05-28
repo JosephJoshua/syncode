@@ -3,6 +3,7 @@ import { MessageSquareMore, Pencil, Plus, Save, Trash2, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { InlineComment } from '@/lib/inline-comments.js';
+import { InlineCommentMarkdown } from './inline-comment-markdown.js';
 
 interface InlineCommentsPanelProps {
   comments: InlineComment[];
@@ -174,9 +175,7 @@ export function InlineCommentsPanel({
                     className="mt-2 min-h-20 w-full resize-none rounded-lg border border-border bg-background/70 px-2.5 py-2 font-mono text-xs text-foreground outline-none"
                   />
                 ) : (
-                  <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">
-                    {comment.content}
-                  </p>
+                  <InlineCommentMarkdown markdown={comment.content} />
                 )}
               </div>
             );

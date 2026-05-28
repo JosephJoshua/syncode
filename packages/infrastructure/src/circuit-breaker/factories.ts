@@ -2,6 +2,7 @@ import {
   BULLMQ_ADAPTER_CIRCUIT_CONFIG,
   COLLAB_CLIENT_CIRCUIT_CONFIG,
   LIVEKIT_ADAPTER_CIRCUIT_CONFIG,
+  LIVEKIT_AGENT_DISPATCH_ADAPTER_CIRCUIT_CONFIG,
   REDIS_ADAPTER_CIRCUIT_CONFIG,
   S3_ADAPTER_CIRCUIT_CONFIG,
 } from './adapter-configs.js';
@@ -36,6 +37,20 @@ export function createProtectedLiveKitAdapter<T extends object>(
   circuitBreaker: CircuitBreakerAdapter,
 ): T {
   return createCircuitBreakerProxy(adapter, circuitBreaker, LIVEKIT_ADAPTER_CIRCUIT_CONFIG);
+}
+
+/**
+ * Creates a LiveKit agent-dispatch adapter with circuit breaker protection.
+ */
+export function createProtectedLiveKitAgentDispatchAdapter<T extends object>(
+  adapter: T,
+  circuitBreaker: CircuitBreakerAdapter,
+): T {
+  return createCircuitBreakerProxy(
+    adapter,
+    circuitBreaker,
+    LIVEKIT_AGENT_DISPATCH_ADAPTER_CIRCUIT_CONFIG,
+  );
 }
 
 /**

@@ -179,7 +179,7 @@ const problemsData: ProblemSeed[] = [
       },
       {
         input: '5 9\n1 5 3 7 2',
-        expectedOutput: '1 3',
+        expectedOutput: '3 4',
         description: 'Larger array',
         isHidden: true,
         sortOrder: 3,

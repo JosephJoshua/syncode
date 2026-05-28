@@ -11,6 +11,7 @@ import { clientIdFromElement, remoteCursorSelector } from '@/lib/remote-cursor-d
 import { codeTextKey } from '@/lib/yjs-collab-provider.js';
 import { buildCursorCssRules, IDLE_HIDE_MS } from './cursor-styles.js';
 import { type EditorKeybindingMode, mountEditorKeybindingMode } from './editor-keybinding-mode.js';
+import { InlineCommentMarkdown } from './inline-comment-markdown.js';
 import { LazyMonacoEditor as Editor } from './lazy-monaco-editor.js';
 import {
   EDITOR_LOADING,
@@ -945,9 +946,9 @@ export function CollaborativeEditor({
                       {formatTime(comment.createdAt)}
                     </span>
                   </div>
-                  <p className="mt-1 whitespace-pre-wrap text-xs text-muted-foreground">
-                    {comment.content}
-                  </p>
+                  <div className="text-xs">
+                    <InlineCommentMarkdown markdown={comment.content} />
+                  </div>
                 </div>
               ))}
             </div>

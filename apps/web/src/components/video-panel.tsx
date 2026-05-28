@@ -1,5 +1,6 @@
 import { Avatar, AvatarFallback, AvatarImage, Button, cn } from '@syncode/ui';
 import {
+  Bot,
   GripHorizontal,
   Maximize2,
   Minimize2,
@@ -20,6 +21,7 @@ export interface VideoPanelParticipant {
   readonly identity: string;
   readonly displayName: string;
   readonly avatarUrl: string | null;
+  readonly isAiInterviewer: boolean;
   readonly hasVideo: boolean;
   readonly videoTrack: MediaStreamTrack | null;
   readonly hasScreenShare: boolean;
@@ -36,6 +38,7 @@ interface ParticipantTileProps extends Omit<VideoPanelParticipant, 'identity'> {
 function ParticipantTile({
   displayName,
   avatarUrl,
+  isAiInterviewer,
   hasVideo,
   videoTrack,
   isSpeaking,
@@ -70,12 +73,18 @@ function ParticipantTile({
         />
       ) : (
         <div className="flex h-full w-full items-center justify-center bg-muted/60">
-          <Avatar className="size-10">
-            {avatarUrl ? <AvatarImage src={avatarUrl} /> : null}
-            <AvatarFallback className="bg-primary/10 text-lg text-primary">
-              {initial}
-            </AvatarFallback>
-          </Avatar>
+          {isAiInterviewer ? (
+            <div className="flex size-10 items-center justify-center rounded-full bg-primary/15 text-primary">
+              <Bot className="size-5" />
+            </div>
+          ) : (
+            <Avatar className="size-10">
+              {avatarUrl ? <AvatarImage src={avatarUrl} /> : null}
+              <AvatarFallback className="bg-primary/10 text-lg text-primary">
+                {initial}
+              </AvatarFallback>
+            </Avatar>
+          )}
         </div>
       )}
 

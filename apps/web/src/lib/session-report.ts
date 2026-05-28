@@ -12,6 +12,9 @@ export type SessionReportQueryResult =
       state: 'pending';
     }
   | {
+      state: 'unavailable';
+    }
+  | {
       state: 'ready';
       report: SessionReport;
     };
@@ -33,10 +36,18 @@ export async function fetchSessionReport(sessionId: string): Promise<SessionRepo
       return { state: 'pending' };
     }
 
+    if (isUnavailableSessionReportError(apiError)) {
+      return { state: 'unavailable' };
+    }
+
     throw error;
   }
 }
 
 export function isPendingSessionReportError(apiError: ApiErrorResult) {
   return apiError?.statusCode === 404 && apiError.code === ERROR_CODES.SESSION_REPORT_NOT_READY;
+}
+
+export function isUnavailableSessionReportError(apiError: ApiErrorResult) {
+  return apiError?.statusCode === 404 && apiError.code === ERROR_CODES.SESSION_REPORT_UNAVAILABLE;
 }

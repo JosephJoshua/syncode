@@ -20,7 +20,12 @@ import {
   submissions,
 } from '@syncode/db';
 import { INVITE_CODE_LENGTH } from '@syncode/shared';
-import { CACHE_SERVICE, MEDIA_SERVICE, STORAGE_SERVICE } from '@syncode/shared/ports';
+import {
+  AGENT_DISPATCH_SERVICE,
+  CACHE_SERVICE,
+  MEDIA_SERVICE,
+  STORAGE_SERVICE,
+} from '@syncode/shared/ports';
 import { and, eq, sql } from 'drizzle-orm';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
 import { ExecutionService } from '@/modules/execution/execution.service.js';
@@ -28,6 +33,7 @@ import { SessionReportsService } from '@/modules/sessions/session-reports.servic
 import { InMemoryCacheService } from '@/test/in-memory-cache.service.js';
 import {
   createTestDb,
+  insertCodeSnapshot,
   insertParticipant,
   insertProblem,
   insertRoom,
@@ -37,6 +43,7 @@ import {
   insertUser,
 } from '@/test/integration-setup.js';
 import {
+  createMockAgentDispatchService,
   createMockAiClient,
   createMockCollabClient,
   createMockConfigService,
@@ -55,6 +62,7 @@ let mockExecutionClient: ReturnType<typeof createMockExecutionClient>;
 let mockCollabClient: ReturnType<typeof createMockCollabClient>;
 let mockSessionReportsService: ReturnType<typeof createMockSessionReportsService>;
 let mockStorageService: ReturnType<typeof createMockStorageService>;
+let mockAgentDispatchService: ReturnType<typeof createMockAgentDispatchService>;
 
 beforeEach(async () => {
   vi.clearAllMocks();
@@ -66,6 +74,7 @@ beforeEach(async () => {
   mockCollabClient = createMockCollabClient();
   mockSessionReportsService = createMockSessionReportsService();
   mockStorageService = createMockStorageService();
+  mockAgentDispatchService = createMockAgentDispatchService();
   mockCollabClient.updateRoomState.mockImplementation(async (request) => {
     if (request.phase === 'finished' && request.language) {
       await insertSessionEndSnapshotForRoom(request.roomId, request.language);
@@ -84,9 +93,16 @@ beforeEach(async () => {
       { provide: CACHE_SERVICE, useValue: new InMemoryCacheService() },
       { provide: COLLAB_CLIENT, useValue: mockCollabClient },
       { provide: MEDIA_SERVICE, useValue: createMockMediaService() },
+      { provide: AGENT_DISPATCH_SERVICE, useValue: mockAgentDispatchService },
       { provide: STORAGE_SERVICE, useValue: mockStorageService },
       { provide: JwtService, useValue: createMockJwtService() },
-      { provide: ConfigService, useValue: createMockConfigService() },
+      {
+        provide: ConfigService,
+        useValue: createMockConfigService({
+          AI_INTERVIEWER_LIVEKIT_ENABLED: true,
+          AI_INTERVIEWER_AGENT_NAME: 'syncode-ai-interviewer',
+        }),
+      },
       { provide: SessionReportsService, useValue: mockSessionReportsService },
     ],
   }).compile();
@@ -1562,6 +1578,258 @@ describe('markParticipantInactive', () => {
 
     expect(row!.isActive).toBe(false);
     expect(row!.leftAt).toEqual(leftAt);
+  });
+
+  it('GIVEN AI room WHEN participant disconnects THEN AI interviewer dispatch is cleaned up', async () => {
+    const host = await insertUser(db);
+    const room = await insertRoom(db, host.id, { mode: 'ai' });
+    const participant = await insertUser(db);
+    await insertParticipant(db, room.id, participant.id, 'candidate');
+    mockAgentDispatchService.listDispatch.mockResolvedValueOnce([
+      { dispatchId: 'dispatch-ai-1', roomName: room.id, agentName: 'syncode-ai-interviewer' },
+      { dispatchId: 'dispatch-other', roomName: room.id, agentName: 'another-agent' },
+    ]);
+
+    await service.markParticipantInactive(
+      room.id,
+      participant.id,
+      new Date('2026-04-08T13:00:00Z'),
+    );
+
+    expect(mockAgentDispatchService.deleteDispatch).toHaveBeenCalledTimes(1);
+    expect(mockAgentDispatchService.deleteDispatch).toHaveBeenCalledWith('dispatch-ai-1', room.id);
+  });
+
+  it('GIVEN non-AI room WHEN participant disconnects THEN AI interviewer dispatch is not touched', async () => {
+    const host = await insertUser(db);
+    const room = await insertRoom(db, host.id, { mode: 'peer' });
+    const participant = await insertUser(db);
+    await insertParticipant(db, room.id, participant.id, 'candidate');
+
+    await service.markParticipantInactive(
+      room.id,
+      participant.id,
+      new Date('2026-04-08T14:00:00Z'),
+    );
+
+    expect(mockAgentDispatchService.listDispatch).not.toHaveBeenCalled();
+    expect(mockAgentDispatchService.deleteDispatch).not.toHaveBeenCalled();
+  });
+});
+
+describe('getAiInterviewerContext', () => {
+  it('GIVEN AI room with snapshot + submission WHEN fetching context THEN returns grounded code and latest submission summary', async () => {
+    const host = await insertUser(db);
+    const candidate = await insertUser(db);
+    const problem = await insertProblem(db, {
+      title: 'Two Sum',
+      description: 'Find two indices that sum to target.',
+      difficulty: 'easy',
+      starterCode: {
+        python: 'def solve():\n    pass',
+      },
+    });
+    const room = await insertRoom(db, host.id, {
+      mode: 'ai',
+      status: 'coding',
+      language: 'python',
+      problemId: problem.id,
+    });
+    await insertParticipant(db, room.id, host.id, 'candidate');
+    await insertParticipant(db, room.id, candidate.id, 'candidate');
+    const session = await insertSession(db, room.id, {
+      mode: 'ai',
+      status: 'ongoing',
+      language: 'python',
+    });
+
+    await insertCodeSnapshot(db, {
+      sessionId: session.id,
+      roomId: room.id,
+      language: 'python',
+      code: 'nums = [2,7,11,15]\nprint(nums)',
+      trigger: 'submission',
+      phase: 'coding',
+      createdAt: new Date('2026-05-24T10:00:00Z'),
+    });
+    await db.insert(submissions).values({
+      roomId: room.id,
+      userId: candidate.id,
+      problemId: problem.id,
+      code: 'def two_sum(nums, target):\n    pass',
+      language: 'python',
+      status: 'completed',
+      totalTestCases: 12,
+      passedTestCases: 9,
+      failedTestCases: 3,
+      errorTestCases: 0,
+      submittedAt: new Date('2026-05-24T10:01:00Z'),
+    });
+
+    const result = await service.getAiInterviewerContext(room.id, candidate.id);
+
+    expect(result.roomId).toBe(room.id);
+    expect(result.participantId).toBe(candidate.id);
+    expect(result.roomStatus).toBe('coding');
+    expect(result.language).toBe('python');
+    expect(result.problem).toEqual({
+      title: 'Two Sum',
+      description: 'Find two indices that sum to target.',
+      difficulty: 'easy',
+      starterCode: 'def solve():\n    pass',
+    });
+    expect(result.currentCode.source).toBe('submission');
+    expect(result.currentCode.code).toBe('def two_sum(nums, target):\n    pass');
+    expect(result.latestSubmission).toEqual({
+      code: 'def two_sum(nums, target):\n    pass',
+      language: 'python',
+      status: 'completed',
+      passedTestCases: 9,
+      totalTestCases: 12,
+      failedTestCases: 3,
+      errorTestCases: 0,
+      submittedAt: '2026-05-24T10:01:00.000Z',
+    });
+  });
+
+  it('GIVEN snapshot timestamp slightly after a recent submission WHEN fetching context THEN prefers submitted code (snapshot likely lags behind editor)', async () => {
+    const host = await insertUser(db);
+    const candidate = await insertUser(db);
+    const problem = await insertProblem(db, {
+      title: 'Two Sum',
+      difficulty: 'easy',
+      starterCode: { python: 'def solve():\n    pass' },
+    });
+    const room = await insertRoom(db, host.id, {
+      mode: 'ai',
+      status: 'coding',
+      language: 'python',
+      problemId: problem.id,
+    });
+    await insertParticipant(db, room.id, host.id, 'candidate');
+    await insertParticipant(db, room.id, candidate.id, 'candidate');
+    const session = await insertSession(db, room.id, {
+      mode: 'ai',
+      status: 'ongoing',
+      language: 'python',
+    });
+
+    const submittedAt = new Date('2026-05-24T10:00:00.000Z');
+    // Snapshot fires 1.5s after submission — within the lag grace window, so
+    // the submission's canonical code must still win.
+    const snapshotAt = new Date(submittedAt.getTime() + 1_500);
+    await db.insert(submissions).values({
+      roomId: room.id,
+      userId: candidate.id,
+      problemId: problem.id,
+      code: 'def two_sum(nums, target):\n    return [0, 1]',
+      language: 'python',
+      status: 'completed',
+      totalTestCases: 5,
+      passedTestCases: 5,
+      failedTestCases: 0,
+      errorTestCases: 0,
+      submittedAt,
+    });
+    await insertCodeSnapshot(db, {
+      sessionId: session.id,
+      roomId: room.id,
+      language: 'python',
+      code: 'def two_sum(nums, target):\n    # partial',
+      trigger: 'periodic',
+      phase: 'coding',
+      createdAt: snapshotAt,
+    });
+
+    const result = await service.getAiInterviewerContext(room.id, candidate.id);
+
+    expect(result.currentCode.source).toBe('submission');
+    expect(result.currentCode.code).toBe('def two_sum(nums, target):\n    return [0, 1]');
+  });
+
+  it('GIVEN snapshot taken well after a submission WHEN fetching context THEN prefers snapshot (real post-submit editing)', async () => {
+    const host = await insertUser(db);
+    const candidate = await insertUser(db);
+    const problem = await insertProblem(db, {
+      title: 'Two Sum',
+      difficulty: 'easy',
+      starterCode: { python: 'def solve():\n    pass' },
+    });
+    const room = await insertRoom(db, host.id, {
+      mode: 'ai',
+      status: 'coding',
+      language: 'python',
+      problemId: problem.id,
+    });
+    await insertParticipant(db, room.id, host.id, 'candidate');
+    await insertParticipant(db, room.id, candidate.id, 'candidate');
+    const session = await insertSession(db, room.id, {
+      mode: 'ai',
+      status: 'ongoing',
+      language: 'python',
+    });
+
+    const submittedAt = new Date('2026-05-24T10:00:00.000Z');
+    // Snapshot fires 10s after submission — well past the lag grace, so the
+    // user has clearly continued editing and the snapshot should win.
+    const snapshotAt = new Date(submittedAt.getTime() + 10_000);
+    await db.insert(submissions).values({
+      roomId: room.id,
+      userId: candidate.id,
+      problemId: problem.id,
+      code: 'def two_sum(nums, target):\n    return [0, 1]',
+      language: 'python',
+      status: 'completed',
+      totalTestCases: 5,
+      passedTestCases: 4,
+      failedTestCases: 1,
+      errorTestCases: 0,
+      submittedAt,
+    });
+    await insertCodeSnapshot(db, {
+      sessionId: session.id,
+      roomId: room.id,
+      language: 'python',
+      code: 'def two_sum(nums, target):\n    # iterating on a fix',
+      trigger: 'periodic',
+      phase: 'coding',
+      createdAt: snapshotAt,
+    });
+
+    const result = await service.getAiInterviewerContext(room.id, candidate.id);
+
+    expect(result.currentCode.source).toBe('snapshot');
+    expect(result.currentCode.code).toBe('def two_sum(nums, target):\n    # iterating on a fix');
+    expect(result.latestSubmission?.code).toBe('def two_sum(nums, target):\n    return [0, 1]');
+  });
+
+  it('GIVEN AI room with no snapshot or submission WHEN fetching context THEN falls back to starter code', async () => {
+    const host = await insertUser(db);
+    const problem = await insertProblem(db, {
+      title: 'Two Sum',
+      description: 'Find two indices that sum to target.',
+      difficulty: 'easy',
+      starterCode: {
+        python: 'def solve():\n    pass',
+      },
+    });
+    const room = await insertRoom(db, host.id, {
+      mode: 'ai',
+      status: 'warmup',
+      language: 'python',
+      problemId: problem.id,
+    });
+    await insertParticipant(db, room.id, host.id, 'candidate');
+
+    const result = await service.getAiInterviewerContext(room.id, host.id);
+
+    expect(result.currentCode).toEqual({
+      code: 'def solve():\n    pass',
+      language: 'python',
+      source: 'starter',
+      updatedAt: null,
+    });
+    expect(result.latestSubmission).toBeNull();
   });
 });
 

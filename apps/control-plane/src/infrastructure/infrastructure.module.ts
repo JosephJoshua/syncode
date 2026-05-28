@@ -9,9 +9,11 @@ import {
   createProtectedBullMqAdapter,
   createProtectedCollabClient,
   createProtectedLiveKitAdapter,
+  createProtectedLiveKitAgentDispatchAdapter,
   createProtectedRedisAdapter,
   createProtectedS3Adapter,
   LiveKitAdapter,
+  LiveKitAgentDispatchAdapter,
   type LiveKitConfig,
   RedisCacheAdapter,
   type RedisConfig,
@@ -19,6 +21,7 @@ import {
   S3StorageAdapter,
 } from '@syncode/infrastructure';
 import {
+  AGENT_DISPATCH_SERVICE,
   CACHE_SERVICE,
   type ICacheService,
   type IQueueService,
@@ -100,6 +103,20 @@ import { QueueExecutionClient } from './clients/queue-execution.client.js';
       },
       inject: [ConfigService, CircuitBreakerAdapter],
     },
+    {
+      provide: AGENT_DISPATCH_SERVICE,
+      useFactory: (config: ConfigService<EnvConfig>, circuitBreaker: CircuitBreakerAdapter) => {
+        const liveKitConfig: LiveKitConfig = {
+          url: config.get('LIVEKIT_URL', { infer: true })!,
+          apiKey: config.get('LIVEKIT_API_KEY', { infer: true })!,
+          apiSecret: config.get('LIVEKIT_API_SECRET', { infer: true })!,
+        };
+
+        const adapter = new LiveKitAgentDispatchAdapter(liveKitConfig);
+        return createProtectedLiveKitAgentDispatchAdapter(adapter, circuitBreaker);
+      },
+      inject: [ConfigService, CircuitBreakerAdapter],
+    },
 
     {
       provide: EXECUTION_CLIENT,
@@ -166,6 +183,7 @@ import { QueueExecutionClient } from './clients/queue-execution.client.js';
     CACHE_SERVICE,
     STORAGE_SERVICE,
     MEDIA_SERVICE,
+    AGENT_DISPATCH_SERVICE,
     EXECUTION_CLIENT,
     AI_CLIENT,
     COLLAB_CLIENT,

@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import {
   BadRequestException,
   ConflictException,
@@ -18,7 +18,9 @@ import {
   AI_CLIENT,
   type AiInterviewCodeAnalysisContext,
   type AiInterviewCodeContext,
+  type AiInterviewerContextResponse,
   type AiInterviewInteractionSignals,
+  type AiInterviewTranscriptPayload,
   type AuthorizeJoinResponse,
   BROWSEABLE_ROOM_STATUSES,
   type BrowseRoomsQuery,
@@ -77,10 +79,13 @@ import {
   RoomRole,
   RoomStatus,
   resolveRoomPermissions,
+  SUPPORTED_LANGUAGES,
   type SupportedLanguage,
 } from '@syncode/shared';
 import {
+  AGENT_DISPATCH_SERVICE,
   CACHE_SERVICE,
+  type IAgentDispatchService,
   type ICacheService,
   type IMediaService,
   type IStorageService,
@@ -147,6 +152,18 @@ interface LatestCodeAnalysisContextCacheEntry {
   context: AiInterviewCodeAnalysisContext;
 }
 
+const FNV_64_OFFSET_BASIS = 0xcbf29ce484222325n;
+const FNV_64_PRIME = 0x100000001b3n;
+
+function createStableDigest(value: string): string {
+  let hash = FNV_64_OFFSET_BASIS;
+  for (const char of value) {
+    hash ^= BigInt(char.codePointAt(0) ?? 0);
+    hash = BigInt.asUintN(64, hash * FNV_64_PRIME);
+  }
+  return hash.toString(16).padStart(16, '0');
+}
+
 @Injectable()
 export class RoomsService implements OnModuleInit {
   private readonly logger = new Logger(RoomsService.name);
@@ -160,6 +177,8 @@ export class RoomsService implements OnModuleInit {
     private readonly collabClient: ICollabClient,
     @Inject(MEDIA_SERVICE)
     private readonly mediaService: IMediaService,
+    @Inject(AGENT_DISPATCH_SERVICE)
+    private readonly agentDispatchService: IAgentDispatchService,
     @Inject(STORAGE_SERVICE)
     private readonly storageService: IStorageService,
     @Inject(CACHE_SERVICE)
@@ -1089,14 +1108,19 @@ export class RoomsService implements OnModuleInit {
     });
 
     // Clean up external resources after authorization + DB delete succeed
-    const [collab, mediaDeleted, whiteboardAssetsDeleted] = await Promise.all([
+    const [collab, mediaDeleted, whiteboardAssetsDeleted, aiDispatchDeleted] = await Promise.all([
       this.destroyCollabDocument(roomId),
       this.deleteMediaRoom(roomId),
       this.deleteWhiteboardAssets(roomId),
+      this.deleteAiInterviewerDispatch(roomId),
     ]);
 
     this.logger.log(
-      `Room ${roomId} destroyed. Collab: ${collab ? 'ok' : 'failed'}, media: ${mediaDeleted ? 'ok' : 'failed'}, whiteboard-assets: ${whiteboardAssetsDeleted ? 'ok' : 'failed'}`,
+      `Room ${roomId} destroyed. Collab: ${collab ? 'ok' : 'failed'}, media: ${
+        mediaDeleted ? 'ok' : 'failed'
+      }, whiteboard-assets: ${whiteboardAssetsDeleted ? 'ok' : 'failed'}, ai-dispatch: ${
+        aiDispatchDeleted ? 'ok' : 'failed'
+      }`,
     );
 
     return { collab, mediaDeleted };
@@ -1623,6 +1647,185 @@ export class RoomsService implements OnModuleInit {
     };
   }
 
+  async persistAiInterviewTranscriptTurns(
+    roomId: string,
+    payload: AiInterviewTranscriptPayload,
+  ): Promise<number> {
+    const sessionId = await this.loadCurrentRoomSessionId(roomId);
+    if (!sessionId) {
+      return 0;
+    }
+
+    const participantIds = Array.from(new Set(payload.turns.map((turn) => turn.participantId)));
+    if (participantIds.length === 0) {
+      return 0;
+    }
+
+    const knownParticipantIdSet = await this.loadKnownRoomParticipantIds(roomId, participantIds);
+
+    let persisted = 0;
+    for (const turn of payload.turns) {
+      const inserted = await this.tryPersistAiInterviewTranscriptTurn({
+        roomId,
+        sessionId,
+        turn,
+        knownParticipantIdSet,
+      });
+      if (inserted) {
+        persisted += 1;
+      }
+    }
+
+    return persisted;
+  }
+
+  private async loadKnownRoomParticipantIds(
+    roomId: string,
+    participantIds: string[],
+  ): Promise<Set<string>> {
+    const knownParticipants = await this.db
+      .select({ userId: roomParticipants.userId })
+      .from(roomParticipants)
+      .where(
+        and(eq(roomParticipants.roomId, roomId), inArray(roomParticipants.userId, participantIds)),
+      );
+    return new Set(knownParticipants.map((participant) => participant.userId));
+  }
+
+  // Attempts to persist a single transcript turn. Returns true when a new row
+  // was inserted, false when the turn was skipped (empty/unknown participant/
+  // duplicate by dedupe key) or the insert failed. On insert failure the
+  // dedupe key is released so the worker's retry is not silently dropped.
+  private async tryPersistAiInterviewTranscriptTurn(params: {
+    roomId: string;
+    sessionId: string;
+    turn: AiInterviewTranscriptPayload['turns'][number];
+    knownParticipantIdSet: Set<string>;
+  }): Promise<boolean> {
+    const { roomId, sessionId, turn, knownParticipantIdSet } = params;
+    const content = turn.content.trim();
+    if (content.length === 0 || !knownParticipantIdSet.has(turn.participantId)) {
+      return false;
+    }
+
+    const dedupeKey = turn.turnId
+      ? `${RoomsService.AI_INTERVIEW_TRANSCRIPT_TURN_DEDUPE_PREFIX}${turn.turnId}`
+      : null;
+    if (dedupeKey) {
+      const firstWrite = await this.cacheService.setIfNotExists(
+        dedupeKey,
+        true,
+        RoomsService.AI_INTERVIEW_TRANSCRIPT_TURN_DEDUPE_TTL_SECONDS,
+      );
+      if (!firstWrite) {
+        return false;
+      }
+    }
+
+    try {
+      await this.db.insert(aiMessages).values({
+        roomId,
+        sessionId,
+        userId: turn.participantId,
+        role: turn.role,
+        content,
+        audioKey: turn.audioKey,
+        createdAt: turn.timestamp ? new Date(turn.timestamp) : new Date(),
+      });
+      return true;
+    } catch (error) {
+      // Insert failed (e.g. transient deadlock). Release the dedupe key so the
+      // worker's retry of the same turnId is not silently dropped for 12h.
+      if (dedupeKey) {
+        await this.cacheService.del(dedupeKey).catch(() => undefined);
+      }
+      this.logger.warn(`Unable to persist AI interview transcript turn for room ${roomId}`, error);
+      return false;
+    }
+  }
+
+  async getAiInterviewerContext(
+    roomId: string,
+    participantId: string,
+  ): Promise<AiInterviewerContextResponse> {
+    const [room] = await this.db
+      .select({
+        mode: rooms.mode,
+        status: rooms.status,
+        language: rooms.language,
+        problemId: rooms.problemId,
+      })
+      .from(rooms)
+      .where(eq(rooms.id, roomId))
+      .limit(1);
+    if (!room) {
+      throw new NotFoundException({
+        message: 'Room not found',
+        code: ERROR_CODES.ROOM_NOT_FOUND,
+      });
+    }
+
+    const [participant] = await this.db
+      .select({ removedAt: roomParticipants.removedAt })
+      .from(roomParticipants)
+      .where(and(eq(roomParticipants.roomId, roomId), eq(roomParticipants.userId, participantId)))
+      .limit(1);
+    if (participant?.removedAt !== null) {
+      throw new ForbiddenException({
+        message: 'Not a participant of this room',
+        code: ERROR_CODES.ROOM_ACCESS_DENIED,
+      });
+    }
+
+    const [problem, latestSnapshot, latestSubmission] = await Promise.all([
+      this.loadAiInterviewerProblemContext(room.problemId),
+      this.loadAiInterviewerLatestSnapshot(roomId),
+      this.loadAiInterviewerLatestSubmission(roomId, participantId),
+    ]);
+
+    const resolvedLanguage = this.resolveAiInterviewerContextLanguage({
+      roomLanguage: room.language,
+      snapshotLanguage: latestSnapshot?.language,
+      submissionLanguage: latestSubmission?.language,
+      starterCode: problem?.starterCode,
+    });
+    const starterCode = this.extractStarterCodeForLanguage(problem?.starterCode, resolvedLanguage);
+    const currentCode = this.resolveAiInterviewerCurrentCode({
+      snapshot: latestSnapshot,
+      submission: latestSubmission,
+      starterCode,
+      language: resolvedLanguage,
+    });
+
+    return {
+      roomId,
+      participantId,
+      roomStatus: room.status,
+      language: resolvedLanguage,
+      problem: problem
+        ? {
+            title: problem.title,
+            description: problem.description ?? '',
+            difficulty: problem.difficulty,
+            starterCode,
+          }
+        : null,
+      currentCode,
+      latestSubmission: latestSubmission
+        ? {
+            code: latestSubmission.code,
+            language: latestSubmission.language,
+            status: latestSubmission.status,
+            passedTestCases: latestSubmission.passedTestCases,
+            totalTestCases: latestSubmission.totalTestCases,
+            failedTestCases: latestSubmission.failedTestCases,
+            errorTestCases: latestSubmission.errorTestCases,
+            submittedAt: latestSubmission.submittedAt.toISOString(),
+          }
+        : null,
+    };
+  }
+
   async requestCodeAnalysis(
     roomId: string,
     userId: string,
@@ -1846,6 +2049,10 @@ export class RoomsService implements OnModuleInit {
   private static readonly AI_INTERVIEW_PROACTIVE_LIMIT_PREFIX = 'ai-interview-proactive-limit:';
   private static readonly AI_INTERVIEW_PROACTIVE_LIMIT_COUNT = 6;
   private static readonly AI_INTERVIEW_PROACTIVE_LIMIT_WINDOW_SECONDS = 5 * 60;
+  // Grace window for Yjs snapshots that arrive shortly after a submission.
+  // Snapshots within this window are likely lagging behind the editor, so the
+  // freshly-submitted code (canonical from the editor) wins over them.
+  private static readonly SNAPSHOT_AFTER_SUBMIT_GRACE_MS = 2_000;
   private static readonly AI_INTERVIEW_TRANSCRIPTION_LIMIT_PREFIX =
     'ai-interview-transcription-limit:';
   private static readonly AI_INTERVIEW_TRANSCRIPTION_LIMIT_COUNT = 10;
@@ -1859,7 +2066,13 @@ export class RoomsService implements OnModuleInit {
   private static readonly AI_INTERVIEW_TRANSCRIPTION_SUBMIT_TIMEOUT_MS = 2_500;
   private static readonly AI_INTERVIEW_TRANSCRIPTION_POLL_TIMEOUT_MS = 500;
   private static readonly AI_INTERVIEW_TRANSCRIPTION_MAX_POLLS = 30;
-  private static readonly AI_INTERVIEW_TRANSCRIPTION_POLL_INTERVAL_MS = 500;
+  private static readonly AI_INTERVIEW_TRANSCRIPTION_POLL_INTERVAL_MS = 250;
+  private static readonly AI_INTERVIEWER_DISPATCH_CACHE_PREFIX = 'ai-interviewer-dispatch:';
+  private static readonly AI_INTERVIEWER_DISPATCH_CACHE_TTL_SECONDS = 60 * 60;
+  private static readonly AI_INTERVIEWER_AGENT_NAME_DEFAULT = 'syncode-ai-interviewer';
+  private static readonly AI_INTERVIEW_TRANSCRIPT_TURN_DEDUPE_PREFIX =
+    'ai-interview-transcript-turn:';
+  private static readonly AI_INTERVIEW_TRANSCRIPT_TURN_DEDUPE_TTL_SECONDS = 12 * 60 * 60;
   private static readonly AI_CODE_ANALYSIS_MAX_CODE_LENGTH = 16_000;
   private static readonly AI_CODE_ANALYSIS_LIMIT_COUNT = 10;
   private static readonly AI_CODE_ANALYSIS_LIMIT_WINDOW_SECONDS = 5 * 60;
@@ -1896,6 +2109,18 @@ export class RoomsService implements OnModuleInit {
         message: 'You do not have media permissions in this room',
         code: ERROR_CODES.ROOM_PERMISSION_DENIED,
       });
+    }
+
+    if (room.mode === 'ai') {
+      try {
+        await this.ensureAiInterviewerDispatch(roomId, userId);
+      } catch (error) {
+        this.logger.warn(
+          `Unable to ensure AI interviewer dispatch for room ${roomId}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
     }
 
     const { token, url } = await this.mediaService.generateToken({
@@ -2081,7 +2306,9 @@ export class RoomsService implements OnModuleInit {
     }
 
     // Fire-and-forget collab notification stays outside the transaction.
-    if (targetStatus !== RoomStatus.FINISHED) {
+    if (targetStatus === RoomStatus.FINISHED) {
+      void this.deleteAiInterviewerDispatch(roomId);
+    } else {
       void this.updateCollabRoomState(roomId, targetStatus, editorLocked, userId);
     }
 
@@ -3427,7 +3654,7 @@ export class RoomsService implements OnModuleInit {
   }
 
   private hashAiContextCode(code: string): string {
-    return createHash('sha256').update(code).digest('hex');
+    return createStableDigest(code);
   }
 
   private async loadCurrentRoomSessionId(roomId: string): Promise<string | null> {
@@ -3445,6 +3672,21 @@ export class RoomsService implements OnModuleInit {
       .update(roomParticipants)
       .set({ isActive: false, leftAt })
       .where(and(eq(roomParticipants.roomId, roomId), eq(roomParticipants.userId, userId)));
+
+    if (!this.isAiInterviewerDispatchEnabled()) {
+      return;
+    }
+
+    const [room] = await this.db
+      .select({ mode: rooms.mode })
+      .from(rooms)
+      .where(eq(rooms.id, roomId))
+      .limit(1);
+    if (room?.mode !== 'ai') {
+      return;
+    }
+
+    await this.deleteAiInterviewerDispatch(roomId);
   }
 
   /**
@@ -3683,6 +3925,174 @@ export class RoomsService implements OnModuleInit {
     return starterMap;
   }
 
+  private async loadAiInterviewerProblemContext(problemId: string | null) {
+    if (!problemId) {
+      return null;
+    }
+    const [problem] = await this.db
+      .select({
+        title: problems.title,
+        description: problems.description,
+        difficulty: problems.difficulty,
+        starterCode: problems.starterCode,
+      })
+      .from(problems)
+      .where(eq(problems.id, problemId))
+      .limit(1);
+    return problem ?? null;
+  }
+
+  private async loadAiInterviewerLatestSnapshot(roomId: string) {
+    const [snapshot] = await this.db
+      .select({
+        code: codeSnapshots.code,
+        language: codeSnapshots.language,
+        createdAt: codeSnapshots.createdAt,
+      })
+      .from(codeSnapshots)
+      .where(eq(codeSnapshots.roomId, roomId))
+      .orderBy(desc(codeSnapshots.createdAt))
+      .limit(1);
+    return snapshot;
+  }
+
+  private async loadAiInterviewerLatestSubmission(roomId: string, participantId: string) {
+    const [submission] = await this.db
+      .select({
+        code: submissions.code,
+        language: submissions.language,
+        status: submissions.status,
+        passedTestCases: submissions.passedTestCases,
+        totalTestCases: submissions.totalTestCases,
+        failedTestCases: submissions.failedTestCases,
+        errorTestCases: submissions.errorTestCases,
+        submittedAt: submissions.submittedAt,
+      })
+      .from(submissions)
+      .where(and(eq(submissions.roomId, roomId), eq(submissions.userId, participantId)))
+      .orderBy(desc(submissions.submittedAt))
+      .limit(1);
+    return submission;
+  }
+
+  private resolveAiInterviewerContextLanguage(input: {
+    roomLanguage: SupportedLanguage | null;
+    snapshotLanguage: SupportedLanguage | undefined;
+    submissionLanguage: SupportedLanguage | undefined;
+    starterCode: unknown;
+  }): SupportedLanguage {
+    if (input.roomLanguage) {
+      return input.roomLanguage;
+    }
+    if (input.snapshotLanguage) {
+      return input.snapshotLanguage;
+    }
+    if (input.submissionLanguage) {
+      return input.submissionLanguage;
+    }
+    const starterMap = this.normalizeStarterCodeMap(input.starterCode);
+    if (starterMap) {
+      for (const language of SUPPORTED_LANGUAGES) {
+        const starter = starterMap[language];
+        if (typeof starter === 'string' && starter.trim().length > 0) {
+          return language;
+        }
+      }
+    }
+    return 'python';
+  }
+
+  private extractStarterCodeForLanguage(
+    starterCode: unknown,
+    language: SupportedLanguage,
+  ): string | null {
+    const starterMap = this.normalizeStarterCodeMap(starterCode);
+    if (!starterMap) {
+      return null;
+    }
+    const starter = starterMap[language];
+    if (typeof starter !== 'string') {
+      return null;
+    }
+    const trimmed = starter.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+
+  private normalizeStarterCodeMap(starterCode: unknown): Record<string, string> | null {
+    if (!starterCode || typeof starterCode !== 'object' || Array.isArray(starterCode)) {
+      return null;
+    }
+    return starterCode as Record<string, string>;
+  }
+
+  private resolveAiInterviewerCurrentCode(input: {
+    snapshot:
+      | {
+          code: string;
+          language: SupportedLanguage;
+          createdAt: Date;
+        }
+      | undefined;
+    submission:
+      | {
+          code: string;
+          language: SupportedLanguage;
+          submittedAt: Date;
+        }
+      | undefined;
+    starterCode: string | null;
+    language: SupportedLanguage;
+  }): AiInterviewerContextResponse['currentCode'] {
+    // Yjs snapshots come from the collab-plane and can lag behind the editor's
+    // local state by a few seconds while WS updates flush. A submission's code
+    // is taken straight from the editor, so it is canonical. Only let the
+    // snapshot win when it is meaningfully newer than the submission — i.e.
+    // the user kept editing after submitting — so a delayed-but-stale snapshot
+    // can't override the just-submitted code.
+    if (input.submission) {
+      const submissionTime = input.submission.submittedAt.getTime();
+      const snapshotTime = input.snapshot?.createdAt.getTime() ?? 0;
+      const snapshotIsPostSubmitEdit =
+        snapshotTime > submissionTime + RoomsService.SNAPSHOT_AFTER_SUBMIT_GRACE_MS;
+      if (input.snapshot && snapshotIsPostSubmitEdit) {
+        return {
+          code: input.snapshot.code,
+          language: input.snapshot.language,
+          source: 'snapshot',
+          updatedAt: input.snapshot.createdAt.toISOString(),
+        };
+      }
+      return {
+        code: input.submission.code,
+        language: input.submission.language,
+        source: 'submission',
+        updatedAt: input.submission.submittedAt.toISOString(),
+      };
+    }
+    if (input.snapshot) {
+      return {
+        code: input.snapshot.code,
+        language: input.snapshot.language,
+        source: 'snapshot',
+        updatedAt: input.snapshot.createdAt.toISOString(),
+      };
+    }
+    if (input.starterCode) {
+      return {
+        code: input.starterCode,
+        language: input.language,
+        source: 'starter',
+        updatedAt: null,
+      };
+    }
+    return {
+      code: '',
+      language: input.language,
+      source: 'unknown',
+      updatedAt: null,
+    };
+  }
+
   private async destroyCollabDocument(roomId: string): Promise<DestroyDocumentResponse | null> {
     try {
       return await this.collabClient.destroyDocument(roomId);
@@ -3708,6 +4118,113 @@ export class RoomsService implements OnModuleInit {
       return true;
     } catch (error) {
       this.logger.warn(`Media room deletion failed for ${roomId}`, error);
+      return false;
+    }
+  }
+
+  private isAiInterviewerDispatchEnabled(): boolean {
+    return this.configService.get('AI_INTERVIEWER_LIVEKIT_ENABLED', { infer: true }) ?? false;
+  }
+
+  private resolveAiInterviewerAgentName(): string {
+    return (
+      this.configService.get('AI_INTERVIEWER_AGENT_NAME', { infer: true }) ??
+      RoomsService.AI_INTERVIEWER_AGENT_NAME_DEFAULT
+    );
+  }
+
+  private async ensureAiInterviewerDispatch(
+    roomId: string,
+    participantUserId: string,
+  ): Promise<void> {
+    if (!this.isAiInterviewerDispatchEnabled()) {
+      return;
+    }
+
+    const cacheKey = `${RoomsService.AI_INTERVIEWER_DISPATCH_CACHE_PREFIX}${roomId}`;
+    const cachedDispatchId = await this.cacheService.get<string>(cacheKey);
+    if (cachedDispatchId?.length) {
+      return;
+    }
+
+    // Two participants joining concurrently can both miss the cache and both
+    // miss listDispatch (LiveKit propagation latency), leading to duplicate
+    // worker dispatches in the same room. Guard the whole check-then-create
+    // block with a short Redis lock via setIfNotExists, then re-check the
+    // cache after acquiring it (double-checked locking).
+    const lockKey = `${cacheKey}:lock`;
+    const acquired = await this.cacheService.setIfNotExists(lockKey, true, 10);
+    if (!acquired) {
+      // Another caller is dispatching. They will populate the cache; skip.
+      return;
+    }
+
+    try {
+      const cachedAfterLock = await this.cacheService.get<string>(cacheKey);
+      if (cachedAfterLock?.length) {
+        return;
+      }
+
+      const agentName = this.resolveAiInterviewerAgentName();
+      const existingDispatches = await this.agentDispatchService.listDispatch(roomId);
+      const existing = existingDispatches.find((dispatch) => dispatch.agentName === agentName);
+      if (existing) {
+        await this.cacheService.set(
+          cacheKey,
+          existing.dispatchId,
+          RoomsService.AI_INTERVIEWER_DISPATCH_CACHE_TTL_SECONDS,
+        );
+        return;
+      }
+
+      const sessionId = await this.loadCurrentRoomSessionId(roomId);
+      const metadata = JSON.stringify({
+        roomId,
+        participantUserId,
+        sessionId,
+      });
+      const created = await this.agentDispatchService.createDispatch(roomId, agentName, {
+        metadata,
+      });
+      await this.cacheService.set(
+        cacheKey,
+        created.dispatchId,
+        RoomsService.AI_INTERVIEWER_DISPATCH_CACHE_TTL_SECONDS,
+      );
+    } finally {
+      await this.cacheService.del(lockKey).catch(() => undefined);
+    }
+  }
+
+  private async deleteAiInterviewerDispatch(roomId: string): Promise<boolean> {
+    if (!this.isAiInterviewerDispatchEnabled()) {
+      return true;
+    }
+
+    const cacheKey = `${RoomsService.AI_INTERVIEWER_DISPATCH_CACHE_PREFIX}${roomId}`;
+    const agentName = this.resolveAiInterviewerAgentName();
+    try {
+      const dispatches = await this.agentDispatchService.listDispatch(roomId);
+      const deletions = dispatches
+        .filter((dispatch) => dispatch.agentName === agentName)
+        .map((dispatch) =>
+          this.agentDispatchService.deleteDispatch(dispatch.dispatchId, roomId).catch((error) => {
+            this.logger.warn(
+              `Unable to delete AI interviewer dispatch ${dispatch.dispatchId} for room ${roomId}: ${
+                error instanceof Error ? error.message : String(error)
+              }`,
+            );
+          }),
+        );
+      await Promise.all(deletions);
+      await this.cacheService.del(cacheKey);
+      return true;
+    } catch (error) {
+      this.logger.warn(
+        `Unable to clean AI interviewer dispatches for room ${roomId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
       return false;
     }
   }

@@ -56,6 +56,7 @@ const MAX_SUGGESTED_APPROACH_LENGTH = 220;
 const MAX_REFLECTION_PROMPT_LENGTH = 180;
 const MAX_INTERVIEW_MESSAGE_LENGTH = 500;
 const MAX_INTERVIEW_QUESTION_LENGTH = 240;
+const MAX_INTERVIEW_ANNOTATION_LENGTH = 420;
 const MAX_INTERVIEW_TRANSCRIPTION_LENGTH = 2_000;
 const INTERVIEW_AUDIO_URL_TTL_SECS = 24 * 60 * 60;
 const MAX_CODE_ANALYSIS_SUMMARY_LENGTH = 320;
@@ -1398,16 +1399,18 @@ export class AiService {
       '3) Do not produce abusive, profane, or meta-reasoning text.',
       'Output contract:',
       'Return strict JSON only with keys:',
-      '{ "shouldRespond": boolean, "message": "string", "followUpQuestion": "string", "codeContext": {"language": "string", "file": "string", "codeSnippet": "string", "startLine": number, "endLine": number, "questionType": "complexity|bug_risk|edge_case|optimization|data_structure_choice|correctness|readability|other", "reason": "string"}, "codeAnnotations": [{"line": number, "comment": "string"}] }',
+      '{ "shouldRespond": boolean, "message": "string", "followUpQuestion": "string (optional)", "codeContext": {"language": "string", "file": "string", "codeSnippet": "string", "startLine": number, "endLine": number, "questionType": "complexity|bug_risk|edge_case|optimization|data_structure_choice|correctness|readability|other", "reason": "string"}, "codeAnnotations": [{"line": number, "comment": "string"}] }',
       'Formatting rules:',
       '- shouldRespond is required.',
       '- If shouldRespond=false, return only {"shouldRespond": false}.',
       '- message should sound like a live interviewer reply and remain under 80 words.',
-      '- followUpQuestion should be a single focused question under 35 words.',
+      '- followUpQuestion is optional. Include it only when a follow-up question would move the interview forward.',
+      '- If included, followUpQuestion should be a single focused question under 35 words.',
       '- codeContext is required and must point to the exact code range the follow-up is about.',
       '- Prefer the provided selected/cursor code context unless another nearby range is clearly better.',
       '- codeAnnotations is optional and may contain at most 3 targeted comments.',
       '- Only annotate lines when the current code clearly warrants it.',
+      '- If you emit codeAnnotations, ensure message briefly tells the candidate to check those inline comments.',
       '- Prefer conceptual follow-ups over giving away the solution.',
       'Interview behavior rules:',
       '- Start the interview naturally when context indicates the session just started.',
@@ -1506,7 +1509,9 @@ export class AiService {
       '- Decide whether you should respond now (shouldRespond=true/false).',
       '- If trigger=user_message, prefer shouldRespond=true unless the message is empty noise.',
       '- If trigger=proactive, only respond when it meaningfully advances the interview.',
-      '- When responding, acknowledge briefly and ask exactly one strong follow-up question.',
+      '- When responding, acknowledge briefly and decide whether to ask a follow-up question.',
+      '- Ask a follow-up only when it clearly improves interview signal; otherwise reply without one.',
+      '- For proactive reason=code_ran or reason=code_submitted: default to a short acknowledgement first. Ask a follow-up only if execution evidence shows a concrete issue worth probing immediately.',
       '- Choose difficulty based on answer quality, current code, history, hints, and execution/analysis context.',
       '- Link the question to a concrete code context with line range and snippet.',
       '- If code annotations are useful, keep them sparse and concrete.',
@@ -1579,15 +1584,14 @@ export class AiService {
       localizedFallback.message,
       'message',
     );
-    let followUpQuestion = this.sanitizeInterviewOutputText(
+    let followUpQuestion = this.sanitizeOptionalInterviewFollowUpQuestion(
       response.followUpQuestion,
-      localizedFallback.followUpQuestion,
-      'followUpQuestion',
     );
 
     const shouldEscalate = this.shouldEscalateInterviewGuidance(request);
     const isLoopingPrompt =
-      this.isTraceLoopPrompt(message) || this.isTraceLoopPrompt(followUpQuestion);
+      this.isTraceLoopPrompt(message) ||
+      (followUpQuestion != null && this.isTraceLoopPrompt(followUpQuestion));
     if (shouldEscalate && isLoopingPrompt) {
       const escalated = this.buildEscalatedInterviewGuidance();
       message = escalated.message;
@@ -1598,25 +1602,53 @@ export class AiService {
       this.shouldForceInterviewLocalizedFallback(turnResponseLanguage, message, followUpQuestion)
     ) {
       message = localizedFallback.message;
-      followUpQuestion = localizedFallback.followUpQuestion;
+      if (followUpQuestion != null) {
+        followUpQuestion = localizedFallback.followUpQuestion;
+      }
     }
 
     const codeAnnotations = response.codeAnnotations
-      ?.map((annotation) => ({
-        line: annotation.line,
-        comment: this.sanitizeInterviewOutputText(
-          annotation.comment,
-          'Consider clarifying this step.',
-          'codeAnnotation',
-        ),
-      }))
-      .filter((annotation) => annotation.comment.length > 0)
+      ?.map((annotation) => {
+        const comment = this.sanitizeInterviewAnnotationText(annotation.comment);
+        if (!comment) {
+          return null;
+        }
+        return {
+          line: annotation.line,
+          comment,
+        };
+      })
+      .filter((annotation): annotation is { line: number; comment: string } => annotation != null)
       .slice(0, 3);
+
+    message = this.ensureInterviewAnnotationNotice(
+      message,
+      codeAnnotations?.length ?? 0,
+      turnResponseLanguage,
+    );
+
+    let normalizedFollowUpQuestion = followUpQuestion?.trim();
+    if (
+      this.shouldSuppressFollowUpForAcknowledgement(
+        request,
+        normalizedFollowUpQuestion,
+        codeAnnotations?.length ?? 0,
+      )
+    ) {
+      normalizedFollowUpQuestion = undefined;
+    }
 
     return {
       shouldRespond: true,
       message: this.truncateHintText(message, MAX_INTERVIEW_MESSAGE_LENGTH),
-      followUpQuestion: this.truncateHintText(followUpQuestion, MAX_INTERVIEW_QUESTION_LENGTH),
+      ...(normalizedFollowUpQuestion
+        ? {
+            followUpQuestion: this.truncateHintText(
+              normalizedFollowUpQuestion,
+              MAX_INTERVIEW_QUESTION_LENGTH,
+            ),
+          }
+        : {}),
       codeContext: this.postProcessInterviewCodeContext(response.codeContext, request),
       codeAnnotations: codeAnnotations && codeAnnotations.length > 0 ? codeAnnotations : undefined,
     };
@@ -1625,13 +1657,19 @@ export class AiService {
   private shouldForceInterviewLocalizedFallback(
     turnResponseLanguage: 'en' | 'zh',
     message: string,
-    followUpQuestion: string,
+    followUpQuestion: string | undefined,
   ): boolean {
     if (turnResponseLanguage !== 'zh') {
       return false;
     }
 
-    return !containsCjkCharacters(message) && !containsCjkCharacters(followUpQuestion);
+    if (containsCjkCharacters(message)) {
+      return false;
+    }
+    if (followUpQuestion && containsCjkCharacters(followUpQuestion)) {
+      return false;
+    }
+    return true;
   }
 
   private shouldEscalateInterviewGuidance(request: InterviewResponseRequest): boolean {
@@ -1843,6 +1881,143 @@ export class AiService {
       return fallback;
     }
     return normalized;
+  }
+
+  private sanitizeOptionalInterviewFollowUpQuestion(value: string | undefined): string | undefined {
+    const normalized = this.normalizeHintText(value, 'reflectionPrompt');
+    if (!normalized) {
+      return undefined;
+    }
+    if (this.isUnsafeModelText(normalized)) {
+      this.logger.warn('Dropping unsafe interview follow-up question');
+      return undefined;
+    }
+    return normalized;
+  }
+
+  private normalizeInterviewAnnotationEscapes(value: string): string {
+    let normalized = '';
+    for (let index = 0; index < value.length; index += 1) {
+      const char = value[index];
+
+      if (char === '\r') {
+        if (value[index + 1] === '\n') {
+          index += 1;
+        }
+        normalized += '\n';
+        continue;
+      }
+
+      if (char === '\\') {
+        const { replacement, advance } = resolveAnnotationBackslashEscape(value, index);
+        normalized += replacement;
+        index += advance;
+        continue;
+      }
+
+      normalized += char;
+    }
+    return normalized;
+  }
+
+  private trimWrappingDoubleQuotes(value: string): string {
+    let start = 0;
+    let end = value.length;
+    while (start < end && value[start] === '"') {
+      start += 1;
+    }
+    while (end > start && value[end - 1] === '"') {
+      end -= 1;
+    }
+    return value.slice(start, end);
+  }
+
+  private collapseLongNewlineRuns(value: string): string {
+    let normalized = '';
+    let newlineCount = 0;
+    for (const char of value) {
+      if (char === '\n') {
+        newlineCount += 1;
+        if (newlineCount <= 3) {
+          normalized += char;
+        }
+        continue;
+      }
+
+      newlineCount = 0;
+      normalized += char;
+    }
+    return normalized;
+  }
+
+  private sanitizeInterviewAnnotationText(value: string | undefined): string | undefined {
+    if (!value) {
+      return undefined;
+    }
+
+    let normalized = this.normalizeInterviewAnnotationEscapes(value.trim());
+
+    normalized = this.trimWrappingDoubleQuotes(normalized).trim();
+    normalized = this.collapseLongNewlineRuns(normalized);
+    normalized = this.truncateHintText(normalized, MAX_INTERVIEW_ANNOTATION_LENGTH).trim();
+
+    if (!normalized || this.isUnsafeModelText(normalized)) {
+      if (normalized) {
+        this.logger.warn('Dropping unsafe interview code annotation');
+      }
+      return undefined;
+    }
+
+    return normalized;
+  }
+
+  private ensureInterviewAnnotationNotice(
+    message: string,
+    annotationCount: number,
+    turnResponseLanguage: 'en' | 'zh',
+  ): string {
+    if (annotationCount <= 0) {
+      return message;
+    }
+
+    const hasNotice =
+      /inline\s+comment/i.test(message) || /注释|註解/.test(message) || /commented/i.test(message);
+    if (hasNotice) {
+      return message;
+    }
+
+    const notice =
+      turnResponseLanguage === 'zh'
+        ? '我在相关代码行补充了行内注释，先看这些注释再继续。'
+        : 'I also left inline comments on relevant lines—check those while you iterate.';
+
+    return `${message} ${notice}`.trim();
+  }
+
+  private shouldSuppressFollowUpForAcknowledgement(
+    request: InterviewResponseRequest,
+    followUpQuestion: string | undefined,
+    annotationCount: number,
+  ): boolean {
+    if (!followUpQuestion) {
+      return false;
+    }
+
+    if (request.trigger !== 'proactive') {
+      return false;
+    }
+
+    const reason = request.interactionSignals?.reason;
+    if (reason !== 'code_ran' && reason !== 'code_submitted') {
+      return false;
+    }
+
+    if (annotationCount > 0) {
+      return true;
+    }
+
+    const hasFailingTests = request.latestExecutionSummary?.allTestsPassed === false;
+    return !hasFailingTests;
   }
 
   private async generateInterviewAudio(
@@ -2099,4 +2274,15 @@ function containsLatinLetters(value: string): boolean {
 
 function describeInterviewResponseLanguage(language: 'en' | 'zh'): string {
   return language === 'zh' ? 'Chinese' : 'English';
+}
+
+function resolveAnnotationBackslashEscape(
+  value: string,
+  index: number,
+): { replacement: string; advance: number } {
+  const next = value[index + 1];
+  if (next === 'n') return { replacement: '\n', advance: 1 };
+  if (next === 't') return { replacement: '\t', advance: 1 };
+  if (next === '"') return { replacement: '"', advance: 1 };
+  return { replacement: '\\', advance: 0 };
 }

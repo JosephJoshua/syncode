@@ -6,7 +6,12 @@ import { Test } from '@nestjs/testing';
 import { AI_CLIENT, COLLAB_CLIENT, ERROR_CODES, EXECUTION_CLIENT } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
 import { aiHints, rooms } from '@syncode/db';
-import { CACHE_SERVICE, MEDIA_SERVICE, STORAGE_SERVICE } from '@syncode/shared/ports';
+import {
+  AGENT_DISPATCH_SERVICE,
+  CACHE_SERVICE,
+  MEDIA_SERVICE,
+  STORAGE_SERVICE,
+} from '@syncode/shared/ports';
 import { eq } from 'drizzle-orm';
 import { ZodValidationPipe } from 'nestjs-zod';
 import request from 'supertest';
@@ -27,6 +32,7 @@ import {
 } from '@/test/integration-setup.js';
 import {
   asUser,
+  createMockAgentDispatchService,
   createMockAiClient,
   createMockCollabClient,
   createMockConfigService,
@@ -66,6 +72,7 @@ beforeEach(async () => {
       { provide: CACHE_SERVICE, useValue: new InMemoryCacheService() },
       { provide: COLLAB_CLIENT, useValue: createMockCollabClient() },
       { provide: MEDIA_SERVICE, useValue: mockMediaService },
+      { provide: AGENT_DISPATCH_SERVICE, useValue: createMockAgentDispatchService() },
       { provide: STORAGE_SERVICE, useValue: createMockStorageService() },
       { provide: JwtService, useValue: createMockJwtService() },
       { provide: ConfigService, useValue: createMockConfigService() },

@@ -1,6 +1,20 @@
 export type { IAiClient } from './client.js';
 export { AI_CLIENT } from './client.js';
 export type {
+  AiInterviewerContext,
+  AiInterviewerEventPayload,
+  AiInterviewerSignalPayload,
+  AiInterviewerSignalReason,
+} from './interviewer-realtime.js';
+export {
+  AI_INTERVIEWER_EVENT_TOPIC,
+  AI_INTERVIEWER_SIGNAL_TOPIC,
+  decodeAiInterviewerEventPayload,
+  decodeAiInterviewerSignalPayload,
+  encodeAiInterviewerEventPayload,
+  encodeAiInterviewerSignalPayload,
+} from './interviewer-realtime.js';
+export type {
   AnalyzeCodeRequest,
   AnalyzeCodeResult,
   GenerateHintRequest,

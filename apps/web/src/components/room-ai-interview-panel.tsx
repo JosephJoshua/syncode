@@ -4,6 +4,7 @@ import { Bot, Loader2, Mic, MicOff, Send } from 'lucide-react';
 import type { KeyboardEvent, ReactNode } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { InlineCommentMarkdown } from './inline-comment-markdown.js';
 import type { Participant } from './room-participant-card.js';
 
 export interface AiInterviewMessage {
@@ -18,7 +19,9 @@ export interface AiInterviewMessage {
   audioUrl?: string;
 }
 
-export type VoiceCaptureState = 'idle' | 'requesting' | 'listening' | 'transcribing';
+export type AiInterviewPanelMode = 'legacy' | 'realtime';
+
+export type VoiceCaptureState = 'idle' | 'requesting' | 'listening' | 'transcribing' | 'responding';
 export type VoicePermissionResult = 'granted' | 'denied' | 'no_device' | 'unavailable';
 
 interface VoiceTranscriptionRequest {
@@ -38,7 +41,17 @@ const VOICE_BASE64_ENCODE_TIMEOUT_MS = 4_000;
 const VOICE_MAX_RECORDING_MS = 45_000;
 const VOICE_MAX_BLOB_BYTES = 2_800_000;
 const VOICE_TARGET_SAMPLE_RATE = 16_000;
+const VOICE_AUTO_RESTART_DELAY_MS = 220;
+const VOICE_INTERRUPTION_THRESHOLD = 0.06;
+const VOICE_INTERRUPTION_HOLD_MS = 260;
 const VOICE_WAVE_OFFSETS = Array.from({ length: 21 }, (_, position) => position - 10);
+const VOICE_SPEECH_SYNTHESIS_CHUNK_LENGTH = 220;
+const STOP_VOICE_CAPTURE_DEFAULT_OPTIONS: Readonly<{ transcribe: boolean }> = { transcribe: true };
+
+interface LatestAssistantMessage {
+  stableId: string;
+  message: AiInterviewMessage;
+}
 
 export function resolveVoiceStatusText(
   t: (key: string) => string,
@@ -49,6 +62,8 @@ export function resolveVoiceStatusText(
       return t('workspace.aiInterviewVoiceRequesting');
     case 'transcribing':
       return t('workspace.aiInterviewVoiceTranscribing');
+    case 'responding':
+      return t('workspace.aiInterviewVoiceResponding');
     case 'listening':
       return t('workspace.aiInterviewVoiceListening');
     default:
@@ -56,17 +71,42 @@ export function resolveVoiceStatusText(
   }
 }
 
+function resolveRealtimeAgentStatusText(
+  t: (key: string) => string,
+  state: 'initializing' | 'idle' | 'listening' | 'thinking' | 'speaking',
+  userState: 'speaking' | 'listening' | 'away',
+): string {
+  if (userState === 'away') {
+    return t('workspace.aiInterviewVoiceListening');
+  }
+  if (userState === 'speaking') {
+    return t('workspace.aiInterviewVoiceListening');
+  }
+  if (state === 'speaking') {
+    return t('workspace.aiInterviewVoiceResponding');
+  }
+  if (state === 'thinking' || state === 'initializing') {
+    return t('workspace.aiInterviewBusy');
+  }
+  return t('workspace.aiInterviewVoiceListening');
+}
+
 function renderVoiceInputIcon({
   isListening,
   isRequestingVoice,
   isTranscribingVoice,
+  isAssistantResponding,
 }: {
   isListening: boolean;
   isRequestingVoice: boolean;
   isTranscribingVoice: boolean;
+  isAssistantResponding: boolean;
 }): ReactNode {
   if (isTranscribingVoice) {
     return <Loader2 className="size-3.5 animate-spin" />;
+  }
+  if (isAssistantResponding) {
+    return <Bot className="size-3.5 animate-pulse" />;
   }
   if (isListening || isRequestingVoice) {
     return <Mic className="size-3.5 animate-pulse" />;
@@ -117,6 +157,7 @@ export function isVoiceCaptureStateActive(state: VoiceCaptureState): boolean {
     case 'requesting':
     case 'listening':
     case 'transcribing':
+    case 'responding':
       return true;
     default:
       return false;
@@ -188,6 +229,7 @@ function renderComposerArea({
   isVoiceCaptureActive,
   voiceLevel,
   isListening,
+  isAssistantResponding,
   voiceStatusText,
   isTranscribingVoice,
   draft,
@@ -206,6 +248,7 @@ function renderComposerArea({
   isVoiceCaptureActive: boolean;
   voiceLevel: number;
   isListening: boolean;
+  isAssistantResponding: boolean;
   voiceStatusText: string | null;
   isTranscribingVoice: boolean;
   draft: string;
@@ -221,17 +264,25 @@ function renderComposerArea({
   voiceButtonTitle: string;
   t: (key: string) => string;
 }): ReactNode {
+  let voiceStatusToneClass: string;
+  if (isTranscribingVoice) {
+    voiceStatusToneClass = 'text-muted-foreground';
+  } else if (isAssistantResponding) {
+    voiceStatusToneClass = 'text-sky-300';
+  } else {
+    voiceStatusToneClass = 'text-primary';
+  }
   return (
     <div className="space-y-2 border-t border-border p-3">
       {isVoiceCaptureActive ? (
         <div className="space-y-2 rounded-md border border-primary/30 bg-primary/5 px-3 py-3">
-          <VoiceActivityWave level={voiceLevel} active={isListening} />
+          <VoiceActivityWave
+            level={voiceLevel}
+            active={isListening || isAssistantResponding}
+            tone={isAssistantResponding ? 'assistant' : 'user'}
+          />
           {voiceStatusText ? (
-            <p
-              className={`text-xs ${isTranscribingVoice ? 'text-muted-foreground' : 'text-primary'}`}
-            >
-              {voiceStatusText}
-            </p>
+            <p className={`text-xs ${voiceStatusToneClass}`}>{voiceStatusText}</p>
           ) : null}
         </div>
       ) : (
@@ -255,12 +306,17 @@ function renderComposerArea({
           size="sm"
           variant="outline"
           className="shrink-0 gap-1.5"
-          disabled={!canSendMessage || isLoading || !isVoiceInputSupported || isTranscribingVoice}
+          disabled={!canSendMessage || !isVoiceInputSupported}
           onClick={onToggleVoiceInput}
-          aria-pressed={isListening}
+          aria-pressed={isVoiceCaptureActive}
           title={voiceButtonTitle}
         >
-          {renderVoiceInputIcon({ isListening, isRequestingVoice, isTranscribingVoice })}
+          {renderVoiceInputIcon({
+            isListening,
+            isRequestingVoice,
+            isTranscribingVoice,
+            isAssistantResponding,
+          })}
           <span className="sr-only">{t('workspace.aiInterviewVoiceInput')}</span>
         </Button>
         <Button
@@ -278,6 +334,10 @@ function renderComposerArea({
 }
 
 export function RoomAiInterviewPanel({
+  mode = 'legacy',
+  realtimeAgentState = 'idle',
+  realtimeUserState = 'listening',
+  realtimeInterruptionAt = null,
   messages,
   isLoading,
   error,
@@ -286,6 +346,10 @@ export function RoomAiInterviewPanel({
   currentUser,
   onTranscribeVoiceInput,
 }: {
+  mode?: AiInterviewPanelMode;
+  realtimeAgentState?: 'initializing' | 'idle' | 'listening' | 'thinking' | 'speaking';
+  realtimeUserState?: 'speaking' | 'listening' | 'away';
+  realtimeInterruptionAt?: number | null;
   messages: AiInterviewMessage[];
   isLoading: boolean;
   error: string | null;
@@ -295,12 +359,15 @@ export function RoomAiInterviewPanel({
   onTranscribeVoiceInput?: (request: VoiceTranscriptionRequest) => Promise<string>;
 }) {
   const { t, i18n } = useTranslation('rooms');
+  const isRealtimeMode = mode === 'realtime';
   const [draft, setDraft] = useState('');
   const [voiceCaptureState, setVoiceCaptureState] = useState<VoiceCaptureState>('idle');
+  const [voiceConversationEnabled, setVoiceConversationEnabled] = useState(false);
   const [voiceError, setVoiceError] = useState<string | null>(null);
   const [voiceLevel, setVoiceLevel] = useState(0);
   const bottomRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const speechUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const mediaChunksRef = useRef<BlobPart[]>([]);
@@ -312,28 +379,163 @@ export function RoomAiInterviewPanel({
   const voiceActiveAtRef = useRef(0);
   const voiceStartedAtRef = useRef(0);
   const voiceAutoStopPendingRef = useRef(false);
+  const voiceDetectedSpeechRef = useRef(false);
+  const voiceInterruptionAtRef = useRef<number | null>(null);
+  const voiceInterruptionHandledRef = useRef(false);
   const voiceSessionRef = useRef(0);
   const voiceFinalizedSessionRef = useRef<number | null>(null);
+  const voiceRestartTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const voiceCaptureStateRef = useRef<VoiceCaptureState>('idle');
+  const voiceConversationEnabledRef = useRef(false);
+  const lastSpokenAssistantMessageIdRef = useRef<string | null>(null);
+  const startVoiceCaptureRef = useRef<() => Promise<void>>(async () => {});
   const isUnmountedRef = useRef(false);
   const voiceTimeoutMessage = t('workspace.aiInterviewVoiceTimeout');
   const isDevEnvironment =
     (import.meta as ImportMeta & { env?: Record<string, unknown> }).env?.DEV === true;
-  const isVoiceInputSupported = supportsVoiceInput(onTranscribeVoiceInput);
+  const isVoiceInputSupported = !isRealtimeMode && supportsVoiceInput(onTranscribeVoiceInput);
   const isListening = voiceCaptureState === 'listening';
   const isRequestingVoice = voiceCaptureState === 'requesting';
   const isTranscribingVoice = voiceCaptureState === 'transcribing';
-  const isVoiceCaptureActive = isVoiceCaptureStateActive(voiceCaptureState);
+  const isAssistantResponding = voiceCaptureState === 'responding';
+  const isVoiceCaptureActive =
+    voiceConversationEnabled || isVoiceCaptureStateActive(voiceCaptureState);
 
   const voiceStatusText = resolveVoiceStatusText(t, voiceCaptureState);
-
-  const latestAudioUrl = [...messages]
-    .reverse()
-    .find((m) => m.role === 'assistant' && m.audioUrl)?.audioUrl;
 
   const messageCount = messages.length;
   const showInitialLoadingState = isInitialLoadingState(isLoading, messageCount);
   const showSendingIndicator = shouldShowSendingIndicator(isLoading, showInitialLoadingState);
-  const voiceButtonTitle = resolveVoiceButtonTitle(t, isVoiceInputSupported);
+  const voiceButtonTitle = voiceConversationEnabled
+    ? t('workspace.aiInterviewVoiceStop')
+    : resolveVoiceButtonTitle(t, isVoiceInputSupported);
+  const latestAssistantMessage = resolveLatestAssistantMessage(messages);
+
+  const clearVoiceRestartTimeout = useCallback(() => {
+    if (voiceRestartTimeoutRef.current != null) {
+      clearTimeout(voiceRestartTimeoutRef.current);
+      voiceRestartTimeoutRef.current = null;
+    }
+  }, []);
+
+  const stopAssistantPlayback = useCallback(() => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+
+    const speechSynthesisApi = globalThis.speechSynthesis;
+    if (speechSynthesisApi) {
+      speechSynthesisApi.cancel();
+    }
+    speechUtteranceRef.current = null;
+    if (!isUnmountedRef.current) {
+      setVoiceCaptureState((previous) => (previous === 'responding' ? 'idle' : previous));
+    }
+  }, []);
+
+  const scheduleVoiceCaptureRestart = useCallback(() => {
+    clearVoiceRestartTimeout();
+    voiceRestartTimeoutRef.current = globalThis.setTimeout(() => {
+      voiceRestartTimeoutRef.current = null;
+      if (isUnmountedRef.current || !voiceConversationEnabledRef.current) {
+        return;
+      }
+      if (voiceCaptureStateRef.current !== 'idle') {
+        return;
+      }
+      void startVoiceCaptureRef.current();
+    }, VOICE_AUTO_RESTART_DELAY_MS);
+  }, [clearVoiceRestartTimeout]);
+
+  const speakWithSpeechSynthesis = useCallback(
+    async (text: string): Promise<void> => {
+      const speechSynthesisApi = globalThis.speechSynthesis;
+      const SpeechSynthesisUtteranceCtor = globalThis.SpeechSynthesisUtterance;
+      if (!speechSynthesisApi || !SpeechSynthesisUtteranceCtor) {
+        return;
+      }
+
+      speechSynthesisApi.cancel();
+      const locale = resolveAssistantSpeechLocale(text, i18n.language);
+      const utterances = splitSpeechUtterance(text);
+
+      for (const phrase of utterances) {
+        await new Promise<void>((resolve, reject) => {
+          const utterance = new SpeechSynthesisUtteranceCtor(phrase);
+          const voices = speechSynthesisApi.getVoices();
+          const selectedVoice = pickSpeechSynthesisVoice(voices, locale);
+          if (selectedVoice) {
+            utterance.voice = selectedVoice;
+          }
+          utterance.lang = locale;
+          utterance.rate = 1;
+          utterance.pitch = 1;
+          utterance.onend = () => resolve();
+          utterance.onerror = () => reject(new Error('Speech synthesis playback failed'));
+          speechUtteranceRef.current = utterance;
+          speechSynthesisApi.speak(utterance);
+        });
+      }
+
+      speechUtteranceRef.current = null;
+    },
+    [i18n.language],
+  );
+
+  const playAssistantMessage = useCallback(
+    async (message: AiInterviewMessage): Promise<void> => {
+      const spokenText = buildAssistantSpeechText(message);
+      if (!spokenText) {
+        return;
+      }
+
+      setVoiceCaptureState('responding');
+      setVoiceLevel(0);
+      voiceInterruptionAtRef.current = null;
+      voiceInterruptionHandledRef.current = false;
+
+      const finalize = () => {
+        if (isUnmountedRef.current) {
+          return;
+        }
+        setVoiceCaptureState((previous) => (previous === 'responding' ? 'idle' : previous));
+        if (voiceConversationEnabledRef.current) {
+          scheduleVoiceCaptureRestart();
+        }
+      };
+
+      if (message.audioUrl) {
+        try {
+          if (audioRef.current) {
+            audioRef.current.pause();
+            audioRef.current = null;
+          }
+          const audio = new Audio(message.audioUrl);
+          audioRef.current = audio;
+          await new Promise<void>((resolve, reject) => {
+            audio.onended = () => resolve();
+            audio.onerror = () => reject(new Error('Remote audio playback failed'));
+            void audio.play().catch(reject);
+          });
+          finalize();
+          return;
+        } catch {
+          if (audioRef.current) {
+            audioRef.current.pause();
+            audioRef.current = null;
+          }
+        }
+      }
+
+      try {
+        await speakWithSpeechSynthesis(spokenText);
+      } finally {
+        finalize();
+      }
+    },
+    [scheduleVoiceCaptureRestart, speakWithSpeechSynthesis],
+  );
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: scroll on new message
   useEffect(() => {
@@ -341,27 +543,43 @@ export function RoomAiInterviewPanel({
   }, [messageCount]);
 
   useEffect(() => {
-    if (!latestAudioUrl) return;
-    if (audioRef.current) {
-      audioRef.current.pause();
+    voiceCaptureStateRef.current = voiceCaptureState;
+  }, [voiceCaptureState]);
+
+  useEffect(() => {
+    voiceConversationEnabledRef.current = voiceConversationEnabled;
+  }, [voiceConversationEnabled]);
+
+  useEffect(() => {
+    if (voiceConversationEnabled) {
+      return;
     }
-    const audio = new Audio(latestAudioUrl);
-    audioRef.current = audio;
-    void audio.play().catch(() => {});
-    return () => {
-      audio.pause();
-    };
-  }, [latestAudioUrl]);
+    stopAssistantPlayback();
+    clearVoiceRestartTimeout();
+  }, [clearVoiceRestartTimeout, stopAssistantPlayback, voiceConversationEnabled]);
+
+  useEffect(() => {
+    if (!voiceConversationEnabled || !latestAssistantMessage) {
+      return;
+    }
+    if (latestAssistantMessage.stableId === lastSpokenAssistantMessageIdRef.current) {
+      return;
+    }
+    lastSpokenAssistantMessageIdRef.current = latestAssistantMessage.stableId;
+    void playAssistantMessage(latestAssistantMessage.message);
+  }, [latestAssistantMessage, playAssistantMessage, voiceConversationEnabled]);
 
   useEffect(() => {
     isUnmountedRef.current = false;
     return () => {
       isUnmountedRef.current = true;
       voiceSessionRef.current += 1;
+      clearVoiceRestartTimeout();
       if (voiceStopFallbackTimeoutRef.current != null) {
         clearTimeout(voiceStopFallbackTimeoutRef.current);
         voiceStopFallbackTimeoutRef.current = null;
       }
+      stopAssistantPlayback();
       const recorder = mediaRecorderRef.current;
       if (recorder && recorder.state !== 'inactive') {
         recorder.stop();
@@ -380,11 +598,12 @@ export function RoomAiInterviewPanel({
         audioContextRef.current = null;
       }
     };
-  }, []);
+  }, [clearVoiceRestartTimeout, stopAssistantPlayback]);
 
   function handleSend() {
     const trimmed = draft.trim();
     if (!trimmed || isLoading) return;
+    stopAssistantPlayback();
     const accepted = onSendMessage(trimmed);
     if (accepted === false) {
       return;
@@ -470,14 +689,22 @@ export function RoomAiInterviewPanel({
       return;
     }
     if (now - voiceStartedAtRef.current >= VOICE_MAX_RECORDING_MS) {
-      stopVoiceCapture(requestId);
+      stopVoiceCapture(requestId, {
+        transcribe: voiceDetectedSpeechRef.current,
+      });
+      if (!voiceDetectedSpeechRef.current && voiceConversationEnabledRef.current) {
+        scheduleVoiceCaptureRestart();
+      }
+      return;
+    }
+    if (!voiceDetectedSpeechRef.current) {
       return;
     }
     if (now - voiceActiveAtRef.current < VOICE_SILENCE_AUTO_STOP_MS) {
       return;
     }
     voiceAutoStopPendingRef.current = true;
-    stopVoiceCapture(requestId);
+    stopVoiceCapture(requestId, { transcribe: true });
   }
 
   function monitorVoiceLevels(requestId: number) {
@@ -498,6 +725,26 @@ export function RoomAiInterviewPanel({
     if (rms >= VOICE_ACTIVITY_THRESHOLD) {
       voiceActiveAtRef.current = Date.now();
       voiceAutoStopPendingRef.current = false;
+      voiceDetectedSpeechRef.current = true;
+    }
+
+    if (voiceCaptureStateRef.current === 'responding' && voiceConversationEnabledRef.current) {
+      if (rms >= VOICE_INTERRUPTION_THRESHOLD) {
+        if (voiceInterruptionAtRef.current == null) {
+          voiceInterruptionAtRef.current = Date.now();
+        } else if (
+          !voiceInterruptionHandledRef.current &&
+          Date.now() - voiceInterruptionAtRef.current >= VOICE_INTERRUPTION_HOLD_MS
+        ) {
+          voiceInterruptionHandledRef.current = true;
+          stopAssistantPlayback();
+          setVoiceCaptureState('listening');
+          voiceActiveAtRef.current = Date.now();
+        }
+      } else {
+        voiceInterruptionAtRef.current = null;
+        voiceInterruptionHandledRef.current = false;
+      }
     }
 
     const normalizedLevel = Math.min(1, rms / 0.18);
@@ -536,6 +783,89 @@ export function RoomAiInterviewPanel({
     }
   }
 
+  // Resets capture state to idle with an optional error message and re-arms
+  // the auto-restart timer when continuous voice conversation is enabled.
+  const finalizeVoiceCaptureIdle = useCallback(
+    (errorMessage: string | null) => {
+      setVoiceCaptureState('idle');
+      if (errorMessage !== null) {
+        setVoiceError(errorMessage);
+      }
+      if (voiceConversationEnabledRef.current) {
+        scheduleVoiceCaptureRestart();
+      }
+    },
+    [scheduleVoiceCaptureRestart],
+  );
+
+  // Runs the prepare → base64 → transcribe pipeline. Returns the trimmed
+  // transcript string, an empty string when the audio yielded no speech, or
+  // null when the caller should abort silently (stale session / unmounted /
+  // oversized prepared audio — those branches set state themselves).
+  const transcribeRecordedBlob = useCallback(
+    async (requestId: number, recordedBlob: Blob): Promise<string | null> => {
+      if (!onTranscribeVoiceInput) {
+        return null;
+      }
+
+      const preparedAudio = await withTimeout(
+        prepareVoiceAudioForTranscription(recordedBlob),
+        VOICE_AUDIO_PREPARE_TIMEOUT_MS,
+        () => new Error(voiceTimeoutMessage),
+      );
+      logVoice('prepare-audio-done', {
+        requestId,
+        sourceSize: recordedBlob.size,
+        sourceType: recordedBlob.type,
+        preparedSize: preparedAudio.blob.size,
+        preparedType: preparedAudio.mimeType,
+      });
+      if (preparedAudio.blob.size > VOICE_MAX_BLOB_BYTES) {
+        finalizeVoiceCaptureIdle(t('workspace.aiInterviewVoiceTooLong'));
+        return null;
+      }
+
+      logVoice('encode-start', {
+        requestId,
+        size: preparedAudio.blob.size,
+        type: preparedAudio.mimeType,
+      });
+      const audioBase64 = await withTimeout(
+        blobToBase64(preparedAudio.blob),
+        VOICE_BASE64_ENCODE_TIMEOUT_MS,
+        () => new Error(voiceTimeoutMessage),
+      );
+      logVoice('encode-done', { requestId, base64Length: audioBase64.length });
+      if (voiceSessionRef.current !== requestId || isUnmountedRef.current) {
+        return null;
+      }
+
+      logVoice('transcribe-start', { requestId });
+      const transcript = await withTimeout(
+        onTranscribeVoiceInput({
+          audioBase64,
+          mimeType: preparedAudio.mimeType,
+          language: resolveRecognitionLanguage(i18n.language),
+        }),
+        VOICE_TRANSCRIPTION_TIMEOUT_MS,
+        () => new Error(voiceTimeoutMessage),
+      );
+      logVoice('transcribe-done', { requestId, transcriptLength: transcript.length });
+      if (voiceSessionRef.current !== requestId || isUnmountedRef.current) {
+        return null;
+      }
+      return transcript.trim();
+    },
+    [
+      finalizeVoiceCaptureIdle,
+      i18n.language,
+      logVoice,
+      onTranscribeVoiceInput,
+      t,
+      voiceTimeoutMessage,
+    ],
+  );
+
   const finalizeVoiceCapture = useCallback(
     async (requestId: number, recordedBlob: Blob) => {
       if (
@@ -547,88 +877,30 @@ export function RoomAiInterviewPanel({
       }
 
       if (recordedBlob.size === 0) {
-        setVoiceCaptureState('idle');
-        setVoiceError(t('workspace.aiInterviewVoiceNoSpeech'));
+        finalizeVoiceCaptureIdle(t('workspace.aiInterviewVoiceNoSpeech'));
         return;
       }
       if (recordedBlob.size > VOICE_MAX_BLOB_BYTES) {
-        setVoiceCaptureState('idle');
-        setVoiceError(t('workspace.aiInterviewVoiceTooLong'));
+        finalizeVoiceCaptureIdle(t('workspace.aiInterviewVoiceTooLong'));
         return;
       }
 
       try {
         setVoiceCaptureState('transcribing');
-        const preparedAudio = await withTimeout(
-          prepareVoiceAudioForTranscription(recordedBlob),
-          VOICE_AUDIO_PREPARE_TIMEOUT_MS,
-          () => new Error(voiceTimeoutMessage),
-        );
-        logVoice('prepare-audio-done', {
-          requestId,
-          sourceSize: recordedBlob.size,
-          sourceType: recordedBlob.type,
-          preparedSize: preparedAudio.blob.size,
-          preparedType: preparedAudio.mimeType,
-        });
-        if (preparedAudio.blob.size > VOICE_MAX_BLOB_BYTES) {
-          setVoiceCaptureState('idle');
-          setVoiceError(t('workspace.aiInterviewVoiceTooLong'));
+        const normalized = await transcribeRecordedBlob(requestId, recordedBlob);
+        if (normalized === null) {
           return;
         }
-
-        logVoice('encode-start', {
-          requestId,
-          size: preparedAudio.blob.size,
-          type: preparedAudio.mimeType,
-        });
-        const audioBase64 = await withTimeout(
-          blobToBase64(preparedAudio.blob),
-          VOICE_BASE64_ENCODE_TIMEOUT_MS,
-          () => new Error(voiceTimeoutMessage),
-        );
-        logVoice('encode-done', {
-          requestId,
-          base64Length: audioBase64.length,
-        });
-        if (voiceSessionRef.current !== requestId || isUnmountedRef.current) {
-          return;
-        }
-
-        logVoice('transcribe-start', { requestId });
-        const transcript = await withTimeout(
-          onTranscribeVoiceInput({
-            audioBase64,
-            mimeType: preparedAudio.mimeType,
-            language: resolveRecognitionLanguage(i18n.language),
-          }),
-          VOICE_TRANSCRIPTION_TIMEOUT_MS,
-          () => new Error(voiceTimeoutMessage),
-        );
-        logVoice('transcribe-done', {
-          requestId,
-          transcriptLength: transcript.length,
-        });
-
-        if (voiceSessionRef.current !== requestId || isUnmountedRef.current) {
-          return;
-        }
-
-        const normalized = transcript.trim();
-        if (!normalized) {
-          setVoiceError(t('workspace.aiInterviewVoiceNoSpeech'));
-          setVoiceCaptureState('idle');
+        if (normalized.length === 0) {
+          finalizeVoiceCaptureIdle(t('workspace.aiInterviewVoiceNoSpeech'));
           return;
         }
 
         onSendMessage(normalized);
         setDraft('');
-        setVoiceCaptureState('idle');
+        finalizeVoiceCaptureIdle(null);
       } catch (error) {
-        logVoice('finalize-error', {
-          requestId,
-          error,
-        });
+        logVoice('finalize-error', { requestId, error });
         if (voiceSessionRef.current !== requestId || isUnmountedRef.current) {
           return;
         }
@@ -636,11 +908,17 @@ export function RoomAiInterviewPanel({
           error instanceof Error && error.message.trim().length > 0
             ? error.message
             : t('workspace.aiInterviewVoiceNetworkError');
-        setVoiceError(message);
-        setVoiceCaptureState('idle');
+        finalizeVoiceCaptureIdle(message);
       }
     },
-    [i18n.language, logVoice, onSendMessage, onTranscribeVoiceInput, t, voiceTimeoutMessage],
+    [
+      finalizeVoiceCaptureIdle,
+      logVoice,
+      onSendMessage,
+      onTranscribeVoiceInput,
+      t,
+      transcribeRecordedBlob,
+    ],
   );
 
   const finalizeVoiceCaptureFromChunks = useCallback(
@@ -668,7 +946,10 @@ export function RoomAiInterviewPanel({
     [cancelVoiceStopFallback, finalizeVoiceCapture, logVoice, stopVoiceStreamsAndMeter],
   );
 
-  function stopVoiceCapture(expectedRequestId: number) {
+  function stopVoiceCapture(
+    expectedRequestId: number,
+    options: Readonly<{ transcribe: boolean }> = STOP_VOICE_CAPTURE_DEFAULT_OPTIONS,
+  ) {
     if (voiceSessionRef.current !== expectedRequestId) {
       return;
     }
@@ -677,6 +958,18 @@ export function RoomAiInterviewPanel({
     if (!recorder || recorder.state === 'inactive') {
       setVoiceCaptureState('idle');
       stopVoiceStreamsAndMeter();
+      return;
+    }
+
+    if (!options.transcribe) {
+      cancelVoiceStopFallback();
+      stopVoiceStreamsAndMeter();
+      mediaRecorderRef.current = null;
+      mediaChunksRef.current = [];
+      setVoiceCaptureState('idle');
+      try {
+        recorder.stop();
+      } catch {}
       return;
     }
 
@@ -714,6 +1007,9 @@ export function RoomAiInterviewPanel({
     voiceSessionRef.current = requestId;
     voiceFinalizedSessionRef.current = null;
     voiceAutoStopPendingRef.current = false;
+    voiceDetectedSpeechRef.current = false;
+    voiceInterruptionAtRef.current = null;
+    voiceInterruptionHandledRef.current = false;
     mediaChunksRef.current = [];
     cancelVoiceStopFallback();
     setVoiceError(null);
@@ -744,6 +1040,7 @@ export function RoomAiInterviewPanel({
       recorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
           mediaChunksRef.current.push(event.data);
+          voiceDetectedSpeechRef.current = true;
           logVoice('data-available', {
             requestId,
             chunkSize: event.data.size,
@@ -799,16 +1096,28 @@ export function RoomAiInterviewPanel({
     }
   }
 
+  startVoiceCaptureRef.current = startVoiceCapture;
+
   async function toggleVoiceInput() {
-    if (voiceCaptureState === 'listening') {
-      stopVoiceCapture(voiceSessionRef.current);
+    if (voiceConversationEnabledRef.current) {
+      setVoiceConversationEnabled(false);
+      clearVoiceRestartTimeout();
+      stopAssistantPlayback();
+      const requestId = voiceSessionRef.current;
+      const recorder = mediaRecorderRef.current;
+      const shouldTranscribeCurrentCapture =
+        recorder?.state === 'recording' && voiceCaptureStateRef.current !== 'transcribing';
+      if (shouldTranscribeCurrentCapture) {
+        stopVoiceCapture(requestId, { transcribe: true });
+      } else {
+        voiceSessionRef.current += 1;
+        stopVoiceCapture(requestId, { transcribe: false });
+        setVoiceCaptureState('idle');
+      }
       return;
     }
 
-    if (voiceCaptureState !== 'idle') {
-      return;
-    }
-
+    setVoiceConversationEnabled(true);
     await startVoiceCapture();
   }
 
@@ -817,6 +1126,59 @@ export function RoomAiInterviewPanel({
       e.preventDefault();
       handleSend();
     }
+  }
+
+  if (isRealtimeMode) {
+    const realtimeStatusText = resolveRealtimeAgentStatusText(
+      t,
+      realtimeAgentState,
+      realtimeUserState,
+    );
+    const realtimeWaveTone: 'assistant' | 'user' =
+      realtimeAgentState === 'speaking' ? 'assistant' : 'user';
+    let realtimeWaveLevel = 0.2;
+    if (realtimeAgentState === 'speaking') {
+      realtimeWaveLevel = 0.9;
+    } else if (realtimeUserState === 'speaking') {
+      realtimeWaveLevel = 0.7;
+    } else if (realtimeAgentState === 'thinking') {
+      realtimeWaveLevel = 0.35;
+    }
+    const showInterruptionNotice = realtimeInterruptionAt != null;
+
+    return (
+      <div className="flex h-full flex-col">
+        <div className="flex-1 space-y-3 overflow-y-auto p-3">
+          <div className="rounded-xl border border-primary/30 bg-primary/5 px-3 py-2">
+            <p className="text-xs text-primary">{t('workspace.aiInterviewRealtimeConnected')}</p>
+            <p className="mt-1 text-xs text-muted-foreground">{realtimeStatusText}</p>
+          </div>
+          <div className="rounded-md border border-primary/25 bg-primary/5 px-3 py-3">
+            <VoiceActivityWave level={realtimeWaveLevel} active={true} tone={realtimeWaveTone} />
+            {showInterruptionNotice ? (
+              <p className="mt-1 text-xs text-primary">
+                {t('workspace.aiInterviewRealtimeInterruption')}
+              </p>
+            ) : null}
+          </div>
+          <div className="rounded-md border border-border/70 bg-muted/20 px-3 py-2">
+            <p className="text-xs text-muted-foreground">
+              {t('workspace.aiInterviewRealtimeVoiceOnly')}
+            </p>
+          </div>
+          {showInitialLoadingState ? (
+            <div className="rounded-xl border border-primary/30 bg-primary/5 px-3 py-3">
+              <div className="flex items-center gap-2 text-xs text-primary">
+                <Loader2 className="size-3.5 animate-spin" />
+                <span>{t('workspace.aiInterviewBusy')}</span>
+              </div>
+            </div>
+          ) : null}
+          {renderErrorBanner(error)}
+          <div ref={bottomRef} />
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -832,6 +1194,7 @@ export function RoomAiInterviewPanel({
         isVoiceCaptureActive,
         voiceLevel,
         isListening,
+        isAssistantResponding,
         voiceStatusText,
         isTranscribingVoice,
         draft,
@@ -856,9 +1219,11 @@ export function RoomAiInterviewPanel({
 function VoiceActivityWave({
   level,
   active,
+  tone,
 }: Readonly<{
   level: number;
   active: boolean;
+  tone: 'user' | 'assistant';
 }>) {
   const center = VOICE_WAVE_OFFSETS.length / 2;
 
@@ -873,7 +1238,9 @@ function VoiceActivityWave({
         return (
           <span
             key={`wave-${offset}`}
-            className="w-1.5 rounded-full bg-primary/70 transition-[height] duration-100 ease-out"
+            className={`w-1.5 rounded-full transition-[height] duration-100 ease-out ${
+              tone === 'assistant' ? 'bg-sky-300/80' : 'bg-primary/70'
+            }`}
             style={{ height }}
           />
         );
@@ -939,7 +1306,7 @@ function AiInterviewMessageBubble({
           <AiInterviewCodeContextCard context={message.codeContext} t={t} />
         ) : null}
 
-        {message.codeAnnotations && message.codeAnnotations.length > 0 ? (
+        {message.codeAnnotations?.length ? (
           <div className="w-full rounded-xl bg-muted/40 px-3 py-2 ring-1 ring-border/40">
             <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
               {t('workspace.aiInterviewAnnotations')}
@@ -951,7 +1318,9 @@ function AiInterviewMessageBubble({
                   className="flex gap-2 text-xs text-muted-foreground"
                 >
                   <span className="shrink-0 font-mono text-primary/70">L{annotation.line}</span>
-                  <span>{annotation.comment}</span>
+                  <div className="min-w-0 flex-1 text-xs">
+                    <InlineCommentMarkdown markdown={annotation.comment} />
+                  </div>
                 </li>
               ))}
             </ul>
@@ -1018,6 +1387,95 @@ export function resolveRecognitionLanguage(language: string | undefined): string
   // an arbitrary region (e.g. `de-US`) yields an invalid locale that STT
   // providers may reject. The Web Speech API tolerates language-only tags.
   return language;
+}
+
+function resolveLatestAssistantMessage(
+  messages: ReadonlyArray<AiInterviewMessage>,
+): LatestAssistantMessage | null {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message?.role !== 'assistant') {
+      continue;
+    }
+    const idPart = message.id ?? `index-${index}`;
+    const createdAtPart = message.createdAt ?? 0;
+    const stableId = `${idPart}:${createdAtPart}:${message.content.slice(0, 48)}`;
+    return { stableId, message };
+  }
+  return null;
+}
+
+function buildAssistantSpeechText(message: AiInterviewMessage): string {
+  const parts = [message.content.trim(), message.followUpQuestion?.trim()].filter(
+    (part): part is string => Boolean(part && part.length > 0),
+  );
+  return parts.join(' ');
+}
+
+function containsCjkCharacters(value: string): boolean {
+  return /[\u3400-\u9fff]/u.test(value);
+}
+
+function resolveAssistantSpeechLocale(text: string, uiLanguage: string): string {
+  if (containsCjkCharacters(text)) {
+    return 'zh-CN';
+  }
+  if (uiLanguage.toLowerCase().startsWith('zh')) {
+    return 'zh-CN';
+  }
+  return 'en-US';
+}
+
+function splitSpeechUtterance(text: string): string[] {
+  const normalized = text.replace(/\s+/g, ' ').trim();
+  if (!normalized) {
+    return [];
+  }
+
+  const chunks: string[] = [];
+  let buffer = '';
+  const segments = normalized.split(/(?<=[。！？.!?])\s+/u);
+
+  for (const segment of segments) {
+    const next = buffer ? `${buffer} ${segment}` : segment;
+    if (next.length <= VOICE_SPEECH_SYNTHESIS_CHUNK_LENGTH) {
+      buffer = next;
+      continue;
+    }
+    if (buffer) {
+      chunks.push(buffer);
+      buffer = '';
+    }
+    if (segment.length <= VOICE_SPEECH_SYNTHESIS_CHUNK_LENGTH) {
+      buffer = segment;
+      continue;
+    }
+    for (let offset = 0; offset < segment.length; offset += VOICE_SPEECH_SYNTHESIS_CHUNK_LENGTH) {
+      chunks.push(segment.slice(offset, offset + VOICE_SPEECH_SYNTHESIS_CHUNK_LENGTH));
+    }
+  }
+
+  if (buffer) {
+    chunks.push(buffer);
+  }
+  return chunks;
+}
+
+function pickSpeechSynthesisVoice(
+  voices: ReadonlyArray<SpeechSynthesisVoice>,
+  locale: string,
+): SpeechSynthesisVoice | null {
+  if (voices.length === 0) {
+    return null;
+  }
+  const normalizedLocale = locale.toLowerCase();
+  const exact = voices.find((voice) => voice.lang.toLowerCase() === normalizedLocale);
+  if (exact) {
+    return exact;
+  }
+  const prefix = normalizedLocale.split('-')[0] ?? normalizedLocale;
+  const sameLanguage = voices.find((voice) => voice.lang.toLowerCase().startsWith(prefix));
+  return sameLanguage ?? null;
 }
 
 async function requestMicrophoneStream(): Promise<{

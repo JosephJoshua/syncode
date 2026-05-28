@@ -778,7 +778,8 @@ describe('AiProcessor', () => {
         'interview-result',
         expect.objectContaining({
           jobId: 'interview-job-1',
-          message: 'Can you explain the invariant your map maintains?',
+          message: expect.stringContaining('invariant your map maintains'),
+          shouldRespond: true,
           followUpQuestion:
             'Why is checking the complement before inserting the current value safe?',
           codeContext: expect.objectContaining({
