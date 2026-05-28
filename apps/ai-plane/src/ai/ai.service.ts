@@ -1909,22 +1909,10 @@ export class AiService {
       }
 
       if (char === '\\') {
-        const next = value[index + 1];
-        if (next === 'n') {
-          normalized += '\n';
-          index += 1;
-          continue;
-        }
-        if (next === 't') {
-          normalized += '\t';
-          index += 1;
-          continue;
-        }
-        if (next === '"') {
-          normalized += '"';
-          index += 1;
-          continue;
-        }
+        const { replacement, advance } = resolveAnnotationBackslashEscape(value, index);
+        normalized += replacement;
+        index += advance;
+        continue;
       }
 
       normalized += char;
@@ -2286,4 +2274,15 @@ function containsLatinLetters(value: string): boolean {
 
 function describeInterviewResponseLanguage(language: 'en' | 'zh'): string {
   return language === 'zh' ? 'Chinese' : 'English';
+}
+
+function resolveAnnotationBackslashEscape(
+  value: string,
+  index: number,
+): { replacement: string; advance: number } {
+  const next = value[index + 1];
+  if (next === 'n') return { replacement: '\n', advance: 1 };
+  if (next === 't') return { replacement: '\t', advance: 1 };
+  if (next === '"') return { replacement: '"', advance: 1 };
+  return { replacement: '\\', advance: 0 };
 }
