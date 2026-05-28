@@ -1041,7 +1041,7 @@ export function RoomWorkspace({
         .filter((comment) => comment.authorId === AI_INTERVIEW_INLINE_COMMENT_AUTHOR_ID)
         .map((comment) => `${comment.lineNumber}:${comment.content.trim()}`),
     );
-    const liveCode = doc?.getText(codeTextKey(language)).toString() ?? '';
+    const liveCode = doc?.getText(codeTextKey(language)).toJSON() ?? '';
     const codeLineCount = Math.max(1, liveCode.split(/\r?\n/).length);
     let addedCount = 0;
 
@@ -1110,7 +1110,7 @@ export function RoomWorkspace({
   const isSubmissionPreviewOpen = submissionPreviewCode !== null;
 
   const getCode = useCallback(() => {
-    return doc?.getText(codeTextKey(language)).toString() ?? '';
+    return doc?.getText(codeTextKey(language)).toJSON() ?? '';
   }, [doc, language]);
 
   useEffect(() => {

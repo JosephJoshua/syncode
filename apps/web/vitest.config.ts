@@ -7,6 +7,8 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
+      'monaco-emacs': fileURLToPath(new URL('./src/test/monaco-emacs-stub.ts', import.meta.url)),
+      'monaco-vim': fileURLToPath(new URL('./src/test/monaco-vim-stub.ts', import.meta.url)),
     },
   },
   test: {
