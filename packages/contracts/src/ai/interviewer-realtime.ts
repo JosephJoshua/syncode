@@ -42,7 +42,7 @@ export const aiInterviewerSignalPayloadSchema = z
             totalTestCases: z.number().int().min(0),
             failedTestCases: z.number().int().min(0),
             errorTestCases: z.number().int().min(0),
-            submittedAt: z.string().datetime(),
+            submittedAt: z.iso.datetime(),
           })
           .strict()
           .optional(),

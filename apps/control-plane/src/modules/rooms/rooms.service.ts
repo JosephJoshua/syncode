@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import {
   BadRequestException,
   ConflictException,
@@ -150,6 +150,18 @@ interface LatestCodeAnalysisContextCacheEntry {
   codeHash: string;
   language: SupportedLanguage;
   context: AiInterviewCodeAnalysisContext;
+}
+
+const FNV_64_OFFSET_BASIS = 0xcbf29ce484222325n;
+const FNV_64_PRIME = 0x100000001b3n;
+
+function createStableDigest(value: string): string {
+  let hash = FNV_64_OFFSET_BASIS;
+  for (const char of value) {
+    hash ^= BigInt(char.codePointAt(0) ?? 0);
+    hash = BigInt.asUintN(64, hash * FNV_64_PRIME);
+  }
+  return hash.toString(16).padStart(16, '0');
 }
 
 @Injectable()
@@ -1758,7 +1770,7 @@ export class RoomsService implements OnModuleInit {
       .from(roomParticipants)
       .where(and(eq(roomParticipants.roomId, roomId), eq(roomParticipants.userId, participantId)))
       .limit(1);
-    if (!participant || participant.removedAt !== null) {
+    if (participant?.removedAt !== null) {
       throw new ForbiddenException({
         message: 'Not a participant of this room',
         code: ERROR_CODES.ROOM_ACCESS_DENIED,
@@ -2294,10 +2306,10 @@ export class RoomsService implements OnModuleInit {
     }
 
     // Fire-and-forget collab notification stays outside the transaction.
-    if (targetStatus !== RoomStatus.FINISHED) {
-      void this.updateCollabRoomState(roomId, targetStatus, editorLocked, userId);
-    } else {
+    if (targetStatus === RoomStatus.FINISHED) {
       void this.deleteAiInterviewerDispatch(roomId);
+    } else {
+      void this.updateCollabRoomState(roomId, targetStatus, editorLocked, userId);
     }
 
     return {
@@ -3642,7 +3654,7 @@ export class RoomsService implements OnModuleInit {
   }
 
   private hashAiContextCode(code: string): string {
-    return createHash('sha256').update(code).digest('hex');
+    return createStableDigest(code);
   }
 
   private async loadCurrentRoomSessionId(roomId: string): Promise<string | null> {
