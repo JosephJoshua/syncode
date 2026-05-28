@@ -19,6 +19,8 @@ vi.mock('@livekit/agents', () => {
     updateChatCtx = vi.fn();
   }
   class FakeAgentSession {
+    constructor(public opts?: unknown) {}
+
     chatCtx = {
       copy: vi.fn(() => ({
         items: [] as Array<{ id: string }>,
@@ -78,6 +80,7 @@ vi.mock('dotenv', () => ({ config: vi.fn() }));
 process.env.INTERNAL_CALLBACK_SECRET =
   process.env.INTERNAL_CALLBACK_SECRET ?? 'unit-test-internal-callback-secret-12345678';
 process.env.AI_PLATFORM_API_KEY = process.env.AI_PLATFORM_API_KEY ?? 'unit-test-platform-key';
+process.env.OPENAI_API_KEY = process.env.OPENAI_API_KEY ?? 'unit-test-openai-key';
 process.env.S3_ENDPOINT = process.env.S3_ENDPOINT ?? 'http://localhost:9000';
 process.env.S3_ACCESS_KEY = process.env.S3_ACCESS_KEY ?? 'unit-test-access';
 process.env.S3_SECRET_KEY = process.env.S3_SECRET_KEY ?? 'unit-test-secret';
@@ -144,6 +147,40 @@ describe('ai-interviewer.worker URL resolvers and parsers', () => {
   it('GIVEN an unknown voice WHEN resolveOpenAiTtsVoice runs THEN it falls back to alloy', () => {
     expect(__testing.resolveOpenAiTtsVoice('Chelsie')).toBe('alloy');
     expect(__testing.resolveOpenAiTtsVoice('shimmer')).toBe('shimmer');
+  });
+
+  it('GIVEN realtime env WHEN createRealtimeSession runs THEN it configures semantic VAD and near-field noise reduction', () => {
+    const session = __testing.createRealtimeSession() as {
+      opts: { llm: { opts: Record<string, unknown> } };
+    };
+
+    expect(session.opts.llm.opts).toMatchObject({
+      apiKey: 'unit-test-openai-key',
+      model: 'gpt-realtime',
+      voice: 'alloy',
+      inputAudioNoiseReduction: { type: 'near_field' },
+      turnDetection: {
+        type: 'semantic_vad',
+        eagerness: 'low',
+        create_response: false,
+        interrupt_response: true,
+      },
+    });
+  });
+
+  it('GIVEN fallback env WHEN createFallbackSession runs THEN it configures multilingual STT and the text LLM', () => {
+    const session = __testing.createFallbackSession() as {
+      opts: { stt: { opts: Record<string, unknown> }; llm: { opts: Record<string, unknown> } };
+    };
+
+    expect(session.opts.stt.opts).toMatchObject({
+      model: 'GLM-ASR-2512',
+      language: 'multi',
+      detectLanguage: true,
+    });
+    expect(session.opts.llm.opts).toMatchObject({
+      model: 'DeepSeek-V3.2-Instruct',
+    });
   });
 
   it('GIVEN JSON metadata WHEN parseDispatchMetadata parses THEN it returns trimmed fields', () => {
@@ -987,6 +1024,7 @@ describe('ai-interviewer.worker submission parsers and predicates', () => {
   it('GIVEN garbage input WHEN parseRunSummary runs THEN it returns null', () => {
     expect(__testing.parseRunSummary(undefined)).toBeNull();
     expect(__testing.parseRunSummary('nothing')).toBeNull();
+    expect(__testing.parseRunSummary('Latest run: 0/0 passed.')).toBeNull();
   });
 
   it('GIVEN a passing submission WHEN isPassingSubmission runs THEN it returns true', () => {
@@ -1052,6 +1090,26 @@ describe('ai-interviewer.worker submission parsers and predicates', () => {
     ).toBe(true);
   });
 
+  it('GIVEN matching counts without timestamp WHEN matchesExpectedSubmission runs THEN it accepts the latest submission', () => {
+    const latest = {
+      code: 'pass',
+      language: 'python' as const,
+      status: 'completed' as const,
+      passedTestCases: 2,
+      totalTestCases: 3,
+      failedTestCases: 1,
+      errorTestCases: 0,
+      submittedAt: '2026-05-27T10:00:00.000Z',
+    };
+
+    expect(
+      __testing.matchesExpectedSubmission(latest, {
+        passedTestCases: 2,
+        totalTestCases: 3,
+      }),
+    ).toBe(true);
+  });
+
   it('GIVEN a mismatched submission WHEN matchesExpectedSubmission runs THEN it returns false', () => {
     const latest = {
       code: 'pass',
@@ -1072,6 +1130,49 @@ describe('ai-interviewer.worker submission parsers and predicates', () => {
     expect(
       __testing.matchesExpectedSubmission(null, { passedTestCases: 1, totalTestCases: 3 }),
     ).toBe(false);
+    expect(
+      __testing.matchesExpectedSubmission(latest, {
+        passedTestCases: 1,
+        totalTestCases: 3,
+        submittedAt: 'not-a-date',
+      }),
+    ).toBe(false);
+  });
+
+  it('GIVEN expected submission context checks WHEN helper predicates run THEN they wait until counts match or attempts are exhausted', () => {
+    const context = {
+      ...baseRuntimeContext,
+      latestSubmission: {
+        code: 'pass',
+        language: 'python' as const,
+        status: 'completed' as const,
+        passedTestCases: 2,
+        totalTestCases: 3,
+        failedTestCases: 1,
+        errorTestCases: 0,
+        submittedAt: '2026-05-27T10:00:00.000Z',
+      },
+    };
+    const expected = { passedTestCases: 3, totalTestCases: 3 };
+
+    expect(__testing.isExpectedSubmissionContext(context, undefined)).toBe(true);
+    expect(__testing.isExpectedSubmissionContext(context, expected)).toBe(false);
+    expect(
+      __testing.shouldReturnFetchedRoomContext({
+        context,
+        expected,
+        attempt: 1,
+        maxAttempts: 4,
+      }),
+    ).toBe(false);
+    expect(
+      __testing.shouldReturnFetchedRoomContext({
+        context,
+        expected,
+        attempt: 4,
+        maxAttempts: 4,
+      }),
+    ).toBe(true);
   });
 
   it('GIVEN a runtime context with a problem WHEN toRealtimeInterviewContext runs THEN it returns the mapped context', () => {
@@ -1181,6 +1282,79 @@ describe('ai-interviewer.worker reason-specific and constraint guidance', () => 
     const out = __testing.buildPhaseBehaviorGuidance(status);
     expect(typeof out).toBe('string');
     expect(out.length).toBeGreaterThan(0);
+  });
+
+  it('GIVEN runtime signal states WHEN shouldIgnoreRuntimeSignal runs THEN waiting and finished rooms are filtered correctly', () => {
+    const signal: Extract<AiInterviewerSignalPayload, { type: 'system_signal' }> = {
+      type: 'system_signal',
+      reason: 'stage_changed',
+    };
+
+    expect(
+      __testing.shouldIgnoreRuntimeSignal(signal, {
+        ...baseRuntimeContext,
+        roomStatus: 'waiting',
+      }),
+    ).toBe(true);
+    expect(
+      __testing.shouldIgnoreRuntimeSignal(
+        { ...signal, reason: 'manual_nudge' },
+        { ...baseRuntimeContext, roomStatus: 'waiting' },
+      ),
+    ).toBe(false);
+    expect(
+      __testing.shouldIgnoreRuntimeSignal(signal, {
+        ...baseRuntimeContext,
+        roomStatus: 'finished',
+      }),
+    ).toBe(true);
+  });
+
+  it('GIVEN phase kickoff signals WHEN predicate helpers run THEN only eligible phase transitions match', () => {
+    const stageChanged: Extract<AiInterviewerSignalPayload, { type: 'system_signal' }> = {
+      type: 'system_signal',
+      reason: 'stage_changed',
+    };
+    const joined: Extract<AiInterviewerSignalPayload, { type: 'system_signal' }> = {
+      type: 'system_signal',
+      reason: 'session_joined',
+    };
+
+    expect(
+      __testing.isWarmupKickoffSignal(
+        joined,
+        { ...baseRuntimeContext, roomStatus: 'warmup' },
+        'not_started',
+      ),
+    ).toBe(true);
+    expect(
+      __testing.isWarmupKickoffSignal(
+        stageChanged,
+        { ...baseRuntimeContext, roomStatus: 'warmup' },
+        'completed',
+      ),
+    ).toBe(false);
+    expect(
+      __testing.isCodingKickoffSignal(
+        stageChanged,
+        { ...baseRuntimeContext, roomStatus: 'coding' },
+        false,
+      ),
+    ).toBe(true);
+    expect(
+      __testing.isCodingKickoffSignal(
+        stageChanged,
+        { ...baseRuntimeContext, roomStatus: 'coding' },
+        true,
+      ),
+    ).toBe(false);
+    expect(
+      __testing.isWrapupKickoffSignal(
+        stageChanged,
+        { ...baseRuntimeContext, roomStatus: 'wrapup' },
+        false,
+      ),
+    ).toBe(true);
   });
 });
 

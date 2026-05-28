@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -85,6 +84,8 @@ const NOISE_RUN_SUMMARY_PATTERN = /Latest run:\s*(\d+)\s*\/\s*(\d+)\s*passed\./i
 const REALTIME_CONTEXT_WARN_TOKENS = 35_000;
 const REALTIME_CONTEXT_CRITICAL_TOKENS = 45_000;
 const LIVE_CODE_CONTEXT_MESSAGE_ID = 'syncode_live_code_context';
+const FNV_64_OFFSET_BASIS = 0xcbf29ce484222325n;
+const FNV_64_PRIME = 0x100000001b3n;
 
 const OPENAI_TTS_VOICES: ReadonlySet<openai.TTSVoices> = new Set([
   'alloy',
@@ -98,6 +99,15 @@ const OPENAI_TTS_VOICES: ReadonlySet<openai.TTSVoices> = new Set([
   'sage',
   'shimmer',
 ]);
+
+function createStableDigest(value: string): string {
+  let hash = FNV_64_OFFSET_BASIS;
+  for (const char of value) {
+    hash ^= BigInt(char.codePointAt(0) ?? 0);
+    hash = BigInt.asUintN(64, hash * FNV_64_PRIME);
+  }
+  return hash.toString(16).padStart(16, '0');
+}
 
 loadWorkerEnvFiles();
 const env = loadWorkerEnv();
@@ -216,10 +226,7 @@ function createTranscriptTurnId(
   timestamp: number,
   content: string,
 ): string {
-  const digest = createHash('sha256')
-    .update(`${role}:${roomId}:${participantId}:${timestamp}:${content}`)
-    .digest('hex')
-    .slice(0, 16);
+  const digest = createStableDigest(`${role}:${roomId}:${participantId}:${timestamp}:${content}`);
   return `lk-ai-turn-${timestamp}-${digest}`;
 }
 
@@ -1470,7 +1477,7 @@ function parseRunSummary(summary: string | undefined): { passed: number; total: 
 
 function isNonPassingSubmission(context: AiInterviewerContextResponse | undefined): boolean {
   const latest = context?.latestSubmission;
-  if (!latest || latest.status !== 'completed' || latest.totalTestCases <= 0) {
+  if (latest?.status !== 'completed' || latest.totalTestCases <= 0) {
     return false;
   }
   return latest.passedTestCases < latest.totalTestCases;
@@ -1478,7 +1485,7 @@ function isNonPassingSubmission(context: AiInterviewerContextResponse | undefine
 
 function isPassingSubmission(context: AiInterviewerContextResponse | undefined): boolean {
   const latest = context?.latestSubmission;
-  if (!latest || latest.status !== 'completed' || latest.totalTestCases <= 0) {
+  if (latest?.status !== 'completed' || latest.totalTestCases <= 0) {
     return false;
   }
   return latest.passedTestCases === latest.totalTestCases;
@@ -1489,8 +1496,7 @@ function matchesExpectedSubmission(
   expected: ParsedSubmissionSignalSummary,
 ): boolean {
   if (
-    !latest ||
-    latest.totalTestCases !== expected.totalTestCases ||
+    latest?.totalTestCases !== expected.totalTestCases ||
     latest.passedTestCases !== expected.passedTestCases
   ) {
     return false;
@@ -1506,6 +1512,73 @@ function matchesExpectedSubmission(
     return false;
   }
   return latestTime >= expectedTime;
+}
+
+type SystemSignalPayload = Extract<AiInterviewerSignalPayload, { type: 'system_signal' }>;
+
+function isExpectedSubmissionContext(
+  context: AiInterviewerContextResponse,
+  expected: ParsedSubmissionSignalSummary | undefined,
+): boolean {
+  return !expected || matchesExpectedSubmission(context.latestSubmission, expected);
+}
+
+function shouldReturnFetchedRoomContext(params: {
+  context: AiInterviewerContextResponse;
+  expected: ParsedSubmissionSignalSummary | undefined;
+  attempt: number;
+  maxAttempts: number;
+}): boolean {
+  return (
+    isExpectedSubmissionContext(params.context, params.expected) ||
+    params.attempt >= params.maxAttempts
+  );
+}
+
+function shouldIgnoreRuntimeSignal(
+  signal: SystemSignalPayload,
+  runtimeContext: AiInterviewerContextResponse | undefined,
+): boolean {
+  if (runtimeContext?.roomStatus === 'waiting' && signal.reason !== 'manual_nudge') {
+    return true;
+  }
+  return runtimeContext?.roomStatus === 'finished';
+}
+
+function isWarmupKickoffSignal(
+  signal: SystemSignalPayload,
+  runtimeContext: AiInterviewerContextResponse | undefined,
+  warmupFlowState: WarmupFlowState,
+): boolean {
+  return (
+    runtimeContext?.roomStatus === 'warmup' &&
+    warmupFlowState === 'not_started' &&
+    (signal.reason === 'session_joined' || signal.reason === 'stage_changed')
+  );
+}
+
+function isCodingKickoffSignal(
+  signal: SystemSignalPayload,
+  runtimeContext: AiInterviewerContextResponse | undefined,
+  codingKickoffAnnounced: boolean,
+): boolean {
+  return (
+    runtimeContext?.roomStatus === 'coding' &&
+    signal.reason === 'stage_changed' &&
+    !codingKickoffAnnounced
+  );
+}
+
+function isWrapupKickoffSignal(
+  signal: SystemSignalPayload,
+  runtimeContext: AiInterviewerContextResponse | undefined,
+  wrapupKickoffAnnounced: boolean,
+): boolean {
+  return (
+    runtimeContext?.roomStatus === 'wrapup' &&
+    (signal.reason === 'stage_changed' || signal.reason === 'session_joined') &&
+    !wrapupKickoffAnnounced
+  );
 }
 
 function toRealtimeInterviewContext(
@@ -1594,6 +1667,10 @@ function shouldRespondToSystemSignal(params: {
   }
 }
 
+// The LiveKit Agent entrypoint below wires SDK callbacks, room events, and
+// provider side effects. Unit tests cover the extracted prompt/context/decision
+// helpers above; the callback itself is exercised by LiveKit runtime tests.
+/* v8 ignore start */
 const agent = defineAgent({
   entry: async (ctx: JobContext) => {
     const metadata = parseDispatchMetadata(ctx.job.metadata);
@@ -1660,17 +1737,15 @@ const agent = defineAgent({
       if (!context) {
         return 'no-context';
       }
-      return createHash('sha256')
-        .update(
-          [
-            context.problemTitle,
-            context.difficulty ?? '',
-            context.language,
-            context.problemDescription,
-            context.starterCode,
-          ].join('||'),
-        )
-        .digest('hex');
+      return createStableDigest(
+        [
+          context.problemTitle,
+          context.difficulty ?? '',
+          context.language,
+          context.problemDescription,
+          context.starterCode,
+        ].join('||'),
+      );
     };
 
     const refreshPromptCachePrefix = () => {
@@ -1917,10 +1992,7 @@ const agent = defineAgent({
           const context = await fetchAiInterviewerRoomContext(roomId, participantUserId);
           applyFetchedRoomContext(context);
 
-          if (!expected || matchesExpectedSubmission(context.latestSubmission, expected)) {
-            return context;
-          }
-          if (attempt >= maxAttempts) {
+          if (shouldReturnFetchedRoomContext({ context, expected, attempt, maxAttempts })) {
             return context;
           }
           await sleep(300);
@@ -1960,7 +2032,7 @@ const agent = defineAgent({
         return false;
       }
       const runtimeContext = (await refreshRoomContext()) ?? latestRuntimeRoomContext;
-      if (!runtimeContext || runtimeContext.roomStatus !== 'warmup') {
+      if (runtimeContext?.roomStatus !== 'warmup') {
         return runtimeContext?.roomStatus === 'coding';
       }
       try {
@@ -2965,20 +3037,12 @@ const agent = defineAgent({
       signal: SystemSignal,
       runtimeContext: AiInterviewerContextResponse | undefined,
     ): Promise<boolean> => {
-      if (
-        runtimeContext?.roomStatus === 'warmup' &&
-        warmupFlowState === 'not_started' &&
-        (signal.reason === 'session_joined' || signal.reason === 'stage_changed')
-      ) {
+      if (isWarmupKickoffSignal(signal, runtimeContext, warmupFlowState)) {
         await startWarmupKickoffIfNeeded(`system_${signal.reason}_warmup_kickoff`);
         return true;
       }
 
-      if (
-        runtimeContext?.roomStatus === 'coding' &&
-        signal.reason === 'stage_changed' &&
-        !codingKickoffAnnounced
-      ) {
+      if (isCodingKickoffSignal(signal, runtimeContext, codingKickoffAnnounced)) {
         const scriptedNow = Date.now();
         lastSystemReplyAt = scriptedNow;
         signalLastSentAt.set(signal.reason, scriptedNow);
@@ -2993,11 +3057,7 @@ const agent = defineAgent({
         return true;
       }
 
-      if (
-        runtimeContext?.roomStatus === 'wrapup' &&
-        (signal.reason === 'stage_changed' || signal.reason === 'session_joined') &&
-        !wrapupKickoffAnnounced
-      ) {
+      if (isWrapupKickoffSignal(signal, runtimeContext, wrapupKickoffAnnounced)) {
         const scriptedNow = Date.now();
         lastSystemReplyAt = scriptedNow;
         signalLastSentAt.set(signal.reason, scriptedNow);
@@ -3039,10 +3099,7 @@ const agent = defineAgent({
       }
       runtimeContextForSignal = await waitOutWaitingStatus(signal, runtimeContextForSignal);
 
-      if (runtimeContextForSignal?.roomStatus === 'waiting' && signal.reason !== 'manual_nudge') {
-        return;
-      }
-      if (runtimeContextForSignal?.roomStatus === 'finished') {
+      if (shouldIgnoreRuntimeSignal(signal, runtimeContextForSignal)) {
         return;
       }
 
@@ -3124,6 +3181,7 @@ const agent = defineAgent({
     })();
   },
 });
+/* v8 ignore stop */
 
 export default agent;
 
@@ -3131,6 +3189,9 @@ export default agent;
 // leaking module-private helpers via top-level exports used by production
 // callers.
 export const __testing = {
+  createRealtimeSession,
+  createFallbackSession,
+  createInterviewSession,
   resolveOpenAiTtsVoice,
   normalizeOpenAiSdkBaseUrl,
   resolveTranscriptUrl,
@@ -3191,6 +3252,12 @@ export const __testing = {
   isNonPassingSubmission,
   isPassingSubmission,
   matchesExpectedSubmission,
+  isExpectedSubmissionContext,
+  shouldReturnFetchedRoomContext,
+  shouldIgnoreRuntimeSignal,
+  isWarmupKickoffSignal,
+  isCodingKickoffSignal,
+  isWrapupKickoffSignal,
   toRealtimeInterviewContext,
   shouldRespondToSystemSignal,
   isChineseLanguageHint,
