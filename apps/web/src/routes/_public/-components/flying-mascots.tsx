@@ -1,4 +1,11 @@
-import { motion, useAnimationFrame, useMotionValue, useSpring, useTransform } from 'motion/react';
+import {
+  motion,
+  useAnimationFrame,
+  useMotionValue,
+  useReducedMotion,
+  useSpring,
+  useTransform,
+} from 'motion/react';
 import { useEffect, useRef, useState } from 'react';
 import { MascotCharacter } from './mascot-character';
 
@@ -35,7 +42,7 @@ function randomWaypoint() {
 }
 
 /* ── Hook: firefly spring motion ─────────────────────────────── */
-function useFireflyMotion() {
+function useFireflyMotion(paused: boolean) {
   const x = useMotionValue(0.5);
   const y = useMotionValue(0.5);
   const springX = useSpring(x, { stiffness: 55, damping: 25, mass: 0.35 });
@@ -45,6 +52,7 @@ function useFireflyMotion() {
   const trailRef = useRef<{ x: number; y: number }[]>([]);
 
   useEffect(() => {
+    if (paused) return;
     const to = randomWaypoint();
     target.current = to;
     x.set(to.x);
@@ -60,9 +68,10 @@ function useFireflyMotion() {
       2500 + Math.random() * 5000,
     );
     return () => clearInterval(id);
-  }, [x, y]);
+  }, [x, y, paused]);
 
   useAnimationFrame((_, delta) => {
+    if (paused) return;
     jitterPhase.current += delta * 0.003;
     const jx =
       Math.sin(jitterPhase.current * 1.7) * 0.003 + Math.cos(jitterPhase.current * 3.1) * 0.0015;
@@ -84,19 +93,19 @@ function useFireflyMotion() {
 }
 
 /* ── Compute mood & look direction from firefly state ─────────── */
-function useMoodAndLook(firefly: ReturnType<typeof useFireflyMotion>) {
+function useMoodAndLook(firefly: ReturnType<typeof useFireflyMotion>, paused: boolean) {
   const [mood, setMood] = useState<'hover' | 'dart' | 'land'>('hover');
   const [lookAngle, setLookAngle] = useState(0);
   const landedAt = useRef(0);
 
   useAnimationFrame(() => {
+    if (paused) return;
     const sx = firefly.springX.get();
     const sy = firefly.springY.get();
     const dx = firefly.target.current.x - sx;
     const dy = firefly.target.current.y - sy;
     const dist = Math.sqrt(dx * dx + dy * dy);
 
-    // Mood: dart when moving fast, land briefly on arrival
     const nextMood: 'hover' | 'dart' | 'land' =
       dist > 0.03 ? 'dart' : Date.now() - landedAt.current < 400 ? 'land' : 'hover';
 
@@ -106,7 +115,6 @@ function useMoodAndLook(firefly: ReturnType<typeof useFireflyMotion>) {
 
     if (nextMood !== mood) setMood(nextMood);
 
-    // Look toward target, clamped to a natural neck range
     const raw =
       dist > 0.01
         ? Math.atan2(dy, dx) * (180 / Math.PI) - 90
@@ -122,22 +130,24 @@ function useMoodAndLook(firefly: ReturnType<typeof useFireflyMotion>) {
  * FlyingMascots
  * ═══════════════════════════════════════════════════════════════ */
 export function FlyingMascots() {
-  const cyan = useFireflyMotion();
-  const coral = useFireflyMotion();
-  const cyanMood = useMoodAndLook(cyan);
-  const coralMood = useMoodAndLook(coral);
+  const prefersReducedMotion = useReducedMotion() ?? false;
+  const cyan = useFireflyMotion(prefersReducedMotion);
+  const coral = useFireflyMotion(prefersReducedMotion);
+  const cyanMood = useMoodAndLook(cyan, prefersReducedMotion);
+  const coralMood = useMoodAndLook(coral, prefersReducedMotion);
 
   // Re-render trail dots at ~20fps
   const [, setTick] = useState(0);
   useEffect(() => {
+    if (prefersReducedMotion) return;
     const id = setInterval(() => setTick((t) => t + 1), 50);
     return () => clearInterval(id);
-  }, []);
+  }, [prefersReducedMotion]);
 
   return (
     <div className="pointer-events-none absolute inset-0 z-10">
       {/* Connecting rope */}
-      <RopeMotion a={cyan} b={coral} />
+      <RopeMotion a={cyan} b={coral} paused={prefersReducedMotion} />
 
       {/* Trails */}
       <FireflyTrail trailRef={cyan.trailRef} color="cyan" />
@@ -244,9 +254,11 @@ function FireflyTrail({
 function RopeMotion({
   a,
   b,
+  paused,
 }: {
   a: ReturnType<typeof useFireflyMotion>;
   b: ReturnType<typeof useFireflyMotion>;
+  paused: boolean;
 }) {
   // Raw endpoints (follow characters instantly)
   const ax = useTransform(a.springX, (v) => v * 100);
@@ -270,6 +282,7 @@ function RopeMotion({
 
   // Update physical values each frame
   useAnimationFrame((_, delta) => {
+    if (paused) return;
     // Push midpoint toward raw center (with inertia from spring)
     const rm = (a.springX.get() + b.springX.get()) / 2;
     const rmy = (a.springY.get() + b.springY.get()) / 2;

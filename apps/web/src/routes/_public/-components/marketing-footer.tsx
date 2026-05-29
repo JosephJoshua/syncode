@@ -15,7 +15,6 @@ export function MarketingFooter() {
       title: t('footer.product'),
       links: [
         { label: t('footer.features'), href: '#features' },
-        { label: t('footer.howItWorks'), href: '#features' },
         { label: t('footer.terminalDemo'), href: '#demo' },
       ],
     },
