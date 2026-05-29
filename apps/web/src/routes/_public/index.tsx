@@ -1,631 +1,530 @@
-import { Button } from '@syncode/ui';
 import { createFileRoute, Link } from '@tanstack/react-router';
-import { ArrowRight, Braces, ChevronDown, MessageSquare, Terminal, Users, Zap } from 'lucide-react';
-import { animate, motion, useInView, useMotionValue } from 'motion/react';
-import type { ReactNode } from 'react';
-import { memo, useEffect, useMemo, useRef } from 'react';
+import { ArrowRight } from 'lucide-react';
+import {
+  motion,
+  useInView,
+  useMotionValue,
+  useReducedMotion,
+  useScroll,
+  useSpring,
+  useTransform,
+} from 'motion/react';
+import type { MouseEvent } from 'react';
+import { useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { GlowOrb, PageBackground } from '@/components/background.js';
-import { CursorSpotlight } from '@/components/spotlight.js';
 import { TerminalDemo } from '@/components/terminal-demo.js';
+import { CtaSection } from './-components/cta-section';
+import { FeaturesSection } from './-components/features-section';
+import { PairMascot } from './-components/pair-mascot';
+import { StatsSection } from './-components/stats-section';
 
 export const Route = createFileRoute('/_public/')({
   component: HomePage,
 });
 
-// Floating code symbols
-const CODE_SYMBOLS = [
-  '</',
-  '/>',
-  '{;}',
-  '( )',
-  '[ ]',
-  '&&',
-  '=>',
-  '::',
-  '/**/',
-  '!=',
-  '++',
-  '0x',
-  '>>>',
-  '${',
-  '??',
-  '|>',
-];
-
-const FloatingSymbols = memo(function FloatingSymbols() {
-  const symbols = useMemo(
-    () =>
-      CODE_SYMBOLS.map((symbol, i) => ({
-        symbol,
-        left: `${5 + ((i * 5.7) % 90)}%`,
-        delay: i * 0.9,
-        duration: 14 + (i % 6) * 2.5,
-        size: 11 + (i % 4) * 2,
-      })),
-    [],
-  );
-
-  return (
-    <div className="pointer-events-none absolute inset-0 overflow-hidden">
-      {symbols.map((s) => (
-        <span
-          key={s.symbol}
-          className="absolute font-mono text-primary/[0.08] select-none"
-          style={{
-            left: s.left,
-            fontSize: `${s.size}px`,
-            animation: `float-drift ${s.duration}s ${s.delay}s linear infinite`,
-          }}
-        >
-          {s.symbol}
-        </span>
-      ))}
-    </div>
-  );
-});
-
-// Language marquee
-const LANGUAGES = [
-  'Python',
-  'JavaScript',
-  'TypeScript',
-  'Go',
-  'Rust',
-  'Java',
-  'C++',
-  'Ruby',
-  'C#',
-  'Kotlin',
-];
-
-function LanguageMarquee() {
-  return (
-    <div className="relative overflow-hidden border-y border-border/20 py-5">
-      <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-24 bg-linear-to-r from-background to-transparent" />
-      <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-24 bg-linear-to-l from-background to-transparent" />
-
-      <div className="flex w-max animate-[marquee_30s_linear_infinite]">
-        {[0, 1].map((copy) =>
-          LANGUAGES.map((lang) => (
-            <span
-              key={`${copy}-${lang}`}
-              className="mx-8 inline-flex items-center gap-2 font-mono text-sm text-muted-foreground/40"
-            >
-              <span className="size-1.5 rounded-full bg-primary/30" />
-              {lang}
-            </span>
-          )),
-        )}
-      </div>
-    </div>
-  );
-}
-
-function AnimatedNumber({ to }: { readonly to: number }) {
-  const ref = useRef<HTMLSpanElement>(null);
-  const isInView = useInView(ref, { once: true });
-  const val = useMotionValue(0);
-
-  useEffect(() => {
-    if (!isInView) return;
-    const controls = animate(val, to, { duration: 2, ease: 'easeOut' });
-    return () => controls.stop();
-  }, [isInView, val, to]);
-
-  useEffect(() => {
-    return val.on('change', (v) => {
-      if (ref.current) ref.current.textContent = String(Math.round(v));
-    });
-  }, [val]);
-
-  return <span ref={ref}>0</span>;
-}
-
-function GradientDivider() {
-  return (
-    <div className="mx-auto h-px max-w-xs bg-linear-to-r from-transparent via-primary/20 to-transparent" />
-  );
-}
-
-const stagger = (i: number) => ({ delay: 0.05 + i * 0.1 });
+/* ═══ Splash Shatter ═══════════════════════════════════════════════════ */
+const SHATTER_FRAGMENTS = [
+  {
+    clip: 'polygon(25% 25%, 58% 20%, 65% 58%, 30% 65%)',
+    to: { x: '-70%', y: '-60%', rotate: -22, scale: 0.3, opacity: 0 },
+    delay: 0.35,
+    color: 'oklch(0.82 0.18 165)',
+  },
+  {
+    clip: 'polygon(52% 20%, 80% 28%, 75% 62%, 58% 55%)',
+    to: { x: '65%', y: '-50%', rotate: 26, scale: 0.25, opacity: 0 },
+    delay: 0.4,
+    color: 'oklch(0.78 0.17 165)',
+  },
+  {
+    clip: 'polygon(-5% -5%, 55% -5%, 35% 30%, -5% 30%)',
+    to: { x: '-100%', y: '-80%', rotate: -28, scale: 0.4, opacity: 0 },
+    delay: 0.55,
+    color: 'oklch(0.75 0.16 165)',
+  },
+  {
+    clip: 'polygon(45% -5%, 105% -5%, 105% 35%, 78% 30%, 50% 22%)',
+    to: { x: '100%', y: '-75%', rotate: 32, scale: 0.35, opacity: 0 },
+    delay: 0.6,
+    color: 'oklch(0.70 0.15 165)',
+  },
+  {
+    clip: 'polygon(-5% 25%, 32% 28%, 35% 62%, -5% 72%)',
+    to: { x: '-110%', y: '20%', rotate: -18, scale: 0.4, opacity: 0 },
+    delay: 0.5,
+    color: 'oklch(0.72 0.16 165)',
+  },
+  {
+    clip: 'polygon(72% 30%, 105% 28%, 105% 68%, 68% 60%)',
+    to: { x: '105%', y: '15%', rotate: 24, scale: 0.4, opacity: 0 },
+    delay: 0.55,
+    color: 'oklch(0.68 0.14 165)',
+  },
+  {
+    clip: 'polygon(-5% 65%, 38% 58%, 48% 105%, -5% 105%)',
+    to: { x: '-85%', y: '90%', rotate: -24, scale: 0.4, opacity: 0 },
+    delay: 0.65,
+    color: 'oklch(0.65 0.15 165)',
+  },
+  {
+    clip: 'polygon(32% 60%, 65% 55%, 72% 62%, 105% 65%, 105% 105%, 42% 105%)',
+    to: { x: '80%', y: '85%', rotate: 22, scale: 0.3, opacity: 0 },
+    delay: 0.7,
+    color: 'oklch(0.60 0.14 165)',
+  },
+] as const;
 
 function HomePage() {
   const { t } = useTranslation('landing');
+  const prefersReducedMotion = useReducedMotion();
+
+  /* ── Terminal 3D scene: mouse-driven tilt ─────────────────────── */
+  const termRef = useRef<HTMLElement>(null);
+  const sceneRef = useRef<HTMLDivElement>(null);
+
+  // Scroll-driven entrance
+  const { scrollYProgress: tp } = useScroll({
+    target: termRef,
+    offset: ['start end', 'start 0.25'],
+  });
+  const termEntryScale = useTransform(tp, [0, 1], [0.85, 1]);
+  const termEntryOpacity = useTransform(tp, [0, 0.3], [0, 1]);
+
+  // Mouse-driven 3D tilt (interactive — moves with cursor over section)
+  const mouseX = useMotionValue(0);
+  const mouseY = useMotionValue(0);
+  const springConfig = { stiffness: 150, damping: 20 };
+  const tiltX = useSpring(useTransform(mouseY, [-0.5, 0.5], [5, -5]), springConfig);
+  const tiltY = useSpring(useTransform(mouseX, [-0.5, 0.5], [-5, 5]), springConfig);
+
+  // Satellite elements parallax (different z-depths)
+  const satX = useSpring(useTransform(mouseX, [-0.5, 0.5], [15, -15]), springConfig);
+  const satY = useSpring(useTransform(mouseY, [-0.5, 0.5], [10, -10]), springConfig);
+  const satNegX = useSpring(useTransform(mouseX, [-0.5, 0.5], [-15, 15]), springConfig);
+  const satFarX = useSpring(useTransform(mouseX, [-0.5, 0.5], [8, -8]), springConfig);
+  const satFarY = useSpring(useTransform(mouseY, [-0.5, 0.5], [5, -5]), springConfig);
+  const satFarNegX = useSpring(useTransform(mouseX, [-0.5, 0.5], [-8, 8]), springConfig);
+
+  // Cursor glow — tracks mouse in PIXELS relative to the scene
+  const glowPxX = useMotionValue(0);
+  const glowPxY = useMotionValue(0);
+  const glowSpringX = useSpring(glowPxX, { stiffness: 200, damping: 25 });
+  const glowSpringY = useSpring(glowPxY, { stiffness: 200, damping: 25 });
+  const glowVisible = useMotionValue(0);
+
+  const handleSceneMouseMove = useCallback(
+    (e: MouseEvent) => {
+      if (!sceneRef.current || prefersReducedMotion) return;
+      const rect = sceneRef.current.getBoundingClientRect();
+      // Normalized for tilt (-0.5 to 0.5)
+      mouseX.set((e.clientX - rect.left) / rect.width - 0.5);
+      mouseY.set((e.clientY - rect.top) / rect.height - 0.5);
+      // Pixel coords for glow (relative to scene)
+      glowPxX.set(e.clientX - rect.left);
+      glowPxY.set(e.clientY - rect.top);
+      glowVisible.set(1);
+    },
+    [mouseX, mouseY, glowPxX, glowPxY, glowVisible, prefersReducedMotion],
+  );
+
+  const handleSceneMouseLeave = useCallback(() => {
+    mouseX.set(0);
+    mouseY.set(0);
+    glowVisible.set(0);
+  }, [mouseX, mouseY, glowVisible]);
 
   return (
     <div className="relative">
-      {/* Hero */}
-      <section className="relative flex min-h-screen items-center overflow-hidden">
-        <PageBackground />
-        <FloatingSymbols />
-        <CursorSpotlight />
-
-        {/* Drifting glow orbs */}
-        <motion.div
-          animate={{ x: [0, 30, -20, 0], y: [0, -25, 10, 0] }}
-          transition={{ duration: 20, repeat: Number.POSITIVE_INFINITY, ease: 'easeInOut' }}
-          className="pointer-events-none absolute left-1/2 top-20 -translate-x-1/2"
-        >
-          <GlowOrb className="animate-[glowPulse_4s_ease-in-out_infinite]" size="lg" />
-        </motion.div>
-        <motion.div
-          animate={{ x: [0, -20, 15, 0], y: [0, 15, -10, 0] }}
-          transition={{ duration: 25, repeat: Number.POSITIVE_INFINITY, ease: 'easeInOut' }}
-          className="pointer-events-none absolute left-1/4 top-2/3"
-        >
-          <GlowOrb className="animate-[glowPulse_5s_ease-in-out_infinite_1.5s]" size="sm" />
-        </motion.div>
-        <motion.div
-          animate={{ x: [0, 25, -15, 0], y: [0, -15, 20, 0] }}
-          transition={{ duration: 22, repeat: Number.POSITIVE_INFINITY, ease: 'easeInOut' }}
-          className="pointer-events-none absolute right-1/4 top-1/3"
-        >
-          <GlowOrb className="animate-[glowPulse_6s_ease-in-out_infinite_3s]" size="sm" />
-        </motion.div>
-
-        {/* Decorative code brackets */}
-        <motion.span
-          initial={{ opacity: 0, x: 40 }}
-          animate={{ opacity: 0.04, x: 0 }}
-          transition={{ duration: 1.2, delay: 0.5, ease: 'easeOut' }}
-          className="pointer-events-none absolute left-4 top-1/2 hidden -translate-y-1/2 font-mono text-[clamp(120px,20vw,280px)] leading-none text-primary select-none lg:block"
-        >
-          {'{\u200B'}
-        </motion.span>
-        <motion.span
-          initial={{ opacity: 0, x: -40 }}
-          animate={{ opacity: 0.04, x: 0 }}
-          transition={{ duration: 1.2, delay: 0.5, ease: 'easeOut' }}
-          className="pointer-events-none absolute right-4 top-1/2 hidden -translate-y-1/2 font-mono text-[clamp(120px,20vw,280px)] leading-none text-primary select-none lg:block"
-        >
-          {'\u200B}'}
-        </motion.span>
-
-        <div className="relative z-10 mx-auto max-w-5xl px-4 text-center">
-          {/* Terminal badge */}
+      {/* ═══ SPLASH ═══════════════════════════════════════════════ */}
+      {!prefersReducedMotion && (
+        <div className="pointer-events-none fixed inset-0 z-[60]">
+          {SHATTER_FRAGMENTS.map((frag) => (
+            <motion.div
+              key={frag.clip}
+              className="absolute inset-0"
+              style={{ clipPath: frag.clip, backgroundColor: frag.color }}
+              initial={{ x: 0, y: 0, rotate: 0, scale: 1, opacity: 1 }}
+              animate={frag.to}
+              transition={{ duration: 0.9, delay: frag.delay, ease: [0.16, 1, 0.3, 1] }}
+            />
+          ))}
           <motion.div
-            initial={{ opacity: 0, scale: 0.8, y: 10 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-            className="mb-8 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-4 py-1.5"
+            className="absolute inset-0 flex items-center justify-center"
+            initial={{ opacity: 0.9, scale: 1 }}
+            animate={{ opacity: 0, scale: 1.1 }}
+            transition={{ duration: 0.4, delay: 0.2, ease: 'easeOut' }}
           >
-            <Terminal className="size-3.5 text-primary" />
-            <span className="font-mono text-xs text-primary">{t('badge')}</span>
-            <span className="h-3.5 w-px bg-primary/30" />
-            <span className="relative flex size-2">
-              <span className="absolute inline-flex size-full animate-ping rounded-full bg-primary/60" />
-              <span className="relative inline-flex size-2 rounded-full bg-primary" />
+            <span className="font-display text-6xl uppercase tracking-tight text-ink/70 sm:text-8xl">
+              SynCode
             </span>
           </motion.div>
+        </div>
+      )}
 
-          {/* Heading */}
-          <motion.h1
-            initial={{ opacity: 0, y: 24 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.7, ...stagger(1), ease: [0.16, 1, 0.3, 1] }}
-            className="text-5xl font-bold tracking-tighter text-foreground sm:text-6xl lg:text-7xl"
+      {/* ═══ HERO ═════════════════════════════════════════════════ */}
+      <section className="relative flex h-svh flex-col items-center justify-center bg-ink">
+        <div
+          className="pointer-events-none absolute inset-0 opacity-[0.03]"
+          style={{
+            backgroundImage: 'radial-gradient(circle, oklch(0.82 0.18 165) 1px, transparent 1px)',
+            backgroundSize: '24px 24px',
+          }}
+        />
+
+        <div className="relative z-10 px-6 text-center">
+          <h1
+            className="font-display uppercase leading-[0.9] tracking-tight"
+            style={{ fontSize: 'clamp(4.5rem, 14vw, 13rem)' }}
           >
-            {t('hero.heading1')}
-            <br className="hidden sm:block" />
-            <span className="bg-linear-to-r from-primary via-primary/60 to-primary bg-[length:200%_auto] bg-clip-text text-transparent animate-[gradient-x_4s_ease-in-out_infinite]">
+            <span className="headline-reveal-line headline-reveal-line-1 block text-foreground">
+              {t('hero.heading1')}
+            </span>
+            <span className="headline-reveal-line headline-reveal-line-2 block text-primary">
               {t('hero.heading2')}
             </span>
-          </motion.h1>
+          </h1>
 
-          {/* Subheading */}
+          <motion.div
+            className="mt-8 sm:mt-12"
+            initial={prefersReducedMotion ? undefined : { opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 1.3, duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+          >
+            <Link
+              to="/register"
+              className="inline-flex items-center rounded-full bg-foreground px-8 py-4 text-base font-medium text-background transition-shadow hover:shadow-lg-flat sm:text-lg"
+            >
+              <span className="btn-text-holder">
+                <span className="btn-text-main flex items-center gap-2">
+                  {t('button.getStarted')}
+                  <ArrowRight className="size-5" />
+                </span>
+                <span className="btn-text-hover flex items-center gap-2" aria-hidden="true">
+                  {t('button.getStartedHover')}
+                  <ArrowRight className="size-5" />
+                </span>
+              </span>
+            </Link>
+          </motion.div>
+        </div>
+
+        {/* Mascot peeking from bottom */}
+        <motion.div
+          className="absolute bottom-0 left-1/2 z-20"
+          style={{ x: '-50%', translateY: '40%' }}
+          initial={prefersReducedMotion ? undefined : { scale: 0.2, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ delay: 0.5, duration: 1.4, type: 'spring', stiffness: 60, damping: 12 }}
+        >
+          <PairMascot size={400} variant="idle" trackMouse />
+        </motion.div>
+      </section>
+
+      {/* ═══ TERMINAL — Floating 3D scene ═════════════════════════
+          The terminal floats in a 3D space. Mouse movement tilts the
+          entire scene. Satellite UI elements (badges, indicators)
+          float at different z-depths, creating parallax on tilt.
+          A soft glow and reflection beneath add depth.
+         ═══════════════════════════════════════════════════════════ */}
+      <section
+        id="demo"
+        ref={termRef}
+        className="relative overflow-hidden bg-charcoal py-24 sm:py-32"
+      >
+        {/* Background grid — subtle spatial depth */}
+        <div
+          className="pointer-events-none absolute inset-0 opacity-[0.04]"
+          style={{
+            backgroundImage:
+              'linear-gradient(oklch(0.82 0.18 165 / 0.3) 1px, transparent 1px), linear-gradient(90deg, oklch(0.82 0.18 165 / 0.3) 1px, transparent 1px)',
+            backgroundSize: '60px 60px',
+          }}
+        />
+
+        {/* Ambient floating particles */}
+        {!prefersReducedMotion && (
+          <>
+            <motion.div
+              className="pointer-events-none absolute left-[20%] top-[30%] size-1 rounded-full bg-primary/30"
+              animate={{ y: [0, -30, 0], x: [0, 10, 0], opacity: [0.2, 0.5, 0.2] }}
+              transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }}
+            />
+            <motion.div
+              className="pointer-events-none absolute right-[25%] top-[60%] size-1.5 rounded-full bg-coral/20"
+              animate={{ y: [0, 20, 0], x: [0, -15, 0], opacity: [0.1, 0.4, 0.1] }}
+              transition={{ duration: 8, repeat: Infinity, ease: 'easeInOut', delay: 2 }}
+            />
+            <motion.div
+              className="pointer-events-none absolute left-[60%] top-[20%] size-1 rounded-full bg-primary/20"
+              animate={{ y: [0, -20, 0], x: [0, -8, 0], opacity: [0.15, 0.35, 0.15] }}
+              transition={{ duration: 7, repeat: Infinity, ease: 'easeInOut', delay: 1 }}
+            />
+            <motion.div
+              className="pointer-events-none absolute right-[40%] bottom-[20%] size-1 rounded-full bg-plum-soft/20"
+              animate={{ y: [0, 15, 0], x: [0, 12, 0], opacity: [0.1, 0.3, 0.1] }}
+              transition={{ duration: 9, repeat: Infinity, ease: 'easeInOut', delay: 3 }}
+            />
+          </>
+        )}
+
+        <div className="relative mx-auto max-w-6xl px-6">
           <motion.p
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, ...stagger(2), ease: [0.16, 1, 0.3, 1] }}
-            className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-muted-foreground sm:text-xl"
-          >
-            {t('hero.sub1')}
-            <br className="hidden sm:block" />
-            {t('hero.sub2')}
-          </motion.p>
-
-          {/* Buttons */}
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, ...stagger(3), ease: [0.16, 1, 0.3, 1] }}
-            className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row"
-          >
-            <Button asChild size="lg" className="shimmer-sweep">
-              <Link to="/register">
-                {t('button.getStarted')}
-                <ArrowRight data-icon="inline-end" className="size-4" />
-              </Link>
-            </Button>
-            <Button asChild variant="outline" size="lg">
-              <Link to="/login">{t('button.signIn')}</Link>
-            </Button>
-          </motion.div>
-
-          {/* Online now badge */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.5, delay: 2 }}
-            className="mt-6 inline-flex items-center gap-2 font-mono text-xs text-muted-foreground/50"
-          >
-            <span className="relative flex size-2">
-              <span className="absolute inline-flex size-full animate-ping rounded-full bg-green-500/50" />
-              <span className="relative inline-flex size-2 rounded-full bg-green-500" />
-            </span>
-            {t('onlineBadge', { count: 247 })}
-          </motion.div>
-
-          {/* Scroll indicator */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1, y: [0, 8, 0] }}
-            transition={{
-              opacity: { duration: 0.5, delay: 1.5 },
-              y: { duration: 2, repeat: Number.POSITIVE_INFINITY, ease: 'easeInOut' },
-            }}
-            className="mt-14"
-          >
-            <ChevronDown className="mx-auto size-5 text-muted-foreground/40" />
-          </motion.div>
-        </div>
-      </section>
-
-      {/* Language Marquee */}
-      <LanguageMarquee />
-
-      {/* Features */}
-      <section className="relative py-32">
-        <div className="mx-auto max-w-5xl px-4">
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: '-100px' }}
-            transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-            className="mb-16 text-center"
-          >
-            <span className="font-mono text-xs text-primary/60">{t('features.comment')}</span>
-            <h2 className="mt-4 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-              {t('features.heading')}
-            </h2>
-            <p className="mx-auto mt-3 max-w-lg text-muted-foreground">{t('features.sub')}</p>
-          </motion.div>
-
-          <div className="grid gap-6 sm:grid-cols-3">
-            <FeatureCard
-              icon={<Users className="size-5" />}
-              title={t('features.pairProgramming')}
-              description={t('features.pairProgrammingDesc')}
-              decorator="collab.connect({ crdt: true })"
-              index={0}
-              accent={
-                <div className="flex gap-1">
-                  <motion.span
-                    className="size-2 rounded-full bg-amber-400"
-                    animate={{ scale: [1, 1.4, 1], opacity: [0.5, 1, 0.5] }}
-                    transition={{ duration: 2, repeat: Number.POSITIVE_INFINITY }}
-                  />
-                  <motion.span
-                    className="size-2 rounded-full bg-violet-400"
-                    animate={{ scale: [1, 1.4, 1], opacity: [0.5, 1, 0.5] }}
-                    transition={{ duration: 2, repeat: Number.POSITIVE_INFINITY, delay: 0.6 }}
-                  />
-                </div>
-              }
-            />
-            <FeatureCard
-              icon={<Braces className="size-5" />}
-              title={t('features.liveExecution')}
-              description={t('features.liveExecutionDesc')}
-              decorator={'sandbox.exec("python", code)'}
-              index={1}
-              accent={
-                <div className="h-1 w-10 overflow-hidden rounded-full bg-muted">
-                  <motion.div
-                    className="h-full rounded-full bg-green-400/80"
-                    animate={{ width: ['0%', '100%'] }}
-                    transition={{
-                      duration: 2,
-                      repeat: Number.POSITIVE_INFINITY,
-                      repeatDelay: 1,
-                      ease: 'easeInOut',
-                    }}
-                  />
-                </div>
-              }
-            />
-            <FeatureCard
-              icon={<MessageSquare className="size-5" />}
-              title={t('features.aiFeedback')}
-              description={t('features.aiFeedbackDesc')}
-              decorator={'ai.review({ depth: "senior" })'}
-              index={2}
-              accent={
-                <div className="flex gap-1">
-                  {[0, 1, 2].map((d) => (
-                    <motion.span
-                      key={d}
-                      className="size-1.5 rounded-full bg-primary/60"
-                      animate={{ y: [0, -4, 0] }}
-                      transition={{
-                        duration: 0.8,
-                        repeat: Number.POSITIVE_INFINITY,
-                        delay: d * 0.15,
-                        ease: 'easeInOut',
-                      }}
-                    />
-                  ))}
-                </div>
-              }
-            />
-          </div>
-        </div>
-      </section>
-
-      <GradientDivider />
-
-      {/* Stats */}
-      <section className="relative py-24">
-        <div className="mx-auto max-w-4xl px-4">
-          <div className="grid grid-cols-2 gap-10 sm:grid-cols-4">
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.5 }}
-              className="text-center"
-            >
-              <div className="font-mono text-4xl font-bold text-foreground sm:text-5xl">
-                <AnimatedNumber to={10} />
-                <span className="text-primary">+</span>
-              </div>
-              <div className="mt-2 text-sm text-muted-foreground">{t('stats.languages')}</div>
-            </motion.div>
-
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.5, delay: 0.1 }}
-              className="text-center"
-            >
-              <div className="font-mono text-4xl font-bold text-foreground sm:text-5xl">
-                <AnimatedNumber to={2} />
-                <span className="text-primary">x</span>
-              </div>
-              <div className="mt-2 text-sm text-muted-foreground">{t('stats.faster')}</div>
-            </motion.div>
-
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.5, delay: 0.2 }}
-              className="text-center"
-            >
-              <div className="font-mono text-4xl font-bold text-foreground sm:text-5xl">
-                <AnimatedNumber to={0} />
-                <span className="text-primary"> lag</span>
-              </div>
-              <div className="mt-2 text-sm text-muted-foreground">{t('stats.realTime')}</div>
-            </motion.div>
-
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.5, delay: 0.3 }}
-              className="text-center"
-            >
-              <div className="font-mono text-4xl font-bold text-foreground sm:text-5xl">
-                <AnimatedNumber to={24} />
-                <span className="text-primary">/7</span>
-              </div>
-              <div className="mt-2 text-sm text-muted-foreground">{t('stats.aiFeedback')}</div>
-            </motion.div>
-          </div>
-        </div>
-      </section>
-
-      <GradientDivider />
-
-      {/* How It Works */}
-      <section className="relative py-32">
-        <div className="mx-auto max-w-4xl px-4">
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: '-100px' }}
-            transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-            className="mb-16 text-center"
-          >
-            <span className="font-mono text-xs text-primary/60">{t('howItWorks.comment')}</span>
-            <h2 className="mt-4 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-              {t('howItWorks.heading')}
-            </h2>
-          </motion.div>
-
-          <div className="relative grid gap-12 sm:grid-cols-3 sm:gap-8">
-            {/* Connecting dashed line(desktop) */}
-            <div className="pointer-events-none absolute top-6 right-20 left-20 hidden h-px border-t border-dashed border-primary/15 sm:block" />
-
-            <StepCard
-              num={1}
-              icon={<Terminal className="size-4" />}
-              title={t('howItWorks.step1Title')}
-              description={t('howItWorks.step1Desc')}
-              index={0}
-            />
-            <StepCard
-              num={2}
-              icon={<Users className="size-4" />}
-              title={t('howItWorks.step2Title')}
-              description={t('howItWorks.step2Desc')}
-              index={1}
-            />
-            <StepCard
-              num={3}
-              icon={<Zap className="size-4" />}
-              title={t('howItWorks.step3Title')}
-              description={t('howItWorks.step3Desc')}
-              index={2}
-            />
-          </div>
-        </div>
-      </section>
-
-      <GradientDivider />
-
-      {/* Terminal Demo */}
-      <section className="relative py-20">
-        <div className="mx-auto max-w-5xl px-4">
-          <motion.div
+            className="mb-16 text-center font-display text-3xl uppercase tracking-tight text-foreground sm:text-4xl lg:text-5xl"
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: '-50px' }}
+            viewport={{ once: true, margin: '-80px' }}
             transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-            className="mb-10 text-center"
           >
-            <span className="font-mono text-xs text-primary/60">{t('demo.comment')}</span>
-            <h2 className="mt-4 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-              {t('demo.heading')}
-            </h2>
-            <p className="mt-3 text-muted-foreground">{t('demo.sub')}</p>
-          </motion.div>
+            {t('terminal.heading1')} <span className="text-primary">{t('terminal.heading2')}</span>
+          </motion.p>
 
-          <motion.div
-            initial={{ opacity: 0, y: 40, scale: 0.95 }}
-            whileInView={{ opacity: 1, y: 0, scale: 1 }}
-            viewport={{ once: true, margin: '-50px' }}
-            transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
-            className="mx-auto max-w-4xl"
+          {/* 3D Scene container — mouse tilt zone */}
+          {/* biome-ignore lint/a11y/noStaticElementInteractions: 3D scene needs mouse tracking for tilt effect */}
+          <div
+            ref={sceneRef}
+            onMouseMove={handleSceneMouseMove}
+            onMouseLeave={handleSceneMouseLeave}
+            className="relative"
+            style={{ perspective: '1200px' }}
           >
-            <TerminalDemo />
-          </motion.div>
+            {/* Cursor glow — a circle that follows the mouse exactly */}
+            {!prefersReducedMotion && (
+              <motion.div
+                className="pointer-events-none absolute z-0 rounded-full"
+                style={{
+                  width: 500,
+                  height: 500,
+                  left: glowSpringX,
+                  top: glowSpringY,
+                  x: '-50%',
+                  y: '-50%',
+                  opacity: glowVisible,
+                  background:
+                    'radial-gradient(circle, oklch(0.82 0.18 165 / 0.12), oklch(0.82 0.18 165 / 0.03) 40%, transparent 70%)',
+                }}
+              />
+            )}
+            {/* Scroll entrance + mouse tilt combined */}
+            <motion.div
+              style={
+                prefersReducedMotion
+                  ? undefined
+                  : {
+                      rotateX: tiltX,
+                      rotateY: tiltY,
+                      scale: termEntryScale,
+                      opacity: termEntryOpacity,
+                      transformOrigin: 'center center',
+                    }
+              }
+            >
+              {/* Terminal card with mouse-tracked glow */}
+              <div className="relative">
+                {/* Glow that follows cursor — like a spotlight */}
+                <motion.div
+                  className="pointer-events-none absolute -inset-12 -z-10 rounded-3xl opacity-40 blur-3xl"
+                  style={{
+                    background: useTransform(
+                      [mouseX, mouseY],
+                      ([mx, my]: number[]) =>
+                        `radial-gradient(600px ellipse at ${50 + (mx as number) * 60}% ${50 + (my as number) * 60}%, oklch(0.82 0.18 165 / 0.35), transparent 70%)`,
+                    ),
+                  }}
+                />
+                {/* Secondary coral glow on opposite side */}
+                <motion.div
+                  className="pointer-events-none absolute -inset-12 -z-10 rounded-3xl opacity-20 blur-3xl"
+                  style={{
+                    background: useTransform(
+                      [mouseX, mouseY],
+                      ([mx, my]: number[]) =>
+                        `radial-gradient(400px ellipse at ${50 - (mx as number) * 40}% ${50 - (my as number) * 40}%, oklch(0.72 0.19 35 / 0.3), transparent 70%)`,
+                    ),
+                  }}
+                />
+
+                <InViewTerminal />
+
+                {/* Reflection — faint mirrored copy below */}
+                <div
+                  className="pointer-events-none mt-1 h-20 opacity-[0.07]"
+                  style={{
+                    background:
+                      'linear-gradient(to bottom, oklch(0.82 0.18 165 / 0.2), transparent)',
+                    maskImage: 'linear-gradient(to bottom, white, transparent)',
+                    WebkitMaskImage: 'linear-gradient(to bottom, white, transparent)',
+                  }}
+                />
+              </div>
+            </motion.div>
+
+            {/* ── Connecting lines from terminal to satellites ── */}
+            {!prefersReducedMotion && (
+              <svg
+                className="pointer-events-none absolute inset-0 z-10 hidden h-full w-full lg:block"
+                fill="none"
+              >
+                <title>Connection lines</title>
+                {/* Right side lines — pulsing dash animation */}
+                <motion.line
+                  x1="100%"
+                  y1="15%"
+                  x2="90%"
+                  y2="30%"
+                  stroke="oklch(0.82 0.18 165 / 0.15)"
+                  strokeWidth={1}
+                  strokeDasharray="4 4"
+                  animate={{ strokeDashoffset: [0, -16] }}
+                  transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
+                />
+                <motion.line
+                  x1="100%"
+                  y1="70%"
+                  x2="92%"
+                  y2="60%"
+                  stroke="oklch(0.82 0.18 165 / 0.1)"
+                  strokeWidth={1}
+                  strokeDasharray="4 4"
+                  animate={{ strokeDashoffset: [0, -16] }}
+                  transition={{ duration: 2.5, repeat: Infinity, ease: 'linear', delay: 0.5 }}
+                />
+                {/* Left side lines */}
+                <motion.line
+                  x1="0%"
+                  y1="35%"
+                  x2="10%"
+                  y2="40%"
+                  stroke="oklch(0.82 0.18 165 / 0.12)"
+                  strokeWidth={1}
+                  strokeDasharray="4 4"
+                  animate={{ strokeDashoffset: [0, 16] }}
+                  transition={{ duration: 2.2, repeat: Infinity, ease: 'linear', delay: 0.3 }}
+                />
+                <motion.line
+                  x1="0%"
+                  y1="80%"
+                  x2="8%"
+                  y2="72%"
+                  stroke="oklch(0.55 0.18 320 / 0.12)"
+                  strokeWidth={1}
+                  strokeDasharray="4 4"
+                  animate={{ strokeDashoffset: [0, 16] }}
+                  transition={{ duration: 2.8, repeat: Infinity, ease: 'linear', delay: 0.8 }}
+                />
+              </svg>
+            )}
+
+            {/* ── Floating satellite elements (different z-depths) ── */}
+            {!prefersReducedMotion && (
+              <>
+                {/* LIVE badge — close to viewer (high parallax) */}
+                <motion.div
+                  className="absolute -right-4 top-8 z-20 hidden lg:block"
+                  style={{ x: satX, y: satY }}
+                  initial={{ opacity: 0, x: 40 }}
+                  whileInView={{ opacity: 1, x: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: 0.4, type: 'spring', stiffness: 200, damping: 20 }}
+                >
+                  <div className="flex items-center gap-2 rounded-full bg-ink/80 px-4 py-2 backdrop-blur-sm">
+                    <span className="relative flex size-2">
+                      <span className="absolute inline-flex size-full animate-ping rounded-full bg-green-400/60" />
+                      <span className="relative inline-flex size-2 rounded-full bg-green-400" />
+                    </span>
+                    <span className="font-mono text-xs font-medium text-green-400">LIVE</span>
+                  </div>
+                </motion.div>
+
+                {/* Connected users — close to viewer */}
+                <motion.div
+                  className="absolute -left-4 top-1/3 z-20 hidden lg:block"
+                  style={{ x: satNegX, y: satY }}
+                  initial={{ opacity: 0, x: -40 }}
+                  whileInView={{ opacity: 1, x: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: 0.6, type: 'spring', stiffness: 200, damping: 20 }}
+                >
+                  <div className="flex items-center gap-2 rounded-full bg-ink/80 px-4 py-2 backdrop-blur-sm">
+                    <div className="flex -space-x-1.5">
+                      <span className="size-4 rounded-full bg-primary ring-2 ring-ink" />
+                      <span className="size-4 rounded-full bg-coral ring-2 ring-ink" />
+                    </div>
+                    <span className="font-mono text-xs text-muted-foreground">2 connected</span>
+                  </div>
+                </motion.div>
+
+                {/* Test status — farther away (less parallax) */}
+                <motion.div
+                  className="absolute -right-2 bottom-1/4 z-20 hidden lg:block"
+                  style={{ x: satFarX, y: satFarY }}
+                  initial={{ opacity: 0, x: 30 }}
+                  whileInView={{ opacity: 1, x: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: 0.8, type: 'spring', stiffness: 200, damping: 20 }}
+                >
+                  <div className="flex items-center gap-2 rounded-xl bg-ink/80 px-4 py-2 backdrop-blur-sm">
+                    <span className="text-green-400">✓</span>
+                    <span className="font-mono text-xs text-muted-foreground">3/3 passed</span>
+                  </div>
+                </motion.div>
+
+                {/* AI review badge — farther away */}
+                <motion.div
+                  className="absolute -left-2 bottom-12 z-20 hidden lg:block"
+                  style={{ x: satFarNegX, y: satFarY }}
+                  initial={{ opacity: 0, x: -30 }}
+                  whileInView={{ opacity: 1, x: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: 1.0, type: 'spring', stiffness: 200, damping: 20 }}
+                >
+                  <div className="flex items-center gap-2 rounded-xl bg-ink/80 px-4 py-2 backdrop-blur-sm">
+                    <div className="flex size-5 items-center justify-center rounded-full bg-plum/20">
+                      <span className="text-[10px] font-bold text-plum-soft">AI</span>
+                    </div>
+                    <span className="font-mono text-xs text-plum-soft">O(n) optimal</span>
+                  </div>
+                </motion.div>
+              </>
+            )}
+          </div>
         </div>
       </section>
 
-      {/* CTA */}
-      <section className="relative overflow-hidden py-32">
-        <PageBackground />
+      <FeaturesSection />
 
-        <motion.div
-          animate={{ x: [0, 20, -10, 0], y: [0, -15, 10, 0] }}
-          transition={{ duration: 18, repeat: Number.POSITIVE_INFINITY, ease: 'easeInOut' }}
-          className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
-        >
-          <GlowOrb className="animate-[glowPulse_4s_ease-in-out_infinite]" size="lg" />
-        </motion.div>
+      <StatsSection />
 
-        <div className="relative z-10 mx-auto max-w-3xl px-4 text-center">
-          <motion.div
-            initial={{ opacity: 0, y: 30, scale: 0.96 }}
-            whileInView={{ opacity: 1, y: 0, scale: 1 }}
-            viewport={{ once: true, margin: '-100px' }}
-            transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
-          >
-            <span className="font-mono text-xs text-primary/60">{t('cta.comment')}</span>
-            <h2 className="mt-4 text-4xl font-bold tracking-tighter text-foreground sm:text-5xl">
-              {t('cta.heading1')}{' '}
-              <span className="text-muted-foreground/30 line-through">{t('cta.alone')}</span>
-              <br />
-              <span className="bg-linear-to-r from-primary via-primary/60 to-primary bg-[length:200%_auto] bg-clip-text text-transparent animate-[gradient-x_4s_ease-in-out_infinite]">
-                {t('cta.heading2')}
-              </span>
-            </h2>
-            <p className="mt-6 text-lg text-muted-foreground">{t('cta.sub')}</p>
-            <div className="mt-10 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
-              <Button asChild size="lg" className="shimmer-sweep">
-                <Link to="/register">
-                  {t('button.getStartedFree')}
-                  <ArrowRight data-icon="inline-end" className="size-4" />
-                </Link>
-              </Button>
-              <span className="font-mono text-xs text-muted-foreground/40">
-                {t('cta.noCreditCard')}
-              </span>
-            </div>
-          </motion.div>
-        </div>
-      </section>
+      <CtaSection />
     </div>
   );
 }
 
-function FeatureCard({
-  icon,
-  title,
-  description,
-  decorator,
-  index,
-  accent,
-}: {
-  readonly icon: ReactNode;
-  readonly title: string;
-  readonly description: string;
-  readonly decorator: string;
-  readonly index: number;
-  readonly accent: ReactNode;
-}) {
+function InViewTerminal() {
+  const ref = useRef<HTMLDivElement>(null);
+  const isInView = useInView(ref, { once: true, amount: 0.3 });
+
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 24 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: '-50px' }}
-      transition={{ duration: 0.5, delay: index * 0.12, ease: [0.16, 1, 0.3, 1] }}
-      className="group relative flex flex-col overflow-hidden rounded-xl border border-border/50 bg-card/60 p-6 backdrop-blur-sm transition-all duration-300 hover:border-primary/30 hover:bg-card/80 hover:shadow-[0_0_30px_-10px_oklch(0.82_0.18_165/0.15)]"
-    >
-      {/* Live accent indicator */}
-      <div className="absolute right-4 top-4">{accent}</div>
-
-      <div className="mb-4 inline-flex self-start rounded-lg border border-border bg-muted/50 p-2.5 text-primary transition-all duration-300 group-hover:border-primary/30 group-hover:bg-primary/10 group-hover:shadow-[0_0_12px_-3px_oklch(0.82_0.18_165/0.3)]">
-        {icon}
-      </div>
-      <h3 className="text-sm font-semibold text-foreground">{title}</h3>
-      <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{description}</p>
-      <div className="mt-auto pt-4 font-mono text-[11px] text-primary/30 transition-colors group-hover:text-primary/60">
-        {decorator}
-      </div>
-    </motion.div>
-  );
-}
-
-function StepCard({
-  num,
-  icon,
-  title,
-  description,
-  index,
-}: {
-  readonly num: number;
-  readonly icon: ReactNode;
-  readonly title: string;
-  readonly description: string;
-  readonly index: number;
-}) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 24 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: '-50px' }}
-      transition={{ duration: 0.5, delay: index * 0.15, ease: [0.16, 1, 0.3, 1] }}
-      className="text-center"
-    >
-      <motion.div
-        whileInView={{ scale: [0.8, 1.1, 1] }}
-        viewport={{ once: true }}
-        transition={{ duration: 0.5, delay: 0.2 + index * 0.15 }}
-        className="relative z-10 mx-auto mb-5 flex size-12 items-center justify-center rounded-full border border-primary/30 bg-background"
-      >
-        <span className="flex items-center gap-1 text-primary">
-          {icon}
-          <span className="font-mono text-sm font-bold">{num}</span>
-        </span>
-      </motion.div>
-
-      <h3 className="text-sm font-semibold text-foreground">{title}</h3>
-      <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{description}</p>
-    </motion.div>
+    <div ref={ref}>
+      {isInView ? (
+        <TerminalDemo />
+      ) : (
+        <div className="aurora-border terminal-glow overflow-hidden rounded-xl border border-primary/15 bg-[#0a0e14]">
+          <div className="flex items-center border-b border-white/6 bg-white/2 px-4 py-2.5">
+            <div className="flex items-center gap-1.5">
+              <span className="size-3 rounded-full bg-[#ff5f57]" />
+              <span className="size-3 rounded-full bg-[#febc2e]" />
+              <span className="size-3 rounded-full bg-[#28c840]" />
+            </div>
+            <span className="mx-auto font-mono text-xs text-muted-foreground/50">
+              two_sum.py — syncode
+            </span>
+          </div>
+          <div className="h-[420px]" />
+          <div className="border-t border-white/6 bg-white/2 px-4 py-2 font-mono text-[11px] text-muted-foreground/40">
+            &nbsp;
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

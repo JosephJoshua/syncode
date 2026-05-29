@@ -29,19 +29,21 @@ export function AnimatedFormField({
   return (
     <motion.div
       className="space-y-2"
-      initial={{ opacity: 0, x: -10 }}
-      animate={{ opacity: 1, x: 0 }}
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, delay: staggerDelay }}
     >
-      <Label htmlFor={id}>{label}</Label>
-      <div className="input-glow relative rounded-lg transition-shadow">
-        <Icon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground transition-colors" />
+      <Label htmlFor={id} className="text-sm text-white/60">
+        {label}
+      </Label>
+      <div className="relative">
+        <Icon className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-white/30" />
         <Input
           id={id}
           type={type}
           autoComplete={autoComplete}
           placeholder={placeholder}
-          className="pl-10"
+          className="h-11 rounded-xl border-0 bg-white/[0.06] pl-10 text-sm placeholder:text-white/20 focus-visible:bg-white/[0.08] focus-visible:ring-1 focus-visible:ring-primary/40"
           aria-invalid={error ? 'true' : 'false'}
           {...registration}
         />
@@ -52,7 +54,7 @@ export function AnimatedFormField({
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
-            className="overflow-hidden text-sm text-destructive"
+            className="overflow-hidden text-sm text-coral"
           >
             {error}
           </motion.p>

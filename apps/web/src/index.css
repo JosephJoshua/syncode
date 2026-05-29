@@ -3,6 +3,10 @@
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist";
 @import "@syncode/ui/theme.css";
+/* Marketing surface tokens: display font, accent palette, MetaMask spring easing,
+ * headline reveal keyframes, and geometry tokens. Tailwind 4 @theme utilities are
+ * registered globally; visual overrides activate only on [data-surface="marketing"]. */
+@import "./routes/_public/-styles/marketing.css";
 @source "../../../packages/ui/src";
 @plugin "@tailwindcss/typography";
 

@@ -14,6 +14,7 @@
     "test:cov": "vitest run --coverage"
   },
   "dependencies": {
+    "@fontsource-variable/antonio": "^5.2.8",
     "@fontsource-variable/geist": "^5.2.8",
     "@hookform/resolvers": "^5.2.2",
     "@monaco-editor/react": "^4.7.0",

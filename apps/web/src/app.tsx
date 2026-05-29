@@ -24,9 +24,20 @@ export function App() {
   }, []);
 
   if (!authReady) {
+    // Solid splash screen — matches the first frame of the shatter animation.
+    // When auth completes, the page renders and the shatter fragments animate
+    // away. Transition is seamless: splash → shatter → hero.
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
-        <div className="size-6 animate-spin rounded-full border-2 border-muted-foreground/20 border-t-primary" />
+      <div
+        className="fixed inset-0 z-[70] flex items-center justify-center"
+        style={{ backgroundColor: 'oklch(0.82 0.18 165)' }}
+      >
+        <span
+          className="font-display text-6xl uppercase tracking-tight sm:text-8xl"
+          style={{ color: 'oklch(0.1 0.005 286 / 0.7)' }}
+        >
+          SynCode
+        </span>
       </div>
     );
   }

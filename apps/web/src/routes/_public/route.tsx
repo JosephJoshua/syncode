@@ -3,9 +3,10 @@ import { createFileRoute, Link, Outlet, useRouterState } from '@tanstack/react-r
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { LanguageSwitcher } from '@/components/language-switcher.js';
-import { SynCodeLogo } from '@/components/syncode-logo.js';
 import { UserMenu } from '@/components/user-menu.js';
 import { useAuthStore } from '@/stores/auth.store.js';
+import { MarketingNav } from './-components/marketing-nav';
+import { MarketingShell } from './-components/marketing-shell';
 
 export const Route = createFileRoute('/_public')({
   component: PublicLayout,
@@ -34,16 +35,24 @@ function PublicLayout() {
     actions = (
       <>
         <LanguageSwitcher />
-        <Button asChild size="sm">
-          <Link to="/register">{t('auth.register')}</Link>
-        </Button>
+        <Link
+          to="/register"
+          className="inline-flex items-center rounded-full bg-foreground px-5 py-2 text-sm font-medium text-background"
+        >
+          <span className="btn-text-holder">
+            <span className="btn-text-main">{t('auth.register')}</span>
+            <span className="btn-text-hover" aria-hidden="true">
+              {t('auth.register')}
+            </span>
+          </span>
+        </Link>
       </>
     );
   } else if (pathname === '/register') {
     actions = (
       <>
         <LanguageSwitcher />
-        <Button asChild variant="outline" size="sm">
+        <Button asChild variant="outline" size="sm" className="rounded-full">
           <Link to="/login">{t('auth.logIn')}</Link>
         </Button>
       </>
@@ -52,35 +61,30 @@ function PublicLayout() {
     actions = (
       <>
         <LanguageSwitcher />
-        <Button asChild variant="outline" size="sm">
+        <Button asChild variant="outline" size="sm" className="hidden rounded-full sm:inline-flex">
           <Link to="/login">{t('auth.logIn')}</Link>
         </Button>
-        <Button asChild size="sm">
-          <Link to="/register">{t('auth.register')}</Link>
-        </Button>
+        <Link
+          to="/register"
+          className="inline-flex items-center rounded-full bg-foreground px-5 py-2 text-sm font-medium text-background"
+        >
+          <span className="btn-text-holder">
+            <span className="btn-text-main">{t('auth.register')}</span>
+            <span className="btn-text-hover" aria-hidden="true">
+              {t('auth.register')}
+            </span>
+          </span>
+        </Link>
       </>
     );
   }
 
   return (
-    <>
-      <nav className="border-b border-border bg-background/80 backdrop-blur-md">
-        <div className="mx-auto flex h-14 max-w-7xl items-center justify-between gap-6 px-4">
-          <div className="flex min-w-0 items-center gap-3 sm:gap-5">
-            <Link
-              to="/"
-              className="flex shrink-0 items-center gap-2 font-semibold text-foreground transition-colors hover:text-primary"
-            >
-              <SynCodeLogo className="h-6 w-6" />
-              <span className="truncate">SynCode</span>
-            </Link>
-          </div>
-          <div className="flex items-center gap-3 text-sm">{actions}</div>
-        </div>
-      </nav>
+    <MarketingShell>
+      <MarketingNav actions={actions} />
       <main>
         <Outlet />
       </main>
-    </>
+    </MarketingShell>
   );
 }
