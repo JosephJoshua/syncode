@@ -56,6 +56,7 @@ const STDIN_PATH = `${CODE_DIR}/stdin.txt`;
 const BINARY_PATH = `${CODE_DIR}/code.out`;
 const DURATION_PATH = `${CODE_DIR}/duration_ns.txt`;
 const MEMORY_PATH = `${CODE_DIR}/peak_kb.txt`;
+const E2B_DENY_OUT_CIDRS = ['0.0.0.0/0'];
 
 /**
  * Wrap a run command with inline nanosecond timing AND peak-RSS measurement.
@@ -106,7 +107,9 @@ export class E2bSandboxAdapter implements ISandboxProvider, OnModuleDestroy {
     const sandbox = await Sandbox.create({
       apiKey: this.apiKey,
       allowInternetAccess: false,
-      network: { denyOut: ['0.0.0.0/0', '::/0'] },
+      // E2B rejects `::/0` at sandbox creation; IPv6 egress is handled by
+      // the best-effort in-sandbox ip6tables rules in NETWORK_HARDENING_CMD.
+      network: { denyOut: E2B_DENY_OUT_CIDRS },
     });
     this.activeSandboxes.add(sandbox);
 
@@ -244,6 +247,14 @@ export class E2bSandboxAdapter implements ISandboxProvider, OnModuleDestroy {
   }
 
   private async hardenNetwork(sandbox: Sandbox): Promise<void> {
+    const hasIptables = await this.commandExists(sandbox, 'iptables');
+    if (!hasIptables) {
+      this.logger.warn(
+        'Skipping in-sandbox iptables hardening because iptables is unavailable; relying on E2B network policy',
+      );
+      return;
+    }
+
     try {
       await sandbox.commands.run(NETWORK_HARDENING_CMD, { timeoutMs: 10_000 });
       this.logger.debug('Sandbox network hardening applied');
@@ -252,6 +263,18 @@ export class E2bSandboxAdapter implements ISandboxProvider, OnModuleDestroy {
       throw new Error(
         'Could not apply sandbox network firewall rules; refusing to run untrusted code',
       );
+    }
+  }
+
+  private async commandExists(sandbox: Sandbox, command: 'iptables'): Promise<boolean> {
+    try {
+      await sandbox.commands.run(`command -v ${command} >/dev/null 2>&1`, { timeoutMs: 5_000 });
+      return true;
+    } catch (error) {
+      if (error instanceof CommandExitError) {
+        return false;
+      }
+      throw error;
     }
   }
 
@@ -264,7 +287,7 @@ export class E2bSandboxAdapter implements ISandboxProvider, OnModuleDestroy {
       const sandbox = await Sandbox.create({
         apiKey: this.apiKey,
         allowInternetAccess: false,
-        network: { denyOut: ['0.0.0.0/0', '::/0'] },
+        network: { denyOut: E2B_DENY_OUT_CIDRS },
       });
       await sandbox.kill();
       return true;
