@@ -6,6 +6,7 @@ const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   PORT: z.coerce.number().positive().default(3001),
   CONTROL_PLANE_URL: z.url().default('http://localhost:3000'),
+  CONTROL_PLANE_SNAPSHOT_TIMEOUT_MS: z.coerce.number().int().positive().default(12_000),
   COLLAB_JWT_SECRET: z.string().min(32, 'COLLAB_JWT_SECRET must be at least 32 characters'),
   INTERNAL_CALLBACK_SECRET: z
     .string()
