@@ -20,6 +20,8 @@ export type LiveKitConnectionState =
   | 'reconnecting'
   | 'failed';
 
+const INITIAL_CONNECT_RETRY_DELAYS_MS = [1_000, 2_000, 4_000, 8_000, 8_000, 8_000] as const;
+
 export interface MediaParticipant {
   identity: string;
   isMuted: boolean;
@@ -357,6 +359,7 @@ export function useLiveKit({
 
     roomRef.current = room;
     let disposed = false;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
     const onConnectionStateChanged = (state: ConnectionState) => {
       if (disposed) return;
@@ -522,22 +525,43 @@ export function useLiveKit({
 
     setConnectionState('connecting');
 
-    room
-      .connect(url, token)
-      .then(() => {
-        if (disposed) return;
-        setConnectionState('connected');
-        refreshParticipants();
-        void refreshDevices();
-      })
-      .catch((err: unknown) => {
-        if (disposed) return;
-        console.error('[LiveKit] Connection failed:', err);
-        setConnectionState('failed');
-      });
+    const connectRoom = (attempt: number) => {
+      room
+        .connect(url, token)
+        .then(() => {
+          if (disposed) return;
+          setConnectionState('connected');
+          refreshParticipants();
+          void refreshDevices();
+        })
+        .catch((err: unknown) => {
+          if (disposed) return;
+
+          const retryDelay = INITIAL_CONNECT_RETRY_DELAYS_MS[attempt];
+          if (retryDelay !== undefined) {
+            console.warn('[LiveKit] Connection failed, retrying:', err);
+            setConnectionState('connecting');
+            retryTimer = setTimeout(() => {
+              retryTimer = null;
+              if (disposed) return;
+              connectRoom(attempt + 1);
+            }, retryDelay);
+            return;
+          }
+
+          console.error('[LiveKit] Connection failed:', err);
+          setConnectionState('failed');
+        });
+    };
+
+    connectRoom(0);
 
     return () => {
       disposed = true;
+      if (retryTimer) {
+        clearTimeout(retryTimer);
+        retryTimer = null;
+      }
       navigator.mediaDevices.removeEventListener('devicechange', onDeviceChange);
       cleanupAudio();
       void room.disconnect();
