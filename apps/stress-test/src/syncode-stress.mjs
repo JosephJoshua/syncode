@@ -2,7 +2,7 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { loadUsers, parseArgs, printHelp } from './config.mjs';
-import { ApiClient } from './http.mjs';
+import { ApiClient, ApiError } from './http.mjs';
 import { Metrics } from './metrics.mjs';
 import { runScenarioIteration, selectUser } from './workloads.mjs';
 
@@ -78,15 +78,18 @@ async function runVirtualUser({ index, config, user, metrics, deadline }) {
         pollIntervalMs: config.pollIntervalMs,
       });
     } catch (error) {
-      metrics.record({
-        label: 'scenario error',
-        status: 0,
-        durationMs: 0,
-        ok: false,
-        userLabel: `vu-${index + 1}`,
-      });
-      console.error(`[vu-${index + 1}] ${error.message}`);
-      if (config.scenario !== 'smoke' && /requires --users-file/.test(error.message)) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!(error instanceof ApiError)) {
+        metrics.record({
+          label: 'scenario error',
+          status: 0,
+          durationMs: 0,
+          ok: false,
+          userLabel: `vu-${index + 1}`,
+        });
+      }
+      console.error(`[vu-${index + 1}] ${message}`);
+      if (config.scenario !== 'smoke' && /requires --users-file/.test(message)) {
         break;
       }
     }

@@ -106,14 +106,23 @@ export class ApiClient {
       }
       return responseBody;
     } catch (error) {
-      if (error.name === 'AbortError') {
+      if (error instanceof ApiError) {
+        throw error;
+      }
+      if (error?.name === 'AbortError') {
         throw new ApiError(`Request timed out for ${requestLabel}`, {
           method,
           url: redactUrl(url.toString()),
           status,
         });
       }
-      throw error;
+      const message = error instanceof Error ? error.message : String(error);
+      throw new ApiError(`Request failed for ${requestLabel}: ${message}`, {
+        method,
+        url: redactUrl(url.toString()),
+        status,
+        cause: message,
+      });
     } finally {
       clearTimeout(timeout);
       this.metrics.record({
