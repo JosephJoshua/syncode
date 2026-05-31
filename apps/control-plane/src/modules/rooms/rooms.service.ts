@@ -2221,6 +2221,32 @@ export class RoomsService implements OnModuleInit {
     const now = new Date();
     let restoreFinalCollabState: { phase: RoomStatus; editorLocked: boolean } | null = null;
 
+    if (targetStatus === RoomStatus.FINISHED) {
+      const finalSnapshotRoom = await this.db.transaction(async (tx) => {
+        const [lockedRoom] = await tx
+          .select()
+          .from(rooms)
+          .where(eq(rooms.id, roomId))
+          .for('no key update');
+
+        if (!lockedRoom) {
+          throw new NotFoundException({
+            message: 'Room not found',
+            code: ERROR_CODES.ROOM_NOT_FOUND,
+          });
+        }
+
+        await this.assertPhaseTransitionAllowed(tx, lockedRoom, userId, targetStatus);
+        return lockedRoom;
+      });
+
+      restoreFinalCollabState = await this.prepareFinalCollabSnapshot(
+        finalSnapshotRoom,
+        targetStatus,
+        userId,
+      );
+    }
+
     const transactionResult = await this.db
       .transaction(async (tx) => {
         const [lockedRoom] = await tx
@@ -2245,11 +2271,6 @@ export class RoomsService implements OnModuleInit {
               Math.max(0, now.getTime() - lockedRoom.phaseStartedAt.getTime())
             : lockedRoom.elapsedMs;
 
-        restoreFinalCollabState = await this.prepareFinalCollabSnapshot(
-          lockedRoom,
-          targetStatus,
-          userId,
-        );
         await this.assertFinalSessionEndSnapshotReady(tx, roomId, lockedStatus, targetStatus);
 
         const roomUpdate = this.buildPhaseTransitionUpdate(
