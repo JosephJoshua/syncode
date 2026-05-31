@@ -103,6 +103,8 @@ import type {
 import type {
   whiteboardAssetUploadUrlRequestSchema,
   whiteboardAssetUploadUrlResponseSchema,
+  whiteboardAssetVerifyRequestSchema,
+  whiteboardAssetVerifyResponseSchema,
 } from './whiteboard-assets.js';
 
 export const CONTROL_API = {
@@ -362,6 +364,10 @@ export const CONTROL_API = {
       z.infer<typeof whiteboardAssetUploadUrlRequestSchema>,
       z.infer<typeof whiteboardAssetUploadUrlResponseSchema>
     >()('rooms/:id/whiteboard/assets/upload-url', 'POST'),
+    VERIFY: defineRoute<
+      z.infer<typeof whiteboardAssetVerifyRequestSchema>,
+      z.infer<typeof whiteboardAssetVerifyResponseSchema>
+    >()('rooms/:id/whiteboard/assets/verify', 'POST'),
   },
   HEALTH: defineRoute<void, z.infer<typeof healthCheckResponseSchema>>()('health', 'GET'),
 };

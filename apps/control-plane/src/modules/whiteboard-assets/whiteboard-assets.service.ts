@@ -33,6 +33,12 @@ interface UploadUrlOutput {
   key: string;
 }
 
+interface VerifyAssetInput {
+  roomId: string;
+  userId: string;
+  key: string;
+}
+
 @Injectable()
 export class WhiteboardAssetsService {
   private static readonly KEY_PREFIX = 'whiteboard';
@@ -75,6 +81,15 @@ export class WhiteboardAssetsService {
     ]);
 
     return { uploadUrl, downloadUrl, key };
+  }
+
+  async verifyAsset({ roomId, userId, key }: VerifyAssetInput): Promise<{ exists: boolean }> {
+    await this.assertCanAnnotateOrDraw(roomId, userId);
+    if (!key.startsWith(`${WhiteboardAssetsService.KEY_PREFIX}/${roomId}/`)) {
+      return { exists: false };
+    }
+    const exists = await this.storageService.exists(key);
+    return { exists };
   }
 
   // Active room-membership check that maps to the same role/host derivation
