@@ -47,18 +47,15 @@ describe('StaticAnalysisAnalyzer', () => {
         }
         return {
           exitCode: 0,
-          stdout: JSON.stringify({
-            duplications: [
-              {
-                lines: 8,
-                tokens: 54,
-                files: [
-                  { name: 'Main.py', startLine: 3, endLine: 10 },
-                  { name: 'Main.py', startLine: 14, endLine: 21 },
-                ],
-              },
-            ],
-          }),
+          stdout: [
+            '<?xml version="1.0" encoding="UTF-8"?>',
+            '<pmd-cpd>',
+            '<duplication lines="8" tokens="54">',
+            '<file path="Main.py" line="3" endline="10" />',
+            '<file path="Main.py" line="14" endline="21" />',
+            '</duplication>',
+            '</pmd-cpd>',
+          ].join(''),
           stderr: '',
           timedOut: false,
         };
@@ -117,7 +114,7 @@ describe('StaticAnalysisAnalyzer', () => {
         }
         return {
           exitCode: 0,
-          stdout: '{"duplications":[]}',
+          stdout: '<pmd-cpd></pmd-cpd>',
           stderr: '',
           timedOut: false,
         };
@@ -241,7 +238,7 @@ describe('StaticAnalysisAnalyzer', () => {
           };
         }
         if (command === 'cpd') {
-          return { exitCode: 0, stdout: '{"duplications":[]}', stderr: '', timedOut: false };
+          return { exitCode: 0, stdout: '<pmd-cpd></pmd-cpd>', stderr: '', timedOut: false };
         }
         return { exitCode: 0, stdout: '', stderr: '', timedOut: false };
       }),
@@ -258,8 +255,8 @@ describe('StaticAnalysisAnalyzer', () => {
       expect.any(Object),
     );
     expect(runner.run).toHaveBeenCalledWith(
-      'cpd',
-      expect.arrayContaining(['--no-fail-on-violation', '--no-fail-on-error']),
+      '/opt/pmd-bin-7.18.0/bin/pmd',
+      expect.arrayContaining(['cpd', '--no-fail-on-violation', '--no-fail-on-error']),
       expect.any(Object),
     );
   });

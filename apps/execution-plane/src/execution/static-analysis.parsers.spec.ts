@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   parseBiomeJson,
   parseClippyJsonLines,
-  parseCpdJson,
+  parseCpdXml,
   parseCppcheckXml,
   parseGolangciLintJson,
   parseLizardXml,
@@ -223,21 +223,16 @@ describe('static analysis parser normalization', () => {
     ]);
   });
 
-  it('GIVEN CPD JSON WHEN parsed THEN returns duplication occurrences', () => {
-    const duplications = parseCpdJson(
-      JSON.stringify({
-        duplications: [
-          {
-            lines: 8,
-            tokens: 54,
-            files: [
-              { name: 'main.py', startLine: 3, endLine: 10 },
-              { name: 'main.py', startLine: 14, endLine: 21 },
-            ],
-          },
-        ],
-      }),
-    );
+  it('GIVEN CPD XML WHEN parsed THEN returns duplication occurrences', () => {
+    const duplications = parseCpdXml(`
+      <?xml version="1.0" encoding="UTF-8"?>
+      <pmd-cpd>
+        <duplication lines="8" tokens="54">
+          <file path="main.py" line="3" endline="10" />
+          <file path="main.py" line="14" endline="21" />
+        </duplication>
+      </pmd-cpd>
+    `);
 
     expect(duplications).toEqual([
       expect.objectContaining({

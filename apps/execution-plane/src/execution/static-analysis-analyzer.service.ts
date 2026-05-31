@@ -14,7 +14,7 @@ import { SUPPORTED_LANGUAGES, type SupportedLanguage } from '@syncode/shared';
 import {
   parseBiomeJson,
   parseClippyJsonLines,
-  parseCpdJson,
+  parseCpdXml,
   parseCppcheckXml,
   parseGolangciLintJson,
   parseLizardXml,
@@ -166,28 +166,33 @@ export class StaticAnalysisAnalyzer {
         args: [
           'cpd',
           '--format',
-          'json',
+          'xml',
+          '--language',
+          cpdLanguageFor(language),
           '--minimum-tokens',
           '40',
           '--no-fail-on-violation',
           '--no-fail-on-error',
-          '--files',
-          fileName,
+          '--dir',
+          '.',
         ],
         fallbackCommand: {
-          command: 'cpd',
+          command: `${process.env.PMD_HOME ?? '/opt/pmd-bin-7.18.0'}/bin/pmd`,
           args: [
+            'cpd',
             '--format',
-            'json',
+            'xml',
+            '--language',
+            cpdLanguageFor(language),
             '--minimum-tokens',
             '40',
             '--no-fail-on-violation',
             '--no-fail-on-error',
-            '--files',
-            fileName,
+            '--dir',
+            '.',
           ],
         },
-        parser: (stdout) => ({ duplications: parseCpdJson(stdout) }),
+        parser: (stdout) => ({ duplications: parseCpdXml(stdout) }),
       },
     ];
 
@@ -330,6 +335,26 @@ function lintCommandFor(language: SupportedLanguage, fileName: string): ToolComm
       };
     default:
       return null;
+  }
+}
+
+function cpdLanguageFor(language: SupportedLanguage): string {
+  switch (language) {
+    case 'python':
+      return 'python';
+    case 'javascript':
+      return 'ecmascript';
+    case 'typescript':
+      return 'typescript';
+    case 'java':
+      return 'java';
+    case 'c':
+    case 'cpp':
+      return 'cpp';
+    case 'go':
+      return 'go';
+    case 'rust':
+      return 'rust';
   }
 }
 
