@@ -14,8 +14,16 @@ describe('validateEnv', () => {
     const env = validateEnv(baseEnv);
 
     expect(env.AI_PLATFORM_API_KEY).toBe('test-key');
-    expect(env.AI_PLATFORM_MODEL).toBe('qwen3.5-mini');
-    expect(env.AI_TTS_MODEL).toBe('qwen-tts');
+    expect(env.AI_PLATFORM_MODEL).toBe('DeepSeek-V3.2-Instruct');
+    expect(env.AI_MAX_CONCURRENT_TASKS).toBe(5);
+    expect(env.AI_RESERVED_REALTIME_SLOTS).toBe(2);
+    expect(env.AI_MAX_BATCH_CONCURRENT_TASKS).toBe(5);
+    expect(env.AI_TTS_MODEL).toBeUndefined();
+    expect(env.AI_INTERVIEWER_LIVEKIT_ENABLED).toBe(false);
+    expect(env.AI_INTERVIEWER_AGENT_NAME).toBe('syncode-ai-interviewer');
+    expect(env.AI_INTERVIEWER_AGENT_IDENTITY).toBe('ai-interviewer');
+    expect(env.OPENAI_REALTIME_MODEL).toBe('gpt-realtime');
+    expect(env.OPENAI_REALTIME_VOICE).toBe('alloy');
     expect(env.S3_BUCKET).toBe('syncode');
   });
 
@@ -23,5 +31,14 @@ describe('validateEnv', () => {
     const { AI_PLATFORM_API_KEY: _apiKey, ...withoutApiKey } = baseEnv;
 
     expect(() => validateEnv(withoutApiKey)).toThrow(/AI_PLATFORM_API_KEY/);
+  });
+
+  it('GIVEN livekit interviewer enabled without required creds WHEN validating THEN fails', () => {
+    expect(() =>
+      validateEnv({
+        ...baseEnv,
+        AI_INTERVIEWER_LIVEKIT_ENABLED: 'true',
+      }),
+    ).toThrow(/LIVEKIT_URL/);
   });
 });

@@ -2,54 +2,56 @@
   "badge": "$ syncode --init",
   "hero": {
     "heading1": "Code interviews,",
-    "heading2": "reimagined.",
-    "sub1": "Real-time pair programming. Sandboxed execution. AI\u2011powered feedback.",
-    "sub2": "Practice like it's the real thing."
+    "heading2": "reimagined."
   },
   "button": {
     "getStarted": "Get started",
-    "signIn": "Sign in",
-    "getStartedFree": "Get started for free"
+    "getStartedHover": "Start coding now"
   },
-  "onlineBadge": "{{count}} engineers online now",
+  "terminal": {
+    "heading1": "Two cursors. One file.",
+    "heading2": "Zero conflicts."
+  },
   "features": {
-    "comment": "// what's inside",
-    "heading": "Built for engineers, by engineers.",
-    "sub": "Everything you need to simulate a real technical interview.",
+    "sidebarLabel": "Features",
     "pairProgramming": "Pair Programming",
-    "pairProgrammingDesc": "Edit the same file at the same time. Both cursors work \u2014 no conflicts, no lag.",
+    "pairProgrammingDesc": "Edit the same file simultaneously. Both cursors work in real-time — no conflicts, no lag, no screen sharing.",
     "liveExecution": "Live Execution",
-    "liveExecutionDesc": "Hit run. See your code execute against real test cases in seconds \u2014 not a simulation.",
+    "liveExecutionDesc": "Run your code against real test cases in seconds. Watch results stream in live — not a simulation.",
     "aiFeedback": "AI Feedback",
-    "aiFeedbackDesc": "Get told where your solution is slow, what edge cases you missed, and how to fix it."
+    "aiFeedbackDesc": "Instant analysis of time complexity, edge cases, and code quality. Like having a senior engineer review your solution.",
+    "aiInterviewer": "AI Interviewer",
+    "aiInterviewerDesc": "Practice with an AI that asks follow-ups, probes your thinking, and gives structured feedback. Like a real technical interview.",
+    "allTestsPassed": "All tests passed",
+    "codeReviewScore": "Code Review Score",
+    "aiQuestion": "How does your hash map handle duplicate values?",
+    "youAnswer": "We check the complement before inserting..."
   },
   "stats": {
+    "sessions": "Sessions completed",
+    "sync": "Real-time sync",
     "languages": "Languages supported",
-    "faster": "Faster than solo prep",
-    "realTime": "Real-time editing",
-    "aiFeedback": "AI feedback available"
-  },
-  "howItWorks": {
-    "comment": "// how it works",
-    "heading": "Interview prep in three steps.",
-    "step1Title": "Spawn a room",
-    "step1Desc": "One click creates an isolated session with a shared editor and voice channel.",
-    "step2Title": "Code in sync",
-    "step2Desc": "Write code side-by-side. You both see every keystroke instantly \u2014 no copy-paste, no screen sharing.",
-    "step3Title": "Run & review",
-    "step3Desc": "Execute tests, get AI analysis, and replay sessions to improve."
-  },
-  "demo": {
-    "comment": "// see it in action",
-    "heading": "Watch it come together.",
-    "sub": "A complete interview session \u2014 from problem to passing tests \u2014 in seconds."
+    "execution": "Test execution"
   },
   "cta": {
-    "comment": "// ready?",
-    "heading1": "Stop grinding",
-    "alone": "alone",
-    "heading2": "Start syncing.",
-    "sub": "Join your peers and practice interviews the way they actually happen \u2014 together.",
-    "noCreditCard": "No credit card required"
+    "headingLine1": "Ready to",
+    "headingLine2": "pair?",
+    "sub": "Start coding together in seconds. No setup, no screen sharing, no friction.",
+    "getStarted": "Get started free",
+    "getStartedHover": "Start coding now"
+  },
+  "footer": {
+    "product": "Product",
+    "community": "Community",
+    "legal": "Legal",
+    "features": "Features",
+    "howItWorks": "How It Works",
+    "terminalDemo": "Terminal Demo",
+    "github": "GitHub",
+    "discord": "Discord",
+    "terms": "Terms of Service",
+    "privacy": "Privacy Policy",
+    "tagline": "Built for engineers",
+    "copyright": "SynCode {{year}}. All rights reserved."
   }
 }

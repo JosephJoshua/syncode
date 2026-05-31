@@ -12,6 +12,8 @@ import { rooms } from './rooms.js';
 import { sessions } from './sessions.js';
 import { users } from './users.js';
 
+const FEEDBACK_STATUSES = ['submitted', 'skipped'] as const;
+
 export const peerFeedback = pgTable(
   'peer_feedback',
   {
@@ -26,14 +28,16 @@ export const peerFeedback = pgTable(
     candidateId: uuid('candidate_id')
       .notNull()
       .references(() => users.id),
-    problemSolvingRating: integer('problem_solving_rating').notNull(),
-    communicationRating: integer('communication_rating').notNull(),
-    codeQualityRating: integer('code_quality_rating').notNull(),
-    debuggingRating: integer('debugging_rating').notNull(),
-    overallRating: integer('overall_rating').notNull(),
-    strengths: text('strengths').notNull(),
-    improvements: text('improvements').notNull(),
-    wouldPairAgain: boolean('would_pair_again').notNull(),
+    status: text('status', { enum: FEEDBACK_STATUSES }).notNull().default('submitted'),
+    feedbackText: text('feedback_text'),
+    problemSolvingRating: integer('problem_solving_rating'),
+    communicationRating: integer('communication_rating'),
+    codeQualityRating: integer('code_quality_rating'),
+    debuggingRating: integer('debugging_rating'),
+    overallRating: integer('overall_rating'),
+    strengths: text('strengths'),
+    improvements: text('improvements'),
+    wouldPairAgain: boolean('would_pair_again'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [

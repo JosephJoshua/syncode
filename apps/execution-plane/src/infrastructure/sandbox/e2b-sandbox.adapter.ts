@@ -13,11 +13,50 @@ const E2B_SUPPORTED_LANGUAGES = new Set<string>([
 ]);
 
 const CODE_DIR = '/tmp/syncode';
+
+// iptables rules applied inside every sandbox before user code runs.
+//
+// IPv4 chain (must succeed — fail-closed on error):
+//   1. Preserve ESTABLISHED/RELATED so the E2B control-plane gRPC channel is
+//      not torn down after we lock the table.
+//   2. Drop RFC 1918, loopback, link-local (169.254/16 covers AWS/GCP/Azure
+//      IMDS), and RFC 6598 shared address space — all SSRF targets.
+//   3. Drop every remaining NEW outbound connection (no internet for user code).
+//
+// IPv6 chain (best-effort — skipped gracefully if ip6tables absent):
+//   Same pattern: allow ESTABLISHED, block loopback (::1), unique-local
+//   (fc00::/7), link-local (fe80::/10), then drop all NEW.
+const NETWORK_HARDENING_CMD = (() => {
+  const ipv4 = [
+    'iptables -w 5 -I OUTPUT 1 -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT',
+    'iptables -w 5 -A OUTPUT -d 10.0.0.0/8     -j DROP',
+    'iptables -w 5 -A OUTPUT -d 172.16.0.0/12  -j DROP',
+    'iptables -w 5 -A OUTPUT -d 192.168.0.0/16 -j DROP',
+    'iptables -w 5 -A OUTPUT -d 127.0.0.0/8    -j DROP',
+    'iptables -w 5 -A OUTPUT -d 169.254.0.0/16 -j DROP',
+    'iptables -w 5 -A OUTPUT -d 100.64.0.0/10  -j DROP',
+    'iptables -w 5 -A OUTPUT -m conntrack --ctstate NEW -j DROP',
+  ].join(' && ');
+
+  const ipv6 = [
+    'ip6tables -w 5 -I OUTPUT 1 -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT',
+    'ip6tables -w 5 -A OUTPUT -d ::1/128   -j DROP',
+    'ip6tables -w 5 -A OUTPUT -d fc00::/7  -j DROP',
+    'ip6tables -w 5 -A OUTPUT -d fe80::/10 -j DROP',
+    'ip6tables -w 5 -A OUTPUT -m conntrack --ctstate NEW -j DROP',
+  ].join(' && ');
+
+  // Apply IPv4 rules (required), then attempt IPv6 rules (optional — not all
+  // E2B images ship ip6tables, so we skip silently if unavailable).
+  return `${ipv4} && { command -v ip6tables >/dev/null 2>&1 && { ${ipv6}; } || true; }`;
+})();
+
 const SOURCE_NAME = 'code';
 const STDIN_PATH = `${CODE_DIR}/stdin.txt`;
 const BINARY_PATH = `${CODE_DIR}/code.out`;
 const DURATION_PATH = `${CODE_DIR}/duration_ns.txt`;
 const MEMORY_PATH = `${CODE_DIR}/peak_kb.txt`;
+const E2B_DENY_OUT_CIDRS = ['0.0.0.0/0'];
 
 /**
  * Wrap a run command with inline nanosecond timing AND peak-RSS measurement.
@@ -65,10 +104,18 @@ export class E2bSandboxAdapter implements ISandboxProvider, OnModuleDestroy {
 
     const startTime = Date.now();
 
-    const sandbox = await Sandbox.create({ apiKey: this.apiKey });
+    const sandbox = await Sandbox.create({
+      apiKey: this.apiKey,
+      allowInternetAccess: false,
+      // E2B rejects `::/0` at sandbox creation; IPv6 egress is handled by
+      // the best-effort in-sandbox ip6tables rules in NETWORK_HARDENING_CMD.
+      network: { denyOut: E2B_DENY_OUT_CIDRS },
+    });
     this.activeSandboxes.add(sandbox);
 
     try {
+      await this.hardenNetwork(sandbox);
+
       const sourcePath = `${CODE_DIR}/${SOURCE_NAME}${config.extension}`;
       const writes: Promise<unknown>[] = [sandbox.files.write(sourcePath, code)];
       if (stdin != null) {
@@ -199,13 +246,49 @@ export class E2bSandboxAdapter implements ISandboxProvider, OnModuleDestroy {
     }
   }
 
+  private async hardenNetwork(sandbox: Sandbox): Promise<void> {
+    const hasIptables = await this.commandExists(sandbox, 'iptables');
+    if (!hasIptables) {
+      this.logger.warn(
+        'Skipping in-sandbox iptables hardening because iptables is unavailable; relying on E2B network policy',
+      );
+      return;
+    }
+
+    try {
+      await sandbox.commands.run(NETWORK_HARDENING_CMD, { timeoutMs: 10_000 });
+      this.logger.debug('Sandbox network hardening applied');
+    } catch (error) {
+      this.logger.error('Sandbox network hardening failed — aborting execution', error);
+      throw new Error(
+        'Could not apply sandbox network firewall rules; refusing to run untrusted code',
+      );
+    }
+  }
+
+  private async commandExists(sandbox: Sandbox, command: 'iptables'): Promise<boolean> {
+    try {
+      await sandbox.commands.run(`command -v ${command} >/dev/null 2>&1`, { timeoutMs: 5_000 });
+      return true;
+    } catch (error) {
+      if (error instanceof CommandExitError) {
+        return false;
+      }
+      throw error;
+    }
+  }
+
   supportsLanguage(language: string): language is SupportedLanguage {
     return E2B_SUPPORTED_LANGUAGES.has(language);
   }
 
   async healthCheck(): Promise<boolean> {
     try {
-      const sandbox = await Sandbox.create({ apiKey: this.apiKey });
+      const sandbox = await Sandbox.create({
+        apiKey: this.apiKey,
+        allowInternetAccess: false,
+        network: { denyOut: E2B_DENY_OUT_CIDRS },
+      });
       await sandbox.kill();
       return true;
     } catch {

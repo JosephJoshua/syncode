@@ -5,11 +5,13 @@ import {
   insertProblem,
   insertProblemTag,
   insertRoom,
+  insertSession,
   insertSubmission,
   insertTag,
   insertTestCase,
   insertUser,
 } from '@/test/integration-setup.js';
+import { AuditService } from '../admin/audit.service.js';
 import { ProblemsService } from './problems.service.js';
 
 let db: Database;
@@ -20,7 +22,7 @@ beforeEach(async () => {
   const testDb = await createTestDb();
   db = testDb.db;
   cleanup = testDb.cleanup;
-  service = new ProblemsService(db);
+  service = new ProblemsService(db, new AuditService(db));
 });
 
 afterEach(async () => {
@@ -40,7 +42,7 @@ describe('listProblems', () => {
     expect(result.pagination.hasMore).toBe(false);
   });
 
-  it('GIVEN draft problem WHEN listing THEN regular users cannot see it but admins can', async () => {
+  it('GIVEN draft problem WHEN listing THEN only admins who request drafts can see it', async () => {
     const user = await insertUser(db, { role: 'user' });
     const admin = await insertUser(db, { role: 'admin' });
     await insertProblem(db, { title: 'Published', isPublished: true });
@@ -48,9 +50,24 @@ describe('listProblems', () => {
 
     const regularResult = await service.listProblems(user.id, { limit: 20, sortOrder: 'desc' });
     const adminResult = await service.listProblems(admin.id, { limit: 20, sortOrder: 'desc' });
+    const adminDraftResult = await service.listProblems(admin.id, {
+      limit: 20,
+      sortOrder: 'desc',
+      includeDrafts: true,
+    });
+    const regularDraftResult = await service.listProblems(user.id, {
+      limit: 20,
+      sortOrder: 'desc',
+      includeDrafts: true,
+    });
 
     expect(regularResult.data.map((problem) => problem.title)).toEqual(['Published']);
-    expect(adminResult.data.map((problem) => problem.title).sort()).toEqual(['Draft', 'Published']);
+    expect(adminResult.data.map((problem) => problem.title)).toEqual(['Published']);
+    expect(adminDraftResult.data.map((problem) => problem.title).sort()).toEqual([
+      'Draft',
+      'Published',
+    ]);
+    expect(regularDraftResult.data.map((problem) => problem.title)).toEqual(['Published']);
   });
 
   it('GIVEN single difficulty filter WHEN listing THEN returns only matching difficulty', async () => {
@@ -454,6 +471,28 @@ describe('findById', () => {
     expect(result.testCases.every((tc) => !tc.isHidden)).toBe(true);
   });
 
+  it('GIVEN admin request without includeHidden WHEN finding THEN does not return hidden test cases', async () => {
+    const admin = await insertUser(db, { role: 'admin' });
+    const p = await insertProblem(db);
+    await insertTestCase(db, p.id, { input: 'visible', isHidden: false });
+    await insertTestCase(db, p.id, { input: 'hidden', isHidden: true });
+
+    const defaultResult = await service.findById(admin.id, p.id);
+    const editorResult = await service.findById(admin.id, p.id, { includeHidden: true });
+
+    expect(defaultResult.testCases.map((tc) => tc.input)).toEqual(['visible']);
+    expect(editorResult.testCases.map((tc) => tc.input).sort()).toEqual(['hidden', 'visible']);
+  });
+
+  it('GIVEN non-admin request with includeHidden WHEN finding THEN throws ForbiddenException', async () => {
+    const user = await insertUser(db);
+    const p = await insertProblem(db);
+
+    await expect(service.findById(user.id, p.id, { includeHidden: true })).rejects.toThrow(
+      'Admin access required',
+    );
+  });
+
   it('GIVEN non-existent ID WHEN finding THEN throws NotFoundException', async () => {
     const user = await insertUser(db);
     await expect(service.findById(user.id, '00000000-0000-0000-0000-000000000000')).rejects.toThrow(
@@ -511,6 +550,60 @@ describe('findById', () => {
     expect(result.constraints).toBeNull();
     expect(result.examples).toEqual([]);
     expect(result.starterCode).toBeNull();
+  });
+});
+
+describe('deleteProblem', () => {
+  it('GIVEN problem referenced by an active room WHEN deleting THEN throws ConflictException', async () => {
+    const admin = await insertUser(db, { role: 'admin' });
+    const p = await insertProblem(db);
+    await insertRoom(db, admin.id, { problemId: p.id });
+
+    await expect(service.deleteProblem(admin.id, p.id)).rejects.toThrow(
+      'Problem is used by existing rooms or sessions',
+    );
+  });
+
+  it('GIVEN problem referenced only by an ended room WHEN deleting THEN succeeds', async () => {
+    const admin = await insertUser(db, { role: 'admin' });
+    const p = await insertProblem(db);
+    await insertRoom(db, admin.id, {
+      problemId: p.id,
+      status: 'finished',
+      endedAt: new Date(),
+    });
+
+    await expect(service.deleteProblem(admin.id, p.id)).resolves.toBeUndefined();
+  });
+
+  it('GIVEN problem referenced by an ongoing session WHEN deleting THEN throws ConflictException', async () => {
+    const admin = await insertUser(db, { role: 'admin' });
+    const p = await insertProblem(db);
+    const room = await insertRoom(db, admin.id, {
+      status: 'finished',
+      endedAt: new Date(),
+    });
+    await insertSession(db, room.id, { problemId: p.id, status: 'ongoing' });
+
+    await expect(service.deleteProblem(admin.id, p.id)).rejects.toThrow(
+      'Problem is used by existing rooms or sessions',
+    );
+  });
+
+  it('GIVEN problem referenced only by a finished session WHEN deleting THEN succeeds', async () => {
+    const admin = await insertUser(db, { role: 'admin' });
+    const p = await insertProblem(db);
+    const room = await insertRoom(db, admin.id, {
+      status: 'finished',
+      endedAt: new Date(),
+    });
+    await insertSession(db, room.id, {
+      problemId: p.id,
+      status: 'finished',
+      finishedAt: new Date(),
+    });
+
+    await expect(service.deleteProblem(admin.id, p.id)).resolves.toBeUndefined();
   });
 });
 

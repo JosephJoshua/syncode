@@ -125,6 +125,7 @@ export class SessionsService {
             hasFeedback: sql<boolean>`EXISTS (
               SELECT 1 FROM peer_feedback pf
               WHERE pf.session_id = ${sessions.id}
+                AND pf.status = 'submitted'
             )`.as('has_feedback'),
             createdAt: sessions.startedAt,
             finishedAt: sessions.finishedAt,
@@ -278,19 +279,15 @@ export class SessionsService {
       this.db
         .select({
           id: peerFeedback.id,
+          status: peerFeedback.status,
           reviewerId: peerFeedback.reviewerId,
           reviewerUsername: users.username,
           reviewerDisplayName: users.displayName,
           reviewerAvatarUrl: users.avatarUrl,
           candidateId: peerFeedback.candidateId,
-          problemSolvingRating: peerFeedback.problemSolvingRating,
-          communicationRating: peerFeedback.communicationRating,
-          codeQualityRating: peerFeedback.codeQualityRating,
-          debuggingRating: peerFeedback.debuggingRating,
-          overallRating: peerFeedback.overallRating,
+          feedbackText: peerFeedback.feedbackText,
           strengths: peerFeedback.strengths,
           improvements: peerFeedback.improvements,
-          wouldPairAgain: peerFeedback.wouldPairAgain,
           createdAt: peerFeedback.createdAt,
         })
         .from(peerFeedback)
@@ -300,7 +297,7 @@ export class SessionsService {
       this.db
         .select({ id: peerFeedback.id })
         .from(peerFeedback)
-        .where(eq(peerFeedback.sessionId, sessionId))
+        .where(and(eq(peerFeedback.sessionId, sessionId), eq(peerFeedback.status, 'submitted')))
         .limit(1),
       this.db
         .select({ id: sessionRecordings.id })
@@ -413,24 +410,24 @@ export class SessionsService {
       })),
       report: normalizedReport,
       latestCodeSnapshot: latestCodeSnapshot[0] ?? null,
-      peerFeedback: visibleFeedbackRows.map((feedback) => ({
-        id: feedback.id,
-        reviewerId: feedback.reviewerId,
-        reviewerName: feedback.reviewerDisplayName ?? feedback.reviewerUsername,
-        reviewerAvatarUrl: reviewerAvatarUrls.get(feedback.reviewerId) ?? null,
-        candidateId: feedback.candidateId,
-        candidateName: participantProfiles.get(feedback.candidateId)?.name ?? feedback.candidateId,
-        candidateAvatarUrl: participantProfiles.get(feedback.candidateId)?.avatarUrl ?? null,
-        problemSolvingRating: feedback.problemSolvingRating,
-        communicationRating: feedback.communicationRating,
-        codeQualityRating: feedback.codeQualityRating,
-        debuggingRating: feedback.debuggingRating,
-        overallRating: feedback.overallRating,
-        strengths: feedback.strengths,
-        improvements: feedback.improvements,
-        wouldPairAgain: feedback.wouldPairAgain,
-        createdAt: feedback.createdAt,
-      })),
+      peerFeedback: visibleFeedbackRows
+        .filter((feedback) => feedback.status === 'submitted')
+        .map((feedback) => ({
+          id: feedback.id,
+          reviewerId: feedback.reviewerId,
+          reviewerName: feedback.reviewerDisplayName ?? feedback.reviewerUsername,
+          reviewerAvatarUrl: reviewerAvatarUrls.get(feedback.reviewerId) ?? null,
+          candidateId: feedback.candidateId,
+          candidateName:
+            participantProfiles.get(feedback.candidateId)?.name ?? feedback.candidateId,
+          candidateAvatarUrl: participantProfiles.get(feedback.candidateId)?.avatarUrl ?? null,
+          feedbackText:
+            feedback.feedbackText ??
+            [feedback.strengths, feedback.improvements]
+              .filter((item): item is string => Boolean(item))
+              .join('\n\n'),
+          createdAt: feedback.createdAt,
+        })),
       hasReport: normalizedReport != null,
       hasFeedback: feedbackExists.length > 0,
       hasRecording: recordingExists.length > 0,

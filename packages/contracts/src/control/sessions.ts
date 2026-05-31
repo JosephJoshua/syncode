@@ -102,8 +102,7 @@ export const sessionReportComparisonSchema = z.object({
 });
 
 export const sessionReportPeerFeedbackSummarySchema = z.object({
-  averageRating: z.number().min(0).max(5),
-  wouldPairAgain: z.number().min(0).max(100),
+  summary: z.string(),
   themes: z.array(z.string()).default([]),
 });
 
@@ -194,14 +193,7 @@ export const sessionPeerFeedbackSchema = z.object({
   candidateId: z.uuid(),
   candidateName: z.string(),
   candidateAvatarUrl: z.string().nullable().default(null),
-  problemSolvingRating: z.number().int().min(1).max(5),
-  communicationRating: z.number().int().min(1).max(5),
-  codeQualityRating: z.number().int().min(1).max(5),
-  debuggingRating: z.number().int().min(1).max(5),
-  overallRating: z.number().int().min(1).max(5),
-  strengths: z.string(),
-  improvements: z.string(),
-  wouldPairAgain: z.boolean(),
+  feedbackText: z.string(),
   createdAt: z.iso.datetime(),
 });
 

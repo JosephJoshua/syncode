@@ -173,11 +173,6 @@ function PeerFeedbackEntryCard({ entry }: { entry: PeerFeedbackEntry }) {
               <p className="truncate text-sm font-semibold text-foreground sm:text-base">
                 {fromUserName} {'\u2192'} {targetUserName}
               </p>
-              <Badge size="sm" variant={getPairAgainBadgeVariant(entry.wouldPairAgain)}>
-                {entry.wouldPairAgain
-                  ? t('peerFeedbackSection.wouldPairAgain')
-                  : t('peerFeedbackSection.wouldNotPairAgain')}
-              </Badge>
             </div>
 
             <p className="mt-1 text-sm text-muted-foreground">
@@ -201,105 +196,13 @@ function PeerFeedbackEntryCard({ entry }: { entry: PeerFeedbackEntry }) {
         </div>
       </div>
 
-      <div className="mt-5 grid gap-3 lg:grid-cols-2 lg:items-center">
-        <div className="lg:w-fit">
-          <div data-slot="peer-feedback-ratings-layout" className="space-y-3">
-            <RatingRow
-              label={t('peerFeedbackSection.ratings.problemSolving')}
-              score={entry.problemSolvingRating}
-            />
-            <RatingRow
-              label={t('peerFeedbackSection.ratings.communication')}
-              score={entry.communicationRating}
-            />
-            <RatingRow
-              label={t('peerFeedbackSection.ratings.codeQuality')}
-              score={entry.codeQualityRating}
-            />
-            <RatingRow
-              label={t('peerFeedbackSection.ratings.debugging')}
-              score={entry.debuggingRating}
-            />
-          </div>
-        </div>
-
-        <div className="lg:flex lg:justify-start">
-          <div
-            data-slot="peer-feedback-summary-panel"
-            className="rounded-xl border border-border/50 bg-background/40 px-5 py-5 lg:w-full"
-          >
-            <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-              {t('peerFeedbackSection.summaryPanel')}
-            </p>
-            <div className="mt-4 border-t border-border/40 pt-4 pl-4">
-              <p className="mt-1 ml-5 font-mono text-4xl font-semibold text-foreground">
-                {entry.overallRating}/5
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="mt-4 grid gap-3 lg:grid-cols-2">
-        <WrittenFeedbackBlock title={t('peerFeedbackSection.strengths')} body={entry.strengths} />
+      <div className="mt-4">
         <WrittenFeedbackBlock
-          title={t('peerFeedbackSection.improvements')}
-          body={entry.improvements}
+          title={t('peerFeedbackSection.feedbackLabel')}
+          body={entry.feedbackText}
         />
       </div>
     </article>
-  );
-}
-
-function RatingRow({ label, score }: { label: string; score: number }) {
-  return (
-    <div data-slot="peer-feedback-rating-row" className="space-y-2">
-      <div className="space-y-2 sm:grid sm:grid-cols-[minmax(0,150px)_264px_3rem] sm:items-center sm:gap-3 sm:space-y-0">
-        <span className="text-sm text-foreground">{label}</span>
-        <div className="flex items-center gap-3 sm:contents">
-          <SegmentedRatingBar label={label} score={score} />
-          <span className="w-12 shrink-0 text-right font-mono text-xs text-muted-foreground">
-            {score}/5
-          </span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function SegmentedRatingBar({ label, score }: { label: string; score: number }) {
-  return (
-    <div
-      data-slot="peer-feedback-rating-bar"
-      role="img"
-      aria-label={`${label}: ${score}/5`}
-      className="flex w-[264px] max-w-full items-center gap-1"
-    >
-      {Array.from({ length: 5 }, (_, index) => {
-        const isFilled = index < score;
-
-        return (
-          <span
-            key={`${label}-${index + 1}`}
-            data-slot="peer-feedback-rating-segment"
-            data-filled={isFilled ? 'true' : 'false'}
-            className={
-              isFilled
-                ? 'h-3 flex-1 rounded-sm bg-primary'
-                : 'h-3 flex-1 rounded-sm bg-background/70 ring-1 ring-inset ring-border/50'
-            }
-          />
-        );
-      })}
-    </div>
-  );
-}
-
-function _SummarySeparator() {
-  return (
-    <span aria-hidden className="text-sm text-muted-foreground/60">
-      •
-    </span>
   );
 }
 
@@ -317,10 +220,6 @@ function WrittenFeedbackBlock({ title, body }: { title: string; body: string }) 
 function getFeedbackUserInitial(name: string) {
   const source = name.trim();
   return source.charAt(0).toUpperCase() || '?';
-}
-
-function getPairAgainBadgeVariant(wouldPairAgain: boolean) {
-  return wouldPairAgain ? 'success' : 'warning';
 }
 
 function formatFeedbackTimestamp(createdAt: string) {

@@ -3,9 +3,12 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "dev": "cross-env NODE_OPTIONS=\"--import tsx\" nest start --watch",
+    "dev": "sh -c 'pnpm run dev:server & pnpm run dev:ai-interviewer-worker & wait'",
+    "dev:server": "cross-env NODE_OPTIONS=\"--import tsx\" nest start --watch",
+    "dev:ai-interviewer-worker": "node --import tsx src/livekit/ai-interviewer.worker.ts dev",
     "build": "nest build",
     "start": "node dist/main.js",
+    "start:ai-interviewer-worker": "node dist/livekit/ai-interviewer.worker.js start",
     "typecheck": "tsc --noEmit",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
@@ -13,6 +16,8 @@
     "test:cov": "vitest run --coverage"
   },
   "dependencies": {
+    "@livekit/agents": "1.4.4",
+    "@livekit/agents-plugin-openai": "1.4.4",
     "@nestjs/common": "^11.1.14",
     "@nestjs/config": "^4.0.3",
     "@nestjs/core": "^11.1.14",
@@ -27,6 +32,7 @@
     "@syncode/contracts": "workspace:^",
     "@syncode/infrastructure": "workspace:^",
     "@syncode/shared": "workspace:^",
+    "dotenv": "^17.4.2",
     "nestjs-pino": "^4.6.0",
     "pino": "^10.3.1",
     "pino-http": "^11.0.0",

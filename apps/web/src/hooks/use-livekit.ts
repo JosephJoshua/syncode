@@ -40,6 +40,13 @@ export interface AudioProcessingOptions {
   autoGainControl: boolean;
 }
 
+export interface LiveKitDataPacket {
+  payload: Uint8Array;
+  participantIdentity: string | null;
+  topic: string | null;
+  receivedAt: number;
+}
+
 function speakingMapsEqual(
   prev: ReadonlyMap<string, boolean>,
   next: ReadonlyMap<string, boolean>,
@@ -63,6 +70,7 @@ export interface UseLiveKitOptions {
     videoInputIds: ReadonlySet<string>;
     audioOutputIds: ReadonlySet<string>;
   }) => void;
+  onDataReceived?: (packet: LiveKitDataPacket) => void;
 }
 
 export interface UseLiveKitResult {
@@ -92,6 +100,14 @@ export interface UseLiveKitResult {
     autoGainControl: boolean;
   }) => Promise<void>;
   connectionQualityMap: ReadonlyMap<string, ConnectionQuality>;
+  publishData: (
+    payload: Uint8Array,
+    options?: {
+      reliable?: boolean;
+      topic?: string;
+      destinationIdentities?: string[];
+    },
+  ) => Promise<void>;
   isPushToTalkMode: boolean;
   togglePushToTalkMode: () => void;
   handlePushToTalk: (pressed: boolean) => void;
@@ -132,6 +148,7 @@ export function useLiveKit({
   preferredAudioDeviceId,
   preferredVideoDeviceId,
   onDevicesDiscovered,
+  onDataReceived,
 }: UseLiveKitOptions): UseLiveKitResult {
   const [connectionState, setConnectionState] = useState<LiveKitConnectionState>('disconnected');
   const [isMicrophoneEnabled, setIsMicrophoneEnabled] = useState(false);
@@ -173,6 +190,8 @@ export function useLiveKit({
 
   const onDevicesDiscoveredRef = useRef(onDevicesDiscovered);
   onDevicesDiscoveredRef.current = onDevicesDiscovered;
+  const onDataReceivedRef = useRef(onDataReceived);
+  onDataReceivedRef.current = onDataReceived;
 
   const refreshParticipants = useCallback(() => {
     const room = roomRef.current;
@@ -452,6 +471,23 @@ export function useLiveKit({
       if (!disposed) resetState();
     };
 
+    const onDataReceivedInternal = (
+      payload: Uint8Array,
+      participant?: RemoteParticipant,
+      _kind?: unknown,
+      topic?: string,
+    ) => {
+      if (disposed) {
+        return;
+      }
+      onDataReceivedRef.current?.({
+        payload,
+        participantIdentity: participant?.identity ?? null,
+        topic: topic ?? null,
+        receivedAt: Date.now(),
+      });
+    };
+
     room.on(RoomEvent.ConnectionStateChanged, onConnectionStateChanged);
     room.on(RoomEvent.ActiveSpeakersChanged, onActiveSpeakersChanged);
     room.on(RoomEvent.TrackSubscribed, onTrackSubscribed);
@@ -466,6 +502,7 @@ export function useLiveKit({
     room.on(RoomEvent.ParticipantConnected, onParticipantConnected);
     room.on(RoomEvent.ParticipantDisconnected, onParticipantDisconnected);
     room.on(RoomEvent.Disconnected, onDisconnected);
+    room.on(RoomEvent.DataReceived, onDataReceivedInternal);
     room.on(
       RoomEvent.ConnectionQualityChanged,
       (quality: ConnectionQuality, participant: Participant) => {
@@ -711,6 +748,28 @@ export function useLiveKit({
     [],
   );
 
+  const publishData = useCallback(
+    async (
+      payload: Uint8Array,
+      options?: {
+        reliable?: boolean;
+        topic?: string;
+        destinationIdentities?: string[];
+      },
+    ) => {
+      const room = roomRef.current;
+      if (!room) {
+        return;
+      }
+      await room.localParticipant.publishData(payload, {
+        reliable: options?.reliable ?? true,
+        topic: options?.topic,
+        destinationIdentities: options?.destinationIdentities,
+      });
+    },
+    [],
+  );
+
   return {
     connectionState,
     isMicrophoneEnabled,
@@ -734,6 +793,7 @@ export function useLiveKit({
     setVideoFilter,
     setAudioProcessing,
     connectionQualityMap,
+    publishData,
     isPushToTalkMode,
     togglePushToTalkMode,
     handlePushToTalk,

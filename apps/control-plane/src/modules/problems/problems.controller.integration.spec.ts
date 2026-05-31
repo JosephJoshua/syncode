@@ -1,12 +1,20 @@
 import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import type { Database } from '@syncode/db';
+import { auditLogs, type Database } from '@syncode/db';
+import { eq } from 'drizzle-orm';
 import { ZodValidationPipe } from 'nestjs-zod';
 import request from 'supertest';
 import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard.js';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
-import { createTestDb, insertProblem, insertUser } from '@/test/integration-setup.js';
+import {
+  createTestDb,
+  insertProblem,
+  insertRoom,
+  insertTestCase,
+  insertUser,
+} from '@/test/integration-setup.js';
 import { asUser, TestAuthGuard } from '@/test/mock-factories.js';
+import { AuditService } from '../admin/audit.service.js';
 import { ProblemsController } from './problems.controller.js';
 import { ProblemsService } from './problems.service.js';
 
@@ -21,7 +29,7 @@ beforeEach(async () => {
 
   const module = await Test.createTestingModule({
     controllers: [ProblemsController],
-    providers: [ProblemsService, { provide: DB_CLIENT, useValue: db }],
+    providers: [ProblemsService, AuditService, { provide: DB_CLIENT, useValue: db }],
   })
     .overrideGuard(JwtAuthGuard)
     .useClass(TestAuthGuard)
@@ -82,6 +90,57 @@ describe('GET /problems', () => {
     ]);
     expect(res.body.data[1].id).toBe(hard.id);
   });
+
+  it('GIVEN problem test cases WHEN listing as admin THEN includes admin-only test counts', async () => {
+    const admin = await insertUser(db, { role: 'admin' });
+    const user = await insertUser(db, { role: 'user' });
+    const problem = await insertProblem(db, { title: 'Counted Cases' });
+    await insertTestCase(db, problem.id, { isHidden: false });
+    await insertTestCase(db, problem.id, { isHidden: true });
+    await insertTestCase(db, problem.id, { isHidden: true });
+
+    const adminRes = await asUser(
+      request(app.getHttpServer()).get('/problems?search=Counted%20Cases&includeDrafts=true'),
+      admin,
+    ).expect(200);
+    const userRes = await asUser(
+      request(app.getHttpServer()).get('/problems?search=Counted%20Cases'),
+      user,
+    ).expect(200);
+
+    expect(adminRes.body.data).toHaveLength(1);
+    expect(adminRes.body.data[0]).toMatchObject({
+      id: problem.id,
+      testCaseCount: 3,
+      hiddenTestCaseCount: 2,
+    });
+    expect(userRes.body.data).toHaveLength(1);
+    expect(userRes.body.data[0]).not.toHaveProperty('testCaseCount');
+    expect(userRes.body.data[0]).not.toHaveProperty('hiddenTestCaseCount');
+  });
+
+  it('GIVEN draft problem WHEN listing as admin THEN drafts require explicit includeDrafts', async () => {
+    const admin = await insertUser(db, { role: 'admin' });
+    await insertProblem(db, { title: 'Published', isPublished: true });
+    await insertProblem(db, { title: 'Draft', isPublished: false });
+
+    const defaultRes = await asUser(
+      request(app.getHttpServer()).get('/problems?sortBy=title&sortOrder=asc'),
+      admin,
+    ).expect(200);
+    const draftRes = await asUser(
+      request(app.getHttpServer()).get('/problems?sortBy=title&sortOrder=asc&includeDrafts=true'),
+      admin,
+    ).expect(200);
+
+    expect(defaultRes.body.data.map((problem: { title: string }) => problem.title)).toEqual([
+      'Published',
+    ]);
+    expect(draftRes.body.data.map((problem: { title: string }) => problem.title)).toEqual([
+      'Draft',
+      'Published',
+    ]);
+  });
 });
 
 describe('POST /problems', () => {
@@ -127,12 +186,18 @@ describe('POST /problems', () => {
       timeLimit: payload.timeLimit,
       memoryLimit: payload.memoryLimit,
     });
-    expect(res.body.testCases).toHaveLength(1);
-    expect(res.body.testCases[0]).toMatchObject({
-      input: payload.testCases[0].input,
-      expectedOutput: payload.testCases[0].expectedOutput,
-      isHidden: false,
-    });
+    expect(res.body.testCases).toEqual([
+      expect.objectContaining({
+        input: payload.testCases[0].input,
+        expectedOutput: payload.testCases[0].expectedOutput,
+        isHidden: false,
+      }),
+      expect.objectContaining({
+        input: payload.testCases[1].input,
+        expectedOutput: payload.testCases[1].expectedOutput,
+        isHidden: true,
+      }),
+    ]);
   });
 
   it('GIVEN non-admin user WHEN creating a problem THEN returns 403', async () => {
@@ -156,5 +221,202 @@ describe('POST /problems', () => {
     await asUser(request(app.getHttpServer()).get(`/problems/${created.body.id}`), admin).expect(
       200,
     );
+  });
+
+  it('GIVEN admin fetches problem without includeHidden THEN hidden test cases stay out of public detail', async () => {
+    const admin = await insertUser(db, { role: 'admin' });
+    const problem = await insertProblem(db);
+    await insertTestCase(db, problem.id, { input: 'visible', isHidden: false });
+    await insertTestCase(db, problem.id, { input: 'hidden', isHidden: true });
+
+    const publicRes = await asUser(
+      request(app.getHttpServer()).get(`/problems/${problem.id}`),
+      admin,
+    ).expect(200);
+    const editorRes = await asUser(
+      request(app.getHttpServer()).get(`/problems/${problem.id}?includeHidden=true`),
+      admin,
+    ).expect(200);
+
+    expect(publicRes.body.testCases.map((tc: { input: string }) => tc.input)).toEqual(['visible']);
+    expect(editorRes.body.testCases.map((tc: { input: string }) => tc.input).sort()).toEqual([
+      'hidden',
+      'visible',
+    ]);
+  });
+
+  it('GIVEN admin problem mutations WHEN they succeed THEN writes complete audit entries', async () => {
+    const admin = await insertUser(db, { role: 'admin' });
+
+    const created = await asUser(request(app.getHttpServer()).post('/problems'), admin)
+      .send(payload)
+      .expect(201);
+
+    await asUser(request(app.getHttpServer()).patch(`/problems/${created.body.id}`), admin)
+      .send({ title: 'Audited Admin Two Sum' })
+      .expect(200);
+
+    await asUser(
+      request(app.getHttpServer()).patch(`/problems/${created.body.id}/publish-status`),
+      admin,
+    )
+      .send({ isPublished: true })
+      .expect(200);
+
+    await asUser(
+      request(app.getHttpServer()).patch(`/problems/${created.body.id}/publish-status`),
+      admin,
+    )
+      .send({ isPublished: false })
+      .expect(200);
+
+    await asUser(request(app.getHttpServer()).delete(`/problems/${created.body.id}`), admin).expect(
+      204,
+    );
+
+    const entries = await db
+      .select({
+        action: auditLogs.action,
+        actorId: auditLogs.actorId,
+        targetType: auditLogs.targetType,
+        targetId: auditLogs.targetId,
+        metadata: auditLogs.metadata,
+      })
+      .from(auditLogs)
+      .where(eq(auditLogs.targetId, created.body.id));
+
+    expect(entries.map((entry) => entry.action).sort()).toEqual([
+      'admin.problem.create',
+      'admin.problem.delete',
+      'admin.problem.publish',
+      'admin.problem.unpublish',
+      'admin.problem.update',
+    ]);
+    expect(entries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          action: 'admin.problem.create',
+          actorId: admin.id,
+          targetType: 'problem',
+          targetId: created.body.id,
+          metadata: expect.objectContaining({
+            title: payload.title,
+            testCaseCount: 2,
+            hiddenTestCaseCount: 1,
+          }),
+        }),
+        expect.objectContaining({
+          action: 'admin.problem.update',
+          metadata: expect.objectContaining({ changedFields: ['title'] }),
+        }),
+        expect.objectContaining({
+          action: 'admin.problem.publish',
+          metadata: expect.objectContaining({ previousIsPublished: false, isPublished: true }),
+        }),
+        expect.objectContaining({
+          action: 'admin.problem.unpublish',
+          metadata: expect.objectContaining({ previousIsPublished: true, isPublished: false }),
+        }),
+        expect.objectContaining({
+          action: 'admin.problem.delete',
+          metadata: expect.objectContaining({ wasPublished: false }),
+        }),
+      ]),
+    );
+  });
+});
+
+describe('PATCH /problems/:id', () => {
+  it('GIVEN admin user WHEN updating a problem THEN replaces editable fields and returns hidden test cases', async () => {
+    const admin = await insertUser(db, { role: 'admin' });
+    const problem = await insertProblem(db, { title: 'Original', isPublished: false });
+    await insertTestCase(db, problem.id, { input: 'old', expectedOutput: 'old' });
+
+    const res = await asUser(request(app.getHttpServer()).patch(`/problems/${problem.id}`), admin)
+      .send({
+        title: 'Updated',
+        description: 'Updated description',
+        testCases: [
+          {
+            input: 'visible input',
+            expectedOutput: 'visible output',
+            isHidden: false,
+          },
+          {
+            input: 'hidden input',
+            expectedOutput: 'hidden output',
+            isHidden: true,
+          },
+        ],
+      })
+      .expect(200);
+
+    expect(res.body).toMatchObject({
+      id: problem.id,
+      title: 'Updated',
+      description: 'Updated description',
+    });
+    expect(res.body.testCases).toEqual([
+      expect.objectContaining({ input: 'visible input', isHidden: false }),
+      expect.objectContaining({ input: 'hidden input', isHidden: true }),
+    ]);
+  });
+});
+
+describe('PATCH /problems/:id/publish-status', () => {
+  it('GIVEN draft problem WHEN admin publishes it THEN regular users can fetch it', async () => {
+    const admin = await insertUser(db, { role: 'admin' });
+    const user = await insertUser(db, { role: 'user' });
+    const problem = await insertProblem(db, { isPublished: false });
+    await insertTestCase(db, problem.id, { isHidden: false });
+
+    await asUser(request(app.getHttpServer()).get(`/problems/${problem.id}`), user).expect(404);
+
+    const publishRes = await asUser(
+      request(app.getHttpServer()).patch(`/problems/${problem.id}/publish-status`),
+      admin,
+    )
+      .send({ isPublished: true })
+      .expect(200);
+
+    const userRes = await asUser(
+      request(app.getHttpServer()).get(`/problems/${problem.id}`),
+      user,
+    ).expect(200);
+
+    expect(publishRes.body).toMatchObject({ id: problem.id, isPublished: true });
+    expect(userRes.body).toMatchObject({ id: problem.id, title: problem.title });
+  });
+});
+
+describe('DELETE /problems/:id', () => {
+  it('GIVEN existing problem WHEN admin deletes it THEN it is no longer fetchable', async () => {
+    const admin = await insertUser(db, { role: 'admin' });
+    const problem = await insertProblem(db);
+
+    const deleteRes = await asUser(
+      request(app.getHttpServer()).delete(`/problems/${problem.id}`),
+      admin,
+    ).expect(204);
+
+    await asUser(request(app.getHttpServer()).get(`/problems/${problem.id}`), admin).expect(404);
+
+    expect(deleteRes.body).toEqual({});
+  });
+
+  it('GIVEN problem referenced by a room WHEN admin deletes it THEN returns 409', async () => {
+    const admin = await insertUser(db, { role: 'admin' });
+    const problem = await insertProblem(db);
+    await insertRoom(db, admin.id, { problemId: problem.id });
+
+    const res = await asUser(
+      request(app.getHttpServer()).delete(`/problems/${problem.id}`),
+      admin,
+    ).expect(409);
+
+    expect(res.body).toMatchObject({
+      code: 'PROBLEM_IN_USE',
+      message: 'Problem is used by existing rooms or sessions',
+    });
   });
 });

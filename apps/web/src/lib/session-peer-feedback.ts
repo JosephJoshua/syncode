@@ -2,6 +2,7 @@ import {
   CONTROL_API,
   type SessionFeedbackEntry,
   type SessionFeedbackResponse,
+  type SubmitSessionFeedbackInput,
   sessionFeedbackResponseSchema,
 } from '@syncode/contracts';
 import { api } from '@/lib/api-client.js';
@@ -29,6 +30,18 @@ export async function fetchSessionPeerFeedback(
 
   const response = await api(CONTROL_API.FEEDBACK.GET_SESSION, {
     params: { id: sessionId },
+  });
+
+  return sessionFeedbackResponseSchema.parse(response);
+}
+
+export async function submitSessionPeerFeedback(
+  sessionId: string,
+  input: SubmitSessionFeedbackInput,
+): Promise<GetSessionFeedbackResponse> {
+  const response = await api(CONTROL_API.FEEDBACK.SUBMIT_SESSION, {
+    params: { id: sessionId },
+    body: input,
   });
 
   return sessionFeedbackResponseSchema.parse(response);

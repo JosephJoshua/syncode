@@ -43,5 +43,5 @@ export function isAllReviewFeedbackSubmitted(
   reviewFeedbackCount: number,
 ): boolean {
   const expected = expectedReviewFeedbackCount(reviewParticipantCount);
-  return expected > 0 && reviewFeedbackCount >= expected;
+  return expected === 0 || reviewFeedbackCount >= expected;
 }

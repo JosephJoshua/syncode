@@ -4,6 +4,9 @@ export type WhiteboardViewMode = 'tab' | 'floating';
 export interface WhiteboardKeyboardFocusController {
   focus: (options?: { focusContainer?: boolean }) => unknown;
   blur: (options?: { blurContainer?: boolean }) => unknown;
+  user?: {
+    updateUserPreferences?: (preferences: { areKeyboardShortcutsEnabled: boolean }) => unknown;
+  };
 }
 
 export interface WhiteboardKeyboardShortcutState {
@@ -43,17 +46,23 @@ export function shouldEnableWhiteboardKeyboardShortcuts({
   isCodeEditorFocused,
   whiteboardHasKeyboardFocus,
 }: WhiteboardKeyboardShortcutState): boolean {
+  if (isCodeEditorFocused) {
+    return false;
+  }
+
   if (activeCenterTab === 'whiteboard') {
     return true;
   }
 
-  return whiteboardViewMode === 'floating' && whiteboardHasKeyboardFocus && !isCodeEditorFocused;
+  return whiteboardViewMode === 'floating' && whiteboardHasKeyboardFocus;
 }
 
 export function applyWhiteboardKeyboardShortcutsState(
   editor: WhiteboardKeyboardFocusController,
   enabled: boolean,
 ): void {
+  editor.user?.updateUserPreferences?.({ areKeyboardShortcutsEnabled: enabled });
+
   if (enabled) {
     editor.focus({ focusContainer: false });
     return;

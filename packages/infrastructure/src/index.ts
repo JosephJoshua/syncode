@@ -6,11 +6,13 @@ export {
   createProtectedBullMqAdapter,
   createProtectedCollabClient,
   createProtectedLiveKitAdapter,
+  createProtectedLiveKitAgentDispatchAdapter,
   createProtectedRedisAdapter,
   createProtectedS3Adapter,
   DEFAULT_CIRCUIT_CONFIGS,
 } from './circuit-breaker/index.js';
 export type { LiveKitConfig, RedisConfig, S3Config } from './config.js';
 export { LiveKitAdapter } from './media/livekit.adapter.js';
+export { LiveKitAgentDispatchAdapter } from './media/livekit-agent-dispatch.adapter.js';
 export { BullMqAdapter } from './queue/bullmq.adapter.js';
 export { S3StorageAdapter } from './storage/s3-storage.adapter.js';

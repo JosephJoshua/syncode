@@ -12,6 +12,8 @@ import type {
   GenerateWeaknessAnalysisResult,
   InterviewResponseRequest,
   InterviewResponseResult,
+  InterviewTranscriptionRequest,
+  InterviewTranscriptionResult,
   ReviewCodeRequest,
   ReviewCodeResult,
 } from './types.js';
@@ -23,6 +25,7 @@ type AiJobType =
   | 'weakness-analysis'
   | 'review'
   | 'interview'
+  | 'interview-transcription'
   | 'session-report';
 
 interface StubJob {
@@ -33,6 +36,7 @@ interface StubJob {
   weaknessAnalysisResult?: GenerateWeaknessAnalysisResult;
   reviewResult?: ReviewCodeResult;
   interviewResult?: InterviewResponseResult;
+  interviewTranscriptionResult?: InterviewTranscriptionResult;
   sessionReportResult?: GenerateSessionReportResult;
 }
 
@@ -139,12 +143,12 @@ export class StubAiClient implements IAiClient {
   }
 
   async submitInterviewResponse(
-    request: InterviewResponseRequest,
+    _request: InterviewResponseRequest,
   ): Promise<SubmitResult<'ai:interview'>> {
-    const jobId = (request.idempotencyKey ?? randomUUID()) as JobId<'ai:interview'>;
+    const jobId = randomUUID() as JobId<'ai:interview'>;
     this.jobs.set(jobId, { status: 'queued', type: 'interview' });
 
-    this.scheduleInterviewCompletion(jobId, request);
+    this.scheduleInterviewCompletion(jobId, _request);
     return { jobId };
   }
 
@@ -152,6 +156,24 @@ export class StubAiClient implements IAiClient {
     const job = this.jobs.get(jobId);
     if (job?.type !== 'interview') return null;
     return job.interviewResult ?? null;
+  }
+
+  async submitInterviewTranscription(
+    request: InterviewTranscriptionRequest,
+  ): Promise<SubmitResult<'ai:interview-transcription'>> {
+    const jobId = randomUUID() as JobId<'ai:interview-transcription'>;
+    this.jobs.set(jobId, { status: 'queued', type: 'interview-transcription' });
+
+    this.scheduleInterviewTranscriptionCompletion(jobId, request);
+    return { jobId };
+  }
+
+  async getInterviewTranscriptionResult(
+    jobId: JobId<'ai:interview-transcription'>,
+  ): Promise<InterviewTranscriptionResult | null> {
+    const job = this.jobs.get(jobId);
+    if (job?.type !== 'interview-transcription') return null;
+    return job.interviewTranscriptionResult ?? null;
   }
 
   async submitSessionReportRequest(
@@ -199,6 +221,14 @@ export class StubAiClient implements IAiClient {
   async getInterviewJobStatus(jobId: JobId<'ai:interview'>): Promise<JobStatus> {
     const job = this.jobs.get(jobId);
     if (job?.type !== 'interview') return 'failed';
+    return job.status;
+  }
+
+  async getInterviewTranscriptionJobStatus(
+    jobId: JobId<'ai:interview-transcription'>,
+  ): Promise<JobStatus> {
+    const job = this.jobs.get(jobId);
+    if (job?.type !== 'interview-transcription') return 'failed';
     return job.status;
   }
 
@@ -336,11 +366,7 @@ export class StubAiClient implements IAiClient {
         const historicalCommunication = request.historicalWeaknesses.find(
           (item) => item.category === 'communication',
         );
-        const peerCommunicationAverage =
-          request.peerFeedback.length > 0
-            ? request.peerFeedback.reduce((sum, item) => sum + item.communicationRating, 0) /
-              request.peerFeedback.length
-            : null;
+        const hasPeerFeedback = request.peerFeedback.length > 0;
 
         job.status = 'completed';
         job.weaknessAnalysisResult = {
@@ -372,10 +398,9 @@ export class StubAiClient implements IAiClient {
               category: 'communication',
               description:
                 'The candidate can improve how they explain trade-offs, invariants, and next debugging steps out loud.',
-              evidence:
-                peerCommunicationAverage != null
-                  ? `Peer communication rating averaged ${peerCommunicationAverage.toFixed(1)}/5 in this session.`
-                  : 'Peer feedback is limited, so the signal is based on sparse discussion evidence.',
+              evidence: hasPeerFeedback
+                ? 'Peer feedback mentioned collaboration and explanation quality during the session.'
+                : 'Peer feedback is limited, so the signal is based on sparse discussion evidence.',
               trend: historicalCommunication?.trend === 'worsening' ? 'worsening' : 'stable',
             },
           ],
@@ -477,7 +502,31 @@ export class StubAiClient implements IAiClient {
           : {
               shouldRespond: false,
             };
-        void this.interviewResultCallback?.(jobId, job.interviewResult);
+        if (job.interviewResult) {
+          this.interviewResultCallback?.(jobId, job.interviewResult).catch(() => {});
+        }
+      }, this.delayMs),
+    );
+  }
+
+  private scheduleInterviewTranscriptionCompletion(
+    jobId: string,
+    request: InterviewTranscriptionRequest,
+  ): void {
+    this.timers.push(
+      setTimeout(() => {
+        const job = this.jobs.get(jobId);
+        if (job) job.status = 'running';
+      }, this.delayMs / 4),
+      setTimeout(() => {
+        const job = this.jobs.get(jobId);
+        if (!job) return;
+
+        job.status = 'completed';
+        const transcriptSeed = request.language ? ` (${request.language})` : '';
+        job.interviewTranscriptionResult = {
+          text: `Stub transcript${transcriptSeed}.`,
+        };
       }, this.delayMs),
     );
   }
@@ -502,13 +551,7 @@ export class StubAiClient implements IAiClient {
         const correctnessScore = latestSubmission
           ? Math.round((latestSubmission.passed / Math.max(latestSubmission.total, 1)) * 100)
           : 70;
-        const peerAverage =
-          request.peerFeedback.length > 0
-            ? request.peerFeedback.reduce((sum, item) => sum + item.overallRating, 0) /
-              request.peerFeedback.length
-            : null;
-        const peerAveragePct =
-          peerAverage == null ? null : Math.round((peerAverage / 5) * 100 * 10) / 10;
+        const hasPeerFeedback = request.peerFeedback.length > 0;
         const chatSignalScore = (request.roomChatMessages?.length ?? 0) > 0 ? 80 : 72;
         const overallScore = Math.max(
           0,
@@ -519,7 +562,7 @@ export class StubAiClient implements IAiClient {
                 correctnessScore,
                 request.runs.length > 0 ? 76 : 70,
                 request.snapshots.length > 0 ? 78 : 70,
-                peerAveragePct ?? 75,
+                hasPeerFeedback ? 80 : 75,
                 Math.max(chatSignalScore, request.aiMessages.length > 0 ? 80 : 72),
               ].reduce((sum, score) => sum + score, 0) / 5,
             ),
@@ -564,7 +607,7 @@ export class StubAiClient implements IAiClient {
               })),
             },
             communication: {
-              score: peerAveragePct ?? 75,
+              score: hasPeerFeedback ? 80 : 75,
               feedback:
                 request.peerFeedback.length > 0
                   ? 'Peer feedback indicates clear collaboration overall.'
@@ -572,7 +615,7 @@ export class StubAiClient implements IAiClient {
               evidence: request.peerFeedback.slice(0, 1).map((feedback) => ({
                 type: 'peer_feedback',
                 reference: feedback.reviewerId,
-                description: feedback.strengths,
+                description: feedback.feedbackText,
               })),
             },
             problemSolving: {
@@ -613,25 +656,7 @@ export class StubAiClient implements IAiClient {
                   averageScore: request.historicalContext.averageScore ?? overallScore,
                 }
               : null,
-          peerFeedbackSummary:
-            request.peerFeedback.length > 0
-              ? {
-                  averageRating:
-                    Math.round(
-                      (request.peerFeedback.reduce((sum, item) => sum + item.overallRating, 0) /
-                        request.peerFeedback.length) *
-                        10,
-                    ) / 10,
-                  wouldPairAgain: Math.round(
-                    (request.peerFeedback.filter((item) => item.wouldPairAgain).length /
-                      request.peerFeedback.length) *
-                      100,
-                  ),
-                  themes: request.peerFeedback
-                    .flatMap((item) => [item.strengths, item.improvements])
-                    .slice(0, 3),
-                }
-              : null,
+          peerFeedbackSummary: null,
           testCaseBreakdown: toPublicSessionReportTestCaseBreakdown(request.finalTestCaseBreakdown),
           model: 'stub-ai-client',
         };

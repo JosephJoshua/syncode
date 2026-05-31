@@ -183,6 +183,30 @@ describe('buildSessionReportPrompt', () => {
     expect(prompt.userPrompt).toContain('…');
   });
 
+  it('GIVEN AI interview chat history WHEN building prompt THEN includes compact communication evidence in session data', () => {
+    const prompt = buildSessionReportPrompt(
+      createReportRequest({
+        aiMessages: [
+          {
+            role: 'assistant',
+            content: 'Please explain your invariant.',
+            createdAt: '2026-04-20T01:00:10.000Z',
+          },
+          {
+            role: 'user',
+            content: 'I keep a map of complements while iterating.',
+            createdAt: '2026-04-20T01:00:18.000Z',
+          },
+        ],
+      }),
+    );
+
+    expect(prompt.userPrompt).toContain('"communicationEvidence"');
+    expect(prompt.userPrompt).toContain('"participantAiMessageCount": 1');
+    expect(prompt.userPrompt).toContain('"assistantAiMessageCount": 1');
+    expect(prompt.userPrompt).toContain('I keep a map of complements while iterating.');
+  });
+
   it('GIVEN participant report request WHEN building prompt THEN requires strict participant-specific evidence', () => {
     const prompt = buildSessionReportPrompt(
       createReportRequest({

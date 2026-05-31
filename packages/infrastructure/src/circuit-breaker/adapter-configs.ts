@@ -31,6 +31,12 @@ export const LIVEKIT_ADAPTER_CIRCUIT_CONFIG: AdapterCircuitConfig = {
   deleteRoom: { circuitName: 'livekit-delete-room' },
 } as const;
 
+export const LIVEKIT_AGENT_DISPATCH_ADAPTER_CIRCUIT_CONFIG: AdapterCircuitConfig = {
+  createDispatch: { circuitName: 'livekit-agent-dispatch-create' },
+  listDispatch: { circuitName: 'livekit-agent-dispatch-list' },
+  deleteDispatch: { circuitName: 'livekit-agent-dispatch-delete' },
+} as const;
+
 export const BULLMQ_ADAPTER_CIRCUIT_CONFIG: AdapterCircuitConfig = {
   enqueue: { circuitName: 'bullmq-enqueue' },
   enqueueBulk: { circuitName: 'bullmq-enqueue-bulk' },

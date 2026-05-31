@@ -29,7 +29,23 @@ export interface LlmGenerateSpeechResult {
   mimeType: string;
 }
 
+export interface LlmGenerateTranscriptionInput {
+  audio: Buffer;
+  mimeType: string;
+  fileName: string;
+  language?: string;
+  model?: string;
+}
+
+export interface LlmGenerateTranscriptionResult {
+  text: string;
+  model: string;
+}
+
 export interface ILlmProvider {
   generateText(input: LlmGenerateTextInput): Promise<LlmGenerateTextResult>;
   generateSpeech(input: LlmGenerateSpeechInput): Promise<LlmGenerateSpeechResult>;
+  generateTranscription(
+    input: LlmGenerateTranscriptionInput,
+  ): Promise<LlmGenerateTranscriptionResult>;
 }

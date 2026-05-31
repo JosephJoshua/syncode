@@ -17,7 +17,7 @@ import {
   testCases,
   users,
 } from '@syncode/db';
-import { and, asc, desc, eq, inArray, isNotNull, ne, or } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lte, ne, or } from 'drizzle-orm';
 import { DB_CLIENT } from '@/modules/db/db.module.js';
 
 const TERMINAL_STATUSES = ['completed', 'failed'] as const;
@@ -59,6 +59,11 @@ export class SessionReportRequestBuilderService {
     problemRow: SessionReportProblemRow | null,
     roomChatMessages: NonNullable<GenerateSessionReportRequest['roomChatMessages']> = [],
   ): Promise<GenerateSessionReportRequest> {
+    const sessionWindowStart = sessionRow.startedAt;
+    const sessionWindowEnd =
+      sessionRow.finishedAt ??
+      new Date(sessionWindowStart.getTime() + Math.max(sessionRow.durationMs ?? 0, 15 * 60_000));
+
     const [snapshotRows, runRows, submissionRows, feedbackRows, aiMessageRows, historicalRows] =
       await Promise.all([
         this.db
@@ -121,16 +126,12 @@ export class SessionReportRequestBuilderService {
           .orderBy(asc(submissions.submittedAt), asc(submissions.id)),
         this.db
           .select({
+            status: peerFeedback.status,
             reviewerId: peerFeedback.reviewerId,
             reviewerUsername: users.username,
-            overallRating: peerFeedback.overallRating,
-            problemSolvingRating: peerFeedback.problemSolvingRating,
-            communicationRating: peerFeedback.communicationRating,
-            codeQualityRating: peerFeedback.codeQualityRating,
-            debuggingRating: peerFeedback.debuggingRating,
+            feedbackText: peerFeedback.feedbackText,
             strengths: peerFeedback.strengths,
             improvements: peerFeedback.improvements,
-            wouldPairAgain: peerFeedback.wouldPairAgain,
             createdAt: peerFeedback.createdAt,
           })
           .from(peerFeedback)
@@ -150,7 +151,18 @@ export class SessionReportRequestBuilderService {
           })
           .from(aiMessages)
           .where(
-            and(eq(aiMessages.sessionId, sessionRow.id), eq(aiMessages.userId, participant.userId)),
+            and(
+              eq(aiMessages.roomId, sessionRow.roomId),
+              eq(aiMessages.userId, participant.userId),
+              or(
+                eq(aiMessages.sessionId, sessionRow.id),
+                and(
+                  isNull(aiMessages.sessionId),
+                  gte(aiMessages.createdAt, sessionWindowStart),
+                  lte(aiMessages.createdAt, sessionWindowEnd),
+                ),
+              ),
+            ),
           )
           .orderBy(asc(aiMessages.createdAt), asc(aiMessages.id)),
         this.db
@@ -248,19 +260,18 @@ export class SessionReportRequestBuilderService {
       finalCodeSnapshot,
       sessionEvents,
       finalTestCaseBreakdown,
-      peerFeedback: feedbackRows.map((feedback) => ({
-        reviewerId: feedback.reviewerId,
-        reviewerUsername: feedback.reviewerUsername,
-        overallRating: feedback.overallRating,
-        problemSolvingRating: feedback.problemSolvingRating,
-        communicationRating: feedback.communicationRating,
-        codeQualityRating: feedback.codeQualityRating,
-        debuggingRating: feedback.debuggingRating,
-        strengths: feedback.strengths,
-        improvements: feedback.improvements,
-        wouldPairAgain: feedback.wouldPairAgain,
-        createdAt: feedback.createdAt.toISOString(),
-      })),
+      peerFeedback: feedbackRows
+        .filter((feedback) => feedback.status === 'submitted')
+        .map((feedback) => ({
+          reviewerId: feedback.reviewerId,
+          reviewerUsername: feedback.reviewerUsername,
+          feedbackText:
+            feedback.feedbackText ??
+            [feedback.strengths, feedback.improvements]
+              .filter((item): item is string => Boolean(item))
+              .join('\n\n'),
+          createdAt: feedback.createdAt.toISOString(),
+        })),
       aiMessages: aiMessageRows.map((message) => ({
         role: message.role,
         content: message.content,

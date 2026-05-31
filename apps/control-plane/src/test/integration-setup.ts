@@ -323,6 +323,8 @@ export async function insertPeerFeedbackRow(
       roomId: opts.roomId,
       reviewerId: opts.reviewerId,
       candidateId: opts.candidateId,
+      status: 'submitted',
+      feedbackText: 'Good overall collaboration.',
       problemSolvingRating: 4,
       communicationRating: 4,
       codeQualityRating: 4,

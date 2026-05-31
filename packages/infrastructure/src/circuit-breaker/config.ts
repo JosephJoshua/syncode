@@ -24,6 +24,9 @@ export type CircuitName =
   | 'livekit-generate-token'
   | 'livekit-create-room'
   | 'livekit-delete-room'
+  | 'livekit-agent-dispatch-create'
+  | 'livekit-agent-dispatch-list'
+  | 'livekit-agent-dispatch-delete'
   | 'bullmq-enqueue'
   | 'bullmq-enqueue-bulk'
   | 'bullmq-get-job'
@@ -154,6 +157,24 @@ export const DEFAULT_CIRCUIT_CONFIGS: Record<CircuitName, Omit<CircuitBreakerCon
     operationTimeoutMs: 5 * 1_000,
   },
   'livekit-delete-room': {
+    failureThreshold: 5,
+    successThreshold: 2,
+    resetTimeoutMs: 20 * 1_000,
+    operationTimeoutMs: 5 * 1_000,
+  },
+  'livekit-agent-dispatch-create': {
+    failureThreshold: 5,
+    successThreshold: 2,
+    resetTimeoutMs: 20 * 1_000,
+    operationTimeoutMs: 5 * 1_000,
+  },
+  'livekit-agent-dispatch-list': {
+    failureThreshold: 5,
+    successThreshold: 2,
+    resetTimeoutMs: 20 * 1_000,
+    operationTimeoutMs: 5 * 1_000,
+  },
+  'livekit-agent-dispatch-delete': {
     failureThreshold: 5,
     successThreshold: 2,
     resetTimeoutMs: 20 * 1_000,

@@ -92,6 +92,111 @@ export interface PersistDocSnapshotResponse {
   success: boolean;
 }
 
+export const aiInterviewTranscriptTurnSchema = z
+  .object({
+    turnId: z
+      .string()
+      .min(1)
+      .max(120)
+      .optional()
+      .describe('Optional idempotency key for this transcript turn'),
+    participantId: z.uuid().describe('Participant user ID associated with this AI session'),
+    role: z.enum(['user', 'assistant']).describe('Transcript speaker role'),
+    content: z.string().min(1).max(8_000).describe('Transcript text content'),
+    audioKey: z
+      .string()
+      .min(1)
+      .max(500)
+      .optional()
+      .describe('Optional storage key for assistant audio output'),
+    timestamp: z
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .describe('Optional epoch timestamp (ms) for when the turn occurred'),
+  })
+  .strict();
+
+export const aiInterviewTranscriptPayloadSchema = z
+  .object({
+    turns: z
+      .array(aiInterviewTranscriptTurnSchema)
+      .min(1)
+      .max(40)
+      .describe('One or more transcript turns to persist'),
+  })
+  .strict();
+
+export type AiInterviewTranscriptPayload = z.infer<typeof aiInterviewTranscriptPayloadSchema>;
+
+export interface AiInterviewTranscriptResponse {
+  success: boolean;
+  persisted: number;
+}
+
+export const aiInterviewerContextRequestSchema = z
+  .object({
+    participantId: z.uuid().describe('Participant user ID linked to the AI interview session'),
+  })
+  .strict();
+
+export type AiInterviewerContextRequest = z.infer<typeof aiInterviewerContextRequestSchema>;
+
+export interface AiInterviewerContextResponse {
+  roomId: string;
+  participantId: string;
+  roomStatus: (typeof ROOM_STATUSES)[number];
+  language: (typeof SUPPORTED_LANGUAGES)[number];
+  problem: {
+    title: string;
+    description: string;
+    difficulty: string | null;
+    starterCode: string | null;
+  } | null;
+  currentCode: {
+    code: string;
+    language: (typeof SUPPORTED_LANGUAGES)[number];
+    source: 'snapshot' | 'submission' | 'starter' | 'unknown';
+    updatedAt: string | null;
+  };
+  latestSubmission: {
+    code: string;
+    language: (typeof SUPPORTED_LANGUAGES)[number];
+    status: 'pending' | 'running' | 'completed' | 'failed';
+    passedTestCases: number;
+    totalTestCases: number;
+    failedTestCases: number;
+    errorTestCases: number;
+    submittedAt: string;
+  } | null;
+}
+
+export const aiInterviewerPhaseTransitionRequestSchema = z
+  .object({
+    participantId: z.uuid().describe('Participant user ID linked to the AI interview session'),
+    targetStatus: z.enum(ROOM_STATUSES).describe('Target room status to transition to'),
+    reason: z
+      .string()
+      .min(1)
+      .max(240)
+      .optional()
+      .describe('Optional short rationale for logging/debugging'),
+  })
+  .strict();
+
+export type AiInterviewerPhaseTransitionRequest = z.infer<
+  typeof aiInterviewerPhaseTransitionRequestSchema
+>;
+
+export interface AiInterviewerPhaseTransitionResponse {
+  roomId: string;
+  previousStatus: (typeof ROOM_STATUSES)[number];
+  currentStatus: (typeof ROOM_STATUSES)[number];
+  transitionedAt: string;
+  transitionedBy: string;
+}
+
 export const CONTROL_INTERNAL = {
   SNAPSHOT_READY: defineRoute<SnapshotReadyPayload, SnapshotReadyResponse>()(
     'internal/collab/snapshot',
@@ -113,4 +218,16 @@ export const CONTROL_INTERNAL = {
     'internal/rooms/:roomId/doc-snapshot',
     'POST',
   ),
+  AI_INTERVIEW_TRANSCRIPT: defineRoute<
+    AiInterviewTranscriptPayload,
+    AiInterviewTranscriptResponse
+  >()('internal/rooms/:roomId/ai-transcript', 'POST'),
+  AI_INTERVIEWER_CONTEXT: defineRoute<AiInterviewerContextRequest, AiInterviewerContextResponse>()(
+    'internal/rooms/:roomId/ai-context',
+    'POST',
+  ),
+  AI_INTERVIEWER_PHASE_TRANSITION: defineRoute<
+    AiInterviewerPhaseTransitionRequest,
+    AiInterviewerPhaseTransitionResponse
+  >()('internal/rooms/:roomId/ai-phase-transition', 'POST'),
 };

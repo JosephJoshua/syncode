@@ -17,6 +17,8 @@ import {
   requestRoomAiHintSchema,
   requestRoomAiInterviewResponseSchema,
   requestRoomAiInterviewSchema,
+  requestRoomAiInterviewTranscriptionResponseSchema,
+  requestRoomAiInterviewTranscriptionSchema,
   requestRoomCodeAnalysisResponseSchema,
   requestRoomCodeAnalysisSchema,
   roomChatMediaUploadRequestSchema,
@@ -60,6 +62,12 @@ export class RequestRoomAiHintResponseDto extends createZodDto(requestRoomAiHint
 export class RequestRoomAiInterviewDto extends createZodDto(requestRoomAiInterviewSchema) {}
 export class RequestRoomAiInterviewResponseDto extends createZodDto(
   requestRoomAiInterviewResponseSchema,
+) {}
+export class RequestRoomAiInterviewTranscriptionDto extends createZodDto(
+  requestRoomAiInterviewTranscriptionSchema,
+) {}
+export class RequestRoomAiInterviewTranscriptionResponseDto extends createZodDto(
+  requestRoomAiInterviewTranscriptionResponseSchema,
 ) {}
 export class RequestRoomCodeAnalysisResponseDto extends createZodDto(
   requestRoomCodeAnalysisResponseSchema,

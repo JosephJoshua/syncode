@@ -4,9 +4,18 @@ export {
 } from './callback-client.js';
 export { COLLAB_CLIENT, type ICollabClient } from './client.js';
 export {
+  type AiInterviewerContextRequest,
+  type AiInterviewerContextResponse,
+  type AiInterviewerPhaseTransitionRequest,
+  type AiInterviewerPhaseTransitionResponse,
+  type AiInterviewTranscriptPayload,
+  type AiInterviewTranscriptResponse,
   type AuthorizeJoinDenialReason,
   type AuthorizeJoinRequest,
   type AuthorizeJoinResponse,
+  aiInterviewerContextRequestSchema,
+  aiInterviewerPhaseTransitionRequestSchema,
+  aiInterviewTranscriptPayloadSchema,
   authorizeJoinRequestSchema,
   CONTROL_INTERNAL,
   type ParticipantHeartbeatRequest,

@@ -6,6 +6,7 @@ export const AI_CODE_ANALYSIS_QUEUE = 'ai.code-analysis';
 export const AI_WEAKNESS_ANALYSIS_QUEUE = 'ai.weakness-analysis';
 export const AI_REVIEW_QUEUE = 'ai.review-code';
 export const AI_INTERVIEW_QUEUE = 'ai.interview-response';
+export const AI_INTERVIEW_TRANSCRIPTION_QUEUE = 'ai.interview-transcription';
 export const AI_SESSION_REPORT_QUEUE = 'ai.session-report';
 export const MATCHMAKING_ENGINE_QUEUE = 'matchmaking.engine';
 export const ROOM_ABANDONED_CLEANUP_QUEUE = 'rooms.cleanup-abandoned';
@@ -18,6 +19,7 @@ export const AI_CODE_ANALYSIS_RESULT_QUEUE = 'ai.code-analysis.results';
 export const AI_WEAKNESS_ANALYSIS_RESULT_QUEUE = 'ai.weakness-analysis.results';
 export const AI_REVIEW_RESULT_QUEUE = 'ai.review-code.results';
 export const AI_INTERVIEW_RESULT_QUEUE = 'ai.interview-response.results';
+export const AI_INTERVIEW_TRANSCRIPTION_RESULT_QUEUE = 'ai.interview-transcription.results';
 export const AI_SESSION_REPORT_RESULT_QUEUE = 'ai.session-report.results';
 
 declare const __jobKind: unique symbol;

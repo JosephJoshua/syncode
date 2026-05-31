@@ -139,8 +139,10 @@ export class SessionReportsService {
       .where(eq(sessionParticipants.sessionId, sessionId))
       .orderBy(asc(sessionParticipants.joinedAt), asc(sessionParticipants.userId));
 
-    if (participants.length === 0) {
-      this.logger.warn(`Skipping report generation for session ${sessionId}: no participants`);
+    const candidates = participants.filter((participant) => participant.role === 'candidate');
+
+    if (candidates.length === 0) {
+      this.logger.warn(`Skipping report generation for session ${sessionId}: no candidate`);
       return;
     }
 
@@ -150,7 +152,7 @@ export class SessionReportsService {
     );
 
     await Promise.all(
-      participants.map(async (participant) => {
+      candidates.map(async (participant) => {
         const request = await this.requestBuilder.buildReportRequest(
           sessionRow,
           participants,
@@ -282,28 +284,42 @@ export class SessionReportsService {
     await this.sessionsService.assertSessionAccessible(sessionId, userId, isAdmin);
 
     const row = await this.db.query.sessionReports.findFirst({
-      columns: { report: true, generatedAt: true },
-      where: (table, { and, eq }) =>
-        and(
-          eq(table.sessionId, sessionId),
-          eq(table.userId, userId),
-          eq(table.status, 'completed'),
-        ),
+      columns: { report: true, generatedAt: true, status: true },
+      where: (table, { and, eq }) => and(eq(table.sessionId, sessionId), eq(table.userId, userId)),
     });
 
-    if (!row?.report) {
+    if (row?.status === 'completed' && row.report) {
+      const report = row.report as SessionReport;
+      return {
+        ...report,
+        sessionId: report.sessionId ?? sessionId,
+        generatedAt: report.generatedAt ?? row.generatedAt?.toISOString(),
+      };
+    }
+
+    if (row) {
       throw new NotFoundException({
         message: 'Session report not yet generated',
         code: ERROR_CODES.SESSION_REPORT_NOT_READY,
       });
     }
 
-    const report = row.report as SessionReport;
-    return {
-      ...report,
-      sessionId: report.sessionId ?? sessionId,
-      generatedAt: report.generatedAt ?? row.generatedAt?.toISOString(),
-    };
+    const participant = await this.db.query.sessionParticipants.findFirst({
+      columns: { role: true },
+      where: (table, { and, eq }) => and(eq(table.sessionId, sessionId), eq(table.userId, userId)),
+    });
+
+    if (participant?.role !== 'candidate') {
+      throw new NotFoundException({
+        message: 'Session report is only generated for the candidate',
+        code: ERROR_CODES.SESSION_REPORT_UNAVAILABLE,
+      });
+    }
+
+    throw new NotFoundException({
+      message: 'Session report not yet generated',
+      code: ERROR_CODES.SESSION_REPORT_NOT_READY,
+    });
   }
 
   private async enqueueParticipantReport(

@@ -1,11 +1,6 @@
-import { Button } from '@syncode/ui';
 import { ArrowRight, Check, LoaderCircle } from 'lucide-react';
-import { AnimatePresence, motion } from 'motion/react';
+import { motion } from 'motion/react';
 
-/**
- * Animated submit button with three visual states: idle, loading, and success.
- * Used by both login and register forms.
- */
 export function AuthSubmitButton({
   isPending,
   isSuccess,
@@ -23,84 +18,46 @@ export function AuthSubmitButton({
   disabled?: boolean;
   staggerDelay?: number;
 }>) {
+  const isDisabled = disabled ?? (isPending || isSuccess);
+  const label = isSuccess ? successLabel : isPending ? pendingLabel : idleLabel;
+  const showHover = !isPending && !isSuccess;
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, delay: staggerDelay }}
     >
-      <Button
+      <button
         type="submit"
-        disabled={disabled ?? (isPending || isSuccess)}
-        className="shimmer-sweep w-full"
-        size="lg"
+        disabled={isDisabled}
+        className="group relative w-full overflow-hidden rounded-full bg-white px-8 py-4 text-base font-semibold text-ink transition-shadow hover:shadow-lg-flat disabled:cursor-not-allowed disabled:opacity-60"
       >
-        <AnimatePresence mode="wait" initial={false}>
-          <SubmitButtonContent
-            isSuccess={isSuccess}
-            isPending={isPending}
-            idleLabel={idleLabel}
-            pendingLabel={pendingLabel}
-            successLabel={successLabel}
-          />
-        </AnimatePresence>
-      </Button>
+        {showHover ? (
+          <span className="btn-text-holder">
+            <span className="btn-text-main flex items-center justify-center gap-2">
+              {label}
+              <ArrowRight className="size-5 transition-transform group-hover:translate-x-0.5" />
+            </span>
+            <span
+              className="btn-text-hover flex items-center justify-center gap-2"
+              aria-hidden="true"
+            >
+              {label}
+              <ArrowRight className="size-5" />
+            </span>
+          </span>
+        ) : (
+          <span className="flex items-center justify-center gap-2">
+            {isPending ? (
+              <LoaderCircle className="size-5 animate-spin" />
+            ) : (
+              <Check className="size-5" />
+            )}
+            {label}
+          </span>
+        )}
+      </button>
     </motion.div>
-  );
-}
-
-function SubmitButtonContent({
-  isSuccess,
-  isPending,
-  idleLabel,
-  pendingLabel,
-  successLabel,
-}: Readonly<{
-  isSuccess: boolean;
-  isPending: boolean;
-  idleLabel: string;
-  pendingLabel: string;
-  successLabel: string;
-}>) {
-  if (isSuccess) {
-    return (
-      <motion.span
-        key="success"
-        initial={{ opacity: 0, scale: 0.5 }}
-        animate={{ opacity: 1, scale: 1 }}
-        className="inline-flex items-center gap-2"
-      >
-        <Check className="size-4" />
-        {successLabel}
-      </motion.span>
-    );
-  }
-
-  if (isPending) {
-    return (
-      <motion.span
-        key="loading"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        className="inline-flex items-center gap-2"
-      >
-        <LoaderCircle className="size-4 animate-spin" />
-        {pendingLabel}
-      </motion.span>
-    );
-  }
-
-  return (
-    <motion.span
-      key="idle"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="inline-flex items-center gap-2"
-    >
-      {idleLabel}
-      <ArrowRight className="size-4 transition-transform group-hover/button:translate-x-0.5" />
-    </motion.span>
   );
 }

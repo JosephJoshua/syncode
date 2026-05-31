@@ -21,14 +21,8 @@ describe('ReportPeerFeedbackSection', () => {
     candidateId: '550e8400-e29b-41d4-a716-446655440005',
     candidateName: 'Bob',
     candidateAvatarUrl: 'https://cdn.example.com/bob.webp',
-    problemSolvingRating: 4,
-    communicationRating: 4,
-    codeQualityRating: 5,
-    debuggingRating: 3,
-    overallRating: 4,
-    strengths: 'Clear explanation',
-    improvements: 'More edge cases',
-    wouldPairAgain: true,
+    status: 'submitted' as const,
+    feedbackText: 'Clear explanation\n\nMore edge cases',
     createdAt: '2026-04-01T00:58:00.000Z',
   };
 
@@ -68,6 +62,8 @@ describe('ReportPeerFeedbackSection', () => {
     );
 
     expect(screen.getByText('Alice → Bob')).toBeInTheDocument();
+    expect(screen.getByText(/Clear explanation/)).toBeInTheDocument();
+    expect(screen.getByText(/More edge cases/)).toBeInTheDocument();
     expect(screen.getByText('peerFeedbackSection.awaitingResponses')).toBeInTheDocument();
     expect(screen.queryByText('peerFeedbackSection.hiddenUntilSubmitted')).not.toBeInTheDocument();
   });

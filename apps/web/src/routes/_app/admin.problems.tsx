@@ -1,32 +1,84 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { CONTROL_API, type CreateProblemInput } from '@syncode/contracts';
-import { PROBLEM_DIFFICULTIES, type ProblemDifficulty, SUPPORTED_LANGUAGES } from '@syncode/shared';
+import type { OnMount } from '@monaco-editor/react';
 import {
+  CONTROL_API,
+  type CreateProblemInput,
+  type ProblemDetail,
+  type ProblemSummary,
+  type UpdateProblemInput,
+} from '@syncode/contracts';
+import { PROBLEM_DIFFICULTIES, SUPPORTED_LANGUAGES } from '@syncode/shared';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
   Badge,
   Button,
   Card,
   CardContent,
   CardHeader,
   CardTitle,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
   Input,
   Label,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationNext,
+  PaginationPrevious,
   Switch,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from '@syncode/ui';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
-import { FileText, Plus, ShieldAlert, Trash2 } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { createFileRoute, useNavigate } from '@tanstack/react-router';
+import {
+  Bold,
+  Code2,
+  Eye,
+  EyeOff,
+  FileText,
+  Heading2,
+  Italic,
+  Link as LinkIcon,
+  List,
+  ListOrdered,
+  Loader2,
+  Pencil,
+  Plus,
+  Quote,
+  RefreshCw,
+  ShieldAlert,
+  Table2,
+  Trash2,
+} from 'lucide-react';
 import type React from 'react';
-import { useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { Controller, type FieldErrors, useFieldArray, useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { z } from 'zod';
+import { AdminTabs } from '@/components/admin/admin-tabs.js';
+import { LazyMonacoEditor as Editor } from '@/components/lazy-monaco-editor.js';
 import { ProblemMarkdown } from '@/components/problems/problem-markdown.js';
+import {
+  EDITOR_LOADING,
+  EDITOR_OPTIONS_BASE,
+  handleEditorWillMount,
+} from '@/components/room-workspace-utils.js';
 import { api, readApiError } from '@/lib/api-client.js';
 import { useAuthStore } from '@/stores/auth.store.js';
 
@@ -35,6 +87,14 @@ export const Route = createFileRoute('/_app/admin/problems')({
 });
 
 const difficulties = PROBLEM_DIFFICULTIES;
+const PAGE_SIZE = 20;
+
+function createPaginationState() {
+  return {
+    currentCursor: undefined as string | undefined,
+    cursorHistory: [] as Array<string | undefined>,
+  };
+}
 
 const optionalLimitSchema = (max: number, message: string) =>
   z.string().refine((value) => {
@@ -76,45 +136,62 @@ const adminProblemFormSchema = z.object({
 });
 
 type AdminProblemFormValues = z.infer<typeof adminProblemFormSchema>;
-
-const defaultFormValues: AdminProblemFormValues = {
-  title: '',
-  difficulty: 'medium',
-  company: '',
-  description: '',
-  constraints: '',
-  examplesText: '[]',
-  starterCodeText: '{}',
-  timeLimit: '',
-  memoryLimit: '',
-  isPublished: false,
-  testCases: [createTestCase()],
-};
+type AdminTranslate = ReturnType<typeof useTranslation>['t'];
 
 function AdminProblemEditorPage() {
-  const { t } = useTranslation('admin');
+  const { t, i18n } = useTranslation('admin');
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const user = useAuthStore((state) => state.user);
-  const [descriptionMode, setDescriptionMode] = useState<'edit' | 'preview'>('edit');
+  const [selectedProblemId, setSelectedProblemId] = useState<string | null>(null);
+  const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<ProblemSummary | null>(null);
+  const [paginationState, setPaginationState] = useState(createPaginationState);
   const {
     control,
     formState: { errors },
     handleSubmit,
     register,
+    reset,
     watch,
   } = useForm<AdminProblemFormValues>({
     resolver: zodResolver(adminProblemFormSchema),
-    defaultValues: defaultFormValues,
+    defaultValues: createDefaultFormValues(),
   });
   const { append, fields, remove } = useFieldArray({ control, name: 'testCases' });
   const watchedValues = watch();
 
+  const problemsQuery = useQuery({
+    queryKey: ['admin', 'problems', 'list', paginationState.currentCursor],
+    enabled: user?.role === 'admin',
+    queryFn: () =>
+      api(CONTROL_API.PROBLEMS.LIST, {
+        searchParams: {
+          cursor: paginationState.currentCursor,
+          limit: PAGE_SIZE,
+          sortBy: 'createdAt',
+          sortOrder: 'desc',
+          includeDrafts: true,
+        },
+      }),
+  });
+
+  const problemDetailQuery = useQuery({
+    queryKey: ['admin', 'problems', 'detail', selectedProblemId],
+    enabled: user?.role === 'admin' && selectedProblemId !== null,
+    queryFn: () =>
+      api(CONTROL_API.PROBLEMS.GET_BY_ID, {
+        params: { id: selectedProblemId ?? '' },
+        searchParams: { includeHidden: true },
+      }),
+  });
+
   const createProblemMutation = useMutation({
     mutationFn: (input: CreateProblemInput) => api(CONTROL_API.PROBLEMS.CREATE, { body: input }),
-    onSuccess: (problem) => {
+    onSuccess: async (problem) => {
       toast.success(t('problemEditor.toast.saved'));
-      queryClient.invalidateQueries({ queryKey: ['problems'] }).catch(() => undefined);
+      closeProblemEditor();
+      await invalidateProblemQueries(queryClient);
       navigate({ to: '/problems/$problemId', params: { problemId: problem.id } }).catch(
         () => undefined,
       );
@@ -125,6 +202,80 @@ function AdminProblemEditorPage() {
     },
   });
 
+  const updateProblemMutation = useMutation({
+    mutationFn: async ({
+      problemId,
+      input,
+      isPublished,
+    }: {
+      problemId: string;
+      input: UpdateProblemInput;
+      isPublished: boolean;
+    }) => {
+      const updated = await api(CONTROL_API.PROBLEMS.UPDATE, {
+        params: { id: problemId },
+        body: input,
+      });
+      if (updated.isPublished !== isPublished) {
+        return api(CONTROL_API.PROBLEMS.PUBLISH_STATUS, {
+          params: { id: problemId },
+          body: { isPublished },
+        });
+      }
+      return updated;
+    },
+    onSuccess: async (problem) => {
+      toast.success(t('problemEditor.toast.saved'));
+      reset(problemDetailToFormValues(problem));
+      closeProblemEditor();
+      await invalidateProblemQueries(queryClient);
+    },
+    onError: async (error) => {
+      const apiError = await readApiError(error);
+      toast.error(apiError?.message ?? t('problemEditor.toast.saveFailed'));
+    },
+  });
+
+  const publishStatusMutation = useMutation({
+    mutationFn: ({ problemId, isPublished }: { problemId: string; isPublished: boolean }) =>
+      api(CONTROL_API.PROBLEMS.PUBLISH_STATUS, {
+        params: { id: problemId },
+        body: { isPublished },
+      }),
+    onSuccess: async () => {
+      toast.success(t('problemEditor.toast.statusSaved'));
+      await invalidateProblemQueries(queryClient);
+    },
+    onError: async (error) => {
+      const apiError = await readApiError(error);
+      toast.error(apiError?.message ?? t('problemEditor.toast.saveFailed'));
+    },
+  });
+
+  const deleteProblemMutation = useMutation({
+    mutationFn: (problemId: string) =>
+      api(CONTROL_API.PROBLEMS.DELETE, { params: { id: problemId } }),
+    onSuccess: async () => {
+      toast.success(t('problemEditor.toast.deleted'));
+      setDeleteTarget(null);
+      if (selectedProblemId === deleteTarget?.id) {
+        setSelectedProblemId(null);
+        reset(createDefaultFormValues());
+      }
+      await invalidateProblemQueries(queryClient);
+    },
+    onError: async (error) => {
+      const apiError = await readApiError(error);
+      toast.error(apiError?.message ?? t('problemEditor.toast.deleteFailed'));
+    },
+  });
+
+  useEffect(() => {
+    if (problemDetailQuery.data?.id === selectedProblemId) {
+      reset(problemDetailToFormValues(problemDetailQuery.data));
+    }
+  }, [problemDetailQuery.data, reset, selectedProblemId]);
+
   const completedCaseCount = useMemo(
     () =>
       watchedValues.testCases.filter((item) => item.input.trim() && item.expectedOutput.trim())
@@ -132,6 +283,28 @@ function AdminProblemEditorPage() {
     [watchedValues.testCases],
   );
   const formErrors = useMemo(() => collectErrorMessages(errors), [errors]);
+  const problems = problemsQuery.data?.data ?? [];
+  const nextCursor = problemsQuery.data?.pagination.nextCursor ?? null;
+  const hasNextPage = problemsQuery.data?.pagination.hasMore === true && nextCursor !== null;
+  const hasPreviousPage = paginationState.cursorHistory.length > 0;
+  const selectedProblem = problems.find((problem) => problem.id === selectedProblemId) ?? null;
+  const isSaving = createProblemMutation.isPending || updateProblemMutation.isPending;
+  const isProblemDetailError = selectedProblemId !== null && problemDetailQuery.isError;
+  const isProblemDetailLoading =
+    selectedProblemId !== null &&
+    !isProblemDetailError &&
+    (problemDetailQuery.isLoading || problemDetailQuery.data?.id !== selectedProblemId);
+  const isFormDisabled = isSaving || isProblemDetailLoading || isProblemDetailError;
+  const isMutating = isSaving || publishStatusMutation.isPending || deleteProblemMutation.isPending;
+  const dateFormatter = useMemo(
+    () =>
+      new Intl.DateTimeFormat(i18n.resolvedLanguage ?? i18n.language, {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+      }),
+    [i18n.language, i18n.resolvedLanguage],
+  );
 
   if (user?.role !== 'admin') {
     return (
@@ -154,340 +327,650 @@ function AdminProblemEditorPage() {
   }
 
   const submitForm = (values: AdminProblemFormValues) => {
+    if (selectedProblemId) {
+      updateProblemMutation.mutate({
+        problemId: selectedProblemId,
+        input: buildUpdateProblemInput(values),
+        isPublished: values.isPublished,
+      });
+      return;
+    }
+
     createProblemMutation.mutate(buildCreateProblemInput(values));
   };
 
+  const startNewProblem = () => {
+    setSelectedProblemId(null);
+    reset(createDefaultFormValues());
+    setIsEditorOpen(true);
+  };
+
+  const selectProblemForEdit = (problemId: string) => {
+    setSelectedProblemId(problemId);
+    reset(createDefaultFormValues());
+    setIsEditorOpen(true);
+  };
+
+  function closeProblemEditor() {
+    if (isMutating) {
+      return;
+    }
+    setIsEditorOpen(false);
+    setSelectedProblemId(null);
+    reset(createDefaultFormValues());
+  }
+
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:py-10 lg:py-12">
-      <section className="max-w-3xl">
-        <h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-          {t('problemEditor.heading')}
-        </h1>
-        <p className="mt-3 text-sm text-muted-foreground sm:text-base">{t('problemEditor.sub')}</p>
+      <section className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="max-w-3xl">
+          <h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
+            {t('problemEditor.management.heading')}
+          </h1>
+          <p className="mt-3 text-sm text-muted-foreground sm:text-base">
+            {t('problemEditor.management.sub')}
+          </p>
+        </div>
+        <div className="flex flex-nowrap items-center gap-3 self-start lg:self-auto">
+          <AdminTabs
+            active="problems"
+            labels={{
+              users: t('navLinks.users'),
+              problems: t('navLinks.problems'),
+              auditLogs: t('navLinks.auditLogs'),
+            }}
+          />
+          <Button type="button" className="h-11 shrink-0" onClick={startNewProblem}>
+            <Plus className="size-4" />
+            {t('problemEditor.management.newProblem')}
+          </Button>
+        </div>
       </section>
-      <div className="mt-5 flex flex-wrap gap-2">
-        <Button variant="outline" asChild>
-          <Link to="/admin/users">{t('navLinks.users')}</Link>
-        </Button>
-        <Button variant="outline" asChild>
-          <Link to="/admin/audit-logs">{t('navLinks.auditLogs')}</Link>
-        </Button>
+
+      <Card className="mt-8 gap-0 overflow-hidden border border-border/50 bg-card/80 py-0 backdrop-blur-sm">
+        <CardHeader className="flex-row items-center justify-between px-5 py-4 sm:px-6">
+          <CardTitle>{t('problemEditor.management.tableTitle')}</CardTitle>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={problemsQuery.isFetching}
+            onClick={() => problemsQuery.refetch()}
+          >
+            <RefreshCw className={problemsQuery.isFetching ? 'size-4 animate-spin' : 'size-4'} />
+            {t('problemEditor.management.refresh')}
+          </Button>
+        </CardHeader>
+        <CardContent className="px-0 pb-0">
+          <AdminProblemsTable
+            dateFormatter={dateFormatter}
+            isDeleting={deleteProblemMutation.isPending}
+            isError={problemsQuery.isError}
+            isLoading={problemsQuery.isLoading}
+            isMutating={isMutating}
+            isPublishing={publishStatusMutation.isPending}
+            onDelete={setDeleteTarget}
+            onEdit={selectProblemForEdit}
+            onTogglePublish={(problem) =>
+              publishStatusMutation.mutate({
+                problemId: problem.id,
+                isPublished: !problem.isPublished,
+              })
+            }
+            problems={problems}
+            t={t}
+          />
+        </CardContent>
+      </Card>
+
+      <div className="flex flex-col gap-3 pt-5 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-sm text-muted-foreground">
+          {t('problemEditor.management.pagination.summary', { count: problems.length })}
+        </p>
+        <Pagination
+          className="justify-end"
+          aria-label={t('problemEditor.management.pagination.ariaLabel')}
+        >
+          <PaginationContent>
+            <PaginationItem>
+              <PaginationPrevious
+                aria-label={t('problemEditor.management.pagination.previous')}
+                disabled={!hasPreviousPage || problemsQuery.isFetching}
+                onClick={() => {
+                  if (!hasPreviousPage || problemsQuery.isFetching) return;
+                  setPaginationState((current) => ({
+                    currentCursor: current.cursorHistory.at(-1),
+                    cursorHistory: current.cursorHistory.slice(0, -1),
+                  }));
+                }}
+              >
+                {t('problemEditor.management.pagination.previous')}
+              </PaginationPrevious>
+            </PaginationItem>
+            <PaginationItem>
+              <PaginationNext
+                aria-label={t('problemEditor.management.pagination.next')}
+                disabled={!hasNextPage || problemsQuery.isFetching}
+                onClick={() => {
+                  if (!hasNextPage || !nextCursor || problemsQuery.isFetching) return;
+                  setPaginationState((current) => ({
+                    currentCursor: nextCursor,
+                    cursorHistory: [...current.cursorHistory, current.currentCursor],
+                  }));
+                }}
+              >
+                {t('problemEditor.management.pagination.next')}
+              </PaginationNext>
+            </PaginationItem>
+          </PaginationContent>
+        </Pagination>
       </div>
 
-      <form
-        className="mt-8 grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]"
-        onSubmit={handleSubmit(submitForm)}
+      <Dialog
+        open={isEditorOpen}
+        onOpenChange={(open) => {
+          if (open) {
+            setIsEditorOpen(true);
+            return;
+          }
+          closeProblemEditor();
+        }}
       >
-        <div className="space-y-6">
-          <Card className="border border-border/50 bg-card/80 py-0 backdrop-blur-sm">
-            <CardHeader className="px-5 pt-6 pb-4 sm:px-6">
-              <CardTitle className="flex items-center gap-2">
-                <FileText className="size-5 text-primary" />
-                {t('problemEditor.heading')}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="grid gap-5 px-5 pb-6 sm:px-6">
-              <div className="grid gap-4 md:grid-cols-2">
-                <Field label={t('problemEditor.fields.title')} htmlFor="problem-title">
-                  <Input
-                    id="problem-title"
-                    placeholder={t('problemEditor.fields.titlePlaceholder')}
-                    {...register('title')}
-                  />
-                </Field>
-                <Field label={t('problemEditor.fields.difficulty')} htmlFor="problem-difficulty">
-                  <Controller
-                    control={control}
-                    name="difficulty"
-                    render={({ field }) => (
-                      <Select
-                        value={field.value}
-                        onValueChange={(value) => field.onChange(value as ProblemDifficulty)}
-                      >
-                        <SelectTrigger id="problem-difficulty">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {difficulties.map((item) => (
-                            <SelectItem key={item} value={item}>
-                              {t(`problemEditor.difficulty.${item}`)}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    )}
-                  />
-                </Field>
-              </div>
-
-              <Field label={t('problemEditor.fields.company')} htmlFor="problem-company">
-                <Input
-                  id="problem-company"
-                  placeholder={t('problemEditor.fields.companyPlaceholder')}
-                  {...register('company')}
-                />
-              </Field>
-
-              <Field label={t('problemEditor.fields.description')} htmlFor="problem-description">
-                <div className="overflow-hidden rounded-lg border border-input bg-background">
-                  <div className="flex items-center border-b border-border/60 bg-muted/30 p-1">
-                    {(['edit', 'preview'] as const).map((mode) => (
-                      <Button
-                        key={mode}
-                        type="button"
-                        size="xs"
-                        variant={descriptionMode === mode ? 'secondary' : 'ghost'}
-                        onClick={() => setDescriptionMode(mode)}
-                      >
-                        {t(`problemEditor.editor.${mode}`)}
-                      </Button>
-                    ))}
-                  </div>
-                  {descriptionMode === 'edit' ? (
-                    <textarea
-                      id="problem-description"
-                      placeholder={t('problemEditor.fields.descriptionPlaceholder')}
-                      className="min-h-48 w-full resize-y bg-transparent px-4 py-3 text-sm outline-none"
-                      {...register('description')}
-                    />
-                  ) : (
-                    <div className="min-h-48 px-4 py-3">
-                      {watchedValues.description.trim() ? (
-                        <ProblemMarkdown content={watchedValues.description} />
-                      ) : (
-                        <p className="text-sm text-muted-foreground">
-                          {t('problemEditor.editor.emptyPreview')}
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </Field>
-
-              <Field label={t('problemEditor.fields.constraints')} htmlFor="problem-constraints">
-                <textarea
-                  id="problem-constraints"
-                  placeholder={t('problemEditor.fields.constraintsPlaceholder')}
-                  className="min-h-28 w-full rounded-lg border border-input bg-background px-4 py-3 text-sm outline-none transition-[border-color,box-shadow] focus-visible:border-ring/60 focus-visible:ring-3 focus-visible:ring-ring/40"
-                  {...register('constraints')}
-                />
-              </Field>
-
-              <div className="grid gap-4 md:grid-cols-2">
-                <Field label={t('problemEditor.fields.timeLimit')} htmlFor="problem-time-limit">
-                  <Input
-                    id="problem-time-limit"
-                    type="number"
-                    min={1}
-                    max={60000}
-                    placeholder={t('problemEditor.fields.timeLimitPlaceholder')}
-                    {...register('timeLimit')}
-                  />
-                </Field>
-                <Field label={t('problemEditor.fields.memoryLimit')} htmlFor="problem-memory-limit">
-                  <Input
-                    id="problem-memory-limit"
-                    type="number"
-                    min={1}
-                    max={4096}
-                    placeholder={t('problemEditor.fields.memoryLimitPlaceholder')}
-                    {...register('memoryLimit')}
-                  />
-                </Field>
-              </div>
-
-              <Field label={t('problemEditor.fields.examples')} htmlFor="problem-examples">
-                <textarea
-                  id="problem-examples"
-                  placeholder={t('problemEditor.fields.examplesPlaceholder')}
-                  className="min-h-28 w-full rounded-lg border border-input bg-background px-4 py-3 font-mono text-sm outline-none transition-[border-color,box-shadow] focus-visible:border-ring/60 focus-visible:ring-3 focus-visible:ring-ring/40"
-                  {...register('examplesText')}
-                />
-              </Field>
-
-              <Field label={t('problemEditor.fields.starterCode')} htmlFor="problem-starter-code">
-                <textarea
-                  id="problem-starter-code"
-                  placeholder={t('problemEditor.fields.starterCodePlaceholder')}
-                  className="min-h-28 w-full rounded-lg border border-input bg-background px-4 py-3 font-mono text-sm outline-none transition-[border-color,box-shadow] focus-visible:border-ring/60 focus-visible:ring-3 focus-visible:ring-ring/40"
-                  {...register('starterCodeText')}
-                />
-              </Field>
-            </CardContent>
-          </Card>
-
-          <Card className="border border-border/50 bg-card/80 py-0 backdrop-blur-sm">
-            <CardHeader className="flex-row items-center justify-between px-5 pt-6 pb-4 sm:px-6">
-              <CardTitle>{t('problemEditor.testCases.title')}</CardTitle>
-              <Button
-                size="sm"
-                variant="outline"
-                type="button"
-                disabled={createProblemMutation.isPending}
-                onClick={() => append(createTestCase())}
-              >
-                <Plus className="size-4" />
-                {t('problemEditor.testCases.add')}
-              </Button>
-            </CardHeader>
-            <CardContent className="space-y-4 px-5 pb-6 sm:px-6">
-              {fields.map((item, index) => (
-                <div key={item.id} className="grid gap-3 rounded-lg border border-border/50 p-4">
-                  <div className="flex items-center justify-between">
-                    <Badge variant="outline">{index + 1}</Badge>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      type="button"
-                      disabled={fields.length === 1 || createProblemMutation.isPending}
-                      onClick={() => remove(index)}
-                    >
-                      <Trash2 className="size-4" />
-                      {t('problemEditor.testCases.remove')}
-                    </Button>
-                  </div>
-                  <div className="grid gap-3 md:grid-cols-2">
-                    <Field label={t('problemEditor.testCases.input')} htmlFor={`${item.id}-in`}>
-                      <Input
-                        id={`${item.id}-in`}
-                        placeholder={t('problemEditor.testCases.inputPlaceholder')}
-                        {...register(`testCases.${index}.input`)}
-                      />
-                    </Field>
-                    <Field label={t('problemEditor.testCases.output')} htmlFor={`${item.id}-out`}>
-                      <Input
-                        id={`${item.id}-out`}
-                        placeholder={t('problemEditor.testCases.outputPlaceholder')}
-                        {...register(`testCases.${index}.expectedOutput`)}
-                      />
-                    </Field>
-                  </div>
-                  <Field
-                    label={t('problemEditor.testCases.description')}
-                    htmlFor={`${item.id}-description`}
-                  >
-                    <Input
-                      id={`${item.id}-description`}
-                      placeholder={t('problemEditor.testCases.descriptionPlaceholder')}
-                      {...register(`testCases.${index}.description`)}
-                    />
-                  </Field>
-                  <div className="grid gap-3 md:grid-cols-3">
-                    <Field
-                      label={t('problemEditor.testCases.timeoutMs')}
-                      htmlFor={`${item.id}-timeout`}
-                    >
-                      <Input
-                        id={`${item.id}-timeout`}
-                        type="number"
-                        min={1}
-                        max={60000}
-                        placeholder={t('problemEditor.testCases.timeoutPlaceholder')}
-                        {...register(`testCases.${index}.timeoutMs`)}
-                      />
-                    </Field>
-                    <Field
-                      label={t('problemEditor.testCases.memoryMb')}
-                      htmlFor={`${item.id}-memory`}
-                    >
-                      <Input
-                        id={`${item.id}-memory`}
-                        type="number"
-                        min={1}
-                        max={4096}
-                        placeholder={t('problemEditor.testCases.memoryPlaceholder')}
-                        {...register(`testCases.${index}.memoryMb`)}
-                      />
-                    </Field>
-                    <div className="flex items-center justify-between gap-3 rounded-lg border border-border/50 px-3 py-2">
-                      <Label htmlFor={`${item.id}-hidden`}>
-                        {t('problemEditor.testCases.hidden')}
-                      </Label>
-                      <Controller
-                        control={control}
-                        name={`testCases.${index}.isHidden`}
-                        render={({ field }) => (
-                          <Switch
-                            id={`${item.id}-hidden`}
-                            checked={field.value}
-                            onCheckedChange={field.onChange}
-                            disabled={createProblemMutation.isPending}
-                          />
-                        )}
-                      />
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-        </div>
-
-        <aside className="space-y-5">
-          <Card className="border border-border/50 bg-card/80 py-0 backdrop-blur-sm">
-            <CardHeader className="px-5 pt-6 pb-4">
-              <CardTitle>{t('problemEditor.preview.title')}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4 px-5 pb-6">
-              <div className="flex items-center justify-between gap-4">
-                <Label htmlFor="published-toggle">{t('problemEditor.fields.published')}</Label>
-                <Controller
-                  control={control}
-                  name="isPublished"
-                  render={({ field }) => (
-                    <Switch
-                      id="published-toggle"
-                      checked={field.value}
-                      onCheckedChange={field.onChange}
-                      disabled={createProblemMutation.isPending}
-                    />
-                  )}
-                />
-              </div>
-              <div className="space-y-3 rounded-lg border border-border/50 bg-background/50 p-4">
-                <div>
-                  <p className="font-medium text-foreground">
-                    {watchedValues.title || t('problemEditor.fields.titlePlaceholder')}
-                  </p>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    {watchedValues.company || t('problemEditor.fields.companyPlaceholder')}
-                  </p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Badge variant="outline">
-                    {t(`problemEditor.difficulty.${watchedValues.difficulty}`)}
-                  </Badge>
-                  <Badge variant={watchedValues.isPublished ? 'success' : 'secondary'}>
-                    {watchedValues.isPublished
-                      ? t('problemEditor.preview.statusPublished')
-                      : t('problemEditor.preview.statusDraft')}
-                  </Badge>
-                  <Badge variant="outline">
-                    {t('problemEditor.preview.caseCount', { count: completedCaseCount })}
-                  </Badge>
-                </div>
-              </div>
-              {formErrors.length > 0 ? (
-                <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
-                  {formErrors.map((error) => (
-                    <p key={error}>{t(error)}</p>
-                  ))}
+        <DialogContent className="w-[min(calc(100vw-2rem),96rem)] max-w-[min(calc(100vw-2rem),96rem)] gap-0 p-0 sm:max-w-[min(calc(100vw-2rem),96rem)]">
+          <DialogHeader className="border-b border-border px-6 py-5">
+            <DialogTitle>
+              {selectedProblem
+                ? t('problemEditor.editorDialog.editTitle', { title: selectedProblem.title })
+                : t('problemEditor.editorDialog.createTitle')}
+            </DialogTitle>
+            <DialogDescription>{t('problemEditor.editorDialog.description')}</DialogDescription>
+          </DialogHeader>
+          <form
+            className="grid max-h-[calc(100vh-7rem)] gap-6 overflow-y-auto p-6 lg:grid-cols-[minmax(0,1fr)_380px]"
+            onSubmit={handleSubmit(submitForm)}
+          >
+            <fieldset className="space-y-6 disabled:opacity-70" disabled={isFormDisabled}>
+              {isProblemDetailError ? (
+                <div
+                  role="alert"
+                  className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive"
+                >
+                  {t('problemEditor.editorDialog.loadFailed')}
                 </div>
               ) : null}
-              <Button type="submit" className="w-full" disabled={createProblemMutation.isPending}>
-                {createProblemMutation.isPending
-                  ? t('problemEditor.actions.saving')
-                  : t('problemEditor.actions.save')}
-              </Button>
-            </CardContent>
-          </Card>
-        </aside>
-      </form>
+              {isProblemDetailLoading ? (
+                <div className="flex min-h-40 items-center justify-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="size-4 animate-spin" />
+                  {t('problemEditor.editorDialog.loading')}
+                </div>
+              ) : (
+                <>
+                  <section className="grid gap-5 rounded-lg border border-border/50 p-5">
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <Field label={t('problemEditor.fields.title')} htmlFor="problem-title">
+                        <Input
+                          id="problem-title"
+                          placeholder={t('problemEditor.fields.titlePlaceholder')}
+                          {...register('title')}
+                        />
+                      </Field>
+                      <Field
+                        label={t('problemEditor.fields.difficulty')}
+                        htmlFor="problem-difficulty"
+                      >
+                        <select
+                          id="problem-difficulty"
+                          className="h-11 w-full rounded-lg border border-input bg-background px-4 py-2.5 text-sm font-medium outline-none transition-[border-color,box-shadow] focus-visible:border-ring/60 focus-visible:ring-3 focus-visible:ring-ring/40"
+                          {...register('difficulty')}
+                        >
+                          {difficulties.map((item) => (
+                            <option key={item} value={item}>
+                              {t(`problemEditor.difficulty.${item}`)}
+                            </option>
+                          ))}
+                        </select>
+                      </Field>
+                    </div>
+
+                    <Field label={t('problemEditor.fields.company')} htmlFor="problem-company">
+                      <Input
+                        id="problem-company"
+                        placeholder={t('problemEditor.fields.companyPlaceholder')}
+                        {...register('company')}
+                      />
+                    </Field>
+
+                    <Controller
+                      control={control}
+                      name="description"
+                      render={({ field }) => (
+                        <MarkdownEditor
+                          label={t('problemEditor.fields.description')}
+                          value={field.value}
+                          onChange={field.onChange}
+                          placeholder={t('problemEditor.fields.descriptionPlaceholder')}
+                        />
+                      )}
+                    />
+
+                    <Field
+                      label={t('problemEditor.fields.constraints')}
+                      htmlFor="problem-constraints"
+                    >
+                      <textarea
+                        id="problem-constraints"
+                        placeholder={t('problemEditor.fields.constraintsPlaceholder')}
+                        className="min-h-28 w-full rounded-lg border border-input bg-background px-4 py-3 text-sm outline-none transition-[border-color,box-shadow] focus-visible:border-ring/60 focus-visible:ring-3 focus-visible:ring-ring/40"
+                        {...register('constraints')}
+                      />
+                    </Field>
+                  </section>
+
+                  <section className="grid gap-5 rounded-lg border border-border/50 p-5">
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <Field
+                        label={t('problemEditor.fields.timeLimit')}
+                        htmlFor="problem-time-limit"
+                      >
+                        <Input
+                          id="problem-time-limit"
+                          type="number"
+                          min={1}
+                          max={60000}
+                          placeholder={t('problemEditor.fields.timeLimitPlaceholder')}
+                          {...register('timeLimit')}
+                        />
+                      </Field>
+                      <Field
+                        label={t('problemEditor.fields.memoryLimit')}
+                        htmlFor="problem-memory-limit"
+                      >
+                        <Input
+                          id="problem-memory-limit"
+                          type="number"
+                          min={1}
+                          max={4096}
+                          placeholder={t('problemEditor.fields.memoryLimitPlaceholder')}
+                          {...register('memoryLimit')}
+                        />
+                      </Field>
+                    </div>
+
+                    <Field label={t('problemEditor.fields.examples')} htmlFor="problem-examples">
+                      <textarea
+                        id="problem-examples"
+                        placeholder={t('problemEditor.fields.examplesPlaceholder')}
+                        className="min-h-28 w-full rounded-lg border border-input bg-background px-4 py-3 font-mono text-sm outline-none transition-[border-color,box-shadow] focus-visible:border-ring/60 focus-visible:ring-3 focus-visible:ring-ring/40"
+                        {...register('examplesText')}
+                      />
+                    </Field>
+
+                    <Field
+                      label={t('problemEditor.fields.starterCode')}
+                      htmlFor="problem-starter-code"
+                    >
+                      <textarea
+                        id="problem-starter-code"
+                        placeholder={t('problemEditor.fields.starterCodePlaceholder')}
+                        className="min-h-28 w-full rounded-lg border border-input bg-background px-4 py-3 font-mono text-sm outline-none transition-[border-color,box-shadow] focus-visible:border-ring/60 focus-visible:ring-3 focus-visible:ring-ring/40"
+                        {...register('starterCodeText')}
+                      />
+                    </Field>
+                  </section>
+
+                  <section className="grid gap-4 rounded-lg border border-border/50 p-5">
+                    <div className="flex items-center justify-between gap-3">
+                      <h2 className="font-semibold text-foreground">
+                        {t('problemEditor.testCases.title')}
+                      </h2>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        type="button"
+                        onClick={() => append(createTestCase())}
+                      >
+                        <Plus className="size-4" />
+                        {t('problemEditor.testCases.add')}
+                      </Button>
+                    </div>
+                    {fields.map((item, index) => (
+                      <div
+                        key={item.id}
+                        className="grid gap-3 rounded-lg border border-border/50 p-4"
+                      >
+                        <div className="flex items-center justify-between">
+                          <Badge variant="outline">{index + 1}</Badge>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            type="button"
+                            disabled={fields.length === 1}
+                            onClick={() => remove(index)}
+                          >
+                            <Trash2 className="size-4" />
+                            {t('problemEditor.testCases.remove')}
+                          </Button>
+                        </div>
+                        <div className="grid gap-3 md:grid-cols-2">
+                          <Field
+                            label={t('problemEditor.testCases.input')}
+                            htmlFor={`${item.id}-in`}
+                          >
+                            <Input
+                              id={`${item.id}-in`}
+                              placeholder={t('problemEditor.testCases.inputPlaceholder')}
+                              {...register(`testCases.${index}.input`)}
+                            />
+                          </Field>
+                          <Field
+                            label={t('problemEditor.testCases.output')}
+                            htmlFor={`${item.id}-out`}
+                          >
+                            <Input
+                              id={`${item.id}-out`}
+                              placeholder={t('problemEditor.testCases.outputPlaceholder')}
+                              {...register(`testCases.${index}.expectedOutput`)}
+                            />
+                          </Field>
+                        </div>
+                        <Field
+                          label={t('problemEditor.testCases.description')}
+                          htmlFor={`${item.id}-description`}
+                        >
+                          <Input
+                            id={`${item.id}-description`}
+                            placeholder={t('problemEditor.testCases.descriptionPlaceholder')}
+                            {...register(`testCases.${index}.description`)}
+                          />
+                        </Field>
+                        <div className="grid gap-3 md:grid-cols-3">
+                          <Field
+                            label={t('problemEditor.testCases.timeoutMs')}
+                            htmlFor={`${item.id}-timeout`}
+                          >
+                            <Input
+                              id={`${item.id}-timeout`}
+                              type="number"
+                              min={1}
+                              max={60000}
+                              placeholder={t('problemEditor.testCases.timeoutPlaceholder')}
+                              {...register(`testCases.${index}.timeoutMs`)}
+                            />
+                          </Field>
+                          <Field
+                            label={t('problemEditor.testCases.memoryMb')}
+                            htmlFor={`${item.id}-memory`}
+                          >
+                            <Input
+                              id={`${item.id}-memory`}
+                              type="number"
+                              min={1}
+                              max={4096}
+                              placeholder={t('problemEditor.testCases.memoryPlaceholder')}
+                              {...register(`testCases.${index}.memoryMb`)}
+                            />
+                          </Field>
+                          <div className="flex items-center justify-between gap-3 rounded-lg border border-border/50 px-3 py-2">
+                            <Label htmlFor={`${item.id}-hidden`}>
+                              {t('problemEditor.testCases.hidden')}
+                            </Label>
+                            <Controller
+                              control={control}
+                              name={`testCases.${index}.isHidden`}
+                              render={({ field }) => (
+                                <Switch
+                                  id={`${item.id}-hidden`}
+                                  checked={field.value}
+                                  onCheckedChange={field.onChange}
+                                />
+                              )}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </section>
+                </>
+              )}
+            </fieldset>
+
+            <aside className="space-y-5">
+              <div className="rounded-lg border border-border/50 p-5">
+                <div className="flex items-center justify-between gap-4">
+                  <Label htmlFor="published-toggle">{t('problemEditor.fields.published')}</Label>
+                  <Controller
+                    control={control}
+                    name="isPublished"
+                    render={({ field }) => (
+                      <Switch
+                        id="published-toggle"
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                        disabled={isFormDisabled}
+                      />
+                    )}
+                  />
+                </div>
+                <div className="mt-4 space-y-3 rounded-lg border border-border/50 bg-card/40 p-4">
+                  <div>
+                    <p className="font-medium text-foreground">
+                      {watchedValues.title || t('problemEditor.fields.titlePlaceholder')}
+                    </p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {watchedValues.company || t('problemEditor.fields.companyPlaceholder')}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Badge variant="outline">
+                      {t(`problemEditor.difficulty.${watchedValues.difficulty}`)}
+                    </Badge>
+                    <Badge variant={watchedValues.isPublished ? 'success' : 'secondary'}>
+                      {watchedValues.isPublished
+                        ? t('problemEditor.preview.statusPublished')
+                        : t('problemEditor.preview.statusDraft')}
+                    </Badge>
+                    <Badge variant="outline">
+                      {t('problemEditor.preview.caseCount', { count: completedCaseCount })}
+                    </Badge>
+                  </div>
+                </div>
+                {formErrors.length > 0 ? (
+                  <div className="mt-4 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+                    {formErrors.map((error) => (
+                      <p key={error}>{t(error)}</p>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={isMutating}
+                  onClick={closeProblemEditor}
+                >
+                  {t('problemEditor.actions.cancel')}
+                </Button>
+                <Button type="submit" disabled={isFormDisabled}>
+                  {isSaving ? t('problemEditor.actions.saving') : t('problemEditor.actions.save')}
+                </Button>
+              </div>
+            </aside>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {t('problemEditor.deleteDialog.title', { title: deleteTarget?.title ?? '' })}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {t('problemEditor.deleteDialog.description')}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteProblemMutation.isPending}>
+              {t('problemEditor.actions.cancel')}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              disabled={deleteProblemMutation.isPending || !deleteTarget}
+              onClick={() => deleteTarget && deleteProblemMutation.mutate(deleteTarget.id)}
+            >
+              {t('problemEditor.management.delete')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
 
 export { AdminProblemEditorPage };
+
+function AdminProblemsTable({
+  dateFormatter,
+  isDeleting,
+  isError,
+  isLoading,
+  isMutating,
+  isPublishing,
+  onDelete,
+  onEdit,
+  onTogglePublish,
+  problems,
+  t,
+}: {
+  readonly dateFormatter: Intl.DateTimeFormat;
+  readonly isDeleting: boolean;
+  readonly isError: boolean;
+  readonly isLoading: boolean;
+  readonly isMutating: boolean;
+  readonly isPublishing: boolean;
+  readonly onDelete: (problem: ProblemSummary) => void;
+  readonly onEdit: (problemId: string) => void;
+  readonly onTogglePublish: (problem: ProblemSummary) => void;
+  readonly problems: ProblemSummary[];
+  readonly t: AdminTranslate;
+}) {
+  if (isError) {
+    return (
+      <div role="alert" className="px-6 py-10 text-sm text-destructive">
+        {t('problemEditor.management.loadFailed')}
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-60 items-center justify-center gap-2 text-sm text-muted-foreground">
+        <Loader2 className="size-4 animate-spin" />
+        {t('problemEditor.management.loading')}
+      </div>
+    );
+  }
+
+  if (problems.length === 0) {
+    return (
+      <div className="px-6 py-10 text-sm text-muted-foreground">
+        {t('problemEditor.management.empty')}
+      </div>
+    );
+  }
+
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow className="hover:bg-transparent">
+          <TableHead>{t('problemEditor.management.columns.problem')}</TableHead>
+          <TableHead className="w-28">{t('problemEditor.management.columns.status')}</TableHead>
+          <TableHead className="w-28">{t('problemEditor.management.columns.tests')}</TableHead>
+          <TableHead className="w-36">{t('problemEditor.management.columns.updated')}</TableHead>
+          <TableHead className="w-56 text-right">
+            {t('problemEditor.management.columns.actions')}
+          </TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {problems.map((problem) => (
+          <TableRow key={problem.id}>
+            <TableCell>
+              <div className="min-w-0">
+                <div className="truncate font-medium text-foreground">{problem.title}</div>
+                <div className="mt-1 flex flex-wrap gap-1.5">
+                  <Badge variant="outline">
+                    {t(`problemEditor.difficulty.${problem.difficulty}`)}
+                  </Badge>
+                  {problem.company ? <Badge variant="neutral">{problem.company}</Badge> : null}
+                </div>
+              </div>
+            </TableCell>
+            <TableCell>
+              <Badge variant={problem.isPublished ? 'success' : 'secondary'}>
+                {problem.isPublished
+                  ? t('problemEditor.preview.statusPublished')
+                  : t('problemEditor.preview.statusDraft')}
+              </Badge>
+            </TableCell>
+            <TableCell className="whitespace-nowrap text-muted-foreground">
+              {problem.testCaseCount ?? 0}
+              {problem.hiddenTestCaseCount
+                ? ` (${t('problemEditor.management.hiddenCount', {
+                    count: problem.hiddenTestCaseCount,
+                  })})`
+                : null}
+            </TableCell>
+            <TableCell className="text-muted-foreground">
+              {problem.updatedAt ? dateFormatter.format(new Date(problem.updatedAt)) : '-'}
+            </TableCell>
+            <TableCell className="text-right">
+              <div className="flex justify-end gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={isMutating}
+                  onClick={() => onEdit(problem.id)}
+                >
+                  <Pencil className="size-4" />
+                  {t('problemEditor.management.edit')}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={isPublishing}
+                  onClick={() => onTogglePublish(problem)}
+                >
+                  {problem.isPublished ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                  {problem.isPublished
+                    ? t('problemEditor.management.unpublish')
+                    : t('problemEditor.management.publish')}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  disabled={isDeleting}
+                  onClick={() => onDelete(problem)}
+                >
+                  <Trash2 className="size-4" />
+                  {t('problemEditor.management.delete')}
+                </Button>
+              </div>
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  );
+}
 
 function Field({
   label,
@@ -504,6 +987,186 @@ function Field({
       {children}
     </div>
   );
+}
+
+function MarkdownEditor({
+  label,
+  value,
+  onChange,
+  placeholder,
+}: {
+  readonly label: string;
+  readonly value: string;
+  readonly onChange: (value: string) => void;
+  readonly placeholder: string;
+}) {
+  const [mode, setMode] = useState<'edit' | 'preview'>('edit');
+  const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
+
+  const apply = (before: string, after = '', fallback = '') => {
+    const editor = editorRef.current;
+    if (!editor) {
+      onChange(`${value}${fallback || before}${after}`);
+      return;
+    }
+    const selection = editor.getSelection();
+    if (!selection) {
+      onChange(`${value}${fallback || before}${after}`);
+      return;
+    }
+    editor.executeEdits('markdown-toolbar', [
+      {
+        range: selection,
+        text: `${before}${fallback}${after}`,
+        forceMoveMarkers: true,
+      },
+    ]);
+  };
+
+  return (
+    <div className="space-y-2">
+      <Label>{label}</Label>
+      <div className="overflow-hidden rounded-lg border border-input bg-background">
+        <div className="flex flex-wrap items-center gap-1 border-b border-border/60 bg-muted/30 p-1">
+          <ToolbarButton
+            label="Bold"
+            icon={<Bold className="size-4" />}
+            onClick={() => apply('**', '**', 'bold')}
+          />
+          <ToolbarButton
+            label="Italic"
+            icon={<Italic className="size-4" />}
+            onClick={() => apply('_', '_', 'italic')}
+          />
+          <ToolbarButton
+            label="Heading"
+            icon={<Heading2 className="size-4" />}
+            onClick={() => apply('## ', '', 'Heading')}
+          />
+          <ToolbarButton
+            label="Quote"
+            icon={<Quote className="size-4" />}
+            onClick={() => apply('> ', '', 'Quote')}
+          />
+          <ToolbarButton
+            label="Code"
+            icon={<Code2 className="size-4" />}
+            onClick={() => apply('`', '`', 'code')}
+          />
+          <ToolbarButton
+            label="Link"
+            icon={<LinkIcon className="size-4" />}
+            onClick={() => apply('[', '](https://)', 'link')}
+          />
+          <ToolbarButton
+            label="Bulleted list"
+            icon={<List className="size-4" />}
+            onClick={() => apply('- ', '', 'item')}
+          />
+          <ToolbarButton
+            label="Numbered list"
+            icon={<ListOrdered className="size-4" />}
+            onClick={() => apply('1. ', '', 'item')}
+          />
+          <ToolbarButton
+            label="Table"
+            icon={<Table2 className="size-4" />}
+            onClick={() => apply('\n| Input | Output |\\n| --- | --- |\\n|  |  |\\n')}
+          />
+          <div className="ml-auto flex gap-1">
+            <Button
+              type="button"
+              size="xs"
+              variant={mode === 'edit' ? 'secondary' : 'ghost'}
+              onClick={() => setMode('edit')}
+            >
+              <FileText className="size-4" />
+            </Button>
+            <Button
+              type="button"
+              size="xs"
+              variant={mode === 'preview' ? 'secondary' : 'ghost'}
+              onClick={() => setMode('preview')}
+            >
+              <Eye className="size-4" />
+            </Button>
+          </div>
+        </div>
+        {mode === 'edit' ? (
+          <div className="h-80">
+            <Suspense fallback={EDITOR_LOADING}>
+              <Editor
+                beforeMount={handleEditorWillMount}
+                defaultLanguage="markdown"
+                language="markdown"
+                loading={EDITOR_LOADING}
+                onMount={(editor) => {
+                  editorRef.current = editor;
+                }}
+                onChange={(next) => onChange(next ?? '')}
+                options={{
+                  ...EDITOR_OPTIONS_BASE,
+                  ariaLabel: label,
+                  glyphMargin: false,
+                  lineNumbers: 'on',
+                  wordWrap: 'on',
+                }}
+                theme="syncode-dark"
+                value={value}
+              />
+            </Suspense>
+          </div>
+        ) : (
+          <div className="min-h-80 px-4 py-3">
+            {value.trim() ? (
+              <ProblemMarkdown content={value} />
+            ) : (
+              <p className="text-sm text-muted-foreground">{placeholder}</p>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ToolbarButton({
+  label,
+  icon,
+  onClick,
+}: {
+  readonly label: string;
+  readonly icon: React.ReactNode;
+  readonly onClick: () => void;
+}) {
+  return (
+    <Button
+      type="button"
+      size="xs"
+      variant="ghost"
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+    >
+      {icon}
+    </Button>
+  );
+}
+
+function createDefaultFormValues(): AdminProblemFormValues {
+  return {
+    title: '',
+    difficulty: 'medium',
+    company: '',
+    description: '',
+    constraints: '',
+    examplesText: '[]',
+    starterCodeText: '{}',
+    timeLimit: '',
+    memoryLimit: '',
+    isPublished: false,
+    testCases: [createTestCase()],
+  };
 }
 
 function createTestCase(): AdminProblemFormValues['testCases'][number] {
@@ -544,6 +1207,36 @@ function buildCreateProblemInput(values: AdminProblemFormValues): CreateProblemI
       timeoutMs: parseOptionalPositiveInteger(item.timeoutMs, 60_000) ?? undefined,
       memoryMb: parseOptionalPositiveInteger(item.memoryMb, 4096) ?? undefined,
     })),
+  };
+}
+
+function buildUpdateProblemInput(values: AdminProblemFormValues): UpdateProblemInput {
+  const { isPublished: _isPublished, ...input } = buildCreateProblemInput(values);
+  return input;
+}
+
+function problemDetailToFormValues(problem: ProblemDetail): AdminProblemFormValues {
+  return {
+    title: problem.title,
+    difficulty: problem.difficulty,
+    company: problem.company ?? '',
+    description: problem.description,
+    constraints: problem.constraints ?? '',
+    examplesText: JSON.stringify(problem.examples, null, 2),
+    starterCodeText: JSON.stringify(problem.starterCode ?? {}, null, 2),
+    timeLimit: problem.timeLimit?.toString() ?? '',
+    memoryLimit: problem.memoryLimit?.toString() ?? '',
+    isPublished: problem.isPublished,
+    testCases: problem.testCases.length
+      ? problem.testCases.map((testCase) => ({
+          input: testCase.input,
+          expectedOutput: testCase.expectedOutput,
+          description: testCase.description ?? '',
+          isHidden: testCase.isHidden,
+          timeoutMs: testCase.timeoutMs?.toString() ?? '',
+          memoryMb: testCase.memoryMb?.toString() ?? '',
+        }))
+      : [createTestCase()],
   };
 }
 
@@ -628,4 +1321,11 @@ function parseOptionalPositiveInteger(value: string, max: number): number | null
     return null;
   }
   return parsed;
+}
+
+async function invalidateProblemQueries(queryClient: ReturnType<typeof useQueryClient>) {
+  await Promise.all([
+    queryClient.invalidateQueries({ queryKey: ['admin', 'problems'] }),
+    queryClient.invalidateQueries({ queryKey: ['problems'] }),
+  ]);
 }

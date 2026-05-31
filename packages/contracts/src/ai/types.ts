@@ -59,6 +59,8 @@ export type InterviewProactiveReason =
   | 'stage_changed'
   | 'user_idle'
   | 'hint_used'
+  | 'code_ran'
+  | 'code_submitted'
   | 'manual_nudge';
 
 export interface InterviewInteractionSignals {
@@ -240,6 +242,7 @@ export interface InterviewResponseRequest {
   interactionSignals?: InterviewInteractionSignals;
   problemDescription: string;
   language: SupportedLanguage;
+  responseLanguage?: 'en' | 'zh';
   userMessage?: string;
 }
 
@@ -256,6 +259,19 @@ export interface InterviewResponseResult {
   codeContext?: InterviewCodeContext;
   codeAnnotations?: Array<{ line: number; comment: string }>;
   audio?: InterviewResponseAudio;
+}
+
+export interface InterviewTranscriptionRequest {
+  roomId: string;
+  sessionId?: string | null;
+  participantId: string;
+  audioBase64: string;
+  mimeType: string;
+  language?: string;
+}
+
+export interface InterviewTranscriptionResult {
+  text: string;
 }
 
 export interface SessionReportParticipantContext {
@@ -310,14 +326,7 @@ export interface SessionReportSubmissionContext {
 export interface SessionReportPeerFeedbackContext {
   reviewerId: string;
   reviewerUsername: string;
-  overallRating: number;
-  problemSolvingRating: number;
-  communicationRating: number;
-  codeQualityRating: number;
-  debuggingRating: number;
-  strengths: string;
-  improvements: string;
-  wouldPairAgain: boolean;
+  feedbackText: string;
   createdAt: string;
 }
 

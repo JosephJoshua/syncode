@@ -5,6 +5,7 @@ import { AI_CLIENT, COLLAB_CLIENT, EXECUTION_CLIENT } from '@syncode/contracts';
 import type { Database } from '@syncode/db';
 import { matchRequests, problemTags, roomParticipants, rooms, tags } from '@syncode/db';
 import {
+  AGENT_DISPATCH_SERVICE,
   CACHE_SERVICE,
   MEDIA_SERVICE,
   QUEUE_SERVICE,
@@ -25,6 +26,7 @@ import {
   insertUser,
 } from '@/test/integration-setup.js';
 import {
+  createMockAgentDispatchService,
   createMockAiClient,
   createMockCollabClient,
   createMockConfigService,
@@ -83,6 +85,7 @@ beforeEach(async () => {
       { provide: CACHE_SERVICE, useValue: new InMemoryCacheService() },
       { provide: COLLAB_CLIENT, useValue: createMockCollabClient() },
       { provide: MEDIA_SERVICE, useValue: createMockMediaService() },
+      { provide: AGENT_DISPATCH_SERVICE, useValue: createMockAgentDispatchService() },
       { provide: STORAGE_SERVICE, useValue: createMockStorageService() },
       { provide: JwtService, useValue: createMockJwtService() },
       { provide: ConfigService, useValue: createMockConfigService() },

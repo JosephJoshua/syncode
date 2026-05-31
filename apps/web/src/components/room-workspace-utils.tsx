@@ -136,6 +136,12 @@ export function LineDiffBlock({
   );
 }
 
+// Shared by every Monaco instance in the app, including read-only viewers
+// (submission preview, session-report snapshot, problem panel code blocks).
+// Intentionally limited to the visual theme so read-only viewers don't get
+// surprise TS/JS type-check squiggles. The collaborative editor uses
+// `handleCollaborativeEditorWillMount` below, which layers diagnostics +
+// compiler options on top for active authoring.
 export const handleEditorWillMount: BeforeMount = (monaco) => {
   monaco.editor.defineTheme('syncode-dark', {
     base: 'vs-dark',
@@ -166,6 +172,35 @@ export const handleEditorWillMount: BeforeMount = (monaco) => {
   });
 };
 
+// Use only for the collaborative (authoring) editor. These calls mutate
+// Monaco's *global* TS/JS language-service singletons, so we keep them off
+// the shared `handleEditorWillMount` path; read-only viewers that never go
+// through here stay free of squiggles when the user opens, e.g., the session
+// report page without ever entering an active room.
+export const handleCollaborativeEditorWillMount: BeforeMount = (monaco) => {
+  handleEditorWillMount(monaco);
+
+  monaco.languages.typescript.typescriptDefaults.setDiagnosticsOptions({
+    noSemanticValidation: false,
+    noSyntaxValidation: false,
+  });
+  monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions({
+    noSemanticValidation: false,
+    noSyntaxValidation: false,
+  });
+
+  const compilerOptions = {
+    allowJs: true,
+    allowNonTsExtensions: true,
+    checkJs: true,
+    noEmit: true,
+    target: monaco.languages.typescript.ScriptTarget.ES2020,
+    moduleResolution: monaco.languages.typescript.ModuleResolutionKind.NodeJs,
+  };
+  monaco.languages.typescript.typescriptDefaults.setCompilerOptions(compilerOptions);
+  monaco.languages.typescript.javascriptDefaults.setCompilerOptions(compilerOptions);
+};
+
 export const EDITOR_OPTIONS_BASE = {
   fontSize: 14,
   fontFamily: "'Geist Mono', 'IBM Plex Mono', 'Fira Code', monospace",
@@ -179,9 +214,33 @@ export const EDITOR_OPTIONS_BASE = {
   smoothScrolling: true,
   bracketPairColorization: { enabled: true },
   guides: { indentation: true },
+  quickSuggestions: { other: true, comments: true, strings: true },
+  suggestOnTriggerCharacters: true,
+  acceptSuggestionOnEnter: 'on' as const,
+  tabCompletion: 'on' as const,
+  parameterHints: { enabled: true },
+  hover: { enabled: true },
+  wordBasedSuggestions: 'matchingDocuments' as const,
+  suggestSelection: 'first' as const,
   tabSize: 2,
   wordWrap: 'off' as const,
   automaticLayout: true,
+  // Force Monaco's legacy <textarea class="inputarea"> input path instead
+  // of the new EditContext API surface (<div class="native-edit-context">),
+  // which is enabled by default in Chrome/Edge since Monaco 0.52. The
+  // tldraw whiteboard panel — always mounted alongside the editor to
+  // preserve canvas state across tab switches — registers a *document*-
+  // level keydown listener (tldraw's OverflowingToolbar) that maps digit
+  // keys 1-0 to toolbar tool positions (8 → Insert Media). Its only "bail
+  // out while the user is typing" check is tldraw's
+  // activeElementShouldCaptureKeys, which recognizes only
+  // <input>/<textarea>/contenteditable. Monaco's EditContext <div> matches
+  // none of those, so without this option tldraw swallows every digit
+  // (preventing them from reaching the editor) and opens its file picker
+  // on 8. Falling back to the textarea path satisfies the
+  // tagName === "textarea" check, so tldraw correctly stays out of the way
+  // while the user types in the code editor.
+  editContext: false,
 };
 
 export const EDITOR_LOADING = (

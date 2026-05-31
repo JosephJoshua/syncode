@@ -59,7 +59,7 @@ function SessionFeedbackPage() {
     queryKey: ['sessions', sessionId, 'report'],
     queryFn: () => fetchSessionReport(sessionId),
     retry: false,
-    refetchInterval: (query) => (query.state.data?.state === 'pending' ? 10_000 : false),
+    refetchInterval: (query) => (query.state.data?.state === 'pending' ? 5_000 : false),
     refetchIntervalInBackground: true,
   });
 
@@ -73,7 +73,7 @@ function SessionFeedbackPage() {
     queryKey: ['sessions', sessionId, 'peer-feedback'],
     queryFn: () => fetchSessionPeerFeedback(sessionId),
     retry: false,
-    refetchInterval: (query) => (query.state.data?.allSubmitted === false ? 10_000 : false),
+    refetchInterval: (query) => (query.state.data?.allSubmitted === false ? 5_000 : false),
   });
 
   const session = sessionQuery.data;
@@ -271,14 +271,7 @@ function SessionFeedbackPage() {
                 <CompactInsightCard
                   title={t('sections.peerFeedback')}
                   rows={[
-                    [
-                      t('peerFeedback.averageRating'),
-                      String(report.peerFeedbackSummary.averageRating),
-                    ],
-                    [
-                      t('peerFeedback.wouldPairAgain'),
-                      `${Math.round(report.peerFeedbackSummary.wouldPairAgain)}%`,
-                    ],
+                    [t('peerFeedback.summary'), report.peerFeedbackSummary.summary],
                     [
                       t('peerFeedback.themes'),
                       report.peerFeedbackSummary.themes.length > 0

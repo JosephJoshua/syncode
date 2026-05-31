@@ -12,10 +12,21 @@ describe('shouldEnableWhiteboardKeyboardShortcuts', () => {
       shouldEnableWhiteboardKeyboardShortcuts({
         activeCenterTab: 'whiteboard',
         whiteboardViewMode: 'tab',
-        isCodeEditorFocused: true,
+        isCodeEditorFocused: false,
         whiteboardHasKeyboardFocus: false,
       }),
     ).toBe(true);
+  });
+
+  it('disables shortcuts whenever the code editor is focused', () => {
+    expect(
+      shouldEnableWhiteboardKeyboardShortcuts({
+        activeCenterTab: 'whiteboard',
+        whiteboardViewMode: 'tab',
+        isCodeEditorFocused: true,
+        whiteboardHasKeyboardFocus: true,
+      }),
+    ).toBe(false);
   });
 
   it('disables floating whiteboard shortcuts while the code editor is focused', () => {
@@ -82,13 +93,42 @@ describe('nextWhiteboardKeyboardFocusState', () => {
 });
 
 describe('applyWhiteboardKeyboardShortcutsState', () => {
-  it('uses transient editor focus instead of persistent user preferences', () => {
-    const editor: WhiteboardKeyboardFocusController & {
-      user: { updateUserPreferences: ReturnType<typeof vi.fn> };
-    } = {
+  it('enables tldraw shortcuts when the whiteboard owns keyboard input', () => {
+    const editor: WhiteboardKeyboardFocusController = {
       focus: vi.fn(),
       blur: vi.fn(),
       user: { updateUserPreferences: vi.fn() },
+    };
+
+    applyWhiteboardKeyboardShortcutsState(editor, true);
+
+    expect(editor.user?.updateUserPreferences).toHaveBeenCalledWith({
+      areKeyboardShortcutsEnabled: true,
+    });
+    expect(editor.focus).toHaveBeenCalledWith({ focusContainer: false });
+    expect(editor.blur).not.toHaveBeenCalled();
+  });
+
+  it('disables tldraw shortcuts when another workspace surface owns keyboard input', () => {
+    const editor: WhiteboardKeyboardFocusController = {
+      focus: vi.fn(),
+      blur: vi.fn(),
+      user: { updateUserPreferences: vi.fn() },
+    };
+
+    applyWhiteboardKeyboardShortcutsState(editor, false);
+
+    expect(editor.user?.updateUserPreferences).toHaveBeenCalledWith({
+      areKeyboardShortcutsEnabled: false,
+    });
+    expect(editor.focus).not.toHaveBeenCalled();
+    expect(editor.blur).toHaveBeenCalledWith({ blurContainer: false });
+  });
+
+  it('falls back to focus control if the tldraw user preferences API is unavailable', () => {
+    const editor: WhiteboardKeyboardFocusController = {
+      focus: vi.fn(),
+      blur: vi.fn(),
     };
 
     applyWhiteboardKeyboardShortcutsState(editor, true);
@@ -96,6 +136,5 @@ describe('applyWhiteboardKeyboardShortcutsState', () => {
 
     expect(editor.focus).toHaveBeenCalledWith({ focusContainer: false });
     expect(editor.blur).toHaveBeenCalledWith({ blurContainer: false });
-    expect(editor.user.updateUserPreferences).not.toHaveBeenCalled();
   });
 });

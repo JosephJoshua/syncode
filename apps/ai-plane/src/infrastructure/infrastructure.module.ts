@@ -47,7 +47,8 @@ import { OpenAiCompatibleLlmProvider } from '../llm/openai-compatible-llm.provid
           baseUrl: config.get('AI_PLATFORM_BASE_URL', { infer: true })!,
           apiKey: config.get('AI_PLATFORM_API_KEY', { infer: true })!,
           model: config.get('AI_PLATFORM_MODEL', { infer: true })!,
-          ttsModel: config.get('AI_TTS_MODEL', { infer: true })!,
+          sttModel: config.get('AI_STT_MODEL', { infer: true })!,
+          ttsModel: config.get('AI_TTS_MODEL', { infer: true }),
           ttsVoice: config.get('AI_TTS_VOICE', { infer: true })!,
           timeoutMs: config.get('AI_REQUEST_TIMEOUT_MS', { infer: true })!,
         });

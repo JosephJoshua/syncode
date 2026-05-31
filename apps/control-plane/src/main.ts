@@ -6,6 +6,7 @@ import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import cookieParser from 'cookie-parser';
+import express from 'express';
 import { Logger } from 'nestjs-pino';
 import { cleanupOpenApiDoc, ZodValidationPipe } from 'nestjs-zod';
 import { AppModule } from './app.module.js';
@@ -17,10 +18,13 @@ import type { EnvConfig } from './config/env.config.js';
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     bufferLogs: true, // Buffer logs until logger is ready.
+    bodyParser: false,
   });
 
   const logger = app.get(Logger);
   app.useLogger(logger);
+  app.use(express.json({ limit: '8mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '8mb' }));
   app.use(cookieParser());
 
   app.useGlobalPipes(new ZodValidationPipe());

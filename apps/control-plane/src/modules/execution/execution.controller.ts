@@ -1,4 +1,4 @@
-import { Controller, Get, Inject, Param, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, UseGuards } from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiExtraModels,
@@ -9,7 +9,7 @@ import {
   getSchemaPath,
 } from '@nestjs/swagger';
 import { SkipThrottle } from '@nestjs/throttler';
-import { CONTROL_API, EXECUTION_CLIENT, type IExecutionClient } from '@syncode/contracts';
+import { CONTROL_API } from '@syncode/contracts';
 import { CurrentUser } from '@/common/decorators/current-user.decorator.js';
 import { ErrorResponseDto } from '@/common/dto/error-response.dto.js';
 import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard.js';
@@ -31,11 +31,7 @@ import { ExecutionService } from './execution.service.js';
 @UseGuards(JwtAuthGuard)
 @Controller()
 export class ExecutionController {
-  constructor(
-    @Inject(EXECUTION_CLIENT)
-    private readonly executionClient: IExecutionClient,
-    private readonly executionService: ExecutionService,
-  ) {}
+  constructor(private readonly executionService: ExecutionService) {}
 
   @Get(CONTROL_API.EXECUTION.GET_SUBMISSION_DETAILS.route)
   @ApiOperation({
@@ -90,6 +86,7 @@ export class ExecutionController {
     },
   })
   @ApiResponse({ status: 401, type: ErrorResponseDto, description: 'Unauthorized' })
+  @ApiResponse({ status: 404, type: ErrorResponseDto, description: 'Execution job not found' })
   @ApiResponse({
     status: 503,
     type: ErrorResponseDto,
@@ -98,17 +95,9 @@ export class ExecutionController {
   @ApiResponse({ status: 504, type: ErrorResponseDto, description: 'Execution service timeout' })
   async getExecutionResult(
     @Param('jobId') jobId: string,
+    @CurrentUser() user: AuthUser,
   ): Promise<ExecutionResultResponseDto | JobStatusResponseDto> {
-    const result = await this.executionClient.getResult(jobId);
-
-    if (result) {
-      return result;
-    }
-
-    // NOTE: 'failed' can mean either "job ran and errored" or "job not found"
-    // TODO: distinguish these later
-    const status = await this.executionClient.getJobStatus(jobId);
-    return { status };
+    return this.executionService.getExecutionResult(jobId, user.id);
   }
 
   @Get(CONTROL_API.EXECUTION.GET_STATUS.route)
@@ -116,15 +105,18 @@ export class ExecutionController {
   @ApiParam({ name: 'jobId', description: 'Execution job ID', example: 'exec-job-abc-123' })
   @ApiResponse({ status: 200, type: JobStatusResponseDto, description: 'Job status' })
   @ApiResponse({ status: 401, type: ErrorResponseDto, description: 'Unauthorized' })
+  @ApiResponse({ status: 404, type: ErrorResponseDto, description: 'Execution job not found' })
   @ApiResponse({
     status: 503,
     type: ErrorResponseDto,
     description: 'Execution service unavailable (circuit breaker open)',
   })
   @ApiResponse({ status: 504, type: ErrorResponseDto, description: 'Execution service timeout' })
-  async getExecutionStatus(@Param('jobId') jobId: string): Promise<JobStatusResponseDto> {
-    const status = await this.executionClient.getJobStatus(jobId);
-    return { status };
+  async getExecutionStatus(
+    @Param('jobId') jobId: string,
+    @CurrentUser() user: AuthUser,
+  ): Promise<JobStatusResponseDto> {
+    return this.executionService.getExecutionStatus(jobId, user.id);
   }
 
   @Get(CONTROL_API.EXECUTION.GET_STATIC_ANALYSIS.route)

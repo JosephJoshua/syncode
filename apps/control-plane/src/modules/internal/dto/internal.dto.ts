@@ -1,4 +1,7 @@
 import {
+  aiInterviewerContextRequestSchema,
+  aiInterviewerPhaseTransitionRequestSchema,
+  aiInterviewTranscriptPayloadSchema,
   authorizeJoinRequestSchema,
   participantHeartbeatRequestSchema,
   persistDocSnapshotPayloadSchema,
@@ -12,3 +15,8 @@ export class UserDisconnectedDto extends createZodDto(userDisconnectedPayloadSch
 export class ParticipantHeartbeatDto extends createZodDto(participantHeartbeatRequestSchema) {}
 export class AuthorizeJoinDto extends createZodDto(authorizeJoinRequestSchema) {}
 export class PersistDocSnapshotDto extends createZodDto(persistDocSnapshotPayloadSchema) {}
+export class AiInterviewTranscriptDto extends createZodDto(aiInterviewTranscriptPayloadSchema) {}
+export class AiInterviewerContextDto extends createZodDto(aiInterviewerContextRequestSchema) {}
+export class AiInterviewerPhaseTransitionDto extends createZodDto(
+  aiInterviewerPhaseTransitionRequestSchema,
+) {}

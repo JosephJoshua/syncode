@@ -11,6 +11,9 @@ import {
 import { ApiExcludeEndpoint } from '@nestjs/swagger';
 import { SkipThrottle } from '@nestjs/throttler';
 import {
+  type AiInterviewerContextResponse,
+  type AiInterviewerPhaseTransitionResponse,
+  type AiInterviewTranscriptResponse,
   type AuthorizeJoinResponse,
   CONTROL_INTERNAL,
   type ParticipantHeartbeatResponse,
@@ -23,6 +26,9 @@ import { InternalCallbackGuard } from '@/common/guards/internal-callback.guard.j
 import { DB_CLIENT } from '@/modules/db/db.module.js';
 import { RoomsService } from '@/modules/rooms/rooms.service.js';
 import {
+  AiInterviewerContextDto,
+  AiInterviewerPhaseTransitionDto,
+  AiInterviewTranscriptDto,
   AuthorizeJoinDto,
   ParticipantHeartbeatDto,
   PersistDocSnapshotDto,
@@ -212,5 +218,56 @@ export class InternalController {
     @Body() payload: AuthorizeJoinDto,
   ): Promise<AuthorizeJoinResponse> {
     return this.roomsService.authorizeJoin(roomId, payload.userId);
+  }
+
+  /**
+   * Called by AI worker to persist interview transcript turns as ai_messages so
+   * communication scoring can use voice interactions in session reports.
+   */
+  @Post(CONTROL_INTERNAL.AI_INTERVIEW_TRANSCRIPT.route)
+  @ApiExcludeEndpoint()
+  async handleAiInterviewTranscript(
+    @Param('roomId') roomId: string,
+    @Body() payload: AiInterviewTranscriptDto,
+  ): Promise<AiInterviewTranscriptResponse> {
+    const persisted = await this.roomsService.persistAiInterviewTranscriptTurns(roomId, payload);
+    return { success: true, persisted };
+  }
+
+  /**
+   * Called by AI interviewer worker to fetch the latest room/problem/code/submission
+   * context for grounded interview responses.
+   */
+  @Post(CONTROL_INTERNAL.AI_INTERVIEWER_CONTEXT.route)
+  @ApiExcludeEndpoint()
+  async handleAiInterviewerContext(
+    @Param('roomId') roomId: string,
+    @Body() payload: AiInterviewerContextDto,
+  ): Promise<AiInterviewerContextResponse> {
+    return this.roomsService.getAiInterviewerContext(roomId, payload.participantId);
+  }
+
+  /**
+   * Called by AI interviewer worker to advance room stage based on interview flow.
+   * Uses existing room transition guardrails and authorization rules via participantId.
+   */
+  @Post(CONTROL_INTERNAL.AI_INTERVIEWER_PHASE_TRANSITION.route)
+  @ApiExcludeEndpoint()
+  async handleAiInterviewerPhaseTransition(
+    @Param('roomId') roomId: string,
+    @Body() payload: AiInterviewerPhaseTransitionDto,
+  ): Promise<AiInterviewerPhaseTransitionResponse> {
+    const result = await this.roomsService.transitionPhase(
+      roomId,
+      payload.participantId,
+      payload.targetStatus,
+    );
+    return {
+      roomId: result.roomId,
+      previousStatus: result.previousStatus,
+      currentStatus: result.currentStatus,
+      transitionedAt: result.transitionedAt.toISOString(),
+      transitionedBy: result.transitionedBy,
+    };
   }
 }

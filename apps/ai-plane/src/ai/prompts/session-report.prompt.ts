@@ -5,6 +5,9 @@ const MAX_FINAL_CODE_BLOCK_LENGTH = 48_000;
 const MAX_SESSION_EVENTS_BLOCK_LENGTH = 12_000;
 const MAX_ROOM_CHAT_MESSAGES = 40;
 const MAX_ROOM_CHAT_MESSAGE_CONTENT_LENGTH = 220;
+const MAX_AI_INTERVIEW_MESSAGES = 40;
+const MAX_AI_INTERVIEW_MESSAGE_CONTENT_LENGTH = 260;
+const MAX_COMMUNICATION_EVIDENCE_MESSAGES = 12;
 
 export interface SessionReportPrompt {
   systemPrompt: string;
@@ -47,6 +50,8 @@ export function buildSessionReportPrompt(
       'For correctness, efficiency, and codeQuality, cite exact short code excerpts when code evidence exists.',
       'sessionEvents includes stage transitions and submissions with timestamps; use it for time-based evidence and do not invent events.',
       'staticAnalysis contains deterministic lint, complexity, and duplication findings. Treat it as objective evidence when present, but do not invent findings when it is empty.',
+      'For the communication dimension, explicitly use aiMessages and roomChatMessages as evidence.',
+      'If aiMessages or roomChatMessages show substantive participant communication, communication score must be greater than 0.',
       'Use evidence.type = "code_line" for line-based code references.',
       'For code_line evidence.reference, use line numbers plus a short exact excerpt from finalCodeSnapshotWithLines, for example "L12: if (seen.has(x))" or "L12-L14: for (...)".',
       'Use evidence.type = "code_snippet" only when a short verbatim snippet is clearer than line numbers.',
@@ -66,7 +71,7 @@ export function buildSessionReportPrompt(
       'When comparisonToHistory is present, it must be an object with trend, sessionsCompared, and averageScore.',
       'comparisonToHistory.trend must be exactly one of: improving, stable, declining.',
       'If peer feedback is unavailable, set peerFeedbackSummary to null. Do not use strings.',
-      'When peerFeedbackSummary is present, it must be an object with averageRating, wouldPairAgain, and themes.',
+      'When peerFeedbackSummary is present, it must be an object with summary and themes, grounded only in submitted feedback text.',
       'Never reveal raw test inputs, expected outputs, actual outputs, or hidden test case contents in any field.',
       'When discussing failing tests, refer only to test case indexes, pass/fail, timeout, or error categories.',
       'Do not include sessionId, generatedAt, or testCaseBreakdown in your response; those are injected by the system.',
@@ -110,6 +115,9 @@ export function buildSessionReportPrompt(
 }
 
 function buildCompactSessionData(request: GenerateSessionReportRequest) {
+  const aiMessages = compactAiInterviewMessages(request.aiMessages);
+  const roomChatMessages = compactRoomChatMessages(request.roomChatMessages ?? []);
+
   return {
     sessionId: request.sessionId,
     roomId: request.roomId,
@@ -121,6 +129,13 @@ function buildCompactSessionData(request: GenerateSessionReportRequest) {
     durationMs: request.durationMs,
     startedAt: request.startedAt,
     finishedAt: request.finishedAt,
+    communicationEvidence: buildCommunicationEvidence(
+      request.participantId,
+      aiMessages,
+      roomChatMessages,
+    ),
+    aiMessages,
+    roomChatMessages,
     snapshots: request.snapshots.map(({ code, ...snapshot }) => ({
       ...snapshot,
       codeLength: code.length,
@@ -136,10 +151,15 @@ function buildCompactSessionData(request: GenerateSessionReportRequest) {
     finalTestCaseBreakdown: request.finalTestCaseBreakdown,
     staticAnalysis: request.staticAnalysis,
     peerFeedback: request.peerFeedback,
-    aiMessages: request.aiMessages,
-    roomChatMessages: compactRoomChatMessages(request.roomChatMessages ?? []),
     historicalContext: request.historicalContext,
   };
+}
+
+function compactAiInterviewMessages(messages: GenerateSessionReportRequest['aiMessages']) {
+  return messages.slice(-MAX_AI_INTERVIEW_MESSAGES).map((message) => ({
+    ...message,
+    content: truncateAiInterviewContent(message.content),
+  }));
 }
 
 function compactRoomChatMessages(
@@ -157,6 +177,31 @@ function truncateChatContent(content: string): string {
   }
 
   return `${content.slice(0, MAX_ROOM_CHAT_MESSAGE_CONTENT_LENGTH)}…`;
+}
+
+function truncateAiInterviewContent(content: string): string {
+  if (content.length <= MAX_AI_INTERVIEW_MESSAGE_CONTENT_LENGTH) {
+    return content;
+  }
+
+  return `${content.slice(0, MAX_AI_INTERVIEW_MESSAGE_CONTENT_LENGTH)}…`;
+}
+
+function buildCommunicationEvidence(
+  _participantId: string,
+  aiMessages: GenerateSessionReportRequest['aiMessages'],
+  roomChatMessages: NonNullable<GenerateSessionReportRequest['roomChatMessages']>,
+) {
+  const participantAiMessages = aiMessages.filter((message) => message.role === 'user');
+  const assistantAiMessages = aiMessages.filter((message) => message.role === 'assistant');
+
+  return {
+    participantAiMessageCount: participantAiMessages.length,
+    assistantAiMessageCount: assistantAiMessages.length,
+    roomChatMessageCount: roomChatMessages.length,
+    recentAiConversation: aiMessages.slice(-MAX_COMMUNICATION_EVIDENCE_MESSAGES),
+    recentRoomChatMessages: roomChatMessages.slice(-MAX_COMMUNICATION_EVIDENCE_MESSAGES),
+  };
 }
 
 function buildFinalSnapshotMetadata(snapshot: GenerateSessionReportRequest['finalCodeSnapshot']) {

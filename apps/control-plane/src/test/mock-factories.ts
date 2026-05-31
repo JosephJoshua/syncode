@@ -66,6 +66,18 @@ export function createMockMediaService() {
   };
 }
 
+export function createMockAgentDispatchService() {
+  return {
+    createDispatch: vi.fn().mockResolvedValue({
+      dispatchId: 'dispatch-1',
+      roomName: 'stub-room',
+      agentName: 'syncode-ai-interviewer',
+    }),
+    listDispatch: vi.fn().mockResolvedValue([]),
+    deleteDispatch: vi.fn().mockResolvedValue(undefined),
+  };
+}
+
 export function createMockExecutionClient() {
   return {
     submit: vi.fn().mockResolvedValue({ jobId: 'stub-job' }),
@@ -104,6 +116,10 @@ export function createMockAiClient() {
         Promise.resolve({ jobId: request.idempotencyKey ?? 'ai-interview-job' }),
       ),
     getInterviewResult: vi.fn().mockResolvedValue(null),
+    submitInterviewTranscription: vi
+      .fn()
+      .mockResolvedValue({ jobId: 'ai-interview-transcription' }),
+    getInterviewTranscriptionResult: vi.fn().mockResolvedValue({ text: 'stub transcript' }),
     submitSessionReportRequest: vi.fn().mockResolvedValue({ jobId: 'session-report-job' }),
     getSessionReportResult: vi.fn().mockResolvedValue(null),
     onSessionReportResult: vi.fn(),
@@ -114,6 +130,7 @@ export function createMockAiClient() {
     getWeaknessAnalysisJobStatus: vi.fn().mockResolvedValue('queued'),
     getReviewJobStatus: vi.fn().mockResolvedValue('queued'),
     getInterviewJobStatus: vi.fn().mockResolvedValue('queued'),
+    getInterviewTranscriptionJobStatus: vi.fn().mockResolvedValue('queued'),
     getSessionReportJobStatus: vi.fn().mockResolvedValue('queued'),
     healthCheck: vi.fn().mockResolvedValue(true),
   };

@@ -10,6 +10,7 @@ function makeTile(overrides: Partial<VideoPanelParticipant> = {}): VideoPanelPar
     identity: 'alice',
     displayName: 'Alice',
     avatarUrl: null,
+    isAiInterviewer: false,
     hasVideo: false,
     videoTrack: null,
     hasScreenShare: false,

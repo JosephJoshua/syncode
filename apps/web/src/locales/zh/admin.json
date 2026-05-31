@@ -3,7 +3,7 @@
   "navLinks": {
     "users": "\u7528\u6237",
     "auditLogs": "\u5ba1\u8ba1\u65e5\u5fd7",
-    "problems": "\u9898\u76ee\u7f16\u8f91\u5668"
+    "problems": "\u9898\u76ee"
   },
   "users": {
     "heading": "\u7528\u6237\u7ba1\u7406",
@@ -79,8 +79,8 @@
     "filters": {
       "searchLabel": "\u641c\u7d22",
       "searchPlaceholder": "\u641c\u7d22\u64cd\u4f5c\u4eba\u3001\u52a8\u4f5c\u6216\u76ee\u6807",
-      "actionLabel": "\u52a8\u4f5c",
-      "actionPlaceholder": "auth.login",
+      "actionLabel": "\u641c\u7d22\u52a8\u4f5c",
+      "actionPlaceholder": "login\u3001ban\u3001unban",
       "fromLabel": "\u5f00\u59cb",
       "toLabel": "\u7ed3\u675f",
       "datePlaceholder": "\u9009\u62e9\u65e5\u671f",
@@ -127,6 +127,46 @@
   "problemEditor": {
     "heading": "\u9898\u76ee\u7f16\u8f91\u5668",
     "sub": "\u7f16\u5199\u3001\u6821\u9a8c\u5e76\u51c6\u5907\u53d1\u5e03\u9762\u8bd5\u9898\u76ee\u3002",
+    "management": {
+      "heading": "\u9898\u76ee\u7ba1\u7406",
+      "sub": "\u5ba1\u9605\u3001\u53d1\u5e03\u5e76\u7ef4\u62a4\u9762\u8bd5\u4f7f\u7528\u7684\u9898\u5e93\u3002",
+      "newProblem": "\u65b0\u5efa\u9898\u76ee",
+      "tableTitle": "\u9898\u76ee",
+      "refresh": "\u5237\u65b0",
+      "loading": "\u6b63\u5728\u52a0\u8f7d\u9898\u76ee...",
+      "empty": "\u672a\u627e\u5230\u9898\u76ee\u3002",
+      "loadFailed": "\u65e0\u6cd5\u52a0\u8f7d\u9898\u76ee\u3002",
+      "hiddenCount_one": "{{count}} \u4e2a\u9690\u85cf",
+      "hiddenCount_other": "{{count}} \u4e2a\u9690\u85cf",
+      "publish": "\u53d1\u5e03",
+      "unpublish": "\u53d6\u6d88\u53d1\u5e03",
+      "edit": "\u7f16\u8f91",
+      "delete": "\u5220\u9664",
+      "pagination": {
+        "summary": "\u672c\u9875 {{count}} \u9053\u9898\u76ee",
+        "previous": "\u4e0a\u4e00\u9875",
+        "next": "\u4e0b\u4e00\u9875",
+        "ariaLabel": "\u9898\u76ee\u5206\u9875"
+      },
+      "columns": {
+        "problem": "\u9898\u76ee",
+        "status": "\u72b6\u6001",
+        "tests": "\u6d4b\u8bd5",
+        "updated": "\u66f4\u65b0",
+        "actions": "\u64cd\u4f5c"
+      }
+    },
+    "editorDialog": {
+      "createTitle": "\u521b\u5efa\u9898\u76ee",
+      "editTitle": "\u7f16\u8f91 {{title}}",
+      "description": "\u4f7f\u7528 Markdown \u7f16\u5199\u9898\u9762\uff0c\u5e76\u4fdd\u6301\u6d4b\u8bd5\u7528\u4f8b\u4e0e\u516c\u5f00\u5951\u7ea6\u4e00\u81f4\u3002",
+      "loading": "\u6b63\u5728\u52a0\u8f7d\u9898\u76ee...",
+      "loadFailed": "\u65e0\u6cd5\u52a0\u8f7d\u8be5\u9898\u76ee\u3002\u8bf7\u5173\u95ed\u5bf9\u8bdd\u6846\u540e\u91cd\u8bd5\u3002"
+    },
+    "deleteDialog": {
+      "title": "\u5220\u9664 {{title}}\uff1f",
+      "description": "\u8fd9\u4f1a\u5c06\u9898\u76ee\u4ece\u5e38\u89c4\u5217\u8868\u4e2d\u79fb\u9664\uff0c\u4f46\u4fdd\u7559\u5df2\u6709\u5386\u53f2\u8bb0\u5f55\u3002"
+    },
     "forbidden": {
       "title": "\u9700\u8981\u7ba1\u7406\u5458\u6743\u9650",
       "description": "\u8be5\u533a\u57df\u4ec5\u5bf9 SynCode \u7ba1\u7406\u5458\u5f00\u653e\u3002"
@@ -185,6 +225,7 @@
       "caseCount_other": "{{count}} \u4e2a\u7528\u4f8b"
     },
     "actions": {
+      "cancel": "\u53d6\u6d88",
       "save": "\u4fdd\u5b58\u9898\u76ee",
       "saving": "\u4fdd\u5b58\u4e2d..."
     },
@@ -200,7 +241,10 @@
     },
     "toast": {
       "saved": "\u9898\u76ee\u5df2\u4fdd\u5b58\u3002",
-      "saveFailed": "\u65e0\u6cd5\u4fdd\u5b58\u9898\u76ee\u3002"
+      "statusSaved": "\u53d1\u5e03\u72b6\u6001\u5df2\u66f4\u65b0\u3002",
+      "deleted": "\u9898\u76ee\u5df2\u5220\u9664\u3002",
+      "saveFailed": "\u65e0\u6cd5\u4fdd\u5b58\u9898\u76ee\u3002",
+      "deleteFailed": "\u65e0\u6cd5\u5220\u9664\u9898\u76ee\u3002"
     }
   }
 }

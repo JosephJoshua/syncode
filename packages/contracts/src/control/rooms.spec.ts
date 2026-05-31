@@ -3,6 +3,8 @@ import {
   browseRoomsQuerySchema,
   browseRoomsResponseSchema,
   changeRoomLanguageSchema,
+  getRoomAiInterviewResultResponseSchema,
+  requestRoomAiInterviewTranscriptionSchema,
 } from './rooms.js';
 
 describe('browseRoomsQuerySchema', () => {
@@ -88,6 +90,60 @@ describe('browseRoomsResponseSchema', () => {
     };
 
     expect(() => browseRoomsResponseSchema.parse(payload)).not.toThrow();
+  });
+});
+
+describe('getRoomAiInterviewResultResponseSchema', () => {
+  test('GIVEN ready response should respond WHEN parsed THEN requires message', () => {
+    const result = getRoomAiInterviewResultResponseSchema.safeParse({
+      status: 'ready',
+      jobId: 'ai-interview-job',
+      shouldRespond: true,
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  test('GIVEN ready response should stay silent WHEN parsed THEN forbids response fields', () => {
+    const result = getRoomAiInterviewResultResponseSchema.safeParse({
+      status: 'ready',
+      jobId: 'ai-interview-job',
+      shouldRespond: false,
+      message: 'This should not be present.',
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  test('GIVEN ready response with message WHEN parsed THEN accepts', () => {
+    const result = getRoomAiInterviewResultResponseSchema.parse({
+      status: 'ready',
+      jobId: 'ai-interview-job',
+      shouldRespond: true,
+      message: 'Can you explain the invariant?',
+    });
+
+    expect(result).toMatchObject({ status: 'ready', shouldRespond: true });
+  });
+});
+
+describe('requestRoomAiInterviewTranscriptionSchema', () => {
+  test('GIVEN supported audio mime type with codec suffix WHEN parsed THEN accepts', () => {
+    const result = requestRoomAiInterviewTranscriptionSchema.parse({
+      audioBase64: Buffer.from('audio').toString('base64'),
+      mimeType: 'audio/webm;codecs=opus',
+    });
+
+    expect(result.mimeType).toBe('audio/webm;codecs=opus');
+  });
+
+  test('GIVEN unsupported audio mime type WHEN parsed THEN rejects', () => {
+    const result = requestRoomAiInterviewTranscriptionSchema.safeParse({
+      audioBase64: Buffer.from('audio').toString('base64'),
+      mimeType: 'text/plain',
+    });
+
+    expect(result.success).toBe(false);
   });
 });
 

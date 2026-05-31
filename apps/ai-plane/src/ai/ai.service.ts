@@ -14,6 +14,8 @@ import type {
   InterviewResponseAudio,
   InterviewResponseRequest,
   InterviewResponseResult,
+  InterviewTranscriptionRequest,
+  InterviewTranscriptionResult,
   ReviewCodeRequest,
   ReviewCodeResult,
 } from '@syncode/contracts';
@@ -27,7 +29,12 @@ import {
 import { z } from 'zod';
 import type { EnvConfig } from '../config/env.config.js';
 import { LLM_PROVIDER } from '../llm/llm.constants.js';
-import type { ILlmProvider } from '../llm/llm.types.js';
+import type {
+  ILlmProvider,
+  LlmGenerateSpeechInput,
+  LlmGenerateTextInput,
+  LlmGenerateTranscriptionInput,
+} from '../llm/llm.types.js';
 import { buildSessionReportPrompt } from './prompts/session-report.prompt.js';
 import { parseSessionReportJson } from './report-json.js';
 import { postprocessSessionReport } from './session-report-postprocess.js';
@@ -49,6 +56,8 @@ const MAX_SUGGESTED_APPROACH_LENGTH = 220;
 const MAX_REFLECTION_PROMPT_LENGTH = 180;
 const MAX_INTERVIEW_MESSAGE_LENGTH = 500;
 const MAX_INTERVIEW_QUESTION_LENGTH = 240;
+const MAX_INTERVIEW_ANNOTATION_LENGTH = 420;
+const MAX_INTERVIEW_TRANSCRIPTION_LENGTH = 2_000;
 const INTERVIEW_AUDIO_URL_TTL_SECS = 24 * 60 * 60;
 const MAX_CODE_ANALYSIS_SUMMARY_LENGTH = 320;
 const MAX_CODE_ANALYSIS_DETAIL_LENGTH = 220;
@@ -56,6 +65,9 @@ const MAX_CODE_ANALYSIS_QUESTION_LENGTH = 140;
 const MAX_WEAKNESS_SUMMARY_LENGTH = 320;
 const MAX_WEAKNESS_DETAIL_LENGTH = 220;
 const MAX_RECURRING_PATTERN_LENGTH = 140;
+const INTERVIEW_STALLED_EDITOR_SECONDS = 90;
+const INTERVIEW_STALLED_RECENT_CHANGES_MAX = 0;
+const ESTIMATED_CHARS_PER_TOKEN = 4;
 
 const PROMPT_INJECTION_PATTERNS: RegExp[] = [
   /\bignore\b[\s\S]{0,80}\binstructions?\b/i,
@@ -87,6 +99,23 @@ const INCORRECTNESS_CLAIM_PATTERNS: RegExp[] = [
   /\bnot pass(?:ed)?\b/i,
   /\bhidden test\b/i,
   /\bdoes(?:\s+not|n't)\s+work\b/i,
+];
+const INTERVIEW_TRACE_LOOP_PATTERNS: RegExp[] = [
+  /\btrace\b/i,
+  /\bwalk\s+through\b/i,
+  /\bstep\s+by\s+step\b/i,
+  /\bdry\s+run\b/i,
+  /\bsimulat(?:e|ing|ion)\b/i,
+];
+const INTERVIEW_USER_STUCK_PATTERNS: RegExp[] = [
+  /\bi\s+do(?:\s+not|n't)\s+know\b/i,
+  /\bidk\b/i,
+  /\bnot\s+sure\b/i,
+  /\bno\s+clue\b/i,
+  /\byou\s+tell\s+me\b/i,
+  /\byou\s+explain\b/i,
+  /\bhelp\s+me\b/i,
+  /\bwhat'?s\s+wrong\b/i,
 ];
 
 interface HintProcessingContext {
@@ -233,7 +262,7 @@ export class AiService {
       latestSubmissionSummary: request.latestSubmissionSummary,
     });
 
-    const llmResult = await this.llmProvider.generateText({
+    const llmInput: LlmGenerateTextInput = {
       messages: [
         {
           role: 'system',
@@ -244,6 +273,13 @@ export class AiService {
       temperature: 0.3,
       maxOutputTokens: 500,
       model: this.resolveHintModel(),
+    };
+
+    const llmResult = await this.generateTextWithTelemetry('hint_generation', llmInput, {
+      roomId: request.roomId,
+      participantId: request.participantId,
+      hintLevel: adaptiveHintLevel,
+      hintStage,
     });
 
     return this.parseHintOutput(llmResult.text, {
@@ -257,7 +293,7 @@ export class AiService {
   async analyzeCode(request: AnalyzeCodeRequest): Promise<AnalyzeCodeResult> {
     this.logger.debug(`Analyzing code for room ${request.roomId}`);
 
-    const llmResult = await this.llmProvider.generateText({
+    const llmInput: LlmGenerateTextInput = {
       messages: [
         {
           role: 'system',
@@ -272,6 +308,11 @@ export class AiService {
       maxOutputTokens: 700,
       jsonMode: true,
       model: this.resolveAnalysisModel(),
+    };
+
+    const llmResult = await this.generateTextWithTelemetry('code_analysis', llmInput, {
+      roomId: request.roomId,
+      participantId: request.participantId,
     });
 
     return this.parseCodeAnalysisOutput(llmResult.text);
@@ -282,7 +323,7 @@ export class AiService {
   ): Promise<GenerateWeaknessAnalysisResult> {
     this.logger.debug(`Generating weakness analysis for session ${request.sessionId}`);
 
-    const llmResult = await this.llmProvider.generateText({
+    const llmInput: LlmGenerateTextInput = {
       messages: [
         { role: 'system', content: this.buildWeaknessAnalysisSystemPrompt() },
         { role: 'user', content: this.buildWeaknessAnalysisPrompt(request) },
@@ -291,6 +332,11 @@ export class AiService {
       maxOutputTokens: 900,
       jsonMode: true,
       model: this.resolveAnalysisModel(),
+    };
+
+    const llmResult = await this.generateTextWithTelemetry('weakness_analysis', llmInput, {
+      sessionId: request.sessionId,
+      participantId: request.participantId,
     });
 
     return {
@@ -338,7 +384,7 @@ export class AiService {
 
       const parsed = this.parseInterviewOutput(llmResult.text, request);
       const audio =
-        parsed.shouldRespond && parsed.message
+        parsed.shouldRespond && parsed.message && this.isInterviewAudioEnabled()
           ? await this.generateInterviewAudio(request, parsed)
           : undefined;
 
@@ -352,18 +398,49 @@ export class AiService {
           error instanceof Error ? error.message : String(error)
         }`,
       );
+      const fallback = this.buildInterviewLocalizedFallbackTexts(request);
 
       return this.postProcessInterviewResponse(
         {
-          message:
-            "I can keep the interview moving. Let's focus on the reasoning behind your current approach.",
-          followUpQuestion:
-            'What invariant should hold after each iteration, and which edge case would break it first?',
+          message: fallback.message,
+          followUpQuestion: fallback.followUpQuestion,
           codeContext: this.resolveInterviewCodeContext(request),
         },
         request,
       );
     }
+  }
+
+  async generateInterviewTranscription(
+    request: InterviewTranscriptionRequest,
+  ): Promise<InterviewTranscriptionResult> {
+    this.logger.debug(`Generating interview transcription for room ${request.roomId}`);
+
+    const decodedAudio = decodeBase64Audio(request.audioBase64);
+    const transcriptionInput: LlmGenerateTranscriptionInput = {
+      audio: decodedAudio,
+      mimeType: request.mimeType,
+      language: normalizeTranscriptionLanguage(request.language),
+      fileName: `interview-${request.roomId}-${request.participantId}.webm`,
+    };
+    const result = await this.generateTranscriptionWithTelemetry(
+      'interview_transcription',
+      transcriptionInput,
+      {
+        roomId: request.roomId,
+        participantId: request.participantId,
+        sessionId: request.sessionId ?? undefined,
+      },
+    );
+
+    const text = normalizeTranscript(result.text);
+    if (!text) {
+      throw new Error('STT response did not include transcript text');
+    }
+
+    return {
+      text: text.slice(0, MAX_INTERVIEW_TRANSCRIPTION_LENGTH),
+    };
   }
 
   async generateSessionReport(
@@ -372,7 +449,7 @@ export class AiService {
     this.logger.debug(`Generating session report for session ${request.sessionId}`);
     try {
       const prompt = buildSessionReportPrompt(request);
-      const llmResult = await this.llmProvider.generateText({
+      const llmInput: LlmGenerateTextInput = {
         messages: [
           { role: 'system', content: prompt.systemPrompt },
           { role: 'user', content: prompt.userPrompt },
@@ -380,7 +457,15 @@ export class AiService {
         temperature: 0.1,
         maxOutputTokens: 2500,
         jsonMode: true,
-      });
+      };
+      const llmResult = await this.generateTextWithTelemetry(
+        'session_report_generation',
+        llmInput,
+        {
+          sessionId: request.sessionId,
+          participantId: request.participantId,
+        },
+      );
 
       const parsed = parseSessionReportJson(llmResult.text);
       const normalizedReport = postprocessSessionReport(request, parsed);
@@ -389,8 +474,8 @@ export class AiService {
         ...normalizedReport,
         sessionId: request.sessionId,
         generatedAt: new Date().toISOString(),
-        testCaseBreakdown: toPublicSessionReportTestCaseBreakdown(request.finalTestCaseBreakdown),
         staticAnalysis: request.staticAnalysis,
+        testCaseBreakdown: toPublicSessionReportTestCaseBreakdown(request.finalTestCaseBreakdown),
         model: llmResult.model,
       };
     } catch (error) {
@@ -1236,10 +1321,12 @@ export class AiService {
     const communicationHistory = request.historicalWeaknesses.find(
       (item) => item.category === 'communication',
     );
-    const peerCommunicationAverage =
-      request.peerFeedback.length > 0
-        ? request.peerFeedback.reduce((sum, item) => sum + item.communicationRating, 0) /
-          request.peerFeedback.length
+    const firstPeerFeedback = request.peerFeedback[0];
+    const peerFeedbackEvidence =
+      firstPeerFeedback != null
+        ? `The session includes ${request.peerFeedback.length} submitted peer feedback entr${
+            request.peerFeedback.length === 1 ? 'y' : 'ies'
+          }, including: "${firstPeerFeedback.feedbackText.slice(0, 180)}"`
         : null;
 
     return {
@@ -1269,8 +1356,8 @@ export class AiService {
           description:
             'The candidate can improve how they explain trade-offs, invariants, and debugging steps out loud.',
           evidence:
-            peerCommunicationAverage != null
-              ? `Peer communication rating averaged ${peerCommunicationAverage.toFixed(1)}/5 in this session.`
+            peerFeedbackEvidence != null
+              ? peerFeedbackEvidence
               : 'Peer feedback is limited, so this is based on sparse communication evidence.',
           trend: communicationHistory?.trend === 'worsening' ? 'worsening' : 'stable',
         },
@@ -1294,7 +1381,12 @@ export class AiService {
     );
   }
 
-  private buildInterviewSystemPrompt(): string {
+  private buildInterviewSystemPrompt(request: InterviewResponseRequest): string {
+    const defaultResponseLanguage = resolveInterviewDefaultResponseLanguage(request);
+    const turnResponseLanguage = resolveInterviewTurnResponseLanguage(
+      request,
+      defaultResponseLanguage,
+    );
     return [
       'You are a senior software engineer conducting a realistic live interview for a company hiring loop.',
       'You can respond in two modes:',
@@ -1307,21 +1399,27 @@ export class AiService {
       '3) Do not produce abusive, profane, or meta-reasoning text.',
       'Output contract:',
       'Return strict JSON only with keys:',
-      '{ "shouldRespond": boolean, "message": "string", "followUpQuestion": "string", "codeContext": {"language": "string", "file": "string", "codeSnippet": "string", "startLine": number, "endLine": number, "questionType": "complexity|bug_risk|edge_case|optimization|data_structure_choice|correctness|readability|other", "reason": "string"}, "codeAnnotations": [{"line": number, "comment": "string"}] }',
+      '{ "shouldRespond": boolean, "message": "string", "followUpQuestion": "string (optional)", "codeContext": {"language": "string", "file": "string", "codeSnippet": "string", "startLine": number, "endLine": number, "questionType": "complexity|bug_risk|edge_case|optimization|data_structure_choice|correctness|readability|other", "reason": "string"}, "codeAnnotations": [{"line": number, "comment": "string"}] }',
       'Formatting rules:',
       '- shouldRespond is required.',
       '- If shouldRespond=false, return only {"shouldRespond": false}.',
       '- message should sound like a live interviewer reply and remain under 80 words.',
-      '- followUpQuestion should be a single focused question under 35 words.',
+      '- followUpQuestion is optional. Include it only when a follow-up question would move the interview forward.',
+      '- If included, followUpQuestion should be a single focused question under 35 words.',
       '- codeContext is required and must point to the exact code range the follow-up is about.',
       '- Prefer the provided selected/cursor code context unless another nearby range is clearly better.',
       '- codeAnnotations is optional and may contain at most 3 targeted comments.',
       '- Only annotate lines when the current code clearly warrants it.',
+      '- If you emit codeAnnotations, ensure message briefly tells the candidate to check those inline comments.',
       '- Prefer conceptual follow-ups over giving away the solution.',
       'Interview behavior rules:',
       '- Start the interview naturally when context indicates the session just started.',
       '- Refer to candidate code, execution outcomes, and prior AI hints when available.',
       '- Avoid repetitive prompts; if nothing useful should be said in proactive mode, set shouldRespond=false.',
+      '- If the candidate is stuck or asks for direct help, stop repeating trace requests and provide concrete diagnosis guidance.',
+      '- If failing tests persist with no code progress, transition to actionable coaching and offer a natural wrap-up option.',
+      `- Default interview language is ${describeInterviewResponseLanguage(defaultResponseLanguage)}.`,
+      `- For this turn, write "message" and "followUpQuestion" in ${describeInterviewResponseLanguage(turnResponseLanguage)} when the candidate language is clear; otherwise fall back to the default language.`,
     ].join('\n');
   }
 
@@ -1332,22 +1430,28 @@ export class AiService {
     let lastError: unknown;
 
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      const llmInput: LlmGenerateTextInput = {
+        messages: [
+          {
+            role: 'system',
+            content: this.buildInterviewSystemPrompt(request),
+          },
+          {
+            role: 'user',
+            content: this.buildInterviewPrompt(request),
+          },
+        ],
+        temperature: 0.35,
+        maxOutputTokens: 700,
+        jsonMode: true,
+        model: this.resolveInterviewModel(),
+      };
       try {
-        return await this.llmProvider.generateText({
-          messages: [
-            {
-              role: 'system',
-              content: this.buildInterviewSystemPrompt(),
-            },
-            {
-              role: 'user',
-              content: this.buildInterviewPrompt(request),
-            },
-          ],
-          temperature: 0.35,
-          maxOutputTokens: 700,
-          jsonMode: true,
-          model: this.resolveInterviewModel(),
+        return await this.generateTextWithTelemetry('interview_response_generation', llmInput, {
+          roomId: request.roomId,
+          participantId: request.participantId,
+          sessionId: request.sessionId ?? undefined,
+          attempt,
         });
       } catch (error) {
         lastError = error;
@@ -1366,6 +1470,11 @@ export class AiService {
 
   private buildInterviewPrompt(request: InterviewResponseRequest): string {
     const codeContext = this.resolveInterviewCodeContext(request);
+    const defaultResponseLanguage = resolveInterviewDefaultResponseLanguage(request);
+    const turnResponseLanguage = resolveInterviewTurnResponseLanguage(
+      request,
+      defaultResponseLanguage,
+    );
     return [
       'Use only the following UNTRUSTED blocks as interview context.',
       this.wrapUntrustedBlock('PROBLEM_DESCRIPTION', request.problemDescription),
@@ -1394,15 +1503,23 @@ export class AiService {
         'INTERACTION_SIGNALS',
         request.interactionSignals ? JSON.stringify(request.interactionSignals) : 'none',
       ),
+      this.wrapUntrustedBlock('DEFAULT_RESPONSE_LANGUAGE', defaultResponseLanguage),
+      this.wrapUntrustedBlock('TURN_RESPONSE_LANGUAGE', turnResponseLanguage),
       'Task:',
       '- Decide whether you should respond now (shouldRespond=true/false).',
       '- If trigger=user_message, prefer shouldRespond=true unless the message is empty noise.',
       '- If trigger=proactive, only respond when it meaningfully advances the interview.',
-      '- When responding, acknowledge briefly and ask exactly one strong follow-up question.',
+      '- When responding, acknowledge briefly and decide whether to ask a follow-up question.',
+      '- Ask a follow-up only when it clearly improves interview signal; otherwise reply without one.',
+      '- For proactive reason=code_ran or reason=code_submitted: default to a short acknowledgement first. Ask a follow-up only if execution evidence shows a concrete issue worth probing immediately.',
       '- Choose difficulty based on answer quality, current code, history, hints, and execution/analysis context.',
       '- Link the question to a concrete code context with line range and snippet.',
       '- If code annotations are useful, keep them sparse and concrete.',
       '- Focus on correctness, trade-offs, complexity, edge cases, or debugging strategy.',
+      '- If candidate explicitly asks for direct explanation, provide direct explanation instead of another trace request.',
+      '- If latest tests are failing and editor activity is stagnant, switch from probing to concrete debug coaching; avoid loops.',
+      '- When stagnation persists, include an option to wrap up with key takeaways.',
+      `- Prefer ${describeInterviewResponseLanguage(turnResponseLanguage)} for this turn when candidate language is clear; otherwise use the default ${describeInterviewResponseLanguage(defaultResponseLanguage)}.`,
     ].join('\n\n');
   }
 
@@ -1429,13 +1546,13 @@ export class AiService {
       } catch {}
     }
 
+    const fallback = this.buildInterviewParseFallback(rawText, request);
+
     return this.postProcessInterviewResponse(
       {
         shouldRespond: true,
-        message:
-          "That's a reasonable direction. Walk me through the key invariant your approach maintains after each step.",
-        followUpQuestion:
-          'Which state are you updating each iteration, and why does it stay correct?',
+        message: fallback.message,
+        followUpQuestion: fallback.followUpQuestion,
         codeContext: this.resolveInterviewCodeContext(request),
       },
       request,
@@ -1446,6 +1563,12 @@ export class AiService {
     response: ParsedInterviewModelResponse,
     request: InterviewResponseRequest,
   ): ParsedInterviewResponse {
+    const localizedFallback = this.buildInterviewLocalizedFallbackTexts(request);
+    const defaultResponseLanguage = resolveInterviewDefaultResponseLanguage(request);
+    const turnResponseLanguage = resolveInterviewTurnResponseLanguage(
+      request,
+      defaultResponseLanguage,
+    );
     const trigger = request.trigger ?? 'user_message';
     const hasResponseContent = Boolean(
       response.message?.trim() || response.followUpQuestion?.trim() || response.codeContext,
@@ -1456,34 +1579,205 @@ export class AiService {
       return { shouldRespond: false };
     }
 
-    const message = this.sanitizeInterviewOutputText(
+    let message = this.sanitizeInterviewOutputText(
       response.message,
-      "That's a reasonable direction. Talk me through the invariant your approach maintains.",
+      localizedFallback.message,
       'message',
     );
-    const followUpQuestion = this.sanitizeInterviewOutputText(
+    let followUpQuestion = this.sanitizeOptionalInterviewFollowUpQuestion(
       response.followUpQuestion,
-      'Which state are you updating each iteration, and why does it stay correct?',
-      'followUpQuestion',
     );
+
+    const shouldEscalate = this.shouldEscalateInterviewGuidance(request);
+    const isLoopingPrompt =
+      this.isTraceLoopPrompt(message) ||
+      (followUpQuestion != null && this.isTraceLoopPrompt(followUpQuestion));
+    if (shouldEscalate && isLoopingPrompt) {
+      const escalated = this.buildEscalatedInterviewGuidance();
+      message = escalated.message;
+      followUpQuestion = escalated.followUpQuestion;
+    }
+
+    if (
+      this.shouldForceInterviewLocalizedFallback(turnResponseLanguage, message, followUpQuestion)
+    ) {
+      message = localizedFallback.message;
+      if (followUpQuestion != null) {
+        followUpQuestion = localizedFallback.followUpQuestion;
+      }
+    }
+
     const codeAnnotations = response.codeAnnotations
-      ?.map((annotation) => ({
-        line: annotation.line,
-        comment: this.sanitizeInterviewOutputText(
-          annotation.comment,
-          'Consider clarifying this step.',
-          'codeAnnotation',
-        ),
-      }))
-      .filter((annotation) => annotation.comment.length > 0)
+      ?.map((annotation) => {
+        const comment = this.sanitizeInterviewAnnotationText(annotation.comment);
+        if (!comment) {
+          return null;
+        }
+        return {
+          line: annotation.line,
+          comment,
+        };
+      })
+      .filter((annotation): annotation is { line: number; comment: string } => annotation != null)
       .slice(0, 3);
+
+    message = this.ensureInterviewAnnotationNotice(
+      message,
+      codeAnnotations?.length ?? 0,
+      turnResponseLanguage,
+    );
+
+    let normalizedFollowUpQuestion = followUpQuestion?.trim();
+    if (
+      this.shouldSuppressFollowUpForAcknowledgement(
+        request,
+        normalizedFollowUpQuestion,
+        codeAnnotations?.length ?? 0,
+      )
+    ) {
+      normalizedFollowUpQuestion = undefined;
+    }
 
     return {
       shouldRespond: true,
       message: this.truncateHintText(message, MAX_INTERVIEW_MESSAGE_LENGTH),
-      followUpQuestion: this.truncateHintText(followUpQuestion, MAX_INTERVIEW_QUESTION_LENGTH),
+      ...(normalizedFollowUpQuestion
+        ? {
+            followUpQuestion: this.truncateHintText(
+              normalizedFollowUpQuestion,
+              MAX_INTERVIEW_QUESTION_LENGTH,
+            ),
+          }
+        : {}),
       codeContext: this.postProcessInterviewCodeContext(response.codeContext, request),
       codeAnnotations: codeAnnotations && codeAnnotations.length > 0 ? codeAnnotations : undefined,
+    };
+  }
+
+  private shouldForceInterviewLocalizedFallback(
+    turnResponseLanguage: 'en' | 'zh',
+    message: string,
+    followUpQuestion: string | undefined,
+  ): boolean {
+    if (turnResponseLanguage !== 'zh') {
+      return false;
+    }
+
+    if (containsCjkCharacters(message)) {
+      return false;
+    }
+    if (followUpQuestion && containsCjkCharacters(followUpQuestion)) {
+      return false;
+    }
+    return true;
+  }
+
+  private shouldEscalateInterviewGuidance(request: InterviewResponseRequest): boolean {
+    if (this.didUserAskForDirectHelp(request.userMessage)) {
+      return true;
+    }
+
+    const latestSummary = request.latestExecutionSummary;
+    const hasFailingTests = latestSummary ? latestSummary.allTestsPassed === false : false;
+    const signals = request.interactionSignals;
+    const stalledEditor =
+      signals?.secondsSinceLastEditorActivity != null &&
+      signals.secondsSinceLastEditorActivity >= INTERVIEW_STALLED_EDITOR_SECONDS &&
+      (signals.recentEditorChanges ?? 0) <= INTERVIEW_STALLED_RECENT_CHANGES_MAX;
+
+    if (hasFailingTests && stalledEditor) {
+      return true;
+    }
+
+    return this.isTraceConversationLoop(request.conversationHistory);
+  }
+
+  private didUserAskForDirectHelp(userMessage: string | undefined): boolean {
+    if (!userMessage) {
+      return false;
+    }
+    return INTERVIEW_USER_STUCK_PATTERNS.some((pattern) => pattern.test(userMessage));
+  }
+
+  private isTraceConversationLoop(
+    conversationHistory: Array<{ role: string; content: string }>,
+  ): boolean {
+    const recentAssistantMessages = conversationHistory
+      .filter((entry) => entry.role === 'assistant')
+      .slice(-3)
+      .map((entry) => entry.content);
+    const recentUserMessages = conversationHistory
+      .filter((entry) => entry.role === 'user')
+      .slice(-3)
+      .map((entry) => entry.content);
+
+    const repeatedTracePrompts = recentAssistantMessages.filter((content) =>
+      this.isTraceLoopPrompt(content),
+    ).length;
+    const userStuckSignals = recentUserMessages.filter((content) =>
+      this.didUserAskForDirectHelp(content),
+    ).length;
+    return repeatedTracePrompts >= 2 && userStuckSignals >= 1;
+  }
+
+  private isTraceLoopPrompt(value: string): boolean {
+    return INTERVIEW_TRACE_LOOP_PATTERNS.some((pattern) => pattern.test(value));
+  }
+
+  private buildEscalatedInterviewGuidance(): { message: string; followUpQuestion: string } {
+    return {
+      message:
+        "Let's switch gears. Since you're stuck, I’ll give direct coaching: isolate the first failing case, log the key state per step, and compare where expected vs actual behavior first diverge.",
+      followUpQuestion:
+        'Do you want a concrete debug checklist now, or should we wrap up with key takeaways?',
+    };
+  }
+
+  private buildInterviewParseFallback(
+    rawText: string,
+    request: InterviewResponseRequest,
+  ): { message: string; followUpQuestion: string } {
+    const localized = this.buildInterviewLocalizedFallbackTexts(request);
+    const cleaned = this.stripCodeFence(rawText).trim();
+    const normalized = this.normalizeHintText(cleaned, 'hint');
+    if (!normalized || this.isUnsafeModelText(normalized)) {
+      return localized;
+    }
+
+    const compact = this.compactHintText(this.trimBoundaryQuoteChars(normalized));
+    if (!compact || this.looksLikeJsonObject(compact)) {
+      return localized;
+    }
+
+    return {
+      message: compact,
+      followUpQuestion: localized.followUpQuestion,
+    };
+  }
+
+  private looksLikeJsonObject(value: string): boolean {
+    const trimmed = value.trim();
+    return trimmed.startsWith('{') && trimmed.endsWith('}');
+  }
+
+  private buildInterviewLocalizedFallbackTexts(request: InterviewResponseRequest): {
+    message: string;
+    followUpQuestion: string;
+  } {
+    const defaultLanguage = resolveInterviewDefaultResponseLanguage(request);
+    const turnLanguage = resolveInterviewTurnResponseLanguage(request, defaultLanguage);
+    if (turnLanguage === 'zh') {
+      return {
+        message: '这个方向可以。请你先说明当前解法在每一步维护的不变量。',
+        followUpQuestion: '每一轮你更新的核心状态是什么？为什么它始终正确？',
+      };
+    }
+
+    return {
+      message:
+        "I can keep the interview moving. Let's focus on the reasoning behind your current approach.",
+      followUpQuestion:
+        'What invariant should hold after each iteration, and which edge case would break it first?',
     };
   }
 
@@ -1589,16 +1883,162 @@ export class AiService {
     return normalized;
   }
 
+  private sanitizeOptionalInterviewFollowUpQuestion(value: string | undefined): string | undefined {
+    const normalized = this.normalizeHintText(value, 'reflectionPrompt');
+    if (!normalized) {
+      return undefined;
+    }
+    if (this.isUnsafeModelText(normalized)) {
+      this.logger.warn('Dropping unsafe interview follow-up question');
+      return undefined;
+    }
+    return normalized;
+  }
+
+  private normalizeInterviewAnnotationEscapes(value: string): string {
+    let normalized = '';
+    for (let index = 0; index < value.length; index += 1) {
+      const char = value[index];
+
+      if (char === '\r') {
+        if (value[index + 1] === '\n') {
+          index += 1;
+        }
+        normalized += '\n';
+        continue;
+      }
+
+      if (char === '\\') {
+        const { replacement, advance } = resolveAnnotationBackslashEscape(value, index);
+        normalized += replacement;
+        index += advance;
+        continue;
+      }
+
+      normalized += char;
+    }
+    return normalized;
+  }
+
+  private trimWrappingDoubleQuotes(value: string): string {
+    let start = 0;
+    let end = value.length;
+    while (start < end && value[start] === '"') {
+      start += 1;
+    }
+    while (end > start && value[end - 1] === '"') {
+      end -= 1;
+    }
+    return value.slice(start, end);
+  }
+
+  private collapseLongNewlineRuns(value: string): string {
+    let normalized = '';
+    let newlineCount = 0;
+    for (const char of value) {
+      if (char === '\n') {
+        newlineCount += 1;
+        if (newlineCount <= 3) {
+          normalized += char;
+        }
+        continue;
+      }
+
+      newlineCount = 0;
+      normalized += char;
+    }
+    return normalized;
+  }
+
+  private sanitizeInterviewAnnotationText(value: string | undefined): string | undefined {
+    if (!value) {
+      return undefined;
+    }
+
+    let normalized = this.normalizeInterviewAnnotationEscapes(value.trim());
+
+    normalized = this.trimWrappingDoubleQuotes(normalized).trim();
+    normalized = this.collapseLongNewlineRuns(normalized);
+    normalized = this.truncateHintText(normalized, MAX_INTERVIEW_ANNOTATION_LENGTH).trim();
+
+    if (!normalized || this.isUnsafeModelText(normalized)) {
+      if (normalized) {
+        this.logger.warn('Dropping unsafe interview code annotation');
+      }
+      return undefined;
+    }
+
+    return normalized;
+  }
+
+  private ensureInterviewAnnotationNotice(
+    message: string,
+    annotationCount: number,
+    turnResponseLanguage: 'en' | 'zh',
+  ): string {
+    if (annotationCount <= 0) {
+      return message;
+    }
+
+    const hasNotice =
+      /inline\s+comment/i.test(message) || /注释|註解/.test(message) || /commented/i.test(message);
+    if (hasNotice) {
+      return message;
+    }
+
+    const notice =
+      turnResponseLanguage === 'zh'
+        ? '我在相关代码行补充了行内注释，先看这些注释再继续。'
+        : 'I also left inline comments on relevant lines—check those while you iterate.';
+
+    return `${message} ${notice}`.trim();
+  }
+
+  private shouldSuppressFollowUpForAcknowledgement(
+    request: InterviewResponseRequest,
+    followUpQuestion: string | undefined,
+    annotationCount: number,
+  ): boolean {
+    if (!followUpQuestion) {
+      return false;
+    }
+
+    if (request.trigger !== 'proactive') {
+      return false;
+    }
+
+    const reason = request.interactionSignals?.reason;
+    if (reason !== 'code_ran' && reason !== 'code_submitted') {
+      return false;
+    }
+
+    if (annotationCount > 0) {
+      return true;
+    }
+
+    const hasFailingTests = request.latestExecutionSummary?.allTestsPassed === false;
+    return !hasFailingTests;
+  }
+
   private async generateInterviewAudio(
     request: InterviewResponseRequest,
     response: ParsedInterviewResponse,
   ): Promise<InterviewResponseAudio | undefined> {
     const spokenText = [response.message, response.followUpQuestion].filter(Boolean).join(' ');
     try {
-      const speech = await this.llmProvider.generateSpeech({
+      const speechInput: LlmGenerateSpeechInput = {
         text: spokenText,
         format: 'mp3',
-      });
+      };
+      const speech = await this.generateSpeechWithTelemetry(
+        'interview_tts_generation',
+        speechInput,
+        {
+          roomId: request.roomId,
+          participantId: request.participantId,
+          sessionId: request.sessionId ?? undefined,
+        },
+      );
 
       const audioKey = [
         'ai',
@@ -1637,7 +2077,212 @@ export class AiService {
     }
   }
 
+  private async generateTextWithTelemetry(
+    taskName: string,
+    input: LlmGenerateTextInput,
+    context: Record<string, string | number | undefined>,
+  ): Promise<Awaited<ReturnType<ILlmProvider['generateText']>>> {
+    const startedAt = Date.now();
+    const result = await this.llmProvider.generateText(input);
+    const latencyMs = Date.now() - startedAt;
+    this.logAiTaskTelemetry(taskName, {
+      model: result.model,
+      latencyMs,
+      inputTokens: this.estimateMessageTokenCount(input.messages),
+      outputTokens: this.estimateTokenCount(result.text),
+      ...context,
+      tokenSource: 'estimated_text',
+    });
+    return result;
+  }
+
+  private async generateSpeechWithTelemetry(
+    taskName: string,
+    input: LlmGenerateSpeechInput,
+    context: Record<string, string | number | undefined>,
+  ): Promise<Awaited<ReturnType<ILlmProvider['generateSpeech']>>> {
+    const startedAt = Date.now();
+    const result = await this.llmProvider.generateSpeech(input);
+    const latencyMs = Date.now() - startedAt;
+    this.logAiTaskTelemetry(taskName, {
+      model: result.model,
+      latencyMs,
+      inputTokens: this.estimateTokenCount(input.text),
+      outputTokens: null,
+      ...context,
+      tokenSource: 'estimated_text',
+    });
+    return result;
+  }
+
+  private async generateTranscriptionWithTelemetry(
+    taskName: string,
+    input: LlmGenerateTranscriptionInput,
+    context: Record<string, string | number | undefined>,
+  ): Promise<Awaited<ReturnType<ILlmProvider['generateTranscription']>>> {
+    const startedAt = Date.now();
+    const result = await this.llmProvider.generateTranscription(input);
+    const latencyMs = Date.now() - startedAt;
+    this.logAiTaskTelemetry(taskName, {
+      model: result.model,
+      latencyMs,
+      inputTokens: null,
+      outputTokens: this.estimateTokenCount(result.text),
+      inputBytes: input.audio.byteLength,
+      ...context,
+      tokenSource: 'estimated_text_output',
+    });
+    return result;
+  }
+
+  private estimateMessageTokenCount(messages: Array<{ content: string }>): number {
+    const contentChars = messages.reduce((sum, message) => sum + message.content.length, 0);
+    return this.estimateTokenCountByCharLength(contentChars);
+  }
+
+  private estimateTokenCount(text: string): number {
+    return this.estimateTokenCountByCharLength(text.length);
+  }
+
+  private estimateTokenCountByCharLength(charLength: number): number {
+    const normalizedLength = Math.max(charLength, 1);
+    return Math.ceil(normalizedLength / ESTIMATED_CHARS_PER_TOKEN);
+  }
+
+  private logAiTaskTelemetry(
+    taskName: string,
+    payload: {
+      model: string;
+      latencyMs: number;
+      inputTokens: number | null;
+      outputTokens: number | null;
+      tokenSource: 'estimated_text' | 'estimated_text_output';
+      inputBytes?: number;
+      roomId?: string;
+      participantId?: string;
+      sessionId?: string;
+      hintLevel?: string;
+      hintStage?: string;
+      attempt?: number;
+    },
+  ): void {
+    this.logger.log(
+      `[ai-task-telemetry] ${JSON.stringify({
+        task: taskName,
+        ...payload,
+      })}`,
+    );
+  }
+
   private resolveInterviewModel(): string {
     return this.configService?.get('AI_PLATFORM_MODEL', { infer: true }) ?? 'qwen3.5-mini';
   }
+
+  private isInterviewAudioEnabled(): boolean {
+    if (!this.configService) {
+      return true;
+    }
+
+    const configuredModel = this.configService.get('AI_TTS_MODEL', { infer: true });
+    return Boolean(configuredModel?.trim());
+  }
+}
+
+function decodeBase64Audio(payload: string): Buffer {
+  const normalized = payload.trim().replace(/^data:[^;]+;base64,/, '');
+  if (!normalized) {
+    throw new Error('Audio payload is empty');
+  }
+
+  const buffer = Buffer.from(normalized, 'base64');
+  if (buffer.length === 0) {
+    throw new Error('Audio payload is invalid');
+  }
+
+  return buffer;
+}
+
+function normalizeTranscript(value: string): string {
+  return value.replaceAll(String.raw`\n`, '\n').replaceAll(/\s+/g, ' ').trim();
+}
+
+function normalizeTranscriptionLanguage(value: string | undefined): string | undefined {
+  const normalized = value?.trim().toLowerCase();
+  if (!normalized) {
+    return undefined;
+  }
+
+  const [primary] = normalized.split('-');
+  if (!primary) {
+    return undefined;
+  }
+
+  return /^[a-z]{2,3}$/i.test(primary) ? primary : undefined;
+}
+
+function resolveInterviewDefaultResponseLanguage(request: InterviewResponseRequest): 'en' | 'zh' {
+  return normalizeInterviewResponseLanguage(request.responseLanguage) ?? 'en';
+}
+
+function resolveInterviewTurnResponseLanguage(
+  request: InterviewResponseRequest,
+  defaultLanguage: 'en' | 'zh',
+): 'en' | 'zh' {
+  const fromUserMessage = normalizeInterviewResponseLanguage(request.userMessage);
+  if (fromUserMessage) {
+    return fromUserMessage;
+  }
+
+  for (let index = request.conversationHistory.length - 1; index >= 0; index -= 1) {
+    const turn = request.conversationHistory[index];
+    if (turn?.role !== 'user') {
+      continue;
+    }
+    const fromHistory = normalizeInterviewResponseLanguage(turn.content);
+    if (fromHistory) {
+      return fromHistory;
+    }
+  }
+
+  return defaultLanguage;
+}
+
+function normalizeInterviewResponseLanguage(value: string | undefined): 'en' | 'zh' | undefined {
+  const normalized = value?.trim().toLowerCase();
+  if (!normalized) {
+    return undefined;
+  }
+
+  if (normalized.startsWith('zh') || containsCjkCharacters(normalized)) {
+    return 'zh';
+  }
+
+  if (normalized.startsWith('en') || containsLatinLetters(normalized)) {
+    return 'en';
+  }
+
+  return undefined;
+}
+
+function containsCjkCharacters(value: string): boolean {
+  return /[\u3400-\u9fff]/u.test(value);
+}
+
+function containsLatinLetters(value: string): boolean {
+  return /[a-z]/i.test(value);
+}
+
+function describeInterviewResponseLanguage(language: 'en' | 'zh'): string {
+  return language === 'zh' ? 'Chinese' : 'English';
+}
+
+function resolveAnnotationBackslashEscape(
+  value: string,
+  index: number,
+): { replacement: string; advance: number } {
+  const next = value[index + 1];
+  if (next === 'n') return { replacement: '\n', advance: 1 };
+  if (next === 't') return { replacement: '\t', advance: 1 };
+  if (next === '"') return { replacement: '"', advance: 1 };
+  return { replacement: '\\', advance: 0 };
 }
