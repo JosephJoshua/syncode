@@ -143,7 +143,7 @@ describe('SnapshotScheduler', () => {
       await expect(scheduler.takeSnapshot('room-1', 'session_end')).resolves.toBeUndefined();
     });
 
-    it('GIVEN strict session_end snapshot times out WHEN taking snapshot THEN does not rethrow', async () => {
+    it('GIVEN strict session_end snapshot times out WHEN taking snapshot THEN rethrows', async () => {
       roomRegistry.createRoom('room-1', { language: 'python' });
       docStore.createDoc('room-1', { initialContentByLanguage: { python: 'const x = 1;' } });
       const timeoutError = new Error(
@@ -154,7 +154,7 @@ describe('SnapshotScheduler', () => {
 
       await expect(
         scheduler.takeSnapshot('room-1', 'session_end', { strict: true }),
-      ).resolves.toBeUndefined();
+      ).rejects.toThrow('Request timed out');
     });
 
     it('GIVEN final snapshot callback throws WHEN taking strict session_end snapshot THEN rethrows', async () => {
