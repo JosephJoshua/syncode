@@ -49,3 +49,23 @@ export const whiteboardAssetUploadUrlResponseSchema = z.object({
 export type WhiteboardAssetUploadUrlResponse = z.infer<
   typeof whiteboardAssetUploadUrlResponseSchema
 >;
+
+export const whiteboardAssetVerifyRequestSchema = z
+  .object({
+    key: z
+      .string()
+      .min(1)
+      .max(500)
+      .describe('S3 object key returned by upload-url for this room asset'),
+  })
+  .strict();
+
+export type WhiteboardAssetVerifyRequest = z.infer<typeof whiteboardAssetVerifyRequestSchema>;
+
+export const whiteboardAssetVerifyResponseSchema = z.object({
+  exists: z
+    .boolean()
+    .describe('Whether the object currently exists in storage for the provided key'),
+});
+
+export type WhiteboardAssetVerifyResponse = z.infer<typeof whiteboardAssetVerifyResponseSchema>;

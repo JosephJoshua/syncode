@@ -221,4 +221,46 @@ describe('StaticAnalysisAnalyzer', () => {
     expect(result.summary.toolFailureCount).toBeGreaterThan(0);
     expect(result.toolResults.every((tool) => tool.status === 'failed')).toBe(true);
   });
+
+  it('GIVEN pmd binary is unavailable WHEN running CPD THEN falls back to cpd binary', async () => {
+    const runner = {
+      run: vi.fn().mockImplementation(async (command: string, args: string[]) => {
+        if (command === 'ruff') {
+          return { exitCode: 0, stdout: '[]', stderr: '', timedOut: false };
+        }
+        if (command === 'lizard') {
+          return { exitCode: 0, stdout: '<cppncss />', stderr: '', timedOut: false };
+        }
+        if (command === 'pmd' && args[0] === 'cpd') {
+          return {
+            exitCode: null,
+            stdout: '',
+            stderr: '',
+            timedOut: false,
+            error: 'spawn pmd ENOENT',
+          };
+        }
+        if (command === 'cpd') {
+          return { exitCode: 0, stdout: '{"duplications":[]}', stderr: '', timedOut: false };
+        }
+        return { exitCode: 0, stdout: '', stderr: '', timedOut: false };
+      }),
+    } satisfies StaticAnalysisCommandRunner;
+    const analyzer = new StaticAnalysisAnalyzer(runner);
+
+    const result = await analyzer.analyze(request);
+
+    expect(result.status).toBe('completed');
+    expect(result.summary.toolFailureCount).toBe(0);
+    expect(runner.run).toHaveBeenCalledWith(
+      'pmd',
+      expect.arrayContaining(['cpd', '--no-fail-on-violation', '--no-fail-on-error']),
+      expect.any(Object),
+    );
+    expect(runner.run).toHaveBeenCalledWith(
+      'cpd',
+      expect.arrayContaining(['--no-fail-on-violation', '--no-fail-on-error']),
+      expect.any(Object),
+    );
+  });
 });

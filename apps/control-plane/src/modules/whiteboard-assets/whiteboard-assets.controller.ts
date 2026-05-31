@@ -14,6 +14,8 @@ import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard.js';
 import {
   WhiteboardAssetUploadUrlRequestDto,
   WhiteboardAssetUploadUrlResponseDto,
+  WhiteboardAssetVerifyRequestDto,
+  WhiteboardAssetVerifyResponseDto,
 } from './dto/whiteboard-asset.dto.js';
 import { WhiteboardAssetsService } from './whiteboard-assets.service.js';
 
@@ -57,6 +59,34 @@ export class WhiteboardAssetsController {
       filename: body.filename,
       contentType: body.contentType,
       contentLength: body.contentLength,
+    });
+  }
+
+  @Post(CONTROL_API.WHITEBOARD_ASSETS.VERIFY.route)
+  @ApiOperation({ summary: 'Verify whether a previously issued whiteboard asset key exists in S3' })
+  @ApiParam({ name: 'id', description: 'Room ID', example: '497f6eca-6276-4993-bfeb-53cbbbba6f08' })
+  @ApiBody({ type: WhiteboardAssetVerifyRequestDto })
+  @ApiResponse({
+    status: 201,
+    type: WhiteboardAssetVerifyResponseDto,
+    description: 'Storage existence status for the provided key',
+  })
+  @ApiResponse({ status: 400, type: ErrorResponseDto, description: 'Validation error' })
+  @ApiResponse({ status: 401, type: ErrorResponseDto, description: 'Unauthorized' })
+  @ApiResponse({
+    status: 403,
+    type: ErrorResponseDto,
+    description: 'Forbidden — not a participant or lacks whiteboard write permission',
+  })
+  async verifyAsset(
+    @Param('id') roomId: string,
+    @CurrentUser() user: { id: string },
+    @Body() body: WhiteboardAssetVerifyRequestDto,
+  ): Promise<WhiteboardAssetVerifyResponseDto> {
+    return this.assetsService.verifyAsset({
+      roomId,
+      userId: user.id,
+      key: body.key,
     });
   }
 }

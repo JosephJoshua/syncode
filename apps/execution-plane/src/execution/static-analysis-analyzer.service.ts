@@ -38,6 +38,7 @@ interface ToolCommand {
   command: string;
   args: string[];
   parser: (stdout: string, stderr: string) => Partial<AnalyzerFindings>;
+  fallbackCommand?: { command: string; args: string[] };
 }
 
 interface AnalyzerFindings {
@@ -70,10 +71,7 @@ export class StaticAnalysisAnalyzer {
 
       for (const tool of commands) {
         const startedAt = Date.now();
-        const result = await this.runner.run(tool.command, tool.args, {
-          cwd: workspace,
-          timeoutMs: request.timeoutMs ?? DEFAULT_TOOL_TIMEOUT_MS,
-        });
+        const result = await this.runWithFallback(tool, workspace, request.timeoutMs);
         const durationMs = Date.now() - startedAt;
         const parsed = this.parseToolOutput(tool, result.stdout, result.stderr);
 
@@ -165,7 +163,30 @@ export class StaticAnalysisAnalyzer {
       {
         tool: 'pmd-cpd',
         command: 'pmd',
-        args: ['cpd', '--format', 'json', '--minimum-tokens', '40', '--files', fileName],
+        args: [
+          'cpd',
+          '--format',
+          'json',
+          '--minimum-tokens',
+          '40',
+          '--no-fail-on-violation',
+          '--no-fail-on-error',
+          '--files',
+          fileName,
+        ],
+        fallbackCommand: {
+          command: 'cpd',
+          args: [
+            '--format',
+            'json',
+            '--minimum-tokens',
+            '40',
+            '--no-fail-on-violation',
+            '--no-fail-on-error',
+            '--files',
+            fileName,
+          ],
+        },
         parser: (stdout) => ({ duplications: parseCpdJson(stdout) }),
       },
     ];
@@ -195,6 +216,25 @@ export class StaticAnalysisAnalyzer {
       };
     }
   }
+
+  private async runWithFallback(
+    tool: ToolCommand,
+    workspace: string,
+    timeoutMs: number | undefined,
+  ): Promise<Awaited<ReturnType<StaticAnalysisCommandRunner['run']>>> {
+    const resolvedTimeoutMs = timeoutMs ?? DEFAULT_TOOL_TIMEOUT_MS;
+    const primaryResult = await this.runner.run(tool.command, tool.args, {
+      cwd: workspace,
+      timeoutMs: resolvedTimeoutMs,
+    });
+    if (!tool.fallbackCommand || !isCommandNotFound(primaryResult)) {
+      return primaryResult;
+    }
+    return this.runner.run(tool.fallbackCommand.command, tool.fallbackCommand.args, {
+      cwd: workspace,
+      timeoutMs: resolvedTimeoutMs,
+    });
+  }
 }
 
 function isToolFailure(
@@ -222,6 +262,16 @@ function resolveToolError(
   if (parsed.parseError) return parsed.parseError;
   if (result.exitCode == null) return 'Tool exited without a status code';
   return `Tool exited with code ${result.exitCode}`;
+}
+
+function isCommandNotFound(
+  result: Awaited<ReturnType<StaticAnalysisCommandRunner['run']>>,
+): boolean {
+  if (result.exitCode !== null) {
+    return false;
+  }
+  const text = `${result.error ?? ''} ${result.stderr}`.toLowerCase();
+  return text.includes('enoent') || text.includes('not found');
 }
 
 function lintCommandFor(language: SupportedLanguage, fileName: string): ToolCommand | null {

@@ -57,6 +57,7 @@ export interface RoomWhiteboardPanelProps {
 
 const VISIBILITY_PREFIX = 'whiteboard:visibility';
 const TLDRAW_LICENSE_KEY = import.meta.env.VITE_TLDRAW_LICENSE_KEY;
+const MAX_WHITEBOARD_UPLOAD_ATTEMPTS = 2;
 
 function readVisibilityPrefs(
   roomId: string,
@@ -497,29 +498,47 @@ function createControlPlaneAssetStore(roomId: string): TLAssetStore {
           `Unsupported asset content type "${contentType}". Allowed: PNG, JPEG, WebP, GIF, SVG, MP4, WebM.`,
         );
       }
-      const presigned: WhiteboardAssetUploadUrlResponse = await api(
-        CONTROL_API.WHITEBOARD_ASSETS.UPLOAD_URL,
-        {
-          params: { id: roomId },
-          body: {
-            filename: file.name,
-            contentType: contentType as WhiteboardAllowedContentType,
-            contentLength: file.size,
-          },
-        },
-      );
+      let lastError: Error | null = null;
 
-      const putResponse = await fetch(presigned.uploadUrl, {
-        method: 'PUT',
-        body: file,
-        headers: { 'Content-Type': contentType },
-      });
-      if (!putResponse.ok) {
-        throw new Error(
-          `Failed to upload whiteboard asset to storage (${putResponse.status} ${putResponse.statusText})`,
+      for (let attempt = 1; attempt <= MAX_WHITEBOARD_UPLOAD_ATTEMPTS; attempt += 1) {
+        const presigned: WhiteboardAssetUploadUrlResponse = await api(
+          CONTROL_API.WHITEBOARD_ASSETS.UPLOAD_URL,
+          {
+            params: { id: roomId },
+            body: {
+              filename: file.name,
+              contentType: contentType as WhiteboardAllowedContentType,
+              contentLength: file.size,
+            },
+          },
         );
+
+        const putResponse = await fetch(presigned.uploadUrl, {
+          method: 'PUT',
+          body: file,
+          headers: { 'Content-Type': contentType },
+        });
+        if (!putResponse.ok) {
+          lastError = new Error(
+            `Failed to upload whiteboard asset to storage (${putResponse.status} ${putResponse.statusText})`,
+          );
+          continue;
+        }
+
+        const verification = await api(CONTROL_API.WHITEBOARD_ASSETS.VERIFY, {
+          params: { id: roomId },
+          body: { key: presigned.key },
+        });
+        if (verification.exists) {
+          return { src: presigned.downloadUrl, meta: { storageKey: presigned.key } };
+        }
+
+        lastError = new Error('Uploaded whiteboard asset is not yet available in storage');
       }
-      return { src: presigned.downloadUrl, meta: { storageKey: presigned.key } };
+
+      throw (
+        lastError ?? new Error('Failed to upload whiteboard asset after retrying storage upload')
+      );
     },
     resolve(asset) {
       return asset.props.src ?? null;

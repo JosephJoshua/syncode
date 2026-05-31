@@ -37,6 +37,8 @@ let storageService: ReturnType<typeof createMockStorageService>;
 
 const baseRoute = (roomId: string) =>
   `/${CONTROL_API.WHITEBOARD_ASSETS.UPLOAD_URL.route.replace(':id', roomId)}`;
+const verifyRoute = (roomId: string) =>
+  `/${CONTROL_API.WHITEBOARD_ASSETS.VERIFY.route.replace(':id', roomId)}`;
 
 async function bearerFor(email: string) {
   const user = await insertUser(db, { email, username: email.split('@')[0]! });
@@ -242,5 +244,40 @@ describe('POST /rooms/:id/whiteboard/assets/upload-url', () => {
     expect(response.status).toBe(201);
     expect(response.body.key).toMatch(/^whiteboard\/[^/]+\/[a-f0-9-]+-my_weird_.._file_.png$/);
     expect(response.body.key).not.toContain(' ');
+  });
+});
+
+describe('POST /rooms/:id/whiteboard/assets/verify', () => {
+  it('GIVEN participant and valid room-scoped key WHEN object exists THEN returns exists=true', async () => {
+    const host = await bearerFor('host-verify@test.com');
+    const candidate = await bearerFor('cand-verify@test.com');
+    const room = await insertRoom(db, host.user.id);
+    await insertParticipant(db, room.id, candidate.user.id, 'candidate');
+    storageService.exists.mockResolvedValueOnce(true);
+
+    const response = await request(app.getHttpServer())
+      .post(verifyRoute(room.id))
+      .set('Authorization', `Bearer ${candidate.token}`)
+      .send({ key: `whiteboard/${room.id}/abc-image.png` });
+
+    expect(response.status).toBe(201);
+    expect(response.body).toEqual({ exists: true });
+    expect(storageService.exists).toHaveBeenCalledWith(`whiteboard/${room.id}/abc-image.png`);
+  });
+
+  it('GIVEN participant but key outside room prefix WHEN verifying THEN returns exists=false without storage lookup', async () => {
+    const host = await bearerFor('host-verify-prefix@test.com');
+    const candidate = await bearerFor('cand-verify-prefix@test.com');
+    const room = await insertRoom(db, host.user.id);
+    await insertParticipant(db, room.id, candidate.user.id, 'candidate');
+
+    const response = await request(app.getHttpServer())
+      .post(verifyRoute(room.id))
+      .set('Authorization', `Bearer ${candidate.token}`)
+      .send({ key: 'whiteboard/some-other-room/abc-image.png' });
+
+    expect(response.status).toBe(201);
+    expect(response.body).toEqual({ exists: false });
+    expect(storageService.exists).not.toHaveBeenCalled();
   });
 });
