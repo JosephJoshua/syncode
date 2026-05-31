@@ -169,6 +169,12 @@ async function flushPromises() {
   });
 }
 
+async function flushMicrotasks() {
+  await act(async () => {
+    await Promise.resolve();
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -230,7 +236,46 @@ describe('useLiveKit', () => {
     expect(result.current.connectionState).toBe('connected');
   });
 
-  it('GIVEN connection fails WHEN rendered THEN connectionState becomes failed', async () => {
+  it('GIVEN initial connection attempts fail WHEN later retry succeeds THEN connectionState becomes connected', async () => {
+    vi.useFakeTimers();
+
+    const lk = await import('livekit-client');
+    const origRoom = lk.Room;
+    const connect = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('connection failed'))
+      .mockRejectedValueOnce(new Error('connection failed'))
+      .mockRejectedValueOnce(new Error('connection failed'))
+      .mockResolvedValueOnce(undefined);
+
+    (lk as Record<string, unknown>).Room = function RetryRoom() {
+      const room = new origRoom();
+      (room as unknown as IMockRoom).connect = connect;
+      latestRoom.current = room as unknown as IMockRoom;
+      return room;
+    };
+
+    try {
+      const { result } = renderHook(() => useLiveKit(defaultOptions()));
+
+      await flushMicrotasks();
+      expect(result.current.connectionState).toBe('connecting');
+      expect(connect).toHaveBeenCalledTimes(1);
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(7_000);
+      });
+
+      expect(connect).toHaveBeenCalledTimes(4);
+      expect(result.current.connectionState).toBe('connected');
+    } finally {
+      (lk as Record<string, unknown>).Room = origRoom;
+      vi.useRealTimers();
+    }
+  });
+
+  it('GIVEN connection keeps failing WHEN retries are exhausted THEN connectionState becomes failed', async () => {
+    vi.useFakeTimers();
     // Start disconnected, then swap the Room mock to reject, then connect
     const { result, rerender } = renderHook((props: UseLiveKitOptions) => useLiveKit(props), {
       initialProps: { url: null, token: null, connect: false } as UseLiveKitOptions,
@@ -239,24 +284,32 @@ describe('useLiveKit', () => {
     // Patch the mock module so the NEXT Room creation rejects on connect
     const lk = await import('livekit-client');
     const origRoom = lk.Room;
+    const connect = vi.fn().mockRejectedValue(new Error('connection failed'));
     (lk as Record<string, unknown>).Room = function FailingRoom() {
       const room = new origRoom();
       // Override the connect to reject
-      (room as unknown as IMockRoom).connect = vi
-        .fn()
-        .mockRejectedValue(new Error('connection failed'));
+      (room as unknown as IMockRoom).connect = connect;
       latestRoom.current = room as unknown as IMockRoom;
       return room;
     };
 
-    rerender({ url: 'wss://lk', token: 'tok', connect: true });
+    try {
+      rerender({ url: 'wss://lk', token: 'tok', connect: true });
 
-    await flushPromises();
+      await flushMicrotasks();
+      expect(result.current.connectionState).toBe('connecting');
 
-    expect(result.current.connectionState).toBe('failed');
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(31_000);
+      });
 
-    // Restore
-    (lk as Record<string, unknown>).Room = origRoom;
+      expect(connect).toHaveBeenCalledTimes(7);
+      expect(result.current.connectionState).toBe('failed');
+    } finally {
+      // Restore
+      (lk as Record<string, unknown>).Room = origRoom;
+      vi.useRealTimers();
+    }
   });
 
   // -----------------------------------------------------------------------
