@@ -199,6 +199,31 @@ export function parseCpdJson(raw: string): StaticAnalysisDuplication[] {
   });
 }
 
+export function parseCpdXml(raw: string): StaticAnalysisDuplication[] {
+  return Array.from(raw.matchAll(/<duplication\b([^>]*)>([\s\S]*?)<\/duplication>/g)).map(
+    (match) => {
+      const duplicationAttrs = parseXmlAttributes(match[1] ?? '');
+      const occurrences = Array.from(match[2]?.matchAll(/<file\b([^>]*)\/>/g) ?? []).map(
+        (fileMatch) => {
+          const fileAttrs = parseXmlAttributes(fileMatch[1] ?? '');
+          return {
+            file: fileAttrs.path ?? null,
+            startLine: asNumber(fileAttrs.line) ?? 0,
+            endLine: asNumber(fileAttrs.endline),
+          };
+        },
+      );
+
+      return {
+        tool: 'pmd-cpd',
+        lines: asNumber(duplicationAttrs.lines) ?? 0,
+        tokens: asNumber(duplicationAttrs.tokens),
+        occurrences,
+      };
+    },
+  );
+}
+
 function normalizeCppcheckSeverity(value: unknown): StaticAnalysisSeverity {
   const raw = asString(value)?.toLowerCase() ?? '';
   if (raw === 'error') return 'error';

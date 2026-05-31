@@ -52,6 +52,11 @@ export class S3StorageAdapter implements IStorageService, OnModuleDestroy {
       },
       forcePathStyle: validatedConfig.forcePathStyle ?? true,
       maxAttempts: validatedConfig.maxAttempts ?? 3,
+      // SeaweedFS is S3-compatible but does not fully support SDK v3's
+      // optional request checksum query/header behavior for presigned PUTs.
+      // Restrict checksum behavior to required operations only.
+      requestChecksumCalculation: 'WHEN_REQUIRED',
+      responseChecksumValidation: 'WHEN_REQUIRED',
     };
 
     this.client = new S3Client(clientConfig);
