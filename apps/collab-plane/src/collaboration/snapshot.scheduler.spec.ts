@@ -143,6 +143,20 @@ describe('SnapshotScheduler', () => {
       await expect(scheduler.takeSnapshot('room-1', 'session_end')).resolves.toBeUndefined();
     });
 
+    it('GIVEN strict session_end snapshot times out WHEN taking snapshot THEN does not rethrow', async () => {
+      roomRegistry.createRoom('room-1', { language: 'python' });
+      docStore.createDoc('room-1', { initialContentByLanguage: { python: 'const x = 1;' } });
+      const timeoutError = new Error(
+        'Request timed out: POST http://control-plane:3000/internal/collab/snapshot',
+      );
+      timeoutError.name = 'TimeoutError';
+      vi.mocked(callbackClient.notifySnapshotReady).mockRejectedValueOnce(timeoutError);
+
+      await expect(
+        scheduler.takeSnapshot('room-1', 'session_end', { strict: true }),
+      ).resolves.toBeUndefined();
+    });
+
     it('GIVEN final snapshot callback throws WHEN taking strict session_end snapshot THEN rethrows', async () => {
       roomRegistry.createRoom('room-1', { language: 'python' });
       docStore.createDoc('room-1', { initialContentByLanguage: { python: 'const x = 1;' } });

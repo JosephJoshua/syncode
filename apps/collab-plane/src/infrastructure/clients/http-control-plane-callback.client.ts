@@ -19,26 +19,28 @@ import ky, { type KyInstance } from 'ky';
 export class HttpControlPlaneCallbackClient implements IControlPlaneCallbackClient {
   private readonly logger = new Logger(HttpControlPlaneCallbackClient.name);
   private readonly client: KyInstance;
+  private readonly snapshotRequestTimeoutMs: number;
 
-  constructor(controlPlaneUrl: string, internalSecret: string) {
+  constructor(controlPlaneUrl: string, internalSecret: string, snapshotRequestTimeoutMs = 12_000) {
+    this.snapshotRequestTimeoutMs = snapshotRequestTimeoutMs;
     this.client = ky.create({
       prefixUrl: controlPlaneUrl,
       timeout: 5_000,
       headers: {
         'X-Internal-Secret': internalSecret,
       },
-      retry: {
-        limit: 3,
-        methods: ['post'],
-        backoffLimit: 4_000,
-      },
+      retry: 0,
     });
   }
 
   async notifySnapshotReady(payload: SnapshotReadyPayload): Promise<void> {
     try {
       const response = await this.client
-        .post(CONTROL_INTERNAL.SNAPSHOT_READY.route, { json: payload })
+        .post(CONTROL_INTERNAL.SNAPSHOT_READY.route, {
+          json: payload,
+          timeout: this.snapshotRequestTimeoutMs,
+          retry: 0,
+        })
         .json<SnapshotReadyResponse>();
       if (!response.success) {
         throw new Error(`Control-plane rejected code snapshot for room ${payload.roomId}`);
@@ -104,7 +106,7 @@ export class HttpControlPlaneCallbackClient implements IControlPlaneCallbackClie
     try {
       const path = buildUrl(CONTROL_INTERNAL.PERSIST_DOC_SNAPSHOT.route, { roomId });
       const response = await this.client
-        .post(path, { json: payload })
+        .post(path, { json: payload, timeout: this.snapshotRequestTimeoutMs, retry: 0 })
         .json<PersistDocSnapshotResponse>();
       if (!response.success) {
         throw new Error(`Control-plane rejected doc snapshot for room ${roomId}`);

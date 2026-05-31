@@ -40,12 +40,16 @@ const DOC_SNAPSHOT_PAYLOAD: PersistDocSnapshotPayload = {
 
 // Mock ky at the module level
 const mockPost = vi.fn();
+const mockCreate = vi.fn();
 
 vi.mock('ky', () => ({
   default: {
-    create: () => ({
-      post: mockPost,
-    }),
+    create: (...args: unknown[]) => {
+      mockCreate(...args);
+      return {
+        post: mockPost,
+      };
+    },
   },
 }));
 
@@ -53,6 +57,7 @@ describe('HttpControlPlaneCallbackClient', () => {
   let client: HttpControlPlaneCallbackClient;
 
   beforeEach(() => {
+    mockCreate.mockReset();
     client = new HttpControlPlaneCallbackClient(CONTROL_PLANE_URL, INTERNAL_SECRET);
     mockPost.mockReset();
   });
@@ -86,6 +91,8 @@ describe('HttpControlPlaneCallbackClient', () => {
 
     expect(mockPost).toHaveBeenCalledWith(CONTROL_INTERNAL.SNAPSHOT_READY.route, {
       json: SNAPSHOT_READY_PAYLOAD,
+      timeout: 12_000,
+      retry: 0,
     });
   });
 
@@ -107,6 +114,25 @@ describe('HttpControlPlaneCallbackClient', () => {
     await expect(client.notifySnapshotReady(SNAPSHOT_READY_PAYLOAD)).rejects.toThrow(
       'Connection refused',
     );
+  });
+
+  it('GIVEN constructor timeout override WHEN notifying snapshot ready THEN uses override timeout', async () => {
+    const customClient = new HttpControlPlaneCallbackClient(
+      CONTROL_PLANE_URL,
+      INTERNAL_SECRET,
+      20_000,
+    );
+    mockPost.mockReturnValueOnce({
+      json: vi.fn().mockResolvedValueOnce({ success: true }),
+    });
+
+    await customClient.notifySnapshotReady(SNAPSHOT_READY_PAYLOAD);
+
+    expect(mockPost).toHaveBeenCalledWith(CONTROL_INTERNAL.SNAPSHOT_READY.route, {
+      json: SNAPSHOT_READY_PAYLOAD,
+      timeout: 20_000,
+      retry: 0,
+    });
   });
 
   it('GIVEN reachable control-plane WHEN heartbeating participants THEN posts to heartbeat endpoint and returns body', async () => {
@@ -162,6 +188,8 @@ describe('HttpControlPlaneCallbackClient', () => {
 
     expect(mockPost).toHaveBeenCalledWith('internal/rooms/room-abc/doc-snapshot', {
       json: DOC_SNAPSHOT_PAYLOAD,
+      timeout: 12_000,
+      retry: 0,
     });
   });
 
@@ -182,6 +210,16 @@ describe('HttpControlPlaneCallbackClient', () => {
 
     await expect(client.persistDocSnapshot('room-abc', DOC_SNAPSHOT_PAYLOAD)).rejects.toThrow(
       'Connection refused',
+    );
+  });
+
+  it('GIVEN client initialized WHEN creating ky client THEN sets short default timeout and disables retries', () => {
+    expect(mockCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        timeout: 5_000,
+        retry: 0,
+        headers: { 'X-Internal-Secret': INTERNAL_SECRET },
+      }),
     );
   });
 });

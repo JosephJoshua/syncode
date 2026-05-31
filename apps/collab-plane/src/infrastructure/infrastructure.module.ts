@@ -12,7 +12,14 @@ import { HttpControlPlaneCallbackClient } from './clients/http-control-plane-cal
       useFactory: (config: ConfigService<EnvConfig>) => {
         const controlPlaneUrl = config.get('CONTROL_PLANE_URL', { infer: true })!;
         const internalSecret = config.get('INTERNAL_CALLBACK_SECRET', { infer: true })!;
-        return new HttpControlPlaneCallbackClient(controlPlaneUrl, internalSecret);
+        const snapshotTimeoutMs = config.get('CONTROL_PLANE_SNAPSHOT_TIMEOUT_MS', {
+          infer: true,
+        })!;
+        return new HttpControlPlaneCallbackClient(
+          controlPlaneUrl,
+          internalSecret,
+          snapshotTimeoutMs,
+        );
       },
       inject: [ConfigService],
     },
