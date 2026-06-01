@@ -100,6 +100,7 @@ describe('RoomsService', () => {
   let mockCollabClient: ReturnType<typeof createMockCollabClient>;
   let mockMediaService: ReturnType<typeof createMockMediaService>;
   let mockAgentDispatchService: ReturnType<typeof createMockAgentDispatchService>;
+  let mockConfigService: ReturnType<typeof createMockConfigService>;
   let cacheService: InMemoryCacheService;
 
   beforeEach(async () => {
@@ -108,6 +109,7 @@ describe('RoomsService', () => {
     mockCollabClient = createMockCollabClient();
     mockMediaService = createMockMediaService();
     mockAgentDispatchService = createMockAgentDispatchService();
+    mockConfigService = createMockConfigService({ AI_INTERVIEWER_LIVEKIT_ENABLED: true });
     cacheService = new InMemoryCacheService();
 
     const module = await Test.createTestingModule({
@@ -122,10 +124,7 @@ describe('RoomsService', () => {
         { provide: STORAGE_SERVICE, useValue: createMockStorageService() },
         { provide: CACHE_SERVICE, useValue: cacheService },
         { provide: JwtService, useValue: createMockJwtService('mock-collab-token') },
-        {
-          provide: ConfigService,
-          useValue: createMockConfigService({ AI_INTERVIEWER_LIVEKIT_ENABLED: true }),
-        },
+        { provide: ConfigService, useValue: mockConfigService },
         { provide: SessionReportsService, useValue: createMockSessionReportsService() },
       ],
     }).compile();
@@ -281,12 +280,12 @@ describe('RoomsService', () => {
       );
     });
 
-    it('GIVEN recovery refresh after startup grace with running AI interviewer job WHEN generating media token THEN preserves it', async () => {
+    it('GIVEN recovery refresh after reconnect grace with running AI interviewer job WHEN generating media token THEN replaces it', async () => {
       mockAiRoomContext();
       await cacheService.set(`ai-interviewer-dispatch:${ROOM_ROW.id}`, 'running-dispatch-id');
       await cacheService.set(
         `ai-interviewer-dispatch-started-at:${ROOM_ROW.id}`,
-        Date.now() - 5 * 60_000,
+        Date.now() - 45_000,
       );
       mockAgentDispatchService.listDispatch.mockResolvedValueOnce([
         {
@@ -296,20 +295,62 @@ describe('RoomsService', () => {
           jobs: [{ id: 'job-1', status: 'running' }],
         },
       ]);
+      mockAgentDispatchService.createDispatch.mockResolvedValueOnce({
+        dispatchId: 'replacement-dispatch-id',
+        roomName: ROOM_ROW.id,
+        agentName: 'syncode-ai-interviewer',
+      });
 
       await service.generateMediaToken(ROOM_ROW.id, HOST_ID, {
         recoverAiInterviewerDispatch: true,
       });
 
-      expect(mockMediaService.listParticipants).not.toHaveBeenCalled();
-      expect(mockAgentDispatchService.deleteDispatch).not.toHaveBeenCalled();
-      expect(mockAgentDispatchService.createDispatch).not.toHaveBeenCalled();
-      expect(await cacheService.get(`ai-interviewer-dispatch:${ROOM_ROW.id}`)).toBe(
+      expect(mockAgentDispatchService.deleteDispatch).toHaveBeenCalledWith(
         'running-dispatch-id',
+        ROOM_ROW.id,
+      );
+      expect(mockAgentDispatchService.createDispatch).toHaveBeenCalled();
+      expect(await cacheService.get(`ai-interviewer-dispatch:${ROOM_ROW.id}`)).toBe(
+        'replacement-dispatch-id',
       );
     });
 
-    it('GIVEN recovery refresh during an extended AI interviewer startup grace WHEN generating media token THEN preserves the slow in-flight dispatch', async () => {
+    it('GIVEN stale running AI interviewer dispatch without active agent WHEN generating media token THEN replaces it', async () => {
+      mockAiRoomContext();
+      await cacheService.set(`ai-interviewer-dispatch:${ROOM_ROW.id}`, 'stale-running-dispatch-id');
+      await cacheService.set(
+        `ai-interviewer-dispatch-started-at:${ROOM_ROW.id}`,
+        Date.now() - 120_000,
+      );
+      mockAgentDispatchService.listDispatch.mockResolvedValueOnce([
+        {
+          dispatchId: 'stale-running-dispatch-id',
+          roomName: ROOM_ROW.id,
+          agentName: 'syncode-ai-interviewer',
+          jobs: [{ id: 'job-1', status: 'running' }],
+        },
+      ]);
+      mockMediaService.listParticipants.mockResolvedValueOnce([]);
+      mockAgentDispatchService.createDispatch.mockResolvedValueOnce({
+        dispatchId: 'replacement-dispatch-id',
+        roomName: ROOM_ROW.id,
+        agentName: 'syncode-ai-interviewer',
+      });
+
+      await service.generateMediaToken(ROOM_ROW.id, HOST_ID);
+
+      expect(mockMediaService.listParticipants).toHaveBeenCalledWith(ROOM_ROW.id);
+      expect(mockAgentDispatchService.deleteDispatch).toHaveBeenCalledWith(
+        'stale-running-dispatch-id',
+        ROOM_ROW.id,
+      );
+      expect(mockAgentDispatchService.createDispatch).toHaveBeenCalled();
+      expect(await cacheService.get(`ai-interviewer-dispatch:${ROOM_ROW.id}`)).toBe(
+        'replacement-dispatch-id',
+      );
+    });
+
+    it('GIVEN recovery refresh after reconnect grace with empty AI interviewer job state WHEN generating media token THEN replaces it', async () => {
       mockAiRoomContext();
       await cacheService.set(`ai-interviewer-dispatch:${ROOM_ROW.id}`, 'slow-dispatch-id');
       await cacheService.set(
@@ -323,16 +364,23 @@ describe('RoomsService', () => {
           agentName: 'syncode-ai-interviewer',
         },
       ]);
+      mockAgentDispatchService.createDispatch.mockResolvedValueOnce({
+        dispatchId: 'replacement-dispatch-id',
+        roomName: ROOM_ROW.id,
+        agentName: 'syncode-ai-interviewer',
+      });
 
       await service.generateMediaToken(ROOM_ROW.id, HOST_ID, {
         recoverAiInterviewerDispatch: true,
       });
 
-      expect(mockMediaService.listParticipants).not.toHaveBeenCalled();
-      expect(mockAgentDispatchService.deleteDispatch).not.toHaveBeenCalled();
-      expect(mockAgentDispatchService.createDispatch).not.toHaveBeenCalled();
-      expect(await cacheService.get(`ai-interviewer-dispatch:${ROOM_ROW.id}`)).toBe(
+      expect(mockAgentDispatchService.deleteDispatch).toHaveBeenCalledWith(
         'slow-dispatch-id',
+        ROOM_ROW.id,
+      );
+      expect(mockAgentDispatchService.createDispatch).toHaveBeenCalled();
+      expect(await cacheService.get(`ai-interviewer-dispatch:${ROOM_ROW.id}`)).toBe(
+        'replacement-dispatch-id',
       );
     });
 
@@ -363,6 +411,89 @@ describe('RoomsService', () => {
       expect(await cacheService.get(`ai-interviewer-dispatch:${ROOM_ROW.id}`)).toBe(
         'pending-dispatch-id',
       );
+    });
+  });
+
+  describe('generateAiInterviewerSimliAvatarSession', () => {
+    function mockAiRoomContext() {
+      dbSetup.mocks.mockSelectWhere
+        .mockResolvedValueOnce([{ ...ROOM_ROW, mode: 'ai' as const }])
+        .mockResolvedValueOnce([{ userId: HOST_ID, role: 'candidate', isActive: true }]);
+    }
+
+    it('GIVEN Simli is not configured WHEN creating an avatar session THEN returns disabled', async () => {
+      mockAiRoomContext();
+      const fetchSpy = vi.spyOn(globalThis, 'fetch');
+
+      const result = await service.generateAiInterviewerSimliAvatarSession(ROOM_ROW.id, HOST_ID);
+
+      expect(result).toEqual({ enabled: false });
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it('GIVEN Simli is configured WHEN creating an avatar session THEN calls compose token API server-side', async () => {
+      mockAiRoomContext();
+      mockConfigService.get.mockImplementation((key: string) => {
+        const values: Record<string, unknown> = {
+          SIMLI_API_KEY: 'simli-key',
+          SIMLI_API_BASE_URL: 'https://api.simli.ai',
+          SIMLI_WS_BASE_URL: 'wss://api.simli.ai',
+          SIMLI_FACE_ID: 'face-1',
+          SIMLI_MAX_SESSION_LENGTH_SECONDS: 900,
+          SIMLI_MAX_IDLE_SECONDS: 120,
+          SIMLI_MODEL: 'fasttalk',
+          SIMLI_AUDIO_BUFFER_SIZE: 4096,
+        };
+        return values[key];
+      });
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+        new Response(JSON.stringify({ session_token: 'simli-session-token' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+      mockMediaService.generateToken.mockResolvedValueOnce({
+        token: 'avatar-livekit-token',
+        url: 'ws://localhost:7880',
+      });
+
+      const result = await service.generateAiInterviewerSimliAvatarSession(ROOM_ROW.id, HOST_ID);
+
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+      expect(url).toBe('https://api.simli.ai/compose/token');
+      expect(init.method).toBe('POST');
+      expect(init.headers).toEqual({
+        'Content-Type': 'application/json',
+        'x-simli-api-key': 'simli-key',
+      });
+      expect(JSON.parse(init.body as string)).toEqual({
+        faceId: 'face-1',
+        handleSilence: false,
+        maxSessionLength: 900,
+        maxIdleTime: 120,
+        model: 'fasttalk',
+      });
+      expect(result).toEqual({
+        enabled: true,
+        sessionToken: 'simli-session-token',
+        wsUrl: 'wss://api.simli.ai',
+        audioBufferSize: 4096,
+        liveKitToken: 'avatar-livekit-token',
+        liveKitUrl: 'ws://localhost:7880',
+        avatarIdentity: 'ai-interviewer-avatar',
+      });
+      expect(mockMediaService.generateToken).toHaveBeenCalledWith({
+        roomName: ROOM_ROW.id,
+        participantIdentity: 'ai-interviewer-avatar',
+        participantName: 'AI Interviewer Avatar',
+        participantAttributes: {
+          'lk.publish_on_behalf': 'ai-interviewer',
+        },
+        canPublish: true,
+        canSubscribe: false,
+        ttlSeconds: 14400,
+      });
     });
   });
 });
