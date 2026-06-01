@@ -1623,7 +1623,7 @@ describe('generateMediaToken', () => {
     );
   });
 
-  it('GIVEN force refresh during AI interviewer startup grace WHEN generating media token THEN keeps the in-flight dispatch', async () => {
+  it('GIVEN recovery refresh during AI interviewer startup grace WHEN generating media token THEN keeps the in-flight dispatch', async () => {
     const host = await insertUser(db);
     const room = await insertRoom(db, host.id, { mode: 'ai' });
     await insertParticipant(db, room.id, host.id, 'candidate');
@@ -1643,7 +1643,7 @@ describe('generateMediaToken', () => {
     });
 
     await service.generateMediaToken(room.id, host.id, {
-      refreshAiInterviewerDispatch: true,
+      recoverAiInterviewerDispatch: true,
     });
 
     expect(mockMediaService.listParticipants).not.toHaveBeenCalled();
@@ -1722,7 +1722,7 @@ describe('generateMediaToken', () => {
     expect(await cacheService.get(`ai-interviewer-dispatch:${room.id}`)).toBe('live-dispatch-id');
   });
 
-  it('GIVEN force refresh with running AI interviewer dispatch WHEN generating media token THEN preserves the dispatch', async () => {
+  it('GIVEN recovery refresh with running AI interviewer dispatch WHEN generating media token THEN preserves the dispatch', async () => {
     const host = await insertUser(db);
     const room = await insertRoom(db, host.id, { mode: 'ai' });
     await insertParticipant(db, room.id, host.id, 'candidate');
@@ -1741,7 +1741,7 @@ describe('generateMediaToken', () => {
     });
 
     await service.generateMediaToken(room.id, host.id, {
-      refreshAiInterviewerDispatch: true,
+      recoverAiInterviewerDispatch: true,
     });
 
     expect(mockAgentDispatchService.deleteDispatch).not.toHaveBeenCalled();

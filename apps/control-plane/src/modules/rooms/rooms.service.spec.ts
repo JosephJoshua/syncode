@@ -256,7 +256,7 @@ describe('RoomsService', () => {
       );
     });
 
-    it('GIVEN force refresh during AI interviewer startup grace WHEN generating media token THEN preserves the in-flight dispatch', async () => {
+    it('GIVEN recovery refresh during AI interviewer startup grace WHEN generating media token THEN preserves the in-flight dispatch', async () => {
       mockAiRoomContext();
       await cacheService.set(`ai-interviewer-dispatch:${ROOM_ROW.id}`, 'pending-dispatch-id');
       await cacheService.set(`ai-interviewer-dispatch-started-at:${ROOM_ROW.id}`, Date.now());
@@ -270,7 +270,7 @@ describe('RoomsService', () => {
       ]);
 
       await service.generateMediaToken(ROOM_ROW.id, HOST_ID, {
-        refreshAiInterviewerDispatch: true,
+        recoverAiInterviewerDispatch: true,
       });
 
       expect(mockMediaService.listParticipants).not.toHaveBeenCalled();
@@ -281,7 +281,7 @@ describe('RoomsService', () => {
       );
     });
 
-    it('GIVEN force refresh after startup grace with running AI interviewer job WHEN generating media token THEN preserves it', async () => {
+    it('GIVEN recovery refresh after startup grace with running AI interviewer job WHEN generating media token THEN preserves it', async () => {
       mockAiRoomContext();
       await cacheService.set(`ai-interviewer-dispatch:${ROOM_ROW.id}`, 'running-dispatch-id');
       await cacheService.set(
@@ -298,7 +298,7 @@ describe('RoomsService', () => {
       ]);
 
       await service.generateMediaToken(ROOM_ROW.id, HOST_ID, {
-        refreshAiInterviewerDispatch: true,
+        recoverAiInterviewerDispatch: true,
       });
 
       expect(mockMediaService.listParticipants).not.toHaveBeenCalled();
@@ -309,7 +309,7 @@ describe('RoomsService', () => {
       );
     });
 
-    it('GIVEN force refresh during an extended AI interviewer startup grace WHEN generating media token THEN preserves the slow in-flight dispatch', async () => {
+    it('GIVEN recovery refresh during an extended AI interviewer startup grace WHEN generating media token THEN preserves the slow in-flight dispatch', async () => {
       mockAiRoomContext();
       await cacheService.set(`ai-interviewer-dispatch:${ROOM_ROW.id}`, 'slow-dispatch-id');
       await cacheService.set(
@@ -325,7 +325,7 @@ describe('RoomsService', () => {
       ]);
 
       await service.generateMediaToken(ROOM_ROW.id, HOST_ID, {
-        refreshAiInterviewerDispatch: true,
+        recoverAiInterviewerDispatch: true,
       });
 
       expect(mockMediaService.listParticipants).not.toHaveBeenCalled();

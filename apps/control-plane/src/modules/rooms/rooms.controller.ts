@@ -704,7 +704,8 @@ export class RoomsController {
   @ApiQuery({
     name: 'refreshAiInterviewerDispatch',
     required: false,
-    description: 'Force-refresh the AI interviewer LiveKit dispatch for recovery',
+    description:
+      'Recheck AI interviewer dispatch health for recovery. Pending/running workers are preserved.',
   })
   @ApiResponse({ status: 200, type: MediaTokenResponseDto, description: 'Token generated' })
   @ApiResponse({
@@ -725,7 +726,7 @@ export class RoomsController {
     @Query('refreshAiInterviewerDispatch') refreshAiInterviewerDispatch?: string,
   ): Promise<MediaTokenResponseDto> {
     const result = await this.roomsService.generateMediaToken(id, user.id, {
-      refreshAiInterviewerDispatch:
+      recoverAiInterviewerDispatch:
         refreshAiInterviewerDispatch === 'true' || refreshAiInterviewerDispatch === '1',
     });
     return { ...result, expiresAt: result.expiresAt.toISOString() };

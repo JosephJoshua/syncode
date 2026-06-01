@@ -2090,7 +2090,7 @@ export class RoomsService implements OnModuleInit {
   async generateMediaToken(
     roomId: string,
     userId: string,
-    options: { refreshAiInterviewerDispatch?: boolean } = {},
+    options: { recoverAiInterviewerDispatch?: boolean } = {},
   ): Promise<MediaTokenResult> {
     const [room, participant] = await this.getRoomContext(roomId, userId);
 
@@ -2124,7 +2124,7 @@ export class RoomsService implements OnModuleInit {
     if (room.mode === 'ai') {
       try {
         await this.ensureAiInterviewerDispatch(roomId, userId, {
-          forceRefresh: options.refreshAiInterviewerDispatch ?? false,
+          recoveryRequested: options.recoverAiInterviewerDispatch ?? false,
         });
       } catch (error) {
         this.logger.warn(
@@ -4225,7 +4225,7 @@ export class RoomsService implements OnModuleInit {
   private findReusableAiInterviewerDispatch(
     dispatches: AgentDispatchInfo[],
     startedAt: number | null,
-    options: { forceRefresh?: boolean; preferredDispatchId?: string } = {},
+    options: { preferredDispatchId?: string } = {},
   ): AgentDispatchInfo | null {
     const orderedDispatches = this.orderAiInterviewerDispatches(
       dispatches,
@@ -4358,7 +4358,7 @@ export class RoomsService implements OnModuleInit {
   private async ensureAiInterviewerDispatch(
     roomId: string,
     participantUserId: string,
-    options: { forceRefresh?: boolean } = {},
+    options: { recoveryRequested?: boolean } = {},
   ): Promise<void> {
     if (!this.isAiInterviewerDispatchEnabled()) {
       return;
@@ -4368,7 +4368,7 @@ export class RoomsService implements OnModuleInit {
     const startedAtKey = this.aiInterviewerDispatchStartedAtKey(roomId);
     const agentName = this.resolveAiInterviewerAgentName();
     if (
-      !options.forceRefresh &&
+      !options.recoveryRequested &&
       (await this.hasCachedLiveAiInterviewerDispatch(cacheKey, startedAtKey, roomId, agentName))
     ) {
       return;
@@ -4393,7 +4393,7 @@ export class RoomsService implements OnModuleInit {
       ) {
         await delay(RoomsService.AI_INTERVIEWER_DISPATCH_LOCK_POLL_MS);
         if (
-          !options.forceRefresh &&
+          !options.recoveryRequested &&
           (await this.hasCachedLiveAiInterviewerDispatch(cacheKey, startedAtKey, roomId, agentName))
         ) {
           return;
@@ -4418,7 +4418,7 @@ export class RoomsService implements OnModuleInit {
 
     try {
       if (
-        !options.forceRefresh &&
+        !options.recoveryRequested &&
         (await this.hasCachedLiveAiInterviewerDispatch(cacheKey, startedAtKey, roomId, agentName))
       ) {
         return;
@@ -4429,9 +4429,7 @@ export class RoomsService implements OnModuleInit {
         (dispatch) => dispatch.agentName === agentName,
       );
       const startedAt = await this.cacheService.get<number>(startedAtKey);
-      const existing = this.findReusableAiInterviewerDispatch(matchingDispatches, startedAt, {
-        forceRefresh: options.forceRefresh,
-      });
+      const existing = this.findReusableAiInterviewerDispatch(matchingDispatches, startedAt);
       if (!existing && matchingDispatches.length > 0) {
         await this.deleteAiInterviewerDispatches(roomId, matchingDispatches);
         this.logger.log(`Replacing terminal AI interviewer dispatch for room ${roomId}`);
@@ -4452,7 +4450,7 @@ export class RoomsService implements OnModuleInit {
         }
 
         if (
-          !options.forceRefresh &&
+          !options.recoveryRequested &&
           !this.hasTerminalAiInterviewerDispatchJob(existing) &&
           (await this.hasLiveAiInterviewerParticipant(roomId))
         ) {
@@ -4470,7 +4468,7 @@ export class RoomsService implements OnModuleInit {
 
         await this.deleteAiInterviewerDispatches(roomId, matchingDispatches);
         this.logger.log(
-          `${options.forceRefresh ? 'Force-refreshing' : 'Replacing stale'} AI interviewer dispatch for room ${roomId}`,
+          `${options.recoveryRequested ? 'Recovery-refreshing stale' : 'Replacing stale'} AI interviewer dispatch for room ${roomId}`,
         );
       }
 

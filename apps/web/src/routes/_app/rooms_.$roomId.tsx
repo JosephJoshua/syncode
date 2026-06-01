@@ -505,7 +505,7 @@ function RoomPage() {
   }, [room, stableCurrentUserId]);
 
   const mediaCredsRef = useRef<{ token: string; url: string } | null>(null);
-  const forceRefreshAiInterviewerDispatchRef = useRef(false);
+  const recoverAiInterviewerDispatchRef = useRef(false);
   const aiInterviewerRecoveryAttemptRef = useRef(0);
   const lastMediaRoomIdRef = useRef(roomId);
   const [mediaReady, setMediaReady] = useState(false);
@@ -527,7 +527,7 @@ function RoomPage() {
     }
 
     lastMediaRoomIdRef.current = roomId;
-    forceRefreshAiInterviewerDispatchRef.current = false;
+    recoverAiInterviewerDispatchRef.current = false;
     aiInterviewerRecoveryAttemptRef.current = 0;
     mediaCredsRef.current = null;
     setMediaReady(false);
@@ -552,16 +552,16 @@ function RoomPage() {
     };
 
     const fetchToken = () => {
-      const forceRefreshAiInterviewerDispatch = forceRefreshAiInterviewerDispatchRef.current;
+      const recoverAiInterviewerDispatch = recoverAiInterviewerDispatchRef.current;
       api(CONTROL_API.ROOMS.MEDIA_TOKEN, {
         params: { id: roomId },
-        ...(forceRefreshAiInterviewerDispatch
+        ...(recoverAiInterviewerDispatch
           ? { searchParams: { refreshAiInterviewerDispatch: true } }
           : {}),
       })
         .then((result) => {
           if (disposed) return;
-          forceRefreshAiInterviewerDispatchRef.current = false;
+          recoverAiInterviewerDispatchRef.current = false;
           mediaCredsRef.current = { token: result.token, url: result.url };
           setMediaReady(true);
 
@@ -571,7 +571,7 @@ function RoomPage() {
         })
         .catch((err) => {
           if (disposed) return;
-          forceRefreshAiInterviewerDispatchRef.current = false;
+          recoverAiInterviewerDispatchRef.current = false;
           console.warn('[LiveKit] Failed to fetch media token:', err);
         });
     };
@@ -675,7 +675,7 @@ function RoomPage() {
       }
       aiInterviewerRecoveryAttemptRef.current += 1;
       console.warn('[LiveKit] AI interviewer did not appear; refreshing AI interviewer dispatch');
-      forceRefreshAiInterviewerDispatchRef.current = true;
+      recoverAiInterviewerDispatchRef.current = true;
       mediaCredsRef.current = null;
       setMediaReady(false);
       setMediaTokenRefreshNonce((value) => value + 1);

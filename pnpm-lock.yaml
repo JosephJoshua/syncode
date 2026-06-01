@@ -42,7 +42,7 @@ importers:
         specifier: 1.4.4
         version: 1.4.4(@livekit/agents@1.4.4(@livekit/rtc-node@0.13.28)(typescript@5.9.2)(zod@4.3.6))(@livekit/rtc-node@0.13.28)(zod@4.3.6)
       '@livekit/agents-plugin-silero':
-        specifier: ^1.4.4
+        specifier: 1.4.4
         version: 1.4.4(@livekit/agents@1.4.4(@livekit/rtc-node@0.13.28)(typescript@5.9.2)(zod@4.3.6))(@livekit/rtc-node@0.13.28)
       '@livekit/plugins-ai-coustics':
         specifier: ^0.2.15
@@ -117,8 +117,8 @@ importers:
         specifier: ^7.8.2
         version: 7.8.2
       undici:
-        specifier: ^8.3.0
-        version: 8.3.0
+        specifier: ^6.26.0
+        version: 6.26.0
       ws:
         specifier: ^8.18.2
         version: 8.19.0
@@ -588,6 +588,8 @@ importers:
       vitest:
         specifier: ^3.0.0
         version: 3.2.4(@types/debug@4.1.13)(@types/node@25.3.3)(jiti@2.6.1)(jsdom@28.1.0(@noble/hashes@1.8.0))(lightningcss@1.31.1)(msw@2.12.14(@types/node@25.3.3)(typescript@5.9.2))(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2)
+
+  apps/stress-test: {}
 
   apps/web:
     dependencies:
@@ -9547,13 +9549,13 @@ packages:
   undici-types@7.18.2:
     resolution: {integrity: sha512-AsuCzffGHJybSaRrmr5eHr81mwJU3kjw6M+uprWvCXiNeN9SOGwQ3Jn8jb8m3Z6izVgknn1R0FTCEAP2QrLY/w==}
 
+  undici@6.26.0:
+    resolution: {integrity: sha512-4yqz8a3n5HmGTlsbADNtr/dJlhkh/55Rq798G6ibiULcXbDtaLpTl1pvdqcbFfeoj3iSi52lePFM7h9H21cw/A==}
+    engines: {node: '>=18.17'}
+
   undici@7.24.7:
     resolution: {integrity: sha512-H/nlJ/h0ggGC+uRL3ovD+G0i4bqhvsDOpbDv7At5eFLlj2b41L8QliGbnl2H7SnDiYhENphh1tQFJZf+MyfLsQ==}
     engines: {node: '>=20.18.1'}
-
-  undici@8.3.0:
-    resolution: {integrity: sha512-TkUDgb6tl7KOGZ+7e8E3d2FYgUQgF6z5YypqjWmixVQSQERFcVrVg0ySADm2LVLRh5ljAaHTCR5Fmz3Q34rB7Q==}
-    engines: {node: '>=22.19.0'}
 
   unicorn-magic@0.3.0:
     resolution: {integrity: sha512-+QBBXBCvifc56fsbuxZQ6Sic3wqqc3WWaqxs58gvJrcOuN83HGTCwz3oS5phzU9LthRNE9VrJCFCLUgHeeFnfA==}
@@ -19787,9 +19789,9 @@ snapshots:
 
   undici-types@7.18.2: {}
 
-  undici@7.24.7: {}
+  undici@6.26.0: {}
 
-  undici@8.3.0: {}
+  undici@7.24.7: {}
 
   unicorn-magic@0.3.0: {}
 
