@@ -351,7 +351,7 @@ function SessionSelectorPopover({
   return (
     <Popover open={isOpen} onOpenChange={onOpenChange}>
       <PopoverTrigger asChild>
-        <Button className="gap-2 bg-emerald-600 text-white hover:bg-emerald-500">
+        <Button className="gap-2">
           <Plus className="size-4" />
           {t('sessionComparison:actions.compareSessions')}
         </Button>
