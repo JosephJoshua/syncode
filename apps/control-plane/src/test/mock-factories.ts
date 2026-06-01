@@ -57,6 +57,7 @@ export function createMockMediaService() {
     deleteRoom: vi.fn().mockResolvedValue(undefined),
     listRooms: vi.fn(),
     getRoomInfo: vi.fn(),
+    listParticipants: vi.fn().mockResolvedValue([]),
     generateToken: vi.fn(),
     removeParticipant: vi.fn(),
     muteParticipantTrack: vi.fn(),

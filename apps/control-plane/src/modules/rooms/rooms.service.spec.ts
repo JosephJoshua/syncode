@@ -89,7 +89,7 @@ function createMockDb() {
 
   return {
     db: { insert: mockInsert, select: mockSelect, transaction: mockTransaction },
-    mocks: { mockReturning, mockSelect },
+    mocks: { mockReturning, mockSelect, mockSelectWhere },
   };
 }
 
@@ -100,6 +100,7 @@ describe('RoomsService', () => {
   let mockCollabClient: ReturnType<typeof createMockCollabClient>;
   let mockMediaService: ReturnType<typeof createMockMediaService>;
   let mockAgentDispatchService: ReturnType<typeof createMockAgentDispatchService>;
+  let cacheService: InMemoryCacheService;
 
   beforeEach(async () => {
     dbSetup = createMockDb();
@@ -107,6 +108,7 @@ describe('RoomsService', () => {
     mockCollabClient = createMockCollabClient();
     mockMediaService = createMockMediaService();
     mockAgentDispatchService = createMockAgentDispatchService();
+    cacheService = new InMemoryCacheService();
 
     const module = await Test.createTestingModule({
       providers: [
@@ -118,9 +120,12 @@ describe('RoomsService', () => {
         { provide: MEDIA_SERVICE, useValue: mockMediaService },
         { provide: AGENT_DISPATCH_SERVICE, useValue: mockAgentDispatchService },
         { provide: STORAGE_SERVICE, useValue: createMockStorageService() },
-        { provide: CACHE_SERVICE, useValue: new InMemoryCacheService() },
+        { provide: CACHE_SERVICE, useValue: cacheService },
         { provide: JwtService, useValue: createMockJwtService('mock-collab-token') },
-        { provide: ConfigService, useValue: createMockConfigService() },
+        {
+          provide: ConfigService,
+          useValue: createMockConfigService({ AI_INTERVIEWER_LIVEKIT_ENABLED: true }),
+        },
         { provide: SessionReportsService, useValue: createMockSessionReportsService() },
       ],
     }).compile();
@@ -215,6 +220,149 @@ describe('RoomsService', () => {
 
       expect(result.collab).toBeNull();
       expect(result.mediaDeleted).toBe(true);
+    });
+  });
+
+  describe('generateMediaToken', () => {
+    function mockAiRoomContext() {
+      dbSetup.mocks.mockSelectWhere
+        .mockResolvedValueOnce([{ ...ROOM_ROW, mode: 'ai' as const }])
+        .mockResolvedValueOnce([{ userId: HOST_ID, role: 'candidate', isActive: true }]);
+      mockMediaService.generateToken.mockResolvedValue({
+        token: 'media-token',
+        url: 'ws://localhost:7880',
+      });
+    }
+
+    it('GIVEN recently created AI interviewer dispatch without active agent WHEN generating media token THEN reuses it', async () => {
+      mockAiRoomContext();
+      await cacheService.set(`ai-interviewer-dispatch:${ROOM_ROW.id}`, 'starting-dispatch-id');
+      await cacheService.set(`ai-interviewer-dispatch-started-at:${ROOM_ROW.id}`, Date.now());
+      mockAgentDispatchService.listDispatch.mockResolvedValueOnce([
+        {
+          dispatchId: 'starting-dispatch-id',
+          roomName: ROOM_ROW.id,
+          agentName: 'syncode-ai-interviewer',
+        },
+      ]);
+
+      await service.generateMediaToken(ROOM_ROW.id, HOST_ID);
+
+      expect(mockMediaService.listParticipants).not.toHaveBeenCalled();
+      expect(mockAgentDispatchService.deleteDispatch).not.toHaveBeenCalled();
+      expect(mockAgentDispatchService.createDispatch).not.toHaveBeenCalled();
+      expect(await cacheService.get(`ai-interviewer-dispatch:${ROOM_ROW.id}`)).toBe(
+        'starting-dispatch-id',
+      );
+    });
+
+    it('GIVEN recovery refresh during AI interviewer startup grace WHEN generating media token THEN preserves the in-flight dispatch', async () => {
+      mockAiRoomContext();
+      await cacheService.set(`ai-interviewer-dispatch:${ROOM_ROW.id}`, 'pending-dispatch-id');
+      await cacheService.set(`ai-interviewer-dispatch-started-at:${ROOM_ROW.id}`, Date.now());
+      mockAgentDispatchService.listDispatch.mockResolvedValueOnce([
+        {
+          dispatchId: 'pending-dispatch-id',
+          roomName: ROOM_ROW.id,
+          agentName: 'syncode-ai-interviewer',
+          jobs: [{ id: 'job-1', status: 'pending' }],
+        },
+      ]);
+
+      await service.generateMediaToken(ROOM_ROW.id, HOST_ID, {
+        recoverAiInterviewerDispatch: true,
+      });
+
+      expect(mockMediaService.listParticipants).not.toHaveBeenCalled();
+      expect(mockAgentDispatchService.deleteDispatch).not.toHaveBeenCalled();
+      expect(mockAgentDispatchService.createDispatch).not.toHaveBeenCalled();
+      expect(await cacheService.get(`ai-interviewer-dispatch:${ROOM_ROW.id}`)).toBe(
+        'pending-dispatch-id',
+      );
+    });
+
+    it('GIVEN recovery refresh after startup grace with running AI interviewer job WHEN generating media token THEN preserves it', async () => {
+      mockAiRoomContext();
+      await cacheService.set(`ai-interviewer-dispatch:${ROOM_ROW.id}`, 'running-dispatch-id');
+      await cacheService.set(
+        `ai-interviewer-dispatch-started-at:${ROOM_ROW.id}`,
+        Date.now() - 5 * 60_000,
+      );
+      mockAgentDispatchService.listDispatch.mockResolvedValueOnce([
+        {
+          dispatchId: 'running-dispatch-id',
+          roomName: ROOM_ROW.id,
+          agentName: 'syncode-ai-interviewer',
+          jobs: [{ id: 'job-1', status: 'running' }],
+        },
+      ]);
+
+      await service.generateMediaToken(ROOM_ROW.id, HOST_ID, {
+        recoverAiInterviewerDispatch: true,
+      });
+
+      expect(mockMediaService.listParticipants).not.toHaveBeenCalled();
+      expect(mockAgentDispatchService.deleteDispatch).not.toHaveBeenCalled();
+      expect(mockAgentDispatchService.createDispatch).not.toHaveBeenCalled();
+      expect(await cacheService.get(`ai-interviewer-dispatch:${ROOM_ROW.id}`)).toBe(
+        'running-dispatch-id',
+      );
+    });
+
+    it('GIVEN recovery refresh during an extended AI interviewer startup grace WHEN generating media token THEN preserves the slow in-flight dispatch', async () => {
+      mockAiRoomContext();
+      await cacheService.set(`ai-interviewer-dispatch:${ROOM_ROW.id}`, 'slow-dispatch-id');
+      await cacheService.set(
+        `ai-interviewer-dispatch-started-at:${ROOM_ROW.id}`,
+        Date.now() - 45_000,
+      );
+      mockAgentDispatchService.listDispatch.mockResolvedValueOnce([
+        {
+          dispatchId: 'slow-dispatch-id',
+          roomName: ROOM_ROW.id,
+          agentName: 'syncode-ai-interviewer',
+        },
+      ]);
+
+      await service.generateMediaToken(ROOM_ROW.id, HOST_ID, {
+        recoverAiInterviewerDispatch: true,
+      });
+
+      expect(mockMediaService.listParticipants).not.toHaveBeenCalled();
+      expect(mockAgentDispatchService.deleteDispatch).not.toHaveBeenCalled();
+      expect(mockAgentDispatchService.createDispatch).not.toHaveBeenCalled();
+      expect(await cacheService.get(`ai-interviewer-dispatch:${ROOM_ROW.id}`)).toBe(
+        'slow-dispatch-id',
+      );
+    });
+
+    it('GIVEN cached terminal dispatch and newer in-flight dispatch WHEN generating media token THEN preserves the in-flight dispatch', async () => {
+      mockAiRoomContext();
+      await cacheService.set(`ai-interviewer-dispatch:${ROOM_ROW.id}`, 'terminal-dispatch-id');
+      await cacheService.set(`ai-interviewer-dispatch-started-at:${ROOM_ROW.id}`, Date.now());
+      mockAgentDispatchService.listDispatch.mockResolvedValueOnce([
+        {
+          dispatchId: 'terminal-dispatch-id',
+          roomName: ROOM_ROW.id,
+          agentName: 'syncode-ai-interviewer',
+          jobs: [{ id: 'job-1', status: 'failed' }],
+        },
+        {
+          dispatchId: 'pending-dispatch-id',
+          roomName: ROOM_ROW.id,
+          agentName: 'syncode-ai-interviewer',
+          jobs: [{ id: 'job-2', status: 'pending' }],
+        },
+      ]);
+
+      await service.generateMediaToken(ROOM_ROW.id, HOST_ID);
+
+      expect(mockMediaService.listParticipants).not.toHaveBeenCalled();
+      expect(mockAgentDispatchService.deleteDispatch).not.toHaveBeenCalled();
+      expect(mockAgentDispatchService.createDispatch).not.toHaveBeenCalled();
+      expect(await cacheService.get(`ai-interviewer-dispatch:${ROOM_ROW.id}`)).toBe(
+        'pending-dispatch-id',
+      );
     });
   });
 });

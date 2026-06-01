@@ -701,6 +701,12 @@ export class RoomsController {
   @HttpCode(200)
   @ApiOperation({ summary: 'Generate LiveKit access token' })
   @ApiParam({ name: 'id', description: 'Room ID (UUID)' })
+  @ApiQuery({
+    name: 'refreshAiInterviewerDispatch',
+    required: false,
+    description:
+      'Recheck AI interviewer dispatch health for recovery. Pending/running workers are preserved.',
+  })
   @ApiResponse({ status: 200, type: MediaTokenResponseDto, description: 'Token generated' })
   @ApiResponse({
     status: 403,
@@ -717,8 +723,12 @@ export class RoomsController {
   async generateMediaToken(
     @CurrentUser() user: AuthUser,
     @Param('id', ParseUUIDPipe) id: string,
+    @Query('refreshAiInterviewerDispatch') refreshAiInterviewerDispatch?: string,
   ): Promise<MediaTokenResponseDto> {
-    const result = await this.roomsService.generateMediaToken(id, user.id);
+    const result = await this.roomsService.generateMediaToken(id, user.id, {
+      recoverAiInterviewerDispatch:
+        refreshAiInterviewerDispatch === 'true' || refreshAiInterviewerDispatch === '1',
+    });
     return { ...result, expiresAt: result.expiresAt.toISOString() };
   }
 

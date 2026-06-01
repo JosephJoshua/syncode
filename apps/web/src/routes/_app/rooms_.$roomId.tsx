@@ -56,6 +56,8 @@ import type {
 } from '@syncode/contracts';
 
 const ROOM_REFRESH_INTERVAL_MS = 15_000;
+const AI_INTERVIEWER_MEDIA_RECOVERY_DELAY_MS = 60_000;
+const AI_INTERVIEWER_MEDIA_RECOVERY_MAX_ATTEMPTS = 2;
 
 const CURSOR_COLORS = [
   '#00e599',
@@ -67,13 +69,6 @@ const CURSOR_COLORS = [
   '#f97316',
   '#a78bfa',
 ];
-
-const AI_INTERVIEWER_IDENTITY =
-  (import.meta.env.VITE_AI_INTERVIEWER_IDENTITY as string | undefined)?.trim() || 'ai-interviewer';
-const AI_INTERVIEWER_REALTIME_ENABLED =
-  ((import.meta.env.VITE_AI_INTERVIEWER_LIVEKIT_ENABLED as string | undefined)
-    ?.trim()
-    .toLowerCase() ?? 'true') === 'true';
 
 function userCursorColor(participants: { userId: string }[], currentUserId: string | null): string {
   const defaultColor = CURSOR_COLORS[0] ?? '#00e599';
@@ -510,7 +505,11 @@ function RoomPage() {
   }, [room, stableCurrentUserId]);
 
   const mediaCredsRef = useRef<{ token: string; url: string } | null>(null);
+  const recoverAiInterviewerDispatchRef = useRef(false);
+  const aiInterviewerRecoveryAttemptRef = useRef(0);
+  const lastMediaRoomIdRef = useRef(roomId);
   const [mediaReady, setMediaReady] = useState(false);
+  const [mediaTokenRefreshNonce, setMediaTokenRefreshNonce] = useState(0);
   const videoPanelMode = useMediaSettingsStore((s) => s.videoPanelMode);
   const setVideoPanelMode = useMediaSettingsStore((s) => s.setVideoPanelMode);
   const [isVideoMinimized, setIsVideoMinimized] = useState(false);
@@ -523,6 +522,19 @@ function RoomPage() {
   const mediaTokenTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    if (lastMediaRoomIdRef.current === roomId) {
+      return;
+    }
+
+    lastMediaRoomIdRef.current = roomId;
+    recoverAiInterviewerDispatchRef.current = false;
+    aiInterviewerRecoveryAttemptRef.current = 0;
+    mediaCredsRef.current = null;
+    setMediaReady(false);
+  }, [roomId]);
+
+  useEffect(() => {
+    void mediaTokenRefreshNonce;
     if (!room || !hasMediaCapability) return;
     if (room.status === 'finished') return;
     if (mediaCredsRef.current) return;
@@ -540,9 +552,16 @@ function RoomPage() {
     };
 
     const fetchToken = () => {
-      api(CONTROL_API.ROOMS.MEDIA_TOKEN, { params: { id: roomId } })
+      const recoverAiInterviewerDispatch = recoverAiInterviewerDispatchRef.current;
+      api(CONTROL_API.ROOMS.MEDIA_TOKEN, {
+        params: { id: roomId },
+        ...(recoverAiInterviewerDispatch
+          ? { searchParams: { refreshAiInterviewerDispatch: true } }
+          : {}),
+      })
         .then((result) => {
           if (disposed) return;
+          recoverAiInterviewerDispatchRef.current = false;
           mediaCredsRef.current = { token: result.token, url: result.url };
           setMediaReady(true);
 
@@ -552,6 +571,7 @@ function RoomPage() {
         })
         .catch((err) => {
           if (disposed) return;
+          recoverAiInterviewerDispatchRef.current = false;
           console.warn('[LiveKit] Failed to fetch media token:', err);
         });
     };
@@ -565,7 +585,7 @@ function RoomPage() {
         mediaTokenTimerRef.current = null;
       }
     };
-  }, [room, hasMediaCapability, roomId]);
+  }, [room, hasMediaCapability, roomId, mediaTokenRefreshNonce]);
 
   const audioProcessing = useMediaSettingsStore((s) => s.audioProcessing);
   const setAudioProcessingStored = useMediaSettingsStore((s) => s.setAudioProcessing);
@@ -626,6 +646,43 @@ function RoomPage() {
     for (const p of mediaRemoteParticipants) set.add(p.identity);
     return set;
   }, [mediaLocalParticipant, mediaRemoteParticipants]);
+
+  const aiInterviewerIdentity = useMemo(
+    () => mediaRemoteParticipants.find((participant) => participant.isAgent)?.identity ?? null,
+    [mediaRemoteParticipants],
+  );
+
+  useEffect(() => {
+    if (aiInterviewerIdentity) {
+      aiInterviewerRecoveryAttemptRef.current = 0;
+      return;
+    }
+    if (
+      room?.mode !== 'ai' ||
+      room.status === 'finished' ||
+      !hasMediaCapability ||
+      mediaConnectionState !== 'connected'
+    ) {
+      return;
+    }
+    if (aiInterviewerRecoveryAttemptRef.current >= AI_INTERVIEWER_MEDIA_RECOVERY_MAX_ATTEMPTS) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      if (aiInterviewerRecoveryAttemptRef.current >= AI_INTERVIEWER_MEDIA_RECOVERY_MAX_ATTEMPTS) {
+        return;
+      }
+      aiInterviewerRecoveryAttemptRef.current += 1;
+      console.warn('[LiveKit] AI interviewer did not appear; refreshing AI interviewer dispatch');
+      recoverAiInterviewerDispatchRef.current = true;
+      mediaCredsRef.current = null;
+      setMediaReady(false);
+      setMediaTokenRefreshNonce((value) => value + 1);
+    }, AI_INTERVIEWER_MEDIA_RECOVERY_DELAY_MS);
+
+    return () => window.clearTimeout(timer);
+  }, [aiInterviewerIdentity, hasMediaCapability, mediaConnectionState, room?.mode, room?.status]);
 
   const mediaMutedMap = useMemo(() => {
     const map = new Map<string, boolean>();
@@ -711,7 +768,7 @@ function RoomPage() {
     }
 
     for (const mp of mediaRemoteParticipants) {
-      const isAiInterviewer = mp.identity === AI_INTERVIEWER_IDENTITY;
+      const isAiInterviewer = mp.isAgent;
       const p = room?.participants.find((rp) => rp.userId === mp.identity);
       const hidden = videoHiddenSet.has(mp.identity);
       tiles.push({
@@ -1216,8 +1273,7 @@ function RoomPage() {
               <DockedVideoPanel tiles={videoTiles} onUndock={() => setVideoPanelMode('floating')} />
             ) : null
           }
-          aiInterviewerIdentity={AI_INTERVIEWER_IDENTITY}
-          aiInterviewerRealtimeEnabled={AI_INTERVIEWER_REALTIME_ENABLED}
+          aiInterviewerIdentity={aiInterviewerIdentity}
           latestLiveKitDataPacket={latestLiveKitDataPacket}
           publishLiveKitData={publishData}
         />

@@ -15,6 +15,12 @@ export interface MediaRoomInfo {
   creationTime: number;
 }
 
+export interface MediaParticipantInfo {
+  identity: string;
+  kind: 'standard' | 'agent' | 'other';
+  state: 'joining' | 'joined' | 'active' | 'disconnected' | 'unknown';
+}
+
 export interface MediaRoomOptions {
   maxParticipants?: number;
   emptyTimeoutSeconds?: number;
@@ -36,6 +42,7 @@ export interface IMediaService {
   deleteRoom(name: string): Promise<void>;
   listRooms(): Promise<MediaRoomInfo[]>;
   getRoomInfo(name: string): Promise<MediaRoomInfo | null>;
+  listParticipants(roomName: string): Promise<MediaParticipantInfo[]>;
   generateToken(options: MediaTokenOptions): Promise<MediaTokenResult>;
   removeParticipant(roomName: string, participantIdentity: string): Promise<void>;
   muteParticipantTrack(options: {
