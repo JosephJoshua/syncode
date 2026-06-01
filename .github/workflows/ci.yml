@@ -212,7 +212,7 @@ jobs:
             done
           }
 
-          services=(web control-plane collab-plane execution-plane ai-plane)
+          services=(web control-plane collab-plane execution-plane ai-plane ai-interviewer-worker)
           case "${DEPLOY_BRANCH}" in
             main)
               env_file=".env.production"
