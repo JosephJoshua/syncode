@@ -6,6 +6,7 @@ import {
 import {
   type ConnectionQuality,
   ConnectionState,
+  isBrowserSupported,
   type LocalTrackPublication,
   type Participant,
   type RemoteParticipant,
@@ -23,6 +24,7 @@ export type LiveKitConnectionState =
   | 'connecting'
   | 'connected'
   | 'reconnecting'
+  | 'unsupported'
   | 'failed';
 
 const INITIAL_CONNECT_RETRY_DELAYS_MS = [1_000, 2_000, 4_000, 8_000, 8_000, 8_000] as const;
@@ -427,6 +429,16 @@ export function useLiveKit({
       return;
     }
 
+    if (!isBrowserSupported()) {
+      if (roomRef.current) {
+        void roomRef.current.disconnect();
+        roomRef.current = null;
+      }
+      resetState();
+      setConnectionState('unsupported');
+      return;
+    }
+
     const ap = audioProcessingRef.current;
     const preferredAudio = preferredAudioDeviceIdRef.current;
     const preferredVideo = preferredVideoDeviceIdRef.current;
@@ -614,7 +626,7 @@ export function useLiveKit({
     room.on(RoomEvent.ActiveDeviceChanged, () => void refreshDevices());
 
     const onDeviceChange = () => void refreshDevices();
-    navigator.mediaDevices.addEventListener('devicechange', onDeviceChange);
+    navigator.mediaDevices?.addEventListener?.('devicechange', onDeviceChange);
 
     setConnectionState('connecting');
 
@@ -655,7 +667,7 @@ export function useLiveKit({
         clearTimeout(retryTimer);
         retryTimer = null;
       }
-      navigator.mediaDevices.removeEventListener('devicechange', onDeviceChange);
+      navigator.mediaDevices?.removeEventListener?.('devicechange', onDeviceChange);
       cleanupAudio();
       void room.disconnect();
       if (roomRef.current === room) {

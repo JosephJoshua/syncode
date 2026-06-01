@@ -8,6 +8,40 @@ import { routeTree } from './routeTree.gen.js';
 
 const router = createRouter({ routeTree });
 
+function isLandingPath(pathname: string): boolean {
+  return pathname === '/';
+}
+
+function LandingSplash() {
+  return (
+    <div
+      className="fixed inset-0 z-[70] flex items-center justify-center"
+      style={{ backgroundColor: 'oklch(0.82 0.18 165)' }}
+    >
+      <span
+        className="font-display text-6xl uppercase tracking-tight sm:text-8xl"
+        style={{ color: 'oklch(0.1 0.005 286 / 0.7)' }}
+      >
+        SynCode
+      </span>
+    </div>
+  );
+}
+
+function AppLoadingScreen() {
+  return (
+    <div
+      className="fixed inset-0 z-[70] flex items-center justify-center"
+      style={{ backgroundColor: 'oklch(0.1 0.005 286)' }}
+    >
+      <output
+        aria-label="Loading"
+        className="size-8 animate-spin rounded-full border-2 border-white/15 border-t-primary"
+      />
+    </div>
+  );
+}
+
 declare module '@tanstack/react-router' {
   interface Register {
     router: typeof router;
@@ -24,22 +58,7 @@ export function App() {
   }, []);
 
   if (!authReady) {
-    // Solid splash screen — matches the first frame of the shatter animation.
-    // When auth completes, the page renders and the shatter fragments animate
-    // away. Transition is seamless: splash → shatter → hero.
-    return (
-      <div
-        className="fixed inset-0 z-[70] flex items-center justify-center"
-        style={{ backgroundColor: 'oklch(0.82 0.18 165)' }}
-      >
-        <span
-          className="font-display text-6xl uppercase tracking-tight sm:text-8xl"
-          style={{ color: 'oklch(0.1 0.005 286 / 0.7)' }}
-        >
-          SynCode
-        </span>
-      </div>
-    );
+    return isLandingPath(globalThis.location.pathname) ? <LandingSplash /> : <AppLoadingScreen />;
   }
 
   return (
