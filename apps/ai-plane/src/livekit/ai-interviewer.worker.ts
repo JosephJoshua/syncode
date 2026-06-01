@@ -1705,7 +1705,7 @@ function buildReasonSpecificInstructions(
     case 'stage_changed':
       return 'The interview phase changed. Orient the candidate briefly to the new phase expectations.';
     case 'user_idle':
-      return 'The candidate has been quiet for a while. Only speak if a brief, warm check-in would help — otherwise stay silent.';
+      return 'The candidate has been quiet for a while. Only speak if a brief, warm check-in would help — otherwise stay silent. Do not call transition_room_phase because silence alone is not interview progress.';
     case 'hint_used':
       return 'The candidate used a hint. A brief acknowledgment or follow-up question is natural.';
     case 'code_ran': {
@@ -1848,6 +1848,23 @@ function isIdleCheckinOverdue(lastUserTurnAt: number, lastReplyAt: number, now: 
   return now - lastUserTurnAt >= IDLE_CHECKIN_MS && now - lastReplyAt >= IDLE_CHECKIN_MS;
 }
 
+function shouldRequestUserAwayDecision(params: {
+  userState: string;
+  agentState: string;
+  lastReplyAt: number;
+  now: number;
+}): boolean {
+  return (
+    params.userState === 'away' &&
+    params.agentState !== 'speaking' &&
+    hasAntiSpamElapsed(params.lastReplyAt, params.now)
+  );
+}
+
+function isIdleDrivenReplyReason(reason: string | null | undefined): boolean {
+  return reason === 'user_away_timeout' || reason === 'system_user_idle';
+}
+
 // The LiveKit Agent entrypoint below wires SDK callbacks, room events, and
 // provider side effects. Unit tests cover the extracted prompt/context/decision
 // helpers above; the callback itself is exercised by LiveKit runtime tests.
@@ -1970,6 +1987,8 @@ const agent = defineAgent({
     let suppressRealtimeAssistantTranscriptsUntil = 0;
     let currentAgentState: voice.AgentState = 'initializing';
     let agentStoppedSpeakingAt = 0;
+    let userAwayDecisionInFlight = false;
+    let activeReplyReason: string | null = null;
     let approxPromptInputTokensTotal = 0;
     let approxOutputTokensTotal = 0;
     let approxConversationTokensTotal = 0;
@@ -2064,6 +2083,8 @@ const agent = defineAgent({
       console.debug(
         `[ai-interviewer-worker] reply-prompt room=${roomId} reason=${params.reason} inputTokens≈${inputTokens} promptInputTotal≈${approxPromptInputTokensTotal} conversationTokens≈${approxConversationTokensTotal}`,
       );
+      const previousActiveReplyReason = activeReplyReason;
+      activeReplyReason = params.reason;
       try {
         await session.generateReply({
           userInput: params.userInput,
@@ -2081,6 +2102,8 @@ const agent = defineAgent({
           message: 'AI interviewer service is temporarily unavailable.',
           occurredAt: Date.now(),
         });
+      } finally {
+        activeReplyReason = previousActiveReplyReason;
       }
       maybeLogContextBudgetRisk();
     };
@@ -2411,6 +2434,17 @@ const agent = defineAgent({
 
         const runtimeContext = (await refreshRoomContext()) ?? latestRuntimeRoomContext;
         const fromStatus = runtimeContext?.roomStatus;
+        if (isIdleDrivenReplyReason(activeReplyReason)) {
+          return {
+            transitioned: false,
+            reason: 'idle-checkin-cannot-transition-phase',
+            fromStatus,
+            targetStatus,
+            interviewerInstruction:
+              'Do not transition phases during idle or away check-ins. Stay in the current phase; ask at most one brief check-in question, or stay silent.',
+          };
+        }
+
         if (fromStatus === targetStatus) {
           return {
             transitioned: false,
@@ -2501,13 +2535,69 @@ const agent = defineAgent({
       },
     );
 
-    session.on(voice.AgentSessionEventTypes.UserStateChanged, (event) => {
-      void publishRealtimeEvent({
-        type: 'user_state',
-        state: event.newState,
-        occurredAt: event.createdAt,
-      });
-    });
+    const handleUserAwayState = async (event: voice.UserStateChangedEvent) => {
+      const initialNow = Date.now();
+      if (
+        userAwayDecisionInFlight ||
+        !shouldRequestUserAwayDecision({
+          userState: event.newState,
+          agentState: currentAgentState,
+          lastReplyAt: lastSystemReplyAt,
+          now: initialNow,
+        })
+      ) {
+        return;
+      }
+
+      userAwayDecisionInFlight = true;
+      try {
+        const runtimeContext = (await refreshRoomContext()) ?? latestRuntimeRoomContext;
+        const now = Date.now();
+        if (
+          !shouldRequestUserAwayDecision({
+            userState: event.newState,
+            agentState: currentAgentState,
+            lastReplyAt: lastSystemReplyAt,
+            now,
+          })
+        ) {
+          return;
+        }
+
+        const signal: SystemSignalPayload = {
+          type: 'system_signal',
+          reason: 'user_idle',
+          summary: 'LiveKit user away timeout triggered.',
+        };
+        if (shouldIgnoreRuntimeSignal(signal, runtimeContext)) {
+          return;
+        }
+        lastSystemReplyAt = now;
+        const instructions = buildSystemSignalInstructions(
+          signal,
+          latestInterviewContext,
+          runtimeContext,
+        );
+        await generateReplyWithTelemetry({
+          reason: 'user_away_timeout',
+          instructions,
+        });
+      } finally {
+        userAwayDecisionInFlight = false;
+      }
+    };
+
+    session.on(
+      voice.AgentSessionEventTypes.UserStateChanged,
+      (event: voice.UserStateChangedEvent) => {
+        void publishRealtimeEvent({
+          type: 'user_state',
+          state: event.newState,
+          occurredAt: event.createdAt,
+        });
+        void handleUserAwayState(event);
+      },
+    );
 
     session.on(voice.AgentSessionEventTypes.OverlappingSpeech, (event) => {
       void publishRealtimeEvent({
@@ -2934,6 +3024,8 @@ export const __testing = {
   toRealtimeInterviewContext,
   hasAntiSpamElapsed,
   isIdleCheckinOverdue,
+  shouldRequestUserAwayDecision,
+  isIdleDrivenReplyReason,
   subscribeRemoteTrackPublication,
   isChineseLanguageHint,
   buildInterfaceLanguageInstruction,
