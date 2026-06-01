@@ -108,6 +108,25 @@ services:
       - backend
       - observability
 
+  ai-interviewer-worker:
+    image: ${REGISTRY_PREFIX:-ghcr.io/josephjoshua}/syncode-ai-plane:${IMAGE_TAG:-latest}
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.ai-plane
+    restart: unless-stopped
+    command: ["node", "dist/livekit/ai-interviewer.worker.bootstrap.js", "start"]
+    env_file: .env
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+    depends_on:
+      control-plane:
+        condition: service_healthy
+      livekit:
+        condition: service_started
+    networks:
+      - backend
+      - observability
+
   watchtower:
     image: nickfedor/watchtower:1.14.3
     restart: unless-stopped
