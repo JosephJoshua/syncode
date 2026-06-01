@@ -1,4 +1,4 @@
-import { CONTROL_API, ERROR_CODES } from '@syncode/contracts';
+import { AI_INTERVIEWER_AGENT_IDENTITY, CONTROL_API, ERROR_CODES } from '@syncode/contracts';
 import type { RoomRole, RoomStatus } from '@syncode/shared';
 import {
   AlertDialog,
@@ -56,8 +56,9 @@ import type {
 } from '@syncode/contracts';
 
 const ROOM_REFRESH_INTERVAL_MS = 15_000;
-const AI_INTERVIEWER_MEDIA_RECOVERY_DELAY_MS = 60_000;
-const AI_INTERVIEWER_MEDIA_RECOVERY_MAX_ATTEMPTS = 2;
+const AI_INTERVIEWER_MEDIA_RECOVERY_DELAY_MS = 8_000;
+const AI_INTERVIEWER_MEDIA_REJOIN_RECOVERY_DELAY_MS = 2_500;
+const AI_INTERVIEWER_MEDIA_RECOVERY_MAX_ATTEMPTS = 5;
 
 const CURSOR_COLORS = [
   '#00e599',
@@ -507,6 +508,7 @@ function RoomPage() {
   const mediaCredsRef = useRef<{ token: string; url: string } | null>(null);
   const recoverAiInterviewerDispatchRef = useRef(false);
   const aiInterviewerRecoveryAttemptRef = useRef(0);
+  const sawAiInterviewerInMediaRoomRef = useRef(false);
   const lastMediaRoomIdRef = useRef(roomId);
   const [mediaReady, setMediaReady] = useState(false);
   const [mediaTokenRefreshNonce, setMediaTokenRefreshNonce] = useState(0);
@@ -529,6 +531,7 @@ function RoomPage() {
     lastMediaRoomIdRef.current = roomId;
     recoverAiInterviewerDispatchRef.current = false;
     aiInterviewerRecoveryAttemptRef.current = 0;
+    sawAiInterviewerInMediaRoomRef.current = false;
     mediaCredsRef.current = null;
     setMediaReady(false);
   }, [roomId]);
@@ -648,12 +651,26 @@ function RoomPage() {
   }, [mediaLocalParticipant, mediaRemoteParticipants]);
 
   const aiInterviewerIdentity = useMemo(
-    () => mediaRemoteParticipants.find((participant) => participant.isAgent)?.identity ?? null,
+    () =>
+      mediaRemoteParticipants.find(
+        (participant) => participant.identity === AI_INTERVIEWER_AGENT_IDENTITY,
+      )?.identity ??
+      mediaRemoteParticipants.find((participant) => participant.isAgent)?.identity ??
+      null,
     [mediaRemoteParticipants],
   );
 
+  const aiInterviewerAudioTrack = useMemo(() => {
+    if (!aiInterviewerIdentity) return null;
+    return (
+      mediaRemoteParticipants.find((participant) => participant.identity === aiInterviewerIdentity)
+        ?.audioTrack ?? null
+    );
+  }, [aiInterviewerIdentity, mediaRemoteParticipants]);
+
   useEffect(() => {
     if (aiInterviewerIdentity) {
+      sawAiInterviewerInMediaRoomRef.current = true;
       aiInterviewerRecoveryAttemptRef.current = 0;
       return;
     }
@@ -669,17 +686,22 @@ function RoomPage() {
       return;
     }
 
-    const timer = window.setTimeout(() => {
-      if (aiInterviewerRecoveryAttemptRef.current >= AI_INTERVIEWER_MEDIA_RECOVERY_MAX_ATTEMPTS) {
-        return;
-      }
-      aiInterviewerRecoveryAttemptRef.current += 1;
-      console.warn('[LiveKit] AI interviewer did not appear; refreshing AI interviewer dispatch');
-      recoverAiInterviewerDispatchRef.current = true;
-      mediaCredsRef.current = null;
-      setMediaReady(false);
-      setMediaTokenRefreshNonce((value) => value + 1);
-    }, AI_INTERVIEWER_MEDIA_RECOVERY_DELAY_MS);
+    const timer = window.setTimeout(
+      () => {
+        if (aiInterviewerRecoveryAttemptRef.current >= AI_INTERVIEWER_MEDIA_RECOVERY_MAX_ATTEMPTS) {
+          return;
+        }
+        aiInterviewerRecoveryAttemptRef.current += 1;
+        console.warn('[LiveKit] AI interviewer did not appear; refreshing AI interviewer dispatch');
+        recoverAiInterviewerDispatchRef.current = true;
+        mediaCredsRef.current = null;
+        setMediaReady(false);
+        setMediaTokenRefreshNonce((value) => value + 1);
+      },
+      sawAiInterviewerInMediaRoomRef.current
+        ? AI_INTERVIEWER_MEDIA_REJOIN_RECOVERY_DELAY_MS
+        : AI_INTERVIEWER_MEDIA_RECOVERY_DELAY_MS,
+    );
 
     return () => window.clearTimeout(timer);
   }, [aiInterviewerIdentity, hasMediaCapability, mediaConnectionState, room?.mode, room?.status]);
@@ -768,7 +790,7 @@ function RoomPage() {
     }
 
     for (const mp of mediaRemoteParticipants) {
-      const isAiInterviewer = mp.isAgent;
+      const isAiInterviewer = mp.isAgent || mp.identity === AI_INTERVIEWER_AGENT_IDENTITY;
       const p = room?.participants.find((rp) => rp.userId === mp.identity);
       const hidden = videoHiddenSet.has(mp.identity);
       tiles.push({
@@ -1274,6 +1296,7 @@ function RoomPage() {
             ) : null
           }
           aiInterviewerIdentity={aiInterviewerIdentity}
+          aiInterviewerAudioTrack={aiInterviewerAudioTrack}
           latestLiveKitDataPacket={latestLiveKitDataPacket}
           publishLiveKitData={publishData}
         />

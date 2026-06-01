@@ -91,6 +91,7 @@ import { allRequiredPeersReady } from '@/lib/participant-readiness.js';
 import { buildInviteLink } from '@/lib/room-stage.js';
 import { authorColor } from '@/lib/whiteboard-author-color.js';
 import { codeTextKey } from '@/lib/yjs-collab-provider.js';
+import { AiInterviewerSimliAvatar } from './ai-interviewer-simli-avatar.js';
 import { CollaborativeEditor, type EditorCodeContext } from './collaborative-editor.js';
 import {
   EDITOR_KEYBINDING_MODES,
@@ -181,6 +182,7 @@ interface RoomWorkspaceProps {
   onSelfMicrophoneToggle?: () => void;
   dockedVideoPanel?: React.ReactNode;
   aiInterviewerIdentity?: string | null;
+  aiInterviewerAudioTrack?: MediaStreamTrack | null;
   latestLiveKitDataPacket?: LiveKitDataPacket | null;
   publishLiveKitData?: (
     payload: Uint8Array,
@@ -309,6 +311,7 @@ export function RoomWorkspace({
   onSelfMicrophoneToggle,
   dockedVideoPanel,
   aiInterviewerIdentity = null,
+  aiInterviewerAudioTrack = null,
   latestLiveKitDataPacket,
   publishLiveKitData,
 }: RoomWorkspaceProps) {
@@ -425,6 +428,9 @@ export function RoomWorkspace({
     'participants',
   );
   const useRealtimeAiInterviewer = room.mode === 'ai';
+  const aiInterviewerIsSpeaking =
+    aiInterviewerAgentState === 'speaking' ||
+    (aiInterviewerIdentity ? (speakingMap?.get(aiInterviewerIdentity) ?? false) : false);
 
   useEffect(() => {
     if (room.mode !== 'ai' && activeRightTab === 'interview') {
@@ -2539,6 +2545,14 @@ export function RoomWorkspace({
         mediaConnectedSet={mediaConnectedSet}
         mediaMutedMap={mediaMutedMap}
       />
+      {useRealtimeAiInterviewer ? (
+        <AiInterviewerSimliAvatar
+          roomId={roomId}
+          enabled={aiInterviewerIdentity !== null}
+          audioTrack={aiInterviewerAudioTrack}
+          isSpeaking={aiInterviewerIsSpeaking}
+        />
+      ) : null}
 
       {/* Main resizable 3-panel area */}
       <ResizablePanelGroup orientation="horizontal" style={{ flex: 1 }}>
