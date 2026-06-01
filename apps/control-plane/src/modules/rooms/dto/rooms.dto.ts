@@ -69,6 +69,28 @@ export class RequestRoomAiInterviewTranscriptionDto extends createZodDto(
 export class RequestRoomAiInterviewTranscriptionResponseDto extends createZodDto(
   requestRoomAiInterviewTranscriptionResponseSchema,
 ) {}
+export class SimliAvatarSessionResponseDto {
+  @ApiProperty({ description: 'Whether Simli avatar sessions are configured for this room' })
+  enabled!: boolean;
+
+  @ApiProperty({ required: false, description: 'Short-lived Simli compose session token' })
+  sessionToken?: string;
+
+  @ApiProperty({ required: false, description: 'Simli WebSocket base URL' })
+  wsUrl?: string;
+
+  @ApiProperty({ required: false, description: 'Simli client audio buffer size' })
+  audioBufferSize?: number;
+
+  @ApiProperty({ required: false, description: 'LiveKit token for publishing avatar video' })
+  liveKitToken?: string;
+
+  @ApiProperty({ required: false, description: 'LiveKit WebSocket URL for the avatar publisher' })
+  liveKitUrl?: string;
+
+  @ApiProperty({ required: false, description: 'Stable LiveKit avatar participant identity' })
+  avatarIdentity?: string;
+}
 export class RequestRoomCodeAnalysisResponseDto extends createZodDto(
   requestRoomCodeAnalysisResponseSchema,
 ) {}

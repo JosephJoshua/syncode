@@ -4,12 +4,18 @@ export {
   CircuitBreakerTimeoutError,
   CircuitState,
 } from '../types/circuit-breaker.js';
-export type { AgentDispatchInfo, IAgentDispatchService } from './agent-dispatch.port.js';
+export type {
+  AgentDispatchInfo,
+  AgentDispatchJobInfo,
+  AgentDispatchJobStatus,
+  IAgentDispatchService,
+} from './agent-dispatch.port.js';
 export { AGENT_DISPATCH_SERVICE } from './agent-dispatch.port.js';
 export type { ICacheService, TtlResult } from './cache.port.js';
 export { CACHE_SERVICE } from './cache.port.js';
 export type {
   IMediaService,
+  MediaParticipantInfo,
   MediaRoomInfo,
   MediaRoomOptions,
   MediaTokenOptions,

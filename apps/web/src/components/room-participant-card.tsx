@@ -535,7 +535,7 @@ function FullParticipantCard({
           </div>
 
           <div className="mt-1.5 flex items-center gap-2">
-            {canManageParticipants && (!isHost || isMe) && !rolesLocked ? (
+            {canManageParticipants && !rolesLocked ? (
               <Select
                 value={participant.role}
                 onValueChange={(value) => onRoleChange?.(participant.userId, value as RoomRole)}

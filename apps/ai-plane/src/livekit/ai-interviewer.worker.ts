@@ -1,8 +1,27 @@
 import { existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { cli, defineAgent, type JobContext, llm, ServerOptions, voice } from '@livekit/agents';
+import {
+  type APIConnectOptions,
+  type AudioBuffer,
+  AudioByteStream,
+  AutoSubscribe,
+  cli,
+  defineAgent,
+  type JobContext,
+  type JobProcess,
+  llm,
+  mergeFrames,
+  normalizeLanguage,
+  ServerOptions,
+  shortuuid,
+  stt,
+  tts,
+  voice,
+} from '@livekit/agents';
 import * as openai from '@livekit/agents-plugin-openai';
+import * as silero from '@livekit/agents-plugin-silero';
+import * as aiCoustics from '@livekit/plugins-ai-coustics';
 import {
   AI_INTERVIEWER_EVENT_TOPIC,
   AI_INTERVIEWER_SIGNAL_TOPIC,
@@ -19,8 +38,12 @@ import {
   encodeAiInterviewerEventPayload,
 } from '@syncode/contracts';
 import { config as loadDotenv } from 'dotenv';
+import { OpenAI } from 'openai';
+import { ProxyAgent, fetch as undiciFetch } from 'undici';
+import { WebSocket } from 'ws';
 import { z } from 'zod';
 import { validateEnv } from '../config/env.config.js';
+import { OpenAiCompatibleLlmProvider } from '../llm/openai-compatible-llm.provider.js';
 
 interface DispatchMetadata {
   roomId?: string;
@@ -42,50 +65,84 @@ interface ParsedSubmissionSignalSummary {
   submittedAt?: string;
 }
 
+interface RemoteTrackPublicationLike {
+  kind?: unknown;
+  sid?: string;
+  subscribed?: boolean;
+  setSubscribed?: (subscribed: boolean) => void;
+}
+
+interface RemoteParticipantLike {
+  identity?: string;
+  trackPublications?: Map<string, RemoteTrackPublicationLike>;
+}
+
 interface WorkerEnv {
   AI_INTERVIEWER_AGENT_IDENTITY: string;
   AI_INTERVIEWER_AGENT_NAME: string;
-  AI_INTERVIEWER_CONTROL_PLANE_URL: string;
   AI_INTERVIEWER_FALLBACK_ENABLED: boolean;
+  AI_INTERVIEWER_FORCE_FALLBACK: boolean;
+  AI_INTERVIEWER_RECONNECT_GRACE_MS: number;
+  AI_INTERVIEWER_WORKER_INITIALIZE_TIMEOUT_MS: number;
+  AI_INTERVIEWER_WORKER_SHUTDOWN_TIMEOUT_MS: number;
   AI_PLATFORM_API_KEY: string;
   AI_PLATFORM_BASE_URL: string;
   AI_PLATFORM_MODEL: string;
+  AI_REQUEST_TIMEOUT_MS: number;
   AI_STT_MODEL: string;
   AI_TTS_MODEL?: string;
   AI_TTS_VOICE: string;
+  MINIMAX_API_KEY?: string;
+  MINIMAX_TTS_BASE_URL?: string;
+  MINIMAX_TTS_MODEL?: string;
   OPENAI_API_KEY?: string;
+  OPENAI_CHAT_FALLBACK_MODEL: string;
+  OPENAI_TTS_BASE_URL: string;
+  OPENAI_TTS_MODEL: string;
   OPENAI_REALTIME_BASE_URL: string;
+  OPENAI_REALTIME_CONNECT_TIMEOUT_MS: number;
   OPENAI_REALTIME_MODEL: string;
   OPENAI_REALTIME_VOICE: string;
+  CONTROL_PLANE_URL: string;
   INTERNAL_CALLBACK_SECRET: string;
+  LIVEKIT_AGENT_CONNECT_URL?: string;
+  LIVEKIT_URL?: string;
 }
 
-type WarmupFlowState = 'not_started' | 'kickoff_sent' | 'followup_sent' | 'completed';
 type LiveContextDetail = 'compact' | 'detailed';
 type RoomPhaseStatus = 'warmup' | 'coding' | 'wrapup' | 'finished';
 
-const SIGNAL_REASON_MIN_INTERVAL_MS: Record<AiInterviewerSignalReason, number> = {
-  session_joined: 10 * 60_000,
-  stage_changed: 90_000,
-  user_idle: 6 * 60_000,
-  hint_used: 2 * 60_000,
-  code_ran: 2 * 60_000,
-  code_submitted: 10_000,
-  manual_nudge: 10_000,
-};
-
-const SYSTEM_SIGNAL_GLOBAL_MIN_INTERVAL_MS = 60_000;
+// Hard backstop: no more than one system-initiated reply per 8 seconds.
+// Prevents audio glitches from overlapping generation and stops spam from
+// rapid-fire signals. The model handles all other turn-taking naturally.
+const ANTI_SPAM_MIN_INTERVAL_MS = 8_000;
+// Safety net: if the candidate has been silent for 5 minutes AND the agent
+// hasn't spoken in 5 minutes, force a check-in even if the model would
+// otherwise stay quiet. Prevents the interview from going totally silent.
+const IDLE_CHECKIN_MS = 5 * 60_000;
 // Suppress user transcripts that land while the agent is speaking or within
 // this window after it stops, since they are almost always echo of the
 // agent's own audio captured by the candidate's microphone (e.g. when the
 // candidate is not wearing headphones) rather than real candidate input.
 const USER_INPUT_ECHO_GUARD_MS = 1_500;
+const REALTIME_EVENT_PUBLISH_TIMEOUT_MS = 2_000;
+// Batch rapid code_ran signals: only inject context at most once per this
+// interval to avoid flooding the model's context window.
+const CODE_RAN_CONTEXT_DEBOUNCE_MS = 30_000;
 const NOISE_RUN_SUMMARY_PATTERN = /Latest run:\s*(\d+)\s*\/\s*(\d+)\s*passed\./i;
 const REALTIME_CONTEXT_WARN_TOKENS = 35_000;
 const REALTIME_CONTEXT_CRITICAL_TOKENS = 45_000;
 const LIVE_CODE_CONTEXT_MESSAGE_ID = 'syncode_live_code_context';
 const FNV_64_OFFSET_BASIS = 0xcbf29ce484222325n;
 const FNV_64_PRIME = 0x100000001b3n;
+const PROXY_ENV_KEYS = [
+  'http_proxy',
+  'https_proxy',
+  'all_proxy',
+  'HTTP_PROXY',
+  'HTTPS_PROXY',
+  'ALL_PROXY',
+] as const;
 
 const OPENAI_TTS_VOICES: ReadonlySet<openai.TTSVoices> = new Set([
   'alloy',
@@ -99,6 +156,27 @@ const OPENAI_TTS_VOICES: ReadonlySet<openai.TTSVoices> = new Set([
   'sage',
   'shimmer',
 ]);
+const MINIMAX_TTS_SAMPLE_RATE = 32_000;
+const MINIMAX_TTS_CHANNELS = 1;
+const MINIMAX_TTS_BYTES_PER_SAMPLE = 2;
+const MINIMAX_TTS_BITRATE = 128_000;
+const MINIMAX_TTS_AUDIO_FORMAT = 'wav';
+
+const minimaxTtsResponseSchema = z
+  .object({
+    data: z
+      .object({
+        audio: z.string().optional(),
+      })
+      .optional(),
+    base_resp: z
+      .object({
+        status_code: z.number().optional(),
+        status_msg: z.string().optional(),
+      })
+      .optional(),
+  })
+  .passthrough();
 
 function createStableDigest(value: string): string {
   let hash = FNV_64_OFFSET_BASIS;
@@ -127,6 +205,84 @@ function trimTrailingSubmissionPunctuation(value: string): string {
     end -= 1;
   }
   return value.slice(0, end);
+}
+
+async function withoutProxyEnv<T>(operation: () => Promise<T>): Promise<T> {
+  const previous = new Map<(typeof PROXY_ENV_KEYS)[number], string | undefined>();
+  for (const key of PROXY_ENV_KEYS) {
+    previous.set(key, process.env[key]);
+    delete process.env[key];
+  }
+
+  try {
+    return await operation();
+  } finally {
+    for (const [key, value] of previous.entries()) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+  }
+}
+
+function subscribeRemoteTrackPublication(
+  publication: RemoteTrackPublicationLike,
+  participant: RemoteParticipantLike | undefined,
+  roomId: string,
+  reason: 'connected' | 'published',
+): void {
+  if (!publication.setSubscribed) {
+    return;
+  }
+
+  if (publication.subscribed) {
+    return;
+  }
+
+  publication.setSubscribed(true);
+  console.debug(
+    `[ai-interviewer-worker] subscribed to participant track room=${roomId} participant=${
+      participant?.identity ?? 'unknown'
+    } track=${publication.sid ?? 'unknown'} kind=${String(publication.kind ?? 'unknown')} reason=${reason}`,
+  );
+}
+
+function subscribeExistingRemoteTracks(ctx: JobContext, roomId: string): void {
+  for (const participant of ctx.room.remoteParticipants.values() as Iterable<RemoteParticipantLike>) {
+    for (const publication of participant.trackPublications?.values() ?? []) {
+      subscribeRemoteTrackPublication(publication, participant, roomId, 'connected');
+    }
+  }
+}
+
+function registerFutureRemoteTrackSubscription(ctx: JobContext, roomId: string): () => void {
+  const room = ctx.room as unknown as {
+    on(
+      event: 'trackPublished',
+      handler: (
+        publication: RemoteTrackPublicationLike,
+        participant: RemoteParticipantLike,
+      ) => void,
+    ): void;
+    off(
+      event: 'trackPublished',
+      handler: (
+        publication: RemoteTrackPublicationLike,
+        participant: RemoteParticipantLike,
+      ) => void,
+    ): void;
+  };
+  const subscribeOnPublish = (
+    publication: RemoteTrackPublicationLike,
+    participant: RemoteParticipantLike,
+  ) => {
+    subscribeRemoteTrackPublication(publication, participant, roomId, 'published');
+  };
+
+  room.on('trackPublished', subscribeOnPublish);
+  return () => room.off('trackPublished', subscribeOnPublish);
 }
 
 loadWorkerEnvFiles();
@@ -172,25 +328,273 @@ function loadWorkerEnv(): WorkerEnv {
   return {
     AI_INTERVIEWER_AGENT_IDENTITY: parsed.AI_INTERVIEWER_AGENT_IDENTITY,
     AI_INTERVIEWER_AGENT_NAME: parsed.AI_INTERVIEWER_AGENT_NAME,
-    AI_INTERVIEWER_CONTROL_PLANE_URL: parsed.AI_INTERVIEWER_CONTROL_PLANE_URL,
     AI_INTERVIEWER_FALLBACK_ENABLED: parsed.AI_INTERVIEWER_FALLBACK_ENABLED,
+    AI_INTERVIEWER_FORCE_FALLBACK: parsed.AI_INTERVIEWER_FORCE_FALLBACK,
+    AI_INTERVIEWER_RECONNECT_GRACE_MS: parsed.AI_INTERVIEWER_RECONNECT_GRACE_MS,
+    AI_INTERVIEWER_WORKER_INITIALIZE_TIMEOUT_MS: parsed.AI_INTERVIEWER_WORKER_INITIALIZE_TIMEOUT_MS,
+    AI_INTERVIEWER_WORKER_SHUTDOWN_TIMEOUT_MS: parsed.AI_INTERVIEWER_WORKER_SHUTDOWN_TIMEOUT_MS,
     AI_PLATFORM_API_KEY: parsed.AI_PLATFORM_API_KEY,
     AI_PLATFORM_BASE_URL: parsed.AI_PLATFORM_BASE_URL,
     AI_PLATFORM_MODEL: parsed.AI_PLATFORM_MODEL,
+    AI_REQUEST_TIMEOUT_MS: parsed.AI_REQUEST_TIMEOUT_MS,
     AI_STT_MODEL: parsed.AI_STT_MODEL,
     AI_TTS_MODEL: parsed.AI_TTS_MODEL,
     AI_TTS_VOICE: parsed.AI_TTS_VOICE,
+    MINIMAX_API_KEY: parsed.MINIMAX_API_KEY,
+    MINIMAX_TTS_BASE_URL: parsed.MINIMAX_TTS_BASE_URL,
+    MINIMAX_TTS_MODEL: parsed.MINIMAX_TTS_MODEL,
     OPENAI_API_KEY: parsed.OPENAI_API_KEY,
+    OPENAI_CHAT_FALLBACK_MODEL: parsed.OPENAI_CHAT_FALLBACK_MODEL,
+    OPENAI_TTS_BASE_URL: parsed.OPENAI_TTS_BASE_URL,
+    OPENAI_TTS_MODEL: parsed.OPENAI_TTS_MODEL,
     OPENAI_REALTIME_BASE_URL: parsed.OPENAI_REALTIME_BASE_URL,
+    OPENAI_REALTIME_CONNECT_TIMEOUT_MS: parsed.OPENAI_REALTIME_CONNECT_TIMEOUT_MS,
     OPENAI_REALTIME_MODEL: parsed.OPENAI_REALTIME_MODEL,
     OPENAI_REALTIME_VOICE: parsed.OPENAI_REALTIME_VOICE,
+    CONTROL_PLANE_URL: parsed.CONTROL_PLANE_URL,
     INTERNAL_CALLBACK_SECRET: parsed.INTERNAL_CALLBACK_SECRET,
+    LIVEKIT_AGENT_CONNECT_URL: parsed.LIVEKIT_AGENT_CONNECT_URL,
+    LIVEKIT_URL: parsed.LIVEKIT_URL,
   };
 }
 
 function normalizeOpenAiSdkBaseUrl(baseUrl: string): string {
   const normalized = trimTrailingSlashes(baseUrl);
   return normalized.endsWith('/v1') ? normalized : `${normalized}/v1`;
+}
+
+function resolveLiveKitAgentConnectUrl(params: {
+  assignedUrl: string;
+  overrideUrl?: string;
+}): string {
+  const overrideUrl = params.overrideUrl?.trim();
+  if (overrideUrl) {
+    return overrideUrl;
+  }
+
+  return params.assignedUrl;
+}
+
+function summarizeUrlForLog(value: string): string {
+  try {
+    const url = new URL(value);
+    return `${url.protocol}//${url.host}`;
+  } catch {
+    return 'invalid-url';
+  }
+}
+
+function resolveUpstreamProxyUrl(): string | undefined {
+  return (
+    process.env.SYNCODE_UPSTREAM_PROXY_URL ||
+    process.env.https_proxy ||
+    process.env.HTTPS_PROXY ||
+    process.env.http_proxy ||
+    process.env.HTTP_PROXY ||
+    process.env.all_proxy ||
+    process.env.ALL_PROXY
+  );
+}
+
+function createProxyFetch(proxyUrl: string): typeof fetch {
+  const dispatcher = new ProxyAgent(proxyUrl);
+  return ((input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) =>
+    undiciFetch(input as Parameters<typeof undiciFetch>[0], {
+      ...(init as Parameters<typeof undiciFetch>[1]),
+      dispatcher,
+    }) as unknown as Promise<Response>) as typeof fetch;
+}
+
+function summarizeProviderError(status: number, body: string): string {
+  try {
+    const parsed = JSON.parse(body) as {
+      error?: { code?: string; type?: string; message?: string };
+    };
+    const code = parsed.error?.code ?? parsed.error?.type;
+    const message = parsed.error?.message;
+    return [status, code, message].filter(Boolean).join(' ');
+  } catch {
+    return `${status} ${body.slice(0, 180)}`.trim();
+  }
+}
+
+async function probeAiPlatformChatCompletion(): Promise<
+  { ok: true } | { ok: false; error: string }
+> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), Math.min(env.AI_REQUEST_TIMEOUT_MS, 8_000));
+
+  try {
+    const response = await fetch(
+      `${normalizeOpenAiSdkBaseUrl(env.AI_PLATFORM_BASE_URL)}/chat/completions`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${env.AI_PLATFORM_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: env.AI_PLATFORM_MODEL,
+          messages: [{ role: 'user', content: 'Reply with OK.' }],
+          max_tokens: 8,
+        }),
+        signal: controller.signal,
+      },
+    );
+
+    if (response.ok) {
+      return { ok: true };
+    }
+
+    return {
+      ok: false,
+      error: summarizeProviderError(response.status, await response.text()),
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function createFallbackLlm(): Promise<openai.LLM> {
+  const aiPlatformLlm = new openai.LLM({
+    apiKey: env.AI_PLATFORM_API_KEY,
+    baseURL: normalizeOpenAiSdkBaseUrl(env.AI_PLATFORM_BASE_URL),
+    model: env.AI_PLATFORM_MODEL,
+    temperature: 0.35,
+  });
+
+  const platformProbe = await probeAiPlatformChatCompletion();
+  if (platformProbe.ok || !env.OPENAI_API_KEY) {
+    if (!platformProbe.ok) {
+      console.warn(
+        `[ai-interviewer-worker] configured AI platform chat probe failed and no OpenAI fallback key is configured: ${platformProbe.error}`,
+      );
+    }
+    return aiPlatformLlm;
+  }
+
+  const proxyUrl = resolveUpstreamProxyUrl();
+  console.warn(
+    `[ai-interviewer-worker] configured AI platform chat unavailable (${platformProbe.error}); using OpenAI chat fallback model ${env.OPENAI_CHAT_FALLBACK_MODEL}${proxyUrl ? ' via proxy' : ''}`,
+  );
+
+  const client = new OpenAI({
+    apiKey: env.OPENAI_API_KEY,
+    fetch: proxyUrl ? createProxyFetch(proxyUrl) : undefined,
+    maxRetries: 1,
+    timeout: env.AI_REQUEST_TIMEOUT_MS,
+  });
+
+  return new openai.LLM({
+    client,
+    model: env.OPENAI_CHAT_FALLBACK_MODEL,
+    temperature: 0.35,
+  });
+}
+
+function createOpenAiFallbackClient(baseURL?: string): OpenAI {
+  const proxyUrl = resolveUpstreamProxyUrl();
+  return new OpenAI({
+    apiKey: env.OPENAI_API_KEY,
+    baseURL,
+    fetch: proxyUrl ? createProxyFetch(proxyUrl) : undefined,
+    maxRetries: 1,
+    timeout: env.AI_REQUEST_TIMEOUT_MS,
+  });
+}
+
+function resolveOpenAiRealtimeWebSocketUrl(baseUrl: string, model: string): string {
+  const url = new URL([trimTrailingSlashes(baseUrl), 'realtime'].join('/'));
+  if (url.protocol === 'https:') {
+    url.protocol = 'wss:';
+  } else if (url.protocol === 'http:') {
+    url.protocol = 'ws:';
+  }
+
+  if (!url.pathname || ['', '/v1'].includes(url.pathname.replace(/\/$/, ''))) {
+    url.pathname = `${url.pathname.replace(/\/$/, '')}/realtime`;
+  } else {
+    url.pathname = url.pathname.replace(/\/$/, '');
+  }
+  url.searchParams.set('model', model);
+  return url.toString();
+}
+
+async function probeWebSocketConnection(params: {
+  url: string;
+  apiKey: string;
+  timeoutMs: number;
+  label: string;
+}): Promise<void> {
+  await new Promise<void>((resolvePromise, rejectPromise) => {
+    const ws = new WebSocket(params.url, {
+      headers: {
+        Authorization: `Bearer ${params.apiKey}`,
+      },
+    });
+    let settled = false;
+
+    const settle = (error?: Error) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timeout);
+      if (error) {
+        if (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN) {
+          ws.terminate();
+        }
+        rejectPromise(error);
+        return;
+      }
+      ws.close(1000, 'preflight complete');
+      resolvePromise();
+    };
+
+    const timeout = setTimeout(() => {
+      settle(
+        new Error(`${params.label} WebSocket connection timed out after ${params.timeoutMs}ms`),
+      );
+    }, params.timeoutMs);
+
+    ws.once('open', () => settle());
+    ws.once('error', (error) => {
+      settle(
+        new Error(
+          `${params.label} WebSocket connection failed: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        ),
+      );
+    });
+    ws.once('close', (code, reason) => {
+      settle(
+        new Error(
+          `${params.label} WebSocket closed before it was ready (code ${code}${
+            reason.length > 0 ? `, reason: ${reason.toString()}` : ''
+          })`,
+        ),
+      );
+    });
+  });
+}
+
+async function probeOpenAiRealtimeConnection(): Promise<void> {
+  if (!env.OPENAI_API_KEY) {
+    throw new Error('OPENAI_API_KEY is required for realtime mode');
+  }
+
+  await probeWebSocketConnection({
+    url: resolveOpenAiRealtimeWebSocketUrl(env.OPENAI_REALTIME_BASE_URL, env.OPENAI_REALTIME_MODEL),
+    apiKey: env.OPENAI_API_KEY,
+    timeoutMs: env.OPENAI_REALTIME_CONNECT_TIMEOUT_MS,
+    label: 'OpenAI Realtime',
+  });
 }
 
 function resolveOpenAiTtsVoice(voiceName: string): openai.TTSVoices {
@@ -200,21 +604,298 @@ function resolveOpenAiTtsVoice(voiceName: string): openai.TTSVoices {
   return 'alloy';
 }
 
+// MiniMax voice names differ from OpenAI's. The REST API accepts MiniMax-native
+// voice IDs, so map common aliases and fall back to a bilingual voice that
+// handles both Chinese and English well.
+const MINIMAX_TTS_VOICES: ReadonlySet<string> = new Set([
+  'male-qn-qingse',
+  'female-shaonv',
+  'presenter_male',
+  'presenter_female',
+  'qingse',
+  'cute_boy',
+  'cute_girl',
+  'deep_male',
+  'pure_female',
+]);
+function resolveMiniMaxTtsVoice(voiceName: string): string {
+  // If the user set a MiniMax-native voice, use it directly.
+  if (MINIMAX_TTS_VOICES.has(voiceName)) {
+    return voiceName;
+  }
+  // If the user configured Chelsie (the proxy TTS voice), map to a
+  // bilingual MiniMax equivalent.
+  if (voiceName === 'Chelsie') {
+    return 'female-shaonv';
+  }
+  return 'male-qn-qingse';
+}
+
+interface MiniMaxHttpTtsOptions {
+  apiKey: string;
+  baseUrl: string;
+  model: string;
+  requestTimeoutMs: number;
+  voice: string;
+}
+
+interface ParsedWavPcm {
+  pcm: Buffer;
+  sampleRate: number;
+  channels: number;
+  bitsPerSample: number;
+}
+
+function resolveMiniMaxTtsUrl(baseUrl: string): string {
+  const url = new URL(trimTrailingSlashes(baseUrl));
+  const path = trimTrailingSlashes(url.pathname);
+  if (path.endsWith('/t2a_v2')) {
+    url.pathname = path;
+    return url.toString();
+  }
+  url.pathname = `${path}/t2a_v2`.replace(/\/{2,}/g, '/');
+  return url.toString();
+}
+
+function extractPcmFromWav(wavData: Buffer): ParsedWavPcm {
+  if (
+    wavData.byteLength < 44 ||
+    wavData.toString('ascii', 0, 4) !== 'RIFF' ||
+    wavData.toString('ascii', 8, 12) !== 'WAVE'
+  ) {
+    throw new Error('MiniMax TTS response did not contain a RIFF/WAVE audio payload');
+  }
+
+  let audioFormat: number | undefined;
+  let channels: number | undefined;
+  let sampleRate: number | undefined;
+  let bitsPerSample: number | undefined;
+  let pcm: Buffer | undefined;
+  let offset = 12;
+
+  while (offset + 8 <= wavData.byteLength) {
+    const chunkId = wavData.toString('ascii', offset, offset + 4);
+    const chunkSize = wavData.readUInt32LE(offset + 4);
+    const chunkStart = offset + 8;
+    const chunkEnd = chunkStart + chunkSize;
+
+    if (chunkEnd > wavData.byteLength) {
+      throw new Error(`MiniMax TTS returned malformed WAV chunk "${chunkId}"`);
+    }
+
+    if (chunkId === 'fmt ') {
+      if (chunkSize < 16) {
+        throw new Error('MiniMax TTS returned a WAV fmt chunk that is too short');
+      }
+      audioFormat = wavData.readUInt16LE(chunkStart);
+      channels = wavData.readUInt16LE(chunkStart + 2);
+      sampleRate = wavData.readUInt32LE(chunkStart + 4);
+      bitsPerSample = wavData.readUInt16LE(chunkStart + 14);
+    } else if (chunkId === 'data') {
+      pcm = wavData.subarray(chunkStart, chunkEnd);
+    }
+
+    offset = chunkEnd + (chunkSize % 2);
+  }
+
+  if (audioFormat !== 1) {
+    throw new Error('MiniMax TTS returned non-PCM WAV audio');
+  }
+  if (bitsPerSample !== MINIMAX_TTS_BYTES_PER_SAMPLE * 8) {
+    throw new Error(`MiniMax TTS returned ${bitsPerSample ?? 'unknown'}-bit audio`);
+  }
+  if (channels !== MINIMAX_TTS_CHANNELS || sampleRate !== MINIMAX_TTS_SAMPLE_RATE) {
+    throw new Error(
+      `MiniMax TTS returned ${sampleRate ?? 'unknown'}Hz/${channels ?? 'unknown'}ch audio, expected ${MINIMAX_TTS_SAMPLE_RATE}Hz/${MINIMAX_TTS_CHANNELS}ch`,
+    );
+  }
+  if (!pcm) {
+    throw new Error('MiniMax TTS response WAV audio did not include a data chunk');
+  }
+
+  return {
+    pcm,
+    sampleRate,
+    channels,
+    bitsPerSample,
+  };
+}
+
+class MiniMaxHttpTts extends tts.TTS {
+  label = 'minimax.TTS';
+  private readonly endpointUrl: string;
+  private readonly opts: MiniMaxHttpTtsOptions;
+  private readonly abortController = new AbortController();
+
+  constructor(opts: MiniMaxHttpTtsOptions) {
+    super(MINIMAX_TTS_SAMPLE_RATE, MINIMAX_TTS_CHANNELS, { streaming: false });
+    this.opts = {
+      ...opts,
+      voice: resolveMiniMaxTtsVoice(opts.voice),
+    };
+    this.endpointUrl = resolveMiniMaxTtsUrl(opts.baseUrl);
+  }
+
+  override get model(): string {
+    return this.opts.model;
+  }
+
+  override get provider(): string {
+    return new URL(this.endpointUrl).host;
+  }
+
+  override synthesize(
+    text: string,
+    connOptions?: APIConnectOptions,
+    abortSignal?: AbortSignal,
+  ): tts.ChunkedStream {
+    const signal = abortSignal
+      ? AbortSignal.any([abortSignal, this.abortController.signal])
+      : this.abortController.signal;
+    return new MiniMaxHttpTtsChunkedStream(
+      this,
+      text,
+      this.opts,
+      this.endpointUrl,
+      connOptions,
+      signal,
+    );
+  }
+
+  override stream(): tts.SynthesizeStream {
+    throw new Error('Streaming is not supported on MiniMax HTTP TTS');
+  }
+
+  override async close(): Promise<void> {
+    this.abortController.abort();
+  }
+}
+
+class MiniMaxHttpTtsChunkedStream extends tts.ChunkedStream {
+  label = 'minimax.ChunkedStream';
+
+  constructor(
+    ttsInstance: MiniMaxHttpTts,
+    text: string,
+    private readonly opts: MiniMaxHttpTtsOptions,
+    private readonly endpointUrl: string,
+    connOptions?: APIConnectOptions,
+    abortSignal?: AbortSignal,
+  ) {
+    super(text, ttsInstance, connOptions, abortSignal);
+  }
+
+  protected override async run(): Promise<void> {
+    try {
+      const signal = AbortSignal.any([
+        this.abortSignal,
+        AbortSignal.timeout(this.opts.requestTimeoutMs),
+      ]);
+      const response = await fetch(this.endpointUrl, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${this.opts.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: this.opts.model,
+          text: this.inputText,
+          stream: false,
+          output_format: 'hex',
+          voice_setting: {
+            voice_id: this.opts.voice,
+            speed: 1,
+            vol: 1,
+            pitch: 0,
+          },
+          audio_setting: {
+            sample_rate: MINIMAX_TTS_SAMPLE_RATE,
+            bitrate: MINIMAX_TTS_BITRATE,
+            format: MINIMAX_TTS_AUDIO_FORMAT,
+            channel: MINIMAX_TTS_CHANNELS,
+          },
+        }),
+        signal,
+      });
+
+      if (!response.ok) {
+        throw new Error(
+          `MiniMax TTS failed: ${summarizeProviderError(response.status, await response.text())}`,
+        );
+      }
+
+      const parsed = minimaxTtsResponseSchema.parse(await response.json());
+      const statusCode = parsed.base_resp?.status_code ?? 0;
+      if (statusCode !== 0) {
+        throw new Error(
+          `MiniMax TTS failed: ${statusCode} ${parsed.base_resp?.status_msg ?? 'unknown error'}`,
+        );
+      }
+
+      const audioHex = parsed.data?.audio;
+      if (!audioHex) {
+        throw new Error('MiniMax TTS response did not include data.audio');
+      }
+
+      const wavAudio = Buffer.from(audioHex, 'hex');
+      const { pcm } = extractPcmFromWav(wavAudio);
+      const requestId = shortuuid();
+      const audioByteStream = new AudioByteStream(MINIMAX_TTS_SAMPLE_RATE, MINIMAX_TTS_CHANNELS);
+      const frames = audioByteStream.write(pcm);
+      const bytesPerFrame =
+        (MINIMAX_TTS_SAMPLE_RATE / 10) * MINIMAX_TTS_CHANNELS * MINIMAX_TTS_BYTES_PER_SAMPLE;
+      if (pcm.byteLength % bytesPerFrame !== 0) {
+        frames.push(...audioByteStream.flush());
+      }
+
+      if (frames.length === 0) {
+        throw new Error('MiniMax TTS response contained no playable audio frames');
+      }
+
+      let lastFrame: (typeof frames)[number] | undefined;
+      const sendLastFrame = (final: boolean) => {
+        if (lastFrame) {
+          this.queue.put({
+            requestId,
+            segmentId: requestId,
+            frame: lastFrame,
+            final,
+          });
+          lastFrame = undefined;
+        }
+      };
+
+      for (const frame of frames) {
+        sendLastFrame(false);
+        lastFrame = frame;
+      }
+      sendLastFrame(true);
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        return;
+      }
+      throw error;
+    } finally {
+      this.queue.close();
+    }
+  }
+}
+
 function resolveTranscriptUrl(roomId: string): string {
   const route = CONTROL_INTERNAL.AI_INTERVIEW_TRANSCRIPT.route.replace(':roomId', roomId);
-  const base = trimTrailingSlashes(env.AI_INTERVIEWER_CONTROL_PLANE_URL);
+  const base = trimTrailingSlashes(env.CONTROL_PLANE_URL);
   return `${base}/${route}`;
 }
 
 function resolveAiInterviewerContextUrl(roomId: string): string {
   const route = CONTROL_INTERNAL.AI_INTERVIEWER_CONTEXT.route.replace(':roomId', roomId);
-  const base = trimTrailingSlashes(env.AI_INTERVIEWER_CONTROL_PLANE_URL);
+  const base = trimTrailingSlashes(env.CONTROL_PLANE_URL);
   return `${base}/${route}`;
 }
 
 function resolveAiInterviewerPhaseTransitionUrl(roomId: string): string {
   const route = CONTROL_INTERNAL.AI_INTERVIEWER_PHASE_TRANSITION.route.replace(':roomId', roomId);
-  const base = trimTrailingSlashes(env.AI_INTERVIEWER_CONTROL_PLANE_URL);
+  const base = trimTrailingSlashes(env.CONTROL_PLANE_URL);
   return `${base}/${route}`;
 }
 
@@ -252,49 +933,112 @@ function createTranscriptTurnId(
 
 function createInterviewerInstructions(): string {
   return [
-    'You are SynCode Interviewer, a strict but fair technical interviewer for live coding sessions.',
-    'You are not a coding copilot. You evaluate reasoning, communication, correctness, and tradeoff thinking.',
-    'Your behavior rules:',
-    '1) Start with one concise greeting and kickoff once per active interview session.',
-    '2) Ask focused questions about reasoning, tradeoffs, edge cases, debugging, and complexity.',
-    '3) Avoid repetitive loops. Do not repeat the same prompt pattern.',
-    '4) Do not ask a follow-up every turn; choose naturally based on context and stay silent for accidental/no-content input.',
-    '5) If candidate is stuck, use interviewer-safe prompts about constraints, tradeoffs, and bottlenecks. Do not explain the target implementation during coding.',
-    '6) Keep responses concise and interviewer-like, not pair-programming-like.',
-    "7) Never use passive helper phrases like 'let me know if you need help', 'we can implement this together', or 'I can help you code this'.",
-    '8) Treat provided starter code as platform scaffold, not candidate-authored mistakes by default.',
-    '9) Be bilingual and adaptive: reply in the language the candidate most recently used (Chinese or English), with natural mixed-language handling.',
-    '9a) Before the candidate has spoken, use the candidate UI language if it is provided. Do not mix Chinese and English in the opening greeting.',
-    '10) During quiet coding periods, speak less. Silence is acceptable; do not fill every pause.',
-    '11) Use add_inline_comment only for high-value, specific code feedback tied to one line.',
-    '12) Do not reveal final algorithms or exact implementation steps when asked or when the candidate only names a broad idea.',
-    '13) If candidate asks for the answer, refuses to reason, or says they cannot think of the strategy, do not answer the request. Ask about constraints, repeated work, or correctness at a high level.',
-    '14) Do not provide direct implementation explanation during warmup or coding. If the candidate repeatedly cannot continue, steer to wrapup instead.',
-    '14a) Until the candidate explicitly gives up or asks for post-submission review, never volunteer exact implementation tactics for the active problem.',
-    '14b) Before wrapup/review, forbidden answer leakage includes naming the canonical optimization, naming the concrete data structure, spelling out what to store, spelling out what to check, or describing the loop mechanics.',
-    '14c) If the candidate names a broad strategy, acknowledge the direction only and ask them to justify the invariant and complexity. Do not complete those details for them.',
-    '14d) If the candidate code already contains a technique, you may describe what their code does during review, but do not phrase it as new implementation advice.',
-    '14e) Do not embed answers inside questions. Ask about the kind of information needed, not the concrete container or exact operation.',
-    '14f) Never name a new concrete data structure, loop shape, variable layout, or exact condition as a hint unless the candidate already wrote it in code or explicitly gives up.',
-    '14g) If the candidate says they do not know which algorithm to use, ask them to reason from constraints, required lookup, or brute-force bottleneck. Do not name the algorithm or data structure.',
-    '15) Keep interview integrity: challenge reasoning before revealing solution details.',
-    '15a) Your default posture is evaluator/interviewer, not assistant. Prefer prompts like "explain your invariant" over "here is how to implement it".',
-    '16) Evaluate candidate solutions by correctness and tradeoffs, not by matching your preferred implementation pattern.',
-    '17) Accept alternative correct solutions and focus feedback on constraints, complexity, readability, and edge cases.',
-    '18) Before reviewing code or test outcomes, fetch fresh context using get_room_context and reference that data, unless a system-triggered instruction explicitly says the worker already computed the response from fresh context.',
-    '19) If context is stale or unavailable, ask one high-level reasoning question instead of pretending to inspect code.',
-    '20) For stage flow, use transition_room_phase only when justified by interview progress:',
-    '20a) warmup -> coding after the candidate answers the final warmup question; first say in the spoken answer that warmup is complete and coding is starting, then the system transitions after your turn.',
-    '20b) coding -> wrapup when implementation discussion is effectively complete, especially after a successful submission review; first summarize your assessment, then the system transitions after your turn.',
-    '20c) wrapup -> finished only when the candidate explicitly ends/signs off.',
-    '21) Never transition to finished without clear user intent to end the interview.',
-    '22) Warmup must stay short: at most 2 focused questions total, then move to coding without asking another warmup question.',
-    '23) In coding phase, avoid babysitting or pair-programming language; challenge and evaluate.',
-    '24) After reviewing a complete or passing solution, give a concise assessment and steer toward wrapup instead of asking endless questions.',
-    '25) Never drift to unrelated problems unless candidate explicitly asks for comparison.',
-    '26) If the candidate says a broad approach, do not fill in the exact problem-specific implementation. Ask them to articulate the invariant and complexity themselves.',
-    '27) Never call a phase transition tool before speaking the transition preamble in the same answer.',
-    '28) After a passing submission, do not recommend a specific alternative algorithm or data structure. Discuss only outcome, complexity tradeoffs, and readiness to wrap up unless the candidate is already in wrapup.',
+    'You are an experienced technical interviewer conducting a live coding interview on SynCode.',
+    '',
+    '## Core Identity',
+    'You are an evaluator, not a tutor or coding copilot. Your job is to assess problem-solving,',
+    'technical communication, and engineering judgment through natural conversation. You challenge',
+    'reasoning, probe tradeoff understanding, and help the candidate stay unstuck — but you never',
+    'do the thinking for them. Your default posture is interviewer, not assistant.',
+    '',
+    '## Conversational Rhythm',
+    'Listen more than you speak. Silence while the candidate thinks or codes is not awkward —',
+    "it's respectful. You are not a chatbot filling every pause.",
+    '',
+    'Speak when:',
+    '- The candidate directly addresses you or asks a question',
+    '- They appear stuck and silent for an extended period — start with "what are you thinking',
+    '  about?" not "here is what to do"',
+    '- They just had a visible breakthrough (tests passing, clever refactor) — a brief',
+    '  acknowledgment is natural',
+    "- They've submitted code — review the outcome concisely",
+    "- They've run tests with new failures — a targeted question about what changed helps",
+    '- The interview phase changes — orient them briefly',
+    '- They are clearly frustrated or repeatedly demanding the answer — redirect with questions',
+    '  about constraints, never comply',
+    '',
+    'Stay silent when:',
+    '- The candidate is actively typing or running tests frequently',
+    '- They just ran code and tests passed — do not narrate every green test',
+    "- They're reading or thinking quietly",
+    '- The input is noise, echo, or accidental ("um", "uh", single characters)',
+    '',
+    '## Answer-Leak Prevention — CRITICAL',
+    'This is the single most important rule. Violating it ruins the interview. You must NEVER',
+    'reveal the solution, the optimal algorithm, or the implementation approach for the active',
+    'interview problem.',
+    '',
+    'Specifically, you must never say or hint at:',
+    '- Any data structure the candidate has not already named: hash map, hash table, dict, set,',
+    '  array, list, queue, stack, heap, tree, graph, trie, deque, etc.',
+    '- Any algorithm or technique they have not named: two-pointer, sliding window, binary search,',
+    '  hashing, memoization, dynamic programming, BFS, DFS, greedy, divide-and-conquer, etc.',
+    '- What the solution should store, look up, check, iterate over, or compare',
+    '- The complexity class of the optimal solution (e.g. "there is an O(n) solution")',
+    '- Lead-in phrases that telegraph the answer: "one approach is", "you could use", "a common',
+    '  way is", "consider using", "have you thought about using a..."',
+    '',
+    'When the candidate asks for the answer or says they are stuck:',
+    '- Ask about constraints: "What operations need to be fast given the input size?"',
+    '- Ask about the bottleneck: "Where is the repeated work in your current approach?"',
+    '- Ask about the invariant: "What property must hold for your solution to be correct?"',
+    '- NEVER respond by naming the algorithm or data structure they should use',
+    '- If they genuinely cannot proceed after repeated guidance, steer toward wrapup for a',
+    '  post-interview review discussion',
+    '',
+    'When the candidate names a broad approach (e.g. "hash map", "two pointers"):',
+    '- Acknowledge the direction neutrally: "OK, tell me more about that"',
+    '- Ask them to justify: "What would be the invariant? The complexity?"',
+    '- Do NOT fill in the missing details — they must complete their own idea',
+    '- "Yes, and you would store the complements in the map" ← THIS IS THE LEAK. Never do this.',
+    '',
+    'When reviewing code, you may describe what their code DOES:',
+    '- "This loop rescans values you have already checked" — OK (describes existing behavior)',
+    '- "You could use a set to track seen values" — NOT OK (names an unstated data structure)',
+    '',
+    'Do not embed answers inside questions. Ask about the KIND of information needed, not the',
+    'concrete container or exact operation. Instead of "could a hash map help here?" ask "what',
+    'information would you need to remember while scanning to avoid rechecking?"',
+    '',
+    '## Phase Awareness',
+    '**Warmup**: Greet briefly. Introduce the problem — state what it asks, never how to solve it.',
+    'Ask exactly one focused question about their planned approach. Keep warmup short — at most',
+    '2 questions, then announce coding is starting. If the candidate wants to start coding',
+    'immediately, let them.',
+    '',
+    '**Coding**: Default to observing. Challenge reasoning when the candidate explains their',
+    'approach. If stuck, guide with questions about constraints and bottlenecks — not solutions.',
+    'If making good progress, stay quiet. After code submission, review the outcome. When the',
+    'solution is passing and reviewed, steer toward wrapup.',
+    '',
+    '**Wrapup**: Summarize — acknowledge what went well, note areas for growth, but do not reveal',
+    'the optimal solution. Invite the candidate to reflect or ask questions. End only when they',
+    'explicitly sign off.',
+    '',
+    '**Finished**: The interview is over. Do not continue questioning.',
+    '',
+    '## Tone',
+    '- Professional but warm. You are evaluating, not interrogating.',
+    '- Concise. Most responses should be 1-3 sentences. Save longer explanations for wrapup review.',
+    '- Bilingual. Match the language the candidate most recently used (Chinese or English). If they',
+    '  have not spoken yet, use the UI language hint provided. Keep code terms in English.',
+    '- Do not mix Chinese and English in the opening greeting — pick one.',
+    '- Honest. If the solution is good, say so. If it has issues, say so constructively.',
+    '- Never use passive helper clichés: "let me know if you need help", "we can implement this',
+    '  together", "I can help you code this".',
+    '- Treat starter code as platform scaffold, not candidate-authored mistakes.',
+    '- Accept alternative correct solutions. Evaluate correctness and tradeoffs, not adherence to',
+    '  your preferred implementation pattern.',
+    '',
+    '## Tools',
+    '- `get_room_context`: Fetch latest code, submission results, and room status. Use before',
+    '  reviewing code or when context seems stale. If context is unavailable, ask one high-level',
+    '  reasoning question instead of pretending to inspect code.',
+    '- `add_inline_comment`: Attach a specific, actionable comment to one line of code. Use',
+    '  sparingly — only for high-value, concrete feedback.',
+    '- `transition_room_phase`: Queue a phase transition after your current spoken turn. Always',
+    '  speak the transition preamble before calling this tool. Use only when interview progress',
+    '  justifies it. Never transition to finished without explicit candidate sign-off.',
   ].join('\n');
 }
 
@@ -322,10 +1066,91 @@ function buildPromptCachePrefix(params: {
   return sections.join('\n\n');
 }
 
-function createRealtimeSession(): voice.AgentSession {
+class AiPlatformHttpStt extends stt.STT {
+  label = 'syncode.AiPlatformHttpStt';
+  private readonly llmProvider: OpenAiCompatibleLlmProvider;
+
+  constructor() {
+    super({ streaming: false, interimResults: false });
+    this.llmProvider = new OpenAiCompatibleLlmProvider({
+      baseUrl: env.AI_PLATFORM_BASE_URL,
+      apiKey: env.AI_PLATFORM_API_KEY,
+      model: env.AI_PLATFORM_MODEL,
+      sttModel: env.AI_STT_MODEL,
+      ttsModel: env.AI_TTS_MODEL,
+      ttsVoice: env.AI_TTS_VOICE,
+      timeoutMs: env.AI_REQUEST_TIMEOUT_MS,
+    });
+  }
+
+  override get model(): string {
+    return env.AI_STT_MODEL;
+  }
+
+  override get provider(): string {
+    return 'syncode-ai-platform';
+  }
+
+  protected override async _recognize(
+    frameBuffer: AudioBuffer,
+    _abortSignal?: AbortSignal,
+  ): Promise<stt.SpeechEvent> {
+    const frame = mergeFrames(frameBuffer);
+    const result = await this.llmProvider.generateTranscription({
+      audio: encodeAudioFrameAsWav(frame),
+      mimeType: 'audio/wav',
+      fileName: 'livekit-turn.wav',
+    });
+    const text = result.text.trim();
+
+    return {
+      type: stt.SpeechEventType.FINAL_TRANSCRIPT,
+      alternatives: [
+        {
+          text,
+          language: normalizeLanguage(''),
+          startTime: 0,
+          endTime: frame.samplesPerChannel / frame.sampleRate,
+          confidence: text ? 1 : 0,
+        },
+      ],
+    };
+  }
+
+  override stream(): stt.SpeechStream {
+    throw new Error('AiPlatformHttpStt requires stt.StreamAdapter with a VAD for streaming use');
+  }
+}
+
+function encodeAudioFrameAsWav(frame: ReturnType<typeof mergeFrames>): Buffer {
+  const pcmData = Buffer.from(frame.data.buffer, frame.data.byteOffset, frame.data.byteLength);
+  const header = Buffer.alloc(44);
+  const bytesPerSample = 2;
+  const blockAlign = frame.channels * bytesPerSample;
+  const byteRate = frame.sampleRate * blockAlign;
+
+  header.write('RIFF', 0);
+  header.writeUInt32LE(36 + pcmData.byteLength, 4);
+  header.write('WAVE', 8);
+  header.write('fmt ', 12);
+  header.writeUInt32LE(16, 16);
+  header.writeUInt16LE(1, 20);
+  header.writeUInt16LE(frame.channels, 22);
+  header.writeUInt32LE(frame.sampleRate, 24);
+  header.writeUInt32LE(byteRate, 28);
+  header.writeUInt16LE(blockAlign, 32);
+  header.writeUInt16LE(bytesPerSample * 8, 34);
+  header.write('data', 36);
+  header.writeUInt32LE(pcmData.byteLength, 40);
+
+  return Buffer.concat([header, pcmData]);
+}
+
+async function createRealtimeSession(): Promise<voice.AgentSession> {
   if (!env.OPENAI_API_KEY) {
     throw new Error('OPENAI_API_KEY is required for realtime mode');
   }
+  await probeOpenAiRealtimeConnection();
   return new voice.AgentSession({
     llm: new openai.realtime.RealtimeModel({
       apiKey: env.OPENAI_API_KEY,
@@ -343,48 +1168,89 @@ function createRealtimeSession(): voice.AgentSession {
   });
 }
 
-function createFallbackSession(): voice.AgentSession {
+async function createFallbackSession(vad?: silero.VAD): Promise<voice.AgentSession> {
   if (!env.AI_INTERVIEWER_FALLBACK_ENABLED) {
     throw new Error('Realtime mode unavailable and fallback mode is disabled');
   }
 
-  const baseURL = normalizeOpenAiSdkBaseUrl(env.AI_PLATFORM_BASE_URL);
-  const stt = new openai.STT({
-    apiKey: env.AI_PLATFORM_API_KEY,
-    baseURL,
-    model: env.AI_STT_MODEL,
-    language: 'multi',
-    detectLanguage: true,
-  });
-  const llmInstance = new openai.LLM({
-    apiKey: env.AI_PLATFORM_API_KEY,
-    baseURL,
-    model: env.AI_PLATFORM_MODEL,
-  });
+  const httpStt = new AiPlatformHttpStt();
+  const sttInstance = vad ? new stt.StreamAdapter(httpStt, vad) : httpStt;
+  const llmInstance = await createFallbackLlm();
 
+  const sessionOpts: voice.AgentSessionOptions = {
+    stt: sttInstance,
+    llm: llmInstance,
+    // Realtime path has built-in turn detection via semantic_vad on the model.
+    // For the fallback STT→LLM→TTS pipeline we supply an explicit VAD for
+    // speech-boundary detection and use VAD-based turn handling.
+    ...(vad ? { vad } : {}),
+    turnDetection: 'vad',
+    ttsReadIdleTimeout: env.AI_REQUEST_TIMEOUT_MS,
+    forwardAudioIdleTimeout: env.AI_REQUEST_TIMEOUT_MS,
+  };
+
+  if (env.MINIMAX_API_KEY && env.MINIMAX_TTS_BASE_URL && env.MINIMAX_TTS_MODEL) {
+    const minimaxTts = new MiniMaxHttpTts({
+      apiKey: env.MINIMAX_API_KEY,
+      baseUrl: env.MINIMAX_TTS_BASE_URL,
+      model: env.MINIMAX_TTS_MODEL,
+      requestTimeoutMs: env.AI_REQUEST_TIMEOUT_MS,
+      voice: env.AI_TTS_VOICE,
+    });
+    return new voice.AgentSession({ ...sessionOpts, tts: minimaxTts });
+  }
+
+  // Proxy-based TTS (e.g. CosyVoice through Tsinghua AI platform).
   if (env.AI_TTS_MODEL) {
     const tts = new openai.TTS({
       apiKey: env.AI_PLATFORM_API_KEY,
-      baseURL,
+      baseURL: normalizeOpenAiSdkBaseUrl(env.AI_PLATFORM_BASE_URL),
       model: env.AI_TTS_MODEL,
       voice: resolveOpenAiTtsVoice(env.AI_TTS_VOICE),
     });
-    return new voice.AgentSession({ stt, llm: llmInstance, tts });
+    return new voice.AgentSession({ ...sessionOpts, tts });
   }
 
-  return new voice.AgentSession({ stt, llm: llmInstance });
+  // Last-resort HTTP TTS for fallback mode. This keeps fallback usable when
+  // Realtime WebSocket is unavailable but regular OpenAI HTTPS endpoints work.
+  if (env.OPENAI_API_KEY) {
+    const baseURL = normalizeOpenAiSdkBaseUrl(env.OPENAI_TTS_BASE_URL);
+    const client = createOpenAiFallbackClient(baseURL);
+    const tts = new openai.TTS({
+      apiKey: env.OPENAI_API_KEY,
+      baseURL,
+      client,
+      model: env.OPENAI_TTS_MODEL,
+      voice: resolveOpenAiTtsVoice(env.AI_TTS_VOICE),
+    });
+    return new voice.AgentSession({ ...sessionOpts, tts });
+  }
+
+  throw new Error(
+    'Fallback voice mode requires a compatible TTS provider. Set MINIMAX_API_KEY + MINIMAX_TTS_BASE_URL + MINIMAX_TTS_MODEL for MiniMax TTS, AI_TTS_MODEL for an OpenAI-compatible AI platform TTS model, or OPENAI_API_KEY for OpenAI HTTP TTS.',
+  );
 }
 
-function createInterviewSession(): voice.AgentSession {
+async function createInterviewSession(
+  vad?: silero.VAD,
+  opts: { forceFallback?: boolean } = {},
+): Promise<voice.AgentSession> {
+  if (opts.forceFallback ?? env.AI_INTERVIEWER_FORCE_FALLBACK) {
+    console.warn(
+      '[ai-interviewer-worker] Realtime session disabled by AI_INTERVIEWER_FORCE_FALLBACK, using STT+LLM+TTS pipeline',
+    );
+    return await createFallbackSession(vad);
+  }
+
   try {
-    return createRealtimeSession();
+    return await createRealtimeSession();
   } catch (error) {
     console.warn(
       `[ai-interviewer-worker] Realtime session unavailable, falling back to STT+LLM+TTS pipeline: ${
         error instanceof Error ? error.message : String(error)
       }`,
     );
-    return createFallbackSession();
+    return await createFallbackSession(vad);
   }
 }
 
@@ -467,13 +1333,10 @@ function buildSystemSignalInstructions(
   rememberedContext?: AiInterviewerContext,
   runtimeContext?: AiInterviewerContextResponse,
 ): string {
-  const parts: string[] = [
-    'A non-verbal interview signal was received from the coding workspace.',
-    `Signal reason: ${signal.reason}.`,
-  ];
+  const parts: string[] = [`[System event: ${signal.reason}]`];
 
   if (signal.summary) {
-    parts.push(`Signal summary: ${signal.summary}`);
+    parts.push(`Details: ${signal.summary}`);
   }
   if (signal.language) {
     parts.push(buildInterfaceLanguageInstruction(signal.language, 'system'));
@@ -497,19 +1360,13 @@ function buildSystemSignalInstructions(
       'Code context (with line range):',
       `${signal.codeContext.file} L${signal.codeContext.startLine}-${signal.codeContext.endLine}`,
       signal.codeContext.codeSnippet,
-      'If a focused correction would help, call add_inline_comment with a precise line and concise feedback.',
+      'If a focused correction would help, use add_inline_comment with the precise line.',
     );
   }
 
-  parts.push(buildReasonSpecificInstructions(signal.reason, signal.summary));
-  if (signal.reason === 'code_submitted') {
-    parts.push(
-      'Do not ignore this signal. Give a concise interviewer evaluation of the submission outcome.',
-    );
-  } else {
-    parts.push(
-      'Decide naturally whether to speak now. If this is quiet work time, keep the response brief or skip asking a follow-up.',
-    );
+  const reasonGuidance = buildReasonSpecificInstructions(signal.reason, signal.summary);
+  if (reasonGuidance) {
+    parts.push(reasonGuidance);
   }
 
   return parts.join('\n');
@@ -520,16 +1377,11 @@ function buildUserTextInstructions(
   context?: AiInterviewerContext,
   runtimeContext?: AiInterviewerContextResponse,
 ): string {
-  const parts = [
-    'Candidate sent a typed text message.',
-    `Candidate message: ${signal.text}`,
-    'Respond naturally as the interviewer and keep continuity with prior conversation context.',
-  ];
+  const parts = [`Candidate: ${signal.text}`];
 
   if (signal.language) {
-    parts.push(`Candidate language hint: ${signal.language}`);
+    parts.push(`Language hint: ${signal.language}`);
   }
-
   if (context) {
     parts.push(buildCompactInterviewContextReminder(context));
   }
@@ -539,72 +1391,8 @@ function buildUserTextInstructions(
   if (signal.latestSubmissionSummary) {
     parts.push(
       [
-        'Candidate-visible latest submission summary (authoritative from UI):',
-        `status=${signal.latestSubmissionSummary.status}, passed=${signal.latestSubmissionSummary.passedTestCases}/${signal.latestSubmissionSummary.totalTestCases}, failed=${signal.latestSubmissionSummary.failedTestCases}, errors=${signal.latestSubmissionSummary.errorTestCases}, at=${signal.latestSubmissionSummary.submittedAt}`,
-      ].join('\n'),
-    );
-  }
-  if (isDirectAnswerRequest(signal.text) && !isExplicitGiveUp(signal.text)) {
-    parts.push(
-      [
-        'Policy reminder: candidate is requesting direct solution help.',
-        'Do not reveal full solution, concrete algorithm steps, or complete data-structure choice yet.',
-        'Avoid naming the final canonical approach directly at this stage.',
-        'Reply with exactly one probing question and at most one constrained hint sentence.',
-        'The probing question must not contain the answer, data structure, loop condition, or exact implementation mechanic.',
-      ].join('\n'),
-    );
-  }
-  if (mentionsBroadApproach(signal.text) && !isExplicitGiveUp(signal.text)) {
-    parts.push(
-      [
-        'Candidate named a broad approach or data structure.',
-        'Do not complete the algorithm for them.',
-        'Do not mention exact storage, matching, or lookup mechanics unless their current code already does so and this is a review.',
-        'Acknowledge briefly, then ask them to explain the invariant, correctness condition, or complexity in their own words.',
-        'The question must not smuggle in implementation details they have not said.',
-      ].join('\n'),
-    );
-  }
-  if (isExplicitGiveUp(signal.text)) {
-    parts.push(
-      'Candidate explicitly gave up or says they are stuck. During coding, do not dump the solution; give brief professional encouragement and ask whether they want one final attempt or prefer to wrap up. Save direct solution explanation for wrapup/post-session review.',
-    );
-  }
-  if (isCodeOrSubmissionReviewRequest(signal.text)) {
-    parts.push(
-      [
-        'Mandatory behavior for this turn:',
-        '1) Call get_room_context before answering.',
-        '2) Base review on the returned code + latestSubmission.',
-        '3) If they differ from earlier memory, trust the latest tool result only.',
-        '4) If latestSubmission is passing or the review is complete, give a concise assessment and steer to wrapup instead of asking more coding questions.',
-      ].join('\n'),
-    );
-  }
-  if (isReadyToCodeIntent(signal.text)) {
-    parts.push(
-      [
-        'Candidate indicated readiness to implement.',
-        'If room is in warmup and transition is appropriate, first say coding is starting in the same turn. The worker will transition after your spoken turn.',
-      ].join('\n'),
-    );
-  }
-  if (isEndInterviewIntent(signal.text)) {
-    parts.push(
-      [
-        'Candidate may be signaling interview end.',
-        'If room is in coding, first summarize and guide toward wrapup before requesting a phase transition.',
-        'If room is in wrapup and intent is explicit goodbye/end, acknowledge the sign-off before requesting finish.',
-      ].join('\n'),
-    );
-  }
-  if (isLikelyAccidentalCandidateMessage(signal.text)) {
-    parts.push(
-      [
-        'The candidate message looks accidental or has no interview content.',
-        'Do not ask a new technical question.',
-        'If a response is necessary, keep it to one short clarification.',
+        'Latest submission (authoritative):',
+        `status=${signal.latestSubmissionSummary.status}, passed=${signal.latestSubmissionSummary.passedTestCases}/${signal.latestSubmissionSummary.totalTestCases}`,
       ].join('\n'),
     );
   }
@@ -683,66 +1471,27 @@ function buildLiveRoomContextInstructions(
   return sections.join('\n');
 }
 
-function buildSilentLiveContextUpdateInstructions(params: {
+function buildCodeContextUpdate(params: {
   context: AiInterviewerContextResponse;
   signal: Extract<AiInterviewerSignalPayload, { type: 'system_signal' }>;
 }): string {
   const latestSubmissionSummary = params.context.latestSubmission
-    ? `${params.context.latestSubmission.passedTestCases}/${params.context.latestSubmission.totalTestCases} passed, failed=${params.context.latestSubmission.failedTestCases}, errors=${params.context.latestSubmission.errorTestCases}, status=${params.context.latestSubmission.status}, language=${params.context.latestSubmission.language}, at=${params.context.latestSubmission.submittedAt}`
+    ? `${params.context.latestSubmission.passedTestCases}/${params.context.latestSubmission.totalTestCases} passed, status=${params.context.latestSubmission.status}`
     : 'none';
 
   return [
-    'Silent live coding context update from the workspace.',
-    'Do not respond because of this message alone.',
-    'Use this as background context only. For candidate-requested reviews, call get_room_context before speaking. For system-triggered submission_review instructions, trust the fresh response text computed by the worker.',
-    `Signal reason: ${params.signal.reason}.`,
-    params.signal.summary ? `Signal summary: ${params.signal.summary}` : undefined,
-    `Room status: ${params.context.roomStatus}`,
-    `Problem: ${params.context.problem?.title ?? 'unknown'}`,
-    `Language: ${params.context.language}`,
-    `Latest submission/run summary: ${latestSubmissionSummary}`,
+    `[Background: ${params.signal.reason}]`,
+    params.signal.summary ? `Summary: ${params.signal.summary}` : undefined,
+    `Room: ${params.context.roomStatus}, Language: ${params.context.language}`,
+    `Latest submission: ${latestSubmissionSummary}`,
     params.context.latestSubmission
-      ? 'Latest submitted code that produced the submission result:'
+      ? `Submitted code:\n${buildNumberedCodeBlock(params.context.latestSubmission.code, 160, 7_000) || '(empty)'}`
       : undefined,
-    params.context.latestSubmission
-      ? buildNumberedCodeBlock(params.context.latestSubmission.code, 160, 7_000) || '(empty)'
-      : undefined,
-    'Current code snapshot:',
+    'Current code:',
     buildNumberedCodeBlock(params.context.currentCode.code, 160, 7_000) || '(empty)',
   ]
     .filter((part): part is string => typeof part === 'string' && part.length > 0)
     .join('\n');
-}
-
-function buildWarmupKickoffInstructions(params: {
-  rememberedContext?: AiInterviewerContext;
-  runtimeContext?: AiInterviewerContextResponse;
-  interfaceLanguage?: string;
-}): string {
-  const parts = [
-    'Warmup scripted turn 1 (follow strictly):',
-    buildInterfaceLanguageInstruction(params.interfaceLanguage, 'opening'),
-    '1) Briefly welcome the candidate.',
-    '2) Explicitly introduce the current interview problem and language from provided context. State only what the problem is asking for — do NOT hint at how to solve it.',
-    '3) Ask exactly one plan question (single question only in this turn).',
-    '4) Keep total output to at most 3 short sentences.',
-    '5) Use at most 1 question mark in this turn.',
-    '6) Do not mention unrelated problems (for example linked list) unless candidate asks to compare.',
-    'HARD ANTI-LEAKAGE RULES FOR THIS TURN (these override any tendency to be helpful):',
-    "- Do NOT name any data structure or container (hash map, hash table, dict/dictionary, set, array, list, queue, stack, heap, tree, graph, trie, deque, etc.) — not as advice, not as a hint, not as 'one common approach', not even as an example.",
-    '- Do NOT name any algorithm or technique (two-pointer, sliding window, binary search, brute force, hashing, memoization, dynamic programming, BFS, DFS, greedy, divide-and-conquer, recursion, sorting first, etc.).',
-    "- Do NOT describe what to store, what to look up, what to check, what to iterate over, or what to compare. Phrases like 'store seen values', 'check if the complement exists', 'iterate and look up' are forbidden.",
-    "- Do NOT use lead-ins like 'one approach is…', 'you could use…', 'a common way is…', 'consider using…'. These leak the answer.",
-    '- Your plan question must ask the candidate how THEY would approach the problem — not propose an approach for them to confirm.',
-    'STOP IMMEDIATELY after asking your single plan question. Do not continue with explanations, examples, or hints. Wait silently for the candidate to respond.',
-  ];
-  if (params.rememberedContext) {
-    parts.push(buildInterviewContextInstructions(params.rememberedContext, 'detailed'));
-  }
-  if (params.runtimeContext) {
-    parts.push(buildLiveRoomContextInstructions(params.runtimeContext, 'compact'));
-  }
-  return parts.join('\n');
 }
 
 function isChineseLanguageHint(language: string | undefined): boolean {
@@ -762,305 +1511,6 @@ function buildInterfaceLanguageInstruction(
   return turnType === 'opening'
     ? 'Candidate UI language is English or unknown. The opening greeting must be in English only; do not include Chinese.'
     : 'Candidate UI language is English or unknown. Prefer English unless the candidate most recently used another language.';
-}
-
-function buildWarmupFollowupInstructions(params: {
-  candidateMessage: string;
-  rememberedContext?: AiInterviewerContext;
-  runtimeContext?: AiInterviewerContextResponse;
-}): string {
-  const parts = [
-    'Warmup scripted turn 2 (follow strictly):',
-    `Candidate message: ${params.candidateMessage}`,
-    'Ask exactly one focused reasoning question about this exact problem only (single question only).',
-    'If the candidate named a broad approach, do not explain the concrete implementation; ask them to state the invariant or correctness condition.',
-    'Keep this turn to at most 2 short sentences and avoid any extra mini-questions.',
-    'HARD ANTI-LEAKAGE RULES FOR THIS TURN (override any tendency to be helpful):',
-    "- Do NOT name any data structure or container (hash map, hash table, dict, set, array, list, queue, stack, heap, tree, graph, trie, deque) — not as advice, hint, 'one approach', or example.",
-    '- Do NOT name any algorithm or technique (two-pointer, sliding window, binary search, brute force, hashing, memoization, DP, BFS, DFS, greedy, sorting first).',
-    "- Do NOT describe what the solution should store, look up, check, iterate over, or compare. Phrases like 'store seen values', 'check the complement', 'use a lookup' are forbidden.",
-    "- Do NOT use lead-ins like 'one approach is', 'you could use', 'a common way is', 'consider using'. These leak the answer.",
-    "- Your question must probe the candidate's OWN reasoning (e.g. about complexity, invariant, tradeoff, brute-force bottleneck). It must not propose any answer for them to confirm.",
-    'STOP IMMEDIATELY after asking your single reasoning question. Do not continue with explanations, examples, or hints. Wait silently for the candidate to respond.',
-  ];
-  if (params.rememberedContext) {
-    parts.push(buildCompactInterviewContextReminder(params.rememberedContext));
-  }
-  if (params.runtimeContext) {
-    parts.push(buildLiveRoomContextInstructions(params.runtimeContext, 'compact'));
-  }
-  return parts.join('\n');
-}
-
-function buildWarmupTransitionAnnouncementInstructions(params: {
-  candidateMessage: string;
-  rememberedContext?: AiInterviewerContext;
-  runtimeContext?: AiInterviewerContextResponse;
-}): string {
-  const parts = [
-    'Warmup final turn (follow strictly):',
-    `Candidate message: ${params.candidateMessage}`,
-    'Acknowledge the candidate answer briefly.',
-    'Clearly say that warmup is complete and the coding phase is starting now.',
-    'Use this as the transition preamble before the system changes the phase.',
-    'Do not ask another warmup question.',
-    'Keep this to at most 2 short sentences.',
-  ];
-  if (params.rememberedContext) {
-    parts.push(buildCompactInterviewContextReminder(params.rememberedContext));
-  }
-  if (params.runtimeContext) {
-    parts.push(buildLiveRoomContextInstructions(params.runtimeContext, 'compact'));
-  }
-  return parts.join('\n');
-}
-
-function buildRepeatedNonPassingGuidanceInstructions(params: {
-  candidateMessage?: string;
-  guidanceTurns: number;
-  runtimeContext?: AiInterviewerContextResponse;
-}): string {
-  const parts = [
-    'Repeated non-passing guidance boundary:',
-    `You have already tried ${params.guidanceTurns} guidance/review turns while the latest submission is still not passing.`,
-    'Do not keep asking another debugging question.',
-    'Do not reveal the full answer or exact implementation.',
-    'Ask the candidate to choose: one final attempt, or wrap up and review what went wrong.',
-    'Keep it to at most 2 short sentences.',
-  ];
-
-  if (params.candidateMessage) {
-    parts.push(`Candidate message: ${params.candidateMessage}`);
-  }
-  if (params.runtimeContext) {
-    parts.push(buildLiveRoomContextInstructions(params.runtimeContext, 'compact'));
-  }
-
-  return parts.join('\n');
-}
-
-function buildWrapupAfterRepeatedStuckInstructions(params: {
-  candidateMessage: string;
-  discouragedTurns: number;
-  runtimeContext?: AiInterviewerContextResponse;
-}): string {
-  const parts = [
-    'Candidate appears unable or unwilling to continue after repeated guidance.',
-    `Discouraged/give-up turns observed: ${params.discouragedTurns}.`,
-    `Candidate message: ${params.candidateMessage}`,
-    'Acknowledge calmly and professionally.',
-    'Say that you will wrap up the interview here and review the learning points.',
-    'Do not give the full implementation answer.',
-    'Keep it to at most 2 short sentences.',
-  ];
-
-  if (params.runtimeContext) {
-    parts.push(buildLiveRoomContextInstructions(params.runtimeContext, 'compact'));
-  }
-
-  return parts.join('\n');
-}
-
-function buildSafeAnswerPressureResponse(params: {
-  candidateMessage: string;
-  pressureTurns: number;
-  shouldWrapUp: boolean;
-  willMoveToWrapup: boolean;
-}): string {
-  const useChinese = /[\u3400-\u9fff]/u.test(params.candidateMessage);
-  if (params.willMoveToWrapup) {
-    return useChinese
-      ? '我们先到这里，不再继续追问最优实现了。接下来进入总结阶段，回顾你目前方案的复杂度和可以改进的方向。'
-      : "We'll stop pushing the optimized implementation here. Let's move to wrapup and review the complexity and improvement direction from your current approach.";
-  }
-  if (params.shouldWrapUp) {
-    return useChinese
-      ? '我们先不继续逼出最优做法了。你可以最后再试一次，或者我们现在进入总结，回顾目前思路的优缺点。'
-      : "Let's not force the optimized approach further right now. You can take one final attempt, or we can move to wrapup and review the tradeoffs from your current approach.";
-  }
-  if (params.pressureTurns >= 2) {
-    return useChinese
-      ? '我不会直接给出算法或实现细节。先用你已经能说明白的做法写出来，然后告诉我它最耗时的重复工作在哪里。'
-      : "I won't give you the algorithm or implementation details directly. Start with the approach you can explain, then tell me where the repeated work happens.";
-  }
-  return useChinese
-    ? '先不要急着要答案。你从暴力做法出发，告诉我哪一步重复检查最多，以及如果想减少重复，需要记住哪类信息。'
-    : "Don't jump straight to the answer. Starting from brute force, tell me which check is repeated most often and what kind of information would reduce that repetition.";
-}
-
-function buildPassingOptimizationGuardResponse(candidateMessage: string): string {
-  const useChinese = /[\u3400-\u9fff]/u.test(candidateMessage);
-  return useChinese
-    ? '你已经有一个通过测试的方案了。作为面试官，我不会直接给出优化实现；请你先指出当前重复遍历中最浪费的一步，以及如果想少做重复检查，需要在遍历过程中记住哪类信息。'
-    : "You already have a passing solution. As the interviewer, I won't prescribe the optimized implementation; first identify the most wasteful repeated check in your current loops, and what kind of information you would need to remember while scanning.";
-}
-
-function hasRepeatedLoopStructure(code: string): boolean {
-  return (code.match(/\b(for|while)\b/gi)?.length ?? 0) >= 2;
-}
-
-function buildSubmissionReviewKey(context: AiInterviewerContextResponse): string | null {
-  const latest = context.latestSubmission;
-  if (!latest) {
-    return null;
-  }
-  return [
-    latest.submittedAt,
-    latest.status,
-    latest.passedTestCases,
-    latest.totalTestCases,
-    latest.failedTestCases,
-    latest.errorTestCases,
-  ].join(':');
-}
-
-function buildMissingSubmissionReviewResponse(useChinese: boolean): string {
-  return useChinese
-    ? '我看到你刚提交了代码，但还没有拿到完整结果。我们先基于当前代码继续讨论复杂度和边界情况。'
-    : "I see that you submitted, but I don't have a complete result yet. Let's continue from the current code and discuss complexity and edge cases.";
-}
-
-function buildIncompleteSubmissionReviewResponse(status: string, useChinese: boolean): string {
-  return useChinese
-    ? `我看到你的提交状态是 ${status}。等结果完成后，我会基于通过情况和当前代码继续追问。`
-    : `I see your submission is ${status}. Once the result completes, I will review the outcome and current code.`;
-}
-
-function buildPassingSubmissionReviewResponse(params: {
-  totalTestCases: number;
-  reviewedCode: string;
-  useChinese: boolean;
-}): string {
-  const { totalTestCases, reviewedCode, useChinese } = params;
-  if (hasRepeatedLoopStructure(reviewedCode)) {
-    return useChinese
-      ? `我看到这次提交通过了全部 ${totalTestCases} 个测试。你提交的代码是重复遍历型方案，正确性在这些用例上没有问题；请你简短说明它的时间复杂度，以及在题目约束下这个取舍是否可以接受，然后我们准备进入总结。`
-      : `I see your submitted code passed all ${totalTestCases} test cases. The code you submitted is a repeated-iteration solution, and it is correct for these tests; briefly state its time complexity and whether that tradeoff is acceptable for the constraints, then we can move toward wrapup.`;
-  }
-  return useChinese
-    ? `我看到这次提交通过了全部 ${totalTestCases} 个测试。请你简短说明最终复杂度和核心正确性理由，然后我们准备进入总结。`
-    : `I see your submission passed all ${totalTestCases} test cases. Briefly explain the final complexity and the core correctness argument, then we can move toward wrapup.`;
-}
-
-function buildPartialSubmissionReviewResponse(params: {
-  passedTestCases: number;
-  totalTestCases: number;
-  useChinese: boolean;
-}): string {
-  const { passedTestCases, totalTestCases, useChinese } = params;
-  return useChinese
-    ? `我看到这次提交通过了 ${passedTestCases}/${totalTestCases} 个测试。先不要换到全新的实现，回到当前代码：哪个假设最可能导致剩余用例失败？`
-    : `I see your submission passed ${passedTestCases}/${totalTestCases} test cases. Do not jump to a new implementation yet; in your current code, which assumption is most likely causing the remaining case to fail?`;
-}
-
-function buildSubmissionReviewResponse(params: {
-  context: AiInterviewerContextResponse;
-  interfaceLanguage?: string;
-}): string {
-  const latest = params.context.latestSubmission;
-  const useChinese = isChineseLanguageHint(params.interfaceLanguage);
-  if (!latest) {
-    return buildMissingSubmissionReviewResponse(useChinese);
-  }
-  if (latest.status !== 'completed') {
-    return buildIncompleteSubmissionReviewResponse(latest.status, useChinese);
-  }
-
-  const passedAll = latest.totalTestCases > 0 && latest.passedTestCases === latest.totalTestCases;
-  if (passedAll) {
-    return buildPassingSubmissionReviewResponse({
-      totalTestCases: latest.totalTestCases,
-      reviewedCode: latest.code || params.context.currentCode.code,
-      useChinese,
-    });
-  }
-  return buildPartialSubmissionReviewResponse({
-    passedTestCases: latest.passedTestCases,
-    totalTestCases: latest.totalTestCases,
-    useChinese,
-  });
-}
-
-function buildRepeatedNonPassingSubmissionBoundaryResponse(params: {
-  context: AiInterviewerContextResponse;
-  guidanceTurns: number;
-  interfaceLanguage?: string;
-}): string {
-  const useChinese = isChineseLanguageHint(params.interfaceLanguage);
-  const latest = params.context.latestSubmission;
-  const resultSegment = latest
-    ? `${latest.passedTestCases}/${latest.totalTestCases}`
-    : 'not fully passing';
-  if (useChinese) {
-    return `我们已经做了 ${params.guidanceTurns} 轮调试引导，最新提交仍然是 ${resultSegment}。你可以最后再尝试一次，或者我们现在进入总结，回顾当前方案的问题。`;
-  }
-  return `We have already done ${params.guidanceTurns} debugging passes, and the latest submission is still ${resultSegment}. You can take one final attempt, or we can move to wrapup and review the issue in your current approach.`;
-}
-
-function buildCodingPhaseKickoffInstructions(params: {
-  candidateMessage?: string;
-  rememberedContext?: AiInterviewerContext;
-  runtimeContext?: AiInterviewerContextResponse;
-}): string {
-  const parts = [
-    'Coding phase kickoff turn (follow strictly):',
-    '1) Say warmup is complete and that coding phase is starting now.',
-    "2) Use wording similar to: 'Sounds good, let's start the coding phase now. You can begin implementing.'",
-    '3) State that you will challenge reasoning and not provide direct final answers.',
-    '4) Keep this concise and interviewer-like.',
-    'HARD ANTI-LEAKAGE RULES FOR THIS TURN:',
-    '- Do NOT name any data structure, algorithm, or technique for the active problem.',
-    '- Do NOT describe what the solution should store, look up, check, or iterate over.',
-    "- Do NOT use lead-ins like 'one approach is', 'you could use', 'a common way is', 'consider using'.",
-    'STOP IMMEDIATELY after the brief kickoff. Do not continue with hints or strategy.',
-  ];
-  if (params.candidateMessage) {
-    parts.push(`Recent candidate message: ${params.candidateMessage}`);
-  }
-  if (params.rememberedContext) {
-    parts.push(buildCompactInterviewContextReminder(params.rememberedContext));
-  }
-  if (params.runtimeContext) {
-    parts.push(buildLiveRoomContextInstructions(params.runtimeContext, 'compact'));
-  }
-  return parts.join('\n');
-}
-
-function buildWrapupPhaseKickoffInstructions(params: {
-  rememberedContext?: AiInterviewerContext;
-  runtimeContext?: AiInterviewerContextResponse;
-}): string {
-  const latest = params.runtimeContext?.latestSubmission;
-  const passingAll =
-    latest?.status === 'completed' &&
-    latest.totalTestCases > 0 &&
-    latest.passedTestCases === latest.totalTestCases;
-  let outcomeGuidance: string;
-  if (!latest) {
-    outcomeGuidance =
-      'No completed submission on record — acknowledge the effort honestly without claiming the solution was finished.';
-  } else if (passingAll) {
-    outcomeGuidance = `Latest submission passed all ${latest.totalTestCases} tests — open with sincere positive acknowledgement (e.g. "great work").`;
-  } else {
-    outcomeGuidance = `Latest submission passed ${latest.passedTestCases}/${latest.totalTestCases} tests — open with measured, respectful acknowledgement (e.g. "good effort", "nice work pushing through this"); do NOT overpraise as if everything passed.`;
-  }
-
-  const parts = [
-    'Wrapup phase kickoff turn (follow strictly):',
-    '1) Open by acknowledging that the interview is moving into the wrapup phase.',
-    `2) ${outcomeGuidance}`,
-    '3) Give a brief overall assessment of the candidate (1-2 sentences) grounded in the submitted code and submission stats: cover correctness and approach. Avoid revealing optimized algorithms or implementation details the candidate did not already state or write.',
-    '4) Explicitly invite the candidate to share any final reflections, questions, or anything they would like to discuss before ending.',
-    '5) Keep the whole turn to roughly 3-5 sentences. Interviewer tone, warm but professional.',
-    '6) Do not request another phase transition in this turn — wrapup ends only when the candidate explicitly signs off.',
-  ];
-  if (params.rememberedContext) {
-    parts.push(buildCompactInterviewContextReminder(params.rememberedContext));
-  }
-  if (params.runtimeContext) {
-    parts.push(buildLiveRoomContextInstructions(params.runtimeContext, 'detailed'));
-  }
-  return parts.join('\n');
 }
 
 function buildConstraintGuidance(context: AiInterviewerContextResponse): string {
@@ -1133,203 +1583,6 @@ function estimateTokenCount(text: string): number {
   }
   // Rough cross-language estimate for telemetry; not model-accurate billing tokens.
   return Math.max(1, Math.ceil(trimmed.length / 3.8));
-}
-
-function isDirectAnswerRequest(text: string): boolean {
-  const normalized = text.toLowerCase();
-  return (
-    normalized.includes('give me the answer') ||
-    normalized.includes('just tell me the answer') ||
-    normalized.includes('tell me exactly') ||
-    normalized.includes('tell me how exactly') ||
-    normalized.includes('exactly how') ||
-    normalized.includes('show me step by step') ||
-    normalized.includes('walk me through the solution') ||
-    normalized.includes('guide me through making it better') ||
-    normalized.includes('guide me through the better solution') ||
-    normalized.includes('what should we use') ||
-    normalized.includes('what should i use') ||
-    normalized.includes('tell me how to solve') ||
-    normalized.includes('how should i solve') ||
-    normalized.includes('what approach should i use') ||
-    normalized.includes('which algorithm') ||
-    normalized.includes('what algorithm') ||
-    normalized.includes('which data structure') ||
-    normalized.includes('what data structure') ||
-    normalized.includes('which data type') ||
-    normalized.includes('what data type') ||
-    normalized.includes('solve it for me') ||
-    normalized.includes('write the code for me') ||
-    normalized.includes('不知道用什么算法') ||
-    normalized.includes('用什么算法') ||
-    normalized.includes('用什么数据结构') ||
-    normalized.includes('直接告诉') ||
-    normalized.includes('给我答案') ||
-    normalized.includes('告诉我怎么做') ||
-    normalized.includes('一步一步教我') ||
-    normalized.includes('直接给代码')
-  );
-}
-
-function isOptimizationRequest(text: string): boolean {
-  const normalized = text.toLowerCase();
-  return (
-    normalized.includes('make it better') ||
-    normalized.includes('make this better') ||
-    normalized.includes('refine the solution') ||
-    normalized.includes('refine this solution') ||
-    normalized.includes('improve the solution') ||
-    normalized.includes('optimize') ||
-    normalized.includes('more efficient') ||
-    normalized.includes('better complexity') ||
-    normalized.includes('更优') ||
-    normalized.includes('优化') ||
-    normalized.includes('提高效率')
-  );
-}
-
-function isCandidateUnableToFindStrategy(text: string): boolean {
-  const normalized = text.toLowerCase();
-  return (
-    normalized.includes("couldn't think") ||
-    normalized.includes('could not think') ||
-    normalized.includes("can't think") ||
-    normalized.includes('cannot think') ||
-    normalized.includes("couldn't come up") ||
-    normalized.includes('could not come up') ||
-    normalized.includes("don't know another strategy") ||
-    normalized.includes('do not know another strategy') ||
-    normalized.includes("don't know the strategy") ||
-    normalized.includes('do not know the strategy') ||
-    normalized.includes("don't know the algorithm") ||
-    normalized.includes('do not know the algorithm') ||
-    normalized.includes('no idea what to use') ||
-    normalized.includes('想不出来') ||
-    normalized.includes('不知道其他方法') ||
-    normalized.includes('不知道策略') ||
-    normalized.includes('不知道算法')
-  );
-}
-
-function mentionsBroadApproach(text: string): boolean {
-  const normalized = text.toLowerCase();
-  return (
-    normalized.includes('hash map') ||
-    normalized.includes('hashmap') ||
-    normalized.includes('dictionary') ||
-    normalized.includes('dict') ||
-    normalized.includes('map structure') ||
-    normalized.includes('two pointer') ||
-    normalized.includes('two-pointer') ||
-    normalized.includes('binary search') ||
-    normalized.includes('哈希') ||
-    normalized.includes('字典') ||
-    normalized.includes('双指针') ||
-    normalized.includes('二分')
-  );
-}
-
-function isExplicitGiveUp(text: string): boolean {
-  const normalized = text.toLowerCase();
-  return (
-    normalized.includes('i give up') ||
-    normalized.includes("i don't know anymore") ||
-    normalized.includes('i am stuck') ||
-    normalized.includes("i can't do it") ||
-    normalized.includes('i cannot do it') ||
-    normalized.includes("i don't think i can do it") ||
-    normalized.includes('i have no idea') ||
-    normalized.includes("i don't know what to do") ||
-    normalized.includes('放弃') ||
-    normalized.includes('我不会了') ||
-    normalized.includes('我做不出来') ||
-    normalized.includes('我不知道怎么做') ||
-    normalized.includes('告诉我答案吧')
-  );
-}
-
-function isDiscouragedCandidateMessage(text: string): boolean {
-  const normalized = text.toLowerCase();
-  return (
-    isExplicitGiveUp(text) ||
-    normalized.includes('this is too hard') ||
-    normalized.includes("i don't think this works") ||
-    normalized.includes("i'm lost") ||
-    normalized.includes('i am lost') ||
-    normalized.includes('算了') ||
-    normalized.includes('太难了') ||
-    normalized.includes('没思路') ||
-    normalized.includes('没有思路')
-  );
-}
-
-function isContinueAttemptIntent(text: string): boolean {
-  const normalized = text.toLowerCase();
-  return (
-    normalized.includes('one more') ||
-    normalized.includes('try again') ||
-    normalized.includes('continue') ||
-    normalized.includes('keep going') ||
-    normalized.includes('再试') ||
-    normalized.includes('继续') ||
-    normalized.includes('再来一次')
-  );
-}
-
-function isCodeOrSubmissionReviewRequest(text: string): boolean {
-  const normalized = text.toLowerCase();
-  return (
-    normalized.includes('review my code') ||
-    normalized.includes('check my code') ||
-    normalized.includes('review the submission') ||
-    normalized.includes('check submission') ||
-    normalized.includes('look at my code') ||
-    normalized.includes('看我的代码') ||
-    normalized.includes('检查我的代码') ||
-    normalized.includes('看一下提交') ||
-    normalized.includes('检查提交结果')
-  );
-}
-
-function isContextRefreshRequest(text: string): boolean {
-  const normalized = text.toLowerCase();
-  return (
-    normalized.includes('retrieve the code context') ||
-    normalized.includes('get the code context') ||
-    normalized.includes('fetch the code context') ||
-    normalized.includes('check the latest code context') ||
-    normalized.includes('refresh context') ||
-    normalized.includes('获取代码上下文') ||
-    normalized.includes('重新获取上下文') ||
-    normalized.includes('再获取一次上下文')
-  );
-}
-
-function isReadyToCodeIntent(text: string): boolean {
-  const normalized = text.toLowerCase();
-  return (
-    normalized.includes('start coding') ||
-    normalized.includes('let me code') ||
-    normalized.includes('i will code now') ||
-    normalized.includes('开始写代码') ||
-    normalized.includes('我来写代码') ||
-    normalized.includes('进入编码')
-  );
-}
-
-function isEndInterviewIntent(text: string): boolean {
-  const normalized = text.toLowerCase();
-  return (
-    normalized.includes('end session') ||
-    normalized.includes('end the interview') ||
-    normalized.includes('stop the interview') ||
-    normalized.includes('thank you for the interview') ||
-    normalized.includes('goodbye') ||
-    normalized.includes('结束面试') ||
-    normalized.includes('结束会话') ||
-    normalized.includes('谢谢面试') ||
-    normalized.includes('再见')
-  );
 }
 
 function isLikelyAccidentalCandidateMessage(text: string): boolean {
@@ -1422,50 +1675,52 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+async function withTimeout<T>(
+  operation: Promise<T>,
+  timeoutMs: number,
+  message: string,
+): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      operation,
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(() => reject(new Error(message)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+  }
+}
+
 function buildReasonSpecificInstructions(
   reason: AiInterviewerSignalReason,
   summary: string | undefined,
 ): string {
   switch (reason) {
     case 'session_joined':
-      return [
-        'Kick off naturally: greet briefly, introduce the problem context, then ask one opening interview question.',
-        'Do not ask company HR-style questions unless the candidate explicitly asks for that format.',
-      ].join('\n');
+      return 'The candidate just joined. Greet them naturally and introduce the interview problem.';
     case 'stage_changed':
-      return [
-        'Adjust tone for the new stage and keep interview progression coherent.',
-        'Do not repeat the previous phase. Make the new phase expectations clear once.',
-        'If stage changed to coding, announce that the candidate can start coding now and keep strict interviewer behavior.',
-      ].join('\n');
+      return 'The interview phase changed. Orient the candidate briefly to the new phase expectations.';
     case 'user_idle':
-      return [
-        'User appears quiet/idle.',
-        'Only speak if a short nudge adds clear value. Otherwise stay silent.',
-        'Never interrupt focused coding just to fill silence.',
-      ].join('\n');
+      return 'The candidate has been quiet for a while. Only speak if a brief, warm check-in would help — otherwise stay silent. Do not call transition_room_phase because silence alone is not interview progress.';
     case 'hint_used':
-      return 'A hint was used. Prefer one concise check-in question instead of a long explanation.';
+      return 'The candidate used a hint. A brief acknowledgment or follow-up question is natural.';
     case 'code_ran': {
       const run = parseRunSummary(summary);
       if (run != null && run.passed === run.total) {
-        return 'Visible run passed fully. Usually remain quiet unless a brief optimization prompt is warranted.';
+        return 'The candidate ran their code and all tests passed. Usually stay quiet — a brief acknowledgment is fine but do not narrate every green test.';
       }
-      return 'A run finished with non-passing tests. Ask one targeted debugging question, not a full solution.';
+      return 'The candidate ran their code and some tests failed. If you have useful guidance, ask one targeted question about what might have changed.';
     }
     case 'code_submitted':
-      return [
-        'Submission finished. This is a strong cue to speak as the interviewer.',
-        'Start by saying you see that the candidate submitted a run.',
-        'Fetch fresh context if needed and evaluate the actual outcome.',
-        'If the solution is passing or the review is complete, summarize the assessment and steer toward wrapup instead of asking more coding questions.',
-        'If it is failing, ask at most one targeted debugging question or give one concise next step without giving away the full fix.',
-        'The debugging question must not name a new exact data structure, loop shape, or implementation condition for the candidate.',
-      ].join('\n');
+      return 'The candidate submitted their code. Review the outcome. If passing, acknowledge and steer toward wrapup. If failing, ask one targeted debugging question.';
     case 'manual_nudge':
-      return 'User explicitly asked for interviewer input. Respond clearly and directly.';
+      return 'The candidate explicitly asked for your input. Respond directly and helpfully.';
     default:
-      return 'Respond naturally and stay concise.';
+      return '';
   }
 }
 
@@ -1565,42 +1820,6 @@ function shouldIgnoreRuntimeSignal(
   return runtimeContext?.roomStatus === 'finished';
 }
 
-function isWarmupKickoffSignal(
-  signal: SystemSignalPayload,
-  runtimeContext: AiInterviewerContextResponse | undefined,
-  warmupFlowState: WarmupFlowState,
-): boolean {
-  return (
-    runtimeContext?.roomStatus === 'warmup' &&
-    warmupFlowState === 'not_started' &&
-    (signal.reason === 'session_joined' || signal.reason === 'stage_changed')
-  );
-}
-
-function isCodingKickoffSignal(
-  signal: SystemSignalPayload,
-  runtimeContext: AiInterviewerContextResponse | undefined,
-  codingKickoffAnnounced: boolean,
-): boolean {
-  return (
-    runtimeContext?.roomStatus === 'coding' &&
-    signal.reason === 'stage_changed' &&
-    !codingKickoffAnnounced
-  );
-}
-
-function isWrapupKickoffSignal(
-  signal: SystemSignalPayload,
-  runtimeContext: AiInterviewerContextResponse | undefined,
-  wrapupKickoffAnnounced: boolean,
-): boolean {
-  return (
-    runtimeContext?.roomStatus === 'wrapup' &&
-    (signal.reason === 'stage_changed' || signal.reason === 'session_joined') &&
-    !wrapupKickoffAnnounced
-  );
-}
-
 function toRealtimeInterviewContext(
   roomContext: AiInterviewerContextResponse,
 ): AiInterviewerContext | undefined {
@@ -1618,73 +1837,32 @@ function toRealtimeInterviewContext(
   };
 }
 
-function shouldRespondToSystemSignal(params: {
-  signal: Extract<AiInterviewerSignalPayload, { type: 'system_signal' }>;
+function hasAntiSpamElapsed(lastReplyAt: number, now: number): boolean {
+  return now - lastReplyAt >= ANTI_SPAM_MIN_INTERVAL_MS;
+}
+
+function isIdleCheckinOverdue(lastUserTurnAt: number, lastReplyAt: number, now: number): boolean {
+  if (lastUserTurnAt <= 0) {
+    return false;
+  }
+  return now - lastUserTurnAt >= IDLE_CHECKIN_MS && now - lastReplyAt >= IDLE_CHECKIN_MS;
+}
+
+function shouldRequestUserAwayDecision(params: {
+  userState: string;
+  agentState: string;
+  lastReplyAt: number;
   now: number;
-  signalLastSentAt: Map<AiInterviewerSignalReason, number>;
-  lastSystemReplyAt: number;
-  hasInterviewStarted: boolean;
-  lastUserTurnAt: number;
-  lastAssistantTurnAt: number;
 }): boolean {
-  const {
-    signal,
-    now,
-    signalLastSentAt,
-    lastSystemReplyAt,
-    hasInterviewStarted,
-    lastUserTurnAt,
-    lastAssistantTurnAt,
-  } = params;
+  return (
+    params.userState === 'away' &&
+    params.agentState !== 'speaking' &&
+    hasAntiSpamElapsed(params.lastReplyAt, params.now)
+  );
+}
 
-  if (signal.reason === 'manual_nudge') {
-    return true;
-  }
-
-  if (signal.reason === 'session_joined') {
-    return !hasInterviewStarted;
-  }
-
-  const previousForReason = signalLastSentAt.get(signal.reason) ?? 0;
-  const minInterval = SIGNAL_REASON_MIN_INTERVAL_MS[signal.reason];
-  if (now - previousForReason < minInterval) {
-    return false;
-  }
-  if (
-    signal.reason !== 'code_submitted' &&
-    now - lastSystemReplyAt < SYSTEM_SIGNAL_GLOBAL_MIN_INTERVAL_MS
-  ) {
-    return false;
-  }
-
-  switch (signal.reason) {
-    case 'user_idle':
-      if (lastUserTurnAt <= 0) {
-        return false;
-      }
-      if (now - lastUserTurnAt < 3 * 60_000) {
-        return false;
-      }
-      return now - lastAssistantTurnAt >= 4 * 60_000;
-    case 'code_ran': {
-      if (now - lastAssistantTurnAt < 2 * 60_000) {
-        return false;
-      }
-      const run = parseRunSummary(signal.summary);
-      if (!run) {
-        return true;
-      }
-      return run.passed < run.total;
-    }
-    case 'hint_used':
-      return now - lastAssistantTurnAt >= 90_000;
-    case 'stage_changed':
-      return now - lastAssistantTurnAt >= 45_000;
-    case 'code_submitted':
-      return now - lastAssistantTurnAt >= 5_000;
-    default:
-      return true;
-  }
+function isIdleDrivenReplyReason(reason: string | null | undefined): boolean {
+  return reason === 'user_away_timeout' || reason === 'system_user_idle';
 }
 
 // The LiveKit Agent entrypoint below wires SDK callbacks, room events, and
@@ -1692,6 +1870,12 @@ function shouldRespondToSystemSignal(params: {
 // helpers above; the callback itself is exercised by LiveKit runtime tests.
 /* v8 ignore start */
 const agent = defineAgent({
+  // Prewarm eagerly loads the Silero VAD model so the fallback STT→LLM→TTS
+  // pipeline can detect speech boundaries without a cold-start delay on first
+  // use. The realtime path ignores VAD (it uses built-in semantic_vad).
+  prewarm: async (proc: JobProcess) => {
+    proc.userData.vad = await silero.VAD.load();
+  },
   entry: async (ctx: JobContext) => {
     const metadata = parseDispatchMetadata(ctx.job.metadata);
     const roomId = metadata.roomId ?? ctx.room.name ?? ctx.job.room?.name;
@@ -1706,43 +1890,105 @@ const agent = defineAgent({
       );
     }
 
-    const session = createInterviewSession();
+    const removeFutureTrackSubscription = registerFutureRemoteTrackSubscription(ctx, roomId);
+    ctx.addShutdownCallback(async () => {
+      removeFutureTrackSubscription();
+    });
+
+    const connectUrl = resolveLiveKitAgentConnectUrl({
+      assignedUrl: ctx.info.url,
+      overrideUrl: env.LIVEKIT_AGENT_CONNECT_URL,
+    });
+    if (connectUrl !== ctx.info.url) {
+      console.debug(
+        `[ai-interviewer-worker] using LiveKit agent connect URL room=${roomId} assigned=${summarizeUrlForLog(
+          ctx.info.url,
+        )} connect=${summarizeUrlForLog(connectUrl)}`,
+      );
+      ctx.info.url = connectUrl;
+    }
+
+    // Keep the initial room handshake fast; broad subscription happens immediately after connect.
+    const connectStartedAt = Date.now();
+    console.debug(
+      `[ai-interviewer-worker] connecting LiveKit room=${roomId} url=${summarizeUrlForLog(
+        ctx.info.url,
+      )}`,
+    );
+    await withoutProxyEnv(() => ctx.connect(undefined, AutoSubscribe.SUBSCRIBE_NONE));
+    console.debug(
+      `[ai-interviewer-worker] connected LiveKit room=${roomId} elapsedMs=${
+        Date.now() - connectStartedAt
+      }`,
+    );
+    subscribeExistingRemoteTracks(ctx, roomId);
+
+    const publishRealtimeEvent = async (event: AiInterviewerEventPayload) => {
+      if (!ctx.agent) {
+        console.warn(
+          `[ai-interviewer-worker] cannot publish realtime event before agent is connected room=${roomId} type=${event.type}`,
+        );
+        return;
+      }
+
+      await withTimeout(
+        ctx.agent.publishData(encodeAiInterviewerEventPayload(event), {
+          reliable: true,
+          topic: AI_INTERVIEWER_EVENT_TOPIC,
+          destination_identities: participantUserId ? [participantUserId] : undefined,
+        }),
+        REALTIME_EVENT_PUBLISH_TIMEOUT_MS,
+        `timed out publishing realtime event ${event.type}`,
+      ).catch((error) => {
+        console.warn(
+          `[ai-interviewer-worker] failed to publish realtime event room=${roomId} type=${event.type}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      });
+    };
+
+    const publishSessionReady = async () => {
+      await publishRealtimeEvent({
+        type: 'session_ready',
+        occurredAt: Date.now(),
+      });
+    };
+
+    let session: voice.AgentSession;
+    try {
+      session = await createInterviewSession(ctx.proc.userData.vad as silero.VAD | undefined);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(
+        `[ai-interviewer-worker] voice interviewer unavailable for room ${roomId}: ${message}`,
+      );
+      await publishRealtimeEvent({
+        type: 'error',
+        message,
+        occurredAt: Date.now(),
+      });
+      return;
+    }
+
     const systemInstructions = createInterviewerInstructions();
     const seenTurnIds = new Set<string>();
-    const signalLastSentAt = new Map<AiInterviewerSignalReason, number>();
     const pendingInlineComments: Array<{ line: number; comment: string }> = [];
     let lastUserSpeakerId: string | null = participantUserId ?? null;
     let latestInterviewContext: AiInterviewerContext | undefined;
     let latestRuntimeRoomContext: AiInterviewerContextResponse | undefined;
-    let preferredInterfaceLanguage: string | undefined;
-    let warmupFlowState: WarmupFlowState = 'not_started';
-    let warmupAssistantTurnCount = 0;
-    let warmupKickoffInFlight = false;
-    let warmupAwaitingCandidateAnswerForTransition = false;
-    let warmupAutoTransitionInFlight = false;
-    let warmupTransitionPendingAfterAssistant = false;
-    let warmupTransitionReason = 'Warmup question cap reached';
     let queuedPhaseTransitionAfterAssistant: {
       targetStatus: RoomPhaseStatus;
       reason?: string;
     } | null = null;
     let queuedPhaseTransitionInFlight = false;
-    let codingKickoffAnnounced = false;
-    let wrapupKickoffAnnounced = false;
-    let hasInterviewStarted = false;
     let lastUserTurnAt = 0;
-    let lastAssistantTurnAt = 0;
     let lastSystemReplyAt = 0;
-    let nonPassingGuidanceTurnCount = 0;
-    let discouragedTurnCount = 0;
-    let lastNonPassingSubmissionKey: string | null = null;
-    let lastReviewedSubmissionKey: string | null = null;
     let suppressRealtimeAssistantTranscriptsUntil = 0;
     let currentAgentState: voice.AgentState = 'initializing';
     let agentStoppedSpeakingAt = 0;
-    let askedContinueAfterRepeatedFailure = false;
-    let answerPressureTurnCount = 0;
-    let answerPressureWrapupPrompted = false;
+    let userAwayDecisionInFlight = false;
+    let activeReplyReason: string | null = null;
     let approxPromptInputTokensTotal = 0;
     let approxOutputTokensTotal = 0;
     let approxConversationTokensTotal = 0;
@@ -1837,12 +2083,28 @@ const agent = defineAgent({
       console.debug(
         `[ai-interviewer-worker] reply-prompt room=${roomId} reason=${params.reason} inputTokens≈${inputTokens} promptInputTotal≈${approxPromptInputTokensTotal} conversationTokens≈${approxConversationTokensTotal}`,
       );
-      await session.generateReply({
-        userInput: params.userInput,
-        instructions: promptPayload,
-        toolChoice: params.toolChoice,
-        inputModality: params.inputModality ?? 'text',
-      });
+      const previousActiveReplyReason = activeReplyReason;
+      activeReplyReason = params.reason;
+      try {
+        await session.generateReply({
+          userInput: params.userInput,
+          instructions: promptPayload,
+          toolChoice: params.toolChoice,
+          inputModality: params.inputModality ?? 'text',
+        });
+      } catch (error) {
+        const message = resolveErrorEventMessage(error);
+        console.warn(
+          `[ai-interviewer-worker] failed to generate reply room=${roomId} reason=${params.reason}: ${message}`,
+        );
+        await publishRealtimeEvent({
+          type: 'error',
+          message: 'AI interviewer service is temporarily unavailable.',
+          occurredAt: Date.now(),
+        });
+      } finally {
+        activeReplyReason = previousActiveReplyReason;
+      }
       maybeLogContextBudgetRisk();
     };
 
@@ -1865,59 +2127,6 @@ const agent = defineAgent({
       }
     };
 
-    const generateGuidedInterviewerMessage = async (params: {
-      message: string;
-      reason: string;
-      context?: AiInterviewerContextResponse;
-    }) => {
-      suppressRealtimeAssistantTranscripts(350);
-      await interruptRealtimeSpeech(params.reason);
-      await sleep(250);
-
-      const contextInstructions = params.context
-        ? [
-            'Fresh room context for this turn:',
-            buildLiveRoomContextInstructions(params.context, 'detailed'),
-          ].join('\n')
-        : '';
-      const instructions = [
-        'Realtime interviewer response directive.',
-        'Respond to the candidate naturally as the interviewer. Do not mention prompts, directives, handoffs, tools, or internal context.',
-        'A private system event will provide the intended response and any fresh room context. Deliver that meaning directly; do not read labels or metadata aloud.',
-        'If fresh room context is provided, treat it as canonical and ignore older memory that conflicts with it.',
-        'Never claim code is incomplete, hardcoded, or unsubmitted if the fresh latestSubmission says the submitted code passed.',
-        'Do not reveal an optimized algorithm, data structure, storage plan, or exact implementation unless the candidate already stated or wrote it.',
-      ]
-        .filter((part) => part.length > 0)
-        .join('\n\n');
-      const userInput = [
-        'Internal interviewer event. This is not a candidate message.',
-        'Speak one natural interviewer response using the private guidance and fresh context.',
-        'Do not mention this internal event.',
-        `Private guidance: ${params.message}`,
-        contextInstructions,
-      ].join('\n');
-      await generateReplyWithTelemetry({
-        reason: params.reason,
-        userInput,
-        instructions,
-        toolChoice: 'none',
-        inputModality: 'text',
-      });
-    };
-
-    const publishRealtimeEvent = async (event: AiInterviewerEventPayload) => {
-      if (!ctx.agent) {
-        return;
-      }
-
-      await ctx.agent.publishData(encodeAiInterviewerEventPayload(event), {
-        reliable: true,
-        topic: AI_INTERVIEWER_EVENT_TOPIC,
-        destination_identities: participantUserId ? [participantUserId] : undefined,
-      });
-    };
-
     const recordTurn = async (turn: TranscriptTurnPayload) => {
       if (seenTurnIds.has(turn.turnId)) {
         return;
@@ -1936,65 +2145,19 @@ const agent = defineAgent({
 
     // Resets phase-flow flags so they reflect the freshly fetched room status.
     // Extracted from refreshRoomContext to keep cognitive complexity low.
-    const applyRefreshedRoomStatusFlags = (
-      roomStatus: AiInterviewerContextResponse['roomStatus'],
-    ) => {
-      if (roomStatus === 'warmup' && warmupFlowState === 'completed') {
-        warmupFlowState = 'not_started';
-        warmupAssistantTurnCount = 0;
-        warmupAwaitingCandidateAnswerForTransition = false;
-        warmupAutoTransitionInFlight = false;
-        warmupTransitionPendingAfterAssistant = false;
-        codingKickoffAnnounced = false;
-        wrapupKickoffAnnounced = false;
-        return;
-      }
-      if (roomStatus === 'coding') {
-        warmupFlowState = 'completed';
-        warmupAssistantTurnCount = 2;
-        warmupAwaitingCandidateAnswerForTransition = false;
-        warmupAutoTransitionInFlight = false;
-        warmupTransitionPendingAfterAssistant = false;
-        wrapupKickoffAnnounced = false;
-        return;
-      }
-      if (roomStatus === 'wrapup' || roomStatus === 'finished') {
-        warmupFlowState = 'completed';
-        warmupAssistantTurnCount = 2;
-        warmupAwaitingCandidateAnswerForTransition = false;
-        warmupAutoTransitionInFlight = false;
-        warmupTransitionPendingAfterAssistant = false;
-        codingKickoffAnnounced = true;
-        if (roomStatus === 'finished') {
-          wrapupKickoffAnnounced = true;
-        }
-      }
-    };
 
     // Resets the non-passing-submission guidance counters whenever the latest
     // submission is passing. Extracted from refreshRoomContext.
-    const resetGuidanceCountersForPassingSubmission = () => {
-      nonPassingGuidanceTurnCount = 0;
-      discouragedTurnCount = 0;
-      lastNonPassingSubmissionKey = null;
-      askedContinueAfterRepeatedFailure = false;
-      answerPressureTurnCount = 0;
-      answerPressureWrapupPrompted = false;
-    };
 
     // Performs the side effects of a successful context fetch: caches the
     // latest runtime/interview context, updates phase-flow flags, refreshes
     // the prompt cache prefix, and resets guidance counters if appropriate.
     const applyFetchedRoomContext = (context: AiInterviewerContextResponse) => {
       latestRuntimeRoomContext = context;
-      applyRefreshedRoomStatusFlags(context.roomStatus);
       const interviewContext = toRealtimeInterviewContext(context);
       if (interviewContext) {
         latestInterviewContext = interviewContext;
         refreshPromptCachePrefix();
-      }
-      if (isPassingSubmission(context)) {
-        resetGuidanceCountersForPassingSubmission();
       }
     };
 
@@ -2031,64 +2194,6 @@ const agent = defineAgent({
       return undefined;
     };
 
-    const markPhaseTransitionState = (targetStatus: RoomPhaseStatus) => {
-      if (targetStatus === 'coding') {
-        warmupFlowState = 'completed';
-        warmupAssistantTurnCount = 2;
-        warmupAwaitingCandidateAnswerForTransition = false;
-        warmupTransitionPendingAfterAssistant = false;
-        codingKickoffAnnounced = true;
-      }
-      if (targetStatus === 'wrapup' || targetStatus === 'finished') {
-        codingKickoffAnnounced = true;
-      }
-      if (targetStatus === 'finished') {
-        wrapupKickoffAnnounced = true;
-      }
-    };
-
-    const transitionWarmupToCoding = async (reason: string): Promise<boolean> => {
-      if (!participantUserId) {
-        return false;
-      }
-      const runtimeContext = (await refreshRoomContext()) ?? latestRuntimeRoomContext;
-      if (runtimeContext?.roomStatus !== 'warmup') {
-        return runtimeContext?.roomStatus === 'coding';
-      }
-      try {
-        await requestAiInterviewerPhaseTransition({
-          roomId,
-          participantId: participantUserId,
-          targetStatus: 'coding',
-          reason,
-        });
-        await refreshRoomContext();
-        markPhaseTransitionState('coding');
-        return true;
-      } catch (error) {
-        console.warn(
-          `[ai-interviewer-worker] warmup->coding transition failed for room ${roomId}: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-        );
-        return false;
-      }
-    };
-
-    const queueWarmupTransitionAfterAssistant = (reason: string): boolean => {
-      if (
-        warmupAutoTransitionInFlight ||
-        warmupTransitionPendingAfterAssistant ||
-        codingKickoffAnnounced
-      ) {
-        return false;
-      }
-      warmupTransitionReason = reason;
-      warmupTransitionPendingAfterAssistant = true;
-      warmupAwaitingCandidateAnswerForTransition = false;
-      return true;
-    };
-
     const queuePhaseTransitionAfterAssistant = (
       targetStatus: RoomPhaseStatus,
       reason?: string,
@@ -2116,7 +2221,6 @@ const agent = defineAgent({
         try {
           const runtimeContext = (await refreshRoomContext()) ?? latestRuntimeRoomContext;
           if (runtimeContext?.roomStatus === queued.targetStatus) {
-            markPhaseTransitionState(queued.targetStatus);
             return;
           }
           await requestAiInterviewerPhaseTransition({
@@ -2126,7 +2230,6 @@ const agent = defineAgent({
             reason: queued.reason,
           });
           await refreshRoomContext();
-          markPhaseTransitionState(queued.targetStatus);
         } catch (error) {
           console.warn(
             `[ai-interviewer-worker] queued phase transition to ${queued.targetStatus} failed for room ${roomId}: ${
@@ -2137,67 +2240,6 @@ const agent = defineAgent({
           queuedPhaseTransitionInFlight = false;
         }
       })();
-    };
-
-    const transitionQueuedWarmupAfterAssistant = () => {
-      if (
-        !warmupTransitionPendingAfterAssistant ||
-        warmupAutoTransitionInFlight ||
-        codingKickoffAnnounced
-      ) {
-        return;
-      }
-      warmupAutoTransitionInFlight = true;
-      void (async () => {
-        try {
-          const transitioned = await transitionWarmupToCoding(warmupTransitionReason);
-          if (!transitioned) {
-            warmupTransitionPendingAfterAssistant = false;
-            return;
-          }
-          warmupFlowState = 'completed';
-          warmupAssistantTurnCount = 2;
-          warmupAwaitingCandidateAnswerForTransition = false;
-          warmupTransitionPendingAfterAssistant = false;
-          codingKickoffAnnounced = true;
-        } finally {
-          warmupAutoTransitionInFlight = false;
-        }
-      })();
-    };
-
-    const startWarmupKickoffIfNeeded = async (reason: string) => {
-      if (warmupKickoffInFlight || warmupFlowState !== 'not_started' || hasInterviewStarted) {
-        return;
-      }
-
-      warmupKickoffInFlight = true;
-      try {
-        const runtimeContext =
-          (await refreshRoomContext({ forceAttempts: 4 })) ?? latestRuntimeRoomContext;
-        if (
-          runtimeContext?.roomStatus !== 'warmup' ||
-          warmupFlowState !== 'not_started' ||
-          hasInterviewStarted
-        ) {
-          return;
-        }
-
-        const scriptedNow = Date.now();
-        lastSystemReplyAt = scriptedNow;
-        signalLastSentAt.set('session_joined', scriptedNow);
-        warmupFlowState = 'kickoff_sent';
-        await generateReplyWithTelemetry({
-          reason,
-          instructions: buildWarmupKickoffInstructions({
-            rememberedContext: latestInterviewContext,
-            runtimeContext,
-            interfaceLanguage: preferredInterfaceLanguage,
-          }),
-        });
-      } finally {
-        warmupKickoffInFlight = false;
-      }
     };
 
     const emitTurn = async (params: {
@@ -2231,239 +2273,16 @@ const agent = defineAgent({
     };
 
     // Returns true when the answer-pressure guard handled the turn.
-    const tryHandleAnswerPressure = async (
-      content: string,
-      runtimeContext: AiInterviewerContextResponse | undefined,
-    ): Promise<boolean> => {
-      const isPreWrapupAnswerPressure =
-        runtimeContext?.roomStatus !== 'wrapup' &&
-        runtimeContext?.roomStatus !== 'finished' &&
-        (isDirectAnswerRequest(content) || isCandidateUnableToFindStrategy(content));
-      if (!isPreWrapupAnswerPressure) {
-        return false;
-      }
-      answerPressureTurnCount += 1;
-      const shouldWrapUp = answerPressureTurnCount >= 3;
-      const willMoveToWrapup = answerPressureWrapupPrompted && answerPressureTurnCount >= 4;
-      if (willMoveToWrapup && runtimeContext?.roomStatus === 'coding') {
-        queuePhaseTransitionAfterAssistant(
-          'wrapup',
-          'Candidate repeatedly requested answer or could not identify strategy',
-        );
-      }
-      if (shouldWrapUp) {
-        answerPressureWrapupPrompted = true;
-      }
-      await generateGuidedInterviewerMessage({
-        reason: 'answer_pressure_guard',
-        message: buildSafeAnswerPressureResponse({
-          candidateMessage: content,
-          pressureTurns: answerPressureTurnCount,
-          shouldWrapUp,
-          willMoveToWrapup,
-        }),
-      });
-      return true;
-    };
 
     // Returns true when the passing-submission optimization guard handled the turn.
-    const tryHandlePassingOptimizationGuard = async (
-      content: string,
-      runtimeContext: AiInterviewerContextResponse | undefined,
-    ): Promise<boolean> => {
-      if (
-        runtimeContext?.roomStatus !== 'coding' ||
-        !isPassingSubmission(runtimeContext) ||
-        !(isOptimizationRequest(content) || isDirectAnswerRequest(content))
-      ) {
-        return false;
-      }
-      answerPressureTurnCount += 1;
-      await generateGuidedInterviewerMessage({
-        reason: 'passing_solution_optimization_guard',
-        message: buildPassingOptimizationGuardResponse(content),
-        context: runtimeContext,
-      });
-      return true;
-    };
 
     // Updates the non-passing-guidance counters in place for the current turn.
-    const updateNonPassingGuidanceCounters = (
-      content: string,
-      hasNonPassingCodingSubmission: boolean,
-    ) => {
-      if (!hasNonPassingCodingSubmission) {
-        return;
-      }
-      if (isContinueAttemptIntent(content)) {
-        askedContinueAfterRepeatedFailure = false;
-        discouragedTurnCount = 0;
-        nonPassingGuidanceTurnCount = Math.min(nonPassingGuidanceTurnCount, 4);
-      }
-      if (isDiscouragedCandidateMessage(content)) {
-        discouragedTurnCount += 1;
-      }
-      if (
-        isDirectAnswerRequest(content) ||
-        mentionsBroadApproach(content) ||
-        isCodeOrSubmissionReviewRequest(content) ||
-        isContextRefreshRequest(content) ||
-        isDiscouragedCandidateMessage(content)
-      ) {
-        nonPassingGuidanceTurnCount += 1;
-      }
-    };
 
     // Returns true when a non-passing-submission boundary turn was emitted.
-    const tryHandleNonPassingBoundary = async (
-      content: string,
-      runtimeContext: AiInterviewerContextResponse | undefined,
-      hasNonPassingCodingSubmission: boolean,
-    ): Promise<boolean> => {
-      if (!hasNonPassingCodingSubmission) {
-        return false;
-      }
-      if (discouragedTurnCount >= 3 && !queuedPhaseTransitionAfterAssistant) {
-        queuePhaseTransitionAfterAssistant(
-          'wrapup',
-          'Candidate remained stuck after repeated guidance',
-        );
-        await generateReplyWithTelemetry({
-          reason: 'wrapup_after_repeated_stuck',
-          instructions: buildWrapupAfterRepeatedStuckInstructions({
-            candidateMessage: content,
-            discouragedTurns: discouragedTurnCount,
-            runtimeContext,
-          }),
-        });
-        return true;
-      }
-      if (nonPassingGuidanceTurnCount >= 5 && !askedContinueAfterRepeatedFailure) {
-        askedContinueAfterRepeatedFailure = true;
-        await generateReplyWithTelemetry({
-          reason: 'repeated_nonpassing_guidance_boundary',
-          instructions: buildRepeatedNonPassingGuidanceInstructions({
-            candidateMessage: content,
-            guidanceTurns: nonPassingGuidanceTurnCount,
-            runtimeContext,
-          }),
-        });
-        return true;
-      }
-      return false;
-    };
 
     // Returns true when the warmup-phase candidate-text flow handled the turn.
-    const tryHandleWarmupCandidateText = async (params: {
-      content: string;
-      language?: string;
-      runtimeContext: AiInterviewerContextResponse | undefined;
-    }): Promise<boolean> => {
-      const { content, language, runtimeContext } = params;
-      if (runtimeContext?.roomStatus !== 'warmup') {
-        return false;
-      }
-      if (isReadyToCodeIntent(content)) {
-        const queued = queueWarmupTransitionAfterAssistant(
-          'Candidate explicitly requested to start coding',
-        );
-        if (queued) {
-          await generateReplyWithTelemetry({
-            reason: 'warmup_explicit_ready_to_code',
-            instructions: buildCodingPhaseKickoffInstructions({
-              candidateMessage: content,
-              rememberedContext: latestInterviewContext,
-              runtimeContext,
-            }),
-          });
-          return true;
-        }
-      }
-
-      if (warmupFlowState === 'not_started') {
-        warmupFlowState = 'kickoff_sent';
-        await generateReplyWithTelemetry({
-          reason: 'warmup_turn_1',
-          instructions: buildWarmupKickoffInstructions({
-            rememberedContext: latestInterviewContext,
-            runtimeContext,
-            interfaceLanguage: language ?? preferredInterfaceLanguage,
-          }),
-        });
-        return true;
-      }
-
-      if (warmupFlowState === 'kickoff_sent') {
-        warmupFlowState = 'followup_sent';
-        warmupAwaitingCandidateAnswerForTransition = true;
-        await generateReplyWithTelemetry({
-          reason: 'warmup_turn_2',
-          instructions: buildWarmupFollowupInstructions({
-            candidateMessage: content,
-            rememberedContext: latestInterviewContext,
-            runtimeContext,
-          }),
-        });
-        return true;
-      }
-
-      if (
-        warmupFlowState === 'followup_sent' &&
-        warmupAwaitingCandidateAnswerForTransition &&
-        !warmupAutoTransitionInFlight
-      ) {
-        const queued = queueWarmupTransitionAfterAssistant(
-          'Warmup follow-up answered by candidate',
-        );
-        if (queued) {
-          await generateReplyWithTelemetry({
-            reason: 'warmup_transition_after_final_answer',
-            instructions: buildWarmupTransitionAnnouncementInstructions({
-              candidateMessage: content,
-              rememberedContext: latestInterviewContext,
-              runtimeContext,
-            }),
-          });
-        }
-        return true;
-      }
-      return false;
-    };
 
     // Returns true when a context-refresh candidate request was handled.
-    const tryHandleCandidateContextRefresh = async (
-      content: string,
-      runtimeContext: AiInterviewerContextResponse | undefined,
-    ): Promise<boolean> => {
-      if (
-        !isContextRefreshRequest(content) ||
-        (runtimeContext?.roomStatus !== 'coding' && runtimeContext?.roomStatus !== 'wrapup')
-      ) {
-        return false;
-      }
-      if (runtimeContext) {
-        await generateReplyWithTelemetry({
-          reason: 'context_refresh_with_runtime_context',
-          instructions: [
-            'Candidate asked you to refresh/review live code context.',
-            `Candidate message: ${content}`,
-            'You now have the latest room context below. Review using this context directly.',
-            'Do not ask the candidate to summarize code unless context is empty.',
-            buildLiveRoomContextInstructions(runtimeContext, 'detailed'),
-          ].join('\n'),
-        });
-        return true;
-      }
-      await generateReplyWithTelemetry({
-        reason: 'context_refresh_unavailable',
-        instructions: [
-          'Candidate asked to review live code, but fresh code data is unavailable to you this turn.',
-          'Do not mention backend, tool, context retrieval, or implementation details.',
-          'Respond as the interviewer with one high-level reasoning question about their intended invariant or latest test outcome.',
-        ].join('\n'),
-      });
-      return true;
-    };
 
     const handleCandidateText = async (params: {
       content: string;
@@ -2478,57 +2297,22 @@ const agent = defineAgent({
         return;
       }
 
-      const signal: Extract<AiInterviewerSignalPayload, { type: 'user_text' }> = {
-        type: 'user_text',
-        text: content,
-        ...(params.language ? { language: params.language } : {}),
-        ...(params.latestSubmissionSummary
-          ? { latestSubmissionSummary: params.latestSubmissionSummary }
-          : {}),
-      };
-
-      const runtimeContext =
-        (await refreshRoomContext({
-          forceAttempts: isContextRefreshRequest(content) ? 5 : 3,
-        })) ?? latestRuntimeRoomContext;
-
-      if (await tryHandleAnswerPressure(content, runtimeContext)) {
-        return;
-      }
-      if (await tryHandlePassingOptimizationGuard(content, runtimeContext)) {
-        return;
-      }
-
-      const hasNonPassingCodingSubmission =
-        runtimeContext?.roomStatus === 'coding' && isNonPassingSubmission(runtimeContext);
-      updateNonPassingGuidanceCounters(content, hasNonPassingCodingSubmission);
-      if (
-        await tryHandleNonPassingBoundary(content, runtimeContext, hasNonPassingCodingSubmission)
-      ) {
-        return;
-      }
-
-      if (
-        await tryHandleWarmupCandidateText({
-          content,
-          language: params.language,
-          runtimeContext,
-        })
-      ) {
-        return;
-      }
-
-      if (await tryHandleCandidateContextRefresh(content, runtimeContext)) {
-        return;
-      }
+      const runtimeContext = (await refreshRoomContext()) ?? latestRuntimeRoomContext;
 
       const instructions = buildUserTextInstructions(
-        signal,
+        {
+          type: 'user_text',
+          text: content,
+          ...(params.language ? { language: params.language } : {}),
+          ...(params.latestSubmissionSummary
+            ? { latestSubmissionSummary: params.latestSubmissionSummary }
+            : {}),
+        },
         latestInterviewContext,
         runtimeContext,
       );
       await generateReplyWithTelemetry({
-        reason: `user_text_${signal.language ?? 'voice'}`,
+        reason: `user_text_${params.language ?? 'voice'}`,
         instructions,
         inputModality: 'text',
       });
@@ -2650,6 +2434,17 @@ const agent = defineAgent({
 
         const runtimeContext = (await refreshRoomContext()) ?? latestRuntimeRoomContext;
         const fromStatus = runtimeContext?.roomStatus;
+        if (isIdleDrivenReplyReason(activeReplyReason)) {
+          return {
+            transitioned: false,
+            reason: 'idle-checkin-cannot-transition-phase',
+            fromStatus,
+            targetStatus,
+            interviewerInstruction:
+              'Do not transition phases during idle or away check-ins. Stay in the current phase; ask at most one brief check-in question, or stay silent.',
+          };
+        }
+
         if (fromStatus === targetStatus) {
           return {
             transitioned: false,
@@ -2689,7 +2484,7 @@ const agent = defineAgent({
       },
     });
 
-    const syncSilentLiveContextUpdate = async (
+    const syncLiveContextUpdate = async (
       runtimeContext: AiInterviewerContextResponse,
       signal: Extract<AiInterviewerSignalPayload, { type: 'system_signal' }>,
     ) => {
@@ -2705,7 +2500,7 @@ const agent = defineAgent({
         nextChatContext.addMessage({
           id: LIVE_CODE_CONTEXT_MESSAGE_ID,
           role: 'system',
-          content: buildSilentLiveContextUpdateInstructions({
+          content: buildCodeContextUpdate({
             context: runtimeContext,
             signal,
           }),
@@ -2713,11 +2508,11 @@ const agent = defineAgent({
         });
         await interviewAgent.updateChatCtx(nextChatContext);
         console.debug(
-          `[ai-interviewer-worker] silent live context updated room=${roomId} reason=${signal.reason}`,
+          `[ai-interviewer-worker] live context updated room=${roomId} reason=${signal.reason}`,
         );
       } catch (error) {
         console.warn(
-          `[ai-interviewer-worker] failed to sync silent live context for room ${roomId}: ${
+          `[ai-interviewer-worker] failed to sync live context for room ${roomId}: ${
             error instanceof Error ? error.message : String(error)
           }`,
         );
@@ -2740,13 +2535,69 @@ const agent = defineAgent({
       },
     );
 
-    session.on(voice.AgentSessionEventTypes.UserStateChanged, (event) => {
-      void publishRealtimeEvent({
-        type: 'user_state',
-        state: event.newState,
-        occurredAt: event.createdAt,
-      });
-    });
+    const handleUserAwayState = async (event: voice.UserStateChangedEvent) => {
+      const initialNow = Date.now();
+      if (
+        userAwayDecisionInFlight ||
+        !shouldRequestUserAwayDecision({
+          userState: event.newState,
+          agentState: currentAgentState,
+          lastReplyAt: lastSystemReplyAt,
+          now: initialNow,
+        })
+      ) {
+        return;
+      }
+
+      userAwayDecisionInFlight = true;
+      try {
+        const runtimeContext = (await refreshRoomContext()) ?? latestRuntimeRoomContext;
+        const now = Date.now();
+        if (
+          !shouldRequestUserAwayDecision({
+            userState: event.newState,
+            agentState: currentAgentState,
+            lastReplyAt: lastSystemReplyAt,
+            now,
+          })
+        ) {
+          return;
+        }
+
+        const signal: SystemSignalPayload = {
+          type: 'system_signal',
+          reason: 'user_idle',
+          summary: 'LiveKit user away timeout triggered.',
+        };
+        if (shouldIgnoreRuntimeSignal(signal, runtimeContext)) {
+          return;
+        }
+        lastSystemReplyAt = now;
+        const instructions = buildSystemSignalInstructions(
+          signal,
+          latestInterviewContext,
+          runtimeContext,
+        );
+        await generateReplyWithTelemetry({
+          reason: 'user_away_timeout',
+          instructions,
+        });
+      } finally {
+        userAwayDecisionInFlight = false;
+      }
+    };
+
+    session.on(
+      voice.AgentSessionEventTypes.UserStateChanged,
+      (event: voice.UserStateChangedEvent) => {
+        void publishRealtimeEvent({
+          type: 'user_state',
+          state: event.newState,
+          occurredAt: event.createdAt,
+        });
+        void handleUserAwayState(event);
+      },
+    );
 
     session.on(voice.AgentSessionEventTypes.OverlappingSpeech, (event) => {
       void publishRealtimeEvent({
@@ -2853,8 +2704,6 @@ const agent = defineAgent({
         }
 
         const codeAnnotations = pendingInlineComments.splice(0, pendingInlineComments.length);
-        lastAssistantTurnAt = event.item.createdAt;
-        hasInterviewStarted = true;
 
         void emitTurn({
           turnId: event.item.id,
@@ -2866,49 +2715,86 @@ const agent = defineAgent({
         });
 
         void (async () => {
-          const runtimeContext = (await refreshRoomContext()) ?? latestRuntimeRoomContext;
           if (queuedPhaseTransitionAfterAssistant) {
             transitionQueuedPhaseAfterAssistant();
-            return;
-          }
-          if (warmupTransitionPendingAfterAssistant && runtimeContext?.roomStatus === 'warmup') {
-            transitionQueuedWarmupAfterAssistant();
-            return;
-          }
-          if (runtimeContext?.roomStatus !== 'warmup') {
-            return;
-          }
-          warmupAssistantTurnCount += 1;
-          if (warmupAssistantTurnCount >= 2 && warmupFlowState !== 'completed') {
-            warmupFlowState = 'followup_sent';
-            warmupAwaitingCandidateAnswerForTransition = true;
           }
         })();
       },
     );
 
+    // QUAIL_L background-noise suppression — free tier, cleans up keyboard
+    // clicks, fan hum, and ambient room noise. Degrades silently to a no-op
+    // when aiCoustics credentials are unavailable (self-hosted LiveKit without
+    // a license key) or the native module cannot be loaded.
+    let noiseCancellation: ReturnType<typeof aiCoustics.audioEnhancement> | undefined;
+    try {
+      noiseCancellation = aiCoustics.audioEnhancement({ model: 'quailL' });
+    } catch {
+      // Native module unavailable — audio passes through unchanged.
+    }
+
     await session.start({
       agent: interviewAgent,
       room: ctx.room,
       inputOptions: {
+        ...(noiseCancellation ? { noiseCancellation } : {}),
         participantIdentity: participantUserId,
-        closeOnDisconnect: true,
+        closeOnDisconnect: false,
       },
     });
 
     void refreshRoomContext();
 
-    const onParticipantDisconnected = (participant: { identity?: string }) => {
-      if (!participantUserId) {
+    let reconnectShutdownTimer: ReturnType<typeof setTimeout> | undefined;
+    const clearReconnectShutdownTimer = () => {
+      if (!reconnectShutdownTimer) {
         return;
       }
-      if (participant.identity !== participantUserId) {
-        return;
-      }
-      ctx.shutdown('participant-disconnected');
+      clearTimeout(reconnectShutdownTimer);
+      reconnectShutdownTimer = undefined;
     };
+
+    const onParticipantConnected = (participant: { identity?: string }) => {
+      if (!participantUserId || participant.identity !== participantUserId) {
+        return;
+      }
+
+      const hadReconnectTimer = reconnectShutdownTimer !== undefined;
+      clearReconnectShutdownTimer();
+      subscribeExistingRemoteTracks(ctx, roomId);
+      console.debug(
+        `[ai-interviewer-worker] participant reconnected room=${roomId} participant=${
+          participant.identity
+        }${hadReconnectTimer ? ' graceTimer=cleared' : ''}`,
+      );
+
+      void (async () => {
+        await sleep(250);
+        await publishSessionReady();
+      })();
+    };
+
+    const onParticipantDisconnected = (participant: { identity?: string }) => {
+      if (!participantUserId || participant.identity !== participantUserId) {
+        return;
+      }
+      clearReconnectShutdownTimer();
+      console.debug(
+        `[ai-interviewer-worker] participant disconnected room=${roomId} participant=${participant.identity}; waiting ${env.AI_INTERVIEWER_RECONNECT_GRACE_MS}ms before shutdown`,
+      );
+      reconnectShutdownTimer = setTimeout(() => {
+        reconnectShutdownTimer = undefined;
+        console.debug(
+          `[ai-interviewer-worker] participant reconnect grace expired room=${roomId}; shutting down`,
+        );
+        ctx.shutdown('participant-disconnected');
+      }, env.AI_INTERVIEWER_RECONNECT_GRACE_MS);
+    };
+    ctx.room.on('participantConnected', onParticipantConnected);
     ctx.room.on('participantDisconnected', onParticipantDisconnected);
     ctx.addShutdownCallback(async () => {
+      clearReconnectShutdownTimer();
+      ctx.room.off('participantConnected', onParticipantConnected);
       ctx.room.off('participantDisconnected', onParticipantDisconnected);
     });
 
@@ -2937,9 +2823,6 @@ const agent = defineAgent({
           content,
           occurredAt: Date.now(),
         });
-      }
-      if (signal.language) {
-        preferredInterfaceLanguage = signal.language;
       }
       void handleCandidateText({
         content,
@@ -2977,131 +2860,20 @@ const agent = defineAgent({
     // Bumps non-passing-submission guidance state on a code_submitted signal,
     // emitting the boundary-response turn when the guidance threshold is hit.
     // Returns true when the boundary turn was emitted so the caller can stop.
-    const handleNonPassingSubmissionTracking = async (
-      signal: SystemSignal,
-      runtimeContext: AiInterviewerContextResponse,
-    ): Promise<boolean> => {
-      const latest = runtimeContext.latestSubmission;
-      const submissionKey = latest
-        ? `${latest.submittedAt}:${latest.passedTestCases}/${latest.totalTestCases}`
-        : null;
-      if (submissionKey && submissionKey !== lastNonPassingSubmissionKey) {
-        lastNonPassingSubmissionKey = submissionKey;
-        nonPassingGuidanceTurnCount += 1;
-      }
-      if (nonPassingGuidanceTurnCount < 5 || askedContinueAfterRepeatedFailure) {
-        return false;
-      }
-      askedContinueAfterRepeatedFailure = true;
-      const boundaryNow = Date.now();
-      lastSystemReplyAt = boundaryNow;
-      signalLastSentAt.set(signal.reason, boundaryNow);
-      await generateGuidedInterviewerMessage({
-        reason: 'repeated_nonpassing_submission_boundary',
-        message: buildRepeatedNonPassingSubmissionBoundaryResponse({
-          context: runtimeContext,
-          guidanceTurns: nonPassingGuidanceTurnCount,
-          interfaceLanguage: preferredInterfaceLanguage,
-        }),
-        context: runtimeContext,
-      });
-      return true;
-    };
 
     // Handles a code_submitted system signal when the room is in coding phase.
-    const handleCodeSubmittedReview = async (
-      signal: SystemSignal,
-      runtimeContext: AiInterviewerContextResponse,
-    ): Promise<void> => {
-      console.debug(
-        `[ai-interviewer-worker] submission context room=${roomId} codeSource=${runtimeContext.currentCode.source} codeUpdatedAt=${runtimeContext.currentCode.updatedAt ?? 'none'} latestSubmission=${
-          runtimeContext.latestSubmission
-            ? `${runtimeContext.latestSubmission.passedTestCases}/${runtimeContext.latestSubmission.totalTestCases}@${runtimeContext.latestSubmission.submittedAt}`
-            : 'none'
-        }`,
-      );
-      const submissionReviewKey = buildSubmissionReviewKey(runtimeContext);
-      if (submissionReviewKey && submissionReviewKey === lastReviewedSubmissionKey) {
-        return;
-      }
-      lastReviewedSubmissionKey = submissionReviewKey;
-
-      if (isPassingSubmission(runtimeContext)) {
-        nonPassingGuidanceTurnCount = 0;
-        discouragedTurnCount = 0;
-        lastNonPassingSubmissionKey = null;
-        askedContinueAfterRepeatedFailure = false;
-      } else if (isNonPassingSubmission(runtimeContext)) {
-        const emittedBoundary = await handleNonPassingSubmissionTracking(signal, runtimeContext);
-        if (emittedBoundary) {
-          return;
-        }
-      }
-
-      const reviewNow = Date.now();
-      lastSystemReplyAt = reviewNow;
-      signalLastSentAt.set(signal.reason, reviewNow);
-      await generateGuidedInterviewerMessage({
-        reason: 'submission_review',
-        message: buildSubmissionReviewResponse({
-          context: runtimeContext,
-          interfaceLanguage: preferredInterfaceLanguage,
-        }),
-        context: runtimeContext,
-      });
-    };
 
     // Handles scripted phase-kickoff signals (warmup/coding/wrapup). Returns
     // true when the signal matched and was handled.
-    const tryHandlePhaseKickoffSignal = async (
-      signal: SystemSignal,
-      runtimeContext: AiInterviewerContextResponse | undefined,
-    ): Promise<boolean> => {
-      if (isWarmupKickoffSignal(signal, runtimeContext, warmupFlowState)) {
-        await startWarmupKickoffIfNeeded(`system_${signal.reason}_warmup_kickoff`);
-        return true;
-      }
-
-      if (isCodingKickoffSignal(signal, runtimeContext, codingKickoffAnnounced)) {
-        const scriptedNow = Date.now();
-        lastSystemReplyAt = scriptedNow;
-        signalLastSentAt.set(signal.reason, scriptedNow);
-        codingKickoffAnnounced = true;
-        await generateReplyWithTelemetry({
-          reason: `system_${signal.reason}_coding_kickoff`,
-          instructions: buildCodingPhaseKickoffInstructions({
-            rememberedContext: latestInterviewContext,
-            runtimeContext,
-          }),
-        });
-        return true;
-      }
-
-      if (isWrapupKickoffSignal(signal, runtimeContext, wrapupKickoffAnnounced)) {
-        const scriptedNow = Date.now();
-        lastSystemReplyAt = scriptedNow;
-        signalLastSentAt.set(signal.reason, scriptedNow);
-        wrapupKickoffAnnounced = true;
-        await generateReplyWithTelemetry({
-          reason: `system_${signal.reason}_wrapup_kickoff`,
-          instructions: buildWrapupPhaseKickoffInstructions({
-            rememberedContext: latestInterviewContext,
-            runtimeContext,
-          }),
-        });
-        return true;
-      }
-      return false;
-    };
 
     // Routes a decoded system_signal through the appropriate handler chain.
+    let lastCodeRanContextAt = 0;
+
     const handleSystemSignal = async (signal: SystemSignal) => {
+      // Interrupt current speech on submission for low-latency review.
       if (signal.reason === 'code_submitted') {
         suppressRealtimeAssistantTranscripts(350);
         await interruptRealtimeSpeech('code_submitted');
-      }
-      if (signal.language) {
-        preferredInterfaceLanguage = signal.language;
       }
       if (signal.interviewContext) {
         latestInterviewContext = signal.interviewContext;
@@ -3123,39 +2895,42 @@ const agent = defineAgent({
         return;
       }
 
+      // code_ran: inject context silently so the model stays informed, but
+      // do not speak on every test run. Debounce to avoid context flooding.
       if (signal.reason === 'code_ran') {
-        if (runtimeContextForSignal) {
-          await syncSilentLiveContextUpdate(runtimeContextForSignal, signal);
+        const now = Date.now();
+        if (runtimeContextForSignal && now - lastCodeRanContextAt >= CODE_RAN_CONTEXT_DEBOUNCE_MS) {
+          lastCodeRanContextAt = now;
+          await syncLiveContextUpdate(runtimeContextForSignal, signal);
         }
         return;
       }
 
-      if (signal.reason === 'code_submitted' && runtimeContextForSignal?.roomStatus === 'coding') {
-        await handleCodeSubmittedReview(signal, runtimeContextForSignal);
-        return;
-      }
-
-      if (await tryHandlePhaseKickoffSignal(signal, runtimeContextForSignal)) {
-        return;
-      }
-
+      // All other signals: check backstops, then let the model decide.
       const now = Date.now();
-      if (
-        !shouldRespondToSystemSignal({
-          signal,
-          now,
-          signalLastSentAt,
-          lastSystemReplyAt,
-          hasInterviewStarted,
-          lastUserTurnAt,
-          lastAssistantTurnAt,
-        })
-      ) {
+      const isNudge = signal.reason === 'manual_nudge';
+      const isSubmission = signal.reason === 'code_submitted';
+      const isJoin = signal.reason === 'session_joined';
+
+      // Manual nudges and submissions always get through (subject to anti-spam).
+      // Other signals need either anti-spam clearance or idle check-in.
+      const allowedByBackstop =
+        isNudge || isSubmission || isJoin
+          ? hasAntiSpamElapsed(lastSystemReplyAt, now)
+          : hasAntiSpamElapsed(lastSystemReplyAt, now) ||
+            isIdleCheckinOverdue(lastUserTurnAt, lastSystemReplyAt, now);
+
+      if (!allowedByBackstop) {
+        return;
+      }
+
+      // Don't generate a reply while the agent is speaking — wait for the
+      // voice agent's natural turn boundary to avoid audio glitches.
+      if (currentAgentState === 'speaking') {
         return;
       }
 
       lastSystemReplyAt = now;
-      signalLastSentAt.set(signal.reason, now);
 
       const instructions = buildSystemSignalInstructions(
         signal,
@@ -3191,14 +2966,7 @@ const agent = defineAgent({
       void handleSystemSignal(signal);
     });
 
-    await publishRealtimeEvent({
-      type: 'session_ready',
-      occurredAt: Date.now(),
-    });
-    void (async () => {
-      await sleep(500);
-      await startWarmupKickoffIfNeeded('system_worker_session_ready_warmup_kickoff');
-    })();
+    await publishSessionReady();
   },
 });
 /* v8 ignore stop */
@@ -3212,8 +2980,13 @@ export const __testing = {
   createRealtimeSession,
   createFallbackSession,
   createInterviewSession,
+  resolveMiniMaxTtsUrl,
+  extractPcmFromWav,
+  resolveOpenAiRealtimeWebSocketUrl,
+  resolveLiveKitAgentConnectUrl,
   resolveOpenAiTtsVoice,
   normalizeOpenAiSdkBaseUrl,
+  withoutProxyEnv,
   resolveTranscriptUrl,
   resolveAiInterviewerContextUrl,
   resolveAiInterviewerPhaseTransitionUrl,
@@ -3227,47 +3000,20 @@ export const __testing = {
   buildInterviewContextInstructions,
   buildCompactInterviewContextReminder,
   buildLiveRoomContextInstructions,
-  buildSilentLiveContextUpdateInstructions,
-  buildWarmupKickoffInstructions,
-  buildWarmupFollowupInstructions,
-  buildWarmupTransitionAnnouncementInstructions,
-  buildRepeatedNonPassingGuidanceInstructions,
-  buildWrapupAfterRepeatedStuckInstructions,
-  buildSafeAnswerPressureResponse,
-  buildPassingOptimizationGuardResponse,
-  buildSubmissionReviewResponse,
-  buildMissingSubmissionReviewResponse,
-  buildIncompleteSubmissionReviewResponse,
-  buildPassingSubmissionReviewResponse,
-  buildPartialSubmissionReviewResponse,
-  buildRepeatedNonPassingSubmissionBoundaryResponse,
-  buildCodingPhaseKickoffInstructions,
-  buildWrapupPhaseKickoffInstructions,
+  buildCodeContextUpdate,
   buildConstraintGuidance,
   buildPhaseBehaviorGuidance,
   buildPromptCachePrefix,
   buildNumberedCodeBlock,
   clampInstructionContent,
   estimateTokenCount,
-  hasRepeatedLoopStructure,
-  buildSubmissionReviewKey,
-  isDirectAnswerRequest,
-  isOptimizationRequest,
-  isCandidateUnableToFindStrategy,
-  mentionsBroadApproach,
-  isExplicitGiveUp,
-  isDiscouragedCandidateMessage,
-  isContinueAttemptIntent,
-  isCodeOrSubmissionReviewRequest,
-  isContextRefreshRequest,
-  isReadyToCodeIntent,
-  isEndInterviewIntent,
   isLikelyAccidentalCandidateMessage,
   parseSubmissionSignalSummary,
   normalizeSubmissionSignalTimestamp,
   resolveInlineCommentLine,
   buildReasonSpecificInstructions,
   resolveErrorEventMessage,
+  withTimeout,
   parseRunSummary,
   isNonPassingSubmission,
   isPassingSubmission,
@@ -3275,22 +3021,25 @@ export const __testing = {
   isExpectedSubmissionContext,
   shouldReturnFetchedRoomContext,
   shouldIgnoreRuntimeSignal,
-  isWarmupKickoffSignal,
-  isCodingKickoffSignal,
-  isWrapupKickoffSignal,
   toRealtimeInterviewContext,
-  shouldRespondToSystemSignal,
+  hasAntiSpamElapsed,
+  isIdleCheckinOverdue,
+  shouldRequestUserAwayDecision,
+  isIdleDrivenReplyReason,
+  subscribeRemoteTrackPublication,
   isChineseLanguageHint,
   buildInterfaceLanguageInstruction,
   createInterviewerInstructions,
 };
 
 const currentFilePath = fileURLToPath(import.meta.url);
-if (process.argv[1] === currentFilePath) {
+export function runAiInterviewerWorker(agentFilePath = currentFilePath): void {
   cli.runApp(
     new ServerOptions({
-      agent: currentFilePath,
+      agent: agentFilePath,
       agentName: env.AI_INTERVIEWER_AGENT_NAME,
+      initializeProcessTimeout: env.AI_INTERVIEWER_WORKER_INITIALIZE_TIMEOUT_MS,
+      shutdownProcessTimeout: env.AI_INTERVIEWER_WORKER_SHUTDOWN_TIMEOUT_MS,
       requestFunc: async (job) => {
         await job.accept(
           'AI Interviewer',
@@ -3300,4 +3049,8 @@ if (process.argv[1] === currentFilePath) {
       },
     }),
   );
+}
+
+if (process.argv[1] === currentFilePath) {
+  runAiInterviewerWorker();
 }

@@ -16,6 +16,9 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import {
   AI_CLIENT,
+  AI_INTERVIEWER_AGENT_IDENTITY,
+  AI_INTERVIEWER_AVATAR_IDENTITY,
+  AI_INTERVIEWER_PUBLISH_ON_BEHALF_ATTRIBUTE,
   type AiInterviewCodeAnalysisContext,
   type AiInterviewCodeContext,
   type AiInterviewerContextResponse,
@@ -84,6 +87,7 @@ import {
 } from '@syncode/shared';
 import {
   AGENT_DISPATCH_SERVICE,
+  type AgentDispatchInfo,
   CACHE_SERVICE,
   type IAgentDispatchService,
   type ICacheService,
@@ -116,6 +120,7 @@ import type {
   RoomDetailResult,
   RoomSummaryResult,
   SetEditorLockResult,
+  SimliAvatarSessionResult,
   TransferOwnershipResult,
   TransitionPhaseResult,
   UpdateParticipantRoleResult,
@@ -152,6 +157,10 @@ interface LatestCodeAnalysisContextCacheEntry {
   context: AiInterviewCodeAnalysisContext;
 }
 
+interface SimliComposeTokenResponse {
+  session_token?: unknown;
+}
+
 const FNV_64_OFFSET_BASIS = 0xcbf29ce484222325n;
 const FNV_64_PRIME = 0x100000001b3n;
 
@@ -162,6 +171,10 @@ function createStableDigest(value: string): string {
     hash = BigInt.asUintN(64, hash * FNV_64_PRIME);
   }
   return hash.toString(16).padStart(16, '0');
+}
+
+function trimTrailingSlashes(value: string): string {
+  return value.replace(/\/+$/, '');
 }
 
 @Injectable()
@@ -2068,7 +2081,13 @@ export class RoomsService implements OnModuleInit {
   private static readonly AI_INTERVIEW_TRANSCRIPTION_MAX_POLLS = 30;
   private static readonly AI_INTERVIEW_TRANSCRIPTION_POLL_INTERVAL_MS = 250;
   private static readonly AI_INTERVIEWER_DISPATCH_CACHE_PREFIX = 'ai-interviewer-dispatch:';
+  private static readonly AI_INTERVIEWER_DISPATCH_STARTED_AT_PREFIX =
+    'ai-interviewer-dispatch-started-at:';
   private static readonly AI_INTERVIEWER_DISPATCH_CACHE_TTL_SECONDS = 60 * 60;
+  private static readonly AI_INTERVIEWER_DISPATCH_STARTUP_GRACE_MS_DEFAULT = 90_000;
+  private static readonly AI_INTERVIEWER_DISPATCH_RECOVERY_REPLACE_AFTER_MS = 12_000;
+  private static readonly AI_INTERVIEWER_DISPATCH_LOCK_TTL_SECONDS = 10;
+  private static readonly AI_INTERVIEWER_DISPATCH_LOCK_POLL_MS = 250;
   private static readonly AI_INTERVIEWER_AGENT_NAME_DEFAULT = 'syncode-ai-interviewer';
   private static readonly AI_INTERVIEW_TRANSCRIPT_TURN_DEDUPE_PREFIX =
     'ai-interview-transcript-turn:';
@@ -2080,8 +2099,13 @@ export class RoomsService implements OnModuleInit {
   private static readonly AI_CODE_ANALYSIS_JOB_CACHE_PREFIX = 'ai-code-analysis-job:';
   private static readonly AI_CODE_ANALYSIS_LATEST_CACHE_PREFIX = 'ai-code-analysis-latest:';
   private static readonly AI_CODE_ANALYSIS_JOB_CACHE_TTL_SECONDS = 60 * 60;
+  private static readonly SIMLI_COMPOSE_TOKEN_PATH = '/compose/token';
 
-  async generateMediaToken(roomId: string, userId: string): Promise<MediaTokenResult> {
+  async generateMediaToken(
+    roomId: string,
+    userId: string,
+    options: { recoverAiInterviewerDispatch?: boolean } = {},
+  ): Promise<MediaTokenResult> {
     const [room, participant] = await this.getRoomContext(roomId, userId);
 
     if (!participant) {
@@ -2113,7 +2137,9 @@ export class RoomsService implements OnModuleInit {
 
     if (room.mode === 'ai') {
       try {
-        await this.ensureAiInterviewerDispatch(roomId, userId);
+        await this.ensureAiInterviewerDispatch(roomId, userId, {
+          recoveryRequested: options.recoverAiInterviewerDispatch ?? false,
+        });
       } catch (error) {
         this.logger.warn(
           `Unable to ensure AI interviewer dispatch for room ${roomId}: ${
@@ -2135,6 +2161,129 @@ export class RoomsService implements OnModuleInit {
     const expiresAt = new Date(Date.now() + RoomsService.MEDIA_TOKEN_TTL_SECONDS * 1000);
 
     return { token, url: clientUrl, expiresAt };
+  }
+
+  async generateAiInterviewerSimliAvatarSession(
+    roomId: string,
+    userId: string,
+  ): Promise<SimliAvatarSessionResult> {
+    const [room, participant] = await this.getRoomContext(roomId, userId);
+
+    if (!participant) {
+      throw new ForbiddenException({
+        message: 'Not a participant of this room',
+        code: ERROR_CODES.ROOM_ACCESS_DENIED,
+      });
+    }
+
+    if (room.mode !== 'ai' || room.status === RoomStatus.FINISHED) {
+      return { enabled: false };
+    }
+
+    const capabilities = resolveRoomPermissions(participant.role, {
+      isHost: room.hostId === userId,
+    });
+    const hasMediaCapability = RoomsService.MEDIA_CAPABILITIES.some((cap) => capabilities.has(cap));
+
+    if (!hasMediaCapability) {
+      throw new ForbiddenException({
+        message: 'You do not have media permissions in this room',
+        code: ERROR_CODES.ROOM_PERMISSION_DENIED,
+      });
+    }
+
+    const apiKey = this.configService.get('SIMLI_API_KEY', { infer: true });
+    const faceId = this.configService.get('SIMLI_FACE_ID', { infer: true });
+    if (!apiKey || !faceId) {
+      return { enabled: false };
+    }
+
+    const apiBaseUrl = trimTrailingSlashes(
+      this.configService.get('SIMLI_API_BASE_URL', { infer: true }) ?? 'https://api.simli.ai',
+    );
+    const wsUrl = trimTrailingSlashes(
+      this.configService.get('SIMLI_WS_BASE_URL', { infer: true }) ?? 'wss://api.simli.ai',
+    );
+    const maxSessionLength =
+      this.configService.get('SIMLI_MAX_SESSION_LENGTH_SECONDS', { infer: true }) ?? 900;
+    const maxIdleTime = this.configService.get('SIMLI_MAX_IDLE_SECONDS', { infer: true }) ?? 120;
+    const model = this.configService.get('SIMLI_MODEL', { infer: true }) ?? 'fasttalk';
+    const audioBufferSize =
+      this.configService.get('SIMLI_AUDIO_BUFFER_SIZE', { infer: true }) ?? 3000;
+    const requestTimeoutMs =
+      this.configService.get('SIMLI_REQUEST_TIMEOUT_MS', { infer: true }) ?? 8000;
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), requestTimeoutMs);
+    let response: Response;
+    try {
+      response = await fetch(`${apiBaseUrl}${RoomsService.SIMLI_COMPOSE_TOKEN_PATH}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-simli-api-key': apiKey,
+        },
+        body: JSON.stringify({
+          faceId,
+          handleSilence: false,
+          maxSessionLength,
+          maxIdleTime,
+          model,
+        }),
+        signal: controller.signal,
+      });
+    } catch (error) {
+      throw new ServiceUnavailableException({
+        message: `Unable to create Simli avatar session: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+        code: ERROR_CODES.AI_SERVICE_UNAVAILABLE,
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
+
+    if (!response.ok) {
+      throw new ServiceUnavailableException({
+        message: `Simli avatar session request failed with status ${response.status}`,
+        code: ERROR_CODES.AI_SERVICE_UNAVAILABLE,
+      });
+    }
+
+    const tokenResponse = (await response.json()) as SimliComposeTokenResponse;
+    if (
+      typeof tokenResponse.session_token !== 'string' ||
+      tokenResponse.session_token.length === 0
+    ) {
+      throw new ServiceUnavailableException({
+        message: 'Simli avatar session response did not include a session token',
+        code: ERROR_CODES.AI_SERVICE_UNAVAILABLE,
+      });
+    }
+
+    const { token: liveKitToken, url: liveKitUrl } = await this.mediaService.generateToken({
+      roomName: roomId,
+      participantIdentity: AI_INTERVIEWER_AVATAR_IDENTITY,
+      participantName: 'AI Interviewer Avatar',
+      participantAttributes: {
+        [AI_INTERVIEWER_PUBLISH_ON_BEHALF_ATTRIBUTE]: AI_INTERVIEWER_AGENT_IDENTITY,
+      },
+      canPublish: true,
+      canSubscribe: false,
+      ttlSeconds: RoomsService.MEDIA_TOKEN_TTL_SECONDS,
+    });
+    const liveKitClientUrl =
+      this.configService.get('LIVEKIT_CLIENT_URL', { infer: true }) ?? liveKitUrl;
+
+    return {
+      enabled: true,
+      sessionToken: tokenResponse.session_token,
+      wsUrl,
+      audioBufferSize,
+      liveKitToken,
+      liveKitUrl: liveKitClientUrl,
+      avatarIdentity: AI_INTERVIEWER_AVATAR_IDENTITY,
+    };
   }
 
   private fetchParticipants(roomId: string) {
@@ -2221,6 +2370,32 @@ export class RoomsService implements OnModuleInit {
     const now = new Date();
     let restoreFinalCollabState: { phase: RoomStatus; editorLocked: boolean } | null = null;
 
+    if (targetStatus === RoomStatus.FINISHED) {
+      const finalSnapshotRoom = await this.db.transaction(async (tx) => {
+        const [lockedRoom] = await tx
+          .select()
+          .from(rooms)
+          .where(eq(rooms.id, roomId))
+          .for('no key update');
+
+        if (!lockedRoom) {
+          throw new NotFoundException({
+            message: 'Room not found',
+            code: ERROR_CODES.ROOM_NOT_FOUND,
+          });
+        }
+
+        await this.assertPhaseTransitionAllowed(tx, lockedRoom, userId, targetStatus);
+        return lockedRoom;
+      });
+
+      restoreFinalCollabState = await this.prepareFinalCollabSnapshot(
+        finalSnapshotRoom,
+        targetStatus,
+        userId,
+      );
+    }
+
     const transactionResult = await this.db
       .transaction(async (tx) => {
         const [lockedRoom] = await tx
@@ -2245,11 +2420,6 @@ export class RoomsService implements OnModuleInit {
               Math.max(0, now.getTime() - lockedRoom.phaseStartedAt.getTime())
             : lockedRoom.elapsedMs;
 
-        restoreFinalCollabState = await this.prepareFinalCollabSnapshot(
-          lockedRoom,
-          targetStatus,
-          userId,
-        );
         await this.assertFinalSessionEndSnapshotReady(tx, roomId, lockedStatus, targetStatus);
 
         const roomUpdate = this.buildPhaseTransitionUpdate(
@@ -3673,20 +3843,10 @@ export class RoomsService implements OnModuleInit {
       .set({ isActive: false, leftAt })
       .where(and(eq(roomParticipants.roomId, roomId), eq(roomParticipants.userId, userId)));
 
-    if (!this.isAiInterviewerDispatchEnabled()) {
-      return;
-    }
-
-    const [room] = await this.db
-      .select({ mode: rooms.mode })
-      .from(rooms)
-      .where(eq(rooms.id, roomId))
-      .limit(1);
-    if (room?.mode !== 'ai') {
-      return;
-    }
-
-    await this.deleteAiInterviewerDispatch(roomId);
+    // Collab disconnects are transient during browser refreshes and network
+    // reconnects. Tearing down the agent here can race with the immediate
+    // media-token redispatch path and strand a worker after LiveKit shutdown.
+    // Room finish/destroy and stale-dispatch replacement still clean it up.
   }
 
   /**
@@ -4133,17 +4293,236 @@ export class RoomsService implements OnModuleInit {
     );
   }
 
+  private aiInterviewerDispatchStartedAtKey(roomId: string): string {
+    return `${RoomsService.AI_INTERVIEWER_DISPATCH_STARTED_AT_PREFIX}${roomId}`;
+  }
+
+  private resolveAiInterviewerDispatchStartupGraceMs(): number {
+    return (
+      this.configService.get('AI_INTERVIEWER_DISPATCH_STARTUP_GRACE_MS', { infer: true }) ??
+      RoomsService.AI_INTERVIEWER_DISPATCH_STARTUP_GRACE_MS_DEFAULT
+    );
+  }
+
+  private isWithinAiInterviewerDispatchStartupGrace(startedAt: number | null): boolean {
+    return (
+      startedAt !== null &&
+      Number.isFinite(startedAt) &&
+      Date.now() - startedAt < this.resolveAiInterviewerDispatchStartupGraceMs()
+    );
+  }
+
+  private isWithinAiInterviewerDispatchRecoveryGrace(startedAt: number | null): boolean {
+    return (
+      startedAt !== null &&
+      Number.isFinite(startedAt) &&
+      Date.now() - startedAt < RoomsService.AI_INTERVIEWER_DISPATCH_RECOVERY_REPLACE_AFTER_MS
+    );
+  }
+
+  private hasInFlightAiInterviewerDispatchJob(dispatch: AgentDispatchInfo): boolean {
+    return (
+      dispatch.jobs?.some((job) => job.status === 'pending' || job.status === 'running') ?? false
+    );
+  }
+
+  private hasTerminalAiInterviewerDispatchJob(dispatch: AgentDispatchInfo): boolean {
+    const jobs = dispatch.jobs ?? [];
+    return jobs.length > 0 && !this.hasInFlightAiInterviewerDispatchJob(dispatch);
+  }
+
+  private shouldPreserveInFlightAiInterviewerDispatch(
+    dispatch: AgentDispatchInfo,
+    startedAt: number | null,
+    options: { recoveryRequested?: boolean } = {},
+  ): boolean {
+    if (options.recoveryRequested && !this.isWithinAiInterviewerDispatchRecoveryGrace(startedAt)) {
+      return false;
+    }
+
+    const withinStartupGrace = this.isWithinAiInterviewerDispatchStartupGrace(startedAt);
+    const hasInFlightJob = this.hasInFlightAiInterviewerDispatchJob(dispatch);
+    if (hasInFlightJob) {
+      return withinStartupGrace;
+    }
+
+    if (!withinStartupGrace) {
+      return false;
+    }
+
+    // LiveKit may list a just-created dispatch before the agent participant is
+    // active and before job state is populated. Do not delete it during that
+    // startup window; otherwise overlapping media-token calls create duplicate
+    // jobs and strand the original worker.
+    return (dispatch.jobs ?? []).length === 0;
+  }
+
+  private orderAiInterviewerDispatches(
+    dispatches: AgentDispatchInfo[],
+    preferredDispatchId?: string,
+  ): AgentDispatchInfo[] {
+    if (!preferredDispatchId) {
+      return dispatches;
+    }
+
+    return [...dispatches].sort((a, b) => {
+      if (a.dispatchId === preferredDispatchId) return -1;
+      if (b.dispatchId === preferredDispatchId) return 1;
+      return 0;
+    });
+  }
+
+  private findReusableAiInterviewerDispatch(
+    dispatches: AgentDispatchInfo[],
+    startedAt: number | null,
+    options: { preferredDispatchId?: string; recoveryRequested?: boolean } = {},
+  ): AgentDispatchInfo | null {
+    const orderedDispatches = this.orderAiInterviewerDispatches(
+      dispatches,
+      options.preferredDispatchId,
+    );
+
+    return (
+      orderedDispatches.find((dispatch) =>
+        this.shouldPreserveInFlightAiInterviewerDispatch(dispatch, startedAt, {
+          recoveryRequested: options.recoveryRequested,
+        }),
+      ) ??
+      orderedDispatches.find((dispatch) => !this.hasTerminalAiInterviewerDispatchJob(dispatch)) ??
+      null
+    );
+  }
+
+  private async cacheAiInterviewerDispatch(
+    cacheKey: string,
+    startedAtKey: string,
+    dispatchId: string,
+    startedAt = Date.now(),
+  ): Promise<void> {
+    await Promise.all([
+      this.cacheService.set(
+        cacheKey,
+        dispatchId,
+        RoomsService.AI_INTERVIEWER_DISPATCH_CACHE_TTL_SECONDS,
+      ),
+      this.cacheService.set(
+        startedAtKey,
+        startedAt,
+        RoomsService.AI_INTERVIEWER_DISPATCH_CACHE_TTL_SECONDS,
+      ),
+    ]);
+  }
+
+  private async clearAiInterviewerDispatchCache(
+    cacheKey: string,
+    startedAtKey: string,
+  ): Promise<void> {
+    await Promise.all([this.cacheService.del(cacheKey), this.cacheService.del(startedAtKey)]);
+  }
+
+  private async hasCachedLiveAiInterviewerDispatch(
+    cacheKey: string,
+    startedAtKey: string,
+    roomId: string,
+    agentName: string,
+  ): Promise<boolean> {
+    const cachedDispatchId = await this.cacheService.get<string>(cacheKey);
+    if (!cachedDispatchId?.length) {
+      return false;
+    }
+    const startedAt = await this.cacheService.get<number>(startedAtKey);
+
+    const existingDispatches = await this.agentDispatchService.listDispatch(roomId);
+    const matchingDispatches = existingDispatches.filter(
+      (dispatch) => dispatch.agentName === agentName,
+    );
+    const existing = this.findReusableAiInterviewerDispatch(matchingDispatches, startedAt, {
+      preferredDispatchId: cachedDispatchId,
+    });
+    if (!existing) {
+      await this.deleteAiInterviewerDispatches(roomId, matchingDispatches);
+      await this.clearAiInterviewerDispatchCache(cacheKey, startedAtKey);
+      return false;
+    }
+
+    if (this.shouldPreserveInFlightAiInterviewerDispatch(existing, startedAt)) {
+      if (existing.dispatchId !== cachedDispatchId || startedAt === null) {
+        await this.cacheAiInterviewerDispatch(
+          cacheKey,
+          startedAtKey,
+          existing.dispatchId,
+          startedAt ?? Date.now(),
+        );
+      }
+      return true;
+    }
+
+    if (!(await this.hasLiveAiInterviewerParticipant(roomId))) {
+      await this.deleteAiInterviewerDispatches(roomId, matchingDispatches);
+      await this.clearAiInterviewerDispatchCache(cacheKey, startedAtKey);
+      return false;
+    }
+
+    if (existing.dispatchId !== cachedDispatchId) {
+      await this.cacheAiInterviewerDispatch(
+        cacheKey,
+        startedAtKey,
+        existing.dispatchId,
+        startedAt ?? Date.now(),
+      );
+    }
+    return true;
+  }
+
+  private async hasLiveAiInterviewerParticipant(roomId: string): Promise<boolean> {
+    try {
+      const participants = await this.mediaService.listParticipants(roomId);
+      return participants.some(
+        (participant) => participant.kind === 'agent' && participant.state === 'active',
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Unable to verify active AI interviewer participant for room ${roomId}; assuming stale dispatch: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      return false;
+    }
+  }
+
+  private async deleteAiInterviewerDispatches(
+    roomId: string,
+    dispatches: AgentDispatchInfo[],
+  ): Promise<void> {
+    await Promise.all(
+      dispatches.map((dispatch) =>
+        this.agentDispatchService.deleteDispatch(dispatch.dispatchId, roomId).catch((error) => {
+          this.logger.warn(
+            `Unable to delete stale AI interviewer dispatch ${dispatch.dispatchId} for room ${roomId}: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
+        }),
+      ),
+    );
+  }
+
   private async ensureAiInterviewerDispatch(
     roomId: string,
     participantUserId: string,
+    options: { recoveryRequested?: boolean } = {},
   ): Promise<void> {
     if (!this.isAiInterviewerDispatchEnabled()) {
       return;
     }
 
     const cacheKey = `${RoomsService.AI_INTERVIEWER_DISPATCH_CACHE_PREFIX}${roomId}`;
-    const cachedDispatchId = await this.cacheService.get<string>(cacheKey);
-    if (cachedDispatchId?.length) {
+    const startedAtKey = this.aiInterviewerDispatchStartedAtKey(roomId);
+    const agentName = this.resolveAiInterviewerAgentName();
+    if (
+      !options.recoveryRequested &&
+      (await this.hasCachedLiveAiInterviewerDispatch(cacheKey, startedAtKey, roomId, agentName))
+    ) {
       return;
     }
 
@@ -4153,28 +4532,102 @@ export class RoomsService implements OnModuleInit {
     // block with a short Redis lock via setIfNotExists, then re-check the
     // cache after acquiring it (double-checked locking).
     const lockKey = `${cacheKey}:lock`;
-    const acquired = await this.cacheService.setIfNotExists(lockKey, true, 10);
+    let acquired = await this.cacheService.setIfNotExists(
+      lockKey,
+      true,
+      RoomsService.AI_INTERVIEWER_DISPATCH_LOCK_TTL_SECONDS,
+    );
     if (!acquired) {
-      // Another caller is dispatching. They will populate the cache; skip.
-      return;
+      const lockWaitStartedAt = Date.now();
+      while (
+        Date.now() - lockWaitStartedAt <
+        RoomsService.AI_INTERVIEWER_DISPATCH_LOCK_TTL_SECONDS * 1_000
+      ) {
+        await delay(RoomsService.AI_INTERVIEWER_DISPATCH_LOCK_POLL_MS);
+        if (
+          !options.recoveryRequested &&
+          (await this.hasCachedLiveAiInterviewerDispatch(cacheKey, startedAtKey, roomId, agentName))
+        ) {
+          return;
+        }
+        if (!(await this.cacheService.exists(lockKey))) {
+          break;
+        }
+      }
+
+      acquired = await this.cacheService.setIfNotExists(
+        lockKey,
+        true,
+        RoomsService.AI_INTERVIEWER_DISPATCH_LOCK_TTL_SECONDS,
+      );
+      if (!acquired) {
+        this.logger.warn(
+          `Unable to acquire AI interviewer dispatch lock for room ${roomId}; leaving existing dispatch state unchanged`,
+        );
+        return;
+      }
     }
 
     try {
-      const cachedAfterLock = await this.cacheService.get<string>(cacheKey);
-      if (cachedAfterLock?.length) {
+      if (
+        !options.recoveryRequested &&
+        (await this.hasCachedLiveAiInterviewerDispatch(cacheKey, startedAtKey, roomId, agentName))
+      ) {
         return;
       }
 
-      const agentName = this.resolveAiInterviewerAgentName();
       const existingDispatches = await this.agentDispatchService.listDispatch(roomId);
-      const existing = existingDispatches.find((dispatch) => dispatch.agentName === agentName);
+      const matchingDispatches = existingDispatches.filter(
+        (dispatch) => dispatch.agentName === agentName,
+      );
+      const startedAt = await this.cacheService.get<number>(startedAtKey);
+      const existing = this.findReusableAiInterviewerDispatch(matchingDispatches, startedAt, {
+        recoveryRequested: options.recoveryRequested ?? false,
+      });
+      if (!existing && matchingDispatches.length > 0) {
+        await this.deleteAiInterviewerDispatches(roomId, matchingDispatches);
+        this.logger.log(`Replacing terminal AI interviewer dispatch for room ${roomId}`);
+      }
+
       if (existing) {
-        await this.cacheService.set(
-          cacheKey,
-          existing.dispatchId,
-          RoomsService.AI_INTERVIEWER_DISPATCH_CACHE_TTL_SECONDS,
+        if (
+          this.shouldPreserveInFlightAiInterviewerDispatch(existing, startedAt, {
+            recoveryRequested: options.recoveryRequested ?? false,
+          })
+        ) {
+          this.logger.debug(
+            `Reusing in-flight AI interviewer dispatch ${existing.dispatchId} for room ${roomId}`,
+          );
+          await this.cacheAiInterviewerDispatch(
+            cacheKey,
+            startedAtKey,
+            existing.dispatchId,
+            startedAt ?? Date.now(),
+          );
+          return;
+        }
+
+        if (
+          !options.recoveryRequested &&
+          !this.hasTerminalAiInterviewerDispatchJob(existing) &&
+          (await this.hasLiveAiInterviewerParticipant(roomId))
+        ) {
+          this.logger.debug(
+            `Reusing active AI interviewer dispatch ${existing.dispatchId} for room ${roomId}`,
+          );
+          await this.cacheAiInterviewerDispatch(
+            cacheKey,
+            startedAtKey,
+            existing.dispatchId,
+            startedAt ?? Date.now(),
+          );
+          return;
+        }
+
+        await this.deleteAiInterviewerDispatches(roomId, matchingDispatches);
+        this.logger.log(
+          `${options.recoveryRequested ? 'Recovery-refreshing stale' : 'Replacing stale'} AI interviewer dispatch for room ${roomId}`,
         );
-        return;
       }
 
       const sessionId = await this.loadCurrentRoomSessionId(roomId);
@@ -4186,11 +4639,8 @@ export class RoomsService implements OnModuleInit {
       const created = await this.agentDispatchService.createDispatch(roomId, agentName, {
         metadata,
       });
-      await this.cacheService.set(
-        cacheKey,
-        created.dispatchId,
-        RoomsService.AI_INTERVIEWER_DISPATCH_CACHE_TTL_SECONDS,
-      );
+      await this.cacheAiInterviewerDispatch(cacheKey, startedAtKey, created.dispatchId);
+      this.logger.log(`Created AI interviewer dispatch ${created.dispatchId} for room ${roomId}`);
     } finally {
       await this.cacheService.del(lockKey).catch(() => undefined);
     }
@@ -4202,6 +4652,7 @@ export class RoomsService implements OnModuleInit {
     }
 
     const cacheKey = `${RoomsService.AI_INTERVIEWER_DISPATCH_CACHE_PREFIX}${roomId}`;
+    const startedAtKey = this.aiInterviewerDispatchStartedAtKey(roomId);
     const agentName = this.resolveAiInterviewerAgentName();
     try {
       const dispatches = await this.agentDispatchService.listDispatch(roomId);
@@ -4217,7 +4668,7 @@ export class RoomsService implements OnModuleInit {
           }),
         );
       await Promise.all(deletions);
-      await this.cacheService.del(cacheKey);
+      await this.clearAiInterviewerDispatchCache(cacheKey, startedAtKey);
       return true;
     } catch (error) {
       this.logger.warn(

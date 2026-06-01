@@ -1,4 +1,9 @@
 import {
+  AI_INTERVIEWER_AGENT_IDENTITY,
+  AI_INTERVIEWER_AVATAR_IDENTITY,
+  AI_INTERVIEWER_PUBLISH_ON_BEHALF_ATTRIBUTE,
+} from '@syncode/contracts';
+import {
   type ConnectionQuality,
   ConnectionState,
   type LocalTrackPublication,
@@ -20,13 +25,104 @@ export type LiveKitConnectionState =
   | 'reconnecting'
   | 'failed';
 
+const INITIAL_CONNECT_RETRY_DELAYS_MS = [1_000, 2_000, 4_000, 8_000, 8_000, 8_000] as const;
+
 export interface MediaParticipant {
   identity: string;
+  isAgent: boolean;
   isMuted: boolean;
+  audioTrack: MediaStreamTrack | null;
   hasVideo: boolean;
   videoTrack: MediaStreamTrack | null;
   hasScreenShare: boolean;
   screenShareTrack: MediaStreamTrack | null;
+}
+
+interface ParticipantWithAttributes {
+  identity: string;
+  attributes?: Record<string, string | undefined>;
+}
+
+function getPublishOnBehalfIdentity(participant: ParticipantWithAttributes): string | null {
+  if (participant.identity === AI_INTERVIEWER_AVATAR_IDENTITY) {
+    return AI_INTERVIEWER_AGENT_IDENTITY;
+  }
+
+  const attributes = participant.attributes as Record<string, string | undefined> | undefined;
+  const identity = attributes?.[AI_INTERVIEWER_PUBLISH_ON_BEHALF_ATTRIBUTE]?.trim();
+  return identity && identity !== participant.identity ? identity : null;
+}
+
+function getRemoteTrackPublications(participant: RemoteParticipant): RemoteTrackPublication[] {
+  const trackPublicationHolder = participant as RemoteParticipant & {
+    getTrackPublications?: () => RemoteTrackPublication[];
+    trackPublications?: Map<string, RemoteTrackPublication>;
+  };
+
+  if (typeof trackPublicationHolder.getTrackPublications === 'function') {
+    return trackPublicationHolder.getTrackPublications() as RemoteTrackPublication[];
+  }
+
+  return Array.from(trackPublicationHolder.trackPublications?.values() ?? []);
+}
+
+function getTrackPublicationBySourceOrKind(
+  participant: RemoteParticipant,
+  source: Track.Source,
+  kind: Track.Kind,
+): RemoteTrackPublication | undefined {
+  const publicationBySource = participant.getTrackPublication(source);
+  if (publicationBySource) {
+    return publicationBySource;
+  }
+
+  return getRemoteTrackPublications(participant).find((publication) => {
+    if (publication.kind !== kind) {
+      return false;
+    }
+    if (publication.source === Track.Source.ScreenShare) {
+      return false;
+    }
+    if (publication.source === Track.Source.ScreenShareAudio) {
+      return false;
+    }
+    return true;
+  });
+}
+
+function mergeRemoteParticipant(
+  participantsByIdentity: Map<string, MediaParticipant>,
+  participant: RemoteParticipant,
+): void {
+  const videoPub = getTrackPublicationBySourceOrKind(
+    participant,
+    Track.Source.Camera,
+    Track.Kind.Video,
+  );
+  const audioPub = getTrackPublicationBySourceOrKind(
+    participant,
+    Track.Source.Microphone,
+    Track.Kind.Audio,
+  );
+  const screenPub = participant.getTrackPublication(Track.Source.ScreenShare);
+  const audioTrack = audioPub?.isMuted ? null : (audioPub?.track?.mediaStreamTrack ?? null);
+  const mediaTrack = videoPub?.isMuted ? null : (videoPub?.track?.mediaStreamTrack ?? null);
+  const screenTrack = screenPub?.isMuted ? null : (screenPub?.track?.mediaStreamTrack ?? null);
+  const publishOnBehalfIdentity = getPublishOnBehalfIdentity(participant);
+  const identity = publishOnBehalfIdentity ?? participant.identity;
+  const existing = participantsByIdentity.get(identity);
+
+  participantsByIdentity.set(identity, {
+    identity,
+    isAgent:
+      participant.isAgent || publishOnBehalfIdentity !== null || (existing?.isAgent ?? false),
+    isMuted: audioTrack ? false : (existing?.isMuted ?? true),
+    audioTrack: audioTrack ?? existing?.audioTrack ?? null,
+    hasVideo: mediaTrack !== null || (existing?.hasVideo ?? false),
+    videoTrack: mediaTrack ?? existing?.videoTrack ?? null,
+    hasScreenShare: screenTrack !== null || (existing?.hasScreenShare ?? false),
+    screenShareTrack: screenTrack ?? existing?.screenShareTrack ?? null,
+  });
 }
 
 export interface MediaDeviceOption {
@@ -43,6 +139,7 @@ export interface AudioProcessingOptions {
 export interface LiveKitDataPacket {
   payload: Uint8Array;
   participantIdentity: string | null;
+  participantIsAgent: boolean;
   topic: string | null;
   receivedAt: number;
 }
@@ -132,7 +229,9 @@ function mapConnectionState(state: ConnectionState): LiveKitConnectionState {
 function participantEqual(a: MediaParticipant, b: MediaParticipant): boolean {
   return (
     a.identity === b.identity &&
+    a.isAgent === b.isAgent &&
     a.isMuted === b.isMuted &&
+    a.audioTrack === b.audioTrack &&
     a.hasVideo === b.hasVideo &&
     a.videoTrack === b.videoTrack &&
     a.hasScreenShare === b.hasScreenShare &&
@@ -218,7 +317,9 @@ export function useLiveKit({
       : (localScreen?.track?.mediaStreamTrack ?? null);
     const nextLocal: MediaParticipant = {
       identity: room.localParticipant.identity,
+      isAgent: false,
       isMuted: !room.localParticipant.isMicrophoneEnabled,
+      audioTrack: null,
       hasVideo: localHasVideo,
       videoTrack: localMediaTrack,
       hasScreenShare: localScreenTrack !== null,
@@ -229,22 +330,11 @@ export function useLiveKit({
       return nextLocal;
     });
 
-    const remotes: MediaParticipant[] = [];
+    const remotesByIdentity = new Map<string, MediaParticipant>();
     for (const p of room.remoteParticipants.values()) {
-      const videoPub = p.getTrackPublication(Track.Source.Camera);
-      const audioPub = p.getTrackPublication(Track.Source.Microphone);
-      const screenPub = p.getTrackPublication(Track.Source.ScreenShare);
-      const mediaTrack = videoPub?.isMuted ? null : (videoPub?.track?.mediaStreamTrack ?? null);
-      const screenTrack = screenPub?.isMuted ? null : (screenPub?.track?.mediaStreamTrack ?? null);
-      remotes.push({
-        identity: p.identity,
-        isMuted: !audioPub || audioPub.isMuted,
-        hasVideo: mediaTrack !== null,
-        videoTrack: mediaTrack,
-        hasScreenShare: screenTrack !== null,
-        screenShareTrack: screenTrack,
-      });
+      mergeRemoteParticipant(remotesByIdentity, p);
     }
+    const remotes = Array.from(remotesByIdentity.values());
     setRemoteParticipants((prev) => {
       if (
         prev.length === remotes.length &&
@@ -357,6 +447,7 @@ export function useLiveKit({
 
     roomRef.current = room;
     let disposed = false;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
     const onConnectionStateChanged = (state: ConnectionState) => {
       if (disposed) return;
@@ -365,7 +456,7 @@ export function useLiveKit({
 
     const onActiveSpeakersChanged = (speakers: { identity: string }[]) => {
       if (disposed) return;
-      const speakerSet = new Set(speakers.map((s) => s.identity));
+      const speakerSet = new Set(speakers.map((s) => getPublishOnBehalfIdentity(s) ?? s.identity));
       setSpeakingMap((prev) => {
         const next = new Map<string, boolean>();
         if (roomRef.current) {
@@ -374,7 +465,8 @@ export function useLiveKit({
             speakerSet.has(roomRef.current.localParticipant.identity),
           );
           for (const p of roomRef.current.remoteParticipants.values()) {
-            next.set(p.identity, speakerSet.has(p.identity));
+            const identity = getPublishOnBehalfIdentity(p) ?? p.identity;
+            next.set(identity, speakerSet.has(identity) || (next.get(identity) ?? false));
           }
         }
         return speakingMapsEqual(prev, next) ? prev : next;
@@ -483,6 +575,7 @@ export function useLiveKit({
       onDataReceivedRef.current?.({
         payload,
         participantIdentity: participant?.identity ?? null,
+        participantIsAgent: participant?.isAgent ?? false,
         topic: topic ?? null,
         receivedAt: Date.now(),
       });
@@ -501,6 +594,9 @@ export function useLiveKit({
     room.on(RoomEvent.TrackUnmuted, onTrackUnmuted);
     room.on(RoomEvent.ParticipantConnected, onParticipantConnected);
     room.on(RoomEvent.ParticipantDisconnected, onParticipantDisconnected);
+    room.on(RoomEvent.ParticipantAttributesChanged, () => {
+      if (!disposed) refreshParticipants();
+    });
     room.on(RoomEvent.Disconnected, onDisconnected);
     room.on(RoomEvent.DataReceived, onDataReceivedInternal);
     room.on(
@@ -522,22 +618,43 @@ export function useLiveKit({
 
     setConnectionState('connecting');
 
-    room
-      .connect(url, token)
-      .then(() => {
-        if (disposed) return;
-        setConnectionState('connected');
-        refreshParticipants();
-        void refreshDevices();
-      })
-      .catch((err: unknown) => {
-        if (disposed) return;
-        console.error('[LiveKit] Connection failed:', err);
-        setConnectionState('failed');
-      });
+    const connectRoom = (attempt: number) => {
+      room
+        .connect(url, token)
+        .then(() => {
+          if (disposed) return;
+          setConnectionState('connected');
+          refreshParticipants();
+          void refreshDevices();
+        })
+        .catch((err: unknown) => {
+          if (disposed) return;
+
+          const retryDelay = INITIAL_CONNECT_RETRY_DELAYS_MS[attempt];
+          if (retryDelay !== undefined) {
+            console.warn('[LiveKit] Connection failed, retrying:', err);
+            setConnectionState('connecting');
+            retryTimer = setTimeout(() => {
+              retryTimer = null;
+              if (disposed) return;
+              connectRoom(attempt + 1);
+            }, retryDelay);
+            return;
+          }
+
+          console.error('[LiveKit] Connection failed:', err);
+          setConnectionState('failed');
+        });
+    };
+
+    connectRoom(0);
 
     return () => {
       disposed = true;
+      if (retryTimer) {
+        clearTimeout(retryTimer);
+        retryTimer = null;
+      }
       navigator.mediaDevices.removeEventListener('devicechange', onDeviceChange);
       cleanupAudio();
       void room.disconnect();

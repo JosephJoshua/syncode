@@ -11,14 +11,27 @@ const envSchema = z
       .default(false),
     AI_INTERVIEWER_AGENT_NAME: z.string().min(1).default('syncode-ai-interviewer'),
     AI_INTERVIEWER_AGENT_IDENTITY: z.string().min(1).default('ai-interviewer'),
-    AI_INTERVIEWER_CONTROL_PLANE_URL: z.url().default('http://localhost:3000'),
+    AI_INTERVIEWER_RECONNECT_GRACE_MS: z.coerce.number().int().positive().default(60_000),
+    AI_INTERVIEWER_WORKER_INITIALIZE_TIMEOUT_MS: z.coerce.number().int().positive().default(60_000),
+    AI_INTERVIEWER_WORKER_SHUTDOWN_TIMEOUT_MS: z.coerce.number().int().positive().default(120_000),
+    CONTROL_PLANE_URL: z.url().default('http://localhost:3000'),
     LIVEKIT_URL: z.url().optional(),
+    LIVEKIT_AGENT_CONNECT_URL: z.url().optional(),
     LIVEKIT_API_KEY: z.string().min(1).optional(),
     LIVEKIT_API_SECRET: z.string().min(1).optional(),
     OPENAI_API_KEY: z.string().min(1).optional(),
+    OPENAI_CHAT_FALLBACK_MODEL: z.string().min(1).default('gpt-4o-mini'),
+    OPENAI_TTS_MODEL: z.string().min(1).default('tts-1'),
+    OPENAI_TTS_BASE_URL: z.url().default('https://api.openai.com/v1'),
     OPENAI_REALTIME_MODEL: z.string().min(1).default('gpt-realtime'),
     OPENAI_REALTIME_VOICE: z.string().min(1).default('alloy'),
     OPENAI_REALTIME_BASE_URL: z.url().default('https://api.openai.com/v1'),
+    OPENAI_REALTIME_PROXY_URL: z.url().optional(),
+    OPENAI_REALTIME_CONNECT_TIMEOUT_MS: z.coerce.number().int().positive().default(5_000),
+    AI_INTERVIEWER_FORCE_FALLBACK: z
+      .union([z.boolean(), z.string()])
+      .transform((val) => val === true || val === 'true' || val === '1')
+      .default(false),
     AI_INTERVIEWER_FALLBACK_ENABLED: z
       .union([z.boolean(), z.string()])
       .transform((val) => val === true || val === 'true' || val === '1')
@@ -31,6 +44,9 @@ const envSchema = z
     AI_STT_MODEL: z.string().default('GLM-ASR-2512'),
     AI_TTS_MODEL: z.string().trim().min(1).optional(),
     AI_TTS_VOICE: z.string().default('Chelsie'),
+    MINIMAX_API_KEY: z.string().min(1).optional(),
+    MINIMAX_TTS_BASE_URL: z.string().url().optional(),
+    MINIMAX_TTS_MODEL: z.string().min(1).optional(),
     AI_REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().default(60_000),
     AI_MAX_CONCURRENT_TASKS: z.coerce.number().int().positive().default(5),
     AI_RESERVED_REALTIME_SLOTS: z.coerce.number().int().min(0).default(2),

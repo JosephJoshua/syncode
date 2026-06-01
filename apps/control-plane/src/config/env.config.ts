@@ -19,6 +19,11 @@ const commaSeparatedListEnv = z
       .filter(Boolean),
   );
 
+const optionalNonEmptyStringEnv = z.preprocess(
+  (val) => (val === '' ? undefined : val),
+  z.string().min(1).optional(),
+);
+
 /**
  * Environment variable validation schema
  */
@@ -57,6 +62,20 @@ const envSchema = z
     LIVEKIT_CLIENT_URL: z.url().optional(),
     AI_INTERVIEWER_LIVEKIT_ENABLED: booleanEnv.default(false),
     AI_INTERVIEWER_AGENT_NAME: z.string().min(1).default('syncode-ai-interviewer'),
+    AI_INTERVIEWER_DISPATCH_STARTUP_GRACE_MS: z.coerce.number().int().positive().default(90_000),
+
+    SIMLI_API_KEY: optionalNonEmptyStringEnv,
+    SIMLI_API_BASE_URL: z.url().default('https://api.simli.ai'),
+    SIMLI_WS_BASE_URL: z.url().default('wss://api.simli.ai'),
+    SIMLI_FACE_ID: optionalNonEmptyStringEnv,
+    SIMLI_MAX_SESSION_LENGTH_SECONDS: z.coerce.number().int().positive().default(900),
+    SIMLI_MAX_IDLE_SECONDS: z.coerce.number().int().positive().default(120),
+    SIMLI_MODEL: z.preprocess(
+      (val) => (val === '' ? undefined : val),
+      z.enum(['fasttalk', 'artalk']).default('fasttalk'),
+    ),
+    SIMLI_AUDIO_BUFFER_SIZE: z.coerce.number().int().positive().default(3000),
+    SIMLI_REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().default(8000),
 
     COLLAB_PLANE_URL: z.url().default('http://localhost:3001'),
     COLLAB_PLANE_CLIENT_URL: z.url().optional(),

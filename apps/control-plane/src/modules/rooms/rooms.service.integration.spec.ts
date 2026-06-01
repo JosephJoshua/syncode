@@ -63,6 +63,8 @@ let mockCollabClient: ReturnType<typeof createMockCollabClient>;
 let mockSessionReportsService: ReturnType<typeof createMockSessionReportsService>;
 let mockStorageService: ReturnType<typeof createMockStorageService>;
 let mockAgentDispatchService: ReturnType<typeof createMockAgentDispatchService>;
+let mockMediaService: ReturnType<typeof createMockMediaService>;
+let cacheService: InMemoryCacheService;
 
 beforeEach(async () => {
   vi.clearAllMocks();
@@ -75,6 +77,8 @@ beforeEach(async () => {
   mockSessionReportsService = createMockSessionReportsService();
   mockStorageService = createMockStorageService();
   mockAgentDispatchService = createMockAgentDispatchService();
+  mockMediaService = createMockMediaService();
+  cacheService = new InMemoryCacheService();
   mockCollabClient.updateRoomState.mockImplementation(async (request) => {
     if (request.phase === 'finished' && request.language) {
       await insertSessionEndSnapshotForRoom(request.roomId, request.language);
@@ -90,9 +94,9 @@ beforeEach(async () => {
       { provide: DB_CLIENT, useValue: db },
       { provide: EXECUTION_CLIENT, useValue: mockExecutionClient },
       { provide: AI_CLIENT, useValue: createMockAiClient() },
-      { provide: CACHE_SERVICE, useValue: new InMemoryCacheService() },
+      { provide: CACHE_SERVICE, useValue: cacheService },
       { provide: COLLAB_CLIENT, useValue: mockCollabClient },
-      { provide: MEDIA_SERVICE, useValue: createMockMediaService() },
+      { provide: MEDIA_SERVICE, useValue: mockMediaService },
       { provide: AGENT_DISPATCH_SERVICE, useValue: mockAgentDispatchService },
       { provide: STORAGE_SERVICE, useValue: mockStorageService },
       { provide: JwtService, useValue: createMockJwtService() },
@@ -1561,6 +1565,355 @@ describe('submitProblem', () => {
   });
 });
 
+describe('generateMediaToken', () => {
+  it('GIVEN stale AI interviewer dispatch cache WHEN generating media token THEN creates a fresh dispatch', async () => {
+    const host = await insertUser(db);
+    const room = await insertRoom(db, host.id, { mode: 'ai' });
+    await insertParticipant(db, room.id, host.id, 'candidate');
+    await cacheService.set(`ai-interviewer-dispatch:${room.id}`, 'stale-dispatch-id');
+    mockAgentDispatchService.listDispatch.mockResolvedValue([]);
+    mockAgentDispatchService.createDispatch.mockResolvedValueOnce({
+      dispatchId: 'fresh-dispatch-id',
+      roomName: room.id,
+      agentName: 'syncode-ai-interviewer',
+    });
+    mockMediaService.generateToken.mockResolvedValueOnce({
+      token: 'media-token',
+      url: 'ws://localhost:7880',
+    });
+
+    await service.generateMediaToken(room.id, host.id);
+
+    expect(mockAgentDispatchService.listDispatch).toHaveBeenCalledWith(room.id);
+    expect(mockAgentDispatchService.createDispatch).toHaveBeenCalledWith(
+      room.id,
+      'syncode-ai-interviewer',
+      {
+        metadata: expect.stringContaining(`"roomId":"${room.id}"`),
+      },
+    );
+    expect(await cacheService.get(`ai-interviewer-dispatch:${room.id}`)).toBe('fresh-dispatch-id');
+  });
+
+  it('GIVEN recently created AI interviewer dispatch without agent participant WHEN generating media token THEN reuses it', async () => {
+    const host = await insertUser(db);
+    const room = await insertRoom(db, host.id, { mode: 'ai' });
+    await insertParticipant(db, room.id, host.id, 'candidate');
+    await cacheService.set(`ai-interviewer-dispatch:${room.id}`, 'starting-dispatch-id');
+    await cacheService.set(`ai-interviewer-dispatch-started-at:${room.id}`, Date.now());
+    mockAgentDispatchService.listDispatch.mockResolvedValueOnce([
+      {
+        dispatchId: 'starting-dispatch-id',
+        roomName: room.id,
+        agentName: 'syncode-ai-interviewer',
+      },
+    ]);
+    mockMediaService.generateToken.mockResolvedValueOnce({
+      token: 'media-token',
+      url: 'ws://localhost:7880',
+    });
+
+    await service.generateMediaToken(room.id, host.id);
+
+    expect(mockMediaService.listParticipants).not.toHaveBeenCalled();
+    expect(mockAgentDispatchService.deleteDispatch).not.toHaveBeenCalled();
+    expect(mockAgentDispatchService.createDispatch).not.toHaveBeenCalled();
+    expect(await cacheService.get(`ai-interviewer-dispatch:${room.id}`)).toBe(
+      'starting-dispatch-id',
+    );
+  });
+
+  it('GIVEN recovery refresh during AI interviewer startup grace WHEN generating media token THEN keeps the in-flight dispatch', async () => {
+    const host = await insertUser(db);
+    const room = await insertRoom(db, host.id, { mode: 'ai' });
+    await insertParticipant(db, room.id, host.id, 'candidate');
+    await cacheService.set(`ai-interviewer-dispatch:${room.id}`, 'pending-dispatch-id');
+    await cacheService.set(`ai-interviewer-dispatch-started-at:${room.id}`, Date.now());
+    mockAgentDispatchService.listDispatch.mockResolvedValueOnce([
+      {
+        dispatchId: 'pending-dispatch-id',
+        roomName: room.id,
+        agentName: 'syncode-ai-interviewer',
+        jobs: [{ id: 'job-1', status: 'pending' }],
+      },
+    ]);
+    mockMediaService.generateToken.mockResolvedValueOnce({
+      token: 'media-token',
+      url: 'ws://localhost:7880',
+    });
+
+    await service.generateMediaToken(room.id, host.id, {
+      recoverAiInterviewerDispatch: true,
+    });
+
+    expect(mockMediaService.listParticipants).not.toHaveBeenCalled();
+    expect(mockAgentDispatchService.deleteDispatch).not.toHaveBeenCalled();
+    expect(mockAgentDispatchService.createDispatch).not.toHaveBeenCalled();
+    expect(await cacheService.get(`ai-interviewer-dispatch:${room.id}`)).toBe(
+      'pending-dispatch-id',
+    );
+  });
+
+  it('GIVEN stale AI interviewer dispatch without agent participant WHEN generating media token THEN replaces the dispatch', async () => {
+    const host = await insertUser(db);
+    const room = await insertRoom(db, host.id, { mode: 'ai' });
+    await insertParticipant(db, room.id, host.id, 'candidate');
+    await cacheService.set(`ai-interviewer-dispatch:${room.id}`, 'stale-dispatch-id');
+    mockAgentDispatchService.listDispatch
+      .mockResolvedValueOnce([
+        {
+          dispatchId: 'stale-dispatch-id',
+          roomName: room.id,
+          agentName: 'syncode-ai-interviewer',
+        },
+      ])
+      .mockResolvedValueOnce([]);
+    mockMediaService.listParticipants.mockResolvedValueOnce([]);
+    mockAgentDispatchService.createDispatch.mockResolvedValueOnce({
+      dispatchId: 'fresh-dispatch-id',
+      roomName: room.id,
+      agentName: 'syncode-ai-interviewer',
+    });
+    mockMediaService.generateToken.mockResolvedValueOnce({
+      token: 'media-token',
+      url: 'ws://localhost:7880',
+    });
+
+    await service.generateMediaToken(room.id, host.id);
+
+    expect(mockAgentDispatchService.deleteDispatch).toHaveBeenCalledWith(
+      'stale-dispatch-id',
+      room.id,
+    );
+    expect(mockAgentDispatchService.createDispatch).toHaveBeenCalledWith(
+      room.id,
+      'syncode-ai-interviewer',
+      {
+        metadata: expect.stringContaining(`"roomId":"${room.id}"`),
+      },
+    );
+    expect(await cacheService.get(`ai-interviewer-dispatch:${room.id}`)).toBe('fresh-dispatch-id');
+  });
+
+  it('GIVEN cached AI interviewer dispatch with live agent participant WHEN generating media token THEN reuses the dispatch', async () => {
+    const host = await insertUser(db);
+    const room = await insertRoom(db, host.id, { mode: 'ai' });
+    await insertParticipant(db, room.id, host.id, 'candidate');
+    await cacheService.set(`ai-interviewer-dispatch:${room.id}`, 'live-dispatch-id');
+    mockAgentDispatchService.listDispatch.mockResolvedValueOnce([
+      {
+        dispatchId: 'live-dispatch-id',
+        roomName: room.id,
+        agentName: 'syncode-ai-interviewer',
+      },
+    ]);
+    mockMediaService.listParticipants.mockResolvedValueOnce([
+      { identity: 'ai-agent-1', kind: 'agent', state: 'active' },
+    ]);
+    mockMediaService.generateToken.mockResolvedValueOnce({
+      token: 'media-token',
+      url: 'ws://localhost:7880',
+    });
+
+    await service.generateMediaToken(room.id, host.id);
+
+    expect(mockAgentDispatchService.deleteDispatch).not.toHaveBeenCalled();
+    expect(mockAgentDispatchService.createDispatch).not.toHaveBeenCalled();
+    expect(await cacheService.get(`ai-interviewer-dispatch:${room.id}`)).toBe('live-dispatch-id');
+  });
+
+  it('GIVEN recovery refresh with running AI interviewer dispatch WHEN generating media token THEN preserves the dispatch', async () => {
+    const host = await insertUser(db);
+    const room = await insertRoom(db, host.id, { mode: 'ai' });
+    await insertParticipant(db, room.id, host.id, 'candidate');
+    await cacheService.set(`ai-interviewer-dispatch:${room.id}`, 'live-dispatch-id');
+    await cacheService.set(`ai-interviewer-dispatch-started-at:${room.id}`, Date.now());
+    mockAgentDispatchService.listDispatch.mockResolvedValueOnce([
+      {
+        dispatchId: 'live-dispatch-id',
+        roomName: room.id,
+        agentName: 'syncode-ai-interviewer',
+        jobs: [{ id: 'job-1', status: 'running' }],
+      },
+    ]);
+    mockMediaService.generateToken.mockResolvedValueOnce({
+      token: 'media-token',
+      url: 'ws://localhost:7880',
+    });
+
+    await service.generateMediaToken(room.id, host.id, {
+      recoverAiInterviewerDispatch: true,
+    });
+
+    expect(mockAgentDispatchService.deleteDispatch).not.toHaveBeenCalled();
+    expect(mockAgentDispatchService.createDispatch).not.toHaveBeenCalled();
+    expect(await cacheService.get(`ai-interviewer-dispatch:${room.id}`)).toBe('live-dispatch-id');
+  });
+
+  it('GIVEN cached terminal AI interviewer dispatch WHEN generating media token THEN replaces the dispatch', async () => {
+    const host = await insertUser(db);
+    const room = await insertRoom(db, host.id, { mode: 'ai' });
+    await insertParticipant(db, room.id, host.id, 'candidate');
+    await cacheService.set(`ai-interviewer-dispatch:${room.id}`, 'terminal-dispatch-id');
+    mockAgentDispatchService.listDispatch
+      .mockResolvedValueOnce([
+        {
+          dispatchId: 'terminal-dispatch-id',
+          roomName: room.id,
+          agentName: 'syncode-ai-interviewer',
+          jobs: [{ id: 'job-1', status: 'failed' }],
+        },
+      ])
+      .mockResolvedValueOnce([]);
+    mockMediaService.listParticipants.mockResolvedValueOnce([
+      { identity: 'ai-agent-1', kind: 'agent', state: 'active' },
+    ]);
+    mockAgentDispatchService.createDispatch.mockResolvedValueOnce({
+      dispatchId: 'fresh-dispatch-id',
+      roomName: room.id,
+      agentName: 'syncode-ai-interviewer',
+    });
+    mockMediaService.generateToken.mockResolvedValueOnce({
+      token: 'media-token',
+      url: 'ws://localhost:7880',
+    });
+
+    await service.generateMediaToken(room.id, host.id);
+
+    expect(mockAgentDispatchService.deleteDispatch).toHaveBeenCalledWith(
+      'terminal-dispatch-id',
+      room.id,
+    );
+    expect(mockAgentDispatchService.createDispatch).toHaveBeenCalledWith(
+      room.id,
+      'syncode-ai-interviewer',
+      {
+        metadata: expect.stringContaining(`"roomId":"${room.id}"`),
+      },
+    );
+    expect(await cacheService.get(`ai-interviewer-dispatch:${room.id}`)).toBe('fresh-dispatch-id');
+  });
+
+  it('GIVEN cached terminal dispatch and newer in-flight dispatch WHEN generating media token THEN preserves the in-flight dispatch', async () => {
+    const host = await insertUser(db);
+    const room = await insertRoom(db, host.id, { mode: 'ai' });
+    await insertParticipant(db, room.id, host.id, 'candidate');
+    await cacheService.set(`ai-interviewer-dispatch:${room.id}`, 'terminal-dispatch-id');
+    await cacheService.set(`ai-interviewer-dispatch-started-at:${room.id}`, Date.now());
+    mockAgentDispatchService.listDispatch.mockResolvedValueOnce([
+      {
+        dispatchId: 'terminal-dispatch-id',
+        roomName: room.id,
+        agentName: 'syncode-ai-interviewer',
+        jobs: [{ id: 'job-1', status: 'failed' }],
+      },
+      {
+        dispatchId: 'pending-dispatch-id',
+        roomName: room.id,
+        agentName: 'syncode-ai-interviewer',
+        jobs: [{ id: 'job-2', status: 'pending' }],
+      },
+    ]);
+    mockMediaService.generateToken.mockResolvedValueOnce({
+      token: 'media-token',
+      url: 'ws://localhost:7880',
+    });
+
+    await service.generateMediaToken(room.id, host.id);
+
+    expect(mockMediaService.listParticipants).not.toHaveBeenCalled();
+    expect(mockAgentDispatchService.deleteDispatch).not.toHaveBeenCalled();
+    expect(mockAgentDispatchService.createDispatch).not.toHaveBeenCalled();
+    expect(await cacheService.get(`ai-interviewer-dispatch:${room.id}`)).toBe(
+      'pending-dispatch-id',
+    );
+  });
+
+  it('GIVEN cached AI interviewer dispatch with non-active agent participant WHEN generating media token THEN replaces the dispatch', async () => {
+    const host = await insertUser(db);
+    const room = await insertRoom(db, host.id, { mode: 'ai' });
+    await insertParticipant(db, room.id, host.id, 'candidate');
+    await cacheService.set(`ai-interviewer-dispatch:${room.id}`, 'stale-dispatch-id');
+    mockAgentDispatchService.listDispatch
+      .mockResolvedValueOnce([
+        {
+          dispatchId: 'stale-dispatch-id',
+          roomName: room.id,
+          agentName: 'syncode-ai-interviewer',
+        },
+      ])
+      .mockResolvedValueOnce([]);
+    mockMediaService.listParticipants.mockResolvedValueOnce([
+      { identity: 'ai-agent-1', kind: 'agent', state: 'joined' },
+    ]);
+    mockAgentDispatchService.createDispatch.mockResolvedValueOnce({
+      dispatchId: 'fresh-dispatch-id',
+      roomName: room.id,
+      agentName: 'syncode-ai-interviewer',
+    });
+    mockMediaService.generateToken.mockResolvedValueOnce({
+      token: 'media-token',
+      url: 'ws://localhost:7880',
+    });
+
+    await service.generateMediaToken(room.id, host.id);
+
+    expect(mockAgentDispatchService.deleteDispatch).toHaveBeenCalledWith(
+      'stale-dispatch-id',
+      room.id,
+    );
+    expect(mockAgentDispatchService.createDispatch).toHaveBeenCalledWith(
+      room.id,
+      'syncode-ai-interviewer',
+      {
+        metadata: expect.stringContaining(`"roomId":"${room.id}"`),
+      },
+    );
+    expect(await cacheService.get(`ai-interviewer-dispatch:${room.id}`)).toBe('fresh-dispatch-id');
+  });
+
+  it('GIVEN cached AI interviewer dispatch when participant listing fails WHEN generating media token THEN creates a fresh dispatch', async () => {
+    const host = await insertUser(db);
+    const room = await insertRoom(db, host.id, { mode: 'ai' });
+    await insertParticipant(db, room.id, host.id, 'candidate');
+    await cacheService.set(`ai-interviewer-dispatch:${room.id}`, 'stale-dispatch-id');
+    mockAgentDispatchService.listDispatch
+      .mockResolvedValueOnce([
+        {
+          dispatchId: 'stale-dispatch-id',
+          roomName: room.id,
+          agentName: 'syncode-ai-interviewer',
+        },
+      ])
+      .mockResolvedValueOnce([]);
+    mockMediaService.listParticipants.mockRejectedValueOnce(new Error('room not found'));
+    mockAgentDispatchService.createDispatch.mockResolvedValueOnce({
+      dispatchId: 'fresh-dispatch-id',
+      roomName: room.id,
+      agentName: 'syncode-ai-interviewer',
+    });
+    mockMediaService.generateToken.mockResolvedValueOnce({
+      token: 'media-token',
+      url: 'ws://localhost:7880',
+    });
+
+    await service.generateMediaToken(room.id, host.id);
+
+    expect(mockAgentDispatchService.deleteDispatch).toHaveBeenCalledWith(
+      'stale-dispatch-id',
+      room.id,
+    );
+    expect(mockAgentDispatchService.createDispatch).toHaveBeenCalledWith(
+      room.id,
+      'syncode-ai-interviewer',
+      {
+        metadata: expect.stringContaining(`"roomId":"${room.id}"`),
+      },
+    );
+    expect(await cacheService.get(`ai-interviewer-dispatch:${room.id}`)).toBe('fresh-dispatch-id');
+  });
+});
+
 describe('markParticipantInactive', () => {
   it('GIVEN active participant WHEN marking inactive THEN sets isActive=false and leftAt', async () => {
     const host = await insertUser(db);
@@ -1580,15 +1933,11 @@ describe('markParticipantInactive', () => {
     expect(row!.leftAt).toEqual(leftAt);
   });
 
-  it('GIVEN AI room WHEN participant disconnects THEN AI interviewer dispatch is cleaned up', async () => {
+  it('GIVEN AI room WHEN participant disconnects THEN AI interviewer dispatch is preserved', async () => {
     const host = await insertUser(db);
     const room = await insertRoom(db, host.id, { mode: 'ai' });
     const participant = await insertUser(db);
     await insertParticipant(db, room.id, participant.id, 'candidate');
-    mockAgentDispatchService.listDispatch.mockResolvedValueOnce([
-      { dispatchId: 'dispatch-ai-1', roomName: room.id, agentName: 'syncode-ai-interviewer' },
-      { dispatchId: 'dispatch-other', roomName: room.id, agentName: 'another-agent' },
-    ]);
 
     await service.markParticipantInactive(
       room.id,
@@ -1596,8 +1945,8 @@ describe('markParticipantInactive', () => {
       new Date('2026-04-08T13:00:00Z'),
     );
 
-    expect(mockAgentDispatchService.deleteDispatch).toHaveBeenCalledTimes(1);
-    expect(mockAgentDispatchService.deleteDispatch).toHaveBeenCalledWith('dispatch-ai-1', room.id);
+    expect(mockAgentDispatchService.listDispatch).not.toHaveBeenCalled();
+    expect(mockAgentDispatchService.deleteDispatch).not.toHaveBeenCalled();
   });
 
   it('GIVEN non-AI room WHEN participant disconnects THEN AI interviewer dispatch is not touched', async () => {

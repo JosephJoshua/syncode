@@ -74,6 +74,7 @@ import type {
   roomDetailSchema,
   runCodeResponseSchema,
   runCodeSchema,
+  simliAvatarSessionResponseSchema,
   submitProblemSchema,
   submitResponseSchema,
   transferRoomOwnershipResponseSchema,
@@ -233,6 +234,10 @@ export const CONTROL_API = {
       z.infer<typeof requestRoomAiInterviewTranscriptionSchema>,
       z.infer<typeof requestRoomAiInterviewTranscriptionResponseSchema>
     >()('rooms/:id/ai/interview/transcribe', 'POST'),
+    AI_INTERVIEW_SIMLI_AVATAR_SESSION: defineRoute<
+      void,
+      z.infer<typeof simliAvatarSessionResponseSchema>
+    >()('rooms/:id/ai/interview/avatar/simli-session', 'POST'),
     CODE_ANALYSIS: defineRoute<
       z.infer<typeof requestRoomCodeAnalysisSchema>,
       z.infer<typeof requestRoomCodeAnalysisResponseSchema>

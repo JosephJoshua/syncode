@@ -33,6 +33,7 @@ export default defineConfig({
         '**/*.test.ts',
         'src/main.ts',
         'src/telemetry.ts',
+        'src/**/*.bootstrap.ts',
         'src/**/*.module.ts',
         'src/**/*.config.ts',
         'src/**/*.dto.ts',

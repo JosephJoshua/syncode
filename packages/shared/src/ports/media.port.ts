@@ -4,6 +4,7 @@ export interface MediaTokenOptions {
   roomName: string;
   participantIdentity: string;
   participantName?: string;
+  participantAttributes?: Record<string, string>;
   canPublish?: boolean;
   canSubscribe?: boolean;
   ttlSeconds?: number;
@@ -13,6 +14,12 @@ export interface MediaRoomInfo {
   name: string;
   numParticipants: number;
   creationTime: number;
+}
+
+export interface MediaParticipantInfo {
+  identity: string;
+  kind: 'standard' | 'agent' | 'other';
+  state: 'joining' | 'joined' | 'active' | 'disconnected' | 'unknown';
 }
 
 export interface MediaRoomOptions {
@@ -36,6 +43,7 @@ export interface IMediaService {
   deleteRoom(name: string): Promise<void>;
   listRooms(): Promise<MediaRoomInfo[]>;
   getRoomInfo(name: string): Promise<MediaRoomInfo | null>;
+  listParticipants(roomName: string): Promise<MediaParticipantInfo[]>;
   generateToken(options: MediaTokenOptions): Promise<MediaTokenResult>;
   removeParticipant(roomName: string, participantIdentity: string): Promise<void>;
   muteParticipantTrack(options: {

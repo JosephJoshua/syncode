@@ -12,17 +12,6 @@ function isPersistedPhase(value: string | undefined): value is RoomStatus {
   return typeof value === 'string' && (ROOM_STATUSES as readonly string[]).includes(value);
 }
 
-function isTimeoutError(error: unknown): boolean {
-  if (!(error instanceof Error)) {
-    return false;
-  }
-  return (
-    error.name === 'TimeoutError' ||
-    error.name === 'AbortError' ||
-    error.message.includes('Request timed out')
-  );
-}
-
 @Injectable()
 export class SnapshotScheduler implements OnModuleDestroy {
   private readonly logger = new Logger(SnapshotScheduler.name);
@@ -136,7 +125,7 @@ export class SnapshotScheduler implements OnModuleDestroy {
       this.logger.warn(
         `Failed to ${action} for room ${roomId}: ${error instanceof Error ? error.message : String(error)}`,
       );
-      if (options.strict && !isTimeoutError(error)) {
+      if (options.strict) {
         throw error;
       }
     }

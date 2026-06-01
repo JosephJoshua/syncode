@@ -134,6 +134,18 @@ export interface MediaTokenResult {
   expiresAt: Date;
 }
 
+export type SimliAvatarSessionResult =
+  | { enabled: false }
+  | {
+      enabled: true;
+      sessionToken: string;
+      wsUrl: string;
+      audioBufferSize: number;
+      liveKitToken: string;
+      liveKitUrl: string;
+      avatarIdentity: string;
+    };
+
 export interface RequestRoomAiHintResult {
   jobId: string;
   hintId: string;

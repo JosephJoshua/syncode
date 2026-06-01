@@ -1,5 +1,5 @@
 # Stage 1: Prune monorepo for ai-plane
-FROM node:25-alpine AS pruner
+FROM node:25-bookworm-slim AS pruner
 
 ENV PNPM_HOME="/pnpm" PATH="/pnpm:$PATH"
 RUN npm install -g --force corepack && corepack enable && corepack prepare pnpm@9.0.0 --activate
@@ -10,9 +10,9 @@ COPY . .
 RUN turbo prune @syncode/ai-plane --docker
 
 # Stage 2: Install deps & build
-FROM node:25-alpine AS builder
+FROM node:25-bookworm-slim AS builder
 
-ENV PNPM_HOME="/pnpm" PATH="/pnpm:$PATH"
+ENV PNPM_HOME="/pnpm" PATH="/pnpm:$PATH" ONNXRUNTIME_NODE_INSTALL=skip
 RUN npm install -g --force corepack && corepack enable && corepack prepare pnpm@9.0.0 --activate
 
 WORKDIR /app
@@ -26,9 +26,13 @@ RUN pnpm turbo build --filter=@syncode/ai-plane
 RUN pnpm deploy --filter=@syncode/ai-plane --prod /app/deploy
 
 # Stage 3: Production runner
-FROM node:25-alpine AS runner
+FROM node:25-bookworm-slim AS runner
 
-RUN apk add --no-cache tini && addgroup -S syncode && adduser -S syncode -G syncode
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ca-certificates tini \
+  && rm -rf /var/lib/apt/lists/* \
+  && groupadd --system syncode \
+  && useradd --system --gid syncode --home-dir /app --shell /usr/sbin/nologin syncode
 
 WORKDIR /app
 
@@ -46,5 +50,5 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
 LABEL org.opencontainers.image.source="https://github.com/JosephJoshua/syncode"
 LABEL org.opencontainers.image.title="syncode-ai-plane"
 
-ENTRYPOINT ["/sbin/tini", "--"]
+ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["node", "dist/main.js"]

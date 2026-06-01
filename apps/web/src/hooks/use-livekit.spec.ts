@@ -56,12 +56,19 @@ vi.mock('livekit-client', () => {
     TrackUnmuted: 'trackUnmuted',
     ParticipantConnected: 'participantConnected',
     ParticipantDisconnected: 'participantDisconnected',
+    ParticipantAttributesChanged: 'participantAttributesChanged',
     Disconnected: 'disconnected',
     ActiveDeviceChanged: 'activeDeviceChanged',
   } as const;
 
   const Track = {
-    Source: { Camera: 'camera', Microphone: 'microphone', ScreenShare: 'screen_share' } as const,
+    Source: {
+      Camera: 'camera',
+      Microphone: 'microphone',
+      ScreenShare: 'screen_share',
+      ScreenShareAudio: 'screen_share_audio',
+      Unknown: 'unknown',
+    } as const,
     Kind: { Audio: 'audio', Video: 'video' } as const,
   };
 
@@ -169,6 +176,12 @@ async function flushPromises() {
   });
 }
 
+async function flushMicrotasks() {
+  await act(async () => {
+    await Promise.resolve();
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -230,7 +243,46 @@ describe('useLiveKit', () => {
     expect(result.current.connectionState).toBe('connected');
   });
 
-  it('GIVEN connection fails WHEN rendered THEN connectionState becomes failed', async () => {
+  it('GIVEN initial connection attempts fail WHEN later retry succeeds THEN connectionState becomes connected', async () => {
+    vi.useFakeTimers();
+
+    const lk = await import('livekit-client');
+    const origRoom = lk.Room;
+    const connect = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('connection failed'))
+      .mockRejectedValueOnce(new Error('connection failed'))
+      .mockRejectedValueOnce(new Error('connection failed'))
+      .mockResolvedValueOnce(undefined);
+
+    (lk as Record<string, unknown>).Room = function RetryRoom() {
+      const room = new origRoom();
+      (room as unknown as IMockRoom).connect = connect;
+      latestRoom.current = room as unknown as IMockRoom;
+      return room;
+    };
+
+    try {
+      const { result } = renderHook(() => useLiveKit(defaultOptions()));
+
+      await flushMicrotasks();
+      expect(result.current.connectionState).toBe('connecting');
+      expect(connect).toHaveBeenCalledTimes(1);
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(7_000);
+      });
+
+      expect(connect).toHaveBeenCalledTimes(4);
+      expect(result.current.connectionState).toBe('connected');
+    } finally {
+      (lk as Record<string, unknown>).Room = origRoom;
+      vi.useRealTimers();
+    }
+  });
+
+  it('GIVEN connection keeps failing WHEN retries are exhausted THEN connectionState becomes failed', async () => {
+    vi.useFakeTimers();
     // Start disconnected, then swap the Room mock to reject, then connect
     const { result, rerender } = renderHook((props: UseLiveKitOptions) => useLiveKit(props), {
       initialProps: { url: null, token: null, connect: false } as UseLiveKitOptions,
@@ -239,24 +291,32 @@ describe('useLiveKit', () => {
     // Patch the mock module so the NEXT Room creation rejects on connect
     const lk = await import('livekit-client');
     const origRoom = lk.Room;
+    const connect = vi.fn().mockRejectedValue(new Error('connection failed'));
     (lk as Record<string, unknown>).Room = function FailingRoom() {
       const room = new origRoom();
       // Override the connect to reject
-      (room as unknown as IMockRoom).connect = vi
-        .fn()
-        .mockRejectedValue(new Error('connection failed'));
+      (room as unknown as IMockRoom).connect = connect;
       latestRoom.current = room as unknown as IMockRoom;
       return room;
     };
 
-    rerender({ url: 'wss://lk', token: 'tok', connect: true });
+    try {
+      rerender({ url: 'wss://lk', token: 'tok', connect: true });
 
-    await flushPromises();
+      await flushMicrotasks();
+      expect(result.current.connectionState).toBe('connecting');
 
-    expect(result.current.connectionState).toBe('failed');
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(31_000);
+      });
 
-    // Restore
-    (lk as Record<string, unknown>).Room = origRoom;
+      expect(connect).toHaveBeenCalledTimes(7);
+      expect(result.current.connectionState).toBe('failed');
+    } finally {
+      // Restore
+      (lk as Record<string, unknown>).Room = origRoom;
+      vi.useRealTimers();
+    }
   });
 
   // -----------------------------------------------------------------------
@@ -385,6 +445,155 @@ describe('useLiveKit', () => {
     });
 
     expect(fakeAudioEl.volume).toBe(0.5);
+  });
+
+  it('GIVEN a remote participant has an audio track WHEN participants refresh THEN exposes the microphone track', async () => {
+    const { result } = renderHook(() => useLiveKit(defaultOptions()));
+    await flushPromises();
+
+    const audioTrack = {} as MediaStreamTrack;
+    const room = getRoom();
+    room.remoteParticipants.set('ai-interviewer', {
+      identity: 'ai-interviewer',
+      isAgent: true,
+      getTrackPublication: vi.fn((source: string) =>
+        source === 'microphone'
+          ? {
+              isMuted: false,
+              track: { mediaStreamTrack: audioTrack },
+            }
+          : null,
+      ),
+    });
+
+    act(() => {
+      room.emit('participantConnected');
+    });
+
+    expect(result.current.remoteParticipants).toEqual([
+      expect.objectContaining({
+        identity: 'ai-interviewer',
+        isAgent: true,
+        audioTrack,
+      }),
+    ]);
+  });
+
+  it('GIVEN an avatar participant publishes video WHEN participants refresh THEN merges avatar video into the agent identity', async () => {
+    const { result } = renderHook(() => useLiveKit(defaultOptions()));
+    await flushPromises();
+
+    const audioTrack = {} as MediaStreamTrack;
+    const avatarVideoTrack = {} as MediaStreamTrack;
+    const room = getRoom();
+    room.remoteParticipants.set('ai-interviewer', {
+      identity: 'ai-interviewer',
+      isAgent: true,
+      getTrackPublication: vi.fn((source: string) =>
+        source === 'microphone'
+          ? {
+              isMuted: false,
+              track: { mediaStreamTrack: audioTrack },
+            }
+          : null,
+      ),
+    });
+    room.remoteParticipants.set('ai-interviewer-avatar', {
+      identity: 'ai-interviewer-avatar',
+      isAgent: false,
+      getTrackPublication: vi.fn((source: string) =>
+        source === 'camera'
+          ? {
+              isMuted: false,
+              track: { mediaStreamTrack: avatarVideoTrack },
+            }
+          : null,
+      ),
+    });
+
+    act(() => {
+      room.emit('participantConnected');
+    });
+
+    expect(result.current.remoteParticipants).toEqual([
+      expect.objectContaining({
+        identity: 'ai-interviewer',
+        isAgent: true,
+        audioTrack,
+        hasVideo: true,
+        videoTrack: avatarVideoTrack,
+      }),
+    ]);
+  });
+
+  it('GIVEN agent media publications use unknown source WHEN participants refresh THEN still exposes audio and avatar video', async () => {
+    const { result } = renderHook(() => useLiveKit(defaultOptions()));
+    await flushPromises();
+
+    const audioTrack = {} as MediaStreamTrack;
+    const avatarVideoTrack = {} as MediaStreamTrack;
+    const room = getRoom();
+    room.remoteParticipants.set('ai-interviewer', {
+      identity: 'ai-interviewer',
+      isAgent: true,
+      getTrackPublication: vi.fn().mockReturnValue(null),
+      getTrackPublications: vi.fn().mockReturnValue([
+        {
+          kind: 'audio',
+          source: 'unknown',
+          isMuted: false,
+          track: { mediaStreamTrack: audioTrack },
+        },
+      ]),
+    });
+    room.remoteParticipants.set('ai-interviewer-avatar', {
+      identity: 'ai-interviewer-avatar',
+      isAgent: false,
+      getTrackPublication: vi.fn().mockReturnValue(null),
+      getTrackPublications: vi.fn().mockReturnValue([
+        {
+          kind: 'video',
+          source: 'unknown',
+          isMuted: false,
+          track: { mediaStreamTrack: avatarVideoTrack },
+        },
+      ]),
+    });
+
+    act(() => {
+      room.emit('participantConnected');
+    });
+
+    expect(result.current.remoteParticipants).toEqual([
+      expect.objectContaining({
+        identity: 'ai-interviewer',
+        isAgent: true,
+        audioTrack,
+        hasVideo: true,
+        videoTrack: avatarVideoTrack,
+      }),
+    ]);
+  });
+
+  it('GIVEN an avatar participant is active speaker WHEN speakers change THEN marks the agent identity as speaking', async () => {
+    const { result } = renderHook(() => useLiveKit(defaultOptions()));
+    await flushPromises();
+    getRoom().remoteParticipants.set('ai-interviewer-avatar', {
+      identity: 'ai-interviewer-avatar',
+      isAgent: false,
+      getTrackPublication: vi.fn().mockReturnValue(null),
+    });
+
+    act(() => {
+      getRoom().emit('activeSpeakersChanged', [
+        {
+          identity: 'ai-interviewer-avatar',
+        },
+      ]);
+    });
+
+    expect(result.current.speakingMap.get('ai-interviewer')).toBe(true);
+    expect(result.current.speakingMap.get('ai-interviewer-avatar')).toBeUndefined();
   });
 
   it('GIVEN setOutputVolume called with value > 1 THEN volume is clamped to 1', async () => {

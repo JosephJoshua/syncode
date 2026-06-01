@@ -464,6 +464,13 @@
     "aiInterviewVoiceTimeout": "Voice transcription timed out. Please try again.",
     "aiInterviewVoiceLanguageUnsupported": "Voice transcription language is not supported.",
     "aiInterviewVoiceError": "Could not capture voice input.",
+    "simliAvatarTitle": "AI interviewer avatar",
+    "simliAvatarIdle": "Avatar is idle.",
+    "simliAvatarWaitingAudio": "Avatar is waiting for the interviewer audio track.",
+    "simliAvatarStarting": "Starting talking avatar...",
+    "simliAvatarConnected": "Talking avatar is live.",
+    "simliAvatarDisabled": "Talking avatar is not configured.",
+    "simliAvatarFailed": "Talking avatar is unavailable.",
     "aiInterviewQuestionType": {
       "complexity": "Complexity",
       "bug_risk": "Bug risk",

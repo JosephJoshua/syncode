@@ -2,6 +2,7 @@ import type { OnModuleDestroy } from '@nestjs/common';
 import { Injectable, Logger } from '@nestjs/common';
 import type {
   IMediaService,
+  MediaParticipantInfo,
   MediaRoomInfo,
   MediaRoomOptions,
   MediaTokenOptions,
@@ -10,6 +11,13 @@ import type {
 } from '@syncode/shared';
 import { AccessToken, RoomServiceClient, TrackSource } from 'livekit-server-sdk';
 import { type LiveKitConfig, LiveKitConfigSchema } from '../config.js';
+
+const LIVEKIT_PARTICIPANT_KIND_AGENT = 4;
+const LIVEKIT_PARTICIPANT_KIND_STANDARD = 0;
+const LIVEKIT_PARTICIPANT_STATE_JOINING = 0;
+const LIVEKIT_PARTICIPANT_STATE_JOINED = 1;
+const LIVEKIT_PARTICIPANT_STATE_ACTIVE = 2;
+const LIVEKIT_PARTICIPANT_STATE_DISCONNECTED = 3;
 
 @Injectable()
 export class LiveKitAdapter implements IMediaService, OnModuleDestroy {
@@ -70,10 +78,21 @@ export class LiveKitAdapter implements IMediaService, OnModuleDestroy {
     };
   }
 
+  async listParticipants(roomName: string): Promise<MediaParticipantInfo[]> {
+    const participants = await this.client.listParticipants(roomName);
+
+    return participants.map((participant) => ({
+      identity: participant.identity,
+      kind: this.mapParticipantKind(participant.kind),
+      state: this.mapParticipantState(participant.state),
+    }));
+  }
+
   async generateToken(options: MediaTokenOptions): Promise<MediaTokenResult> {
     const token = new AccessToken(this.config.apiKey, this.config.apiSecret, {
       identity: options.participantIdentity,
       name: options.participantName,
+      attributes: options.participantAttributes,
       ttl: options.ttlSeconds,
     });
 
@@ -171,5 +190,34 @@ export class LiveKitAdapter implements IMediaService, OnModuleDestroy {
 
   async onModuleDestroy(): Promise<void> {
     await this.shutdown();
+  }
+
+  private mapParticipantKind(kind: unknown): MediaParticipantInfo['kind'] {
+    if (kind === LIVEKIT_PARTICIPANT_KIND_AGENT || String(kind) === 'AGENT') {
+      return 'agent';
+    }
+    if (kind === LIVEKIT_PARTICIPANT_KIND_STANDARD || String(kind) === 'STANDARD') {
+      return 'standard';
+    }
+    return 'other';
+  }
+
+  private mapParticipantState(state: unknown): MediaParticipantInfo['state'] {
+    switch (state) {
+      case LIVEKIT_PARTICIPANT_STATE_JOINING:
+      case 'JOINING':
+        return 'joining';
+      case LIVEKIT_PARTICIPANT_STATE_JOINED:
+      case 'JOINED':
+        return 'joined';
+      case LIVEKIT_PARTICIPANT_STATE_ACTIVE:
+      case 'ACTIVE':
+        return 'active';
+      case LIVEKIT_PARTICIPANT_STATE_DISCONNECTED:
+      case 'DISCONNECTED':
+        return 'disconnected';
+      default:
+        return 'unknown';
+    }
   }
 }
