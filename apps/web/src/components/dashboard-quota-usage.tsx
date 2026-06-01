@@ -113,7 +113,7 @@ export function DashboardQuotaUsage({
             </div>
           ) : (
             <div className="space-y-4">
-              <div className="flex flex-col gap-4 lg:flex-row lg:flex-wrap lg:items-center">
+              <div className="grid gap-4 lg:grid-cols-3">
                 {items.map((item) => (
                   <QuotaRow key={item.key} item={item} />
                 ))}
@@ -167,11 +167,11 @@ function QuotaRow({ item }: { readonly item: QuotaItem }) {
   return (
     <div
       className={cn(
-        'w-full rounded-lg border border-border/45 bg-background/60 p-3.5 sm:p-4 lg:w-auto',
+        'min-w-0 rounded-lg border border-border/45 bg-background/60 p-3.5 sm:p-4',
         item.isExceeded && 'border-destructive/30 bg-destructive/5',
       )}
     >
-      <div className="grid grid-cols-[auto_minmax(5rem,1fr)_auto] items-center gap-4 sm:grid-cols-[auto_14rem_auto]">
+      <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4">
         <p
           className={cn(
             'font-mono text-xs uppercase tracking-[0.14em] text-muted-foreground/90',
@@ -183,7 +183,7 @@ function QuotaRow({ item }: { readonly item: QuotaItem }) {
 
         <Progress
           aria-label={`${item.label} ${item.value}`}
-          className="h-2 w-full bg-muted/80 sm:w-56"
+          className="h-2 w-full min-w-0 bg-muted/80"
           indicatorClassName={progressTone}
           value={item.percent}
         />
@@ -203,16 +203,16 @@ function QuotaRow({ item }: { readonly item: QuotaItem }) {
 
 function QuotaRowsSkeleton() {
   return (
-    <div className="flex flex-col gap-4 lg:flex-row lg:flex-wrap lg:items-center">
+    <div className="grid gap-4 lg:grid-cols-3">
       {['ai', 'execution', 'rooms'].map((item) => (
         <div
           key={item}
           data-testid="quota-row-skeleton"
-          className="w-full rounded-lg border border-border/45 bg-background/60 p-4 lg:w-auto"
+          className="min-w-0 rounded-lg border border-border/45 bg-background/60 p-4"
         >
-          <div className="grid grid-cols-[auto_minmax(5rem,1fr)_auto] items-center gap-4 sm:grid-cols-[auto_14rem_auto]">
+          <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4">
             <Skeleton className="h-3 w-16" />
-            <Skeleton className="h-2 w-full rounded-full sm:w-56" />
+            <Skeleton className="h-2 w-full min-w-0 rounded-full" />
             <Skeleton className="h-5 w-14" />
           </div>
         </div>

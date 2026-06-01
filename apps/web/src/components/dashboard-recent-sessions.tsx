@@ -314,11 +314,7 @@ export function DashboardRecentSessions({
           <h2 className="shrink-0 text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
             {t('recentSessions')}
           </h2>
-          <Button
-            asChild
-            className="h-9 gap-2 bg-emerald-600 text-white hover:bg-emerald-500"
-            size="sm"
-          >
+          <Button asChild className="h-9 gap-2" size="sm">
             <Link to="/sessions/compare">
               <GitCompareArrows className="size-4" />
               {t('actions.compareSessions')}

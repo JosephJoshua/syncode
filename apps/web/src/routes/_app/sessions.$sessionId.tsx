@@ -134,11 +134,7 @@ function SessionFeedbackPage() {
     reportState?.state === 'pending' ? 'pending' : report ? 'ready' : 'unavailable';
   const compareSessionsAction =
     reportState?.state === 'ready' ? (
-      <Button
-        asChild
-        className="h-9 gap-2 bg-emerald-600 text-white hover:bg-emerald-500"
-        size="sm"
-      >
+      <Button asChild className="h-9 gap-2" size="sm">
         <Link to="/sessions/compare" search={{ ids: sessionId }}>
           <GitCompareArrows className="size-4" />
           {t('sessionComparison:actions.compareSessions')}
