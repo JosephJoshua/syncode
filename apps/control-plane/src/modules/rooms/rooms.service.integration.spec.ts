@@ -1727,6 +1727,7 @@ describe('generateMediaToken', () => {
     const room = await insertRoom(db, host.id, { mode: 'ai' });
     await insertParticipant(db, room.id, host.id, 'candidate');
     await cacheService.set(`ai-interviewer-dispatch:${room.id}`, 'live-dispatch-id');
+    await cacheService.set(`ai-interviewer-dispatch-started-at:${room.id}`, Date.now());
     mockAgentDispatchService.listDispatch.mockResolvedValueOnce([
       {
         dispatchId: 'live-dispatch-id',

@@ -71,6 +71,7 @@ import {
   RoomDetailDto,
   RunCodeDto,
   RunCodeResponseDto,
+  SimliAvatarSessionResponseDto,
   SubmitCodeResponseDto,
   SubmitProblemDto,
   TransferRoomOwnershipDto,
@@ -449,6 +450,33 @@ export class RoomsController {
     @Body() body: RequestRoomAiInterviewTranscriptionDto,
   ): Promise<RequestRoomAiInterviewTranscriptionResponseDto> {
     return this.roomsService.requestAiInterviewTranscription(id, user.id, body);
+  }
+
+  @Post(CONTROL_API.ROOMS.AI_INTERVIEW_SIMLI_AVATAR_SESSION.route)
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Create a Simli avatar session for the realtime AI interviewer',
+    description:
+      'Returns a short-lived Simli session token when Simli is configured. The Simli API key never leaves the server.',
+  })
+  @ApiParam({ name: 'id', description: 'Room ID (UUID)' })
+  @ApiResponse({
+    status: 200,
+    type: SimliAvatarSessionResponseDto,
+    description: 'Simli avatar session details, or disabled when Simli is not configured',
+  })
+  @ApiResponse({
+    status: 403,
+    type: ErrorResponseDto,
+    description: 'Not a participant or lacks media capability',
+  })
+  @ApiResponse({ status: 404, type: ErrorResponseDto, description: 'Room not found' })
+  @ApiResponse({ status: 503, type: ErrorResponseDto, description: 'Simli unavailable' })
+  async generateAiInterviewerSimliAvatarSession(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<SimliAvatarSessionResponseDto> {
+    return this.roomsService.generateAiInterviewerSimliAvatarSession(id, user.id);
   }
 
   @Get(CONTROL_API.ROOMS.AI_INTERVIEW_RESULT.route)

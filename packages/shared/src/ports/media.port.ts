@@ -4,6 +4,7 @@ export interface MediaTokenOptions {
   roomName: string;
   participantIdentity: string;
   participantName?: string;
+  participantAttributes?: Record<string, string>;
   canPublish?: boolean;
   canSubscribe?: boolean;
   ttlSeconds?: number;

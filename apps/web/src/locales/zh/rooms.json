@@ -423,6 +423,13 @@
     "aiInterviewVoiceTimeout": "语音转写超时，请重试。",
     "aiInterviewVoiceLanguageUnsupported": "当前语音识别语言不受支持。",
     "aiInterviewVoiceError": "无法捕获语音输入。",
+    "simliAvatarTitle": "AI 面试官头像",
+    "simliAvatarIdle": "头像处于空闲状态。",
+    "simliAvatarWaitingAudio": "头像正在等待面试官音频轨道。",
+    "simliAvatarStarting": "正在启动数字人头像...",
+    "simliAvatarConnected": "数字人头像已上线。",
+    "simliAvatarDisabled": "未配置数字人头像。",
+    "simliAvatarFailed": "数字人头像暂时不可用。",
     "aiInterviewQuestionType": {
       "complexity": "复杂度",
       "bug_risk": "缺陷风险",

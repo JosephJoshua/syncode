@@ -902,6 +902,32 @@ export const ensureCollabResponseSchema = z.object({
 
 export type EnsureCollabResponse = z.infer<typeof ensureCollabResponseSchema>;
 
+// ── Simli avatar session ─────────────────────────────────────────────
+
+export const AI_INTERVIEWER_AVATAR_IDENTITY = 'ai-interviewer-avatar';
+export const AI_INTERVIEWER_AGENT_IDENTITY = 'ai-interviewer';
+export const AI_INTERVIEWER_PUBLISH_ON_BEHALF_ATTRIBUTE = 'lk.publish_on_behalf';
+
+export const simliAvatarSessionResponseSchema = z.discriminatedUnion('enabled', [
+  z.object({
+    enabled: z.literal(false),
+  }),
+  z.object({
+    enabled: z.literal(true),
+    sessionToken: z.string().min(1).describe('Short-lived Simli compose session token'),
+    wsUrl: z.url().describe('Simli WebSocket base URL used by the browser client'),
+    audioBufferSize: z.number().int().positive().describe('Simli client audio buffer size'),
+    liveKitToken: z.string().min(1).describe('LiveKit token for publishing avatar video'),
+    liveKitUrl: z.string().min(1).describe('LiveKit WebSocket URL for the avatar publisher'),
+    avatarIdentity: z
+      .string()
+      .min(1)
+      .describe('Stable LiveKit participant identity used by the avatar publisher'),
+  }),
+]);
+
+export type SimliAvatarSessionResponse = z.infer<typeof simliAvatarSessionResponseSchema>;
+
 // ── Media token ──────────────────────────────────────────────────────
 
 export const mediaTokenResponseSchema = z.object({

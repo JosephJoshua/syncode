@@ -56,12 +56,19 @@ vi.mock('livekit-client', () => {
     TrackUnmuted: 'trackUnmuted',
     ParticipantConnected: 'participantConnected',
     ParticipantDisconnected: 'participantDisconnected',
+    ParticipantAttributesChanged: 'participantAttributesChanged',
     Disconnected: 'disconnected',
     ActiveDeviceChanged: 'activeDeviceChanged',
   } as const;
 
   const Track = {
-    Source: { Camera: 'camera', Microphone: 'microphone', ScreenShare: 'screen_share' } as const,
+    Source: {
+      Camera: 'camera',
+      Microphone: 'microphone',
+      ScreenShare: 'screen_share',
+      ScreenShareAudio: 'screen_share_audio',
+      Unknown: 'unknown',
+    } as const,
     Kind: { Audio: 'audio', Video: 'video' } as const,
   };
 
@@ -438,6 +445,155 @@ describe('useLiveKit', () => {
     });
 
     expect(fakeAudioEl.volume).toBe(0.5);
+  });
+
+  it('GIVEN a remote participant has an audio track WHEN participants refresh THEN exposes the microphone track', async () => {
+    const { result } = renderHook(() => useLiveKit(defaultOptions()));
+    await flushPromises();
+
+    const audioTrack = {} as MediaStreamTrack;
+    const room = getRoom();
+    room.remoteParticipants.set('ai-interviewer', {
+      identity: 'ai-interviewer',
+      isAgent: true,
+      getTrackPublication: vi.fn((source: string) =>
+        source === 'microphone'
+          ? {
+              isMuted: false,
+              track: { mediaStreamTrack: audioTrack },
+            }
+          : null,
+      ),
+    });
+
+    act(() => {
+      room.emit('participantConnected');
+    });
+
+    expect(result.current.remoteParticipants).toEqual([
+      expect.objectContaining({
+        identity: 'ai-interviewer',
+        isAgent: true,
+        audioTrack,
+      }),
+    ]);
+  });
+
+  it('GIVEN an avatar participant publishes video WHEN participants refresh THEN merges avatar video into the agent identity', async () => {
+    const { result } = renderHook(() => useLiveKit(defaultOptions()));
+    await flushPromises();
+
+    const audioTrack = {} as MediaStreamTrack;
+    const avatarVideoTrack = {} as MediaStreamTrack;
+    const room = getRoom();
+    room.remoteParticipants.set('ai-interviewer', {
+      identity: 'ai-interviewer',
+      isAgent: true,
+      getTrackPublication: vi.fn((source: string) =>
+        source === 'microphone'
+          ? {
+              isMuted: false,
+              track: { mediaStreamTrack: audioTrack },
+            }
+          : null,
+      ),
+    });
+    room.remoteParticipants.set('ai-interviewer-avatar', {
+      identity: 'ai-interviewer-avatar',
+      isAgent: false,
+      getTrackPublication: vi.fn((source: string) =>
+        source === 'camera'
+          ? {
+              isMuted: false,
+              track: { mediaStreamTrack: avatarVideoTrack },
+            }
+          : null,
+      ),
+    });
+
+    act(() => {
+      room.emit('participantConnected');
+    });
+
+    expect(result.current.remoteParticipants).toEqual([
+      expect.objectContaining({
+        identity: 'ai-interviewer',
+        isAgent: true,
+        audioTrack,
+        hasVideo: true,
+        videoTrack: avatarVideoTrack,
+      }),
+    ]);
+  });
+
+  it('GIVEN agent media publications use unknown source WHEN participants refresh THEN still exposes audio and avatar video', async () => {
+    const { result } = renderHook(() => useLiveKit(defaultOptions()));
+    await flushPromises();
+
+    const audioTrack = {} as MediaStreamTrack;
+    const avatarVideoTrack = {} as MediaStreamTrack;
+    const room = getRoom();
+    room.remoteParticipants.set('ai-interviewer', {
+      identity: 'ai-interviewer',
+      isAgent: true,
+      getTrackPublication: vi.fn().mockReturnValue(null),
+      getTrackPublications: vi.fn().mockReturnValue([
+        {
+          kind: 'audio',
+          source: 'unknown',
+          isMuted: false,
+          track: { mediaStreamTrack: audioTrack },
+        },
+      ]),
+    });
+    room.remoteParticipants.set('ai-interviewer-avatar', {
+      identity: 'ai-interviewer-avatar',
+      isAgent: false,
+      getTrackPublication: vi.fn().mockReturnValue(null),
+      getTrackPublications: vi.fn().mockReturnValue([
+        {
+          kind: 'video',
+          source: 'unknown',
+          isMuted: false,
+          track: { mediaStreamTrack: avatarVideoTrack },
+        },
+      ]),
+    });
+
+    act(() => {
+      room.emit('participantConnected');
+    });
+
+    expect(result.current.remoteParticipants).toEqual([
+      expect.objectContaining({
+        identity: 'ai-interviewer',
+        isAgent: true,
+        audioTrack,
+        hasVideo: true,
+        videoTrack: avatarVideoTrack,
+      }),
+    ]);
+  });
+
+  it('GIVEN an avatar participant is active speaker WHEN speakers change THEN marks the agent identity as speaking', async () => {
+    const { result } = renderHook(() => useLiveKit(defaultOptions()));
+    await flushPromises();
+    getRoom().remoteParticipants.set('ai-interviewer-avatar', {
+      identity: 'ai-interviewer-avatar',
+      isAgent: false,
+      getTrackPublication: vi.fn().mockReturnValue(null),
+    });
+
+    act(() => {
+      getRoom().emit('activeSpeakersChanged', [
+        {
+          identity: 'ai-interviewer-avatar',
+        },
+      ]);
+    });
+
+    expect(result.current.speakingMap.get('ai-interviewer')).toBe(true);
+    expect(result.current.speakingMap.get('ai-interviewer-avatar')).toBeUndefined();
   });
 
   it('GIVEN setOutputVolume called with value > 1 THEN volume is clamped to 1', async () => {

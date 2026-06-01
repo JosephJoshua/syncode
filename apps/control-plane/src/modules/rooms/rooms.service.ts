@@ -16,6 +16,9 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import {
   AI_CLIENT,
+  AI_INTERVIEWER_AGENT_IDENTITY,
+  AI_INTERVIEWER_AVATAR_IDENTITY,
+  AI_INTERVIEWER_PUBLISH_ON_BEHALF_ATTRIBUTE,
   type AiInterviewCodeAnalysisContext,
   type AiInterviewCodeContext,
   type AiInterviewerContextResponse,
@@ -117,6 +120,7 @@ import type {
   RoomDetailResult,
   RoomSummaryResult,
   SetEditorLockResult,
+  SimliAvatarSessionResult,
   TransferOwnershipResult,
   TransitionPhaseResult,
   UpdateParticipantRoleResult,
@@ -153,6 +157,10 @@ interface LatestCodeAnalysisContextCacheEntry {
   context: AiInterviewCodeAnalysisContext;
 }
 
+interface SimliComposeTokenResponse {
+  session_token?: unknown;
+}
+
 const FNV_64_OFFSET_BASIS = 0xcbf29ce484222325n;
 const FNV_64_PRIME = 0x100000001b3n;
 
@@ -163,6 +171,10 @@ function createStableDigest(value: string): string {
     hash = BigInt.asUintN(64, hash * FNV_64_PRIME);
   }
   return hash.toString(16).padStart(16, '0');
+}
+
+function trimTrailingSlashes(value: string): string {
+  return value.replace(/\/+$/, '');
 }
 
 @Injectable()
@@ -2073,6 +2085,7 @@ export class RoomsService implements OnModuleInit {
     'ai-interviewer-dispatch-started-at:';
   private static readonly AI_INTERVIEWER_DISPATCH_CACHE_TTL_SECONDS = 60 * 60;
   private static readonly AI_INTERVIEWER_DISPATCH_STARTUP_GRACE_MS_DEFAULT = 90_000;
+  private static readonly AI_INTERVIEWER_DISPATCH_RECOVERY_REPLACE_AFTER_MS = 12_000;
   private static readonly AI_INTERVIEWER_DISPATCH_LOCK_TTL_SECONDS = 10;
   private static readonly AI_INTERVIEWER_DISPATCH_LOCK_POLL_MS = 250;
   private static readonly AI_INTERVIEWER_AGENT_NAME_DEFAULT = 'syncode-ai-interviewer';
@@ -2086,6 +2099,7 @@ export class RoomsService implements OnModuleInit {
   private static readonly AI_CODE_ANALYSIS_JOB_CACHE_PREFIX = 'ai-code-analysis-job:';
   private static readonly AI_CODE_ANALYSIS_LATEST_CACHE_PREFIX = 'ai-code-analysis-latest:';
   private static readonly AI_CODE_ANALYSIS_JOB_CACHE_TTL_SECONDS = 60 * 60;
+  private static readonly SIMLI_COMPOSE_TOKEN_PATH = '/compose/token';
 
   async generateMediaToken(
     roomId: string,
@@ -2147,6 +2161,129 @@ export class RoomsService implements OnModuleInit {
     const expiresAt = new Date(Date.now() + RoomsService.MEDIA_TOKEN_TTL_SECONDS * 1000);
 
     return { token, url: clientUrl, expiresAt };
+  }
+
+  async generateAiInterviewerSimliAvatarSession(
+    roomId: string,
+    userId: string,
+  ): Promise<SimliAvatarSessionResult> {
+    const [room, participant] = await this.getRoomContext(roomId, userId);
+
+    if (!participant) {
+      throw new ForbiddenException({
+        message: 'Not a participant of this room',
+        code: ERROR_CODES.ROOM_ACCESS_DENIED,
+      });
+    }
+
+    if (room.mode !== 'ai' || room.status === RoomStatus.FINISHED) {
+      return { enabled: false };
+    }
+
+    const capabilities = resolveRoomPermissions(participant.role, {
+      isHost: room.hostId === userId,
+    });
+    const hasMediaCapability = RoomsService.MEDIA_CAPABILITIES.some((cap) => capabilities.has(cap));
+
+    if (!hasMediaCapability) {
+      throw new ForbiddenException({
+        message: 'You do not have media permissions in this room',
+        code: ERROR_CODES.ROOM_PERMISSION_DENIED,
+      });
+    }
+
+    const apiKey = this.configService.get('SIMLI_API_KEY', { infer: true });
+    const faceId = this.configService.get('SIMLI_FACE_ID', { infer: true });
+    if (!apiKey || !faceId) {
+      return { enabled: false };
+    }
+
+    const apiBaseUrl = trimTrailingSlashes(
+      this.configService.get('SIMLI_API_BASE_URL', { infer: true }) ?? 'https://api.simli.ai',
+    );
+    const wsUrl = trimTrailingSlashes(
+      this.configService.get('SIMLI_WS_BASE_URL', { infer: true }) ?? 'wss://api.simli.ai',
+    );
+    const maxSessionLength =
+      this.configService.get('SIMLI_MAX_SESSION_LENGTH_SECONDS', { infer: true }) ?? 900;
+    const maxIdleTime = this.configService.get('SIMLI_MAX_IDLE_SECONDS', { infer: true }) ?? 120;
+    const model = this.configService.get('SIMLI_MODEL', { infer: true }) ?? 'fasttalk';
+    const audioBufferSize =
+      this.configService.get('SIMLI_AUDIO_BUFFER_SIZE', { infer: true }) ?? 3000;
+    const requestTimeoutMs =
+      this.configService.get('SIMLI_REQUEST_TIMEOUT_MS', { infer: true }) ?? 8000;
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), requestTimeoutMs);
+    let response: Response;
+    try {
+      response = await fetch(`${apiBaseUrl}${RoomsService.SIMLI_COMPOSE_TOKEN_PATH}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-simli-api-key': apiKey,
+        },
+        body: JSON.stringify({
+          faceId,
+          handleSilence: false,
+          maxSessionLength,
+          maxIdleTime,
+          model,
+        }),
+        signal: controller.signal,
+      });
+    } catch (error) {
+      throw new ServiceUnavailableException({
+        message: `Unable to create Simli avatar session: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+        code: ERROR_CODES.AI_SERVICE_UNAVAILABLE,
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
+
+    if (!response.ok) {
+      throw new ServiceUnavailableException({
+        message: `Simli avatar session request failed with status ${response.status}`,
+        code: ERROR_CODES.AI_SERVICE_UNAVAILABLE,
+      });
+    }
+
+    const tokenResponse = (await response.json()) as SimliComposeTokenResponse;
+    if (
+      typeof tokenResponse.session_token !== 'string' ||
+      tokenResponse.session_token.length === 0
+    ) {
+      throw new ServiceUnavailableException({
+        message: 'Simli avatar session response did not include a session token',
+        code: ERROR_CODES.AI_SERVICE_UNAVAILABLE,
+      });
+    }
+
+    const { token: liveKitToken, url: liveKitUrl } = await this.mediaService.generateToken({
+      roomName: roomId,
+      participantIdentity: AI_INTERVIEWER_AVATAR_IDENTITY,
+      participantName: 'AI Interviewer Avatar',
+      participantAttributes: {
+        [AI_INTERVIEWER_PUBLISH_ON_BEHALF_ATTRIBUTE]: AI_INTERVIEWER_AGENT_IDENTITY,
+      },
+      canPublish: true,
+      canSubscribe: false,
+      ttlSeconds: RoomsService.MEDIA_TOKEN_TTL_SECONDS,
+    });
+    const liveKitClientUrl =
+      this.configService.get('LIVEKIT_CLIENT_URL', { infer: true }) ?? liveKitUrl;
+
+    return {
+      enabled: true,
+      sessionToken: tokenResponse.session_token,
+      wsUrl,
+      audioBufferSize,
+      liveKitToken,
+      liveKitUrl: liveKitClientUrl,
+      avatarIdentity: AI_INTERVIEWER_AVATAR_IDENTITY,
+    };
   }
 
   private fetchParticipants(roomId: string) {
@@ -4175,6 +4312,14 @@ export class RoomsService implements OnModuleInit {
     );
   }
 
+  private isWithinAiInterviewerDispatchRecoveryGrace(startedAt: number | null): boolean {
+    return (
+      startedAt !== null &&
+      Number.isFinite(startedAt) &&
+      Date.now() - startedAt < RoomsService.AI_INTERVIEWER_DISPATCH_RECOVERY_REPLACE_AFTER_MS
+    );
+  }
+
   private hasInFlightAiInterviewerDispatchJob(dispatch: AgentDispatchInfo): boolean {
     return (
       dispatch.jobs?.some((job) => job.status === 'pending' || job.status === 'running') ?? false
@@ -4189,13 +4334,18 @@ export class RoomsService implements OnModuleInit {
   private shouldPreserveInFlightAiInterviewerDispatch(
     dispatch: AgentDispatchInfo,
     startedAt: number | null,
+    options: { recoveryRequested?: boolean } = {},
   ): boolean {
-    const hasInFlightJob = this.hasInFlightAiInterviewerDispatchJob(dispatch);
-    if (hasInFlightJob) {
-      return true;
+    if (options.recoveryRequested && !this.isWithinAiInterviewerDispatchRecoveryGrace(startedAt)) {
+      return false;
     }
 
     const withinStartupGrace = this.isWithinAiInterviewerDispatchStartupGrace(startedAt);
+    const hasInFlightJob = this.hasInFlightAiInterviewerDispatchJob(dispatch);
+    if (hasInFlightJob) {
+      return withinStartupGrace;
+    }
+
     if (!withinStartupGrace) {
       return false;
     }
@@ -4225,7 +4375,7 @@ export class RoomsService implements OnModuleInit {
   private findReusableAiInterviewerDispatch(
     dispatches: AgentDispatchInfo[],
     startedAt: number | null,
-    options: { preferredDispatchId?: string } = {},
+    options: { preferredDispatchId?: string; recoveryRequested?: boolean } = {},
   ): AgentDispatchInfo | null {
     const orderedDispatches = this.orderAiInterviewerDispatches(
       dispatches,
@@ -4234,7 +4384,9 @@ export class RoomsService implements OnModuleInit {
 
     return (
       orderedDispatches.find((dispatch) =>
-        this.shouldPreserveInFlightAiInterviewerDispatch(dispatch, startedAt),
+        this.shouldPreserveInFlightAiInterviewerDispatch(dispatch, startedAt, {
+          recoveryRequested: options.recoveryRequested,
+        }),
       ) ??
       orderedDispatches.find((dispatch) => !this.hasTerminalAiInterviewerDispatchJob(dispatch)) ??
       null
@@ -4429,14 +4581,20 @@ export class RoomsService implements OnModuleInit {
         (dispatch) => dispatch.agentName === agentName,
       );
       const startedAt = await this.cacheService.get<number>(startedAtKey);
-      const existing = this.findReusableAiInterviewerDispatch(matchingDispatches, startedAt);
+      const existing = this.findReusableAiInterviewerDispatch(matchingDispatches, startedAt, {
+        recoveryRequested: options.recoveryRequested ?? false,
+      });
       if (!existing && matchingDispatches.length > 0) {
         await this.deleteAiInterviewerDispatches(roomId, matchingDispatches);
         this.logger.log(`Replacing terminal AI interviewer dispatch for room ${roomId}`);
       }
 
       if (existing) {
-        if (this.shouldPreserveInFlightAiInterviewerDispatch(existing, startedAt)) {
+        if (
+          this.shouldPreserveInFlightAiInterviewerDispatch(existing, startedAt, {
+            recoveryRequested: options.recoveryRequested ?? false,
+          })
+        ) {
           this.logger.debug(
             `Reusing in-flight AI interviewer dispatch ${existing.dispatchId} for room ${roomId}`,
           );

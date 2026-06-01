@@ -701,6 +701,9 @@ importers:
       shadcn:
         specifier: ^4.1.1
         version: 4.1.1(@types/node@25.3.3)(typescript@5.9.2)
+      simli-client:
+        specifier: ^3.0.1
+        version: 3.0.1(@types/dom-mediacapture-record@1.0.22)
       sonner:
         specifier: ^2.0.7
         version: 2.0.7(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
@@ -9041,6 +9044,9 @@ packages:
   signal-exit@4.1.0:
     resolution: {integrity: sha512-bzyZ1e88w9O1iNJbKnOlvYTrWPDl46O1bG0D3XInv+9tkPrxrN8jUUTiFlDkkmKWgn1M6CfIA13SuGqOa9Korw==}
     engines: {node: '>=14'}
+
+  simli-client@3.0.1:
+    resolution: {integrity: sha512-4TWccj4pTZqojFNVj8HLaDZ3d44knebmLC9T6GYOz61ttZSoUM/Ogmmyr5SOs/63nc/V52VWvqysCul2x5x5zw==}
 
   sisteransi@1.0.5:
     resolution: {integrity: sha512-bLGGlR1QxBcynn2d5YmDX4MGjlZvy2MRBDRNHLJ8VI6l6+9FUiyTFNJ0IveOSP0bcXgVDPRcfGqA0pjaqUpfVg==}
@@ -19221,6 +19227,12 @@ snapshots:
   signal-exit@3.0.7: {}
 
   signal-exit@4.1.0: {}
+
+  simli-client@3.0.1(@types/dom-mediacapture-record@1.0.22):
+    dependencies:
+      livekit-client: 2.18.3(@types/dom-mediacapture-record@1.0.22)
+    transitivePeerDependencies:
+      - '@types/dom-mediacapture-record'
 
   sisteransi@1.0.5: {}
 

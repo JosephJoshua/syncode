@@ -1553,6 +1553,44 @@ describe('ai-interviewer.worker numbered code block and clamp helpers', () => {
       const longAgo = now - 6 * 60_000;
       expect(__testing.isIdleCheckinOverdue(longAgo, now, now)).toBe(false);
     });
+
+    it('GIVEN LiveKit marks the user away WHEN anti-spam elapsed THEN worker should ask the model to decide whether to check in', () => {
+      const now = Date.now();
+      expect(
+        __testing.shouldRequestUserAwayDecision({
+          userState: 'away',
+          agentState: 'listening',
+          lastReplyAt: now - 10_000,
+          now,
+        }),
+      ).toBe(true);
+    });
+
+    it('GIVEN LiveKit marks the user away while agent is speaking WHEN checked THEN worker should not start another reply', () => {
+      const now = Date.now();
+      expect(
+        __testing.shouldRequestUserAwayDecision({
+          userState: 'away',
+          agentState: 'speaking',
+          lastReplyAt: now - 10_000,
+          now,
+        }),
+      ).toBe(false);
+    });
+
+    it('GIVEN reply was triggered by idle detection WHEN checking transition guard THEN it is idle-driven', () => {
+      expect(__testing.isIdleDrivenReplyReason('user_away_timeout')).toBe(true);
+      expect(__testing.isIdleDrivenReplyReason('system_user_idle')).toBe(true);
+      expect(__testing.isIdleDrivenReplyReason('user_text_voice')).toBe(false);
+      expect(__testing.isIdleDrivenReplyReason('system_code_submitted')).toBe(false);
+    });
+
+    it('GIVEN user idle instructions WHEN built THEN they forbid phase transitions from silence alone', () => {
+      const instructions = __testing.buildReasonSpecificInstructions('user_idle', undefined);
+
+      expect(instructions).toContain('Do not call transition_room_phase');
+      expect(instructions).toContain('silence alone is not interview progress');
+    });
   });
 
   describe('ai-interviewer.worker createInterviewerInstructions', () => {

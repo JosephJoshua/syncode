@@ -92,6 +92,7 @@ export class LiveKitAdapter implements IMediaService, OnModuleDestroy {
     const token = new AccessToken(this.config.apiKey, this.config.apiSecret, {
       identity: options.participantIdentity,
       name: options.participantName,
+      attributes: options.participantAttributes,
       ttl: options.ttlSeconds,
     });
 
