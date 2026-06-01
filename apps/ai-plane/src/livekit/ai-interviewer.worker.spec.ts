@@ -800,6 +800,55 @@ describe('ai-interviewer.worker URL resolvers and parsers', () => {
     expect(setSubscribed).toHaveBeenCalledWith(true);
   });
 
+  it('GIVEN a publication cannot be subscribed WHEN subscribing THEN it is ignored', () => {
+    expect(() =>
+      __testing.subscribeRemoteTrackPublication(
+        {
+          kind: 'KIND_AUDIO',
+          sid: 'track-1',
+          subscribed: false,
+        },
+        { identity: 'candidate-1' },
+        'room-1',
+        'published',
+      ),
+    ).not.toThrow();
+  });
+
+  it('GIVEN a publication is already subscribed WHEN subscribing THEN it is not resubscribed', () => {
+    const setSubscribed = vi.fn();
+
+    __testing.subscribeRemoteTrackPublication(
+      {
+        kind: 'KIND_AUDIO',
+        sid: 'track-1',
+        subscribed: true,
+        setSubscribed,
+      },
+      { identity: 'candidate-1' },
+      'room-1',
+      'published',
+    );
+
+    expect(setSubscribed).not.toHaveBeenCalled();
+  });
+
+  it('GIVEN participant track metadata is absent WHEN subscribing THEN logging uses safe fallbacks', () => {
+    const setSubscribed = vi.fn();
+
+    __testing.subscribeRemoteTrackPublication(
+      {
+        subscribed: false,
+        setSubscribed,
+      },
+      undefined,
+      'room-1',
+      'published',
+    );
+
+    expect(setSubscribed).toHaveBeenCalledWith(true);
+  });
+
   it('GIVEN JSON metadata WHEN parseDispatchMetadata parses THEN it returns trimmed fields', () => {
     expect(
       __testing.parseDispatchMetadata(
