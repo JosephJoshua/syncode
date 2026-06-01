@@ -22,8 +22,18 @@ describe('validateEnv', () => {
     expect(env.AI_INTERVIEWER_LIVEKIT_ENABLED).toBe(false);
     expect(env.AI_INTERVIEWER_AGENT_NAME).toBe('syncode-ai-interviewer');
     expect(env.AI_INTERVIEWER_AGENT_IDENTITY).toBe('ai-interviewer');
+    expect(env.AI_INTERVIEWER_RECONNECT_GRACE_MS).toBe(60_000);
+    expect(env.AI_INTERVIEWER_WORKER_INITIALIZE_TIMEOUT_MS).toBe(60_000);
+    expect(env.AI_INTERVIEWER_WORKER_SHUTDOWN_TIMEOUT_MS).toBe(120_000);
+    expect(env.LIVEKIT_AGENT_CONNECT_URL).toBeUndefined();
+    expect(env.OPENAI_CHAT_FALLBACK_MODEL).toBe('gpt-4o-mini');
+    expect(env.OPENAI_TTS_MODEL).toBe('tts-1');
+    expect(env.OPENAI_TTS_BASE_URL).toBe('https://api.openai.com/v1');
     expect(env.OPENAI_REALTIME_MODEL).toBe('gpt-realtime');
     expect(env.OPENAI_REALTIME_VOICE).toBe('alloy');
+    expect(env.OPENAI_REALTIME_PROXY_URL).toBeUndefined();
+    expect(env.OPENAI_REALTIME_CONNECT_TIMEOUT_MS).toBe(5_000);
+    expect(env.AI_INTERVIEWER_FORCE_FALLBACK).toBe(false);
     expect(env.S3_BUCKET).toBe('syncode');
   });
 

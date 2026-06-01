@@ -57,6 +57,7 @@ const envSchema = z
     LIVEKIT_CLIENT_URL: z.url().optional(),
     AI_INTERVIEWER_LIVEKIT_ENABLED: booleanEnv.default(false),
     AI_INTERVIEWER_AGENT_NAME: z.string().min(1).default('syncode-ai-interviewer'),
+    AI_INTERVIEWER_DISPATCH_STARTUP_GRACE_MS: z.coerce.number().int().positive().default(90_000),
 
     COLLAB_PLANE_URL: z.url().default('http://localhost:3001'),
     COLLAB_PLANE_CLIENT_URL: z.url().optional(),

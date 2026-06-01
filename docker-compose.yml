@@ -71,8 +71,19 @@ services:
     restart: unless-stopped
     ports:
       - "127.0.0.1:7880:7880"
+      - "127.0.0.1:7881:7881/tcp"
+      - "127.0.0.1:50000-50100:50000-50100/udp"
     environment:
       LIVEKIT_KEYS: "${LIVEKIT_API_KEY:-devkey}: ${LIVEKIT_API_SECRET:-devsecret}"
+      LIVEKIT_CONFIG: |
+        port: 7880
+        log_level: info
+        rtc:
+          tcp_port: 7881
+          port_range_start: 50000
+          port_range_end: 50100
+          use_external_ip: false
+          node_ip: 127.0.0.1
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:7880"]
       interval: 5s

@@ -79,6 +79,7 @@ import { useInlineComments } from '@/hooks/use-inline-comments.js';
 import type { LiveKitDataPacket } from '@/hooks/use-livekit.js';
 import { useSharedExecution } from '@/hooks/use-shared-execution.js';
 import type { CollabConnectionStatus } from '@/hooks/use-yjs-collab.js';
+import { canPublishRealtimeAiInterviewerSignal } from '@/lib/ai-interviewer-realtime.js';
 import { api, readApiError, resolveErrorMessage } from '@/lib/api-client.js';
 import {
   MOCK_INLINE_COMMENTS,
@@ -179,8 +180,7 @@ interface RoomWorkspaceProps {
   selfMicrophoneEnabled?: boolean;
   onSelfMicrophoneToggle?: () => void;
   dockedVideoPanel?: React.ReactNode;
-  aiInterviewerIdentity?: string;
-  aiInterviewerRealtimeEnabled?: boolean;
+  aiInterviewerIdentity?: string | null;
   latestLiveKitDataPacket?: LiveKitDataPacket | null;
   publishLiveKitData?: (
     payload: Uint8Array,
@@ -308,8 +308,7 @@ export function RoomWorkspace({
   selfMicrophoneEnabled,
   onSelfMicrophoneToggle,
   dockedVideoPanel,
-  aiInterviewerIdentity = 'ai-interviewer',
-  aiInterviewerRealtimeEnabled = false,
+  aiInterviewerIdentity = null,
   latestLiveKitDataPacket,
   publishLiveKitData,
 }: RoomWorkspaceProps) {
@@ -365,12 +364,16 @@ export function RoomWorkspace({
   const aiInterviewReadMessageIdsRef = useRef<Set<string>>(new Set());
   const aiInterviewIntroRequestedRef = useRef(false);
   const aiInterviewRealtimeTurnIdsRef = useRef<Set<string>>(new Set());
+  const previousAiInterviewerMediaConnectedRef = useRef(false);
   const [aiInterviewerAgentState, setAiInterviewerAgentState] = useState<
     'initializing' | 'idle' | 'listening' | 'thinking' | 'speaking'
   >('idle');
   const [aiInterviewerUserState, setAiInterviewerUserState] = useState<
     'speaking' | 'listening' | 'away'
   >('listening');
+  const [aiInterviewerRealtimeReadyIdentity, setAiInterviewerRealtimeReadyIdentity] = useState<
+    string | null
+  >(null);
   const [aiInterviewerInterruptionAt, setAiInterviewerInterruptionAt] = useState<number | null>(
     null,
   );
@@ -421,7 +424,7 @@ export function RoomWorkspace({
   const [activeRightTab, setActiveRightTab] = useState<'participants' | 'chat' | 'interview'>(
     'participants',
   );
-  const useRealtimeAiInterviewer = aiInterviewerRealtimeEnabled && room.mode === 'ai';
+  const useRealtimeAiInterviewer = room.mode === 'ai';
 
   useEffect(() => {
     if (room.mode !== 'ai' && activeRightTab === 'interview') {
@@ -466,8 +469,10 @@ export function RoomWorkspace({
     aiInterviewToastInitializedRef.current = false;
     aiInterviewIntroRequestedRef.current = false;
     aiInterviewRealtimeTurnIdsRef.current.clear();
+    previousAiInterviewerMediaConnectedRef.current = false;
     setAiInterviewerAgentState('idle');
     setAiInterviewerUserState('listening');
+    setAiInterviewerRealtimeReadyIdentity(null);
     setAiInterviewerInterruptionAt(null);
     setRunStaticAnalysisState({ status: 'idle' });
     setSubmitStaticAnalysisState({ status: 'idle' });
@@ -489,6 +494,8 @@ export function RoomWorkspace({
     setAiInterviewError(null);
     setAiInterviewMessages([]);
     setEditorCodeContext(null);
+    setAiInterviewerRealtimeReadyIdentity(null);
+    previousAiInterviewerMediaConnectedRef.current = false;
     aiInterviewIntroRequestedRef.current = false;
     aiInterviewAppliedAnnotationMessageIdsRef.current.clear();
   }, [cancelAiInterviewPolling, room.mode, room.status]);
@@ -548,7 +555,7 @@ export function RoomWorkspace({
   );
 
   const applyRealtimeAiInterviewerEvent = useCallback(
-    (event: AiInterviewerEventPayload) => {
+    (event: AiInterviewerEventPayload, participantIdentity: string | null) => {
       switch (event.type) {
         case 'agent_state':
           setAiInterviewerAgentState(event.state);
@@ -574,14 +581,19 @@ export function RoomWorkspace({
           setAiInterviewLoading(false);
           return;
         case 'session_ready':
+          setAiInterviewerRealtimeReadyIdentity(participantIdentity);
           setAiInterviewError(null);
           setAiInterviewLoading(false);
+          if (aiInterviewMessages.length === 0) {
+            aiInterviewIntroRequestedRef.current = false;
+            aiInterviewRealtimeLastSignalAtByReasonRef.current.delete('session_joined');
+          }
           return;
         default:
           return;
       }
     },
-    [appendRealtimeInterviewTurn],
+    [aiInterviewMessages.length, appendRealtimeInterviewTurn],
   );
 
   useEffect(() => {
@@ -591,8 +603,11 @@ export function RoomWorkspace({
     if (latestLiveKitDataPacket.topic !== AI_INTERVIEWER_EVENT_TOPIC) {
       return;
     }
+    if (!latestLiveKitDataPacket.participantIsAgent) {
+      return;
+    }
     const identity = latestLiveKitDataPacket.participantIdentity;
-    if (identity && identity !== aiInterviewerIdentity) {
+    if (identity && aiInterviewerIdentity && identity !== aiInterviewerIdentity) {
       return;
     }
 
@@ -600,7 +615,7 @@ export function RoomWorkspace({
     if (!event) {
       return;
     }
-    applyRealtimeAiInterviewerEvent(event);
+    applyRealtimeAiInterviewerEvent(event, identity ?? null);
   }, [
     aiInterviewerIdentity,
     applyRealtimeAiInterviewerEvent,
@@ -755,13 +770,31 @@ export function RoomWorkspace({
   const canEditCode = room.myCapabilities.includes('code:edit');
   const canSendChat = room.myCapabilities.includes('chat:send');
   const canRequestHint = room.myCapabilities.includes('ai:request-hint');
+  const aiInterviewerMediaConnected = Boolean(
+    aiInterviewerIdentity && mediaConnectedSet?.has(aiInterviewerIdentity),
+  );
+  const aiInterviewerSignalReady = canPublishRealtimeAiInterviewerSignal({
+    hasPublisher: Boolean(publishLiveKitData),
+    agentMediaConnected: aiInterviewerMediaConnected,
+    agentSessionReady:
+      aiInterviewerIdentity !== null &&
+      aiInterviewerRealtimeReadyIdentity === aiInterviewerIdentity,
+  });
   const canSendInterviewMessage =
     canRequestHint &&
     room.mode === 'ai' &&
     AI_INTERVIEW_ALLOWED_STATUSES.has(room.status) &&
-    (!useRealtimeAiInterviewer || Boolean(publishLiveKitData));
+    (!useRealtimeAiInterviewer || aiInterviewerSignalReady);
   const canManageParticipants = room.myCapabilities.includes('participant:assign-role');
   const isEditorReadOnly = !canEditCode || room.editorLocked || room.status === 'finished';
+
+  useEffect(() => {
+    const wasConnected = previousAiInterviewerMediaConnectedRef.current;
+    previousAiInterviewerMediaConnectedRef.current = aiInterviewerMediaConnected;
+    if (wasConnected && !aiInterviewerMediaConnected) {
+      setAiInterviewerRealtimeReadyIdentity(null);
+    }
+  }, [aiInterviewerMediaConnected]);
 
   const participants = useMemo(
     () => room.participants.filter((p: Participant) => p.isActive),
@@ -1966,6 +1999,7 @@ export function RoomWorkspace({
           latestSubmissionSummary,
         }).catch(() => {
           setAiInterviewError(t('workspace.aiInterviewUnavailable'));
+          setAiInterviewLoading(false);
         });
         return true;
       }
@@ -2321,6 +2355,7 @@ export function RoomWorkspace({
           : undefined,
       }).catch(() => {
         setAiInterviewError(t('workspace.aiInterviewUnavailable'));
+        setAiInterviewLoading(false);
       });
     },
     [
@@ -2337,6 +2372,14 @@ export function RoomWorkspace({
       room.status,
     ],
   );
+
+  useEffect(() => {
+    if (!useRealtimeAiInterviewer || !aiInterviewerMediaConnected) {
+      return;
+    }
+    setAiInterviewError(null);
+    setAiInterviewLoading(false);
+  }, [aiInterviewerMediaConnected, useRealtimeAiInterviewer]);
 
   useEffect(() => {
     if (!useRealtimeAiInterviewer || !canSendInterviewMessage) {

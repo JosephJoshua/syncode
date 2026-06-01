@@ -24,6 +24,7 @@ const INITIAL_CONNECT_RETRY_DELAYS_MS = [1_000, 2_000, 4_000, 8_000, 8_000, 8_00
 
 export interface MediaParticipant {
   identity: string;
+  isAgent: boolean;
   isMuted: boolean;
   hasVideo: boolean;
   videoTrack: MediaStreamTrack | null;
@@ -45,6 +46,7 @@ export interface AudioProcessingOptions {
 export interface LiveKitDataPacket {
   payload: Uint8Array;
   participantIdentity: string | null;
+  participantIsAgent: boolean;
   topic: string | null;
   receivedAt: number;
 }
@@ -134,6 +136,7 @@ function mapConnectionState(state: ConnectionState): LiveKitConnectionState {
 function participantEqual(a: MediaParticipant, b: MediaParticipant): boolean {
   return (
     a.identity === b.identity &&
+    a.isAgent === b.isAgent &&
     a.isMuted === b.isMuted &&
     a.hasVideo === b.hasVideo &&
     a.videoTrack === b.videoTrack &&
@@ -220,6 +223,7 @@ export function useLiveKit({
       : (localScreen?.track?.mediaStreamTrack ?? null);
     const nextLocal: MediaParticipant = {
       identity: room.localParticipant.identity,
+      isAgent: false,
       isMuted: !room.localParticipant.isMicrophoneEnabled,
       hasVideo: localHasVideo,
       videoTrack: localMediaTrack,
@@ -240,6 +244,7 @@ export function useLiveKit({
       const screenTrack = screenPub?.isMuted ? null : (screenPub?.track?.mediaStreamTrack ?? null);
       remotes.push({
         identity: p.identity,
+        isAgent: p.isAgent,
         isMuted: !audioPub || audioPub.isMuted,
         hasVideo: mediaTrack !== null,
         videoTrack: mediaTrack,
@@ -486,6 +491,7 @@ export function useLiveKit({
       onDataReceivedRef.current?.({
         payload,
         participantIdentity: participant?.identity ?? null,
+        participantIsAgent: participant?.isAgent ?? false,
         topic: topic ?? null,
         receivedAt: Date.now(),
       });
