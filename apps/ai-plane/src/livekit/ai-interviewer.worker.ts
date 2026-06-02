@@ -22,7 +22,9 @@ import {
 import * as openai from '@livekit/agents-plugin-openai';
 import * as silero from '@livekit/agents-plugin-silero';
 import * as aiCoustics from '@livekit/plugins-ai-coustics';
+import { Room } from '@livekit/rtc-node';
 import {
+  AI_INTERVIEWER_AVATAR_IDENTITY,
   AI_INTERVIEWER_EVENT_TOPIC,
   AI_INTERVIEWER_SIGNAL_TOPIC,
   type AiInterviewerContext,
@@ -38,6 +40,7 @@ import {
   encodeAiInterviewerEventPayload,
 } from '@syncode/contracts';
 import { config as loadDotenv } from 'dotenv';
+import { AccessToken, RoomServiceClient, type VideoGrant } from 'livekit-server-sdk';
 import { OpenAI } from 'openai';
 import { ProxyAgent, fetch as undiciFetch } from 'undici';
 import { WebSocket } from 'ws';
@@ -78,10 +81,13 @@ interface RemoteParticipantLike {
 }
 
 interface WorkerEnv {
+  REDIS_URL: string;
   AI_INTERVIEWER_AGENT_IDENTITY: string;
   AI_INTERVIEWER_AGENT_NAME: string;
   AI_INTERVIEWER_FALLBACK_ENABLED: boolean;
   AI_INTERVIEWER_FORCE_FALLBACK: boolean;
+  AI_INTERVIEWER_LIVEKIT_PREWARM_ENABLED: boolean;
+  AI_INTERVIEWER_LIVEKIT_PREWARM_TIMEOUT_MS: number;
   AI_INTERVIEWER_RECONNECT_GRACE_MS: number;
   AI_INTERVIEWER_WORKER_INITIALIZE_TIMEOUT_MS: number;
   AI_INTERVIEWER_WORKER_SHUTDOWN_TIMEOUT_MS: number;
@@ -106,12 +112,13 @@ interface WorkerEnv {
   CONTROL_PLANE_URL: string;
   INTERNAL_CALLBACK_SECRET: string;
   LIVEKIT_AGENT_CONNECT_URL?: string;
+  LIVEKIT_API_KEY?: string;
+  LIVEKIT_API_SECRET?: string;
   LIVEKIT_URL?: string;
 }
 
 type LiveContextDetail = 'compact' | 'detailed';
 type RoomPhaseStatus = 'warmup' | 'coding' | 'wrapup' | 'finished';
-
 // Hard backstop: no more than one system-initiated reply per 8 seconds.
 // Prevents audio glitches from overlapping generation and stops spam from
 // rapid-fire signals. The model handles all other turn-taking naturally.
@@ -161,6 +168,7 @@ const MINIMAX_TTS_CHANNELS = 1;
 const MINIMAX_TTS_BYTES_PER_SAMPLE = 2;
 const MINIMAX_TTS_BITRATE = 128_000;
 const MINIMAX_TTS_AUDIO_FORMAT = 'wav';
+const LIVEKIT_STALE_PARTICIPANT_CLEANUP_TIMEOUT_MS = 3_000;
 
 const minimaxTtsResponseSchema = z
   .object({
@@ -326,10 +334,13 @@ function loadWorkerEnv(): WorkerEnv {
   }
 
   return {
+    REDIS_URL: parsed.REDIS_URL,
     AI_INTERVIEWER_AGENT_IDENTITY: parsed.AI_INTERVIEWER_AGENT_IDENTITY,
     AI_INTERVIEWER_AGENT_NAME: parsed.AI_INTERVIEWER_AGENT_NAME,
     AI_INTERVIEWER_FALLBACK_ENABLED: parsed.AI_INTERVIEWER_FALLBACK_ENABLED,
     AI_INTERVIEWER_FORCE_FALLBACK: parsed.AI_INTERVIEWER_FORCE_FALLBACK,
+    AI_INTERVIEWER_LIVEKIT_PREWARM_ENABLED: parsed.AI_INTERVIEWER_LIVEKIT_PREWARM_ENABLED,
+    AI_INTERVIEWER_LIVEKIT_PREWARM_TIMEOUT_MS: parsed.AI_INTERVIEWER_LIVEKIT_PREWARM_TIMEOUT_MS,
     AI_INTERVIEWER_RECONNECT_GRACE_MS: parsed.AI_INTERVIEWER_RECONNECT_GRACE_MS,
     AI_INTERVIEWER_WORKER_INITIALIZE_TIMEOUT_MS: parsed.AI_INTERVIEWER_WORKER_INITIALIZE_TIMEOUT_MS,
     AI_INTERVIEWER_WORKER_SHUTDOWN_TIMEOUT_MS: parsed.AI_INTERVIEWER_WORKER_SHUTDOWN_TIMEOUT_MS,
@@ -354,6 +365,8 @@ function loadWorkerEnv(): WorkerEnv {
     CONTROL_PLANE_URL: parsed.CONTROL_PLANE_URL,
     INTERNAL_CALLBACK_SECRET: parsed.INTERNAL_CALLBACK_SECRET,
     LIVEKIT_AGENT_CONNECT_URL: parsed.LIVEKIT_AGENT_CONNECT_URL,
+    LIVEKIT_API_KEY: parsed.LIVEKIT_API_KEY,
+    LIVEKIT_API_SECRET: parsed.LIVEKIT_API_SECRET,
     LIVEKIT_URL: parsed.LIVEKIT_URL,
   };
 }
@@ -373,6 +386,142 @@ function resolveLiveKitAgentConnectUrl(params: {
   }
 
   return params.assignedUrl;
+}
+
+function resolveLiveKitServerApiUrl(liveKitUrl: string | undefined): string | null {
+  if (!liveKitUrl) {
+    return null;
+  }
+
+  try {
+    const url = new URL(liveKitUrl);
+    if (url.protocol === 'ws:') {
+      url.protocol = 'http:';
+    } else if (url.protocol === 'wss:') {
+      url.protocol = 'https:';
+    } else if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+      return null;
+    }
+    return trimTrailingSlashes(url.toString());
+  } catch {
+    return null;
+  }
+}
+
+async function removeStaleLiveKitParticipants(roomName: string | undefined): Promise<void> {
+  if (!roomName || !env.LIVEKIT_API_KEY || !env.LIVEKIT_API_SECRET) {
+    return;
+  }
+
+  const serverUrl = resolveLiveKitServerApiUrl(env.LIVEKIT_URL);
+  if (!serverUrl) {
+    return;
+  }
+
+  const staleIdentities = new Set([
+    env.AI_INTERVIEWER_AGENT_IDENTITY,
+    AI_INTERVIEWER_AVATAR_IDENTITY,
+  ]);
+  const roomService = new RoomServiceClient(
+    serverUrl,
+    env.LIVEKIT_API_KEY,
+    env.LIVEKIT_API_SECRET,
+    {
+      requestTimeout: LIVEKIT_STALE_PARTICIPANT_CLEANUP_TIMEOUT_MS,
+    },
+  );
+
+  try {
+    await withTimeout(
+      (async () => {
+        const participants = await roomService.listParticipants(roomName);
+        const staleParticipants = participants.filter((participant) =>
+          staleIdentities.has(participant.identity),
+        );
+        if (staleParticipants.length === 0) {
+          return;
+        }
+
+        await Promise.all(
+          staleParticipants.map((participant) =>
+            roomService.removeParticipant(roomName, participant.identity),
+          ),
+        );
+        console.info(
+          `[ai-interviewer-worker] removed stale LiveKit participants room=${roomName} identities=${staleParticipants
+            .map((participant) => participant.identity)
+            .join(',')}`,
+        );
+      })(),
+      LIVEKIT_STALE_PARTICIPANT_CLEANUP_TIMEOUT_MS,
+      'timed out removing stale LiveKit participants',
+    );
+  } catch (error) {
+    console.warn(
+      `[ai-interviewer-worker] stale participant cleanup skipped room=${roomName}: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  }
+}
+
+async function prewarmLiveKitRtcConnection(): Promise<void> {
+  if (!env.AI_INTERVIEWER_LIVEKIT_PREWARM_ENABLED) {
+    return;
+  }
+
+  if (!env.LIVEKIT_URL || !env.LIVEKIT_API_KEY || !env.LIVEKIT_API_SECRET) {
+    return;
+  }
+
+  const room = new Room();
+  const roomName = `syncode-ai-interviewer-prewarm-${process.pid}-${Date.now()}`;
+  const identity = `ai-interviewer-prewarm-${process.pid}`;
+  const token = new AccessToken(env.LIVEKIT_API_KEY, env.LIVEKIT_API_SECRET, {
+    identity,
+    name: 'AI Interviewer Prewarm',
+  });
+  token.kind = 'agent';
+  token.addGrant({
+    room: roomName,
+    roomJoin: true,
+    canPublish: false,
+    canSubscribe: false,
+  } as VideoGrant);
+
+  const connectUrl = resolveLiveKitAgentConnectUrl({
+    assignedUrl: env.LIVEKIT_URL,
+    overrideUrl: env.LIVEKIT_AGENT_CONNECT_URL,
+  });
+  const startedAt = Date.now();
+
+  try {
+    await withTimeout(
+      withoutProxyEnv(async () => {
+        await room.connect(connectUrl, await token.toJwt(), {
+          autoSubscribe: false,
+          dynacast: false,
+        });
+      }),
+      env.AI_INTERVIEWER_LIVEKIT_PREWARM_TIMEOUT_MS,
+      'timed out prewarming LiveKit RTC connection',
+    );
+    console.info(
+      `[ai-interviewer-worker] LiveKit RTC prewarm connected elapsedMs=${
+        Date.now() - startedAt
+      } url=${summarizeUrlForLog(connectUrl)}`,
+    );
+  } catch (error) {
+    console.warn(
+      `[ai-interviewer-worker] LiveKit RTC prewarm failed after ${
+        Date.now() - startedAt
+      }ms; first interview join may be slow: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  } finally {
+    await room.disconnect().catch(() => undefined);
+  }
 }
 
 function summarizeUrlForLog(value: string): string {
@@ -1853,8 +2002,10 @@ function shouldRequestUserAwayDecision(params: {
   agentState: string;
   lastReplyAt: number;
   now: number;
+  hasAssistantSpoken: boolean;
 }): boolean {
   return (
+    params.hasAssistantSpoken &&
     params.userState === 'away' &&
     params.agentState !== 'speaking' &&
     hasAntiSpamElapsed(params.lastReplyAt, params.now)
@@ -1874,7 +2025,8 @@ const agent = defineAgent({
   // pipeline can detect speech boundaries without a cold-start delay on first
   // use. The realtime path ignores VAD (it uses built-in semantic_vad).
   prewarm: async (proc: JobProcess) => {
-    proc.userData.vad = await silero.VAD.load();
+    const [vad] = await Promise.all([silero.VAD.load(), prewarmLiveKitRtcConnection()]);
+    proc.userData.vad = vad;
   },
   entry: async (ctx: JobContext) => {
     const metadata = parseDispatchMetadata(ctx.job.metadata);
@@ -1953,7 +2105,18 @@ const agent = defineAgent({
         type: 'session_ready',
         occurredAt: Date.now(),
       });
+      if (avatarProviderEvent) {
+        await publishRealtimeEvent({
+          ...avatarProviderEvent,
+          occurredAt: Date.now(),
+        });
+      }
     };
+
+    let avatarProviderEvent: Extract<
+      AiInterviewerEventPayload,
+      { type: 'avatar_provider' }
+    > | null = null;
 
     let session: voice.AgentSession;
     try {
@@ -1988,6 +2151,7 @@ const agent = defineAgent({
     let currentAgentState: voice.AgentState = 'initializing';
     let agentStoppedSpeakingAt = 0;
     let userAwayDecisionInFlight = false;
+    let hasAssistantSpoken = false;
     let activeReplyReason: string | null = null;
     let approxPromptInputTokensTotal = 0;
     let approxOutputTokensTotal = 0;
@@ -2544,6 +2708,7 @@ const agent = defineAgent({
           agentState: currentAgentState,
           lastReplyAt: lastSystemReplyAt,
           now: initialNow,
+          hasAssistantSpoken,
         })
       ) {
         return;
@@ -2559,6 +2724,7 @@ const agent = defineAgent({
             agentState: currentAgentState,
             lastReplyAt: lastSystemReplyAt,
             now,
+            hasAssistantSpoken,
           })
         ) {
           return;
@@ -2690,6 +2856,7 @@ const agent = defineAgent({
         if (suppressRealtimeAssistantTranscriptsUntil > 0) {
           suppressRealtimeAssistantTranscriptsUntil = 0;
         }
+        hasAssistantSpoken = true;
         const assistantTokens = estimateTokenCount(content);
         approxOutputTokensTotal += assistantTokens;
         approxConversationTokensTotal += assistantTokens;
@@ -2733,6 +2900,13 @@ const agent = defineAgent({
       // Native module unavailable — audio passes through unchanged.
     }
 
+    avatarProviderEvent = {
+      type: 'avatar_provider',
+      provider: 'simli',
+      state: 'client_fallback',
+      occurredAt: Date.now(),
+    };
+
     await session.start({
       agent: interviewAgent,
       room: ctx.room,
@@ -2741,6 +2915,7 @@ const agent = defineAgent({
         participantIdentity: participantUserId,
         closeOnDisconnect: false,
       },
+      outputOptions: session.output.audio ? { audioEnabled: false } : undefined,
     });
 
     void refreshRoomContext();
@@ -2984,6 +3159,8 @@ export const __testing = {
   extractPcmFromWav,
   resolveOpenAiRealtimeWebSocketUrl,
   resolveLiveKitAgentConnectUrl,
+  resolveLiveKitServerApiUrl,
+  removeStaleLiveKitParticipants,
   resolveOpenAiTtsVoice,
   normalizeOpenAiSdkBaseUrl,
   withoutProxyEnv,
@@ -3041,6 +3218,7 @@ export function runAiInterviewerWorker(agentFilePath = currentFilePath): void {
       initializeProcessTimeout: env.AI_INTERVIEWER_WORKER_INITIALIZE_TIMEOUT_MS,
       shutdownProcessTimeout: env.AI_INTERVIEWER_WORKER_SHUTDOWN_TIMEOUT_MS,
       requestFunc: async (job) => {
+        await removeStaleLiveKitParticipants(job.room?.name);
         await job.accept(
           'AI Interviewer',
           env.AI_INTERVIEWER_AGENT_IDENTITY,

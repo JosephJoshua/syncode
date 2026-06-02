@@ -23,6 +23,8 @@ describe('validateEnv', () => {
     expect(env.AI_INTERVIEWER_AGENT_NAME).toBe('syncode-ai-interviewer');
     expect(env.AI_INTERVIEWER_AGENT_IDENTITY).toBe('ai-interviewer');
     expect(env.AI_INTERVIEWER_RECONNECT_GRACE_MS).toBe(60_000);
+    expect(env.AI_INTERVIEWER_LIVEKIT_PREWARM_ENABLED).toBe(true);
+    expect(env.AI_INTERVIEWER_LIVEKIT_PREWARM_TIMEOUT_MS).toBe(30_000);
     expect(env.AI_INTERVIEWER_WORKER_INITIALIZE_TIMEOUT_MS).toBe(60_000);
     expect(env.AI_INTERVIEWER_WORKER_SHUTDOWN_TIMEOUT_MS).toBe(120_000);
     expect(env.LIVEKIT_AGENT_CONNECT_URL).toBeUndefined();

@@ -33,6 +33,10 @@ const latestRoom = vi.hoisted(() => {
   return { current: null as IMockRoom | null };
 });
 
+const browserSupport = vi.hoisted(() => {
+  return { current: true };
+});
+
 // ---------------------------------------------------------------------------
 // Mock livekit-client
 // ---------------------------------------------------------------------------
@@ -116,6 +120,7 @@ vi.mock('livekit-client', () => {
     RoomEvent,
     Track,
     Room: MockRoomConstructor,
+    isBrowserSupported: vi.fn(() => browserSupport.current),
   };
 });
 
@@ -190,6 +195,7 @@ describe('useLiveKit', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     latestRoom.current = null;
+    browserSupport.current = true;
   });
 
   afterEach(() => {
@@ -225,6 +231,15 @@ describe('useLiveKit', () => {
 
     expect(result.current.connectionState).toBe('disconnected');
     expect(result.current.remoteParticipants).toEqual([]);
+  });
+
+  it('GIVEN WebRTC is unavailable WHEN rendered THEN connectionState is unsupported', () => {
+    browserSupport.current = false;
+
+    const { result } = renderHook(() => useLiveKit(defaultOptions()));
+
+    expect(result.current.connectionState).toBe('unsupported');
+    expect(latestRoom.current).toBeNull();
   });
 
   // -----------------------------------------------------------------------
