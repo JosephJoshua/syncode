@@ -12,6 +12,11 @@ const envSchema = z
     AI_INTERVIEWER_AGENT_NAME: z.string().min(1).default('syncode-ai-interviewer'),
     AI_INTERVIEWER_AGENT_IDENTITY: z.string().min(1).default('ai-interviewer'),
     AI_INTERVIEWER_RECONNECT_GRACE_MS: z.coerce.number().int().positive().default(60_000),
+    AI_INTERVIEWER_LIVEKIT_PREWARM_ENABLED: z
+      .union([z.boolean(), z.string()])
+      .transform((val) => val === true || val === 'true' || val === '1')
+      .default(true),
+    AI_INTERVIEWER_LIVEKIT_PREWARM_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
     AI_INTERVIEWER_WORKER_INITIALIZE_TIMEOUT_MS: z.coerce.number().int().positive().default(60_000),
     AI_INTERVIEWER_WORKER_SHUTDOWN_TIMEOUT_MS: z.coerce.number().int().positive().default(120_000),
     CONTROL_PLANE_URL: z.url().default('http://localhost:3000'),

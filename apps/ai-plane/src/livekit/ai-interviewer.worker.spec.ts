@@ -76,6 +76,22 @@ vi.mock('@livekit/agents', () => {
     generateReply = vi.fn();
     interrupt = vi.fn(() => ({ await: Promise.resolve() }));
   }
+  class FakeAudioOutput {
+    sampleRate?: number;
+    constructor(sampleRate?: number) {
+      this.sampleRate = sampleRate;
+    }
+    async captureFrame(_frame: unknown): Promise<void> {}
+    flush(): void {}
+    clearBuffer(): void {}
+    async waitForPlayout(): Promise<{ playbackPosition: number; interrupted: boolean }> {
+      return { playbackPosition: 0, interrupted: false };
+    }
+    onAttached(): void {}
+    onDetached(): void {}
+    pause(): void {}
+    resume(): void {}
+  }
   class FakeTTS {
     emit = vi.fn();
     constructor(
@@ -183,6 +199,7 @@ vi.mock('@livekit/agents', () => {
     voice: {
       Agent: FakeAgent,
       AgentSession: FakeAgentSession,
+      AudioOutput: FakeAudioOutput,
       AgentSessionEventTypes: {
         AgentStateChanged: 'agent_state_changed',
         UserStateChanged: 'user_state_changed',
@@ -451,6 +468,20 @@ describe('ai-interviewer.worker URL resolvers and parsers', () => {
         assignedUrl: 'wss://project.livekit.cloud',
       }),
     ).toBe('wss://project.livekit.cloud');
+  });
+
+  it('GIVEN a LiveKit websocket URL WHEN resolving the server API URL THEN it uses the HTTP protocol', () => {
+    expect(__testing.resolveLiveKitServerApiUrl('ws://localhost:7880')).toBe(
+      'http://localhost:7880',
+    );
+    expect(__testing.resolveLiveKitServerApiUrl('wss://project.livekit.cloud/')).toBe(
+      'https://project.livekit.cloud',
+    );
+  });
+
+  it('GIVEN an invalid LiveKit URL WHEN resolving the server API URL THEN it returns null', () => {
+    expect(__testing.resolveLiveKitServerApiUrl('not a url')).toBeNull();
+    expect(__testing.resolveLiveKitServerApiUrl('ftp://livekit.example.com')).toBeNull();
   });
 
   it('GIVEN a slow operation WHEN withTimeout runs THEN it rejects with the timeout message', async () => {
@@ -1562,8 +1593,22 @@ describe('ai-interviewer.worker numbered code block and clamp helpers', () => {
           agentState: 'listening',
           lastReplyAt: now - 10_000,
           now,
+          hasAssistantSpoken: true,
         }),
       ).toBe(true);
+    });
+
+    it('GIVEN the opening turn has not been delivered WHEN LiveKit marks the user away THEN worker should not replace the warmup', () => {
+      const now = Date.now();
+      expect(
+        __testing.shouldRequestUserAwayDecision({
+          userState: 'away',
+          agentState: 'listening',
+          lastReplyAt: 0,
+          now,
+          hasAssistantSpoken: false,
+        }),
+      ).toBe(false);
     });
 
     it('GIVEN LiveKit marks the user away while agent is speaking WHEN checked THEN worker should not start another reply', () => {
@@ -1574,6 +1619,7 @@ describe('ai-interviewer.worker numbered code block and clamp helpers', () => {
           agentState: 'speaking',
           lastReplyAt: now - 10_000,
           now,
+          hasAssistantSpoken: true,
         }),
       ).toBe(false);
     });
