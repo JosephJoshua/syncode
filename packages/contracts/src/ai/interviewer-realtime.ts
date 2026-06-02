@@ -91,6 +91,11 @@ export const aiInterviewerEventPayloadSchema = z
       type: z.literal('session_ready'),
     }),
     aiInterviewerEventBaseSchema.extend({
+      type: z.literal('avatar_provider'),
+      provider: z.literal('simli'),
+      state: z.literal('client_fallback'),
+    }),
+    aiInterviewerEventBaseSchema.extend({
       type: z.literal('agent_state'),
       state: z.enum(['initializing', 'idle', 'listening', 'thinking', 'speaking']),
     }),

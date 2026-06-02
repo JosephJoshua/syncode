@@ -8,9 +8,11 @@ type SimliClientInstance = InstanceType<typeof import('simli-client')['SimliClie
 const AVATAR_VIDEO_TRACK_NAME = 'ai-interviewer-avatar-video';
 const AVATAR_VIDEO_CAPTURE_TIMEOUT_MS = 5000;
 const AVATAR_VIDEO_CAPTURE_POLL_MS = 100;
-const AVATAR_VIDEO_WIDTH = 1280;
-const AVATAR_VIDEO_HEIGHT = 720;
-const AVATAR_VIDEO_MAX_BITRATE = 2_500_000;
+const AVATAR_VIDEO_WIDTH = 1920;
+const AVATAR_VIDEO_HEIGHT = 1080;
+const AVATAR_START_ATTEMPTS = 3;
+const AVATAR_START_RETRY_DELAY_MS = 1500;
+const AVATAR_VIDEO_MAX_BITRATE = 6_000_000;
 const AVATAR_VIDEO_MAX_FRAMERATE = 30;
 
 interface SpeechGatedAudioTrack {
@@ -48,7 +50,7 @@ export function AiInterviewerSimliAvatar({
     isSpeakingRef.current = isSpeaking;
     speechGateRef.current?.setSpeaking(isSpeaking);
     if (!isSpeaking) {
-      clientRef.current?.ClearBuffer();
+      clearSimliBuffer(clientRef.current);
     }
   }, [isSpeaking]);
 
@@ -82,74 +84,93 @@ export function AiInterviewerSimliAvatar({
     let speechGate: SpeechGatedAudioTrack | null = null;
 
     async function startAvatar() {
-      try {
-        const session = await api(CONTROL_API.ROOMS.AI_INTERVIEW_SIMLI_AVATAR_SESSION, {
-          params: { id: roomId },
-        });
-        if (disposed) return;
-        if (!session.enabled) {
+      for (let attempt = 1; attempt <= AVATAR_START_ATTEMPTS && !disposed; attempt += 1) {
+        try {
+          await startAvatarOnce();
           return;
+        } catch (error) {
+          console.warn(
+            `[Simli] Failed to start AI interviewer avatar (attempt ${attempt}/${AVATAR_START_ATTEMPTS}):`,
+            error,
+          );
+          await cleanupAttempt();
+          if (attempt < AVATAR_START_ATTEMPTS && !disposed) {
+            await sleep(AVATAR_START_RETRY_DELAY_MS * attempt);
+          }
         }
+      }
+    }
 
-        const { LogLevel, SimliClient } = await import('simli-client');
-        if (disposed) return;
+    async function cleanupAttempt() {
+      const failedClient = client;
+      if (failedClient) {
+        clearSimliBuffer(failedClient);
+        await stopSimliClient(failedClient);
+      }
+      if (clientRef.current === failedClient) {
+        clientRef.current = null;
+      }
+      client = null;
+      if (speechGateRef.current === speechGate) {
+        speechGateRef.current = null;
+      }
+      speechGate?.cleanup();
+      speechGate = null;
+      avatarVideo?.cleanup();
+      avatarVideo?.room.disconnect();
+      avatarVideo = null;
+    }
 
-        client = new SimliClient(
-          session.sessionToken,
-          simliVideoElement,
-          simliAudioElement,
-          null,
-          LogLevel.ERROR,
-          'livekit',
-          'websockets',
-          session.wsUrl,
-          session.audioBufferSize,
-        );
-        clientRef.current = client;
-        client.on('error', () => console.warn('[Simli] AI interviewer avatar client error'));
-        client.on('startup_error', () =>
-          console.warn('[Simli] AI interviewer avatar startup error'),
-        );
-        await client.start();
-        keepSimliAudioSilent();
-        if (disposed) {
-          await client.stop();
-          return;
-        }
+    async function startAvatarOnce() {
+      client = null;
+      speechGate = null;
+      avatarVideo = null;
 
-        speechGate = createSpeechGatedAudioTrack(simliAudioTrack, isSpeakingRef.current);
-        speechGateRef.current = speechGate;
-        client.listenToMediastreamTrack(speechGate.track);
-        avatarVideo = await publishAvatarVideoToLiveKit({
-          canvasElement: simliCanvasElement,
-          sourceVideoElement: simliVideoElement,
-          token: session.liveKitToken,
-          url: session.liveKitUrl,
-        });
-        if (disposed) {
-          avatarVideo.cleanup();
-          avatarVideo.room.disconnect();
-          return;
-        }
-      } catch (error) {
-        console.warn('[Simli] Failed to start AI interviewer avatar:', error);
-        const failedClient = client;
-        if (failedClient) {
-          failedClient.ClearBuffer();
-          await failedClient.stop().catch(() => undefined);
-        }
-        if (clientRef.current === failedClient) {
-          clientRef.current = null;
-        }
-        client = null;
-        if (speechGateRef.current === speechGate) {
-          speechGateRef.current = null;
-        }
-        speechGate?.cleanup();
-        speechGate = null;
-        avatarVideo?.cleanup();
-        avatarVideo?.room.disconnect();
-        avatarVideo = null;
+      const session = await api(CONTROL_API.ROOMS.AI_INTERVIEW_SIMLI_AVATAR_SESSION, {
+        params: { id: roomId },
+      });
+      if (disposed) return;
+      if (!session.enabled) {
+        return;
+      }
+
+      const { LogLevel, SimliClient } = await import('simli-client');
+      if (disposed) return;
+
+      client = new SimliClient(
+        session.sessionToken,
+        simliVideoElement,
+        simliAudioElement,
+        null,
+        LogLevel.ERROR,
+        'livekit',
+        'websockets',
+        session.wsUrl,
+        session.audioBufferSize,
+      );
+      clientRef.current = client;
+      client.on('error', () => console.warn('[Simli] AI interviewer avatar client error'));
+      client.on('startup_error', () => console.warn('[Simli] AI interviewer avatar startup error'));
+      await client.start();
+      keepSimliAudioSilent();
+      if (disposed) {
+        await client.stop();
+        return;
+      }
+
+      speechGate = createSpeechGatedAudioTrack(simliAudioTrack, isSpeakingRef.current);
+      speechGateRef.current = speechGate;
+      client.listenToMediastreamTrack(speechGate.track);
+      avatarVideo = await publishAvatarVideoToLiveKit({
+        canvasElement: simliCanvasElement,
+        sourceVideoElement: simliVideoElement,
+        token: session.liveKitToken,
+        url: session.liveKitUrl,
+      });
+      if (disposed) {
+        avatarVideo.cleanup();
+        avatarVideo.room.disconnect();
+        return;
       }
     }
 
@@ -159,8 +180,8 @@ export function AiInterviewerSimliAvatar({
       disposed = true;
       simliAudioElement.removeEventListener('volumechange', keepSimliAudioSilent);
       if (client) {
-        client.ClearBuffer();
-        void client.stop().catch(() => undefined);
+        clearSimliBuffer(client);
+        void stopSimliClient(client);
       }
       if (clientRef.current === client) {
         clientRef.current = null;
@@ -181,22 +202,24 @@ export function AiInterviewerSimliAvatar({
   return (
     <div
       aria-hidden="true"
-      className="pointer-events-none fixed left-0 top-0 h-[720px] w-[1280px] origin-top-left scale-[0.001] overflow-hidden opacity-[0.01]"
+      className="pointer-events-none fixed left-0 top-0 h-[1080px] w-[1920px] origin-top-left scale-[0.001] overflow-hidden opacity-[0.01]"
       data-testid="simli-avatar-publisher"
     >
       <video
         ref={videoRef}
-        className="h-[720px] w-[1280px] object-cover"
+        className="h-[1080px] w-[1920px] object-contain"
         autoPlay
+        disablePictureInPicture
         height={AVATAR_VIDEO_HEIGHT}
         muted
         playsInline
+        preload="auto"
         width={AVATAR_VIDEO_WIDTH}
         data-testid="simli-avatar-video"
       />
       <canvas
         ref={canvasRef}
-        className="h-[720px] w-[1280px]"
+        className="h-[1080px] w-[1920px]"
         height={AVATAR_VIDEO_HEIGHT}
         width={AVATAR_VIDEO_WIDTH}
         data-testid="simli-avatar-canvas"
@@ -204,6 +227,26 @@ export function AiInterviewerSimliAvatar({
       <audio ref={audioRef} autoPlay muted data-testid="simli-avatar-audio" />
     </div>
   );
+}
+
+function sleep(delayMs: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, delayMs));
+}
+
+function clearSimliBuffer(client: SimliClientInstance | null): void {
+  try {
+    client?.ClearBuffer();
+  } catch (error) {
+    console.warn('[Simli] Failed to clear avatar buffer:', error);
+  }
+}
+
+async function stopSimliClient(client: SimliClientInstance): Promise<void> {
+  try {
+    await client.stop();
+  } catch (error) {
+    console.warn('[Simli] Failed to stop avatar client:', error);
+  }
 }
 
 function silenceAudioElement(audioElement: HTMLAudioElement): void {
@@ -325,6 +368,8 @@ function startAvatarCanvasRenderer({
   if (!context) {
     return () => undefined;
   }
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = 'high';
 
   let animationFrame: number | null = null;
   let stopped = false;
@@ -341,7 +386,7 @@ function startAvatarCanvasRenderer({
       sourceVideoElement.videoHeight > 0
     ) {
       try {
-        context.drawImage(sourceVideoElement, 0, 0, AVATAR_VIDEO_WIDTH, AVATAR_VIDEO_HEIGHT);
+        drawContainedVideoFrame(context, sourceVideoElement);
       } catch (error) {
         console.warn('[Simli] Failed to draw AI interviewer avatar frame:', error);
       }
@@ -357,6 +402,20 @@ function startAvatarCanvasRenderer({
       window.cancelAnimationFrame(animationFrame);
     }
   };
+}
+
+function drawContainedVideoFrame(
+  context: CanvasRenderingContext2D,
+  sourceVideoElement: HTMLVideoElement,
+): void {
+  const sourceWidth = sourceVideoElement.videoWidth;
+  const sourceHeight = sourceVideoElement.videoHeight;
+  const scale = Math.min(AVATAR_VIDEO_WIDTH / sourceWidth, AVATAR_VIDEO_HEIGHT / sourceHeight);
+  const width = Math.round(sourceWidth * scale);
+  const height = Math.round(sourceHeight * scale);
+  const x = Math.round((AVATAR_VIDEO_WIDTH - width) / 2);
+  const y = Math.round((AVATAR_VIDEO_HEIGHT - height) / 2);
+  context.drawImage(sourceVideoElement, x, y, width, height);
 }
 
 function captureCanvasStream(canvasElement: HTMLCanvasElement): MediaStream {

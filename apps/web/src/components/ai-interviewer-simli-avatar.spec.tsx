@@ -66,6 +66,7 @@ describe('AiInterviewerSimliAvatar', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
   });
 
@@ -130,7 +131,7 @@ describe('AiInterviewerSimliAvatar', () => {
         source: 'camera',
         simulcast: false,
         videoEncoding: expect.objectContaining({
-          maxBitrate: 2_500_000,
+          maxBitrate: 6_000_000,
           maxFramerate: 30,
         }),
       }),
@@ -203,11 +204,11 @@ function mockVideoElementReady() {
   });
   Object.defineProperty(HTMLVideoElement.prototype, 'videoWidth', {
     configurable: true,
-    get: () => 1280,
+    get: () => 1920,
   });
   Object.defineProperty(HTMLVideoElement.prototype, 'videoHeight', {
     configurable: true,
-    get: () => 720,
+    get: () => 1080,
   });
 }
 

@@ -668,6 +668,22 @@ function RoomPage() {
     );
   }, [aiInterviewerIdentity, mediaRemoteParticipants]);
 
+  const aiInterviewerHasVideo = useMemo(() => {
+    if (!aiInterviewerIdentity) return false;
+    return (
+      mediaRemoteParticipants.find((participant) => participant.identity === aiInterviewerIdentity)
+        ?.hasVideo ?? false
+    );
+  }, [aiInterviewerIdentity, mediaRemoteParticipants]);
+
+  const aiInterviewerVideoTrack = useMemo(() => {
+    if (!aiInterviewerIdentity) return null;
+    return (
+      mediaRemoteParticipants.find((participant) => participant.identity === aiInterviewerIdentity)
+        ?.videoTrack ?? null
+    );
+  }, [aiInterviewerIdentity, mediaRemoteParticipants]);
+
   useEffect(() => {
     if (aiInterviewerIdentity) {
       sawAiInterviewerInMediaRoomRef.current = true;
@@ -791,6 +807,9 @@ function RoomPage() {
 
     for (const mp of mediaRemoteParticipants) {
       const isAiInterviewer = mp.isAgent || mp.identity === AI_INTERVIEWER_AGENT_IDENTITY;
+      if (isAiInterviewer) {
+        continue;
+      }
       const p = room?.participants.find((rp) => rp.userId === mp.identity);
       const hidden = videoHiddenSet.has(mp.identity);
       tiles.push({
@@ -1297,6 +1316,8 @@ function RoomPage() {
           }
           aiInterviewerIdentity={aiInterviewerIdentity}
           aiInterviewerAudioTrack={aiInterviewerAudioTrack}
+          aiInterviewerVideoTrack={aiInterviewerVideoTrack}
+          aiInterviewerHasVideo={aiInterviewerHasVideo}
           latestLiveKitDataPacket={latestLiveKitDataPacket}
           publishLiveKitData={publishData}
         />

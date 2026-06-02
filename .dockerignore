@@ -11,7 +11,9 @@ docs
 .env.*
 !.env.example
 *.log
+*.tsbuildinfo
 .DS_Store
+._*
 .vscode
 .idea
 .github
