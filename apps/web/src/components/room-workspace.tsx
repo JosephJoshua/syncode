@@ -1,4 +1,5 @@
 import {
+  AI_INTERVIEWER_AGENT_IDENTITY,
   AI_INTERVIEWER_EVENT_TOPIC,
   AI_INTERVIEWER_SIGNAL_TOPIC,
   type AiInterviewCodeContext,
@@ -78,6 +79,7 @@ import type * as Y from 'yjs';
 import { useInlineComments } from '@/hooks/use-inline-comments.js';
 import type { LiveKitDataPacket } from '@/hooks/use-livekit.js';
 import { useSharedExecution } from '@/hooks/use-shared-execution.js';
+import { useVideoTrack } from '@/hooks/use-video-track.js';
 import type { CollabConnectionStatus } from '@/hooks/use-yjs-collab.js';
 import { canPublishRealtimeAiInterviewerSignal } from '@/lib/ai-interviewer-realtime.js';
 import { api, readApiError, resolveErrorMessage } from '@/lib/api-client.js';
@@ -183,6 +185,8 @@ interface RoomWorkspaceProps {
   dockedVideoPanel?: React.ReactNode;
   aiInterviewerIdentity?: string | null;
   aiInterviewerAudioTrack?: MediaStreamTrack | null;
+  aiInterviewerVideoTrack?: MediaStreamTrack | null;
+  aiInterviewerHasVideo?: boolean;
   latestLiveKitDataPacket?: LiveKitDataPacket | null;
   publishLiveKitData?: (
     payload: Uint8Array,
@@ -201,6 +205,51 @@ interface CasePollDeps {
   readonly token: { cancelled: boolean };
   readonly setMultiRunState: React.Dispatch<React.SetStateAction<MultiRunState>>;
   readonly t: (key: string) => string;
+}
+
+function AiInterviewerLiveKitAvatar({
+  track,
+  isSpeaking,
+}: {
+  track: MediaStreamTrack | null;
+  isSpeaking: boolean;
+}) {
+  const videoRef = useVideoTrack(track);
+
+  if (!track) {
+    return null;
+  }
+
+  return (
+    <div className="pointer-events-none fixed right-4 bottom-24 z-50 w-[min(18rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-primary/35 bg-background/95 shadow-2xl shadow-black/25 backdrop-blur">
+      <div className="relative aspect-video bg-muted">
+        <video
+          ref={videoRef}
+          className="h-full w-full object-cover"
+          autoPlay
+          playsInline
+          muted
+          aria-label="AI interviewer avatar"
+        />
+        <div
+          className={cn(
+            'absolute inset-0 rounded-2xl ring-2 ring-transparent transition-colors',
+            isSpeaking ? 'ring-primary/80' : 'ring-transparent',
+          )}
+        />
+      </div>
+      <div className="flex items-center gap-2 px-3 py-2 text-xs font-medium">
+        <Bot className="size-3.5 text-primary" />
+        <span>AI Interviewer</span>
+        <span
+          className={cn(
+            'ml-auto h-1.5 w-1.5 rounded-full',
+            isSpeaking ? 'bg-primary' : 'bg-muted-foreground/60',
+          )}
+        />
+      </div>
+    </div>
+  );
 }
 
 async function executeCasePoll(deps: CasePollDeps): Promise<void> {
@@ -312,6 +361,8 @@ export function RoomWorkspace({
   dockedVideoPanel,
   aiInterviewerIdentity = null,
   aiInterviewerAudioTrack = null,
+  aiInterviewerVideoTrack = null,
+  aiInterviewerHasVideo = false,
   latestLiveKitDataPacket,
   publishLiveKitData,
 }: RoomWorkspaceProps) {
@@ -371,6 +422,9 @@ export function RoomWorkspace({
   const [aiInterviewerAgentState, setAiInterviewerAgentState] = useState<
     'initializing' | 'idle' | 'listening' | 'thinking' | 'speaking'
   >('idle');
+  const [aiInterviewerAvatarProviderState, setAiInterviewerAvatarProviderState] = useState<
+    'unknown' | 'client_fallback'
+  >('unknown');
   const [aiInterviewerUserState, setAiInterviewerUserState] = useState<
     'speaking' | 'listening' | 'away'
   >('listening');
@@ -477,6 +531,7 @@ export function RoomWorkspace({
     aiInterviewRealtimeTurnIdsRef.current.clear();
     previousAiInterviewerMediaConnectedRef.current = false;
     setAiInterviewerAgentState('idle');
+    setAiInterviewerAvatarProviderState('unknown');
     setAiInterviewerUserState('listening');
     setAiInterviewerRealtimeReadyIdentity(null);
     setAiInterviewerInterruptionAt(null);
@@ -595,6 +650,9 @@ export function RoomWorkspace({
             aiInterviewRealtimeLastSignalAtByReasonRef.current.delete('session_joined');
           }
           return;
+        case 'avatar_provider':
+          setAiInterviewerAvatarProviderState(event.state);
+          return;
         default:
           return;
       }
@@ -609,16 +667,24 @@ export function RoomWorkspace({
     if (latestLiveKitDataPacket.topic !== AI_INTERVIEWER_EVENT_TOPIC) {
       return;
     }
-    if (!latestLiveKitDataPacket.participantIsAgent) {
-      return;
-    }
     const identity = latestLiveKitDataPacket.participantIdentity;
-    if (identity && aiInterviewerIdentity && identity !== aiInterviewerIdentity) {
-      return;
-    }
 
     const event = decodeAiInterviewerEventPayload(latestLiveKitDataPacket.payload);
     if (!event) {
+      return;
+    }
+
+    const isExpectedInterviewerIdentity =
+      !identity || identity === AI_INTERVIEWER_AGENT_IDENTITY || identity === aiInterviewerIdentity;
+    if (!latestLiveKitDataPacket.participantIsAgent && !isExpectedInterviewerIdentity) {
+      return;
+    }
+    if (
+      identity &&
+      aiInterviewerIdentity &&
+      identity !== aiInterviewerIdentity &&
+      identity !== AI_INTERVIEWER_AGENT_IDENTITY
+    ) {
       return;
     }
     applyRealtimeAiInterviewerEvent(event, identity ?? null);
@@ -2548,11 +2614,19 @@ export function RoomWorkspace({
       {useRealtimeAiInterviewer ? (
         <AiInterviewerSimliAvatar
           roomId={roomId}
-          enabled={aiInterviewerIdentity !== null}
+          enabled={
+            aiInterviewerIdentity !== null &&
+            !aiInterviewerHasVideo &&
+            aiInterviewerAvatarProviderState === 'client_fallback'
+          }
           audioTrack={aiInterviewerAudioTrack}
           isSpeaking={aiInterviewerIsSpeaking}
         />
       ) : null}
+      <AiInterviewerLiveKitAvatar
+        track={aiInterviewerVideoTrack}
+        isSpeaking={aiInterviewerIsSpeaking}
+      />
 
       {/* Main resizable 3-panel area */}
       <ResizablePanelGroup orientation="horizontal" style={{ flex: 1 }}>
