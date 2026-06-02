@@ -88,12 +88,22 @@ export function MediaControls({
   const isConnected = connectionState === 'connected';
   const isConnecting = connectionState === 'connecting' || connectionState === 'reconnecting';
   const isFailed = connectionState === 'failed';
+  const isUnsupported = connectionState === 'unsupported';
 
-  if (isFailed) {
+  if (isFailed || isUnsupported) {
     return (
-      <div className="flex items-center gap-1.5 rounded-lg border border-destructive/30 bg-destructive/10 px-2 py-1">
+      <div
+        className="flex items-center gap-1.5 rounded-lg border border-destructive/30 bg-destructive/10 px-2 py-1"
+        title={
+          isUnsupported
+            ? 'WebRTC is unavailable in this browser context'
+            : 'Media connection failed'
+        }
+      >
         <TriangleAlert className="size-3 text-destructive" />
-        <span className="font-mono text-[10px] text-destructive">media offline</span>
+        <span className="font-mono text-[10px] text-destructive">
+          {isUnsupported ? 'webrtc blocked' : 'media offline'}
+        </span>
       </div>
     );
   }
