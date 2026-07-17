@@ -120,7 +120,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for branch naming, commit message format,
 ## Codex-assisted AI Interviewer
 
 Codex is used to quickly configure and assign the AI interviewer. The fallback voice pipeline
-uses the ElevenLabs API when `ELEVENLABS_TTS_API_KEY` is set in local `.env` file.
+uses the ElevenLabs API when `ELEVENLABS_TTS_API_KEY` is set in local `.env` file. Customization of the model and voice is also available via
+changing `ELEVENLABS_TTS_MODEL` and `ELEVENLABS_TTS_VOICE_ID`.
 
 ## License
 
