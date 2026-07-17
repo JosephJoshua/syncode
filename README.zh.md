@@ -117,12 +117,12 @@ infra/
 
 分支命名、提交信息格式和 PR 流程等规范详见 [CONTRIBUTING.zh.md](CONTRIBUTING.zh.md)。所有规范均通过 git hooks 和 CI 强制执行。
 
-## 许可证
-
-[Apache License 2.0](LICENSE)
-
 ## Codex 辅助配置 AI 面试官
 
 项目使用 Codex 快速配置并分配 AI 面试官。在本地 `.env` 文件中设置
 `ELEVENLABS_TTS_API_KEY` 后，备用语音流程会使用 ElevenLabs API。也可通过
-`ELEVENLABS_TTS_MODEL` 和 `ELEVENLABS_TTS_VOICE_ID` 自定义模型与声音；请勿提交 API 密钥。
+`ELEVENLABS_TTS_MODEL` 和 `ELEVENLABS_TTS_VOICE_ID` 自定义模型与声音。
+
+## 许可证
+
+[Apache License 2.0](LICENSE)
