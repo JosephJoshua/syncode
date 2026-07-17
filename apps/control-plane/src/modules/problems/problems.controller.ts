@@ -1,0 +1,214 @@
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Ip,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiOperation,
+  ApiParam,
+  ApiQuery,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
+import { CONTROL_API, PROBLEM_LIST_STATUSES, SORT_ORDER_OPTIONS } from '@syncode/contracts';
+import { PROBLEM_DIFFICULTIES, PROBLEMS_SORT_BY_OPTIONS } from '@syncode/shared';
+import { ZodValidationPipe } from 'nestjs-zod';
+import { CurrentUser } from '@/common/decorators/current-user.decorator.js';
+import { ErrorResponseDto } from '@/common/dto/error-response.dto.js';
+import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard.js';
+import type { AuthUser } from '@/modules/auth/auth.types.js';
+import {
+  CreateProblemDto,
+  ProblemDetailDto,
+  ProblemDetailQueryDto,
+  ProblemsListQueryDto,
+  ProblemsListResponseDto,
+  ProblemsTagsResponseDto,
+  PublishProblemStatusDto,
+  UpdateProblemDto,
+} from './dto/problems.dto.js';
+import { ProblemsService } from './problems.service.js';
+
+@ApiTags('problems')
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard)
+@Controller()
+export class ProblemsController {
+  constructor(private readonly problemsService: ProblemsService) {}
+
+  @Get(CONTROL_API.PROBLEMS.LIST.route)
+  @ApiOperation({ summary: 'List problems' })
+  @ApiQuery({ name: 'cursor', required: false, description: 'Pagination cursor' })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Page size (1-100)' })
+  @ApiQuery({
+    name: 'difficulty',
+    required: false,
+    enum: [...PROBLEM_DIFFICULTIES],
+    isArray: true,
+    description: 'Filter by difficulties; repeat the query param or pass a comma-separated list',
+  })
+  @ApiQuery({
+    name: 'status',
+    required: false,
+    enum: [...PROBLEM_LIST_STATUSES],
+    isArray: true,
+    description:
+      'Filter by current user attempt status; repeat the query param or pass a comma-separated list',
+  })
+  @ApiQuery({
+    name: 'tags',
+    required: false,
+    description: 'Comma-separated tag slugs',
+  })
+  @ApiQuery({ name: 'company', required: false, description: 'Company slug filter' })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    description: 'Full-text search on title and description',
+  })
+  @ApiQuery({
+    name: 'sortBy',
+    required: false,
+    enum: [...PROBLEMS_SORT_BY_OPTIONS],
+    description: 'Sort field',
+  })
+  @ApiQuery({
+    name: 'sortOrder',
+    required: false,
+    enum: [...SORT_ORDER_OPTIONS],
+    description: 'Sort direction',
+  })
+  @ApiQuery({
+    name: 'includeDrafts',
+    required: false,
+    type: Boolean,
+    description: 'Admin-only: include unpublished draft problems',
+  })
+  @ApiResponse({
+    status: 200,
+    type: ProblemsListResponseDto,
+    description: 'Paginated list of problems',
+  })
+  @ApiResponse({ status: 401, type: ErrorResponseDto, description: 'Unauthorized' })
+  async listProblems(
+    @CurrentUser() user: AuthUser,
+    @Query(new ZodValidationPipe(ProblemsListQueryDto)) query: ProblemsListQueryDto,
+  ): Promise<ProblemsListResponseDto> {
+    return this.problemsService.listProblems(user.id, query);
+  }
+
+  @Post(CONTROL_API.PROBLEMS.CREATE.route)
+  @HttpCode(201)
+  @ApiOperation({ summary: 'Create a problem' })
+  @ApiBody({ type: CreateProblemDto })
+  @ApiResponse({ status: 201, type: ProblemDetailDto, description: 'Created problem' })
+  @ApiResponse({ status: 400, type: ErrorResponseDto, description: 'Validation error' })
+  @ApiResponse({ status: 401, type: ErrorResponseDto, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, type: ErrorResponseDto, description: 'Admin access required' })
+  @ApiResponse({ status: 409, type: ErrorResponseDto, description: 'Problem title already exists' })
+  async createProblem(
+    @CurrentUser() user: AuthUser,
+    @Body() body: CreateProblemDto,
+    @Ip() ipAddress?: string,
+  ): Promise<ProblemDetailDto> {
+    return this.problemsService.createProblem(user.id, body, ipAddress);
+  }
+
+  @Patch(CONTROL_API.PROBLEMS.UPDATE.route)
+  @ApiOperation({ summary: 'Update a problem' })
+  @ApiParam({ name: 'id', description: 'Problem ID (UUID)' })
+  @ApiBody({ type: UpdateProblemDto })
+  @ApiResponse({ status: 200, type: ProblemDetailDto, description: 'Updated problem' })
+  @ApiResponse({ status: 400, type: ErrorResponseDto, description: 'Validation error' })
+  @ApiResponse({ status: 401, type: ErrorResponseDto, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, type: ErrorResponseDto, description: 'Admin access required' })
+  @ApiResponse({ status: 404, type: ErrorResponseDto, description: 'Problem not found' })
+  @ApiResponse({ status: 409, type: ErrorResponseDto, description: 'Problem title already exists' })
+  async updateProblem(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() body: UpdateProblemDto,
+    @Ip() ipAddress?: string,
+  ): Promise<ProblemDetailDto> {
+    return this.problemsService.updateProblem(user.id, id, body, ipAddress);
+  }
+
+  @Patch(CONTROL_API.PROBLEMS.PUBLISH_STATUS.route)
+  @ApiOperation({ summary: 'Change problem publish status' })
+  @ApiParam({ name: 'id', description: 'Problem ID (UUID)' })
+  @ApiBody({ type: PublishProblemStatusDto })
+  @ApiResponse({ status: 200, type: ProblemDetailDto, description: 'Updated problem' })
+  @ApiResponse({ status: 401, type: ErrorResponseDto, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, type: ErrorResponseDto, description: 'Admin access required' })
+  @ApiResponse({ status: 404, type: ErrorResponseDto, description: 'Problem not found' })
+  async changePublishStatus(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() body: PublishProblemStatusDto,
+    @Ip() ipAddress?: string,
+  ): Promise<ProblemDetailDto> {
+    return this.problemsService.changePublishStatus(user.id, id, body, ipAddress);
+  }
+
+  // /problems/tags MUST be registered before /problems/:id
+  // to prevent NestJS from matching "tags" as an :id parameter.
+  @Get(CONTROL_API.PROBLEMS.TAGS.route)
+  @ApiOperation({ summary: 'List all tags' })
+  @ApiResponse({
+    status: 200,
+    type: ProblemsTagsResponseDto,
+    description: 'List of tags',
+  })
+  @ApiResponse({ status: 401, type: ErrorResponseDto, description: 'Unauthorized' })
+  async listTags(): Promise<ProblemsTagsResponseDto> {
+    return this.problemsService.listTags();
+  }
+
+  @Get(CONTROL_API.PROBLEMS.GET_BY_ID.route)
+  @ApiOperation({ summary: 'Get problem details by ID' })
+  @ApiParam({ name: 'id', description: 'Problem ID (UUID)' })
+  @ApiQuery({
+    name: 'includeHidden',
+    required: false,
+    type: Boolean,
+    description: 'Admin-only: include hidden test cases for problem editing',
+  })
+  @ApiResponse({ status: 200, type: ProblemDetailDto, description: 'Problem details' })
+  @ApiResponse({ status: 401, type: ErrorResponseDto, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, type: ErrorResponseDto, description: 'Admin access required' })
+  @ApiResponse({ status: 404, type: ErrorResponseDto, description: 'Problem not found' })
+  async getProblem(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Query(new ZodValidationPipe(ProblemDetailQueryDto)) query: ProblemDetailQueryDto = {},
+  ): Promise<ProblemDetailDto> {
+    return this.problemsService.findById(user.id, id, { includeHidden: query?.includeHidden });
+  }
+
+  @Delete(CONTROL_API.PROBLEMS.DELETE.route)
+  @HttpCode(204)
+  @ApiOperation({ summary: 'Delete a problem' })
+  @ApiParam({ name: 'id', description: 'Problem ID (UUID)' })
+  @ApiResponse({ status: 204, description: 'Deleted problem' })
+  @ApiResponse({ status: 401, type: ErrorResponseDto, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, type: ErrorResponseDto, description: 'Admin access required' })
+  @ApiResponse({ status: 404, type: ErrorResponseDto, description: 'Problem not found' })
+  @ApiResponse({ status: 409, type: ErrorResponseDto, description: 'Problem is in use' })
+  async deleteProblem(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Ip() ipAddress?: string,
+  ): Promise<void> {
+    await this.problemsService.deleteProblem(user.id, id, ipAddress);
+  }
+}

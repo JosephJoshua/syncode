@@ -1,0 +1,82 @@
+# Stage 1: Prune monorepo for execution-plane
+FROM node:25-alpine AS pruner
+
+ENV PNPM_HOME="/pnpm" PATH="/pnpm:$PATH"
+RUN npm install -g --force corepack && corepack enable && corepack prepare pnpm@9.0.0 --activate
+RUN pnpm add -g turbo
+
+WORKDIR /app
+COPY . .
+RUN turbo prune @syncode/execution-plane --docker
+
+# Stage 2: Install deps & build
+FROM node:25-alpine AS builder
+
+ENV PNPM_HOME="/pnpm" PATH="/pnpm:$PATH"
+RUN npm install -g --force corepack && corepack enable && corepack prepare pnpm@9.0.0 --activate
+
+WORKDIR /app
+
+COPY --from=pruner /app/out/json/ .
+RUN pnpm install --frozen-lockfile
+
+COPY --from=pruner /app/out/full/ .
+RUN pnpm turbo build --filter=@syncode/execution-plane
+
+RUN pnpm deploy --filter=@syncode/execution-plane --prod /app/deploy
+
+# Stage 3: Production runner
+FROM node:25-alpine AS runner
+
+ARG RUFF_VERSION=0.14.8
+ARG LIZARD_VERSION=1.19.0
+ARG PMD_VERSION=7.18.0
+ARG GOLANGCI_LINT_VERSION=v2.6.2
+
+ENV ANALYSIS_TOOLS_HOME="/opt/analysis-tools" \
+    PMD_HOME="/opt/pmd-bin-${PMD_VERSION}" \
+    PATH="/opt/analysis-tools/bin:/opt/pmd-bin-${PMD_VERSION}/bin:${PATH}"
+
+RUN apk add --no-cache \
+      bash \
+      cargo \
+      cppcheck \
+      curl \
+      git \
+      go \
+      openjdk21-jre-headless \
+      py3-pip \
+      python3 \
+      rust \
+      rust-clippy \
+      tini \
+      unzip \
+    && python3 -m venv "${ANALYSIS_TOOLS_HOME}" \
+    && "${ANALYSIS_TOOLS_HOME}/bin/pip" install --no-cache-dir \
+      "ruff==${RUFF_VERSION}" \
+      "lizard==${LIZARD_VERSION}" \
+    && curl -fsSL "https://github.com/pmd/pmd/releases/download/pmd_releases%2F${PMD_VERSION}/pmd-dist-${PMD_VERSION}-bin.zip" -o /tmp/pmd.zip \
+    && unzip -q /tmp/pmd.zip -d /opt \
+    && rm /tmp/pmd.zip \
+    && GOBIN=/usr/local/bin go install "github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${GOLANGCI_LINT_VERSION}" \
+    && addgroup -S syncode \
+    && adduser -S syncode -G syncode
+
+WORKDIR /app
+
+COPY --from=builder --chown=syncode:syncode /app/deploy .
+
+COPY --chown=syncode:syncode infra/docker/healthcheck-worker.mjs /app/healthcheck-worker.mjs
+
+ENV NODE_ENV=production
+
+USER syncode
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD node /app/healthcheck-worker.mjs || exit 1
+
+LABEL org.opencontainers.image.source="https://github.com/JosephJoshua/syncode"
+LABEL org.opencontainers.image.title="syncode-execution-plane"
+
+ENTRYPOINT ["/sbin/tini", "--"]
+CMD ["node", "dist/main.js"]

@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Local Terminal</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #111315;
+      --panel: #171b1f;
+      --line: #2a3036;
+      --text: #e7edf3;
+      --muted: #8d98a5;
+      --accent: #45c08a;
+      --danger: #ff6464;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      height: 100%;
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    body {
+      display: grid;
+      grid-template-rows: 44px 1fr;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-width: 0;
+      padding: 0 12px;
+      border-bottom: 1px solid var(--line);
+      background: var(--panel);
+    }
+
+    .title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      font-size: 14px;
+      font-weight: 650;
+    }
+
+    .dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 999px;
+      background: var(--muted);
+      flex: 0 0 auto;
+    }
+
+    .dot.connected {
+      background: var(--accent);
+    }
+
+    .dot.closed {
+      background: var(--danger);
+    }
+
+    .status {
+      overflow: hidden;
+      color: var(--muted);
+      font-size: 12px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    button {
+      flex: 0 0 auto;
+      height: 30px;
+      padding: 0 10px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #20262b;
+      color: var(--text);
+      font: inherit;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background: #293038;
+    }
+
+    #terminal {
+      min-height: 0;
+      padding: 8px;
+    }
+
+    .xterm {
+      height: 100%;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="title">
+      <span id="dot" class="dot"></span>
+      <span>Local Terminal</span>
+    </div>
+    <div id="status" class="status">connecting...</div>
+    <button id="reconnect" type="button">Reconnect</button>
+  </header>
+
+  <main id="terminal"></main>
+
+  <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
+  <script>
+    const terminal = new Terminal({
+      cursorBlink: true,
+      fontFamily: 'ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace',
+      fontSize: 14,
+      theme: {
+        background: '#111315',
+        foreground: '#e7edf3',
+        cursor: '#e7edf3',
+        selectionBackground: '#38566b'
+      }
+    });
+
+    const fitAddon = new FitAddon.FitAddon();
+    const dot = document.getElementById('dot');
+    const status = document.getElementById('status');
+    const reconnect = document.getElementById('reconnect');
+    let socket = null;
+
+    terminal.loadAddon(fitAddon);
+    terminal.open(document.getElementById('terminal'));
+
+    function setStatus(text, state) {
+      status.textContent = text;
+      dot.className = `dot ${state || ''}`.trim();
+    }
+
+    function fitAndSendSize() {
+      fitAddon.fit();
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({
+          type: 'resize',
+          cols: terminal.cols,
+          rows: terminal.rows
+        }));
+      }
+    }
+
+    function connect() {
+      if (socket) {
+        socket.close();
+      }
+
+      const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const terminalPath = location.pathname.replace(/\/$/, '');
+      const wsUrl = `${wsProtocol}//${location.host}${terminalPath}/ws${location.search}`;
+      socket = new WebSocket(wsUrl);
+
+      setStatus('connecting...', '');
+
+      socket.addEventListener('open', () => {
+        terminal.focus();
+        setStatus('connected', 'connected');
+        fitAndSendSize();
+      });
+
+      socket.addEventListener('message', (event) => {
+        terminal.write(event.data);
+      });
+
+      socket.addEventListener('close', () => {
+        setStatus('connection closed', 'closed');
+      });
+
+      socket.addEventListener('error', () => {
+        setStatus('connection error', 'closed');
+      });
+    }
+
+    terminal.onData((data) => {
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({ type: 'input', data }));
+      }
+    });
+
+    reconnect.addEventListener('click', connect);
+    window.addEventListener('resize', fitAndSendSize);
+
+    fitAndSendSize();
+    connect();
+  </script>
+</body>
+</html>

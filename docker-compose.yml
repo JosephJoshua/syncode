@@ -1,0 +1,89 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: syncode-postgres
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: syncode
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: syncode-redis
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  seaweedfs:
+    image: chrislusf/seaweedfs:4.13
+    container_name: syncode-seaweedfs
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8333:8333"
+      - "127.0.0.1:9333:9333"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        printf '{"identities":[{"name":"syncode","credentials":[{"accessKey":"syncode","secretKey":"syncode-secret"}],"actions":["Admin","Read","Write","List","Tagging"]}]}'
+        > /tmp/s3.json &&
+        weed server -s3 -s3.config=/tmp/s3.json -s3.port=8333 &
+        PID=$$! &&
+        until wget -q --spider http://localhost:8333/ 2>/dev/null; do sleep 0.5; done &&
+        wget --method=PUT -q -O /dev/null http://localhost:8333/syncode 2>/dev/null || true &&
+        wait $$PID
+    volumes:
+      - seaweedfs_data:/data
+    healthcheck:
+        test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:9333/ || exit 1"]
+        interval: 10s
+        timeout: 5s
+        retries: 10
+        start_period: 30s
+
+  livekit:
+    image: livekit/livekit-server:v1.9.11
+    container_name: syncode-livekit
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:7880:7880"
+      - "127.0.0.1:7881:7881/tcp"
+      - "127.0.0.1:50000-50100:50000-50100/udp"
+    environment:
+      LIVEKIT_KEYS: "${LIVEKIT_API_KEY:-devkey}: ${LIVEKIT_API_SECRET:-devsecret}"
+      LIVEKIT_CONFIG: |
+        port: 7880
+        log_level: info
+        rtc:
+          tcp_port: 7881
+          port_range_start: 50000
+          port_range_end: 50100
+          use_external_ip: false
+          node_ip: 127.0.0.1
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:7880"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pg_data:
+  redis_data:
+  seaweedfs_data:

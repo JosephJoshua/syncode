@@ -1,0 +1,57 @@
+{
+  "badge": "$ syncode --init",
+  "hero": {
+    "heading1": "Code interviews,",
+    "heading2": "reimagined."
+  },
+  "button": {
+    "getStarted": "Get started",
+    "getStartedHover": "Start coding now"
+  },
+  "terminal": {
+    "heading1": "Two cursors. One file.",
+    "heading2": "Zero conflicts."
+  },
+  "features": {
+    "sidebarLabel": "Features",
+    "pairProgramming": "Pair Programming",
+    "pairProgrammingDesc": "Edit the same file simultaneously. Both cursors work in real-time — no conflicts, no lag, no screen sharing.",
+    "liveExecution": "Live Execution",
+    "liveExecutionDesc": "Run your code against real test cases in seconds. Watch results stream in live — not a simulation.",
+    "aiFeedback": "AI Feedback",
+    "aiFeedbackDesc": "Instant analysis of time complexity, edge cases, and code quality. Like having a senior engineer review your solution.",
+    "aiInterviewer": "AI Interviewer",
+    "aiInterviewerDesc": "Practice with an AI that asks follow-ups, probes your thinking, and gives structured feedback. Like a real technical interview.",
+    "allTestsPassed": "All tests passed",
+    "codeReviewScore": "Code Review Score",
+    "aiQuestion": "How does your hash map handle duplicate values?",
+    "youAnswer": "We check the complement before inserting..."
+  },
+  "stats": {
+    "sessions": "Sessions completed",
+    "sync": "Real-time sync",
+    "languages": "Languages supported",
+    "execution": "Test execution"
+  },
+  "cta": {
+    "headingLine1": "Ready to",
+    "headingLine2": "pair?",
+    "sub": "Start coding together in seconds. No setup, no screen sharing, no friction.",
+    "getStarted": "Get started free",
+    "getStartedHover": "Start coding now"
+  },
+  "footer": {
+    "product": "Product",
+    "community": "Community",
+    "legal": "Legal",
+    "features": "Features",
+    "howItWorks": "How It Works",
+    "terminalDemo": "Terminal Demo",
+    "github": "GitHub",
+    "discord": "Discord",
+    "terms": "Terms of Service",
+    "privacy": "Privacy Policy",
+    "tagline": "Built for engineers",
+    "copyright": "SynCode {{year}}. All rights reserved."
+  }
+}

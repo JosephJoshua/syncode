@@ -1,0 +1,13 @@
+{
+  "heading": "Bookmarks",
+  "sub": {
+    "loading": "Loading bookmarks...",
+    "count_one": "{{count}} bookmarked problem",
+    "count_other": "{{count}} bookmarked problems"
+  },
+  "empty": {
+    "title": "No bookmarks yet",
+    "description": "Bookmark problems from the problem library to save them here for quick access.",
+    "browseProblems": "Browse problems"
+  }
+}

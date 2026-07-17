@@ -1,0 +1,47 @@
+FROM redis:7-alpine
+
+ARG RUFF_VERSION=0.14.8
+ARG LIZARD_VERSION=1.19.0
+ARG PMD_VERSION=7.18.0
+ARG GOLANGCI_LINT_VERSION=2.6.2
+ARG BIOME_VERSION=2.4.4
+
+ENV ANALYSIS_TOOLS_HOME="/opt/analysis-tools" \
+    PMD_HOME="/opt/pmd-bin-${PMD_VERSION}" \
+    PATH="/opt/analysis-tools/bin:/opt/pmd-bin-${PMD_VERSION}/bin:/usr/local/bin:${PATH}"
+
+RUN apk add --no-cache \
+      bash \
+      cargo \
+      cppcheck \
+      curl \
+      git \
+      go \
+      openjdk21-jre-headless \
+      py3-pip \
+      python3 \
+      rust \
+      rust-clippy \
+      tini \
+      unzip \
+      nodejs \
+      npm \
+      ca-certificates \
+    && python3 -m venv "${ANALYSIS_TOOLS_HOME}" \
+    && "${ANALYSIS_TOOLS_HOME}/bin/pip" install --no-cache-dir \
+      "ruff==${RUFF_VERSION}" \
+      "lizard==${LIZARD_VERSION}" \
+    && curl -fsSL "https://github.com/pmd/pmd/releases/download/pmd_releases%2F${PMD_VERSION}/pmd-dist-${PMD_VERSION}-bin.zip" -o /tmp/pmd.zip \
+    && unzip -q /tmp/pmd.zip -d /opt \
+    && rm /tmp/pmd.zip \
+    && curl -fsSL "https://github.com/golangci/golangci-lint/releases/download/v${GOLANGCI_LINT_VERSION}/golangci-lint-${GOLANGCI_LINT_VERSION}-linux-arm64.tar.gz" -o /tmp/golangci-lint.tar.gz \
+    && tar -xzf /tmp/golangci-lint.tar.gz -C /tmp \
+    && mv "/tmp/golangci-lint-${GOLANGCI_LINT_VERSION}-linux-arm64/golangci-lint" /usr/local/bin/golangci-lint \
+    && chmod +x /usr/local/bin/golangci-lint \
+    && rm -rf /tmp/golangci-lint.tar.gz "/tmp/golangci-lint-${GOLANGCI_LINT_VERSION}-linux-arm64" \
+    && npm install -g "@biomejs/biome@${BIOME_VERSION}" \
+    && mkdir -p /work
+
+WORKDIR /work
+ENTRYPOINT []
+CMD ["sh"]

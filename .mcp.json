@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "Syncode": {
+      "command": "npx",
+      "args": ["-y", "apidog-mcp-server@latest", "--site-id=766584"]
+    }
+  }
+}

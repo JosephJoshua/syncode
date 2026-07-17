@@ -1,0 +1,50 @@
+{
+  "name": "syncode",
+  "private": true,
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test --continue",
+    "test:cov": "turbo run test:cov",
+    "test:e2e": "turbo run test:e2e",
+    "test:integration": "turbo run test:integration",
+    "lint": "turbo run lint",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "check": "biome check .",
+    "generate": "turbo run generate",
+    "migrate": "turbo run migrate",
+    "studio": "turbo run studio",
+    "db:generate": "pnpm --filter @syncode/db generate",
+    "db:migrate": "pnpm --filter @syncode/db migrate",
+    "db:seed": "pnpm --filter @syncode/db seed",
+    "db:studio": "pnpm --filter @syncode/db studio",
+    "infra:up": "docker compose -f docker-compose.yml up -d",
+    "infra:down": "docker compose down",
+    "infra:full": "docker compose up -d",
+    "infra:logs": "docker compose logs -f",
+    "test:ai-api": "pnpm --filter @syncode/ai-plane exec tsx ../../scripts/testing-ai-api.ts",
+    "clean": "node scripts/clean.mjs",
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.4",
+    "@commitlint/cli": "^20.4.2",
+    "@commitlint/config-conventional": "^20.4.2",
+    "cross-env": "^10.1.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.3.1",
+    "turbo": "^2.8.12",
+    "typescript": "5.9.2"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx,json,css,md}": [
+      "pnpm exec biome check --write --no-errors-on-unmatched"
+    ]
+  },
+  "packageManager": "pnpm@9.0.0",
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,306 @@
+import { cn } from '@syncode/ui';
+import { motion, useMotionValue, useSpring, useTransform } from 'motion/react';
+import { useCallback, useEffect, useRef } from 'react';
+
+type BotMood = 'sleeping' | 'waiting' | 'alert' | 'excited';
+
+interface MoodVisuals {
+  eyeRx: number;
+  eyeRy: number;
+  eyeBaseY: number;
+  eyeColor: string;
+  mouthScaleY: number;
+  mouthColor: string;
+  ledColor: string;
+  screenFill: string;
+}
+
+const NEUTRAL_EYE_COLOR = 'oklch(0.82 0.01 286)';
+const NEUTRAL_MOUTH_COLOR = 'oklch(0.50 0.01 286)';
+const ACCENT_COLOR = 'oklch(0.82 0.18 165)';
+const NEUTRAL_LED_COLOR = 'oklch(0.35 0.01 286)';
+const NEUTRAL_SCREEN_FILL = 'oklch(0.17 0.005 286)';
+const EXCITED_SCREEN_FILL = 'oklch(0.18 0.01 165)';
+
+const MOOD_VISUALS: Record<BotMood, MoodVisuals> = {
+  sleeping: {
+    eyeRx: 5.5,
+    eyeRy: 1,
+    eyeBaseY: 50,
+    eyeColor: NEUTRAL_EYE_COLOR,
+    mouthScaleY: 0,
+    mouthColor: NEUTRAL_MOUTH_COLOR,
+    ledColor: NEUTRAL_LED_COLOR,
+    screenFill: NEUTRAL_SCREEN_FILL,
+  },
+  waiting: {
+    eyeRx: 4,
+    eyeRy: 4.5,
+    eyeBaseY: 47,
+    eyeColor: NEUTRAL_EYE_COLOR,
+    mouthScaleY: 0.2,
+    mouthColor: NEUTRAL_MOUTH_COLOR,
+    ledColor: NEUTRAL_LED_COLOR,
+    screenFill: NEUTRAL_SCREEN_FILL,
+  },
+  alert: {
+    eyeRx: 4,
+    eyeRy: 4.5,
+    eyeBaseY: 47,
+    eyeColor: NEUTRAL_EYE_COLOR,
+    mouthScaleY: 0.6,
+    mouthColor: NEUTRAL_MOUTH_COLOR,
+    ledColor: 'oklch(0.82 0.18 165 / 0.6)',
+    screenFill: NEUTRAL_SCREEN_FILL,
+  },
+  excited: {
+    eyeRx: 3.5,
+    eyeRy: 4,
+    eyeBaseY: 47,
+    eyeColor: ACCENT_COLOR,
+    mouthScaleY: 1,
+    mouthColor: ACCENT_COLOR,
+    ledColor: ACCENT_COLOR,
+    screenFill: EXCITED_SCREEN_FILL,
+  },
+};
+
+function resolveMood(readyCount: number, totalCount: number): BotMood {
+  if (totalCount === 0) return 'sleeping';
+  if (readyCount === totalCount) return 'excited';
+  if (readyCount > 0) return 'alert';
+  return 'waiting';
+}
+
+export function LobbyBot({
+  readyCount,
+  totalCount,
+  className,
+}: {
+  readonly readyCount: number;
+  readonly totalCount: number;
+  readonly className?: string;
+}) {
+  const mood = resolveMood(readyCount, totalCount);
+  const progress = totalCount > 0 ? readyCount / totalCount : 0;
+  const svgRef = useRef<SVGSVGElement>(null);
+
+  const glowSpring = useSpring(0, { stiffness: 80, damping: 20 });
+  const glowShadow = useTransform(
+    glowSpring,
+    [0, 1],
+    [
+      '0 0 0px oklch(0.82 0.18 165 / 0), inset 0 0 0px oklch(0.82 0.18 165 / 0)',
+      '0 0 24px oklch(0.82 0.18 165 / 0.5), inset 0 0 10px oklch(0.82 0.18 165 / 0.12)',
+    ],
+  );
+
+  useEffect(() => {
+    glowSpring.set(progress);
+  }, [progress, glowSpring]);
+
+  const gazeX = useMotionValue(0);
+  const gazeY = useMotionValue(0);
+  const smoothGazeX = useSpring(gazeX, { stiffness: 150, damping: 20 });
+  const smoothGazeY = useSpring(gazeY, { stiffness: 150, damping: 20 });
+
+  const leftPupilCx = useTransform(smoothGazeX, (v) => 38 + v);
+  const leftPupilCy = useTransform(smoothGazeY, (v) => 47 + v);
+  const rightPupilCx = useTransform(smoothGazeX, (v) => 62 + v);
+  const rightPupilCy = useTransform(smoothGazeY, (v) => 47 + v);
+
+  const handleMouseMove = useCallback(
+    (e: MouseEvent) => {
+      if (mood === 'sleeping' || !svgRef.current) return;
+      const rect = svgRef.current.getBoundingClientRect();
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+      const dx = e.clientX - cx;
+      const dy = e.clientY - cy;
+      const dist = Math.hypot(dx, dy);
+      const maxOffset = 3;
+      const scale = Math.min(maxOffset / Math.max(dist * 0.015, 1), maxOffset);
+      gazeX.set(Math.max(-maxOffset, Math.min(maxOffset, dx * 0.015 * scale)));
+      gazeY.set(Math.max(-maxOffset, Math.min(maxOffset, dy * 0.015 * scale)));
+    },
+    [mood, gazeX, gazeY],
+  );
+
+  useEffect(() => {
+    globalThis.addEventListener('mousemove', handleMouseMove);
+    return () => globalThis.removeEventListener('mousemove', handleMouseMove);
+  }, [handleMouseMove]);
+
+  // Reset gaze when sleeping
+  useEffect(() => {
+    if (mood === 'sleeping') {
+      gazeX.set(0);
+      gazeY.set(0);
+    }
+  }, [mood, gazeX, gazeY]);
+
+  const { eyeRx, eyeRy, eyeBaseY, eyeColor, mouthScaleY, mouthColor, ledColor, screenFill } =
+    MOOD_VISUALS[mood];
+
+  return (
+    <div className={cn('relative flex flex-col items-center', className)}>
+      {/* Glow behind the face */}
+      <motion.div className="absolute inset-0 rounded-2xl" style={{ boxShadow: glowShadow }} />
+
+      {/* Gentle idle float */}
+      <motion.svg
+        ref={svgRef}
+        viewBox="0 0 100 100"
+        className="relative size-24"
+        aria-hidden="true"
+        animate={{ y: [0, -2.5, 0] }}
+        transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
+      >
+        {/* Head */}
+        <rect
+          x="10"
+          y="10"
+          width="80"
+          height="80"
+          rx="22"
+          fill="oklch(0.20 0.005 286)"
+          stroke="oklch(0.30 0.005 286)"
+          strokeWidth="1.2"
+        />
+
+        {/* Screen inset */}
+        <motion.rect
+          x="17"
+          y="17"
+          width="66"
+          height="66"
+          rx="15"
+          stroke="oklch(0.25 0.005 286)"
+          strokeWidth="0.5"
+          animate={{ fill: screenFill }}
+          transition={{ duration: 0.5 }}
+        />
+
+        {/* Status LED with pulse for excited */}
+        <motion.circle
+          cx="50"
+          cy="29"
+          r="1.8"
+          animate={{
+            fill: ledColor,
+            scale: mood === 'excited' ? [1, 1.4, 1] : 1,
+          }}
+          transition={
+            mood === 'excited'
+              ? { duration: 1.5, repeat: Infinity, ease: 'easeInOut' }
+              : { duration: 0.4 }
+          }
+        />
+
+        {/* Left eye */}
+        <motion.ellipse
+          cx={38}
+          cy={eyeBaseY}
+          rx={eyeRx}
+          ry={eyeRy}
+          animate={{
+            rx: eyeRx,
+            ry: eyeRy,
+            fill: eyeColor,
+          }}
+          style={{
+            cx: mood === 'sleeping' ? 38 : leftPupilCx,
+            cy: mood === 'sleeping' ? eyeBaseY : leftPupilCy,
+          }}
+          transition={{ type: 'spring', stiffness: 180, damping: 16 }}
+        />
+
+        {/* Right eye */}
+        <motion.ellipse
+          cx={62}
+          cy={eyeBaseY}
+          rx={eyeRx}
+          ry={eyeRy}
+          animate={{
+            rx: eyeRx,
+            ry: eyeRy,
+            fill: eyeColor,
+          }}
+          style={{
+            cx: mood === 'sleeping' ? 62 : rightPupilCx,
+            cy: mood === 'sleeping' ? eyeBaseY : rightPupilCy,
+          }}
+          transition={{ type: 'spring', stiffness: 180, damping: 16 }}
+        />
+
+        {/* Blink overlay (waiting mood) */}
+        {mood === 'waiting' && (
+          <>
+            <motion.rect
+              x="29"
+              y="39"
+              width="18"
+              height="16"
+              rx="5"
+              fill={screenFill}
+              animate={{ scaleY: [0, 0, 1, 0, 0] }}
+              transition={{
+                duration: 3.5,
+                repeat: Infinity,
+                times: [0, 0.44, 0.48, 0.52, 1],
+                ease: 'easeInOut',
+              }}
+              style={{ transformOrigin: '38px 47px' }}
+            />
+            <motion.rect
+              x="53"
+              y="39"
+              width="18"
+              height="16"
+              rx="5"
+              fill={screenFill}
+              animate={{ scaleY: [0, 0, 1, 0, 0] }}
+              transition={{
+                duration: 3.5,
+                delay: 0.03,
+                repeat: Infinity,
+                times: [0, 0.44, 0.48, 0.52, 1],
+                ease: 'easeInOut',
+              }}
+              style={{ transformOrigin: '62px 47px' }}
+            />
+          </>
+        )}
+
+        {/* Mouth */}
+        <motion.path
+          d="M 38 62 Q 50 72 62 62"
+          fill="none"
+          strokeLinecap="round"
+          strokeWidth="1.8"
+          animate={{
+            scaleY: mouthScaleY,
+            stroke: mouthColor,
+          }}
+          transition={{ type: 'spring', stiffness: 160, damping: 14 }}
+          style={{ transformOrigin: '50px 62px' }}
+        />
+
+        {/* Zzz for sleeping */}
+        {mood === 'sleeping' && (
+          <motion.text
+            x="70"
+            y="34"
+            fontSize="9"
+            fill="oklch(0.42 0.01 286)"
+            fontFamily="monospace"
+            animate={{ opacity: [0, 0.7, 0], y: [36, 30, 24] }}
+            transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+          >
+            z
+          </motion.text>
+        )}
+      </motion.svg>
+    </div>
+  );
+}

@@ -1,0 +1,114 @@
+import { SUPPORTED_LANGUAGES, type SupportedLanguage } from '@syncode/shared';
+
+export interface LanguageSelectorMetadata {
+  label: string;
+  shortLabel: string;
+  fallbackIconText: string;
+  iconSrc: string;
+  iconClassName?: string;
+  isRunnable?: boolean;
+  isComingSoon?: boolean;
+}
+
+export interface LanguageSelectorOption extends LanguageSelectorMetadata {
+  value: SupportedLanguage;
+}
+
+const languageIconSources: Record<SupportedLanguage, string> = {
+  python: new URL('./icons/python.svg', import.meta.url).href,
+  javascript: new URL('./icons/javascript.svg', import.meta.url).href,
+  typescript: new URL('./icons/typescript.svg', import.meta.url).href,
+  java: new URL('./icons/java.svg', import.meta.url).href,
+  cpp: new URL('./icons/cplusplus.svg', import.meta.url).href,
+  c: new URL('./icons/c.svg', import.meta.url).href,
+  go: new URL('./icons/go.svg', import.meta.url).href,
+  rust: new URL('./icons/rust.svg', import.meta.url).href,
+};
+
+export const LANGUAGE_VERSIONED_LABELS: Record<SupportedLanguage, string> = {
+  python: 'Python 3.12',
+  javascript: 'JavaScript (Node.js 20)',
+  typescript: 'TypeScript (TSX)',
+  java: 'Java 21',
+  cpp: 'C++ (GCC 13)',
+  c: 'C (GCC 13)',
+  go: 'Go 1.22',
+  rust: 'Rust 1.77',
+};
+
+export const LANGUAGE_SELECTOR_METADATA: Record<SupportedLanguage, LanguageSelectorMetadata> = {
+  python: {
+    label: 'Python',
+    shortLabel: 'Py',
+    fallbackIconText: 'Py',
+    iconSrc: languageIconSources.python,
+    isRunnable: true,
+  },
+  javascript: {
+    label: 'JavaScript',
+    shortLabel: 'JS',
+    fallbackIconText: 'JS',
+    iconSrc: languageIconSources.javascript,
+    isRunnable: true,
+  },
+  typescript: {
+    label: 'TypeScript',
+    shortLabel: 'TS',
+    fallbackIconText: 'TS',
+    iconSrc: languageIconSources.typescript,
+    isRunnable: true,
+  },
+  java: {
+    label: 'Java',
+    shortLabel: 'J',
+    fallbackIconText: 'J',
+    iconSrc: languageIconSources.java,
+    isRunnable: true,
+  },
+  cpp: {
+    label: 'C++',
+    shortLabel: 'C++',
+    fallbackIconText: 'C++',
+    iconSrc: languageIconSources.cpp,
+    iconClassName: 'h-4.5 w-4.5',
+    isRunnable: true,
+  },
+  c: {
+    label: 'C',
+    shortLabel: 'C',
+    fallbackIconText: 'C',
+    iconSrc: languageIconSources.c,
+    iconClassName: 'h-3 w-3',
+  },
+  go: {
+    label: 'Go',
+    shortLabel: 'Go',
+    fallbackIconText: 'Go',
+    iconSrc: languageIconSources.go,
+    iconClassName: 'h-4.5 w-4.5',
+  },
+  rust: {
+    label: 'Rust',
+    shortLabel: 'Rs',
+    fallbackIconText: 'Rs',
+    iconSrc: languageIconSources.rust,
+    iconClassName: 'h-4.5 w-4.5',
+  },
+};
+
+export function getLanguageSelectorOption(language: SupportedLanguage): LanguageSelectorOption {
+  return {
+    value: language,
+    ...LANGUAGE_SELECTOR_METADATA[language],
+  };
+}
+
+export function getLanguageSelectorOptions(
+  languages?: readonly SupportedLanguage[],
+): LanguageSelectorOption[] {
+  const allowedLanguages = languages ? new Set(languages) : null;
+
+  return SUPPORTED_LANGUAGES.filter((language) => {
+    return allowedLanguages ? allowedLanguages.has(language) : true;
+  }).map(getLanguageSelectorOption);
+}

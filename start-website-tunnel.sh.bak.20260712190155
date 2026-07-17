@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+set -euo pipefail
+APP_DIR="$HOME/Desktop/syncode-develop"
+SESSION="syncode-website"
+TUNNEL_NAME="deltawood"
+CLOUDFLARED_CONFIG="$HOME/.cloudflared/config.yml"
+ensure_cloudflared_config() {
+  mkdir -p "$HOME/.cloudflared"
+  cat > "$CLOUDFLARED_CONFIG" <<EOF
+ tunnel: a421a60d-edaf-4992-a9b6-71b551191547
+ credentials-file: /home/cybercraze/.cloudflared/a421a60d-edaf-4992-a9b6-71b551191547.json
+
+ ingress:
+   - hostname: deltawood.my
+     service: http://localhost:5173
+   - hostname: collab.deltawood.my
+     service: http://localhost:3001
+   - service: http_status:404
+EOF
+}
+TUNNEL_LOG="$APP_DIR/cloudflared.log"
+APP_LOG="$APP_DIR/app.log"
+STARTUP_LOG="$APP_DIR/startup.log"
+
+wait_for_container_health() {
+  local container="$1"
+  local status=""
+  for attempt in $(seq 1 90); do
+    status=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$container" 2>/dev/null || true)
+    if [ "$status" = "healthy" ] || [ "$status" = "running" ]; then
+      printf '[%s] %s is %s\n' "$(date -Is)" "$container" "$status"
+      return 0
+    fi
+    printf '[%s] Waiting for %s, current status: %s\n' "$(date -Is)" "$container" "${status:-missing}"
+    sleep 2
+  done
+  printf '[%s] %s did not become healthy in time\n' "$(date -Is)" "$container"
+  docker logs --tail 80 "$container" 2>&1 || true
+  return 1
+}
+
+ensure_cloudflared_config
+
+cd "$APP_DIR"
+export PATH="$APP_DIR/analysis-tools/bin:$PATH"
+{
+  printf '[%s] Starting Docker backend services\n' "$(date -Is)"
+  docker-compose -f docker-compose.yml up -d
+  wait_for_container_health syncode-postgres
+  wait_for_container_health syncode-redis
+  wait_for_container_health syncode-seaweedfs
+  wait_for_container_health syncode-livekit
+  printf '[%s] Running database migrations\n' "$(date -Is)"
+  pnpm db:migrate
+} >> "$STARTUP_LOG" 2>&1
+
+tmux has-session -t "$SESSION" 2>/dev/null && tmux kill-session -t "$SESSION"
+: > "$TUNNEL_LOG"
+: > "$APP_LOG"
+tmux new-session -d -s "$SESSION" -n app "cd '$APP_DIR' && PATH='$APP_DIR/analysis-tools/bin:$PATH' pnpm dev 2>&1 | tee -a '$APP_LOG'"
+tmux split-window -t "$SESSION":0 -h "cd '$APP_DIR' && cloudflared tunnel --config '$CLOUDFLARED_CONFIG' --no-autoupdate run '$TUNNEL_NAME' 2>&1 | tee -a '$TUNNEL_LOG'"
+tmux select-layout -t "$SESSION":0 even-horizontal
+printf 'Started tmux session %s with tunnel %s\n' "$SESSION" "$TUNNEL_NAME"

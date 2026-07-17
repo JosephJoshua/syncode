@@ -1,0 +1,1 @@
+ALTER TABLE "code_snapshots" ADD COLUMN "phase" "room_status";

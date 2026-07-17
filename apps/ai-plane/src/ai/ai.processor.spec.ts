@@ -1,0 +1,934 @@
+import { Test } from '@nestjs/testing';
+import {
+  AI_CODE_ANALYSIS_QUEUE,
+  AI_CODE_ANALYSIS_RESULT_QUEUE,
+  AI_HINT_QUEUE,
+  AI_HINT_RESULT_QUEUE,
+  AI_INTERVIEW_QUEUE,
+  AI_INTERVIEW_RESULT_QUEUE,
+  AI_INTERVIEW_TRANSCRIPTION_QUEUE,
+  AI_INTERVIEW_TRANSCRIPTION_RESULT_QUEUE,
+  AI_REVIEW_QUEUE,
+  AI_REVIEW_RESULT_QUEUE,
+  AI_SESSION_REPORT_QUEUE,
+  AI_SESSION_REPORT_RESULT_QUEUE,
+  AI_WEAKNESS_ANALYSIS_QUEUE,
+  AI_WEAKNESS_ANALYSIS_RESULT_QUEUE,
+} from '@syncode/contracts';
+import type { IQueueService, IStorageService, QueueJob } from '@syncode/shared/ports';
+import { QUEUE_SERVICE, STORAGE_SERVICE } from '@syncode/shared/ports';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { LLM_PROVIDER } from '../llm/llm.constants.js';
+import { AiProcessor } from './ai.processor.js';
+import { AiService } from './ai.service.js';
+
+function createMockQueueService() {
+  const handlers = new Map<string, (job: QueueJob) => Promise<void>>();
+
+  const mock: Record<keyof IQueueService, ReturnType<typeof vi.fn>> = {
+    process: vi.fn((queueName: string, handler: (job: QueueJob) => Promise<void>) => {
+      handlers.set(queueName, handler);
+    }),
+    enqueue: vi.fn().mockResolvedValue('result-job-id'),
+    enqueueBulk: vi.fn().mockResolvedValue([]),
+    getJob: vi.fn().mockResolvedValue(null),
+    getDeadLetterJobs: vi.fn().mockResolvedValue([]),
+    retryDeadLetterJob: vi.fn().mockResolvedValue(undefined),
+    retryAllDeadLetterJobs: vi.fn().mockResolvedValue(0),
+    purgeDeadLetterQueue: vi.fn().mockResolvedValue(0),
+    getQueueStats: vi.fn().mockResolvedValue({
+      waiting: 0,
+      active: 0,
+      completed: 0,
+      failed: 0,
+      delayed: 0,
+      paused: 0,
+    }),
+    drain: vi.fn().mockResolvedValue(undefined),
+    pause: vi.fn().mockResolvedValue(undefined),
+    resume: vi.fn().mockResolvedValue(undefined),
+    shutdown: vi.fn().mockResolvedValue(undefined),
+    registerEventHandlers: vi.fn(),
+  };
+
+  return { mock, handlers };
+}
+
+function createFakeJob<T>(data: T, id = 'job-123'): QueueJob<T> {
+  return {
+    id,
+    name: 'test-job',
+    data,
+    attemptsMade: 0,
+    maxAttempts: 3,
+    timestamp: Date.now(),
+  };
+}
+
+function createDeferred<T = void>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
+function createMockStorageService(): IStorageService {
+  return {
+    upload: vi.fn().mockResolvedValue(undefined),
+    download: vi.fn().mockResolvedValue(Buffer.from('')),
+    delete: vi.fn().mockResolvedValue(undefined),
+    deleteMany: vi.fn().mockResolvedValue({ deleted: [], failed: [] }),
+    exists: vi.fn().mockResolvedValue(true),
+    getMetadata: vi.fn().mockResolvedValue(null),
+    list: vi.fn().mockResolvedValue({ keys: [], isTruncated: false }),
+    copy: vi.fn().mockResolvedValue(undefined),
+    getUploadUrl: vi.fn().mockResolvedValue('https://storage.example/upload'),
+    getDownloadUrl: vi.fn().mockResolvedValue('https://storage.example/interview-audio.mp3'),
+    shutdown: vi.fn().mockResolvedValue(undefined),
+  };
+}
+
+const resultJobOptions = {
+  attempts: 3,
+  backoff: { type: 'exponential', delay: 1500 },
+  removeOnComplete: 100,
+  removeOnFail: false,
+};
+
+describe('AiProcessor', () => {
+  const { mock: mockQueueService, handlers } = createMockQueueService();
+
+  let processor: AiProcessor;
+  let aiService: AiService;
+
+  beforeAll(async () => {
+    const module = await Test.createTestingModule({
+      providers: [
+        AiProcessor,
+        AiService,
+        { provide: QUEUE_SERVICE, useValue: mockQueueService },
+        {
+          provide: LLM_PROVIDER,
+          useValue: {
+            generateText: vi
+              .fn()
+              .mockImplementation(
+                async (input: {
+                  maxOutputTokens?: number;
+                  messages?: Array<{ role: string; content: string }>;
+                }) => {
+                  const systemMessage =
+                    input.messages?.find((message) => message.role === 'system')?.content ?? '';
+                  if (
+                    systemMessage.includes(
+                      'You are a senior software engineer conducting a realistic live interview for a company hiring loop.',
+                    ) &&
+                    input.maxOutputTokens === 700
+                  ) {
+                    return {
+                      text: JSON.stringify({
+                        shouldRespond: true,
+                        message: 'Can you explain the invariant your map maintains?',
+                        followUpQuestion:
+                          'Why is checking the complement before inserting the current value safe?',
+                        codeContext: {
+                          language: 'typescript',
+                          file: 'solution.ts',
+                          codeSnippet: 'function twoSum() {}',
+                          startLine: 1,
+                          endLine: 1,
+                          questionType: 'correctness',
+                          reason: 'Invariant follow-up',
+                        },
+                        codeAnnotations: [{ line: 1, comment: 'Name the state you are tracking.' }],
+                      }),
+                      model: 'qwen3.5-mini',
+                    };
+                  }
+
+                  if (input.maxOutputTokens === 600) {
+                    return {
+                      text: JSON.stringify({
+                        message: 'Can you explain the invariant your map maintains?',
+                        followUpQuestion:
+                          'Why is checking the complement before inserting the current value safe?',
+                        codeContext: {
+                          language: 'typescript',
+                          file: 'solution.ts',
+                          codeSnippet: 'function twoSum() {}',
+                          startLine: 1,
+                          endLine: 1,
+                          questionType: 'correctness',
+                          reason: 'Invariant follow-up',
+                        },
+                        codeAnnotations: [{ line: 1, comment: 'Name the state you are tracking.' }],
+                      }),
+                      model: 'qwen3.5-mini',
+                    };
+                  }
+
+                  if (input.maxOutputTokens === 700) {
+                    return {
+                      text: JSON.stringify({
+                        summary:
+                          'The implementation should be discussed through complexity, edge cases, and readability.',
+                        focusAreas: {
+                          complexity: 'Ask the candidate to justify the dominant operation.',
+                          edgeCases: 'Probe empty input and duplicate-value behavior.',
+                          readability:
+                            'Ask which state names make the approach easiest to explain.',
+                        },
+                        followUpQuestions: [
+                          'What operation dominates the time complexity?',
+                          'Which duplicate-value case would you test first?',
+                        ],
+                      }),
+                      model: 'qwen3.5-mini',
+                    };
+                  }
+
+                  if (input.maxOutputTokens === 900) {
+                    return {
+                      text: JSON.stringify({
+                        summary: 'Edge-case reasoning and communication need repeated attention.',
+                        recurringPatterns: [
+                          'Boundary cases are discussed after implementation instead of before.',
+                        ],
+                        weaknesses: [
+                          {
+                            category: 'edge_cases',
+                            description:
+                              'The candidate should identify boundary cases before submitting.',
+                            evidence:
+                              'The session included a submission before edge cases were named.',
+                            trend: 'stable',
+                          },
+                        ],
+                      }),
+                      model: 'qwen3.5-mini',
+                    };
+                  }
+
+                  if (input.maxOutputTokens === 2500) {
+                    return {
+                      text: JSON.stringify({
+                        overallScore: 82,
+                        dimensions: {
+                          correctness: {
+                            score: 84,
+                            feedback: 'Correctness',
+                            evidence: [
+                              {
+                                type: 'code_line',
+                                reference: 'L1: function twoSum() { return [0, 1]; }',
+                                description: 'The final code returns a pair of indices.',
+                              },
+                            ],
+                          },
+                          efficiency: {
+                            score: 78,
+                            feedback: 'Efficiency',
+                            evidence: [
+                              {
+                                type: 'code_line',
+                                reference: 'L1: function twoSum() { return [0, 1]; }',
+                                description: 'The final code is compact enough to inspect.',
+                              },
+                            ],
+                          },
+                          codeQuality: {
+                            score: 80,
+                            feedback: 'Code quality',
+                            evidence: [
+                              {
+                                type: 'code_line',
+                                reference: 'L1: function twoSum() { return [0, 1]; }',
+                                description: 'The final code is readable in the final snapshot.',
+                              },
+                            ],
+                          },
+                          communication: {
+                            score: 76,
+                            feedback: 'Communication',
+                            evidence: [
+                              {
+                                type: 'event_timestamp',
+                                reference: '2026-04-20T01:01:00.000Z',
+                                description: 'The session timeline includes a wrap-up transition.',
+                              },
+                            ],
+                          },
+                          problemSolving: {
+                            score: 83,
+                            feedback: 'Problem solving',
+                            evidence: [
+                              {
+                                type: 'code_line',
+                                reference: 'L1: function twoSum() { return [0, 1]; }',
+                                description: 'The final code shows the selected approach.',
+                              },
+                            ],
+                          },
+                        },
+                        strengths: ['Strong iteration'],
+                        areasForImprovement: ['Explain tradeoffs earlier'],
+                        detailedFeedback: 'Detailed feedback',
+                        comparisonToHistory: null,
+                        peerFeedbackSummary: null,
+                      }),
+                      model: 'qwen3.5-mini',
+                    };
+                  }
+
+                  return {
+                    text: JSON.stringify({
+                      hint: 'Consider storing seen values in a map.',
+                      suggestedApproach: 'Track complement values while iterating.',
+                    }),
+                    model: 'qwen3.5-mini',
+                  };
+                },
+              ),
+            generateSpeech: vi.fn().mockResolvedValue({
+              audio: Buffer.from('speech-bytes'),
+              model: 'qwen-tts',
+              mimeType: 'audio/mpeg',
+            }),
+            generateTranscription: vi.fn().mockResolvedValue({
+              text: 'transcribed answer',
+              model: 'glm-asr',
+            }),
+          },
+        },
+        {
+          provide: STORAGE_SERVICE,
+          useValue: createMockStorageService(),
+        },
+      ],
+    }).compile();
+
+    processor = module.get(AiProcessor);
+    aiService = module.get(AiService);
+  });
+
+  describe('onModuleInit', () => {
+    it('GIVEN the processor WHEN onModuleInit is called THEN registers handlers on all 7 queues', () => {
+      processor.onModuleInit();
+
+      expect(mockQueueService.process).toHaveBeenCalledTimes(7);
+      expect(handlers.has(AI_HINT_QUEUE)).toBe(true);
+      expect(handlers.has(AI_CODE_ANALYSIS_QUEUE)).toBe(true);
+      expect(handlers.has(AI_WEAKNESS_ANALYSIS_QUEUE)).toBe(true);
+      expect(handlers.has(AI_REVIEW_QUEUE)).toBe(true);
+      expect(handlers.has(AI_INTERVIEW_QUEUE)).toBe(true);
+      expect(handlers.has(AI_INTERVIEW_TRANSCRIPTION_QUEUE)).toBe(true);
+      expect(handlers.has(AI_SESSION_REPORT_QUEUE)).toBe(true);
+
+      const sessionReportProcessCall = mockQueueService.process.mock.calls.find(
+        ([queueName]) => queueName === AI_SESSION_REPORT_QUEUE,
+      );
+
+      expect(sessionReportProcessCall?.[2]).toEqual({ concurrency: 1 });
+    });
+  });
+
+  describe('global concurrency cap', () => {
+    it('GIVEN 6 jobs across multiple queues WHEN processed in parallel THEN at most 5 run concurrently', async () => {
+      processor.onModuleInit();
+      mockQueueService.enqueue.mockClear();
+
+      const hintHandler = handlers.get(AI_HINT_QUEUE)!;
+      const reviewHandler = handlers.get(AI_REVIEW_QUEUE)!;
+      const interviewHandler = handlers.get(AI_INTERVIEW_QUEUE)!;
+
+      const blockers = Array.from({ length: 6 }, () => createDeferred<void>());
+      let nextBlockerIndex = 0;
+      let activeJobs = 0;
+      let maxActiveJobs = 0;
+
+      const waitInCriticalSection = async () => {
+        const blockerIndex = nextBlockerIndex++;
+        activeJobs += 1;
+        maxActiveJobs = Math.max(maxActiveJobs, activeJobs);
+        await blockers[blockerIndex]?.promise;
+        activeJobs -= 1;
+      };
+
+      const hintSpy = vi.spyOn(aiService, 'generateHint').mockImplementation(async () => {
+        await waitInCriticalSection();
+        return {
+          hint: 'Hint',
+          suggestedApproach: 'Approach',
+        };
+      });
+
+      const reviewSpy = vi.spyOn(aiService, 'reviewCode').mockImplementation(async () => {
+        await waitInCriticalSection();
+        return {
+          overallScore: 80,
+          summary: 'Solid implementation.',
+          categories: [],
+        };
+      });
+
+      const interviewSpy = vi
+        .spyOn(aiService, 'generateInterviewResponse')
+        .mockImplementation(async () => {
+          await waitInCriticalSection();
+          return {
+            shouldRespond: true,
+            message: 'Can you explain your approach?',
+          };
+        });
+
+      try {
+        const jobs = [
+          hintHandler(
+            createFakeJob({
+              roomId: 'room-1',
+              participantId: 'user-1',
+              problemDescription: 'Two Sum',
+              currentCode: 'function twoSum() {}',
+              language: 'typescript',
+              hintLevel: 'gentle',
+            }),
+          ),
+          hintHandler(
+            createFakeJob({
+              roomId: 'room-2',
+              participantId: 'user-2',
+              problemDescription: 'Two Sum',
+              currentCode: 'function twoSum() {}',
+              language: 'typescript',
+              hintLevel: 'gentle',
+            }),
+          ),
+          reviewHandler(
+            createFakeJob({
+              roomId: 'room-3',
+              participantId: 'user-3',
+              problemDescription: 'Two Sum',
+              code: 'function twoSum() {}',
+              language: 'typescript',
+            }),
+          ),
+          reviewHandler(
+            createFakeJob({
+              roomId: 'room-4',
+              participantId: 'user-4',
+              problemDescription: 'Two Sum',
+              code: 'function twoSum() {}',
+              language: 'typescript',
+            }),
+          ),
+          interviewHandler(
+            createFakeJob({
+              roomId: 'room-5',
+              participantId: 'user-5',
+              problemDescription: 'Two Sum',
+              currentCode: 'function twoSum() {}',
+              language: 'typescript',
+              userMessage: 'I am using a map.',
+              conversationHistory: [],
+            }),
+          ),
+          interviewHandler(
+            createFakeJob({
+              roomId: 'room-6',
+              participantId: 'user-6',
+              problemDescription: 'Two Sum',
+              currentCode: 'function twoSum() {}',
+              language: 'typescript',
+              userMessage: 'I am using a set.',
+              conversationHistory: [],
+            }),
+          ),
+        ];
+
+        for (let attempt = 0; attempt < 20 && maxActiveJobs < 5; attempt += 1) {
+          await new Promise<void>((resolve) => {
+            setTimeout(resolve, 0);
+          });
+        }
+        expect(maxActiveJobs).toBe(5);
+
+        for (const blocker of blockers) {
+          blocker.resolve();
+        }
+        await Promise.all(jobs);
+
+        expect(maxActiveJobs).toBe(5);
+      } finally {
+        hintSpy.mockRestore();
+        reviewSpy.mockRestore();
+        interviewSpy.mockRestore();
+      }
+    });
+
+    it('GIVEN many batch jobs WHEN realtime job arrives THEN reserved realtime slots keep it responsive', async () => {
+      processor.onModuleInit();
+      mockQueueService.enqueue.mockClear();
+
+      const weaknessHandler = handlers.get(AI_WEAKNESS_ANALYSIS_QUEUE)!;
+      const hintHandler = handlers.get(AI_HINT_QUEUE)!;
+
+      const blockers = Array.from({ length: 6 }, () => createDeferred<void>());
+      let blockerIndex = 0;
+      let startedBatchJobs = 0;
+      let startedRealtimeJobs = 0;
+
+      const blockUntilReleased = async () => {
+        const current = blockerIndex++;
+        await blockers[current]?.promise;
+      };
+
+      const weaknessSpy = vi
+        .spyOn(aiService, 'generateWeaknessAnalysis')
+        .mockImplementation(async () => {
+          startedBatchJobs += 1;
+          await blockUntilReleased();
+          return {
+            sessionId: 'session-1',
+            participantId: 'user-1',
+            reportedAt: '2026-04-20T00:00:00.000Z',
+            summary: 'summary',
+            recurringPatterns: [],
+            weaknesses: [],
+          };
+        });
+
+      const hintSpy = vi.spyOn(aiService, 'generateHint').mockImplementation(async () => {
+        startedRealtimeJobs += 1;
+        await blockUntilReleased();
+        return {
+          hint: 'Hint',
+          suggestedApproach: 'Approach',
+        };
+      });
+
+      const makeWeaknessJob = (id: string) =>
+        createFakeJob(
+          {
+            sessionId: id,
+            roomId: `room-${id}`,
+            participantId: 'user-1',
+            participantRole: 'candidate',
+            sessionReportGeneratedAt: '2026-04-20T06:00:00.000Z',
+            problem: {
+              id: 'problem-1',
+              title: 'Two Sum',
+              description: 'Find two numbers.',
+              difficulty: 'easy',
+              constraints: null,
+            },
+            language: 'typescript',
+            durationMs: 120000,
+            snapshots: [],
+            runs: [],
+            submissions: [],
+            peerFeedback: [],
+            aiMessages: [],
+            sessionReportSummary: {
+              overallScore: 72,
+              feedback: 'Needs better edge-case reasoning.',
+            },
+            historicalWeaknesses: [],
+          },
+          `weakness-job-${id}`,
+        );
+
+      try {
+        const batchJobs = [
+          weaknessHandler(makeWeaknessJob('session-1')),
+          weaknessHandler(makeWeaknessJob('session-2')),
+          weaknessHandler(makeWeaknessJob('session-3')),
+          weaknessHandler(makeWeaknessJob('session-4')),
+          weaknessHandler(makeWeaknessJob('session-5')),
+        ];
+
+        for (let attempt = 0; attempt < 20 && startedBatchJobs < 3; attempt += 1) {
+          await new Promise<void>((resolve) => {
+            setTimeout(resolve, 0);
+          });
+        }
+        expect(startedBatchJobs).toBe(3);
+
+        const realtimeJob = hintHandler(
+          createFakeJob(
+            {
+              roomId: 'room-realtime',
+              participantId: 'user-realtime',
+              problemDescription: 'Two Sum',
+              currentCode: 'function twoSum() {}',
+              language: 'typescript',
+              hintLevel: 'gentle',
+            },
+            'hint-job-realtime',
+          ),
+        );
+
+        for (let attempt = 0; attempt < 20 && startedRealtimeJobs < 1; attempt += 1) {
+          await new Promise<void>((resolve) => {
+            setTimeout(resolve, 0);
+          });
+        }
+        expect(startedRealtimeJobs).toBe(1);
+
+        for (const blocker of blockers) {
+          blocker.resolve();
+        }
+
+        await Promise.all([...batchJobs, realtimeJob]);
+      } finally {
+        weaknessSpy.mockRestore();
+        hintSpy.mockRestore();
+      }
+    });
+  });
+
+  describe('hint job processing', () => {
+    it('GIVEN a hint job WHEN the handler processes it THEN enqueues result to AI_HINT_RESULT_QUEUE with jobId', async () => {
+      processor.onModuleInit();
+
+      const handler = handlers.get(AI_HINT_QUEUE)!;
+      const job = createFakeJob(
+        {
+          roomId: 'room-1',
+          participantId: 'user-1',
+          problemDescription: 'Two Sum',
+          currentCode: 'function twoSum() {}',
+          codeContext: {
+            language: 'typescript',
+            file: 'solution.ts',
+            codeSnippet: 'function twoSum() {}',
+            startLine: 1,
+            endLine: 1,
+            questionType: 'correctness',
+          },
+          language: 'typescript',
+          hintLevel: 'gentle',
+        },
+        'hint-job-1',
+      );
+
+      await handler(job);
+
+      expect(mockQueueService.enqueue).toHaveBeenCalledWith(
+        AI_HINT_RESULT_QUEUE,
+        'hint-result',
+        expect.objectContaining({ jobId: 'hint-job-1', hint: expect.any(String) }),
+        resultJobOptions,
+      );
+    });
+  });
+
+  describe('code analysis job processing', () => {
+    it('GIVEN a code analysis job WHEN the handler processes it THEN enqueues result to AI_CODE_ANALYSIS_RESULT_QUEUE with jobId', async () => {
+      processor.onModuleInit();
+      mockQueueService.enqueue.mockClear();
+
+      const handler = handlers.get(AI_CODE_ANALYSIS_QUEUE)!;
+      const job = createFakeJob(
+        {
+          roomId: 'room-1',
+          participantId: 'user-1',
+          problemDescription: 'Two Sum',
+          code: 'function twoSum(nums, target) { return []; }',
+          language: 'typescript',
+        },
+        'code-analysis-job-1',
+      );
+
+      await handler(job);
+
+      expect(mockQueueService.enqueue).toHaveBeenCalledWith(
+        AI_CODE_ANALYSIS_RESULT_QUEUE,
+        'code-analysis-result',
+        expect.objectContaining({
+          jobId: 'code-analysis-job-1',
+          summary: expect.any(String),
+          followUpQuestions: expect.any(Array),
+        }),
+        resultJobOptions,
+      );
+    });
+  });
+
+  describe('weakness analysis job processing', () => {
+    it('GIVEN a weakness analysis job WHEN the handler processes it THEN enqueues result to AI_WEAKNESS_ANALYSIS_RESULT_QUEUE with jobId', async () => {
+      processor.onModuleInit();
+      mockQueueService.enqueue.mockClear();
+
+      const handler = handlers.get(AI_WEAKNESS_ANALYSIS_QUEUE)!;
+      const job = createFakeJob(
+        {
+          sessionId: '550e8400-e29b-41d4-a716-446655440000',
+          roomId: '660e8400-e29b-41d4-a716-446655440000',
+          participantId: '770e8400-e29b-41d4-a716-446655440000',
+          participantRole: 'candidate',
+          sessionReportGeneratedAt: '2026-04-20T06:00:00.000Z',
+          problem: {
+            id: '880e8400-e29b-41d4-a716-446655440000',
+            title: 'Two Sum',
+            description: 'Find two numbers.',
+            difficulty: 'easy',
+            constraints: null,
+          },
+          language: 'typescript',
+          durationMs: 120000,
+          snapshots: [],
+          runs: [],
+          submissions: [],
+          peerFeedback: [],
+          aiMessages: [],
+          sessionReportSummary: {
+            overallScore: 72,
+            feedback: 'Candidate solved the main case but discussed edge cases late.',
+          },
+          historicalWeaknesses: [],
+        },
+        'weakness-analysis-job-1',
+      );
+
+      await handler(job);
+
+      expect(mockQueueService.enqueue).toHaveBeenCalledWith(
+        AI_WEAKNESS_ANALYSIS_RESULT_QUEUE,
+        'weakness-analysis-result',
+        expect.objectContaining({
+          jobId: 'weakness-analysis-job-1',
+          sessionId: '550e8400-e29b-41d4-a716-446655440000',
+          participantId: '770e8400-e29b-41d4-a716-446655440000',
+          reportedAt: '2026-04-20T06:00:00.000Z',
+          summary: expect.any(String),
+          recurringPatterns: expect.any(Array),
+          weaknesses: expect.any(Array),
+        }),
+        resultJobOptions,
+      );
+    });
+  });
+
+  describe('review job processing', () => {
+    it('GIVEN a review job WHEN the handler processes it THEN enqueues result to AI_REVIEW_RESULT_QUEUE with jobId', async () => {
+      processor.onModuleInit();
+      mockQueueService.enqueue.mockClear();
+
+      const handler = handlers.get(AI_REVIEW_QUEUE)!;
+      const job = createFakeJob(
+        {
+          roomId: 'room-1',
+          participantId: 'user-1',
+          problemDescription: 'Two Sum',
+          code: 'function twoSum() { return [0, 1]; }',
+          language: 'typescript',
+        },
+        'review-job-1',
+      );
+
+      await handler(job);
+
+      expect(mockQueueService.enqueue).toHaveBeenCalledWith(
+        AI_REVIEW_RESULT_QUEUE,
+        'review-result',
+        expect.objectContaining({
+          jobId: 'review-job-1',
+          overallScore: expect.any(Number),
+          categories: expect.any(Array),
+        }),
+        resultJobOptions,
+      );
+    });
+  });
+
+  describe('interview job processing', () => {
+    it('GIVEN an interview job WHEN the handler processes it THEN enqueues result to AI_INTERVIEW_RESULT_QUEUE with jobId', async () => {
+      processor.onModuleInit();
+      mockQueueService.enqueue.mockClear();
+
+      const handler = handlers.get(AI_INTERVIEW_QUEUE)!;
+      const job = createFakeJob(
+        {
+          roomId: 'room-1',
+          participantId: 'user-1',
+          problemDescription: 'Two Sum',
+          currentCode: 'function twoSum() {}',
+          codeContext: {
+            language: 'typescript',
+            file: 'solution.ts',
+            codeSnippet: 'function twoSum() {}',
+            startLine: 1,
+            endLine: 1,
+            questionType: 'correctness',
+          },
+          language: 'typescript',
+          conversationHistory: [],
+          userMessage: 'I will use a hash map.',
+        },
+        'interview-job-1',
+      );
+
+      await handler(job);
+
+      expect(mockQueueService.enqueue).toHaveBeenCalledWith(
+        AI_INTERVIEW_RESULT_QUEUE,
+        'interview-result',
+        expect.objectContaining({
+          jobId: 'interview-job-1',
+          message: expect.stringContaining('invariant your map maintains'),
+          shouldRespond: true,
+          followUpQuestion:
+            'Why is checking the complement before inserting the current value safe?',
+          codeContext: expect.objectContaining({
+            file: 'solution.ts',
+            startLine: 1,
+            endLine: 1,
+          }),
+          codeAnnotations: [{ line: 1, comment: 'Name the state you are tracking.' }],
+          audio: expect.objectContaining({
+            downloadUrl: 'https://storage.example/interview-audio.mp3',
+          }),
+        }),
+        resultJobOptions,
+      );
+    });
+  });
+
+  describe('session report job processing', () => {
+    it('GIVEN a session report job WHEN the handler processes it THEN enqueues result to AI_SESSION_REPORT_RESULT_QUEUE with jobId', async () => {
+      processor.onModuleInit();
+      mockQueueService.enqueue.mockClear();
+
+      const handler = handlers.get(AI_SESSION_REPORT_QUEUE)!;
+      const job = createFakeJob(
+        {
+          sessionId: '550e8400-e29b-41d4-a716-446655440000',
+          roomId: '660e8400-e29b-41d4-a716-446655440000',
+          participantId: '770e8400-e29b-41d4-a716-446655440000',
+          participantRole: 'candidate',
+          participants: [
+            {
+              userId: '770e8400-e29b-41d4-a716-446655440000',
+              username: 'alice',
+              displayName: 'Alice',
+              role: 'candidate',
+            },
+          ],
+          problem: {
+            id: '880e8400-e29b-41d4-a716-446655440000',
+            title: 'Two Sum',
+            description: 'Find two numbers.',
+            difficulty: 'easy',
+            constraints: null,
+          },
+          language: 'typescript',
+          durationMs: 120000,
+          startedAt: '2026-04-20T01:00:00.000Z',
+          finishedAt: '2026-04-20T01:02:00.000Z',
+          snapshots: [],
+          runs: [],
+          submissions: [],
+          finalCodeSnapshot: {
+            snapshotId: '990e8400-e29b-41d4-a716-446655440000',
+            timestamp: '2026-04-20T01:01:50.000Z',
+            trigger: 'session_end',
+            language: 'typescript',
+            code: 'function twoSum() { return [0, 1]; }',
+            linesOfCode: 1,
+            phase: 'finished',
+          },
+          sessionEvents: [
+            {
+              eventType: 'stage_transition',
+              timestamp: '2026-04-20T01:01:00.000Z',
+              details: 'coding -> wrapup',
+              metadata: {
+                fromStage: 'coding',
+                toStage: 'wrapup',
+                trigger: 'phase_change',
+              },
+            },
+          ],
+          finalTestCaseBreakdown: [
+            {
+              testCaseIndex: 0,
+              input: 'nums = [2,7,11,15], target = 9',
+              description: 'Basic case',
+              isHidden: false,
+              passed: true,
+              expectedOutput: '[0,1]',
+              actualOutput: '[0,1]',
+              stdout: '[0,1]\\n',
+              stderr: '',
+              exitCode: 0,
+              durationMs: 12,
+              memoryUsageMb: 8.5,
+              timedOut: false,
+              errorMessage: null,
+            },
+          ],
+          peerFeedback: [],
+          aiMessages: [],
+          historicalContext: null,
+        },
+        'session-report-job-1',
+      );
+
+      await handler(job);
+
+      expect(mockQueueService.enqueue).toHaveBeenCalledWith(
+        AI_SESSION_REPORT_RESULT_QUEUE,
+        'session-report-result',
+        expect.objectContaining({
+          jobId: 'session-report-job-1',
+          sessionId: '550e8400-e29b-41d4-a716-446655440000',
+          overallScore: expect.any(Number),
+          testCaseBreakdown: [
+            expect.objectContaining({
+              testCaseIndex: 0,
+              passed: true,
+              timedOut: false,
+              errorMessage: null,
+            }),
+          ],
+        }),
+        resultJobOptions,
+      );
+    });
+  });
+
+  describe('interview transcription job processing', () => {
+    it('GIVEN an interview transcription job WHEN processed THEN enqueues result to transcription result queue', async () => {
+      processor.onModuleInit();
+      mockQueueService.enqueue.mockClear();
+
+      const handler = handlers.get(AI_INTERVIEW_TRANSCRIPTION_QUEUE)!;
+      const job = createFakeJob(
+        {
+          roomId: 'room-1',
+          sessionId: 'session-1',
+          participantId: 'user-1',
+          audioBase64: Buffer.from('audio').toString('base64'),
+          mimeType: 'audio/webm',
+          language: 'en-US',
+        },
+        'interview-transcription-job-1',
+      );
+
+      await handler(job);
+
+      expect(mockQueueService.enqueue).toHaveBeenCalledWith(
+        AI_INTERVIEW_TRANSCRIPTION_RESULT_QUEUE,
+        'interview-transcription-result',
+        expect.objectContaining({
+          jobId: 'interview-transcription-job-1',
+          text: 'transcribed answer',
+        }),
+        resultJobOptions,
+      );
+    });
+  });
+});

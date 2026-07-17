@@ -1,0 +1,882 @@
+/**
+ * ONLY FOR DEMO PURPOSES — DO NOT USE AS A PRODUCTION SEED
+ */
+
+import { randomBytes, scrypt } from 'node:crypto';
+import { promisify } from 'node:util';
+import { and, eq, inArray, notLike, sql } from 'drizzle-orm';
+import { drizzle } from 'drizzle-orm/postgres-js';
+import postgres from 'postgres';
+import * as schema from './schema/index.js';
+
+const databaseUrl = process.env.DATABASE_URL;
+
+if (!databaseUrl) {
+  console.error('DATABASE_URL environment variable is required');
+  process.exit(1);
+}
+
+const client = postgres(databaseUrl, { max: 1 });
+const db = drizzle(client, { schema });
+
+const scryptAsync = promisify(scrypt);
+
+// Matches the runtime format used by auth.service.ts so seeded users can log in.
+async function hashPassword(password: string): Promise<string> {
+  const salt = randomBytes(16).toString('hex');
+  const derivedKey = (await scryptAsync(password, salt, 64)) as Buffer;
+  return `${salt}:${derivedKey.toString('hex')}`;
+}
+
+const demoPassword = await hashPassword('password123');
+
+const usersData = [
+  {
+    email: 'alice@example.com',
+    username: 'alice',
+    passwordHash: demoPassword,
+    displayName: 'Alice Chen',
+    role: 'admin' as const,
+    bio: 'Platform admin and interview coach.',
+  },
+  {
+    email: 'bob@example.com',
+    username: 'bob',
+    passwordHash: demoPassword,
+    displayName: 'Bob Zhang',
+    role: 'user' as const,
+    bio: 'CS senior preparing for SWE interviews.',
+  },
+  {
+    email: 'carol@example.com',
+    username: 'carol',
+    passwordHash: demoPassword,
+    displayName: 'Carol Li',
+    role: 'user' as const,
+    bio: 'Graduate student focused on algorithms.',
+  },
+  {
+    email: 'dave@example.com',
+    username: 'dave',
+    passwordHash: demoPassword,
+    displayName: 'Dave Wang',
+    role: 'user' as const,
+    bio: 'Freshman learning data structures.',
+  },
+];
+
+// ---------------------------------------------------------------------------
+// Tags
+// ---------------------------------------------------------------------------
+const tagsData = [
+  { name: 'Array', slug: 'array' },
+  { name: 'String', slug: 'string' },
+  { name: 'Hash Table', slug: 'hash-table' },
+  { name: 'Linked List', slug: 'linked-list' },
+  { name: 'Stack', slug: 'stack' },
+  { name: 'Queue', slug: 'queue' },
+  { name: 'Tree', slug: 'tree' },
+  { name: 'Binary Search', slug: 'binary-search' },
+  { name: 'Dynamic Programming', slug: 'dynamic-programming' },
+  { name: 'Graph', slug: 'graph' },
+  { name: 'Sorting', slug: 'sorting' },
+  { name: 'Greedy', slug: 'greedy' },
+  { name: 'Two Pointers', slug: 'two-pointers' },
+  { name: 'Sliding Window', slug: 'sliding-window' },
+  { name: 'Recursion', slug: 'recursion' },
+  { name: 'Math', slug: 'math' },
+];
+
+// ---------------------------------------------------------------------------
+// Problems — classic interview questions with test cases & starter code
+// ---------------------------------------------------------------------------
+interface ProblemSeed {
+  title: string;
+  description: string;
+  difficulty: 'easy' | 'medium' | 'hard';
+  company: string | null;
+  constraints: string | null;
+  examples: { input: string; output: string; explanation?: string }[];
+  starterCode: Record<string, string>;
+  timeLimit: number;
+  memoryLimit: number;
+  tags: string[]; // tag slugs
+  testCases: {
+    input: string;
+    expectedOutput: string;
+    description?: string;
+    isHidden: boolean;
+    sortOrder: number;
+  }[];
+}
+
+const problemsData: ProblemSeed[] = [
+  // ---- Easy ---------------------------------------------------------------
+  {
+    title: 'Two Sum',
+    description: [
+      'Given an array of N integers and a target, find two 0-based indices whose values sum to the target.',
+      '',
+      'You may assume each input has exactly one solution, and you may not use the same element twice.',
+      '',
+      '## Input Format',
+      'The first line contains two integers N and target.',
+      'The second line contains N space-separated integers a[0], a[1], ..., a[N-1].',
+      '',
+      '## Output Format',
+      'Print two 0-based indices i and j with i < j such that a[i] + a[j] = target.',
+    ].join('\n'),
+    difficulty: 'easy',
+    company: 'Google',
+    constraints:
+      '2 <= N <= 10^4\n-10^9 <= a[i] <= 10^9\n-10^9 <= target <= 10^9\nExactly one valid answer exists.',
+    examples: [
+      {
+        input: '4 9\n2 7 11 15',
+        output: '0 1',
+        explanation: 'a[0] + a[1] = 2 + 7 = 9.',
+      },
+      { input: '3 6\n3 2 4', output: '1 2' },
+      { input: '2 6\n3 3', output: '0 1' },
+    ],
+    starterCode: {
+      python:
+        "import sys\n\ndef solve(nums, target):\n    # TODO: your solution here\n    return (0, 0)\n\ndef main():\n    data = sys.stdin.read().split()\n    n = int(data[0])\n    target = int(data[1])\n    nums = [int(x) for x in data[2:2 + n]]\n    i, j = solve(nums, target)\n    print(f'{i} {j}')\n\nif __name__ == '__main__':\n    main()\n",
+      javascript:
+        "import { readFileSync } from 'node:fs';\n\nconst tokens = readFileSync(0, 'utf-8').trim().split(/\\s+/);\nconst n = Number(tokens[0]);\nconst target = Number(tokens[1]);\nconst nums = tokens.slice(2, 2 + n).map(Number);\n\nfunction solve(nums, target) {\n  // TODO: your solution here\n  return [0, 0];\n}\n\nconst [i, j] = solve(nums, target);\nconsole.log(i + ' ' + j);\n",
+      typescript:
+        "import { readFileSync } from 'node:fs';\n\nconst tokens = readFileSync(0, 'utf-8').trim().split(/\\s+/) as string[];\nconst n = Number(tokens[0]);\nconst target = Number(tokens[1]);\nconst nums: number[] = tokens.slice(2, 2 + n).map(Number);\n\nfunction solve(nums: number[], target: number): [number, number] {\n  // TODO: your solution here\n  return [0, 0];\n}\n\nconst [i, j] = solve(nums, target);\nconsole.log(i + ' ' + j);\n",
+      java: 'import java.util.*;\nimport java.io.*;\n\npublic class Main {\n    public static void main(String[] args) throws IOException {\n        StreamTokenizer in = new StreamTokenizer(new BufferedReader(new InputStreamReader(System.in)));\n        in.nextToken(); int n = (int) in.nval;\n        in.nextToken(); long target = (long) in.nval;\n        long[] nums = new long[n];\n        for (int k = 0; k < n; k++) {\n            in.nextToken();\n            nums[k] = (long) in.nval;\n        }\n        // TODO: your solution here\n        int i = 0, j = 0;\n        System.out.println(i + " " + j);\n    }\n}\n',
+      cpp: '#include <bits/stdc++.h>\nusing namespace std;\n\nint main() {\n    ios_base::sync_with_stdio(false);\n    cin.tie(nullptr);\n    int n;\n    long long target;\n    cin >> n >> target;\n    vector<long long> nums(n);\n    for (int k = 0; k < n; k++) cin >> nums[k];\n    // TODO: your solution here\n    int i = 0, j = 0;\n    cout << i << " " << j << endl;\n    return 0;\n}\n',
+      c: '#include <stdio.h>\n#include <stdlib.h>\n\nint main(void) {\n    int n;\n    long long target;\n    if (scanf("%d %lld", &n, &target) != 2) return 0;\n    long long *nums = (long long *) malloc((size_t) n * sizeof(long long));\n    for (int k = 0; k < n; k++) scanf("%lld", &nums[k]);\n    /* TODO: your solution here */\n    int i = 0, j = 0;\n    printf("%d %d\\n", i, j);\n    free(nums);\n    return 0;\n}\n',
+      go: 'package main\n\nimport (\n\t"bufio"\n\t"fmt"\n\t"os"\n)\n\nfunc main() {\n\treader := bufio.NewReader(os.Stdin)\n\tvar n int\n\tvar target int64\n\tfmt.Fscan(reader, &n, &target)\n\tnums := make([]int64, n)\n\tfor k := 0; k < n; k++ {\n\t\tfmt.Fscan(reader, &nums[k])\n\t}\n\t// TODO: your solution here\n\ti, j := 0, 0\n\tfmt.Printf("%d %d\\n", i, j)\n}\n',
+      rust: 'use std::io::{self, Read};\n\nfn main() {\n    let mut input = String::new();\n    io::stdin().read_to_string(&mut input).unwrap();\n    let mut iter = input.split_whitespace();\n    let n: usize = iter.next().unwrap().parse().unwrap();\n    let _target: i64 = iter.next().unwrap().parse().unwrap();\n    let nums: Vec<i64> = (0..n).map(|_| iter.next().unwrap().parse().unwrap()).collect();\n    let _ = nums;\n    // TODO: your solution here\n    let (i, j) = (0usize, 0usize);\n    println!("{} {}", i, j);\n}\n',
+    },
+    timeLimit: 5000,
+    memoryLimit: 256,
+    tags: ['array', 'hash-table'],
+    testCases: [
+      {
+        input: '4 9\n2 7 11 15',
+        expectedOutput: '0 1',
+        description: 'Basic case',
+        isHidden: false,
+        sortOrder: 0,
+      },
+      {
+        input: '3 6\n3 2 4',
+        expectedOutput: '1 2',
+        description: 'Non-adjacent elements',
+        isHidden: false,
+        sortOrder: 1,
+      },
+      {
+        input: '2 6\n3 3',
+        expectedOutput: '0 1',
+        description: 'Duplicate values',
+        isHidden: false,
+        sortOrder: 2,
+      },
+      {
+        input: '5 9\n1 5 3 7 2',
+        expectedOutput: '3 4',
+        description: 'Larger array',
+        isHidden: true,
+        sortOrder: 3,
+      },
+      {
+        input: '5 -8\n-1 -2 -3 -4 -5',
+        expectedOutput: '2 4',
+        description: 'Negative numbers',
+        isHidden: true,
+        sortOrder: 4,
+      },
+    ],
+  },
+  {
+    title: 'Valid Parentheses',
+    description: [
+      "Given a string s containing only the characters '(', ')', '{', '}', '[' and ']', determine if the input is valid.",
+      '',
+      'A string is valid when:',
+      '1. Each open bracket is closed by the same type of bracket.',
+      '2. Open brackets are closed in the correct order.',
+      '3. Every close bracket has a matching open bracket of the same type.',
+      '',
+      '## Input Format',
+      'A single line containing the string s (may be empty).',
+      '',
+      '## Output Format',
+      'Print YES if the string is valid, otherwise NO.',
+    ].join('\n'),
+    difficulty: 'easy',
+    company: 'Amazon',
+    constraints: '0 <= |s| <= 10^4\ns consists only of the characters (, ), {, }, [ and ].',
+    examples: [
+      { input: '()', output: 'YES' },
+      { input: '()[]{}', output: 'YES' },
+      { input: '(]', output: 'NO' },
+    ],
+    starterCode: {
+      python:
+        "import sys\n\ndef solve(s):\n    # TODO: your solution here\n    return False\n\ndef main():\n    s = sys.stdin.readline().rstrip('\\n')\n    print('YES' if solve(s) else 'NO')\n\nif __name__ == '__main__':\n    main()\n",
+      javascript:
+        "import { readFileSync } from 'node:fs';\n\nconst s = readFileSync(0, 'utf-8').split('\\n')[0] ?? '';\n\nfunction solve(s) {\n  // TODO: your solution here\n  return false;\n}\n\nconsole.log(solve(s) ? 'YES' : 'NO');\n",
+      typescript:
+        "import { readFileSync } from 'node:fs';\n\nconst s: string = readFileSync(0, 'utf-8').split('\\n')[0] ?? '';\n\nfunction solve(s: string): boolean {\n  // TODO: your solution here\n  return false;\n}\n\nconsole.log(solve(s) ? 'YES' : 'NO');\n",
+      java: 'import java.util.*;\nimport java.io.*;\n\npublic class Main {\n    public static void main(String[] args) throws IOException {\n        BufferedReader br = new BufferedReader(new InputStreamReader(System.in));\n        String s = br.readLine();\n        if (s == null) s = "";\n        // TODO: your solution here\n        boolean ok = false;\n        System.out.println(ok ? "YES" : "NO");\n    }\n}\n',
+      cpp: '#include <bits/stdc++.h>\nusing namespace std;\n\nint main() {\n    ios_base::sync_with_stdio(false);\n    cin.tie(nullptr);\n    string s;\n    getline(cin, s);\n    // TODO: your solution here\n    bool ok = false;\n    cout << (ok ? "YES" : "NO") << endl;\n    return 0;\n}\n',
+      c: '#include <stdio.h>\n#include <string.h>\n\nint main(void) {\n    char s[10005];\n    if (!fgets(s, sizeof(s), stdin)) s[0] = \'\\0\';\n    size_t len = strlen(s);\n    if (len > 0 && s[len - 1] == \'\\n\') s[len - 1] = \'\\0\';\n    /* TODO: your solution here */\n    int ok = 0;\n    printf("%s\\n", ok ? "YES" : "NO");\n    return 0;\n}\n',
+      go: 'package main\n\nimport (\n\t"bufio"\n\t"fmt"\n\t"os"\n)\n\nfunc main() {\n\treader := bufio.NewReader(os.Stdin)\n\ts, _ := reader.ReadString(\'\\n\')\n\tif len(s) > 0 && s[len(s)-1] == \'\\n\' {\n\t\ts = s[:len(s)-1]\n\t}\n\t// TODO: your solution here\n\tok := false\n\tif ok {\n\t\tfmt.Println("YES")\n\t} else {\n\t\tfmt.Println("NO")\n\t}\n\t_ = s\n}\n',
+      rust: 'use std::io::{self, BufRead};\n\nfn main() {\n    let stdin = io::stdin();\n    let mut s = String::new();\n    stdin.lock().read_line(&mut s).unwrap();\n    let s = s.trim_end_matches(\'\\n\').trim_end_matches(\'\\r\').to_string();\n    let _ = s;\n    // TODO: your solution here\n    let ok = false;\n    println!("{}", if ok { "YES" } else { "NO" });\n}\n',
+    },
+    timeLimit: 5000,
+    memoryLimit: 256,
+    tags: ['string', 'stack'],
+    testCases: [
+      {
+        input: '()',
+        expectedOutput: 'YES',
+        description: 'Simple pair',
+        isHidden: false,
+        sortOrder: 0,
+      },
+      {
+        input: '()[]{}',
+        expectedOutput: 'YES',
+        description: 'Multiple types',
+        isHidden: false,
+        sortOrder: 1,
+      },
+      {
+        input: '(]',
+        expectedOutput: 'NO',
+        description: 'Mismatched',
+        isHidden: false,
+        sortOrder: 2,
+      },
+      {
+        input: '([)]',
+        expectedOutput: 'NO',
+        description: 'Wrong nesting order',
+        isHidden: true,
+        sortOrder: 3,
+      },
+      {
+        input: '{[]}',
+        expectedOutput: 'YES',
+        description: 'Nested valid',
+        isHidden: true,
+        sortOrder: 4,
+      },
+      {
+        input: '',
+        expectedOutput: 'YES',
+        description: 'Empty string',
+        isHidden: true,
+        sortOrder: 5,
+      },
+    ],
+  },
+  {
+    title: 'Reverse Linked List',
+    description: [
+      'Given a singly linked list of N integers, reverse the list and print the values in reversed order.',
+      '',
+      '## Input Format',
+      'The first line contains a single integer N (the number of nodes).',
+      'The second line contains N space-separated integers, the list values in order from head to tail.',
+      'If N is 0 the second line is empty.',
+      '',
+      '## Output Format',
+      'Print N space-separated integers: the reversed list values. If N is 0, print an empty line.',
+    ].join('\n'),
+    difficulty: 'easy',
+    company: 'Microsoft',
+    constraints: '0 <= N <= 5000\n-5000 <= value <= 5000',
+    examples: [
+      { input: '5\n1 2 3 4 5', output: '5 4 3 2 1' },
+      { input: '2\n1 2', output: '2 1' },
+      { input: '0\n', output: '' },
+    ],
+    starterCode: {
+      python:
+        "import sys\n\ndef solve(values):\n    # TODO: your solution here\n    return values\n\ndef main():\n    data = sys.stdin.read().split()\n    n = int(data[0]) if data else 0\n    values = [int(x) for x in data[1:1 + n]]\n    result = solve(values)\n    print(' '.join(str(x) for x in result))\n\nif __name__ == '__main__':\n    main()\n",
+      javascript:
+        "import { readFileSync } from 'node:fs';\n\nconst tokens = readFileSync(0, 'utf-8').trim().split(/\\s+/).filter(Boolean);\nconst n = tokens.length === 0 ? 0 : Number(tokens[0]);\nconst values = tokens.slice(1, 1 + n).map(Number);\n\nfunction solve(values) {\n  // TODO: your solution here\n  return values;\n}\n\nconsole.log(solve(values).join(' '));\n",
+      typescript:
+        "import { readFileSync } from 'node:fs';\n\nconst tokens = readFileSync(0, 'utf-8').trim().split(/\\s+/).filter(Boolean) as string[];\nconst n: number = tokens.length === 0 ? 0 : Number(tokens[0]);\nconst values: number[] = tokens.slice(1, 1 + n).map(Number);\n\nfunction solve(values: number[]): number[] {\n  // TODO: your solution here\n  return values;\n}\n\nconsole.log(solve(values).join(' '));\n",
+      java: "import java.util.*;\nimport java.io.*;\n\npublic class Main {\n    public static void main(String[] args) throws IOException {\n        StreamTokenizer in = new StreamTokenizer(new BufferedReader(new InputStreamReader(System.in)));\n        int tok = in.nextToken();\n        int n = tok == StreamTokenizer.TT_EOF ? 0 : (int) in.nval;\n        int[] values = new int[n];\n        for (int k = 0; k < n; k++) {\n            in.nextToken();\n            values[k] = (int) in.nval;\n        }\n        // TODO: your solution here\n        int[] result = values;\n        StringBuilder sb = new StringBuilder();\n        for (int k = 0; k < result.length; k++) {\n            if (k > 0) sb.append(' ');\n            sb.append(result[k]);\n        }\n        System.out.println(sb.toString());\n    }\n}\n",
+      cpp: "#include <bits/stdc++.h>\nusing namespace std;\n\nint main() {\n    ios_base::sync_with_stdio(false);\n    cin.tie(nullptr);\n    int n = 0;\n    if (!(cin >> n)) n = 0;\n    vector<int> values(n);\n    for (int k = 0; k < n; k++) cin >> values[k];\n    // TODO: your solution here\n    vector<int> result = values;\n    for (int k = 0; k < (int) result.size(); k++) {\n        if (k > 0) cout << ' ';\n        cout << result[k];\n    }\n    cout << endl;\n    return 0;\n}\n",
+      c: '#include <stdio.h>\n#include <stdlib.h>\n\nint main(void) {\n    int n = 0;\n    if (scanf("%d", &n) != 1) n = 0;\n    int *values = n > 0 ? (int *) malloc((size_t) n * sizeof(int)) : NULL;\n    for (int k = 0; k < n; k++) scanf("%d", &values[k]);\n    /* TODO: your solution here */\n    int *result = values;\n    for (int k = 0; k < n; k++) {\n        if (k > 0) printf(" ");\n        printf("%d", result[k]);\n    }\n    printf("\\n");\n    free(values);\n    return 0;\n}\n',
+      go: 'package main\n\nimport (\n\t"bufio"\n\t"fmt"\n\t"os"\n\t"strconv"\n\t"strings"\n)\n\nfunc main() {\n\treader := bufio.NewReader(os.Stdin)\n\tvar n int\n\tif _, err := fmt.Fscan(reader, &n); err != nil {\n\t\tn = 0\n\t}\n\tvalues := make([]int, n)\n\tfor k := 0; k < n; k++ {\n\t\tfmt.Fscan(reader, &values[k])\n\t}\n\t// TODO: your solution here\n\tresult := values\n\tparts := make([]string, len(result))\n\tfor k, v := range result {\n\t\tparts[k] = strconv.Itoa(v)\n\t}\n\tfmt.Println(strings.Join(parts, " "))\n}\n',
+      rust: 'use std::io::{self, Read};\n\nfn main() {\n    let mut input = String::new();\n    io::stdin().read_to_string(&mut input).unwrap();\n    let mut iter = input.split_whitespace();\n    let n: usize = iter.next().and_then(|s| s.parse().ok()).unwrap_or(0);\n    let values: Vec<i32> = (0..n).map(|_| iter.next().unwrap().parse().unwrap()).collect();\n    // TODO: your solution here\n    let result = values;\n    let parts: Vec<String> = result.iter().map(|v| v.to_string()).collect();\n    println!("{}", parts.join(" "));\n}\n',
+    },
+    timeLimit: 5000,
+    memoryLimit: 256,
+    tags: ['linked-list', 'recursion'],
+    testCases: [
+      {
+        input: '5\n1 2 3 4 5',
+        expectedOutput: '5 4 3 2 1',
+        description: 'Standard case',
+        isHidden: false,
+        sortOrder: 0,
+      },
+      {
+        input: '2\n1 2',
+        expectedOutput: '2 1',
+        description: 'Two elements',
+        isHidden: false,
+        sortOrder: 1,
+      },
+      {
+        input: '0\n',
+        expectedOutput: '',
+        description: 'Empty list',
+        isHidden: false,
+        sortOrder: 2,
+      },
+      {
+        input: '1\n1',
+        expectedOutput: '1',
+        description: 'Single element',
+        isHidden: true,
+        sortOrder: 3,
+      },
+    ],
+  },
+
+  // ---- Medium -------------------------------------------------------------
+  {
+    title: 'Longest Substring Without Repeating Characters',
+    description: [
+      'Given a string s, find the length of the longest substring that contains no repeated characters.',
+      '',
+      '## Input Format',
+      'A single line containing the string s (may be empty).',
+      '',
+      '## Output Format',
+      'Print a single integer: the length of the longest substring with no repeated characters.',
+    ].join('\n'),
+    difficulty: 'medium',
+    company: 'Amazon',
+    constraints:
+      '0 <= |s| <= 5 * 10^4\ns consists of English letters, digits, symbols, and spaces.',
+    examples: [
+      { input: 'abcabcbb', output: '3', explanation: 'The answer is "abc".' },
+      { input: 'bbbbb', output: '1', explanation: 'The answer is "b".' },
+      { input: 'pwwkew', output: '3', explanation: 'The answer is "wke".' },
+    ],
+    starterCode: {
+      python:
+        "import sys\n\ndef solve(s):\n    # TODO: your solution here\n    return 0\n\ndef main():\n    s = sys.stdin.readline().rstrip('\\n')\n    print(solve(s))\n\nif __name__ == '__main__':\n    main()\n",
+      javascript:
+        "import { readFileSync } from 'node:fs';\n\nconst s = readFileSync(0, 'utf-8').split('\\n')[0] ?? '';\n\nfunction solve(s) {\n  // TODO: your solution here\n  return 0;\n}\n\nconsole.log(solve(s));\n",
+      typescript:
+        "import { readFileSync } from 'node:fs';\n\nconst s: string = readFileSync(0, 'utf-8').split('\\n')[0] ?? '';\n\nfunction solve(s: string): number {\n  // TODO: your solution here\n  return 0;\n}\n\nconsole.log(solve(s));\n",
+      java: 'import java.io.*;\n\npublic class Main {\n    public static void main(String[] args) throws IOException {\n        BufferedReader br = new BufferedReader(new InputStreamReader(System.in));\n        String s = br.readLine();\n        if (s == null) s = "";\n        // TODO: your solution here\n        int result = 0;\n        System.out.println(result);\n    }\n}\n',
+      cpp: '#include <bits/stdc++.h>\nusing namespace std;\n\nint main() {\n    ios_base::sync_with_stdio(false);\n    cin.tie(nullptr);\n    string s;\n    getline(cin, s);\n    // TODO: your solution here\n    int result = 0;\n    cout << result << endl;\n    return 0;\n}\n',
+      c: "#include <stdio.h>\n#include <string.h>\n\nint main(void) {\n    char s[50005];\n    if (!fgets(s, sizeof(s), stdin)) s[0] = '\\0';\n    size_t len = strlen(s);\n    if (len > 0 && s[len - 1] == '\\n') s[len - 1] = '\\0';\n    /* TODO: your solution here */\n    int result = 0;\n    printf(\"%d\\n\", result);\n    return 0;\n}\n",
+      go: 'package main\n\nimport (\n\t"bufio"\n\t"fmt"\n\t"os"\n)\n\nfunc main() {\n\treader := bufio.NewReader(os.Stdin)\n\ts, _ := reader.ReadString(\'\\n\')\n\tif len(s) > 0 && s[len(s)-1] == \'\\n\' {\n\t\ts = s[:len(s)-1]\n\t}\n\t_ = s\n\t// TODO: your solution here\n\tresult := 0\n\tfmt.Println(result)\n}\n',
+      rust: "use std::io::{self, BufRead};\n\nfn main() {\n    let stdin = io::stdin();\n    let mut s = String::new();\n    stdin.lock().read_line(&mut s).unwrap();\n    let s = s.trim_end_matches('\\n').trim_end_matches('\\r').to_string();\n    let _ = s;\n    // TODO: your solution here\n    let result: usize = 0;\n    println!(\"{}\", result);\n}\n",
+    },
+    timeLimit: 5000,
+    memoryLimit: 256,
+    tags: ['string', 'hash-table', 'sliding-window'],
+    testCases: [
+      {
+        input: 'abcabcbb',
+        expectedOutput: '3',
+        description: 'Repeating pattern',
+        isHidden: false,
+        sortOrder: 0,
+      },
+      {
+        input: 'bbbbb',
+        expectedOutput: '1',
+        description: 'All same characters',
+        isHidden: false,
+        sortOrder: 1,
+      },
+      {
+        input: 'pwwkew',
+        expectedOutput: '3',
+        description: 'Middle substring',
+        isHidden: false,
+        sortOrder: 2,
+      },
+      {
+        input: '',
+        expectedOutput: '0',
+        description: 'Empty string',
+        isHidden: true,
+        sortOrder: 3,
+      },
+      {
+        input: 'abcdef',
+        expectedOutput: '6',
+        description: 'All unique',
+        isHidden: true,
+        sortOrder: 4,
+      },
+      {
+        input: 'aab',
+        expectedOutput: '2',
+        description: 'Short with repeat',
+        isHidden: true,
+        sortOrder: 5,
+      },
+    ],
+  },
+  {
+    title: 'Binary Tree Level Order Traversal',
+    description: [
+      'Given a binary tree, print its level-order traversal (left to right, one level per line).',
+      '',
+      '## Input Format',
+      'A single line with whitespace-separated tokens describing the tree in level order.',
+      "Each token is either an integer (a node value) or '#' for a missing child.",
+      'An empty input represents an empty tree.',
+      '',
+      '## Output Format',
+      'For each level from top to bottom, print the values on that level on a single line, separated by spaces.',
+      'Print nothing for an empty tree.',
+    ].join('\n'),
+    difficulty: 'medium',
+    company: 'Meta',
+    constraints:
+      '0 <= number of nodes <= 2000\n-1000 <= node value <= 1000\nMissing children are represented by #.',
+    examples: [
+      { input: '3 9 20 # # 15 7', output: '3\n9 20\n15 7' },
+      { input: '1', output: '1' },
+      { input: '', output: '' },
+    ],
+    starterCode: {
+      python:
+        "import sys\n\ndef solve(tokens):\n    # TODO: your solution here\n    # Return a list of levels; each level is a list of ints.\n    return []\n\ndef main():\n    tokens = sys.stdin.read().split()\n    levels = solve(tokens)\n    print('\\n'.join(' '.join(str(v) for v in lvl) for lvl in levels))\n\nif __name__ == '__main__':\n    main()\n",
+      javascript:
+        "import { readFileSync } from 'node:fs';\n\nconst tokens = readFileSync(0, 'utf-8').trim().split(/\\s+/).filter(Boolean);\n\nfunction solve(tokens) {\n  // TODO: your solution here\n  // Return an array of levels; each level is an array of numbers.\n  return [];\n}\n\nconst levels = solve(tokens);\nconsole.log(levels.map((lvl) => lvl.join(' ')).join('\\n'));\n",
+      typescript:
+        "import { readFileSync } from 'node:fs';\n\nconst tokens = readFileSync(0, 'utf-8').trim().split(/\\s+/).filter(Boolean) as string[];\n\nfunction solve(tokens: string[]): number[][] {\n  // TODO: your solution here\n  return [];\n}\n\nconst levels = solve(tokens);\nconsole.log(levels.map((lvl) => lvl.join(' ')).join('\\n'));\n",
+      java: "import java.util.*;\nimport java.io.*;\n\npublic class Main {\n    public static void main(String[] args) throws IOException {\n        BufferedReader br = new BufferedReader(new InputStreamReader(System.in));\n        StringBuilder all = new StringBuilder();\n        String line;\n        while ((line = br.readLine()) != null) all.append(line).append(' ');\n        String[] tokens = all.toString().trim().isEmpty() ? new String[0] : all.toString().trim().split(\"\\\\s+\");\n        // TODO: your solution here\n        List<List<Integer>> levels = new ArrayList<>();\n        StringBuilder out = new StringBuilder();\n        for (int l = 0; l < levels.size(); l++) {\n            if (l > 0) out.append('\\n');\n            List<Integer> lvl = levels.get(l);\n            for (int k = 0; k < lvl.size(); k++) {\n                if (k > 0) out.append(' ');\n                out.append(lvl.get(k));\n            }\n        }\n        System.out.println(out.toString());\n    }\n}\n",
+      cpp: "#include <bits/stdc++.h>\nusing namespace std;\n\nint main() {\n    ios_base::sync_with_stdio(false);\n    cin.tie(nullptr);\n    vector<string> tokens;\n    string tok;\n    while (cin >> tok) tokens.push_back(tok);\n    // TODO: your solution here\n    vector<vector<int>> levels;\n    for (size_t l = 0; l < levels.size(); l++) {\n        if (l > 0) cout << '\\n';\n        for (size_t k = 0; k < levels[l].size(); k++) {\n            if (k > 0) cout << ' ';\n            cout << levels[l][k];\n        }\n    }\n    cout << endl;\n    return 0;\n}\n",
+      c: '#include <stdio.h>\n#include <string.h>\n#include <stdlib.h>\n\nint main(void) {\n    char **tokens = NULL;\n    size_t count = 0, cap = 0;\n    char buf[64];\n    while (scanf("%63s", buf) == 1) {\n        if (count == cap) {\n            cap = cap ? cap * 2 : 16;\n            tokens = (char **) realloc(tokens, cap * sizeof(char *));\n        }\n        tokens[count++] = strdup(buf);\n    }\n    /* TODO: your solution here */\n    /* Build the tree from tokens, then print each level on its own line. */\n    (void) tokens;\n    (void) count;\n    printf("\\n");\n    return 0;\n}\n',
+      go: 'package main\n\nimport (\n\t"bufio"\n\t"fmt"\n\t"os"\n\t"strconv"\n\t"strings"\n)\n\nfunc main() {\n\tscanner := bufio.NewScanner(os.Stdin)\n\tscanner.Buffer(make([]byte, 1024*1024), 1024*1024)\n\tscanner.Split(bufio.ScanWords)\n\tvar tokens []string\n\tfor scanner.Scan() {\n\t\ttokens = append(tokens, scanner.Text())\n\t}\n\t_ = tokens\n\t// TODO: your solution here\n\tvar levels [][]int\n\tlines := make([]string, 0, len(levels))\n\tfor _, lvl := range levels {\n\t\tparts := make([]string, len(lvl))\n\t\tfor k, v := range lvl {\n\t\t\tparts[k] = strconv.Itoa(v)\n\t\t}\n\t\tlines = append(lines, strings.Join(parts, " "))\n\t}\n\tfmt.Println(strings.Join(lines, "\\n"))\n}\n',
+      rust: 'use std::io::{self, Read};\n\nfn main() {\n    let mut input = String::new();\n    io::stdin().read_to_string(&mut input).unwrap();\n    let tokens: Vec<&str> = input.split_whitespace().collect();\n    let _ = tokens;\n    // TODO: your solution here\n    let levels: Vec<Vec<i32>> = Vec::new();\n    let lines: Vec<String> = levels\n        .iter()\n        .map(|lvl| lvl.iter().map(|v| v.to_string()).collect::<Vec<_>>().join(" "))\n        .collect();\n    println!("{}", lines.join("\\n"));\n}\n',
+    },
+    timeLimit: 5000,
+    memoryLimit: 256,
+    tags: ['tree', 'queue'],
+    testCases: [
+      {
+        input: '3 9 20 # # 15 7',
+        expectedOutput: '3\n9 20\n15 7',
+        description: 'Standard tree',
+        isHidden: false,
+        sortOrder: 0,
+      },
+      {
+        input: '1',
+        expectedOutput: '1',
+        description: 'Single node',
+        isHidden: false,
+        sortOrder: 1,
+      },
+      {
+        input: '',
+        expectedOutput: '',
+        description: 'Empty tree',
+        isHidden: false,
+        sortOrder: 2,
+      },
+      {
+        input: '1 2 3 4 5',
+        expectedOutput: '1\n2 3\n4 5',
+        description: 'Complete tree',
+        isHidden: true,
+        sortOrder: 3,
+      },
+    ],
+  },
+  {
+    title: 'Coin Change',
+    description: [
+      'You are given N coin denominations and a target amount. Return the minimum number of coins needed to make up exactly that amount. If it is impossible, return -1. You may use each denomination any number of times.',
+      '',
+      '## Input Format',
+      'The first line contains two integers N and target.',
+      'The second line contains N space-separated integers, the coin denominations.',
+      '',
+      '## Output Format',
+      'Print a single integer: the minimum number of coins, or -1 if the amount cannot be made.',
+    ].join('\n'),
+    difficulty: 'medium',
+    company: 'Google',
+    constraints: '1 <= N <= 12\n1 <= denomination <= 2^31 - 1\n0 <= target <= 10^4',
+    examples: [
+      { input: '3 12\n1 5 10', output: '3', explanation: '12 = 10 + 1 + 1.' },
+      { input: '1 3\n2', output: '-1' },
+      { input: '1 0\n1', output: '0' },
+    ],
+    starterCode: {
+      python:
+        "import sys\n\ndef solve(coins, amount):\n    # TODO: your solution here\n    return -1\n\ndef main():\n    data = sys.stdin.read().split()\n    n = int(data[0])\n    amount = int(data[1])\n    coins = [int(x) for x in data[2:2 + n]]\n    print(solve(coins, amount))\n\nif __name__ == '__main__':\n    main()\n",
+      javascript:
+        "import { readFileSync } from 'node:fs';\n\nconst tokens = readFileSync(0, 'utf-8').trim().split(/\\s+/);\nconst n = Number(tokens[0]);\nconst amount = Number(tokens[1]);\nconst coins = tokens.slice(2, 2 + n).map(Number);\n\nfunction solve(coins, amount) {\n  // TODO: your solution here\n  return -1;\n}\n\nconsole.log(solve(coins, amount));\n",
+      typescript:
+        "import { readFileSync } from 'node:fs';\n\nconst tokens = readFileSync(0, 'utf-8').trim().split(/\\s+/) as string[];\nconst n = Number(tokens[0]);\nconst amount = Number(tokens[1]);\nconst coins: number[] = tokens.slice(2, 2 + n).map(Number);\n\nfunction solve(coins: number[], amount: number): number {\n  // TODO: your solution here\n  return -1;\n}\n\nconsole.log(solve(coins, amount));\n",
+      java: 'import java.util.*;\nimport java.io.*;\n\npublic class Main {\n    public static void main(String[] args) throws IOException {\n        StreamTokenizer in = new StreamTokenizer(new BufferedReader(new InputStreamReader(System.in)));\n        in.nextToken(); int n = (int) in.nval;\n        in.nextToken(); int amount = (int) in.nval;\n        long[] coins = new long[n];\n        for (int k = 0; k < n; k++) {\n            in.nextToken();\n            coins[k] = (long) in.nval;\n        }\n        // TODO: your solution here\n        int result = -1;\n        System.out.println(result);\n    }\n}\n',
+      cpp: '#include <bits/stdc++.h>\nusing namespace std;\n\nint main() {\n    ios_base::sync_with_stdio(false);\n    cin.tie(nullptr);\n    int n, amount;\n    cin >> n >> amount;\n    vector<long long> coins(n);\n    for (int k = 0; k < n; k++) cin >> coins[k];\n    // TODO: your solution here\n    int result = -1;\n    cout << result << endl;\n    return 0;\n}\n',
+      c: '#include <stdio.h>\n#include <stdlib.h>\n\nint main(void) {\n    int n, amount;\n    if (scanf("%d %d", &n, &amount) != 2) return 0;\n    long long *coins = (long long *) malloc((size_t) n * sizeof(long long));\n    for (int k = 0; k < n; k++) scanf("%lld", &coins[k]);\n    /* TODO: your solution here */\n    int result = -1;\n    printf("%d\\n", result);\n    free(coins);\n    return 0;\n}\n',
+      go: 'package main\n\nimport (\n\t"bufio"\n\t"fmt"\n\t"os"\n)\n\nfunc main() {\n\treader := bufio.NewReader(os.Stdin)\n\tvar n, amount int\n\tfmt.Fscan(reader, &n, &amount)\n\tcoins := make([]int64, n)\n\tfor k := 0; k < n; k++ {\n\t\tfmt.Fscan(reader, &coins[k])\n\t}\n\t_ = coins\n\t_ = amount\n\t// TODO: your solution here\n\tresult := -1\n\tfmt.Println(result)\n}\n',
+      rust: 'use std::io::{self, Read};\n\nfn main() {\n    let mut input = String::new();\n    io::stdin().read_to_string(&mut input).unwrap();\n    let mut iter = input.split_whitespace();\n    let n: usize = iter.next().unwrap().parse().unwrap();\n    let amount: i64 = iter.next().unwrap().parse().unwrap();\n    let coins: Vec<i64> = (0..n).map(|_| iter.next().unwrap().parse().unwrap()).collect();\n    let _ = (coins, amount);\n    // TODO: your solution here\n    let result: i64 = -1;\n    println!("{}", result);\n}\n',
+    },
+    timeLimit: 5000,
+    memoryLimit: 256,
+    tags: ['array', 'dynamic-programming'],
+    testCases: [
+      {
+        input: '3 12\n1 5 10',
+        expectedOutput: '3',
+        description: 'Greedy-safe case',
+        isHidden: false,
+        sortOrder: 0,
+      },
+      {
+        input: '1 3\n2',
+        expectedOutput: '-1',
+        description: 'Impossible',
+        isHidden: false,
+        sortOrder: 1,
+      },
+      {
+        input: '1 0\n1',
+        expectedOutput: '0',
+        description: 'Zero amount',
+        isHidden: false,
+        sortOrder: 2,
+      },
+      {
+        input: '3 6\n1 3 4',
+        expectedOutput: '2',
+        description: 'Greedy fails (3+3)',
+        isHidden: true,
+        sortOrder: 3,
+      },
+      {
+        input: '4 27\n2 5 10 1',
+        expectedOutput: '4',
+        description: 'Multiple denominations',
+        isHidden: true,
+        sortOrder: 4,
+      },
+    ],
+  },
+
+  // ---- Hard ---------------------------------------------------------------
+  {
+    title: 'Merge K Sorted Lists',
+    description: [
+      'You are given K sorted lists. Merge them into a single sorted list and print the result.',
+      '',
+      '## Input Format',
+      'The first line contains a single integer K (the number of lists).',
+      'For each of the K lists:',
+      '- One line with a single integer N, the length of that list.',
+      '- If N > 0, the next line contains N space-separated integers in non-decreasing order.',
+      '- If N = 0, there is no values line for that list.',
+      '',
+      '## Output Format',
+      'Print all merged values in non-decreasing order on one line, separated by spaces.',
+      'If the merged list is empty, print an empty line.',
+    ].join('\n'),
+    difficulty: 'hard',
+    company: 'Amazon',
+    constraints:
+      '0 <= K <= 10^4\n0 <= N per list <= 500\n-10^4 <= value <= 10^4\nEach list is sorted in non-decreasing order.\nSum of all Ns <= 10^4.',
+    examples: [
+      {
+        input: '3\n3\n1 4 5\n3\n1 3 4\n2\n2 6',
+        output: '1 1 2 3 4 4 5 6',
+      },
+      { input: '0', output: '' },
+      { input: '1\n0', output: '' },
+    ],
+    starterCode: {
+      python:
+        "import sys\n\ndef solve(lists):\n    # TODO: your solution here\n    return []\n\ndef main():\n    data = sys.stdin.read().split()\n    idx = 0\n    k = int(data[idx]) if idx < len(data) else 0\n    idx += 1\n    lists = []\n    for _ in range(k):\n        n = int(data[idx])\n        idx += 1\n        lst = [int(x) for x in data[idx:idx + n]]\n        idx += n\n        lists.append(lst)\n    merged = solve(lists)\n    print(' '.join(str(x) for x in merged))\n\nif __name__ == '__main__':\n    main()\n",
+      javascript:
+        "import { readFileSync } from 'node:fs';\n\nconst tokens = readFileSync(0, 'utf-8').trim().split(/\\s+/).filter(Boolean);\nlet idx = 0;\nconst k = tokens.length === 0 ? 0 : Number(tokens[idx++]);\nconst lists = [];\nfor (let i = 0; i < k; i++) {\n  const n = Number(tokens[idx++]);\n  const lst = tokens.slice(idx, idx + n).map(Number);\n  idx += n;\n  lists.push(lst);\n}\n\nfunction solve(lists) {\n  // TODO: your solution here\n  return [];\n}\n\nconsole.log(solve(lists).join(' '));\n",
+      typescript:
+        "import { readFileSync } from 'node:fs';\n\nconst tokens = readFileSync(0, 'utf-8').trim().split(/\\s+/).filter(Boolean) as string[];\nlet idx = 0;\nconst k = tokens.length === 0 ? 0 : Number(tokens[idx++]);\nconst lists: number[][] = [];\nfor (let i = 0; i < k; i++) {\n  const n = Number(tokens[idx++]);\n  const lst = tokens.slice(idx, idx + n).map(Number);\n  idx += n;\n  lists.push(lst);\n}\n\nfunction solve(lists: number[][]): number[] {\n  // TODO: your solution here\n  return [];\n}\n\nconsole.log(solve(lists).join(' '));\n",
+      java: "import java.util.*;\nimport java.io.*;\n\npublic class Main {\n    public static void main(String[] args) throws IOException {\n        StreamTokenizer in = new StreamTokenizer(new BufferedReader(new InputStreamReader(System.in)));\n        int tok = in.nextToken();\n        int k = tok == StreamTokenizer.TT_EOF ? 0 : (int) in.nval;\n        List<int[]> lists = new ArrayList<>();\n        for (int i = 0; i < k; i++) {\n            in.nextToken();\n            int n = (int) in.nval;\n            int[] lst = new int[n];\n            for (int j = 0; j < n; j++) {\n                in.nextToken();\n                lst[j] = (int) in.nval;\n            }\n            lists.add(lst);\n        }\n        // TODO: your solution here\n        int[] merged = new int[0];\n        StringBuilder sb = new StringBuilder();\n        for (int i = 0; i < merged.length; i++) {\n            if (i > 0) sb.append(' ');\n            sb.append(merged[i]);\n        }\n        System.out.println(sb.toString());\n    }\n}\n",
+      cpp: "#include <bits/stdc++.h>\nusing namespace std;\n\nint main() {\n    ios_base::sync_with_stdio(false);\n    cin.tie(nullptr);\n    int k = 0;\n    if (!(cin >> k)) k = 0;\n    vector<vector<int>> lists(k);\n    for (int i = 0; i < k; i++) {\n        int n;\n        cin >> n;\n        lists[i].resize(n);\n        for (int j = 0; j < n; j++) cin >> lists[i][j];\n    }\n    // TODO: your solution here\n    vector<int> merged;\n    for (size_t i = 0; i < merged.size(); i++) {\n        if (i > 0) cout << ' ';\n        cout << merged[i];\n    }\n    cout << endl;\n    return 0;\n}\n",
+      c: '#include <stdio.h>\n#include <stdlib.h>\n\nint main(void) {\n    int k = 0;\n    if (scanf("%d", &k) != 1) k = 0;\n    int **lists = k > 0 ? (int **) malloc((size_t) k * sizeof(int *)) : NULL;\n    int *sizes = k > 0 ? (int *) malloc((size_t) k * sizeof(int)) : NULL;\n    for (int i = 0; i < k; i++) {\n        scanf("%d", &sizes[i]);\n        lists[i] = sizes[i] > 0 ? (int *) malloc((size_t) sizes[i] * sizeof(int)) : NULL;\n        for (int j = 0; j < sizes[i]; j++) scanf("%d", &lists[i][j]);\n    }\n    /* TODO: your solution here */\n    int *merged = NULL;\n    int mlen = 0;\n    for (int i = 0; i < mlen; i++) {\n        if (i > 0) printf(" ");\n        printf("%d", merged[i]);\n    }\n    printf("\\n");\n    for (int i = 0; i < k; i++) free(lists[i]);\n    free(lists);\n    free(sizes);\n    return 0;\n}\n',
+      go: 'package main\n\nimport (\n\t"bufio"\n\t"fmt"\n\t"os"\n\t"strconv"\n\t"strings"\n)\n\nfunc main() {\n\treader := bufio.NewReader(os.Stdin)\n\tvar k int\n\tif _, err := fmt.Fscan(reader, &k); err != nil {\n\t\tk = 0\n\t}\n\tlists := make([][]int, k)\n\tfor i := 0; i < k; i++ {\n\t\tvar n int\n\t\tfmt.Fscan(reader, &n)\n\t\tlists[i] = make([]int, n)\n\t\tfor j := 0; j < n; j++ {\n\t\t\tfmt.Fscan(reader, &lists[i][j])\n\t\t}\n\t}\n\t_ = lists\n\t// TODO: your solution here\n\tmerged := []int{}\n\tparts := make([]string, len(merged))\n\tfor i, v := range merged {\n\t\tparts[i] = strconv.Itoa(v)\n\t}\n\tfmt.Println(strings.Join(parts, " "))\n}\n',
+      rust: 'use std::io::{self, Read};\n\nfn main() {\n    let mut input = String::new();\n    io::stdin().read_to_string(&mut input).unwrap();\n    let mut iter = input.split_whitespace();\n    let k: usize = iter.next().and_then(|s| s.parse().ok()).unwrap_or(0);\n    let mut lists: Vec<Vec<i32>> = Vec::with_capacity(k);\n    for _ in 0..k {\n        let n: usize = iter.next().unwrap().parse().unwrap();\n        let lst: Vec<i32> = (0..n).map(|_| iter.next().unwrap().parse().unwrap()).collect();\n        lists.push(lst);\n    }\n    let _ = lists;\n    // TODO: your solution here\n    let merged: Vec<i32> = Vec::new();\n    let parts: Vec<String> = merged.iter().map(|v| v.to_string()).collect();\n    println!("{}", parts.join(" "));\n}\n',
+    },
+    timeLimit: 5000,
+    memoryLimit: 256,
+    tags: ['linked-list', 'sorting'],
+    testCases: [
+      {
+        input: '3\n3\n1 4 5\n3\n1 3 4\n2\n2 6',
+        expectedOutput: '1 1 2 3 4 4 5 6',
+        description: 'Three sorted lists',
+        isHidden: false,
+        sortOrder: 0,
+      },
+      {
+        input: '0',
+        expectedOutput: '',
+        description: 'Empty input',
+        isHidden: false,
+        sortOrder: 1,
+      },
+      {
+        input: '1\n0',
+        expectedOutput: '',
+        description: 'Single empty list',
+        isHidden: false,
+        sortOrder: 2,
+      },
+      {
+        input: '3\n1\n1\n1\n2\n1\n3',
+        expectedOutput: '1 2 3',
+        description: 'Single-element lists',
+        isHidden: true,
+        sortOrder: 3,
+      },
+      {
+        input: '2\n3\n-2 -1 0\n3\n0 1 2',
+        expectedOutput: '-2 -1 0 0 1 2',
+        description: 'Negative numbers',
+        isHidden: true,
+        sortOrder: 4,
+      },
+    ],
+  },
+  {
+    title: 'Trapping Rain Water',
+    description: [
+      'Given N non-negative integer bar heights, each of width 1, compute the total amount of water trapped after it rains.',
+      '',
+      '## Input Format',
+      'The first line contains a single integer N.',
+      'The second line contains N space-separated non-negative integers, the bar heights.',
+      '',
+      '## Output Format',
+      'Print a single integer: the total amount of trapped water.',
+    ].join('\n'),
+    difficulty: 'hard',
+    company: 'Google',
+    constraints: '1 <= N <= 2 * 10^4\n0 <= height[i] <= 10^5',
+    examples: [
+      { input: '12\n0 1 0 2 1 0 1 3 2 1 2 1', output: '6' },
+      { input: '6\n4 2 0 3 2 5', output: '9' },
+    ],
+    starterCode: {
+      python:
+        "import sys\n\ndef solve(height):\n    # TODO: your solution here\n    return 0\n\ndef main():\n    data = sys.stdin.read().split()\n    n = int(data[0])\n    height = [int(x) for x in data[1:1 + n]]\n    print(solve(height))\n\nif __name__ == '__main__':\n    main()\n",
+      javascript:
+        "import { readFileSync } from 'node:fs';\n\nconst tokens = readFileSync(0, 'utf-8').trim().split(/\\s+/);\nconst n = Number(tokens[0]);\nconst height = tokens.slice(1, 1 + n).map(Number);\n\nfunction solve(height) {\n  // TODO: your solution here\n  return 0;\n}\n\nconsole.log(solve(height));\n",
+      typescript:
+        "import { readFileSync } from 'node:fs';\n\nconst tokens = readFileSync(0, 'utf-8').trim().split(/\\s+/) as string[];\nconst n = Number(tokens[0]);\nconst height: number[] = tokens.slice(1, 1 + n).map(Number);\n\nfunction solve(height: number[]): number {\n  // TODO: your solution here\n  return 0;\n}\n\nconsole.log(solve(height));\n",
+      java: 'import java.util.*;\nimport java.io.*;\n\npublic class Main {\n    public static void main(String[] args) throws IOException {\n        StreamTokenizer in = new StreamTokenizer(new BufferedReader(new InputStreamReader(System.in)));\n        in.nextToken(); int n = (int) in.nval;\n        int[] height = new int[n];\n        for (int k = 0; k < n; k++) {\n            in.nextToken();\n            height[k] = (int) in.nval;\n        }\n        // TODO: your solution here\n        long result = 0;\n        System.out.println(result);\n    }\n}\n',
+      cpp: '#include <bits/stdc++.h>\nusing namespace std;\n\nint main() {\n    ios_base::sync_with_stdio(false);\n    cin.tie(nullptr);\n    int n;\n    cin >> n;\n    vector<int> height(n);\n    for (int k = 0; k < n; k++) cin >> height[k];\n    // TODO: your solution here\n    long long result = 0;\n    cout << result << endl;\n    return 0;\n}\n',
+      c: '#include <stdio.h>\n#include <stdlib.h>\n\nint main(void) {\n    int n;\n    if (scanf("%d", &n) != 1) return 0;\n    int *height = (int *) malloc((size_t) n * sizeof(int));\n    for (int k = 0; k < n; k++) scanf("%d", &height[k]);\n    /* TODO: your solution here */\n    long long result = 0;\n    printf("%lld\\n", result);\n    free(height);\n    return 0;\n}\n',
+      go: 'package main\n\nimport (\n\t"bufio"\n\t"fmt"\n\t"os"\n)\n\nfunc main() {\n\treader := bufio.NewReader(os.Stdin)\n\tvar n int\n\tfmt.Fscan(reader, &n)\n\theight := make([]int, n)\n\tfor k := 0; k < n; k++ {\n\t\tfmt.Fscan(reader, &height[k])\n\t}\n\t_ = height\n\t// TODO: your solution here\n\tresult := 0\n\tfmt.Println(result)\n}\n',
+      rust: 'use std::io::{self, Read};\n\nfn main() {\n    let mut input = String::new();\n    io::stdin().read_to_string(&mut input).unwrap();\n    let mut iter = input.split_whitespace();\n    let n: usize = iter.next().unwrap().parse().unwrap();\n    let height: Vec<i64> = (0..n).map(|_| iter.next().unwrap().parse().unwrap()).collect();\n    let _ = height;\n    // TODO: your solution here\n    let result: i64 = 0;\n    println!("{}", result);\n}\n',
+    },
+    timeLimit: 5000,
+    memoryLimit: 256,
+    tags: ['array', 'two-pointers', 'dynamic-programming'],
+    testCases: [
+      {
+        input: '12\n0 1 0 2 1 0 1 3 2 1 2 1',
+        expectedOutput: '6',
+        description: 'Classic example',
+        isHidden: false,
+        sortOrder: 0,
+      },
+      {
+        input: '6\n4 2 0 3 2 5',
+        expectedOutput: '9',
+        description: 'V-shape valleys',
+        isHidden: false,
+        sortOrder: 1,
+      },
+      {
+        input: '5\n1 2 3 4 5',
+        expectedOutput: '0',
+        description: 'Ascending, no trap',
+        isHidden: true,
+        sortOrder: 2,
+      },
+      {
+        input: '5\n5 4 3 2 1',
+        expectedOutput: '0',
+        description: 'Descending, no trap',
+        isHidden: true,
+        sortOrder: 3,
+      },
+      {
+        input: '3\n3 0 3',
+        expectedOutput: '3',
+        description: 'Single valley',
+        isHidden: true,
+        sortOrder: 4,
+      },
+    ],
+  },
+];
+
+// ---------------------------------------------------------------------------
+// Seed execution
+// ---------------------------------------------------------------------------
+async function seed() {
+  console.log('Seeding database...\n');
+
+  // 1. Users
+  const insertedUsers = await db
+    .insert(schema.users)
+    .values(usersData)
+    .onConflictDoNothing()
+    .returning({ id: schema.users.id, username: schema.users.username });
+  console.log(`  Users:    ${insertedUsers.length} inserted`);
+
+  // Heal demo users seeded with the legacy SHA-256 format so they can log in.
+  // Scrypt hashes always contain a `:` separator; legacy hex digests do not.
+  // This narrow predicate avoids clobbering passwords that were updated through
+  // the auth service (e.g. a developer changed alice's password manually).
+  await db
+    .update(schema.users)
+    .set({ passwordHash: demoPassword })
+    .where(
+      and(
+        inArray(
+          schema.users.email,
+          usersData.map((u) => u.email),
+        ),
+        notLike(schema.users.passwordHash, '%:%'),
+      ),
+    );
+
+  // 2. Tags
+  const insertedTags = await db
+    .insert(schema.tags)
+    .values(tagsData)
+    .onConflictDoNothing()
+    .returning({ id: schema.tags.id, slug: schema.tags.slug });
+  console.log(`  Tags:     ${insertedTags.length} inserted`);
+
+  // Build slug → id lookup from ALL tags (not just newly inserted ones)
+  const allTags = await db.select({ id: schema.tags.id, slug: schema.tags.slug }).from(schema.tags);
+  const tagsBySlug = new Map(allTags.map((t) => [t.slug, t.id]));
+
+  // 3. Problems + test cases + tag links
+  // Problems are upserted on the `title` unique index so re-running the seed
+  // refreshes content (description, examples, starter code, etc.) in place,
+  // preserving the row id — and therefore all FK references from submissions,
+  // sessions, rooms, and bookmarks. Test cases have no stable natural key, so
+  // they're rebuilt per problem on each run.
+  let problemCount = 0;
+  let testCaseCount = 0;
+
+  for (const p of problemsData) {
+    const [upserted] = await db
+      .insert(schema.problems)
+      .values({
+        title: p.title,
+        description: p.description,
+        difficulty: p.difficulty,
+        company: p.company,
+        constraints: p.constraints,
+        examples: p.examples,
+        starterCode: p.starterCode,
+        timeLimit: p.timeLimit,
+        memoryLimit: p.memoryLimit,
+      })
+      .onConflictDoUpdate({
+        target: schema.problems.title,
+        // Match the partial unique index `problems_title_unique`.
+        targetWhere: sql`deleted_at IS NULL`,
+        set: {
+          description: p.description,
+          difficulty: p.difficulty,
+          company: p.company,
+          constraints: p.constraints,
+          examples: p.examples,
+          starterCode: p.starterCode,
+          timeLimit: p.timeLimit,
+          memoryLimit: p.memoryLimit,
+        },
+      })
+      .returning({ id: schema.problems.id });
+
+    if (!upserted) {
+      continue;
+    }
+
+    problemCount++;
+
+    // Test cases — replace per problem.
+    await db.delete(schema.testCases).where(eq(schema.testCases.problemId, upserted.id));
+
+    if (p.testCases.length > 0) {
+      const insertedCases = await db
+        .insert(schema.testCases)
+        .values(
+          p.testCases.map((tc) => ({
+            ...tc,
+            problemId: upserted.id,
+            timeoutMs: p.timeLimit,
+            memoryMb: p.memoryLimit,
+          })),
+        )
+        .returning({ id: schema.testCases.id });
+      testCaseCount += insertedCases.length;
+    }
+
+    // Problem ↔ tag links — idempotent insert; stale links from removed tags
+    // are not pruned (tag membership rarely shrinks for a given problem).
+    const tagLinks = p.tags
+      .map((slug) => tagsBySlug.get(slug))
+      .filter((id): id is string => id != null)
+      .map((tagId) => ({ problemId: upserted.id, tagId }));
+
+    if (tagLinks.length > 0) {
+      await db.insert(schema.problemTags).values(tagLinks).onConflictDoNothing();
+    }
+  }
+
+  console.log(`  Problems: ${problemCount} upserted`);
+  console.log(`  Tests:    ${testCaseCount} inserted`);
+
+  // 4. Global limits (ensure defaults exist — table may not exist if migration is pending)
+  try {
+    await db
+      .insert(schema.globalLimits)
+      .values([
+        { key: 'ai_daily_limit', value: 100 },
+        { key: 'execution_daily_limit', value: 100 },
+        { key: 'rooms_max_active', value: 100 },
+      ])
+      .onConflictDoNothing();
+    console.log('  Limits:   ensured defaults');
+  } catch {
+    console.log('  Limits:   skipped (table not found — run migrations first)');
+  }
+
+  console.log('\nSeed complete.');
+}
+
+try {
+  await seed();
+} catch (error) {
+  console.error('Seed failed:', error);
+  process.exit(1);
+} finally {
+  await client.end();
+}

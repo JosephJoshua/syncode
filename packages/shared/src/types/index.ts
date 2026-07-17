@@ -1,0 +1,59 @@
+export {
+  CircuitBreakerOpenError,
+  CircuitBreakerTimeoutError,
+  CircuitState,
+} from './circuit-breaker.js';
+export type {
+  CursorUpdatePayload,
+  ErrorPayload,
+  ParticipantJoinPayload,
+  ParticipantLeavePayload,
+  RoomJoinedPayload,
+  RoomJoinPayload,
+  RoomStatusChangePayload,
+  SyncUpdatePayload,
+} from './events.js';
+export { RoomEvent } from './events.js';
+export type { ExecutionRequest, ExecutionResult, SupportedLanguage } from './execution.js';
+export type { ProblemAttemptStatus, ProblemDifficulty, ProblemSortBy } from './problem.js';
+export {
+  PROBLEM_ATTEMPT_STATUSES,
+  PROBLEM_DIFFICULTIES,
+  PROBLEMS_SORT_BY_OPTIONS,
+} from './problem.js';
+export type { RoomMode, RoomParticipant } from './room.js';
+export {
+  getNextStatuses,
+  isRoomRole,
+  isValidStatusTransition,
+  JOINABLE_ROOM_ROLES as JOINABLE_ROLES,
+  ROOM_MODES,
+  ROOM_ROLES,
+  ROOM_STATUS_LABELS,
+  ROOM_STATUSES,
+  RoomRole,
+  RoomStatus,
+  VALID_STATUS_TRANSITIONS,
+} from './room.js';
+export { UserRole } from './user.js';
+export type { WeaknessCategory, WeaknessTrend } from './weakness.js';
+export { WEAKNESS_CATEGORIES, WEAKNESS_TRENDS } from './weakness.js';
+export type {
+  WhiteboardAllowedContentType,
+  WhiteboardAllowedImageType,
+  WhiteboardAllowedVideoType,
+  WhiteboardAssetMeta,
+  WhiteboardLayer,
+  WhiteboardShapeMeta,
+} from './whiteboard.js';
+export {
+  isWhiteboardContentType,
+  isWhiteboardImageType,
+  isWhiteboardLayer,
+  isWhiteboardVideoType,
+  maxBytesForContentType,
+  WHITEBOARD_ALLOWED_IMAGE_TYPES,
+  WHITEBOARD_ALLOWED_VIDEO_TYPES,
+  WHITEBOARD_ASSET_LIMITS,
+  WHITEBOARD_LAYERS,
+} from './whiteboard.js';

@@ -1,0 +1,368 @@
+import {
+  BROWSEABLE_ROOM_STATUSES,
+  type BrowseableRoomStatus,
+  CONTROL_API,
+  type PublicRoomSummary,
+} from '@syncode/contracts';
+import {
+  PROBLEM_DIFFICULTIES,
+  type ProblemDifficulty,
+  type SupportedLanguage,
+} from '@syncode/shared';
+import { Button, Input } from '@syncode/ui';
+import { useInfiniteQuery, useMutation } from '@tanstack/react-query';
+import { createFileRoute, useNavigate } from '@tanstack/react-router';
+import { Compass, Loader2, Search, Sparkles, X } from 'lucide-react';
+import { motion } from 'motion/react';
+import { useDeferredValue, useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { toast } from 'sonner';
+import { FilterPill } from '@/components/filter-pill.js';
+import { LANGUAGE_VERSIONED_LABELS } from '@/components/language-selector.data.js';
+import { LanguageSelector } from '@/components/language-selector.js';
+import { BrowseEmptyState } from '@/components/rooms-browse/browse-empty-state.js';
+import { PublicRoomCard } from '@/components/rooms-browse/public-room-card.js';
+import { api, readApiError } from '@/lib/api-client.js';
+import { resolveJoinError } from '@/lib/join-errors.js';
+import { ROOM_STATUS_KEYS } from '@/lib/room-stage.js';
+import { useAuthStore } from '@/stores/auth.store.js';
+
+const DIFFICULTY_KEYS: Record<ProblemDifficulty, string> = {
+  easy: 'problems:detail.easy',
+  medium: 'problems:detail.medium',
+  hard: 'problems:detail.hard',
+};
+
+export const Route = createFileRoute('/_app/rooms/browse')({
+  component: BrowseRoomsPage,
+});
+
+export { BrowseRoomsPage };
+
+const BROWSE_PAGE_SIZE = 12;
+const BROWSE_REFRESH_INTERVAL_MS = 5_000;
+
+type BrowseFilters = {
+  search: string;
+  language: SupportedLanguage | null;
+  difficulty: ProblemDifficulty | null;
+  status: BrowseableRoomStatus | null;
+};
+
+const emptyFilters: BrowseFilters = {
+  search: '',
+  language: null,
+  difficulty: null,
+  status: null,
+};
+
+function BrowseRoomsPage() {
+  const { t } = useTranslation('rooms');
+  const navigate = useNavigate();
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      navigate({ to: '/login' }).catch(() => {});
+    }
+  }, [isAuthenticated, navigate]);
+
+  const [filters, setFilters] = useState<BrowseFilters>(emptyFilters);
+
+  const deferredSearch = useDeferredValue(filters.search);
+  const normalizedSearch = deferredSearch.trim();
+
+  const searchParams = useMemo(
+    () => ({
+      limit: BROWSE_PAGE_SIZE,
+      language: filters.language ?? undefined,
+      difficulty: filters.difficulty ?? undefined,
+      status: filters.status ?? undefined,
+      search: normalizedSearch.length > 0 ? normalizedSearch : undefined,
+    }),
+    [filters.difficulty, filters.language, filters.status, normalizedSearch],
+  );
+
+  const browseQuery = useInfiniteQuery({
+    queryKey: ['rooms', 'browse', searchParams],
+    queryFn: ({ pageParam }) =>
+      api(CONTROL_API.ROOMS.BROWSE_PUBLIC, {
+        searchParams: { ...searchParams, cursor: pageParam },
+      }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.pagination.nextCursor ?? undefined,
+    refetchInterval: BROWSE_REFRESH_INTERVAL_MS,
+  });
+
+  const accumulated = useMemo(() => {
+    const rooms = browseQuery.data?.pages.flatMap((page) => page.data) ?? [];
+    const seen = new Set<string>();
+    return rooms.filter((room) => {
+      if (seen.has(room.roomId)) return false;
+      seen.add(room.roomId);
+      return true;
+    });
+  }, [browseQuery.data]);
+
+  const joinMutation = useMutation({
+    mutationFn: (roomId: string) =>
+      api(CONTROL_API.ROOMS.JOIN, { params: { id: roomId }, body: {} }),
+  });
+
+  const handleJoin = async (roomId: string) => {
+    try {
+      await joinMutation.mutateAsync(roomId);
+      toast.success(t('browse.joinSuccess'));
+      navigate({ to: '/rooms/$roomId', params: { roomId } }).catch(() => undefined);
+    } catch (error) {
+      const apiError = await readApiError(error);
+      toast.error(resolveJoinError(apiError, t, 'browse.joinFailed'));
+    }
+  };
+
+  const handleClearFilters = () => {
+    setFilters(emptyFilters);
+  };
+
+  const isFiltered =
+    filters.language !== null ||
+    filters.difficulty !== null ||
+    filters.status !== null ||
+    normalizedSearch.length > 0;
+
+  const isInitialLoading = browseQuery.isPending && accumulated.length === 0;
+  const resultCount = accumulated.length;
+
+  return (
+    <div>
+      <motion.section
+        className="mb-6 flex flex-wrap items-center justify-between gap-3"
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+      >
+        <div className="inline-flex w-fit items-center gap-2 rounded-full border border-border/60 bg-card/60 px-3 py-1 text-xs font-medium text-muted-foreground backdrop-blur-sm">
+          <Sparkles size={13} className="text-primary" />
+          {t('browse.subheading')}
+        </div>
+        <p className="text-sm text-muted-foreground">
+          {isInitialLoading ? t('browse.loading') : t('browse.resultCount', { count: resultCount })}
+        </p>
+      </motion.section>
+
+      <motion.div
+        className="sticky top-2 z-20 mb-8"
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.08, ease: [0.22, 1, 0.36, 1] }}
+      >
+        <div className="rounded-2xl border border-border/50 bg-card/70 p-4 shadow-[0_8px_32px_-16px_color-mix(in_oklch,var(--background)_60%,transparent)] backdrop-blur-xl sm:p-5">
+          <div className="flex flex-col gap-4">
+            <div className="relative">
+              <Search
+                size={16}
+                className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground/60"
+              />
+              <Input
+                type="text"
+                value={filters.search}
+                onChange={(event) =>
+                  setFilters((prev) => ({ ...prev, search: event.target.value }))
+                }
+                placeholder={t('browse.filters.search')}
+                aria-label={t('browse.filters.search')}
+                className="h-11 pl-10 text-sm"
+              />
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+                  {t('browse.filters.difficulty')}
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  <FilterPill
+                    active={filters.difficulty === null}
+                    onClick={() => setFilters((prev) => ({ ...prev, difficulty: null }))}
+                  >
+                    {t('browse.filters.difficultyAll')}
+                  </FilterPill>
+                  {PROBLEM_DIFFICULTIES.map((difficulty) => (
+                    <FilterPill
+                      key={difficulty}
+                      active={filters.difficulty === difficulty}
+                      onClick={() =>
+                        setFilters((prev) => ({
+                          ...prev,
+                          difficulty: prev.difficulty === difficulty ? null : difficulty,
+                        }))
+                      }
+                    >
+                      {t(DIFFICULTY_KEYS[difficulty])}
+                    </FilterPill>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mx-1 h-5 w-px bg-border/60" />
+
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+                  {t('browse.filters.status')}
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  <FilterPill
+                    active={filters.status === null}
+                    onClick={() => setFilters((prev) => ({ ...prev, status: null }))}
+                  >
+                    {t('browse.filters.statusAll')}
+                  </FilterPill>
+                  {BROWSEABLE_ROOM_STATUSES.map((status) => (
+                    <FilterPill
+                      key={status}
+                      active={filters.status === status}
+                      onClick={() =>
+                        setFilters((prev) => ({
+                          ...prev,
+                          status: prev.status === status ? null : status,
+                        }))
+                      }
+                    >
+                      {t(ROOM_STATUS_KEYS[status])}
+                    </FilterPill>
+                  ))}
+                </div>
+              </div>
+
+              <div className="ml-auto flex items-center gap-2">
+                <div className="flex items-center gap-1">
+                  <LanguageSelector
+                    value={filters.language ?? undefined}
+                    onValueChange={(language) => setFilters((prev) => ({ ...prev, language }))}
+                    labelOverrides={LANGUAGE_VERSIONED_LABELS}
+                    placeholder={t('browse.filters.languageAll')}
+                    ariaLabel={t('browse.filters.language')}
+                    className="h-9 w-[200px]"
+                  />
+                  {filters.language !== null && (
+                    <button
+                      type="button"
+                      aria-label={t('browse.filters.clearLanguage')}
+                      onClick={() => setFilters((prev) => ({ ...prev, language: null }))}
+                      className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+
+                {isFiltered && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleClearFilters}
+                    className="text-xs"
+                  >
+                    {t('browse.emptyState.clearFilters')}
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </motion.div>
+
+      <BrowseResults
+        isInitialLoading={isInitialLoading}
+        accumulated={accumulated}
+        isFiltered={isFiltered}
+        onClearFilters={handleClearFilters}
+        listLabel={t('browse.heading')}
+        handleJoin={handleJoin}
+        joinPendingRoomId={joinMutation.isPending ? (joinMutation.variables ?? null) : null}
+        hasMore={browseQuery.hasNextPage}
+        isFetchingMore={browseQuery.isFetchingNextPage}
+        onLoadMore={() => {
+          browseQuery.fetchNextPage().catch(() => undefined);
+        }}
+        loadMoreLabel={t('browse.loadMore')}
+      />
+    </div>
+  );
+}
+
+type BrowseResultsProps = {
+  isInitialLoading: boolean;
+  accumulated: PublicRoomSummary[];
+  isFiltered: boolean;
+  onClearFilters: () => void;
+  listLabel: string;
+  handleJoin: (roomId: string) => void;
+  joinPendingRoomId: string | null;
+  hasMore: boolean;
+  isFetchingMore: boolean;
+  onLoadMore: () => void;
+  loadMoreLabel: string;
+};
+
+function BrowseResults({
+  isInitialLoading,
+  accumulated,
+  isFiltered,
+  onClearFilters,
+  listLabel,
+  handleJoin,
+  joinPendingRoomId,
+  hasMore,
+  isFetchingMore,
+  onLoadMore,
+  loadMoreLabel,
+}: BrowseResultsProps) {
+  if (isInitialLoading) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <Loader2 size={32} className="animate-spin text-primary/60" />
+      </div>
+    );
+  }
+
+  if (accumulated.length === 0) {
+    return <BrowseEmptyState isFiltered={isFiltered} onClearFilters={onClearFilters} />;
+  }
+
+  return (
+    <>
+      <ul aria-label={listLabel} className="grid list-none gap-4 p-0 sm:grid-cols-2 xl:grid-cols-3">
+        {accumulated.map((room, index) => (
+          <PublicRoomCard
+            key={room.roomId}
+            room={room}
+            index={index}
+            onJoin={handleJoin}
+            isJoining={joinPendingRoomId === room.roomId}
+          />
+        ))}
+      </ul>
+
+      {hasMore && (
+        <div className="mt-10 flex justify-center">
+          <Button
+            variant="outline"
+            size="lg"
+            disabled={isFetchingMore}
+            onClick={onLoadMore}
+            className="gap-2"
+          >
+            {isFetchingMore ? (
+              <Loader2 size={16} className="animate-spin" />
+            ) : (
+              <Compass size={16} />
+            )}
+            {loadMoreLabel}
+          </Button>
+        </div>
+      )}
+    </>
+  );
+}

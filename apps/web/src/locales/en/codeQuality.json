@@ -1,0 +1,55 @@
+{
+  "panel": {
+    "title": "Code quality",
+    "description": "Review lint issues, function complexity, and duplicated code regions."
+  },
+  "summary": {
+    "clean": "No quality issues",
+    "issueCount_one": "{{count}} issue",
+    "issueCount_other": "{{count}} issues",
+    "lint": "Lint issues",
+    "complexity": "Complex functions",
+    "duplication": "Duplications"
+  },
+  "severity": {
+    "error": "Error",
+    "warning": "Warning",
+    "info": "Info"
+  },
+  "line": "Line {{line}}",
+  "lineColumn": "Line {{line}}:{{column}}",
+  "lint": {
+    "title": "Lint issues",
+    "empty": "No lint issues detected."
+  },
+  "complexity": {
+    "title": "Complexity",
+    "empty": "No complex functions detected.",
+    "cyclomatic": "Cyclomatic {{value}}",
+    "cognitive": "Cognitive {{value}}",
+    "scoreLabel": "{{functionName}} complexity score {{score}}",
+    "status": {
+      "healthy": "Healthy",
+      "moderate": "Moderate",
+      "high": "High"
+    }
+  },
+  "editor": {
+    "title": "Duplication highlights",
+    "selectLine": "Select line {{line}}"
+  },
+  "duplication": {
+    "title": "Duplicated regions",
+    "empty": "No duplicated regions detected.",
+    "similarity": "{{value}}% similar",
+    "range": "Lines {{start}}-{{end}} match {{duplicateStart}}-{{duplicateEnd}}"
+  },
+  "preview": {
+    "title": "Code quality preview",
+    "description": "A focused view of lint findings, complexity scores, and duplication highlights.",
+    "issues": {
+      "untypedCases": "Add a typed case model before this function is reused.",
+      "branching": "Consider splitting timeout and runtime-error scoring into separate helpers."
+    }
+  }
+}

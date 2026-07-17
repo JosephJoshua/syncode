@@ -1,0 +1,57 @@
+{
+  "badge": "$ syncode --init",
+  "hero": {
+    "heading1": "技术面试,",
+    "heading2": "重新定义"
+  },
+  "button": {
+    "getStarted": "立即开始",
+    "getStartedHover": "现在开始编程"
+  },
+  "terminal": {
+    "heading1": "两个光标。一个文件。",
+    "heading2": "零冲突。"
+  },
+  "features": {
+    "sidebarLabel": "功能特性",
+    "pairProgramming": "结对编程",
+    "pairProgrammingDesc": "同时编辑同一文件。两个光标实时协作——无冲突、无延迟、无需屏幕共享。",
+    "liveExecution": "实时执行",
+    "liveExecutionDesc": "几秒内就能看到代码在真实测试用例上的运行结果——不是模拟，而是真实执行。",
+    "aiFeedback": "AI 反馈",
+    "aiFeedbackDesc": "即时分析时间复杂度、边界情况和代码质量。就像有一位高级工程师在审查你的解法。",
+    "aiInterviewer": "AI 面试官",
+    "aiInterviewerDesc": "与 AI 练习，它会追问、探索你的思路，并给出结构化反馈。如同真实技术面试。",
+    "allTestsPassed": "全部测试通过",
+    "codeReviewScore": "代码评审得分",
+    "aiQuestion": "你的哈希表如何处理重复值？",
+    "youAnswer": "我们在插入前检查 complement……"
+  },
+  "stats": {
+    "sessions": "场会话已完成",
+    "sync": "实时同步",
+    "languages": "种语言支持",
+    "execution": "测试执行"
+  },
+  "cta": {
+    "headingLine1": "准备好",
+    "headingLine2": "结对了？",
+    "sub": "几秒内开始协作编程。无需配置，无需屏幕共享，零摩擦。",
+    "getStarted": "免费开始使用",
+    "getStartedHover": "现在开始编程"
+  },
+  "footer": {
+    "product": "产品",
+    "community": "社区",
+    "legal": "法律",
+    "features": "功能特性",
+    "howItWorks": "使用方法",
+    "terminalDemo": "终端演示",
+    "github": "GitHub",
+    "discord": "Discord",
+    "terms": "服务条款",
+    "privacy": "隐私政策",
+    "tagline": "为工程师而生",
+    "copyright": "SynCode {{year}}. 保留所有权利。"
+  }
+}

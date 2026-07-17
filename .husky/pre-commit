@@ -1,0 +1,2 @@
+pnpm lint-staged
+./scripts/check-commit-size.sh

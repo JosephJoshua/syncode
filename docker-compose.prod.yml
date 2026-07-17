@@ -1,0 +1,351 @@
+services:
+  nginx:
+    image: nginx:1.28-alpine
+
+    restart: unless-stopped
+    ports:
+      - "${NGINX_PORT:-4443}:80"
+      - "${GRAFANA_PORT:-3334}:3334"
+    volumes:
+      - ./infra/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      web:
+        condition: service_started
+      control-plane:
+        condition: service_healthy
+      collab-plane:
+        condition: service_healthy
+      seaweedfs:
+        condition: service_healthy
+      grafana:
+        condition: service_started
+    networks:
+      - frontend
+      - proxy
+      - backend
+      - observability
+
+  web:
+    image: ${REGISTRY_PREFIX:-ghcr.io/josephjoshua}/syncode-web:${IMAGE_TAG:-latest}
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.web
+      args:
+        VITE_TLDRAW_LICENSE_KEY: ${VITE_TLDRAW_LICENSE_KEY:-}
+    restart: unless-stopped
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+    networks:
+      - frontend
+
+  control-plane:
+    image: ${REGISTRY_PREFIX:-ghcr.io/josephjoshua}/syncode-control-plane:${IMAGE_TAG:-latest}
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.control-plane
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:?TRUSTED_PROXIES must name the exact nginx/proxy CIDR trusted by control-plane}
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - proxy
+      - backend
+      - observability
+
+  collab-plane:
+    image: ${REGISTRY_PREFIX:-ghcr.io/josephjoshua}/syncode-collab-plane:${IMAGE_TAG:-latest}
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.collab-plane
+    restart: unless-stopped
+    env_file: .env
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - proxy
+      - backend
+      - observability
+
+  execution-plane:
+    image: ${REGISTRY_PREFIX:-ghcr.io/josephjoshua}/syncode-execution-plane:${IMAGE_TAG:-latest}
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.execution-plane
+    restart: unless-stopped
+    env_file: .env
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - backend
+      - observability
+
+  ai-plane:
+    image: ${REGISTRY_PREFIX:-ghcr.io/josephjoshua}/syncode-ai-plane:${IMAGE_TAG:-latest}
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.ai-plane
+    restart: unless-stopped
+    env_file: .env
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - backend
+      - observability
+
+  ai-interviewer-worker:
+    image: ${REGISTRY_PREFIX:-ghcr.io/josephjoshua}/syncode-ai-plane:${IMAGE_TAG:-latest}
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.ai-plane
+    restart: unless-stopped
+    command: ["node", "dist/livekit/ai-interviewer.worker.bootstrap.js", "start"]
+    env_file: .env
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+    depends_on:
+      control-plane:
+        condition: service_healthy
+      livekit:
+        condition: service_started
+    networks:
+      - backend
+      - observability
+
+  watchtower:
+    image: nickfedor/watchtower:1.14.3
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${DOCKER_CONFIG:-/root/.docker/config.json}:/config.json:ro
+    environment:
+      WATCHTOWER_POLL_INTERVAL: "300"
+      WATCHTOWER_CLEANUP: "true"
+      WATCHTOWER_LABEL_ENABLE: "true"
+
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-syncode}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+    command: >
+      redis-server
+      --appendonly yes
+      --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", 'redis-cli -a "$$REDIS_PASSWORD" ping']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  livekit:
+    image: livekit/livekit-server:v1.9.11
+    restart: unless-stopped
+    environment:
+      LIVEKIT_KEYS: "${LIVEKIT_API_KEY:?LIVEKIT_API_KEY is required}: ${LIVEKIT_API_SECRET:?LIVEKIT_API_SECRET is required}"
+      LIVEKIT_CONFIG: |
+        port: 7880
+        log_level: info
+        rtc:
+          tcp_port: ${LIVEKIT_RTC_TCP_PORT:-7881}
+          port_range_start: ${LIVEKIT_RTC_UDP_PORT_RANGE_START:-50000}
+          port_range_end: ${LIVEKIT_RTC_UDP_PORT_RANGE_END:-50100}
+          use_external_ip: true
+    ports:
+      - "${LIVEKIT_RTC_TCP_PORT:-7881}:${LIVEKIT_RTC_TCP_PORT:-7881}/tcp"
+      - "${LIVEKIT_RTC_UDP_PORT_RANGE:-50000-50100}:${LIVEKIT_RTC_UDP_PORT_RANGE:-50000-50100}/udp"
+    networks:
+      - proxy
+      - backend
+
+  seaweedfs:
+    image: chrislusf/seaweedfs:4.13
+    restart: unless-stopped
+    environment:
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:?S3_ACCESS_KEY is required}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:?S3_SECRET_KEY is required}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        umask 077 &&
+        printf '{"identities":[{"name":"syncode","credentials":[{"accessKey":"%s","secretKey":"%s"}],"actions":["Admin","Read","Write","List","Tagging"]}]}'
+        "$$S3_ACCESS_KEY" "$$S3_SECRET_KEY"
+        > /tmp/s3.json &&
+        weed server -s3 -s3.config=/tmp/s3.json -s3.port=8333 &
+        PID=$$! &&
+        until wget -q --spider http://localhost:8333/ 2>/dev/null; do sleep 0.5; done &&
+        wget --method=PUT -q -O /dev/null http://localhost:8333/$${S3_BUCKET:-syncode} 2>/dev/null || true &&
+        wait $$PID
+    volumes:
+      - seaweedfs_data:/data
+    networks:
+      - backend
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--spider",
+          "-q",
+          "http://localhost:9333/cluster/status",
+        ]
+      interval: 10s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.147.0
+    restart: unless-stopped
+    volumes:
+      - ./infra/otel/config.yaml:/etc/otelcol-contrib/config.yaml:ro
+    depends_on:
+      prometheus:
+        condition: service_started
+      loki:
+        condition: service_started
+      tempo:
+        condition: service_started
+    networks:
+      - observability
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:13133/"]
+      interval: 10s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+  prometheus:
+    image: prom/prometheus:v3.10.0
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --web.enable-remote-write-receiver
+      - --storage.tsdb.retention.time=7d
+      - --storage.tsdb.retention.size=2GB
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    networks:
+      - observability
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9090/-/healthy"]
+      interval: 10s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+  loki:
+    image: grafana/loki:3.6.7
+    restart: unless-stopped
+    command:
+      - -config.file=/etc/loki/config.yaml
+    volumes:
+      - ./infra/loki/config.yaml:/etc/loki/config.yaml:ro
+      - loki_data:/loki
+    networks:
+      - observability
+    healthcheck:
+      test: ["CMD", "/usr/bin/loki", "-health"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 5
+
+  tempo:
+    image: grafana/tempo:2.10.1
+    restart: unless-stopped
+    command:
+      - -config.file=/etc/tempo/config.yaml
+    volumes:
+      - ./infra/tempo/config.yaml:/etc/tempo/config.yaml:ro
+      - tempo_data:/var/tempo
+    networks:
+      - observability
+
+  grafana:
+    image: grafana/grafana:12.4.0
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD is required}
+      GF_SERVER_ROOT_URL: https://${GRAFANA_SUBDOMAIN:-grafana}.${DOMAIN:?DOMAIN is required}
+      GF_SERVER_DOMAIN: ${GRAFANA_SUBDOMAIN:-grafana}.${DOMAIN}
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      prometheus:
+        condition: service_healthy
+      loki:
+        condition: service_started
+      tempo:
+        condition: service_started
+    networks:
+      - observability
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:3000/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+
+networks:
+  frontend:
+    driver: bridge
+  proxy:
+    driver: bridge
+  backend:
+    driver: bridge
+  observability:
+    driver: bridge
+
+volumes:
+  pg_data:
+  redis_data:
+  seaweedfs_data:
+  prometheus_data:
+  loki_data:
+  tempo_data:
+  grafana_data:

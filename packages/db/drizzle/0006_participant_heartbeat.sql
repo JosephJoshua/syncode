@@ -1,0 +1,2 @@
+ALTER TABLE "room_participants" ADD COLUMN "last_heartbeat_at" timestamp with time zone;--> statement-breakpoint
+CREATE INDEX "room_participants_active_heartbeat_idx" ON "room_participants" USING btree ("last_heartbeat_at") WHERE "room_participants"."is_active" = true;
